@@ -35,7 +35,6 @@ skywire cli tp viz
       --cdd string          DMSG cache dir ("" to disable) (default "/tmp/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -m, --cfa int             update cache files if older than n minutes (default 5)
       --tpd-url string      transport discovery URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-  -w, --ut-url string       uptime tracker URL (empty = disabled)
       --sd-url string       service discovery URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --dmsg-url string     DMSG discovery URL (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --no-cache            disable caching, always fetch fresh data

@@ -38,7 +38,6 @@ type V1 struct {
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
 	Routing       *Routing             `json:"routing"`
-	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
 	// EmbeddedServices are deployment services (transport-discovery,
 	// address-resolver, route-finder, service-discovery) this visor runs
@@ -46,6 +45,10 @@ type V1 struct {
 	// and addressed as dmsg://<visor pk>:80/<prefix>/... Blocks have the
 	// same shape as a services.json entry plus an optional "prefix".
 	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
+	// DeploymentStatusAddr serves the status page of the embedded services
+	// over plain HTTP, such as 127.0.0.1:8082 for a reverse proxy. It is also
+	// at /status on the dmsg HTTP port. Empty serves it there only.
+	DeploymentStatusAddr string `json:"deployment_status_addr,omitempty"`
 
 	// Stats configures the visor-local telemetry store. Nil/zero
 	// values use defaults; Disabled=true skips the store entirely.
@@ -108,7 +111,7 @@ type V1 struct {
 	RewardAddress    string `json:"reward_address,omitempty"`
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
-	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
+	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit: "none" (the default), a size like "256MiB", or "auto" for 90% of total RAM
 	// FlightRecorder keeps the last seconds of execution trace in memory for
 	// stall diagnosis. Off by default because it allocates heavily.
 	FlightRecorder bool `json:"flight_recorder,omitempty"`
@@ -892,12 +895,6 @@ type Routing struct {
 	// destabilizes their handshakes — the pty 32-leg-mux footgun. Set true
 	// only with a policy purpose-built for control traffic.
 	PolicyOnControlPorts bool `json:"policy_on_control_ports,omitempty"`
-}
-
-// UptimeTracker configures uptime tracker.
-type UptimeTracker struct {
-	Addr     string `json:"addr"`
-	AddrDmsg string `json:"addr_dmsg,omitempty"`
 }
 
 // PublicVisorConfig configures public visor behavior and service discovery registration.

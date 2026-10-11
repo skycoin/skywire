@@ -24,24 +24,26 @@ skywire dmsg web
 ## Flags
 
 ```
-  -r, --addproxy string    configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)
-      --attach socket      attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
-  -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -D, --dmsgconf string    dmsghttp-config path
-  -E, --envs               show example .conf file
-  -f, --filter string      domain suffix to filter (default ".dmsg")
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "debug")
-  -p, --port uints         port(s) to serve the web application (default [8080])
-      --pprofaddr string   pprof http port (default "localhost:6060")
-      --pprofmode string   [ cpu | mem | mutex | block | trace | http ]
-  -x, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
-  -t, --resolve strings    resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy
-  -e, --sess int           number of DMSG Servers to connect to (default 2)
-  -s, --sk cipher.SecKey   a random key is generated if unspecified
-                            (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -q, --socks uint         port to serve the socks5 proxy (default 4445)
-  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
+  -r, --addproxy string       configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)
+      --attach socket         attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
+  -B, --direct                use dmsg-direct client & don't connect to DMSG Discovery
+  -A, --disc-addr string      DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -D, --dmsgconf string       dmsghttp-config path
+  -E, --envs                  show example .conf file
+  -f, --filter string         domain suffix to filter (default ".dmsg")
+  -l, --loglvl string         [ debug | warn | error | fatal | panic | trace | info ] (default "debug")
+  -p, --port uints            port(s) to serve the web application (default [8080])
+      --pprofaddr string      pprof http port (default "localhost:6060")
+      --pprofmode string      [ cpu | mem | mutex | block | trace | http ]
+  -x, --proxy string          connect to DMSG via proxy (i.e. '127.0.0.1:1080')
+  -t, --resolve strings       resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy
+  -e, --sess int              number of DMSG Servers to connect to (default 2)
+  -s, --sk cipher.SecKey      a random key is generated if unspecified
+                               (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --skynet pk@host:port   reach visors over skynet and dmsg through one transport to a local visor, as pk@host:port (its transport_port, or its stcpr port)
+      --skynet-type string    transport type for --skynet: stcpr, swsr, squicr or stcp (default "stcpr")
+  -q, --socks uint            port to serve the socks5 proxy (default 4445)
+  -S, --srv pk@ip:port        connect via specific dmsg server pk@ip:port
 ```
 
 ## Global Flags

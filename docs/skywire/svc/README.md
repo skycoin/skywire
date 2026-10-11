@@ -30,7 +30,6 @@ skywire svc
 - [stun](stun/README.md) — STUN server for skywire
 - [tpd](tpd/README.md) — Transport Discovery Server for skywire
 - [tps](tps/README.md) — Transport setup server for skywire
-- [ut](ut/README.md) — Uptime Tracker Server for skywire
 
 ## Global Flags
 

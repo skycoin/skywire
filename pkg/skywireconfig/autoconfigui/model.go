@@ -51,7 +51,7 @@ type Model struct {
 }
 
 var groupOrder = []string{
-	"Hypervisor", "Identity and rewards", "Networking and transports", "Dmsg server",
+	"Hypervisor", "Identity and rewards", "Networking and transports", "Dmsg server", "Deployment",
 	"Privacy and routing", "Whitelists", "Resolvers and web bridges", "VPN server",
 	"VPN router", "Proxy", "Apps", "Skycoin", "Runtime", "Other",
 }
@@ -72,7 +72,7 @@ var groupExact = map[string]string{
 	"no-direct-transports": "Privacy and routing", "pty-rpc-exec": "Privacy and routing",
 	"calculate-routes": "Privacy and routing",
 	"dmsgpty-pks":      "Whitelists", "survey": "Whitelists", "routesetup": "Whitelists",
-	"tpsetup": "Whitelists", "resolvers": "Resolvers and web bridges",
+	"tpsetup": "Whitelists", "skydeploy": "Deployment", "resolvers": "Resolvers and web bridges",
 	"wisp-socks": "Resolvers and web bridges", "vpnserver": "VPN server",
 	"killsw": "VPN server", "addvpn": "VPN server", "vpnwl": "VPN server",
 	"secure": "VPN server", "netifc": "VPN server",
@@ -80,7 +80,7 @@ var groupExact = map[string]string{
 }
 
 var groupPrefix = []struct{ prefix, group string }{
-	{"dmsg-server", "Dmsg server"}, {"dmsg-relay", "Dmsg server"},
+	{"dmsg-server", "Dmsg server"}, {"dmsg-relay", "Dmsg server"}, {"deployment", "Deployment"},
 	{"vpnrouter", "VPN router"}, {"proxy", "Proxy"}, {"startproxy", "Proxy"},
 	{"dmsgweb", "Resolvers and web bridges"}, {"skynetweb", "Resolvers and web bridges"},
 	{"skycoin", "Skycoin"}, {"skychat", "Apps"}, {"chat", "Apps"},

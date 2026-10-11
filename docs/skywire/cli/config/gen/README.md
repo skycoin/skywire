@@ -109,7 +109,7 @@ skywire cli config gen
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
-      --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".haltingstate.net")
+      --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".theskywirenetwork.net")
       --browse-tls-cert string               PEM cert for the browse-origin listener — a real wildcard cert for *.<browse-suffix> so status-<surface>.<suffix> loads over warning-free HTTPS. Requires --browse-tls-key; empty = plain HTTP on loopback
       --browse-tls-key string                PEM key paired with --browse-tls-cert
       --servechat                            autostart skychat (default true)
@@ -124,9 +124,10 @@ skywire cli config gen
       --skycoindflags string                 extra flags appended to every skycoin daemon (port and data dir auto allocated)
       --coin-nodes string                    fibercoin nodes to forward over dmsg + advertise (type=coin); CSV of local_addr[@dmsg_port]
       --skycoinweb                           autostart skycoin web wallet (thin client)
-      --skycoinwebaddr string                skycoin web bind address (host:port) (default "127.0.0.1:8002")
+      --skycoinwebaddr string                skycoin web bind address (host:port), or none for no port (default "127.0.0.1:8002")
       --skycoinwebnodes string               node URLs the skycoin web wallet talks to (comma separated)
       --skycoinwebwallet string              skycoin web wallet dir override
+      --skycoinwebelectrum string            skycoin web electrum servers (comma separated), default, or none
       --skycoinwebuser string                skycoin web UID (empty inherits visor UID)
       --rewardaddr string                    skycoin reward address or xpub key
   -k, --os string                            (linux / mac / win) paths (default "linux")
@@ -148,6 +149,9 @@ skywire cli config gen
       --dmsg-server                          run a dmsg server inside the visor on the visor's OWN key, sharing its transport port
       --dmsg-server-public string            address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to
       --dmsg-server-ws-tls string            address (":443") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host
+      --deployment string                    run a whole deployment in this visor and use it instead of prod. Takes the public host[:port] of its dmsg server (port 8080 by default), which runs on the visor key and becomes the transport port; the address resolver takes UDP port+13
+      --deployment-redis string              redis URL or socket path for the deployment; empty keeps its entries in memory
+      --deployment-wss-suffix string         domain suffix of the deployment dmsg server's wss front, wss://<pk label>.<suffix>/dmsg, for browser visors
       --dmsg-relay-addr string               loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys
       --dmsg-relay-keys string               public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate
       --no-dmsg-relay                        do not serve the local dmsg relay acceptor at all (it is served by default)

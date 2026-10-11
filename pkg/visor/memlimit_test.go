@@ -25,3 +25,23 @@ func TestApplyMemoryLimitEnvWins(t *testing.T) {
 		t.Fatalf("config limit not applied: %d", got)
 	}
 }
+
+func TestAutoMemoryLimit(t *testing.T) {
+	const mib = 1024 * 1024
+	if got := autoMemoryLimit(1000 * mib); got != 900*mib {
+		t.Fatalf("autoMemoryLimit(1000MiB) = %d, want %d", got, 900*mib)
+	}
+	if got := autoMemoryLimit(0); got != 0 {
+		t.Fatalf("autoMemoryLimit(0) = %d, want 0", got)
+	}
+}
+
+func TestApplyMemoryLimitNone(t *testing.T) {
+	before := debug.SetMemoryLimit(-1)
+	for _, v := range []string{"none", ""} {
+		applyMemoryLimit(logging.MustGetLogger("test"), v)
+		if got := debug.SetMemoryLimit(-1); got != before {
+			t.Fatalf("memory_limit %q changed the limit to %d", v, got)
+		}
+	}
+}

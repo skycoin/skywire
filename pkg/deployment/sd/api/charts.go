@@ -103,3 +103,8 @@ func buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.
 		chart("Service versions", "Registered services by the visor version they report, eight largest.", f.Group(chartVersionPrefix, 8)),
 	}}, nil
 }
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (a *API) Charts() *charts.Page {
+	return a.chartsPage.Load()
+}

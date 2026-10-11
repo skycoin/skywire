@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	kcp "github.com/0magnet/kcp-go/v5"
 
@@ -51,8 +52,10 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
@@ -116,6 +119,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	enableMetrics := cfg.MetricsAddr != ""
 	arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr, cfg.PublicUDPAddr)
+	s.chartsAPI.Store(arAPI)
 
 	udpAddr := cfg.UDPAddr
 	if udpAddr == "" {
@@ -299,4 +303,13 @@ func chartStore(sc storeconfig.Config, log *logging.Logger) charts.Store {
 		return charts.NewMemoryStore()
 	}
 	return st
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
 }

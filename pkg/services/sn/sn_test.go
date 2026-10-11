@@ -159,8 +159,9 @@ func TestRun_MissingKeys(t *testing.T) {
 // newDmsgDiscovery brings up an in-memory dmsg-discovery (served over HTTP via
 // httptest) plus a single dmsg server registered against it, so that
 // router.NewNode can establish a real session and become Ready without
-// reaching the public network. Returns the discovery URL.
-func newDmsgDiscovery(t *testing.T) string {
+// reaching the public network. Returns the discovery URL and the server's
+// entry.
+func newDmsgDiscovery(t *testing.T) (string, *disc.Entry) {
 	t.Helper()
 	log := testLog()
 
@@ -185,14 +186,14 @@ func newDmsgDiscovery(t *testing.T) string {
 	case <-time.After(10 * time.Second):
 		t.Fatal("dmsg server did not become ready")
 	}
-	return httpSrv.URL
+	return httpSrv.URL, &disc.Entry{Static: srvPK, Server: &disc.Server{Address: lis.Addr().String()}}
 }
 
 func TestRun_FullPathWithCascadeAndHealth(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping dmsg network integration test in -short mode")
 	}
-	discURL := newDmsgDiscovery(t)
+	discURL, srvEntry := newDmsgDiscovery(t)
 
 	pk, sk := validKeys(t)
 	cfg := &Config{Tag: "sn_it", MetricsAddr: "127.0.0.1:0"}
@@ -200,6 +201,7 @@ func TestRun_FullPathWithCascadeAndHealth(t *testing.T) {
 	cfg.SetupConfig.SK = sk
 	cfg.SetupConfig.Dmsg.Discovery = discURL
 	cfg.SetupConfig.Dmsg.SessionsCount = 1
+	cfg.SetupConfig.Dmsg.Servers = []*disc.Entry{srvEntry}
 	// A TPD URL exercises the discovery-client branch of startCascade; the URL
 	// only needs to be constructible (no live TPD is contacted during Run).
 	cfg.SetupConfig.TransportDiscovery = discURL
@@ -228,6 +230,28 @@ func TestRun_FullPathWithCascadeAndHealth(t *testing.T) {
 	case err := <-errCh:
 		require.NoError(t, err)
 	case <-time.After(15 * time.Second):
+		t.Fatal("Run did not return after context cancel")
+	}
+}
+
+// A node that cannot reach any dmsg server still stops when Run is canceled.
+func TestRun_CancelBeforeDmsgReady(t *testing.T) {
+	pk, sk := validKeys(t)
+	cfg := &Config{Tag: "sn_cancel"}
+	cfg.SetupConfig.PK = pk
+	cfg.SetupConfig.SK = sk
+	cfg.SetupConfig.Dmsg.SessionsCount = 1
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- New(cfg, testLog()).Run(ctx) }()
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return after context cancel")
 	}
 }

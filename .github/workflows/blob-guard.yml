@@ -38,8 +38,7 @@ jobs:
           set -euo pipefail
 
           # The paths whose large files are intended. A prefix entry ends in /.
-          ALLOWLIST="pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-          docs/graph/viewer/api/layout.json
+          ALLOWLIST="docs/graph/viewer/api/layout.json
           pkg/geoip/GeoLite2-City.mmdb.gz
           pkg/tpviz/legacy/bundle.js
           pkg/router/policy/wasm/presets/bundle.wasm

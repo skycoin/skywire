@@ -35,7 +35,6 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
@@ -58,7 +57,7 @@ func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error 
 	return nil
 }
 
-func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
+func initUptimeHeartbeat(_ context.Context, v *Visor, log *logging.Logger) error {
 	const (
 		tickDuration = 5 * time.Minute
 		// heartbeatSendTimeout bounds one heartbeat round so a slow or blocked
@@ -73,19 +72,8 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		heartbeatWarnAfter = 2
 	)
 
-	// Resolve both targets. The standalone uptime-tracker URL may be absent
-	// (the tracker is decommissioned fleet-wide); the TPD heartbeat URL is the
-	// REWARD-CRITICAL presence signal and is derived INDEPENDENTLY of whether
-	// uptime_tracker is set. Previously this whole goroutine returned early when
-	// uptime_tracker was empty, so decommissioning the standalone tracker
-	// silently disabled the TPD heartbeat too — a fleet-wide reward-uptime
-	// regression. resolveUptimeTargets keeps that invariant unit-testable.
-	// The standalone uptime-tracker client has been decommissioned; only the
-	// reward-critical TPD heartbeat target is consumed now. resolveUptimeTargets
-	// is retained (and its regression test with it) because it guarantees the TPD
-	// heartbeat URL is derived INDEPENDENTLY of the (now-absent) uptime_tracker
-	// config — the invariant whose violation once collapsed fleet reward uptime.
-	_, tpdURL := resolveUptimeTargets(v.conf.UptimeTracker, v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)
+	// The heartbeat goes to TPD, the reward-critical presence signal.
+	tpdURL := heartbeatURL(v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)
 
 	if tpdURL == "" {
 		v.log.Debug("uptime: no transport-discovery addr; skipping TPD heartbeat.")
@@ -94,7 +82,7 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Connect IN THE BACKGROUND. utclient.NewHTTP runs a blocking auth handshake
 	// with infinite exponential-backoff retry, so a synchronous connect here
-	// would hang initUptimeTracker (and every module that depends on the visor,
+	// would hang initUptimeHeartbeat (and every module that depends on the visor,
 	// most visibly the hypervisor) whenever a service is unreachable. Neither
 	// client may gate startup. Use the visor's long-lived ctx, not the init ctx.
 	bgCtx := v.ctx
@@ -167,7 +155,7 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		ticker := time.NewTicker(tickDuration)
-		v.pushCloseStack("uptime_tracker", func() error {
+		v.pushCloseStack("uptime", func() error {
 			ticker.Stop()
 			return nil
 		})
@@ -201,31 +189,19 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-// resolveUptimeTargets decides which uptime endpoints the heartbeat loop
-// targets. It returns the standalone uptime-tracker URL (empty when
-// unconfigured — the tracker is decommissioned fleet-wide) and the TPD
-// heartbeat URL, the reward-critical presence signal. The TPD URL is derived
-// independently of ut so that an absent/nil uptime_tracker can never disable
-// the TPD heartbeat — the regression that silently collapsed fleet reward
-// uptime. Pure and side-effect-free so the invariant is unit-testable.
-func resolveUptimeTargets(ut *visorconfig.UptimeTracker, discovery, discoveryDmsg string) (utURL, tpdURL string) {
-	if ut != nil {
-		utURL = ut.Addr
-		if utURL == "" {
-			utURL = ut.AddrDmsg
-		}
+// heartbeatURL is the TPD address the uptime heartbeat goes to: the
+// clearnet address when set, else the dmsg one.
+func heartbeatURL(discovery, discoveryDmsg string) string {
+	if discovery != "" {
+		return discovery
 	}
-	tpdURL = discovery
-	if tpdURL == "" {
-		tpdURL = discoveryDmsg
-	}
-	return utURL, tpdURL
+	return discoveryDmsg
 }
 
 // buildUptimeClient constructs an authenticated uptime/heartbeat client for the
 // given service URL. It returns nil (after logging at Warn) on any failure, so
 // one unreachable service never gates the other or startup. label is used only
-// in log messages to distinguish the standalone tracker from the TPD heartbeat.
+// in log messages.
 func buildUptimeClient(ctx context.Context, v *Visor, url, label string) utclient.APIClient {
 	httpC, err := getHTTPClient(ctx, v, url)
 	if err != nil {

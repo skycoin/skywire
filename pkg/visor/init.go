@@ -83,8 +83,8 @@ type modules struct {
 	cli vinit.Module
 	// hypervisors to control this visor
 	hvs vinit.Module
-	// Uptime tracker
-	ut vinit.Module
+	// Uptime heartbeat to transport discovery
+	uptime vinit.Module
 	// Public visors: automatically establish connections to public visors
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
@@ -265,7 +265,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// the dial would always fall through to dmsg even when a fast
 	// transport exists.
 	m.hvs = maker("hypervisors", initHypervisors, &m.dmsgC, &m.tr)
-	m.ut = maker("uptime_tracker", initUptimeTracker, &m.dmsgHTTP)
+	m.uptime = maker("uptime", initUptimeHeartbeat, &m.dmsgHTTP)
 	m.pv = maker("public_autoconnect", initPublicAutoconnect, &m.tr, &m.disc)
 	m.trs = maker("transport_setup", initTransportSetup, &m.dmsgC, &m.tr)
 	m.tm = vinit.MakeModule("transports", vinit.DoNothing, logger, &m.sc, &m.sudphC, &m.dmsgCtrl, &m.dmsgHTTPLogServer, &m.dmsgTrackers, &m.launch)
@@ -328,7 +328,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// transport). See init_sd_reg_cxo.go.
 	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
-		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.ut, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.uiServer, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices)
+		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.uiServer, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
@@ -426,6 +426,11 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 				DelegatedServers: delegatedServers,
 			},
 			Static: serviceURL.Addr.PK,
+		}
+		// A service on a key that also runs a dmsg server, such as the visor's
+		// own, must not drop that server from the direct client.
+		if prev, perr := v.dClient.Entry(ctx, serviceURL.Addr.PK); perr == nil && prev.Server != nil {
+			clientEntry.Server = prev.Server
 		}
 
 		err = v.dClient.PostEntry(ctx, clientEntry)

@@ -43,11 +43,11 @@ skywire cli rewards
 
 ```
   -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -d, --date string        date for which to calculate reward (default "2026-09-14")
+  -d, --date string        date for which to calculate reward (default "2026-10-09")
   -k, --pk string          check reward for pubkey
   -n, --noarch strings     disallowed architectures, comma separated (default [null,wasm])
-  -w, --a1 strings         pool 1 allowed arch, comma separated (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
-  -x, --a2 strings         pool 2 allowed arch, comma separated (default [amd64,386])
+  -w, --a1 strings         allowed arch, comma separated (with --a2, the architectures that qualify) (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
+  -x, --a2 strings         more allowed arch, comma separated (with --a1, the architectures that qualify) (default [amd64,386])
   -y, --year int           yearly total rewards per pool (default 408000)
   -u, --utfile string      uptime tracker data file (default "ut.txt")
   -p, --lpath string       path to the surveys (default "log_collecting")
@@ -58,8 +58,8 @@ skywire cli rewards
   -r, --process            run complete reward processing workflow
   -t, --require-tp         require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)
   -T, --tp-hist string     path to transport history directory (default "hist")
-  -b, --require-bw         require minimum bandwidth (proportional reward based on bandwidth)
-      --no-bw-pool         recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)
+  -b, --require-bw         pay pool 2 by bandwidth from the day's bandwidth file; without it pool 2 repeats pool 1
+      --no-bw-pool         recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool, so pool 2 repeats pool 1
   -B, --min-bw uint        minimum bandwidth in bytes to qualify (used with --require-bw) (default 64)
   -S, --sat-exp float      regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal) (default 0.5)
       --bw-sat-exp float   bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal) (default 0.5)

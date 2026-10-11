@@ -75,7 +75,7 @@ jobs:
       # exact APK the job built beats rebuilding it locally and guessing.
       - name: Upload debug APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: skywire-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk

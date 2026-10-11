@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/geoip"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -59,8 +59,6 @@ type Config struct {
 	CacheMaxAge int
 	// TPDURL is the transport discovery URL
 	TPDURL string
-	// UTURL is the uptime tracker URL
-	UTURL string
 	// SDURL is the service discovery URL
 	SDURL string
 	// DMSGURL is the DMSG discovery URL
@@ -154,16 +152,11 @@ func DefaultConfig() Config {
 		TPDURLDmsg:   deployment.Prod.TransportDiscoveryDmsg,
 		SDURLDmsg:    deployment.Prod.ServiceDiscoveryDmsg,
 		DMSGURLDmsg:  deployment.Prod.DmsgDiscoveryDmsg,
-		// UTURL intentionally empty: the standalone uptime tracker is
-		// decommissioned. An operator can still pass --ut-url for a custom
-		// standalone deployment, but the default no longer points at a dead
-		// clearnet endpoint.
-		UTURL:       "",
-		SDURL:       deployment.Prod.ServiceDiscovery,
-		DMSGURL:     deployment.Prod.DmsgDiscovery,
-		NoCache:     false,
-		AutoRefresh: true,
-		GeoIPURL:    deployment.Prod.GeoIP,
+		SDURL:        deployment.Prod.ServiceDiscovery,
+		DMSGURL:      deployment.Prod.DmsgDiscovery,
+		NoCache:      false,
+		AutoRefresh:  true,
+		GeoIPURL:     deployment.Prod.GeoIP,
 	}
 }
 
@@ -656,18 +649,8 @@ func (s *Server) setupRoutes() {
 		tpdAge := s.getCacheAgeSeconds(tpdCacheFile)
 		sdAge := s.getCacheAgeSeconds(sdCacheFile)
 
-		// Uptime tracker is decommissioned by default; only report its age
-		// when an operator configured a standalone UTURL.
-		var utAge int64
-		if s.config.UTURL != "" {
-			utAge = s.getCacheAgeSeconds(CacheFilePath(s.config.CacheDirUT, s.config.UTURL+"/uptimes?v=v2"))
-		}
-
 		// Find the oldest cache age
 		maxAge := tpdAge
-		if utAge > maxAge {
-			maxAge = utAge
-		}
 		if sdAge > maxAge {
 			maxAge = sdAge
 		}
@@ -685,7 +668,6 @@ func (s *Server) setupRoutes() {
 			"next_refresh_in": nextRefreshIn,
 			"cache_ages": map[string]int{
 				"tpd": int(tpdAge),
-				"ut":  int(utAge),
 				"sd":  int(sdAge),
 			},
 			"auto_refresh": s.config.AutoRefresh,
@@ -782,15 +764,9 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Uptime now comes from the TPD-integrated uptime tracker; the standalone
-	// uptime tracker was decommissioned. Prefer an operator-supplied UTURL for
-	// back-compat, else fall back to the TPD's own /uptimes?v=v2 feed — it
-	// returns the same []VisorSummary ({pk,on,version,daily}) shape the UI's
+	// Uptime comes from TPD's /uptimes?v=v2 feed. It returns the same []VisorSummary ({pk,on,version,daily}) shape the UI's
 	// UptimeEntry expects, so no remapping is needed.
-	base := s.config.UTURL
-	if base == "" {
-		base = s.config.TPDURL
-	}
+	base := s.config.TPDURL
 	if base == "" {
 		w.Write([]byte("[]")) //nolint:errcheck,gosec
 		return
@@ -1209,8 +1185,7 @@ func (s *Server) refreshCache() {
 	// Build URL to cache file mapping dynamically. Only clearnet-fetch what is
 	// actually served that way: when embedded in a visor, all-transports comes
 	// from the dmsg/CXO feed (handleTransports), not a cached clearnet TPD, so
-	// skip the TPD fetch. The standalone uptime tracker is decommissioned, so
-	// only fetch uptimes when an operator explicitly configured a UTURL.
+	// skip the TPD fetch, and the uptimes with it.
 	urls := map[string]string{}
 	// TPD: embedded-in-visor uses the dmsg/CXO feed (handleTransports), so skip.
 	// Standalone fetches over dmsg (tpdBase → dmsg://) when a dmsg client is set;
@@ -1219,13 +1194,8 @@ func (s *Server) refreshCache() {
 		tpdURL := s.tpdBase() + "/all-transports"
 		urls[CacheFilePath(s.config.CacheDirTPD, tpdURL)] = tpdURL
 	}
-	// Uptime feed: prefer the TPD-integrated tracker (standalone UT decommissioned),
-	// falling back to an operator-supplied UTURL. Keeps the /api/uptimes cache warm
-	// so visor online/offline status is populated. Gated like the TPD fetch above.
-	if s.config.UTURL != "" {
-		utURL := s.config.UTURL + "/uptimes?v=v2"
-		urls[CacheFilePath(s.config.CacheDirUT, utURL)] = utURL
-	} else if s.getVisorAPI() == nil && s.config.TPDURL != "" && !s.deploymentFetchGated() {
+	// Keep the /api/uptimes cache warm so visor online status is populated.
+	if s.getVisorAPI() == nil && s.config.TPDURL != "" && !s.deploymentFetchGated() {
 		upURL := s.tpdBase() + "/uptimes?v=v2"
 		urls[CacheFilePath(s.config.CacheDirUT, upURL)] = upURL
 	}
@@ -1420,7 +1390,7 @@ func (s *Server) getCacheAgeSeconds(cacheFile string) int64 {
 // raw from here. The content-type gate leaves the wasm blob
 // (application/wasm) and the websocket upgrade alone.
 func (s *Server) Handler() http.Handler {
-	return middleware.Compress(5)(s.mux)
+	return httputil.CompressMin(httputil.CompressMinBytes, 5)(s.mux)
 }
 
 // Start initializes the cache and starts auto-refresh without starting the HTTP server.
@@ -1454,7 +1424,7 @@ func (s *Server) ListenAndServe() error {
 	s.log.WithField("tpd", s.config.CacheDirTPD).WithField("ut", s.config.CacheDirUT).
 		WithField("sd", s.config.CacheDirSD).Info("Cache directories")
 	s.log.WithField("max_age_min", s.config.CacheMaxAge).Debug("Cache max age")
-	s.log.WithField("tpd", s.config.TPDURL).WithField("ut", s.config.UTURL).
+	s.log.WithField("tpd", s.config.TPDURL).
 		WithField("sd", s.config.SDURL).Debug("Service URLs")
 	if s.config.AutoRefresh {
 		s.log.Info("Auto-refresh: enabled")

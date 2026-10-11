@@ -68,7 +68,7 @@ skywire cli tp
       --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --remote strings    list transports on remote visor(s) via TPS (comma-separated PKs)
       --skynet strings    list the transports remote visor(s) sign and serve, fetched over skywire transports (comma-separated PKs)
-  -L, --live              live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes
+  -L, --live              live-refresh mode (TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes
 ```
 
 ## Global Flags

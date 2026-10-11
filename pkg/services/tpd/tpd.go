@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,8 +67,10 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
@@ -153,6 +156,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 			closeAll()
 			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
 		}
+	} else {
+		// An in-memory store is the whole set already.
+		store.ShareStore(ctx, storeCfg.URL, st)
 	}
 
 	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
@@ -181,6 +187,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
 	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
+	s.chartsAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
 	if live {
 		if err := tpdAPI.SeedReconcile(ctx); err != nil {
@@ -472,4 +479,13 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
 	return mgr
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
 }

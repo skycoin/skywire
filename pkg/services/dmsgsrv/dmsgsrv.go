@@ -20,15 +20,11 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	chi "github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -184,15 +180,11 @@ func (s *service) Run(ctx context.Context) error {
 		cfg.MaxSessions = dmsg.DefaultMaxSessions
 	}
 	if cfg.HTTPAddress == "" {
-		u, err := url.Parse(cfg.LocalAddress)
+		addr, err := healthAddr(cfg.LocalAddress)
 		if err != nil {
-			return fmt.Errorf("dmsg-server: parse local_address %q: %w", cfg.LocalAddress, err)
+			return err
 		}
-		hp, err := strconv.Atoi(u.Port())
-		if err != nil {
-			return fmt.Errorf("dmsg-server: parse local_address port %q: %w", cfg.LocalAddress, err)
-		}
-		cfg.HTTPAddress = ":" + strconv.Itoa(hp+1)
+		cfg.HTTPAddress = addr
 	}
 
 	var m metrics.Metrics
@@ -203,11 +195,11 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	metricsutil.ServeHTTPMetrics(log, s.cfg.MetricsAddr)
 
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r := httputil.NewRouter()
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 
 	srvAPI := dmsgserver.NewServerAPI(r, log, m)
 
@@ -332,7 +324,8 @@ func (s *service) Run(ctx context.Context) error {
 	// wasm-visor with no extra port and no discovery topology change. See
 	// docs/design/dmsg-server-protocol-unification.md.
 	mainWSURL := ""
-	var wssHost string // <DNSLabel>.<suffix> this server's wss advert + built-in TLS use
+	var wssHost string      // <DNSLabel>.<suffix> this server's wss advert + built-in TLS use
+	var wssAliases []string // the deployment's earlier names for this server, still answered
 	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
 		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
 		// wss_domain_suffix: advertise a TLS-fronted wss:// URL self-derived from
@@ -348,6 +341,7 @@ func (s *service) Run(ctx context.Context) error {
 		suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, ".")
 		if suffix == "" && deployment.Prod.IsKnownDmsgServer(cfg.PubKey) {
 			suffix = strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
+			wssAliases = deployment.Prod.WSSAliasHosts(cfg.PubKey.DNSLabel())
 		}
 		if suffix != "" {
 			wssHost = cfg.PubKey.DNSLabel() + "." + suffix
@@ -407,7 +401,7 @@ func (s *service) Run(ctx context.Context) error {
 					cacheDir = filepath.Join(filepath.Dir(cfg.Path), "dmsg-autocert")
 				}
 			}
-			ServeWSTLS(log, srv, cfg.WSTLSAddress, cacheDir, wssHost, mainWSURL)
+			ServeWSTLS(log, srv, cfg.WSTLSAddress, cacheDir, wssHost, mainWSURL, wssAliases...)
 		}
 	}
 
@@ -721,4 +715,18 @@ func dmsgdServersFeed(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Log
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
 	return mgr
+}
+
+// healthAddr is the health address for a server listening on local: the
+// port after its own, on every interface.
+func healthAddr(local string) (string, error) {
+	_, p, err := net.SplitHostPort(local)
+	if err != nil {
+		return "", fmt.Errorf("dmsg-server: parse local_address %q: %w", local, err)
+	}
+	hp, err := strconv.Atoi(p)
+	if err != nil {
+		return "", fmt.Errorf("dmsg-server: parse local_address port %q: %w", local, err)
+	}
+	return ":" + strconv.Itoa(hp+1), nil
 }

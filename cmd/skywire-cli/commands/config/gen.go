@@ -498,6 +498,9 @@ func init() {
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerPublicAddr, "dmsg-server-public", "${DMSGSERVERPUBLIC}", "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerWSTLSAddr, "dmsg-server-ws-tls", "${DMSGSERVERWSTLS}", "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-ws-tls")
+	skyenvStringVar(genConfigCmd.Flags(), &deploymentHost, "deployment", "${DEPLOYMENT}", "run a whole deployment in this visor and use it instead of prod. Takes the public host[:port] of its dmsg server (port 8080 by default), which runs on the visor key and becomes the transport port; the address resolver takes UDP port+13")
+	skyenvStringVar(genConfigCmd.Flags(), &deploymentRedis, "deployment-redis", "${DEPLOYMENTREDIS}", "redis URL or socket path for the deployment; empty keeps its entries in memory")
+	skyenvStringVar(genConfigCmd.Flags(), &deploymentWSSSuffix, "deployment-wss-suffix", "${DEPLOYMENTWSSSUFFIX}", "domain suffix of the deployment dmsg server's wss front, wss://<pk label>.<suffix>/dmsg, for browser visors")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayAddr, "dmsg-relay-addr", "${DMSGRELAYADDR}", "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayKeys, "dmsg-relay-keys", "${DMSGRELAYKEYS}", "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgRelay, "no-dmsg-relay", "${NODMSGRELAY:-false}", "do not serve the local dmsg relay acceptor at all (it is served by default)")
@@ -749,7 +752,10 @@ var genConfigCmd = &cobra.Command{
 			isStdout = false
 		}
 
-		fetchServiceConfig(log)
+		// A deployment visor serves its own services, so nothing is fetched.
+		if deploymentHost == "" {
+			fetchServiceConfig(log)
+		}
 
 		// reset the state of isStdout
 		isStdout = wasStdout
@@ -780,6 +786,12 @@ var genConfigCmd = &cobra.Command{
 		conf.Common.Version = x
 		conf.Common.SK = sk
 		conf.Common.PK = pk
+
+		if deploymentHost != "" {
+			if err := configureDeployment(pk); err != nil {
+				log.WithError(err).Fatal("deployment")
+			}
+		}
 
 		if services.DNSServer != "" {
 			dnsServer = services.DNSServer
@@ -886,7 +898,6 @@ func fetchServiceConfig(log *logging.Logger) {
 			services.TransportDiscoveryDmsg = embedded.TransportDiscoveryDmsg
 			services.AddressResolverDmsg = embedded.AddressResolverDmsg
 			services.RouteFinderDmsg = embedded.RouteFinderDmsg
-			services.UptimeTrackerDmsg = embedded.UptimeTrackerDmsg
 			services.ServiceDiscoveryDmsg = embedded.ServiceDiscoveryDmsg
 		}
 	} else {
@@ -1134,9 +1145,14 @@ func mergeExistingApps(log *logging.Logger) {
 	if len(oldConfCache.EmbeddedServices) > 0 && len(conf.EmbeddedServices) == 0 {
 		conf.EmbeddedServices = oldConfCache.EmbeddedServices
 	}
-	// So is memory_limit: a host sized for the services it runs keeps its limit.
-	if oldConfCache.MemoryLimit != "" {
+	// So is an explicit memory_limit. "auto" was only the old generated default,
+	// so a regen replaces it with the "none" default.
+	if l := oldConfCache.MemoryLimit; l != "" && l != "auto" {
 		conf.MemoryLimit = oldConfCache.MemoryLimit
+	}
+	// So is where the status page of those services is served.
+	if oldConfCache.DeploymentStatusAddr != "" {
+		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
 	}
 	if oldConfCache.Launcher == nil {
 		return
@@ -1498,9 +1514,6 @@ func configureLauncher(log *logging.Logger) {
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: isDisplayNodeIP,
 	}
-	// The standalone uptime-tracker is deprecated (uptime is now tracked by the
-	// discovery services). Generated configs no longer carry an `uptime_tracker`
-	// block — conf.UptimeTracker stays nil and initUptimeTracker skips it.
 	if cliAddr != "" {
 		conf.CLIAddr = offsetAddr(cliAddr)
 	} else {
@@ -1529,7 +1542,8 @@ func configureLauncher(log *logging.Logger) {
 	if conf.GeoIP == "" {
 		conf.GeoIP = deployment.Prod.GeoIP
 	}
-	conf.MemoryLimit = "auto"
+	// Written out so the setting is visible. "none" sets no Go memory limit.
+	conf.MemoryLimit = "none"
 	// Config bootstrap service
 	conf.ConfService = serviceConfURL
 	conf.ConfServiceDmsg = services.ConfDmsg
@@ -1629,6 +1643,9 @@ func configureLauncher(log *logging.Logger) {
 			Enabled:       true,
 			PublicAddress: dmsgServerPublicAddr,
 			WSTLSAddress:  dmsgServerWSTLSAddr,
+		}
+		if deploymentHost != "" {
+			conf.Dmsg.Server.WSSDomainSuffix = strings.TrimPrefix(deploymentWSSSuffix, ".")
 		}
 	}
 
@@ -2628,9 +2645,9 @@ func configureExtraResolvers(log *logging.Logger) {
 
 // configureBrowseOrigin enables, by default, the loopback "real-origin" browse
 // proxy (pkg/visor/meshproxy.go). Its meshStatusHandler serves the proxy-status
-// pages at status-<surface>.<suffix> (e.g. status-skysocks.haltingstate.net) —
+// pages at status-<surface>.<suffix> (e.g. status-skysocks.theskywirenetwork.net) —
 // the native counterpart of the wasm visor's browse origin. Suffix defaults to
-// the deployment's browse_origin_suffix (".haltingstate.net"), matching the wasm
+// the deployment's browse_origin_suffix (".theskywirenetwork.net"), matching the wasm
 // surface, so a real single-level wildcard cert *.<suffix> covers the status
 // hosts. TLS activates on that loopback listener ONLY when the operator supplies
 // --browse-tls-cert/--browse-tls-key (the wildcard PRIVATE KEY is a deployment

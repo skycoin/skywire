@@ -42,7 +42,7 @@ func init() {
 	uptimeCmd.Flags().DurationVar(&uptimeRestartLoopMax, "restart-loop-threshold", 30*time.Second,
 		"sessions shorter than this get a (restart loop?) tag")
 	uptimeCmd.Flags().BoolVarP(&uptimeLive, "live", "L", false,
-		"live-refresh mode (bubbletea TUI, 1s tick); current session 'running:' line ticks up in place")
+		"live-refresh mode (TUI, 1s tick); current session 'running:' line ticks up in place")
 	RootCmd.AddCommand(uptimeCmd)
 }
 

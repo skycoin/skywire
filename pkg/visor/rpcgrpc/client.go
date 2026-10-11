@@ -68,7 +68,7 @@ func (c *PingClient) Close() error {
 // other PingClient methods this returns the raw protoc-generated
 // stream type because callers want event-level control (e.g. the
 // 'cli visor ping tree-stream' command emits NDJSON envelopes, the
-// upcoming Bubble Tea TUI rewire will drive its own update loop).
+// ping tree TUI drives its own update loop).
 // Wrapping in a callback pattern here would force every consumer to
 // re-marshal back to the event type.
 func (c *PingClient) StreamPingTree(ctx context.Context, req *PingTreeRequest) (PingService_StreamPingTreeClient, error) {

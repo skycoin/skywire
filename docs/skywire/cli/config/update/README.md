@@ -41,6 +41,7 @@ skywire cli config update
       --set-minhop int           change min hops value (default -1)
   -i, --input string             path of input config file.
   -o, --output string            config file to output
+  -u, --user                     update config at: $HOME/skywire-config.json
 ```
 
 ## Global Flags

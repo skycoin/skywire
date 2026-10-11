@@ -5,6 +5,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 )
 
 // State is what a running service reports about itself: `skywire cli visor
@@ -49,6 +50,12 @@ type PublisherState struct {
 	Port uint16 `json:"port"`
 	treestore.PublishState
 	node.PublisherStats
+}
+
+// ChartsPager is a service with a charts page. A host shows the pages of all
+// its services together as one status page.
+type ChartsPager interface {
+	ChartsPage() *charts.Page
 }
 
 // Stater is implemented by services that report their State.

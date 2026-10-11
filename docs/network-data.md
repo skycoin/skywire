@@ -15,7 +15,6 @@ configuration. Use `--direct` to skip the visor RPC.
 | Address Resolver | http://ar.skywire.skycoin.com | `dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80` |
 | Route Finder | http://rf.skywire.skycoin.com | `dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80` |
 | Service Discovery | http://sd.skycoin.com | `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80` |
-| Uptime Tracker | http://ut.skywire.skycoin.com | `dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80` |
 
 ---
 
@@ -66,7 +65,6 @@ Route Setup Node      OK      557ms    dmsg       v1.3.46-0               032457
 | Address Resolver | [http://ar.skywire.skycoin.com/health](http://ar.skywire.skycoin.com/health) | `dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80/health` |
 | Route Finder | [http://rf.skywire.skycoin.com/health](http://rf.skywire.skycoin.com/health) | `dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80/health` |
 | Service Discovery | [http://sd.skycoin.com/health](http://sd.skycoin.com/health) | `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/health` |
-| Uptime Tracker | [http://ut.skywire.skycoin.com/health](http://ut.skywire.skycoin.com/health) | `dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80/health` |
 
 ---
 
@@ -302,11 +300,11 @@ List public visors from service discovery.
 
 ### `skywire cli ut`
 
-Standalone uptime tracker data.
+Visor uptime as transport discovery records it.
 
 **Data source:** `/uptimes?v=v2`
-- [http://ut.skywire.skycoin.com/uptimes?v=v2](http://ut.skywire.skycoin.com/uptimes?v=v2)
-- `dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80/uptimes?v=v2`
+- [http://tpd.skywire.skycoin.com/uptimes?v=v2](http://tpd.skywire.skycoin.com/uptimes?v=v2)
+- `dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v2`
 
 ### `skywire cli ut tpd`
 

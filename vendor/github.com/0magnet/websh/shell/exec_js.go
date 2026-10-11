@@ -4,27 +4,40 @@ package shell
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"path"
 	"path/filepath"
 	"strings"
 	"syscall/js"
+	"time"
 
+	"github.com/0magnet/bottle/proc"
 	"github.com/0magnet/sh/v3/expand"
 	"github.com/0magnet/sh/v3/interp"
+
+	"github.com/0magnet/websh/widget"
 )
 
+// resizePoll is how often a child's terminal size is checked, as ssh does.
+const resizePoll = 250 * time.Millisecond
+
 // execExternal runs a program from the filesystem as a child wasm process via
-// bottle's proc layer (globalThis.proc). It is how a shell in the tab execs a
-// compiled binary — a Go toolchain, say — parked in jsfs on the PATH.
+// bottle's proc layer (globalThis.proc): a compiled binary — a Go toolchain,
+// a TUI — on the PATH, built by Go or by TinyGo.
 //
-// Its stdio crosses through jsfs pipes, never a Go callback: the child writes
-// its stdout into a pipe (a plain JS sink), and this shell reads the other end
-// with an ordinary os.File. Nothing re-enters this runtime from inside the
-// child's execution slice.
+// It runs as a program in a terminal does. Its output reaches the terminal as
+// it is written. What is typed reaches its stdin, and a program waiting for
+// keys waits. Ctrl+C (cooked) stops it. When its stdout is this terminal it
+// has a terminal of its own (see bottle's proc.TTY, and childtty): the size,
+// resizes, and raw mode, in which every key is its own. It is told
+// WEBSH_PLACEMENTS=1 then, and may lay widgets it offers (package widget)
+// over its cells; they are withdrawn when it exits.
+//
+// The program is read from this shell's filesystem, which need not be the
+// page's jsfs, and compiled once for as long as the file stays the same.
 func (s *Shell) execExternal(ctx context.Context, args []string) (int, bool) {
-	proc := js.Global().Get("proc")
-	fsjs := js.Global().Get("fs")
-	if !proc.Truthy() || !fsjs.Truthy() {
+	if !js.Global().Get("proc").Truthy() || !js.Global().Get("fs").Truthy() {
 		return 0, false // no process/filesystem layer on this page
 	}
 	hc := interp.HandlerCtx(ctx)
@@ -33,90 +46,141 @@ func (s *Shell) execExternal(ctx context.Context, args []string) (int, bool) {
 		return 0, false // not on the PATH: let the caller say "not found"
 	}
 
-	// A jsfs pipe per output stream; the child writes the write end via a plain
-	// JS sink (no callback into this runtime), and its bytes queue in jsfs.
-	makePipe := func() (r, w int) {
-		p := fsjs.Call("pipe")
-		return p.Index(0).Int(), p.Index(1).Int()
+	c := &proc.Cmd{Path: bin, Args: args, Dir: hc.Dir, Stdout: hc.Stdout, Stderr: hc.Stderr}
+	fi, err := s.FS.Stat(bin)
+	if err != nil {
+		Printf(hc.Stderr, "%s: %v\n", args[0], err)
+		return 126, true
 	}
-	ro, wo := makePipe()
-	re, we := makePipe()
+	// argv[0] keys the compiled program, and the stamp tells this file from
+	// the next one written there.
+	// Only a wasm module is a program here; a text file on the PATH, or a
+	// path typed at the prompt, is not run (as bash will not run a file
+	// without its execute bit) but said to be what it is.
+	if !isWasm(s, bin) {
+		Printf(hc.Stderr, "%s: cannot execute: not a wasm program\n", args[0])
+		return 126, true
+	}
+	c.Stamp = fmt.Sprintf("%s:%d:%d", bin, fi.Size(), fi.ModTime().UnixNano())
+	if !proc.Cached(args[0], c.Stamp) {
+		if c.Program, err = readAll(s, bin); err != nil {
+			Printf(hc.Stderr, "%s: %v\n", args[0], err)
+			return 126, true
+		}
+	}
 
-	opts := js.Global().Get("Object").New()
-	argv := js.Global().Get("Array").New()
-	for _, a := range args {
-		argv.Call("push", a)
-	}
-	opts.Set("argv", argv)
-	opts.Set("cwd", hc.Dir)
-	env := js.Global().Get("Object").New()
+	tty := s.Size != nil && s.IsTerminal != nil && s.IsTerminal(hc.Stdout)
 	hc.Env.Each(func(name string, vr expand.Variable) bool {
-		env.Set(name, vr.String())
+		if vr.IsSet() {
+			c.Env = append(c.Env, name+"="+vr.String())
+		}
 		return true
 	})
-	opts.Set("env", env)
-	opts.Set("stdout", proc.Call("pipeSink", wo))
-	opts.Set("stderr", proc.Call("pipeSink", we))
+	raw := false
+	if tty {
+		c.Env = append(c.Env, "WEBSH_PLACEMENTS=1")
+		cols, rows := s.Size()
+		c.TTY = &proc.TTY{Cols: cols, Rows: rows, OnRaw: func(on bool) {
+			raw = on
+			if s.RawMode != nil {
+				s.RawMode(on)
+			}
+		}}
+	}
+	in, err := c.StdinPipe()
+	if err != nil {
+		Printf(hc.Stderr, "%s: %v\n", args[0], err)
+		return 126, true
+	}
+	p, err := c.Start()
+	if err != nil {
+		Printf(hc.Stderr, "%s: %v\n", args[0], err)
+		return 126, true
+	}
+	defer s.WithSource("local")()
 
-	res := proc.Call("spawn", opts)
-	done := make(chan int, 1)
-	then := js.FuncOf(func(_ js.Value, a []js.Value) any {
-		code := 0
-		if len(a) > 0 {
-			code = a[0].Int()
+	done := make(chan struct{})
+	var code int
+	go func() {
+		code, err = p.Wait()
+		close(done)
+		// A key read for it after it is gone is the shell's again: wake the
+		// read below rather than leave it waiting for one.
+		if s.WakeStdin != nil {
+			s.WakeStdin()
 		}
-		done <- code
-		return nil
-	})
-	res.Get("exited").Call("then", then)
-	code := <-done
-	then.Release()
+	}()
+	go func() {
+		t := time.NewTicker(resizePoll)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				p.Kill(false)
+				return
+			case <-t.C:
+				if tty {
+					p.Resize(s.Size())
+				}
+			}
+		}
+	}()
+	feed(hc.Stdin, in, done)
+	<-done
 
-	// The child is gone. Close the write ends (EOF for the read ends) and drain
-	// the buffered output into the shell's stdio. Reading now — with the child's
-	// runtime finished — keeps every jsfs read callback inside this runtime, so
-	// nothing re-enters mid-slice. Stock syscall/fs_js.go can't read these
-	// JS-created pipe fds (they aren't in its fd table), so read jsfs directly.
-	fsjs.Call("pipeRelease", wo)
-	fsjs.Call("pipeRelease", we)
-	// Ignoring these two: they are the shell's own stdio, so if it cannot
-	// accept output there is nowhere left to report the failure to.
-	hc.Stdout.Write(readPipe(fsjs, ro)) //nolint:errcheck,gosec
-	hc.Stderr.Write(readPipe(fsjs, re)) //nolint:errcheck,gosec
-	fsjs.Call("pipeRelease", ro)
-	fsjs.Call("pipeRelease", re)
+	widget.Drop(p.ID)
+	if raw && s.RawMode != nil {
+		s.RawMode(false) // it left the terminal raw: killed, or it forgot
+	}
+	if err != nil {
+		Printf(hc.Stderr, "%s: %v\n", args[0], err)
+		return 126, true
+	}
 	return code, true
 }
 
-// readPipe drains a jsfs pipe read fd to completion via globalThis.fs.read.
-func readPipe(fsjs js.Value, fd int) []byte {
-	const chunk = 1 << 16
-	jsBuf := js.Global().Get("Uint8Array").New(chunk)
-	var out []byte
-	for {
-		done := make(chan int, 1)
-		cb := js.FuncOf(func(_ js.Value, a []js.Value) any {
-			if len(a) > 0 && a[0].Truthy() { // read error
-				done <- -1
-				return nil
-			}
-			n := 0
-			if len(a) > 1 {
-				n = a[1].Int()
-			}
-			done <- n
-			return nil
-		})
-		fsjs.Call("read", fd, jsBuf, 0, chunk, js.Null(), cb)
-		n := <-done
-		cb.Release()
-		if n <= 0 { // EOF or error
-			return out
-		}
-		b := make([]byte, n)
-		js.CopyBytesToGo(b, jsBuf)
-		out = append(out, b...)
+// feed copies what is typed (or piped) into a child's stdin until the child
+// exits or the input ends. It reads on the caller's goroutine, so no reader is
+// left behind to take the shell's next key.
+func feed(r io.Reader, w io.WriteCloser, done <-chan struct{}) {
+	defer w.Close() //nolint:errcheck // the end of its input either way
+	if r == nil {
+		return
 	}
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		n, err := r.Read(buf)
+		select {
+		case <-done:
+			return
+		default:
+		}
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// readAll reads a program from the shell's filesystem.
+func readAll(s *Shell, name string) ([]byte, error) {
+	f, err := s.FS.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck // read-only
+	return io.ReadAll(f)
 }
 
 // lookPath resolves name against the shell's filesystem: a path with a slash
@@ -151,4 +215,16 @@ func envGet(env expand.Environ, name string) string {
 		return v.String()
 	}
 	return ""
+}
+
+// isWasm reports whether the file at name starts as a wasm module does.
+func isWasm(s *Shell, name string) bool {
+	f, err := s.FS.Open(name)
+	if err != nil {
+		return false
+	}
+	defer f.Close() //nolint:errcheck // read-only
+	head := make([]byte, 4)
+	n, err := io.ReadFull(f, head)
+	return err == nil && n == 4 && string(head) == "\x00asm"
 }

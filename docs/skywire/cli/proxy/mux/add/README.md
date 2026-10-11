@@ -15,9 +15,11 @@ Path-disjointness across intermediate hops, and "find me a disjoint
 route automatically," are deferred. For now the caller picks the
 route via 'route calc' (or constructs one).
 
-When the app has multiple concurrent rg's, pass --rg <src-port> to
-target one of them; otherwise the visor errors with the candidate
-list.
+When the app has multiple concurrent rg's — one per SOCKS5 connection,
+or one per tunnel under 'proxy start --tunnels N' — pass --rg <port> to
+target one of them; that is the group's own port as 'mux info' prints it
+(desc.dst_port), since every group shares one src_port. Otherwise the
+visor errors with the candidate list.
 
 Example:
   skywire cli proxy mux info                                # see current legs + rg src_port
@@ -36,8 +38,9 @@ skywire cli proxy mux add
 ## Flags
 
 ```
+      --forward-only   pin the new leg to the FORWARD (upload) direction: its reverse rule is dropped, so it adds upstream send capacity without enlarging the download set. To clear the pin, 'mux rm <tp-id>' the leg and add it again without this flag
   -n, --name string    app whose route group to modify (default "skysocks-client")
-      --rg uint16      rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)
+      --rg uint16      rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'
       --route string   route JSON file ('-' = stdin); shape is 'cli route calc --json' output (default "-")
 ```
 

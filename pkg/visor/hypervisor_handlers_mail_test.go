@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -40,8 +40,8 @@ func TestMailSendFailureKeepsTheReasons(t *testing.T) {
 		mu:       new(sync.RWMutex),
 		selfConn: Conn{API: mailSendAPI{res: res, err: errors.New("skymail: not delivered to any recipient")}},
 	}
-	r := chi.NewRouter()
-	r.Post("/visors/{pk}/mail/send", hv.postMailSend())
+	r := httputil.NewRouter()
+	hv.mailRoutes(r)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/visors/"+pk.Hex()+"/mail/send",
 		strings.NewReader(`{"to":["bob@z.dmsg"],"body":"x"}`)))

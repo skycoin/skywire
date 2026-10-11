@@ -117,10 +117,13 @@ type HypervisorConfig struct {
 	CXOSubscribeInterval Duration `json:"cxo_subscribe_interval,omitempty"`
 	// WasmServe, when non-nil with a non-empty Addr, also serves the
 	// standalone wasm-visor PWA / testing harness from this same visor
-	// process on that address — built from the binary's embedded wasm, so
-	// a rebuild-restart serves the latest (no separate `hv serve`). Off
-	// by default. See pkg/visor.ServeWasm.
+	// process on that address, so a rebuild-restart serves the latest (no
+	// separate `hv serve`). Off by default. See pkg/visor.ServeWasm.
 	WasmServe *WasmServeConf `json:"wasm_serve,omitempty"`
+	// WasmModuleSource is the visor the js/wasm module served for the desk
+	// is refreshed from when the desk is opened. Empty means
+	// the deployment's wasm_module_source.
+	WasmModuleSource string `json:"wasm_module_source,omitempty"`
 }
 
 // WasmServeConf configures the in-process standalone wasm-visor server —
@@ -134,13 +137,11 @@ type WasmServeConf struct {
 	Harness  bool   `json:"harness,omitempty"`  // mount the /ctl/* operator control bridge (DEV ONLY — never expose publicly)
 	Password string `json:"password,omitempty"` // optional access-password gate (use with TLS)
 	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
-	// /skywire.wasm — the desk host, the tab's visor and every command the
-	// desk's terminal runs. Empty = the module embedded by the two-stage build
-	// (make build-embedded), else the package location on disk; without one
-	// wasm_serve does not start. Same as `skywire cli hv serve --exec-wasm`.
-	// Build it with:
-	//   GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" \
-	//     -trimpath -ldflags "-s -w" -o build/skywire.wasm .
+	// /skywire.wasm: the desk host, the tab's visor and every command the
+	// desk's terminal runs. Empty means the module installed beside the
+	// binary, which is refreshed when the desk is opened. A path here is a
+	// developer's own build and is served as it is. Same as
+	// `skywire cli hv serve --exec-wasm`.
 	ExecWasm string `json:"exec_wasm,omitempty"`
 	// DeskHelpTerminal opens a second desk terminal that has already run
 	// `skywire --help`. Off by default: it is a whole extra Go/wasm runtime of

@@ -37,13 +37,14 @@ skywire cli route
 - [rm](rm/README.md) — Remove routing rule
 - [rsn-remote-stats](rsn-remote-stats/README.md) — Query a standalone Route Setup Node's statistics
 - [rsn-stats](rsn-stats/README.md) — Show embedded Route Setup Node request statistics
+- [settings](settings/README.md) — Show or set the visor's runtime router knobs
 - [table-stats](table-stats/README.md) — Show routing-table observability counters (rule count, route-ID high-water, per-type)
 - [trace](trace/README.md) — Per-hop latency printout for the route to a destination visor
 
 ## Flags
 
 ```
-  -L, --live         live-refresh mode (bubbletea TUI, 1s tick) for the routing-rules listing
+  -L, --live         live-refresh mode (TUI, 1s tick) for the routing-rules listing
   -n, --nrid         display the next available route id
   -i, --rid string   show routing rule matching route ID
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")

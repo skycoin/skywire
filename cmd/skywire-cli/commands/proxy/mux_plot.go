@@ -59,7 +59,7 @@ func init() {
 	muxPlotCmd.Flags().IntVar(&muxPlotSmooth, "smooth", 0, "shorthand for appending |sma:N to the pipeline (0 = none)")
 	muxPlotCmd.Flags().StringVarP(&muxPlotPipeline, "pipeline", "p", "", "plot-go processing pipeline for the bandwidth series (default 'roc:<interval>'; e.g. 'roc:1|sma:5', 'roc:1|avg:5')")
 	muxPlotCmd.Flags().BoolVar(&muxPlotRecv, "recv", false, "plot received bandwidth instead of sent")
-	muxPlotCmd.Flags().BoolVar(&muxPlotTUI, "tui", false, "render in a bubbletea alt-screen (flicker-free, resize-aware) instead of ANSI redraw; poll mode only")
+	muxPlotCmd.Flags().BoolVar(&muxPlotTUI, "tui", false, "render in an alt-screen (flicker-free, resize-aware) instead of ANSI redraw; poll mode only")
 	// --pk mode: plot a controlled, self-measured mux route (StreamMuxBandwidth)
 	// instead of a running app's route group — the reliable multi-leg demonstrator.
 	muxPlotCmd.Flags().StringVar(&muxPlotPK, "pk", "", "measure an ad-hoc mux route to this peer PK instead of polling a running app")
@@ -216,7 +216,7 @@ var plotPalette = []asciigraph.AnsiColor{
 
 // runMuxPlot drives the poll → pipeline → redraw loop until ctrl+c.
 // Two renderers share one data path: the default plotnet-style ANSI redraw,
-// and (--tui) a bubbletea alt-screen via livetui — flicker-free, resize-aware,
+// and (--tui) an alt-screen via livetui — flicker-free, resize-aware,
 // scrollback-preserving. The tracks map persists across livetui's interval
 // Refresh calls via the closure; per-leg plot pipelines carry the rate state.
 func runMuxPlot(poll func() (any, error)) {
@@ -580,8 +580,8 @@ func render(tracks map[int]*legTrack) {
 
 // frame assembles one chart frame (bandwidth panel over RTT panel, legend,
 // aggregate, event markers) as a string, without any screen-clear escapes — so
-// it can be piped either through render's ANSI redraw or into the bubbletea
-// alt-screen viewport (livetui) in --tui mode. Empty string when there are no
+// it can be piped either through render's ANSI redraw or into livetui's
+// alt-screen view in --tui mode. Empty string when there are no
 // legs to draw yet.
 func frame(tracks map[int]*legTrack) string {
 	idxs := make([]int, 0, len(tracks))

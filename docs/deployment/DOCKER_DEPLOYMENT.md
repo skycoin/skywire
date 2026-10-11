@@ -39,10 +39,8 @@ The compose file defines the following services:
 | setup-node | `svc sn` | none | dmsg-discovery | Route setup node |
 | transport-discovery | `svc tpd` | 9091 | redis, dmsg-discovery | Transport discovery and registration |
 | transport-setup | `svc tps` | none | none | Transport setup service |
-| uptime-tracker | `svc ut` | configurable | postgres, redis, dmsg-discovery | Tracks visor uptime |
 | stun | `svc stun` | 3478, 3479 | none | STUN server for NAT detection |
 | geoip | `svc ip` | configurable | none | GeoIP service (embedded database) |
-| postgres | postgres image | 5432 | none | Database for uptime tracker |
 | redis | redis image | 6379 | none | Key-value store for service state |
 | skywire-visor | `visor` | none | most services | Optional deployment visor |
 
@@ -59,7 +57,7 @@ cp env.template .env
 The `.env` file contains:
 - Service ports
 - Secret keys for each service (generate with `skywire cli config gen-keys`)
-- Redis and Postgres credentials
+- Redis credentials
 - Network monitor public keys
 - DMSG server configuration
 - Pprof debug ports
@@ -194,7 +192,6 @@ ports:
    - `config-bootstrapper/config.json` — config bootstrapper service config
    - `dmsg-server/<name>/config.json` — dmsg server configs
    - `setup-node/config.json` — setup node config
-   - `postgres-init/` — postgres initialization scripts
 3. Pull the image and start services:
 
 ```bash
@@ -265,4 +262,4 @@ When running separate production and test deployments:
 ### Services not starting
 - Check `.env` file exists and has all required variables
 - Check `docker compose logs <service-name>`
-- Verify redis and postgres are healthy: `docker compose ps`
+- Verify redis is healthy: `docker compose ps`

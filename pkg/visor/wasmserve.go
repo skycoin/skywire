@@ -40,7 +40,6 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // WasmServeConfig configures ServeWasm. Mirrors the `hv serve` flags.
@@ -64,11 +63,12 @@ type WasmServeConfig struct {
 	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
-	// ExecWasmPath, when set, serves the skywire command module (the root
-	// binary built for GOOS=js) from that file at /skywire.wasm instead of the
-	// copy the two-stage build embedded (pkg/wasmhv/execwasm). A developer
-	// override for rebuild-in-place work; distributed binaries leave it empty.
+	// ExecWasmPath serves the skywire command module from that file at
+	// /skywire.wasm. Empty means the module installed beside the binary.
 	ExecWasmPath string
+	// module returns the refresher for that module, nil to serve it as it is,
+	// as a standalone `hv serve` does.
+	module func() *wasmModuleRefresher
 	// DeskHelpTerminal opens a second terminal that has already run
 	// `skywire --help`. Off by default: it costs a whole extra Go/wasm runtime
 	// of the full binary, permanently — see deskWasmBootOpts.
@@ -92,16 +92,12 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		log = logging.MustGetLogger("wasm-serve")
 	}
 	// The ONE module everything served here runs out of: the desk host, the
-	// tab's visor, every command the terminal executes. Explicit path, else
-	// the module embedded by the two-stage build, else the package location
-	// on disk (execModuleSource). Without one there is nothing to serve — a
-	// plain source build stops here rather than put up a desk with no host.
+	// tab's visor, every command the terminal executes (execModuleSource).
 	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
 	if !haveExecWasm {
-		return fmt.Errorf("no skywire command module embedded: run `make build-embedded` or pass --exec-wasm")
+		return fmt.Errorf("no skywire command module at %q: install skywire.wasm.gz beside the binary or pass --exec-wasm", execWasmPath)
 	}
 	cfg.ExecWasmPath = execWasmPath
-	warnStaleExecModule(log)
 	uiFS, err := HypervisorUIFS()
 	if err != nil {
 		return fmt.Errorf("hypervisor UI assets: %w", err)
@@ -213,6 +209,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// start without one) — the desk host, the tab's visor and every command
 	// the terminal runs.
 	mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
+		cfg.refresher().await(r.Context())
 		serveExecWasm(w, r, execWasmPath)
 	})
 	// The desk — the ONE page, served AT THE ROOT below: the tab as a Linux
@@ -348,6 +345,8 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			// root. What does frame it is an embedder of the whole surface,
 			// and the desk is the surface.
 			//
+			// Opening the desk is when its module is brought up to date.
+			cfg.refresher().refresh(r.Context())
 			// The page boots with the fingerprint /wasm-version answers RIGHT
 			// NOW, so a poll compares like with like.
 			_, _ = w.Write(renderServedVersion(deskPage, servedVersion(wasmVer, cfg.ExecWasmPath))) //nolint:errcheck
@@ -408,7 +407,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		return nil
 	}
-	log.Infof("serving the desk (skywire.wasm: %s) on %s", execModuleDesc(execWasmPath), cfg.Addr)
+	log.Infof("serving the desk (skywire.wasm: %s) on %s", execWasmPath, cfg.Addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -619,15 +618,6 @@ func wasmPasswordGate(h http.Handler, password string, secure bool) http.Handler
 	})
 }
 
-// execModuleDesc names where the served command module comes from, for the
-// startup log: the path when it is a file, else the embedded copy's stamp.
-func execModuleDesc(path string) string {
-	if path != "" {
-		return path
-	}
-	return "embedded " + execwasm.Stamp()
-}
-
 // randomHex returns n cryptographically-random bytes as a lowercase hex string.
 func randomHex(n int) (string, error) {
 	b := make([]byte, n)
@@ -788,37 +778,6 @@ func deskShellHTML(scriptsHTML, deskOptsJS string) []byte {
 	return []byte(strings.ReplaceAll(out, "__DESK_OPTS__", deskOptsJS))
 }
 
-// warnStaleExecModule says so when the embedded command module was built from
-// a different commit than this binary.
-//
-// Both halves of that mismatch are silent by default. `go build .` embeds
-// whatever pkg/wasmhv/execwasm/blob already holds instead of rebuilding it, so
-// a freshly installed binary can serve a module many commits old; and the desk
-// reports the MODULE's version, which reads as a different number rather than
-// an old one. A visor was found on 2026-09-13 serving a three-day-old module
-// after several reinstalls, with nothing anywhere saying so.
-//
-// Only a warning: an older module still runs, and a developer deliberately
-// pinning one with --exec-wasm should not be stopped. It names both revisions
-// and the command that fixes it.
-func warnStaleExecModule(log *logging.Logger) {
-	if log == nil {
-		return
-	}
-	modRev := execwasm.Revision()
-	binRev := buildinfo.Commit()
-	if modRev == "" || binRev == "" || binRev == "unknown" {
-		return // nothing recorded to compare; say nothing rather than guess
-	}
-	if modRev == binRev {
-		return
-	}
-	log.WithField("module_revision", modRev).
-		WithField("binary_revision", binRev).
-		Warn("The embedded skywire command module was built from a different commit than this binary — " +
-			"the desk is serving older code than the visor. Run `make embed-exec-wasm` and rebuild.")
-}
-
 // wasmBrowseOriginScripts is the real-origin browser's V-side half for the
 // wasm-served desk: the config the transport reads, then realorigin's responder
 // (which owns the trust boundary and publishes globalThis.realOrigin), then
@@ -852,4 +811,12 @@ func wasmBrowseOriginScripts(cfg WasmServeConfig, localScheme, localPort, suffix
 		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};</script>` + "\n" +
 		`<script src="/browse-responder.js"></script>` + "\n" +
 		`<script src="/browse-transport.js"></script>` + "\n"
+}
+
+// refresher is the module's refresher, nil when it is served as it is.
+func (cfg WasmServeConfig) refresher() *wasmModuleRefresher {
+	if cfg.module == nil {
+		return nil
+	}
+	return cfg.module()
 }

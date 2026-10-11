@@ -1,9 +1,6 @@
-//go:build !(js && wasm)
-
 // Package clivisorping cmd/skywire-cli/commands/visor/ping/tree_tui.go c5-cli-visor
 //
-// The bubbletea machinery of `visor ping tree`, split behind !(js && wasm);
-// the command spec stays in tree.go and a js twin stubs runPingTree.
+// The screen of `visor ping tree`; the command spec stays in tree.go.
 package ping
 
 import (
@@ -17,20 +14,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
-// runPingTree opens the StreamPingTree RPC, starts a Bubble Tea
-// program that consumes events, and blocks until the TUI exits.
-// Ctrl+C or 'q' inside the TUI cancels the upstream context, which
-// tears down the BFS within one in-flight ping.
+// runPingTree opens the StreamPingTree RPC and draws its events until the
+// user quits, which cancels the BFS within one in-flight ping.
 func runPingTree(cmd *cobra.Command, _ []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,12 +40,10 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	model := newPingTreeModel(ctx, cancel)
+	model := newPingTreeModel()
 
-	// Optional NDJSON tee-to-file. When set, we open the file once
-	// up-front and the stream consumer goroutine writes one line per
-	// event. The TUI runs in parallel — operator gets visual + file
-	// in one shot.
+	// Optional NDJSON tee-to-file, written by the stream consumer while
+	// the screen runs.
 	if treeFlags.OutputFile != "" {
 		f, openErr := os.OpenFile(treeFlags.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
 		if openErr != nil {
@@ -65,21 +54,24 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 		model.outputFile = f
 	}
 
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
-	go consumeStream(stream, p, model)
-
-	if _, err := p.Run(); err != nil {
+	err = runStreamView(streamView{
+		top: func(spin string) string {
+			return sgr(205, true)("Ping Tree (gRPC streaming, server-side BFS)") + "\n" + model.statsLine(spin)
+		},
+		body: model.renderTree,
+		hint: model.hint,
+		feed: func(changed func()) { go consumeStream(stream, model, changed) },
+	})
+	cancel()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "ping tree: TUI: %v\n", err)
 		os.Exit(1)
 	}
 
-	// tea.WithAltScreen restores the pre-TUI screen contents on
-	// exit, which wipes the tree the operator just spent time on.
-	// Print the final state to stdout so it lands in terminal
-	// scrollback regardless of whether the run completed or the
-	// operator hit Ctrl+C / q mid-stream.
+	// The screen is cleared on exit, so print the final state where it
+	// stays in the scrollback.
 	fmt.Print(model.renderTree())
-	fmt.Println(model.statsLine())
+	fmt.Println(model.statsLine(""))
 }
 
 func buildPingTreeRequest() *rpcgrpc.PingTreeRequest {
@@ -105,26 +97,24 @@ func buildPingTreeRequest() *rpcgrpc.PingTreeRequest {
 // Stream consumer
 // ---------------------------------------------------------------------------
 
-// consumeStream reads events off the gRPC stream and forwards each
-// one to the Bubble Tea program via p.Send(eventMsg{...}). When the
-// stream closes (RunDone or EOF), it sends a streamDoneMsg so the
-// TUI can switch to "press q to exit" mode without quitting outright
-// — operators may want to scroll through results.
-func consumeStream(stream rpcgrpc.PingService_StreamPingTreeClient, p *tea.Program, m *pingTreeModel) {
+// consumeStream folds events off the gRPC stream into m until it closes.
+// The screen stays up after the run so results can be scrolled.
+func consumeStream(stream rpcgrpc.PingService_StreamPingTreeClient, m *pingTreeModel, changed func()) {
 	for {
 		ev, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
-				p.Send(streamDoneMsg{})
-				return
+				err = nil
 			}
-			p.Send(streamErrMsg{err: err})
+			m.finish(err)
+			changed()
 			return
 		}
 		if m.outputFile != nil {
 			writeNDJSONLine(m.outputFile, ev)
 		}
-		p.Send(eventMsg{ev: ev})
+		m.applyEvent(ev)
+		changed()
 	}
 }
 
@@ -179,7 +169,7 @@ func classifyEvent(ev *rpcgrpc.PingTreeEvent) (string, any) { //nolint
 }
 
 // ---------------------------------------------------------------------------
-// Bubble Tea model
+// Model
 // ---------------------------------------------------------------------------
 
 // treeEntry is one (transport, peer) pair as the TUI sees it. The
@@ -230,15 +220,6 @@ type runSummary struct {
 }
 
 type pingTreeModel struct {
-	viewport viewport.Model
-	spinner  spinner.Model
-
-	ready      bool
-	quitting   bool
-	width      int
-	height     int
-	autoScroll bool
-
 	mu          sync.RWMutex
 	entries     map[string]*treeEntry // tp_id → entry
 	entryOrder  []string              // tp_id insert order; ties to discovery order at each level
@@ -252,8 +233,6 @@ type pingTreeModel struct {
 	streamErr   error
 	streamEnded bool
 
-	ctx      context.Context
-	cancel   context.CancelFunc
 	runStart time.Time
 
 	// outputFile is the optional --output NDJSON tee. Owned by the
@@ -261,135 +240,33 @@ type pingTreeModel struct {
 	outputFile *os.File
 }
 
-func newPingTreeModel(ctx context.Context, cancel context.CancelFunc) *pingTreeModel {
-	sp := spinner.New()
-	sp.Spinner = spinner.Line
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-
+func newPingTreeModel() *pingTreeModel {
 	return &pingTreeModel{
-		spinner:    sp,
-		entries:    make(map[string]*treeEntry),
-		levels:     make(map[int32]*levelInfo),
-		autoScroll: true,
-		ctx:        ctx,
-		cancel:     cancel,
-		runStart:   time.Now(),
+		entries:  make(map[string]*treeEntry),
+		levels:   make(map[int32]*levelInfo),
+		runStart: time.Now(),
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Bubble Tea Update / Init / View
-// ---------------------------------------------------------------------------
-
-// eventMsg wraps one PingTreeEvent from the gRPC stream. The
-// stream-consumer goroutine sends one per event via p.Send.
-type eventMsg struct{ ev *rpcgrpc.PingTreeEvent }
-
-// streamDoneMsg fires when the gRPC stream closes cleanly (EOF
-// after a RunDone). The TUI stops the spinner and shows
-// "press q to exit" in the footer.
-type streamDoneMsg struct{}
-
-// streamErrMsg fires when stream.Recv() returns an error other
-// than EOF. The TUI surfaces the error inline.
-type streamErrMsg struct{ err error }
-
-// tickMsg drives the elapsed-time counter and re-renders the tree
-// even when no new events have arrived (so the operator sees the
-// spinner moving and the elapsed timer ticking).
-type tickMsg struct{}
-
-func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
+// finish records the end of the stream, with err nil on a clean close.
+func (m *pingTreeModel) finish(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.streamEnded = true
+	m.streamErr = err
 }
 
-func (m *pingTreeModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, tickCmd())
-}
-
-func (m *pingTreeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	switch v := msg.(type) {
-	case tea.KeyMsg:
-		switch v.String() {
-		case "q", "ctrl+c", "esc":
-			m.quitting = true
-			m.cancel()
-			return m, tea.Quit
-		case "a":
-			m.autoScroll = !m.autoScroll
-		case "up", "k":
-			m.viewport.ScrollUp(1)
-			m.autoScroll = false
-		case "down", "j":
-			m.viewport.ScrollDown(1)
-			m.autoScroll = false
-		case "pgup":
-			m.viewport.HalfPageUp()
-			m.autoScroll = false
-		case "pgdown":
-			m.viewport.HalfPageDown()
-			m.autoScroll = false
-		case "home", "g":
-			m.viewport.GotoTop()
-			m.autoScroll = false
-		case "end", "G":
-			m.viewport.GotoBottom()
-			m.autoScroll = true
-		}
-
-	case tea.WindowSizeMsg:
-		if !m.ready {
-			m.viewport = viewport.New(v.Width, v.Height-3)
-			m.viewport.SetContent(m.renderTree())
-			m.ready = true
-		} else {
-			m.viewport.Width = v.Width
-			m.viewport.Height = v.Height - 3
-		}
-		m.width, m.height = v.Width, v.Height
-
-	case spinner.TickMsg:
-		var spinnerCmd tea.Cmd
-		m.spinner, spinnerCmd = m.spinner.Update(msg)
-		cmds = append(cmds, spinnerCmd)
-
-	case tickMsg:
-		// Re-render to refresh elapsed-time counter + status line.
-		m.viewport.SetContent(m.renderTree())
-		if m.autoScroll {
-			m.viewport.GotoBottom()
-		}
-		if !m.streamEnded {
-			cmds = append(cmds, tickCmd())
-		}
-
-	case eventMsg:
-		m.applyEvent(v.ev)
-		m.viewport.SetContent(m.renderTree())
-		if m.autoScroll {
-			m.viewport.GotoBottom()
-		}
-
-	case streamDoneMsg:
-		m.streamEnded = true
-		m.viewport.SetContent(m.renderTree())
-
-	case streamErrMsg:
-		m.streamErr = v.err
-		m.streamEnded = true
-		m.viewport.SetContent(m.renderTree())
+func (m *pingTreeModel) hint() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.streamEnded {
+		return "Run complete — q to exit"
 	}
-
-	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
-	return m, tea.Batch(cmds...)
+	return "↑/↓ scroll | PgUp/PgDn page | a toggle auto-scroll | q quit"
 }
 
 // applyEvent folds one PingTreeEvent into the model state. Called
-// from the Update message handler; takes the model's write lock so
+// from the stream consumer; takes the model's write lock so
 // the renderer (which holds the read lock) doesn't see partial
 // updates.
 func (m *pingTreeModel) applyEvent(ev *rpcgrpc.PingTreeEvent) {
@@ -480,38 +357,9 @@ func (m *pingTreeModel) applyEvent(ev *rpcgrpc.PingTreeEvent) {
 	}
 }
 
-func (m *pingTreeModel) View() string {
-	if m.quitting {
-		return "Shutting down...\n"
-	}
-	if !m.ready {
-		return "Initializing...\n"
-	}
-
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	header := headerStyle.Render("Ping Tree (gRPC streaming, server-side BFS)")
-
-	stats := m.statsLine()
-
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	scrollPct := m.viewport.ScrollPercent() * 100
-	scrollIndicator := fmt.Sprintf("%.0f%%", scrollPct)
-	if m.autoScroll {
-		scrollIndicator += " [auto]"
-	}
-	hint := "↑/↓ scroll | PgUp/PgDn page | a toggle auto-scroll | q quit"
-	if m.streamEnded {
-		hint = "Run complete — q to exit"
-	}
-	footer := footerStyle.Render(fmt.Sprintf("%s | %s", hint, scrollIndicator))
-
-	return fmt.Sprintf("%s\n%s\n%s\n%s", header, stats, m.viewport.View(), footer)
-}
-
-// statsLine renders the per-frame summary above the viewport. Pulls
-// from m's locked state. Format mirrors the pre-rewire output:
+// statsLine renders the summary above the tree:
 // "Visors: A/B pinged, F failed | Elapsed: T | [status]".
-func (m *pingTreeModel) statsLine() string {
+func (m *pingTreeModel) statsLine(spin string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -530,7 +378,7 @@ func (m *pingTreeModel) statsLine() string {
 		pinged, discovered, failed, elapsed)
 	if m.statusPhase != "" && !m.streamEnded {
 		stats += fmt.Sprintf(" | %s %s (inflight=%d pending=%d)",
-			m.spinner.View(), m.statusPhase, m.statusInFly, m.statusPend)
+			spin, m.statusPhase, m.statusInFly, m.statusPend)
 	}
 	if m.serverError != "" {
 		stats += " | server error: " + m.serverError
@@ -541,7 +389,7 @@ func (m *pingTreeModel) statsLine() string {
 	return stats
 }
 
-// renderTree builds the scrollable viewport content. Per level we
+// renderTree builds the scrolling body. Per level we
 // group entries by parentPK so each subtree is rendered as
 //
 //	<parent-PK>
@@ -576,13 +424,13 @@ func (m *pingTreeModel) renderTree() string {
 	}
 	sort.Ints(levelKeys)
 
-	headStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	rootStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("87")).Bold(true)
-	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	cacheStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-	liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	pendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	headStyle := sgr(39, true)
+	rootStyle := sgr(87, true)
+	branchStyle := sgr(244, false)
+	cacheStyle := sgr(117, false)
+	liveStyle := sgr(82, false)
+	failStyle := sgr(196, false)
+	pendStyle := sgr(241, false)
 
 	var sb strings.Builder
 
@@ -599,7 +447,7 @@ func (m *pingTreeModel) renderTree() string {
 				info.skippedCached, info.succeeded-info.skippedCached, info.failed)
 		}
 		levelHeader += ") ==="
-		sb.WriteString(headStyle.Render(levelHeader))
+		sb.WriteString(headStyle(levelHeader))
 		sb.WriteString("\n")
 
 		// Stable subtree order: sort parent PKs alphabetically so the
@@ -626,9 +474,9 @@ func (m *pingTreeModel) renderTree() string {
 				return ai.ts.Before(aj.ts)
 			})
 
-			rootLabel := rootStyle.Render(parentPK)
+			rootLabel := rootStyle(parentPK)
 			if lv == 1 {
-				rootLabel += " " + branchStyle.Render("(local)")
+				rootLabel += " " + branchStyle("(local)")
 			}
 			sb.WriteString(rootLabel)
 			sb.WriteString("\n")
@@ -642,16 +490,16 @@ func (m *pingTreeModel) renderTree() string {
 				switch entryCategory(e) {
 				case 0:
 					if e.latencySource == "transport_summary" {
-						line = cacheStyle.Render(line)
+						line = cacheStyle(line)
 					} else {
-						line = liveStyle.Render(line)
+						line = liveStyle(line)
 					}
 				case 1:
-					line = pendStyle.Render(line)
+					line = pendStyle(line)
 				case 2:
-					line = failStyle.Render(line)
+					line = failStyle(line)
 				}
-				sb.WriteString(branchStyle.Render(connector))
+				sb.WriteString(branchStyle(connector))
 				sb.WriteString(line)
 				sb.WriteString("\n")
 			}
@@ -660,7 +508,7 @@ func (m *pingTreeModel) renderTree() string {
 	}
 
 	if m.runDone != nil {
-		sb.WriteString(headStyle.Render("=== Run Summary ==="))
+		sb.WriteString(headStyle("=== Run Summary ==="))
 		sb.WriteString("\n")
 		sb.WriteString(fmt.Sprintf(
 			"discovered=%d pinged=%d succeeded=%d failed=%d skipped_cached=%d\n"+
@@ -748,7 +596,7 @@ func formatEntryLine(e *treeEntry) string {
 	}
 
 	// %-66s remotePK, %-36s tpID, %-6s tpType — fixed widths so the
-	// columns line up across rows. lipgloss color escapes are added
+	// columns line up across rows. SGR color escapes are added
 	// downstream around the whole row, so width math stays correct.
 	return fmt.Sprintf("%s %-66s %-36s %-6s %s",
 		glyph, e.remotePK, e.tpID, e.tpType, block)

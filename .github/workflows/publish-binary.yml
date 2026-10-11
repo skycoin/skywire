@@ -90,16 +90,13 @@ jobs:
             zstd -19 -q -f -o "dist/skywire-linux-${name}.zst" skywire
             rm -f skywire
           }
-          # Stage 1 of the two-stage build: the full skywire command module for
-          # GOOS=js — the desk's `skywire` command and the tab visor — built
-          # FIRST and gzipped into pkg/wasmhv/execwasm/blob/ so every native
-          # binary below embeds it and serves the desk with no extra file
-          # (hv serve, visor-hosted wasm_serve, the native hypervisor). Same
-          # toolchain as the embedded wasm_exec.js, same version stamping.
+          # The full skywire command module for GOOS=js, the desk's `skywire`
+          # command and the tab visor. It ships beside the binaries with its
+          # manifest; visors refresh their copy from it when the desk is opened.
           echo "==> building js/wasm command module"
-          # A dirty tree — one untracked file is enough — makes Go record
-          # vcs.modified=true in this module, and the desk then reports
-          # dev-<commit>-dirty for the life of the binary that embeds it.
+          # A dirty tree (one untracked file is enough) makes Go record
+          # vcs.modified=true in the module, and the desk then reports
+          # dev-<commit>-dirty.
           if [ -n "$(git status --porcelain)" ]; then
             echo "::error::work tree is dirty before the js/wasm build"
             git status --porcelain
@@ -107,47 +104,15 @@ jobs:
           fi
           GOOS=js GOARCH=wasm \
             go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" -ldflags="${LDFLAGS}" -o skywire.wasm .
-          gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-          # Record which commit the module was built from, beside it, so a
-          # served binary can report that its desk is older than itself. Without
-          # this the blob has no revision, execwasm.Revision() is "", and the
-          # staleness check (rev != "" && bin != "" && rev != bin) is hard-false
-          # — inert on exactly the binaries that ship. Same lift as
-          # `make embed-exec-wasm`: vcs.revision= is not at the start of a
-          # strings(1) line, so match the substring rather than anchoring.
-          strings -a skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
-            | head -1 | cut -d= -f2 > pkg/wasmhv/execwasm/blob/revision.txt
-          # The module's gzip trailer, so a module rebuilt by //go:embedbuild
-          # is not reported under this commit.
-          tail -c 8 pkg/wasmhv/execwasm/blob/skywire.wasm.gz | od -An -tx4 | tr -d ' \n' >> pkg/wasmhv/execwasm/blob/revision.txt
-          echo >> pkg/wasmhv/execwasm/blob/revision.txt
-          # An empty revision is the silent failure this exists to prevent, so
-          # fail the build rather than publish a binary that cannot self-report.
-          test -n "$(head -1 pkg/wasmhv/execwasm/blob/revision.txt)" || {
-            echo "ERROR: could not read vcs.revision from the js/wasm module"; exit 1; }
-          echo "staged module revision: $(cat pkg/wasmhv/execwasm/blob/revision.txt)"
+          sh scripts/wasm-module.sh skywire.wasm dist "${VERSION}"
           rm -f skywire.wasm
-          ls -la pkg/wasmhv/execwasm/blob/
-          # Both blob files are TRACKED, so the two writes above leave the tree
-          # modified and every native build below would record vcs.modified=true
-          # (`go version -m` then reads "+dirty"). assume-unchanged hides the
-          # work tree copy from git while the rebuilt bytes are still what gets
-          # embedded; nothing is committed and nothing is reverted.
-          git update-index --assume-unchanged \
-            pkg/wasmhv/execwasm/blob/skywire.wasm.gz \
-            pkg/wasmhv/execwasm/blob/revision.txt
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::work tree is dirty before the native builds"
-            git status --porcelain
-            exit 1
-          fi
           build_arch amd64   amd64   ""
           build_arch arm64   arm64   ""
           build_arch arm     arm     6
           build_arch armhf   arm     7
           build_arch 386     386     ""
           build_arch riscv64 riscv64 ""
-          ( cd dist && sha256sum *.zst > SHA256SUMS )
+          ( cd dist && sha256sum -- *.zst skywire.wasm.gz skywire.wasm.json > SHA256SUMS )
           {
             echo "BRANCH=${BRANCH}"
             echo "VERSION=${VERSION}"
@@ -177,9 +142,11 @@ jobs:
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \
               --notes "${NOTES}"
-            gh release upload "${TAG}" dist/*.zst dist/SHA256SUMS --clobber
+            gh release upload "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS --clobber
+            # The module used to ship as this zstd asset; nothing builds it now.
+            gh release delete-asset "${TAG}" skywire-js-wasm.zst --yes 2>/dev/null || true
           else
-            gh release create "${TAG}" dist/*.zst dist/SHA256SUMS \
+            gh release create "${TAG}" dist/*.zst dist/skywire.wasm.gz dist/skywire.wasm.json dist/SHA256SUMS \
               --target "${GITHUB_SHA}" \
               --prerelease \
               --title "${BRANCH} latest (${VERSION})" \

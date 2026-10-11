@@ -157,11 +157,11 @@ func TestDeregisterRun_DirectSigning_AllTypes(t *testing.T) {
 func withRootFlags(t *testing.T) {
 	t.Helper()
 	a, l, p := addr, logLvl, pprofAddr
-	sd, ar, ut, tpd, dmsgd := sdURL, arURL, utURL, tpdURL, dmsgdURL
+	sd, ar, tpd, dmsgd := sdURL, arURL, tpdURL, dmsgdURL
 	cd, pkv, skv := cleaningDelay, pk, sk
 	t.Cleanup(func() {
 		addr, logLvl, pprofAddr = a, l, p
-		sdURL, arURL, utURL, tpdURL, dmsgdURL = sd, ar, ut, tpd, dmsgd
+		sdURL, arURL, tpdURL, dmsgdURL = sd, ar, tpd, dmsgd
 		cleaningDelay, pk, sk = cd, pkv, skv
 	})
 }
@@ -178,8 +178,8 @@ func TestRootRun(t *testing.T) {
 	pprofAddr = ""
 	cleaningDelay = 100000 // avoid a cleaning pass during the test
 	// Point service URLs at an unreachable local addr so no prod traffic.
-	sdURL, arURL, utURL, tpdURL, dmsgdURL = "http://127.0.0.1:1", "http://127.0.0.1:1",
-		"http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1"
+	sdURL, arURL, tpdURL, dmsgdURL = "http://127.0.0.1:1", "http://127.0.0.1:1",
+		"http://127.0.0.1:1", "http://127.0.0.1:1"
 
 	done := make(chan struct{})
 	go func() {
@@ -219,7 +219,7 @@ func TestRootCmd_Metadata(t *testing.T) {
 	require.Equal(t, "Network monitor for skywire VPN and Visor.", RootCmd.Short)
 	require.NotNil(t, RootCmd.Run)
 	for _, name := range []string{
-		"addr", "pprof", "sd-url", "ar-url", "ut-url", "tpd-url",
+		"addr", "pprof", "sd-url", "ar-url", "tpd-url",
 		"dmsgd-url", "cleaning-delay", "pk", "sk", "tag", "loglvl",
 	} {
 		require.NotNil(t, RootCmd.Flags().Lookup(name), "flag %q should be registered", name)

@@ -132,7 +132,7 @@ type Service struct {
 	Geo           *geo.LocationData `json:"geo,omitempty" gorm:"embedded"`
 	DisplayNodeIP bool              `json:"display_node_ip,omitempty"`
 	Version       string            `json:"version,omitempty"`
-	LocalIPs      stringArray       `json:"local_ips,omitempty" gorm:"type:text[]"`
+	LocalIPs      []string          `json:"local_ips,omitempty"`
 	Info          *VPNInfo          `json:"info,omitempty" gorm:"-"`
 	// Coin, set for ServiceTypeCoin entries, carries the fibercoin identity +
 	// capabilities so a thin-client wallet can filter discovery by coin/network

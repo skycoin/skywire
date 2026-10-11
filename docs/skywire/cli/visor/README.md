@@ -31,6 +31,8 @@ skywire cli visor
 - [reinit](reinit/README.md) — Reinitiate modules
 - [resume](resume/README.md) — Resume a suspended visor
 - [reward](reward/README.md) — Show reward history for a visor
+- [services](services/README.md) — List the deployment services this visor embeds
+- [skyenv](skyenv/README.md) — Show or edit the visor's /etc/skywire.conf
 - [start](start/README.md) — Start visor
 - [state](state/README.md) — Curated snapshot of the visor's live internal runtime state
 - [suspend](suspend/README.md) — Suspend visor (tear down networking, keep local RPC)

@@ -41,6 +41,7 @@ cobra subcommand tree.
 - [multipath.md](multipath.md) — multiplexed route groups: starting apps with `--mux`, per-leg telemetry (`proxy mux info`), reshaping live groups, `mux-bw` measurements, and the WASM/Starlark routing-policy engine
 - [dmsg-tools.md](dmsg-tools.md) — the dmsg relay network from the CLI: carriers (tcp/quic/wss/WebTransport), server reachability probing (`mdisc check`, `dmsg conf probe`, `self-ping`), per-server pinning, and the standalone curl/cat/scp/iperf utilities
 - [deployment-health.md](deployment-health.md) — health, pprof profiles, and logs of the deployment services **and** any visor, fetched over dmsg: `svc health`, the discovery read APIs, and the survey-whitelist-gated `/debug` surfaces
+- [custom-deployment.md](custom-deployment.md) — run a whole deployment in one visor, join visors to it, and set up the DNS and TLS for its dmsg server's wss name and for a browse origin
 
 ## Advanced
 

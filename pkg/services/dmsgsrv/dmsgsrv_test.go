@@ -138,9 +138,9 @@ func TestRunConfigPathError(t *testing.T) {
 }
 
 func TestRunLocalAddressParseError(t *testing.T) {
-	// ":8081" has no scheme → url.Parse fails → Run returns the
-	// parse-local_address error before any networking.
-	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: ":8081"}}, testLog()).(*service)
+	// "8081" has no host:port form, so Run returns the parse-local_address
+	// error before any networking.
+	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: "8081"}}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "local_address") {
 		t.Fatalf("expected local_address parse error, got %v", err)
@@ -148,8 +148,8 @@ func TestRunLocalAddressParseError(t *testing.T) {
 }
 
 func TestRunLocalAddressPortError(t *testing.T) {
-	// "//127.0.0.1" parses but has no port → strconv.Atoi fails.
-	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: "//127.0.0.1"}}, testLog()).(*service)
+	// "127.0.0.1:x" splits but its port is not a number.
+	svc := New(&Config{Config: dmsgserver.Config{LocalAddress: "127.0.0.1:x"}}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "port") {
 		t.Fatalf("expected local_address port error, got %v", err)
@@ -291,5 +291,16 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func TestHealthAddr(t *testing.T) {
+	for local, want := range map[string]string{":8080": ":8081", "0.0.0.0:18080": ":18081", "[::]:9000": ":9001"} {
+		if got, err := healthAddr(local); err != nil || got != want {
+			t.Errorf("healthAddr(%q) = %q, %v; want %q", local, got, err, want)
+		}
+	}
+	if _, err := healthAddr("8080"); err == nil {
+		t.Error("healthAddr(\"8080\"): want an error")
 	}
 }

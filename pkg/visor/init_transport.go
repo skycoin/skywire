@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -1408,6 +1409,12 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 
 	connect := func(context.Context) (transport.DiscoveryClient, error) {
 		return tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	}
+
+	// A TPD this visor hosts under its own key mounts after the transport
+	// module, so waiting for it here only delays the boot.
+	if cmdutil.PKFromDmsgURL(tpdURL) == v.conf.PK {
+		return transport.NewDeferredDiscoveryClient(v.ctx, log, tpdDeferredRetry, connect), nil
 	}
 
 	// One bounded attempt on the boot path, so the common case (TPD reachable)

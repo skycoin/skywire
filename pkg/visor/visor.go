@@ -123,6 +123,12 @@ type Visor struct {
 	// dmsgHTTPTr is DmsgHTTP's shared keep-alive transport (dmsg_over_skynet.go).
 	dmsgHTTPOnce sync.Once
 	dmsgHTTPTr   *http.Transport
+
+	// wasmModuleRef refreshes the js/wasm module this visor serves for the
+	// desk (wasmmodule.go); nil when it does not.
+	wasmModuleOnce sync.Once
+	wasmModuleRef  *wasmModuleRefresher
+
 	// dmsgSkynet counts how dials to .dmsg peers went (dmsg_over_skynet.go).
 	dmsgSkynet dmsgSkynetStats
 	// reach holds this visor's reach card and the peers' it fetched (reach_card.go).
@@ -183,6 +189,10 @@ type Visor struct {
 	// (nil = none), so `visor state --select roles` can report the running
 	// server's key and address rather than only what the config asked for.
 	dmsgSrvRole atomic.Pointer[visorapi.DmsgServerRole]
+
+	// dmsgSelfOnly is set when the visor's own-key dmsg server is the only one it
+	// knows, so its client connects to that server and nothing waits for the client first.
+	dmsgSelfOnly bool
 
 	// dmsgSrv is the running own-key in-process dmsg server, kept so the
 	// state API can report the clients CONNECTED TO it. Every co-resident
@@ -737,17 +747,25 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	// loop re-embeds + re-serves the latest wasm on every restart (no separate
 	// `hv serve` process). Off unless configured. Best-effort — a serve error
 	// is logged, not fatal.
+	// wasmVisor is the visor wasm_serve refreshes its module through, once it is up.
+	var wasmVisor atomic.Pointer[Visor]
 	if conf.Hypervisor != nil && conf.Hypervisor.WasmServe != nil && conf.Hypervisor.WasmServe.Addr != "" {
 		ws := conf.Hypervisor.WasmServe
 		go func() {
 			if err := ServeWasm(parentCtx, WasmServeConfig{
-				Addr:             ws.Addr,
-				TLS:              ws.TLS,
-				TLSCert:          ws.TLSCert,
-				TLSKey:           ws.TLSKey,
-				Harness:          ws.Harness,
-				Password:         ws.Password,
-				ExecWasmPath:     ws.ExecWasm,
+				Addr:         ws.Addr,
+				TLS:          ws.TLS,
+				TLSCert:      ws.TLSCert,
+				TLSKey:       ws.TLSKey,
+				Harness:      ws.Harness,
+				Password:     ws.Password,
+				ExecWasmPath: ws.ExecWasm,
+				module: func() *wasmModuleRefresher {
+					if v := wasmVisor.Load(); v != nil {
+						return v.wasmModule()
+					}
+					return nil
+				},
 				DeskHelpTerminal: ws.DeskHelpTerminal,
 				DeskDocsPort:     ws.DeskDocsPort,
 				BrowseSuffix:     ws.BrowseSuffix,
@@ -784,6 +802,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 
 	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
 	vis, ok := NewVisor(ctx, conf, opts, logBroadcaster, store)
+	wasmVisor.Store(vis)
 	if !ok {
 		select {
 		case <-ctx.Done():

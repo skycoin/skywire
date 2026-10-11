@@ -552,11 +552,11 @@ POST /transports/delete-batch
 
 ## Uptime Tracking Integration
 
-The Transport Discovery integrates with uptime tracking to provide visor availability information. This endpoint mirrors the Uptime Tracker's data format for consistency.
+The Transport Discovery records visor uptime and serves it here.
 
 ### GET Uptimes
 
-Returns visor uptime and online status. This endpoint caches and serves uptime tracker data, providing a unified view of visor availability alongside transport data.
+Returns visor uptime and online status. It gives a view of visor availability alongside transport data.
 
 **Note:** This endpoint does NOT include QoS metrics (bandwidth/latency). For QoS data, use the `/metrics` endpoints.
 

@@ -79,8 +79,6 @@ skywire svc nm
                               (default "network_monitor")
       --tpd-url string       url to transport discovery
                               (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-      --ut-url string        url to uptime tracker visor data
-                              (default "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80")
 ```
 
 ## Global Flags

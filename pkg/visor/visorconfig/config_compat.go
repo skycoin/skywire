@@ -50,10 +50,10 @@ type v1JSON struct {
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
 	Routing       *Routing             `json:"routing"`
-	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
 
-	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
+	EmbeddedServices     []services.Block `json:"embedded_services,omitempty"`
+	DeploymentStatusAddr string           `json:"deployment_status_addr,omitempty"`
 
 	Stats   *Stats        `json:"stats,omitempty"`
 	Skychat *Skychat      `json:"skychat,omitempty"`
@@ -122,9 +122,9 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.STCP = mirror.STCP
 	v.Transport = mirror.Transport
 	v.Routing = mirror.Routing
-	v.UptimeTracker = mirror.UptimeTracker
 	v.Launcher = mirror.Launcher
 	v.EmbeddedServices = mirror.EmbeddedServices
+	v.DeploymentStatusAddr = mirror.DeploymentStatusAddr
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
 	v.Wallet = mirror.Wallet

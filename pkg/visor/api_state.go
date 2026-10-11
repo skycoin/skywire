@@ -4,7 +4,6 @@ package visor
 import (
 	"time"
 
-	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
@@ -178,7 +177,7 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 			UptimeRecorder:     v.uptimeRecorder != nil,
 			EmbeddedTPS:        v.embeddedTPS != nil,
 			EmbeddedRouteSetup: v.embeddedRouteSetup != nil,
-			ExecWasm:           execWasmInfo(),
+			ExecWasm:           v.execWasmInfo(),
 		}
 	}
 
@@ -215,24 +214,23 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 	return snap, nil
 }
 
-// execWasmInfo describes the embedded js/wasm command module for the state
-// snapshot. Nil when nothing is embedded and nothing is recorded — a plain
-// source build has no module and no story to tell about one.
-func execWasmInfo() *visorapi.ExecWasmInfo {
-	present := execwasm.Present()
-	rev := execwasm.Revision()
-	if !present && rev == "" {
+// execWasmInfo describes the js/wasm module this visor serves for the desk,
+// nil when it has none.
+func (v *Visor) execWasmInfo() *visorapi.ExecWasmInfo {
+	explicit := ""
+	if hc := v.conf.Hypervisor; hc != nil && hc.WasmServe != nil {
+		explicit = hc.WasmServe.ExecWasm
+	}
+	path, ok := execModuleSource(explicit)
+	if !ok {
 		return nil
 	}
-	bin := buildinfo.Commit()
-	if bin == "unknown" {
-		bin = ""
+	info := &visorapi.ExecWasmInfo{Path: path, Stamp: execwasm.Stamp(path)}
+	if m, err := execwasm.ReadManifest(path); err == nil {
+		info.Version, info.Revision = m.Version, m.Revision
 	}
-	return &visorapi.ExecWasmInfo{
-		Present:        present,
-		Revision:       rev,
-		BinaryRevision: bin,
-		Stale:          rev != "" && bin != "" && rev != bin,
-		Stamp:          execwasm.Stamp(),
+	if r := v.wasmModule(); r != nil {
+		info.Source = r.source.Hex()
 	}
+	return info
 }

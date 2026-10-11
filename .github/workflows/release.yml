@@ -37,8 +37,53 @@ jobs:
             --title "${{ env.RELEASE_TAG }}" \
             --generate-notes || true
 
-  linux:
+  wasm-module:
+    # The js/wasm module, built once and shipped beside every binary: on the
+    # release as skywire.wasm.gz with its manifest, and inside each archive,
+    # macOS package and MSI, so an installed visor has a desk to serve.
     needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout skywire at the tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Build the js/wasm module
+        env:
+          CGO_ENABLED: "0"
+          GOOS: js
+          GOARCH: wasm
+        run: |
+          set -euo pipefail
+          go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" \
+            -ldflags "-s -w -buildid= -X ${MODULE}/pkg/buildinfo.version=${RELEASE_TAG}" \
+            -o "$RUNNER_TEMP/skywire.wasm" .
+          if grep -aq 'vcs.modified=true' "$RUNNER_TEMP/skywire.wasm"; then
+            echo "::error::the js/wasm module records vcs.modified=true"
+            exit 1
+          fi
+          sh scripts/wasm-module.sh "$RUNNER_TEMP/skywire.wasm" dist "${RELEASE_TAG}"
+          ( cd dist && sha256sum skywire.wasm.gz > skywire.wasm.gz.sha256 )
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            dist/skywire.wasm.gz dist/skywire.wasm.json dist/skywire.wasm.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
+
+  linux:
+    needs: [create-release, wasm-module]
     runs-on: ubuntu-latest
     strategy:
       # Don't let one arch's transient failure (e.g. a flaky module fetch)
@@ -132,56 +177,6 @@ jobs:
       - name: Build libusb for musl target
         run: '"$RUNNER_TEMP/build-libusb-musl.sh" ${{ matrix.arch }} ${{ matrix.toolchain }} ./musl-data/${{ matrix.toolchain }}-cross'
 
-      - name: Build the js/wasm command module (stage 1 of the two-stage build)
-        env:
-          CGO_ENABLED: "0"
-          GOOS: js
-          GOARCH: wasm
-        run: |
-          # Gate: this module is built with -buildvcs=true, so a dirty tree is
-          # recorded IN THE MODULE as vcs.modified=true and the desk reports
-          # dev-<commit>-dirty forever after (v1.3.94's embedded module did).
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::work tree is dirty before the js/wasm build — the embedded module would be stamped dirty"
-            git status --porcelain
-            exit 1
-          fi
-          # The desk's `skywire` command and the tab visor, embedded into the
-          # native binary below (pkg/wasmhv/execwasm) so every release serves
-          # the desk with no extra file. Same toolchain as wasm_exec.js.
-          go build -trimpath -buildvcs=true -mod=vendor -tags "withoutsystray withoutgotop" \
-            -ldflags "-s -w -buildid=" -o skywire.wasm .
-          gzip -9 -n -c skywire.wasm > pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-          # Record which commit the module was built from, beside it, so a
-          # served binary can report that its desk is older than itself. Without
-          # this the blob has no revision, execwasm.Revision() is "", and the
-          # staleness check (rev != "" && bin != "" && rev != bin) is hard-false
-          # — inert on exactly the binaries that ship. Same lift as
-          # `make embed-exec-wasm`: vcs.revision= is not at the start of a
-          # strings(1) line, so match the substring rather than anchoring.
-          strings -a skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
-            | head -1 | cut -d= -f2 > pkg/wasmhv/execwasm/blob/revision.txt
-          # The module's gzip trailer, so a module rebuilt by //go:embedbuild
-          # is not reported under this commit.
-          tail -c 8 pkg/wasmhv/execwasm/blob/skywire.wasm.gz | od -An -tx4 | tr -d ' \n' >> pkg/wasmhv/execwasm/blob/revision.txt
-          echo >> pkg/wasmhv/execwasm/blob/revision.txt
-          # An empty revision is the silent failure this exists to prevent, so
-          # fail the build rather than publish a binary that cannot self-report.
-          test -n "$(head -1 pkg/wasmhv/execwasm/blob/revision.txt)" || {
-            echo "ERROR: could not read vcs.revision from the js/wasm module"; exit 1; }
-          echo "staged module revision: $(cat pkg/wasmhv/execwasm/blob/revision.txt)"
-          rm -f skywire.wasm
-          ls -la pkg/wasmhv/execwasm/blob/
-          # Both files above are TRACKED (committed by #4872), so overwriting
-          # them leaves two modified tracked files — which is what stamped the
-          # native binary +dirty. assume-unchanged makes git ignore the work
-          # tree copy while the rebuilt bytes are still what gets embedded;
-          # nothing is committed and nothing is reverted.
-          git update-index --assume-unchanged \
-            pkg/wasmhv/execwasm/blob/skywire.wasm.gz \
-            pkg/wasmhv/execwasm/blob/revision.txt
-          git status --porcelain
-
       - name: Build skywire release binary
         env:
           CGO_ENABLED: "1"
@@ -196,9 +191,8 @@ jobs:
             git status --porcelain
             exit 1
           fi
-          # Built from the checked-out tag (not `go install module@tag`) so the
-          # staged js/wasm module above is embedded. -mod=vendor: the tree
-          # vendors its dependencies.
+          # Built from the checked-out tag (not `go install module@tag`).
+          # -mod=vendor: the tree vendors its dependencies.
           #
           # -X …buildinfo.version: this was the one native build in the repo
           # that stamped no version at all, so Version() fell back to
@@ -216,11 +210,11 @@ jobs:
             ./bin/skywire skycoin || true
           fi
 
-      # v1.3.94 shipped `mod github.com/skycoin/skywire v1.3.94+dirty` and an
-      # embedded module carrying vcs.modified=true. Both are checked here, on
-      # the artifact itself, so a release that would repeat it fails before the
-      # upload instead of being discovered in a downloaded tarball.
-      - name: Verify the built binary and its embedded module are clean
+      # v1.3.94 shipped `mod github.com/skycoin/skywire v1.3.94+dirty`. It is
+      # checked here, on the artifact itself, so a release that would repeat
+      # it fails before the upload instead of being discovered in a downloaded
+      # tarball.
+      - name: Verify the built binary is clean
         run: |
           set -euo pipefail
           go version -m bin/skywire > "$RUNNER_TEMP/buildinfo.txt"
@@ -233,28 +227,18 @@ jobs:
             echo "::error::bin/skywire records vcs.modified=true"
             exit 1
           fi
-          # The module embedded in that binary is the staged blob, byte for
-          # byte, so read the blob rather than carving the gzip stream back out
-          # of a 100 MB binary — same bytes, and it works on every arch.
-          gzip -dc pkg/wasmhv/execwasm/blob/skywire.wasm.gz > "$RUNNER_TEMP/staged.wasm"
-          mod=$(grep -m1 -aoE 'vcs\.modified=[a-z]+' "$RUNNER_TEMP/staged.wasm" || true)
-          rev=$(grep -m1 -aoE 'vcs\.revision=[0-9a-f]{40}' "$RUNNER_TEMP/staged.wasm" || true)
-          rm -f "$RUNNER_TEMP/staged.wasm"
-          echo "embedded js/wasm module: ${rev:-<none>} ${mod:-<none>}"
-          if [ "$mod" != "vcs.modified=false" ]; then
-            echo "::error::the embedded js/wasm module is not clean (${mod:-no vcs.modified record})"
-            exit 1
-          fi
-          # …and that it was built from THIS commit, not carried in stale.
-          make check-exec-wasm
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           sha256sum "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Upload to release
@@ -268,7 +252,7 @@ jobs:
             --clobber
 
   darwin-amd64:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: macos-15-intel
     steps:
       - uses: actions/setup-go@v7
@@ -291,8 +275,6 @@ jobs:
         run: |
           # module@tag from the proxy: there is no work tree in this job, so
           # nothing here can dirty the build and no clean-tree gate applies.
-          # The flip side is that this binary embeds the COMMITTED js/wasm
-          # blob, not a freshly built one — only the linux job rebuilds it.
           go install -trimpath -ldflags "-s -w" \
             ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
@@ -302,12 +284,16 @@ jobs:
           ./bin/skywire skycoin || true
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -315,6 +301,7 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
+          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -335,7 +322,7 @@ jobs:
             --clobber
 
   darwin-arm64:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: macos-latest
     steps:
       - uses: actions/setup-go@v7
@@ -358,8 +345,6 @@ jobs:
         run: |
           # module@tag from the proxy: there is no work tree in this job, so
           # nothing here can dirty the build and no clean-tree gate applies.
-          # The flip side is that this binary embeds the COMMITTED js/wasm
-          # blob, not a freshly built one — only the linux job rebuilds it.
           go install -trimpath -ldflags "-s -w" \
             ${{ env.MODULE }}@${{ env.RELEASE_TAG }}
 
@@ -369,12 +354,16 @@ jobs:
           ./bin/skywire skycoin || true
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p dist
           cp bin/skywire dist/
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -382,6 +371,7 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
+          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -402,7 +392,7 @@ jobs:
             --clobber
 
   windows:
-    needs: create-release
+    needs: [create-release, wasm-module]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -511,11 +501,16 @@ jobs:
           }
 
       - name: Create archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $ARCHIVE_NAME = "skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force -Path "dist"
           Copy-Item "bin\skywire.exe" "dist\"
+          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} `
+            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir wasm --clobber
+          Copy-Item "wasm\skywire.wasm.gz", "wasm\skywire.wasm.json" "dist\"
 
           # Include hardware wallet binary and required DLLs if present
           if (Test-Path "bin\skyhw.exe") {
@@ -552,6 +547,8 @@ jobs:
           Set-Location scripts\win_installer
           New-Item -ItemType Directory -Force -Path "build\apps"
           Copy-Item ..\..\bin\skywire.exe build\skywire.exe
+          Copy-Item ..\..\wasm\skywire.wasm.gz build\skywire.wasm.gz
+          Copy-Item ..\..\wasm\skywire.wasm.json build\skywire.wasm.json
           Copy-Item skywire.bat build\skywire.bat
           Copy-Item skywire-autoconfig.bat build\skywire-autoconfig.bat
           New-Item -ItemType File -Path "build\new.update"
@@ -620,7 +617,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} --pattern "*.sha256"
-          cat *.sha256 > checksums.txt
+          cat -- *.sha256 > checksums.txt
 
       - name: Upload combined checksums
         env:

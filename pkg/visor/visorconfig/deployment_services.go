@@ -79,12 +79,6 @@ func (v1 *V1) ApplyDeploymentServices(next, prev *Services) []string {
 		str("launcher.service_discovery", &l.ServiceDisc, next.ServiceDiscovery, prev.ServiceDiscovery, emb.ServiceDiscovery)
 		str("launcher.service_discovery_dmsg", &l.ServiceDiscDmsg, next.ServiceDiscoveryDmsg, prev.ServiceDiscoveryDmsg, emb.ServiceDiscoveryDmsg)
 	}
-	// The standalone uptime tracker is deprecated and generated configs carry
-	// no block for it; only refresh one an operator kept.
-	if u := v1.UptimeTracker; u != nil {
-		str("uptime_tracker.addr", &u.Addr, next.UptimeTracker, prev.UptimeTracker, emb.UptimeTracker)
-		str("uptime_tracker.addr_dmsg", &u.AddrDmsg, next.UptimeTrackerDmsg, prev.UptimeTrackerDmsg, emb.UptimeTrackerDmsg)
-	}
 	str("reward_system", &v1.RewardSystem, next.RewardSystem, prev.RewardSystem, emb.RewardSystem)
 	str("reward_system_dmsg", &v1.RewardSystemDmsg, next.RewardSystemDmsg, prev.RewardSystemDmsg, emb.RewardSystemDmsg)
 	str("conf_service_dmsg", &v1.ConfServiceDmsg, next.ConfDmsg, prev.ConfDmsg, emb.ConfDmsg)
