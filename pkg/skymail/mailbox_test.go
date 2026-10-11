@@ -101,15 +101,19 @@ func newTestNet() *testNet {
 
 // addVisor opens a mailbox for a fresh PK and serves it. It is
 // reachable over .skynet only; .dmsg has no dialer.
-func (n *testNet) addVisor(t *testing.T) *visor {
+func (n *testNet) addVisor(t *testing.T, opts ...func(*Config)) *visor {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
-	mb, err := Open(Config{
+	cfg := Config{
 		Dir:     t.TempDir(),
 		PK:      pk,
 		PeerPK:  peerOf,
 		Dialers: map[string]skymailbridge.Dialer{".skynet": n.dialerFor(pk)},
-	})
+	}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	mb, err := Open(cfg)
 	require.NoError(t, err)
 	l := newChanListener()
 	n.mu.Lock()
@@ -171,6 +175,30 @@ func TestSendDeliversVerbatimWithTheVerifiedSender(t *testing.T) {
 	inbox, err = b.mb.List(FolderInbox)
 	require.NoError(t, err)
 	require.Empty(t, inbox)
+}
+
+func TestDeliveryIsReportedOnceStored(t *testing.T) {
+	n := newTestNet()
+	got := make(chan Delivered, 1)
+	a := n.addVisor(t)
+	b := n.addVisor(t, func(c *Config) { c.OnDeliver = func(d Delivered) { got <- d } })
+
+	_, err := a.mb.Send(context.Background(), Outgoing{
+		From: "alice", To: []string{addr("bob", b.pk)}, Subject: "grüße", Body: "hi",
+	})
+	require.NoError(t, err)
+	select {
+	case d := <-got:
+		require.Equal(t, "grüße", d.Subject)
+		require.Equal(t, addr("alice", a.pk), d.From)
+		require.Equal(t, a.pk, d.PeerPK)
+		inbox, err := b.mb.List(FolderInbox)
+		require.NoError(t, err)
+		require.Len(t, inbox, 1)
+		require.Equal(t, inbox[0].ID, d.ID, "reported after it is stored, under its inbox id")
+	case <-time.After(5 * time.Second):
+		t.Fatal("delivery was not reported")
+	}
 }
 
 func TestWhitelistRefusesOtherPKs(t *testing.T) {

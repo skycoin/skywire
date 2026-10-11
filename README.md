@@ -71,8 +71,8 @@ in the Android app. They share the network but not every capability.
 | Multi-hop and multi-path routes | ✓ | ✓ | ✓ |
 | Browse `.dmsg` and `.skynet` sites | ✓ | ✓ | ✗ ⁴ |
 | Host a site, forward a port | ✓ | ✓ ⁵ | ✗ |
-| Chat, voice calls, mail | ✓ | ✓ | chat and voice ⁶ |
-| Remote shell and file mount (pty) | ✓ | ✓ ⁷ | ✗ |
+| Chat, voice calls, mail | ✓ | ✓ | ✓ |
+| Remote shell and file mount (pty) | ✓ | ✓ ⁶ | ✗ |
 | Dashboard | ✓ | ✓ | native screens |
 | Desk (browser desktop) | ✓ | ✓ | ✗ |
 | Skycoin wallet | ✓ | ✓ | ✓ |
@@ -89,9 +89,7 @@ in the Android app. They share the network but not every capability.
 
 ⁵ On the tab's virtual loopback rather than the computer's.
 
-⁶ The mailbox runs in the core but the app has no mail screen yet.
-
-⁷ The tab hosts a websh shell and its own files rather than the computer's.
+⁶ The tab hosts a websh shell and its own files rather than the computer's.
 
 ## Features
 
