@@ -43,6 +43,7 @@
     <string name="hub_fleet_sub">你在别处运行的节点</string>
     <string name="hub_meet_sub">加密通话</string>
     <string name="hub_mail_sub">Skywire 邮件</string>
+    <string name="hub_name_beta">%1$s（测试版）</string>
     <string name="hub_hero_reconnecting">重新连接中</string>
     <string name="hub_hero_starting">启动中</string>
     <string name="hub_hero_no_exit">尚未选择出口</string>
