@@ -92,7 +92,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, _ cipher.PubKey, sEn
 	// their second edge to the zero PK.
 	if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
 		pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
-			entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), s.bandwidthEdgesTTL())
+			bandwidthEdgesValue(entry), s.bandwidthEdgesTTL())
 	}
 
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -168,7 +168,7 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, _ cipher.PubKe
 		// the counterparty identifiable after expiry — see RegisterTransport.
 		if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
 			pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
-				entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), s.bandwidthEdgesTTL())
+				bandwidthEdgesValue(entry), s.bandwidthEdgesTTL())
 		}
 	}
 

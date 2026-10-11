@@ -13,6 +13,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // bwIndexMaxDays is the deepest day the index tracks: the 35-day TTL of the
@@ -28,9 +29,11 @@ const bwIndexMaxDays = 35
 type bwDayIndex struct {
 	// anchor is the UTC epoch day the scan ran on. Bit k of a transport's
 	// mask means a hash exists for day anchor-k.
-	anchor    int64
-	byID      map[uuid.UUID]uint64
-	edges     map[uuid.UUID][2]cipher.PubKey
+	anchor int64
+	byID   map[uuid.UUID]uint64
+	edges  map[uuid.UUID][2]cipher.PubKey
+	// types is each transport's type, where one was found.
+	types     map[uuid.UUID]string
 	scannedAt time.Time
 }
 
@@ -181,6 +184,7 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 		anchor:    epochDay(now),
 		byID:      make(map[uuid.UUID]uint64),
 		edges:     make(map[uuid.UUID][2]cipher.PubKey),
+		types:     make(map[uuid.UUID]string),
 		scannedAt: started,
 	}
 	prefix := serviceName + ":bw:daily:"
@@ -218,8 +222,11 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 		_, _ = pipe.Exec(ctx) //nolint:errcheck // per-command results below
 		for i, id := range batch {
 			if pair, err := cmds[i].Result(); err == nil {
-				if e, ok := parseBandwidthEdgePair(pair); ok {
+				if e, typ, ok := parseBandwidthEdgePair(pair); ok {
 					ix.edges[id] = e
+					if typ != "" {
+						ix.types[id] = typ
+					}
 					continue
 				}
 			}
@@ -249,6 +256,7 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 			}
 		}
 	}
+	s.recoverBandwidthTypes(ctx, ix, now)
 	s.log.WithField("transports", len(ix.byID)).WithField("edges", len(ix.edges)).
 		WithField("took", time.Since(started).Round(time.Millisecond)).
 		Debug("Rebuilt bandwidth day index")
@@ -256,6 +264,33 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 		return nil, fmt.Errorf("bandwidth index edges: %w", err)
 	}
 	return ix, nil
+}
+
+// recoverBandwidthTypes fills the type of each transport whose bw:edges value
+// predates the type, from its uptime hash for the newest day it has data.
+// That hash lives 36 hours, so older transports stay without a type.
+func (s *redisStore) recoverBandwidthTypes(ctx context.Context, ix *bwDayIndex, now time.Time) {
+	var missing []uuid.UUID
+	for id := range ix.edges {
+		if ix.types[id] == "" {
+			missing = append(missing, id)
+		}
+	}
+	for start := 0; start < len(missing); start += scanBatch {
+		batch := missing[start:min(start+scanBatch, len(missing))]
+		pipe := s.client.Pipeline()
+		cmds := make([]*redis.StringCmd, len(batch))
+		for i, id := range batch {
+			day := now.AddDate(0, 0, -newestBit(ix.byID[id])).Format(MetricsDateFormat)
+			cmds[i] = pipe.HGet(ctx, tpUptimeKey(id.String(), day), "type")
+		}
+		_, _ = pipe.Exec(ctx) //nolint:errcheck // a missing hash leaves the type unknown
+		for i, id := range batch {
+			if typ, err := cmds[i].Result(); err == nil && typ != "" {
+				ix.types[id] = typ
+			}
+		}
+	}
 }
 
 // newestBit is the lowest set bit's position: the most recent day with data.
@@ -296,7 +331,7 @@ func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map
 		if !ok {
 			continue // only legacy/combined data, no per-edge fields — skip
 		}
-		entries = append(entries, &transport.Entry{ID: id, Edges: edges})
+		entries = append(entries, &transport.Entry{ID: id, Edges: edges, Type: types.Type(ix.types[id])})
 		expiredIDs[id] = true
 	}
 	if len(entries) == 0 {

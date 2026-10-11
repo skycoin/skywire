@@ -465,21 +465,30 @@ func (s *redisStore) GetAllTransportMetrics(ctx context.Context, query MetricsQu
 	return s.buildTransportMetrics(ctx, entries, expiredIDs, query)
 }
 
-// parseBandwidthEdgePair parses the "<edge0hex>,<edge1hex>" value written by
-// bandwidthEdgesKey at registration back into an edge pair (kept in entry
-// order, which the transport.Entry contract already sorts ascending).
-func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, bool) {
+// bandwidthEdgesValue is the bw:edges value for a transport: its edge pair,
+// in entry order, and its type.
+func bandwidthEdgesValue(e *transport.Entry) string {
+	return e.Edges[0].Hex() + "," + e.Edges[1].Hex() + "," + string(e.Type)
+}
+
+// parseBandwidthEdgePair parses a bw:edges value back into the edge pair and
+// type. A value written before the type was kept has no type.
+func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, string, bool) {
 	parts := strings.Split(v, ",")
-	if len(parts) != 2 {
-		return [2]cipher.PubKey{}, false
+	if len(parts) != 2 && len(parts) != 3 {
+		return [2]cipher.PubKey{}, "", false
 	}
 	var edges [2]cipher.PubKey
-	for i, p := range parts {
+	for i, p := range parts[:2] {
 		if err := edges[i].UnmarshalText([]byte(p)); err != nil {
-			return [2]cipher.PubKey{}, false
+			return [2]cipher.PubKey{}, "", false
 		}
 	}
-	return edges, true
+	typ := ""
+	if len(parts) == 3 {
+		typ = parts[2]
+	}
+	return edges, typ, true
 }
 
 // GetTransportMetricsByIDs returns metrics for specific transports.
