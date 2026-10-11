@@ -581,6 +581,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.EmbeddedProxies(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".EmbeddedServiceControl", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.EmbeddedServiceControlArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.EmbeddedServiceControl(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".EnableHypervisor", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(bool)
 		if err := rpcDec.Decode(rpcArg); err != nil {
