@@ -32,6 +32,7 @@
     <string name="hub_fleet_sub">Visors you run elsewhere</string>
     <string name="hub_meet_sub">Encrypted calls</string>
     <string name="hub_mail_sub">Mail over Skywire</string>
+    <string name="hub_name_beta">%1$s (beta)</string>
     <string name="hub_hero_reconnecting">Reconnecting</string>
     <string name="hub_hero_starting">Starting</string>
     <string name="hub_hero_no_exit">No exit chosen yet</string>

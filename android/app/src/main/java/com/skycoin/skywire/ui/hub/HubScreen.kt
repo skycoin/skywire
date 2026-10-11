@@ -176,7 +176,7 @@ fun HubScreen(
         )
         add(
             HubTile(
-                name = stringResource(R.string.app_skymail),
+                name = stringResource(R.string.hub_name_beta, stringResource(R.string.app_skymail)),
                 subtitle = state.unreadMail.takeIf { it > 0 }
                     ?.let { pluralStringResource(R.plurals.hub_mail_unread, it, it) }
                     ?: stringResource(R.string.hub_mail_sub),
