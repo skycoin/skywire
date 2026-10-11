@@ -23,6 +23,7 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.webview.JsDialogChromeClient
 import kotlinx.coroutines.delay
@@ -160,7 +161,10 @@ internal object ChatWebView {
             authAttempts = 0
             onHistoryChanged(view.canGoBack())
             // about:blank is the teardown load, not a chat page.
-            if (url != "about:blank") onPageReady()
+            if (url != "about:blank") {
+                ChatPageLog.add("webview: page loaded")
+                onPageReady()
+            }
         }
 
         override fun onReceivedError(
@@ -209,6 +213,10 @@ internal object ChatWebView {
             onPermissionRequest.invoke(request)
         }
 
+        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+            ChatPageLog.add("webview: page withdrew its request for ${request.resources.joinToString()}")
+        }
+
         override fun onShowFileChooser(
             view: WebView,
             callback: ValueCallback<Array<Uri>>,
@@ -220,6 +228,7 @@ internal object ChatWebView {
             // own errors land next to the app's logcat, and its server side
             // is one tap away under the bar's Logs action.
             Log.d(TAG, "${message.sourceId()}:${message.lineNumber()} ${message.message()}")
+            ChatPageLog.add("console ${message.messageLevel()} :${message.lineNumber()} ${message.message()}")
             return true
         }
     }
@@ -375,6 +384,7 @@ internal object ChatWebView {
 
     /** Tear-down that actually stops the page: SSE otherwise keeps polling. */
     fun release(view: WebView) {
+        ChatPageLog.add("webview: page closed")
         view.stopLoading()
         view.webChromeClient = null
         view.loadUrl("about:blank")

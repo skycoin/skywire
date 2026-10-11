@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
+import android.webkit.WebView
 import com.skycoin.skywire.api.VisorApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -94,6 +95,12 @@ object DiagnosticsExport {
             }
 
             zip.file(notes, "app-crash.log", paths.crashLogFile)
+            zip.file(notes, "skychat-page.log", paths.chatPageLogFile)
+            zip.file(
+                notes,
+                "skychat-page.log.1",
+                File(paths.chatPageLogFile.parentFile, paths.chatPageLogFile.name + ".1"),
+            )
             // The one source that exists when the visor will not start.
             zip.file(notes, "process-output.log", paths.processLogFile)
             zip.file(
@@ -124,6 +131,9 @@ object DiagnosticsExport {
                                     LOW_MEMORY or OTHER means the phone stopped the app,
                                     CRASH means the app failed (stack in app-crash.log)
         app-crash.log               stack traces of the app's own crashes, if it has had any
+        skychat-page.log[.1]        the SkyChat page's console and its WebView's events: pages
+                                    loaded and closed, camera and microphone requests and their
+                                    answers, and any time the page stopped answering
         device.txt                  phone, Android and version details
         collection-notes.txt        present only if something could not be collected, and why
 
@@ -142,6 +152,9 @@ object DiagnosticsExport {
             appendLine("android.sdk = ${Build.VERSION.SDK_INT}")
             appendLine("device = ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("abis = ${Build.SUPPORTED_ABIS.joinToString(",")}")
+            // SkyChat runs in it, and a phone without Google Play ships its own.
+            val webView = runCatching { WebView.getCurrentWebViewPackage() }.getOrNull()
+            appendLine("webview = ${webView?.let { "${it.packageName} ${it.versionName}" } ?: "?"}")
         }
     }
 

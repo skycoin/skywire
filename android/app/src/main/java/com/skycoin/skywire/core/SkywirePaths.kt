@@ -38,6 +38,9 @@ class SkywirePaths(context: Context) {
     /** Stack traces of the app's own crashes, written by [CrashLog]. */
     val crashLogFile: File = File(dataDir, "app-crash.log")
 
+    /** The chat page's console and WebView events, written by [ChatPageLog]. */
+    val chatPageLogFile: File = File(dataDir, "skychat-page.log")
+
     /**
      * The extracted, executable Go payload. Valid because the module packs
      * jniLibs with useLegacyPackaging=true.

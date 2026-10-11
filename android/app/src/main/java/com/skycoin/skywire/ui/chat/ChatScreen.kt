@@ -2,6 +2,7 @@ package com.skycoin.skywire.ui.chat
 
 import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -41,12 +42,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.ChatMedia
+import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.theme.LocalDarkTheme
+import kotlinx.coroutines.delay
 
 /**
  * Chat tab — skychat's own web UI, embedded.
@@ -103,6 +107,7 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         val request = pendingMedia
         pendingMedia = null
         webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
+        ChatPageLog.add("webview: Android answered $grants" + if (request == null) " with no request waiting" else "")
         // Only the missing permissions were asked for, so one the phone had
         // already granted (the microphone, for a first video) is not in grants.
         request?.grantOrDeny { resource ->
@@ -127,6 +132,32 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     // and a video the player itself made full screen has no history entry
     // of its own — the page's back would change the chat underneath it.
     BackHandler(enabled = fullscreen?.showing == true) { fullscreen?.exit() }
+
+    // The page's JavaScript thread, checked from outside while it is on
+    // screen. A page stuck in a loop or a wait looks like one ignoring taps.
+    val onScreen by AppVisibility.isForeground.collectAsState()
+    LaunchedEffect(webView, pageReady, onScreen) {
+        val view = webView ?: return@LaunchedEffect
+        if (!pageReady || !onScreen) return@LaunchedEffect
+        var sent = 0L
+        var stalled = false
+        while (true) {
+            delay(PAGE_PING_MS)
+            val now = SystemClock.elapsedRealtime()
+            if (sent == 0L) {
+                sent = now
+                view.evaluateJavascript("0") {
+                    val waited = (SystemClock.elapsedRealtime() - sent) / 1000
+                    if (stalled) ChatPageLog.add("webview: page answering again after $waited s")
+                    sent = 0L
+                    stalled = false
+                }
+            } else if (!stalled && now - sent >= PAGE_STALL_MS) {
+                stalled = true
+                ChatPageLog.add("webview: page has not answered for ${(now - sent) / 1000} s")
+            }
+        }
+    }
 
     // A skychat:// link another app opened us for. It waits here rather than
     // at the Activity for as long as it has to: the core may still be
@@ -206,6 +237,10 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                     val needed = request.resources
                                         .mapNotNull(ChatWebView::androidPermission)
                                         .filterNot { ChatWebView.hasPermission(ctx, it) }
+                                    ChatPageLog.add(
+                                        "webview: page asked for ${request.resources.joinToString()}" +
+                                            if (needed.isEmpty()) ", already granted" else ", asking Android for $needed",
+                                    )
                                     if (needed.isEmpty()) {
                                         request.grantOrDeny { resource ->
                                             ChatWebView.androidPermission(resource) != null
@@ -358,3 +393,6 @@ private fun ChatStatus(
         }
     }
 }
+
+private const val PAGE_PING_MS = 2_000L
+private const val PAGE_STALL_MS = 5_000L
