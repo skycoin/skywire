@@ -43,7 +43,7 @@ skywire cli rewards
 
 ```
   -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -d, --date string        date for which to calculate reward (default "2026-10-09")
+  -d, --date string        date for which to calculate reward (default "2026-10-10")
   -k, --pk string          check reward for pubkey
   -n, --noarch strings     disallowed architectures, comma separated (default [null,wasm])
   -w, --a1 strings         allowed arch, comma separated (with --a2, the architectures that qualify) (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
