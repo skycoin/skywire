@@ -98,7 +98,7 @@ func TestVisorBWTable(t *testing.T) {
 	}}
 	tb := visorBWTable(day, map[string]string{"bb": roleRegistered}, map[string]string{"bb": "v1.3.100"})
 	require.Contains(t, tb.Title, "2026-10-05")
-	require.Contains(t, tb.Note, "1 transports between visors on the same network")
+	require.Contains(t, tb.Note, "1 between visors on the same network")
 	require.Equal(t, []string{"Public key", "Version", "Role", "Sent", "stcpr", "sudph", "unknown"}, tb.Head)
 	require.Equal(t, []string{"bb", "v1.3.100", "registered dmsg server", "1 GiB", "1 GiB", "1 MiB", "1 KiB"}, tb.Rows[0])
 	require.Equal(t, "#4e79a7", tb.Marks[0])

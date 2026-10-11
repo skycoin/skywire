@@ -27,8 +27,8 @@ func TestVisorBWPublisher(t *testing.T) {
 	eb := func(s, r uint64) *store.EdgeBandwidth { return &store.EdgeBandwidth{Sent: s, Recv: r} }
 	fake := &leafFake{saved: map[string][][]byte{
 		day: savedDay(t, []store.TransportMetric{
-			{Type: "stcpr", Edges: []string{"a", "b"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(100, 40)}}},
-			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9), SameNetwork: true}}},
+			{Type: "stcpr", Edges: []string{"a", "b"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(100, 40), B: eb(40, 100)}}},
+			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9), B: eb(9, 7), SameNetwork: true}}},
 		}),
 	}}
 	var batches [][]treestore.PutOp
@@ -70,7 +70,7 @@ func TestVisorBWPublisherWaitsForAnEmptyDay(t *testing.T) {
 	require.Empty(t, batches)
 
 	fake.saved[day] = savedDay(t, []store.TransportMetric{{Type: "stcpr", Edges: []string{"a", "b"},
-		Daily: []store.DailyEdgeBandwidth{{Date: day, A: &store.EdgeBandwidth{Sent: 5}}}}})
+		Daily: []store.DailyEdgeBandwidth{{Date: day, A: &store.EdgeBandwidth{Sent: 5}, B: &store.EdgeBandwidth{Recv: 5}}}}})
 	p.publishOnce(t.Context(), now)
 	require.Len(t, batches, 1)
 	require.Equal(t, store.VisorBWDayPath(day), batches[0][0].Path)
