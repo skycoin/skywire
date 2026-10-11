@@ -14842,30 +14842,41 @@
         this._store('r', JSON.stringify(this.recipients));
       }
 
+      // _cached reads one JSON value the page stored, or null. Runs inside the
+      // constructor, so a value it cannot read must not throw: that kills every button.
+      _cached(key) {
+        try {
+          return JSON.parse(localStorage.getItem(key) || 'null');
+        } catch (e) {
+          console.warn(`skychat: ignoring unreadable cache entry ${key}:`, (e && e.message) || e);
+          return null;
+        }
+      }
+
       loadData() {
-        const seen = localStorage.getItem('s');
-        if (seen) this.messagesSeen = JSON.parse(seen);
+        const seen = this._cached('s');
+        if (seen && typeof seen === 'object' && !Array.isArray(seen)) this.messagesSeen = seen;
 
         // The notes thread is cached like a DM but is not a recipient, so it
         // is rehydrated on its own rather than by the loop below.
         this._loadThread(this.savedKey());
 
-        const recipients = localStorage.getItem('r');
-        if (recipients) {
-          this.recipients = JSON.parse(recipients);
+        const recipients = this._cached('r');
+        if (Array.isArray(recipients)) {
+          this.recipients = recipients.filter(pk => typeof pk === 'string');
 
           this.recipients.forEach(pk => {
             if (!this.messagesSeen[pk]) this.messagesSeen[pk] = 0;
             this.messagesQuantity[pk] = 0;
 
-            const saved = localStorage.getItem(`c_${pk}`);
-            if (saved) {
-              this.messages[pk] = JSON.parse(saved);
+            const saved = this._cached(`c_${pk}`);
+            if (Array.isArray(saved)) {
               // Drop any duplicate-wireId messages a past double-delivery left
               // in the cache, so old dups don't reappear on reload.
               const seenIds = new Set();
-              this.messages[pk] = this.messages[pk].filter(m => {
-                if (!m || m.date || !m.wireId) return true;
+              this.messages[pk] = saved.filter(m => {
+                if (!m || typeof m !== 'object') return false;
+                if (m.date || !m.wireId) return true;
                 if (seenIds.has(m.wireId)) return false;
                 seenIds.add(m.wireId);
                 return true;
@@ -14901,16 +14912,10 @@
       _loadThread(key) {
         this.messages[key] = [];
         this.messagesQuantity[key] = 0;
-        let saved = null;
-        try {
-          saved = JSON.parse(localStorage.getItem(`c_${key}`) || 'null');
-        } catch (e) {
-          saved = null;
-        }
+        const saved = this._cached(`c_${key}`);
         if (!Array.isArray(saved)) return;
-        this.messages[key] = saved;
-        saved.forEach(m => {
-          if (!m) return;
+        this.messages[key] = saved.filter(m => m && typeof m === 'object');
+        this.messages[key].forEach(m => {
           if (m.date) m.date = new Date(m.date);
           else { this.messagesQuantity[key]++; m.ts = new Date(m.ts); }
         });
