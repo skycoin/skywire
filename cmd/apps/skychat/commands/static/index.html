@@ -7939,6 +7939,31 @@
       _recSliceMs() { return 3000; } // emit a chunk this often instead of one blob at the end
       _recMemCapMB() { return 96; }  // in-memory ceiling when there's no disk to stream to
       _recTmpPrefix() { return 'skychat-rec-'; }
+      _recOpenTimeoutMs() { return 10000; } // devices that take longer are treated as stuck
+      _recStopTimeoutMs() { return 5000; }  // a recorder that has not reported stopping by then never will
+
+      // _recTimeOpen decides whether opening the devices may be timed. The
+      // phone app flags its own permission dialog (skywirePermissionPrompt),
+      // so it always is. A browser can prompt with no sign the page can see,
+      // so there only devices it reports as already granted are timed.
+      _recTimeOpen(kind) {
+        const timed = { on: !!window.SkywireMedia };
+        if (timed.on || !navigator.permissions || !navigator.permissions.query) return timed;
+        const names = kind === 'video' ? ['camera', 'microphone'] : ['microphone'];
+        Promise.all(names.map(name => navigator.permissions.query({ name })))
+          .then(all => { timed.on = all.every(st => st.state === 'granted'); })
+          .catch(() => { /* cannot tell, so never time it */ });
+        return timed;
+      }
+
+      // _recStuckText says what to do about devices that never answered. In
+      // the phone app they live in the app's process, which only a force stop
+      // ends; the core keeps it running otherwise.
+      _recStuckText(spec) {
+        return window.SkywireMedia
+          ? `${spec.devices} not responding. Force stop Skywire in Android's app settings, then try again.`
+          : `${spec.devices} not responding. Close other apps using it, or restart the browser.`;
+      }
 
       _recSupported() {
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
@@ -8100,13 +8125,35 @@
         this.rec.pending = true;
         this.rec.released = false;
         this.rec.cancelled = false;
+        const devices = spec.devices.toLowerCase();
+        const asked = Date.now();
+        console.info(`skychat: opening the ${devices} for a ${spec.noun.toLowerCase()}`);
+
+        // A getUserMedia that never settles would hold pending for the life of
+        // the page. Time on a permission prompt is the user's, not the device's.
+        let abandoned = false;
+        let waited = 0;
+        const timed = this._recTimeOpen(kind);
+        const watchdog = setInterval(() => {
+          if (!timed.on || window.skywirePermissionPrompt || document.hidden) return;
+          waited += 500;
+          if (waited < this._recOpenTimeoutMs()) return;
+          clearInterval(watchdog);
+          abandoned = true;
+          this.rec.pending = false;
+          console.warn(`skychat: no answer from the ${devices} after ${Date.now() - asked} ms`);
+          this.showToast(this._recStuckText(spec), 'error');
+        }, 500);
 
         let stream;
         try {
           stream = await navigator.mediaDevices.getUserMedia(this._recConstraints(kind));
         } catch (err) {
+          clearInterval(watchdog);
+          if (abandoned) return;
           this.rec.pending = false;
           const name = err && err.name;
+          console.info(`skychat: the ${devices} refused after ${Date.now() - asked} ms: ${name || err}`);
           this.showToast(
             name === 'NotAllowedError' ? `${spec.devices} access denied.`
               : name === 'NotFoundError' ? `No ${spec.devices.toLowerCase()} found.`
@@ -8115,6 +8162,15 @@
             'error');
           return;
         }
+        clearInterval(watchdog);
+        if (abandoned) {
+          // Answered after all, long after the press it was for.
+          stream.getTracks().forEach(t => t.stop());
+          console.info(`skychat: the ${devices} answered after ${Date.now() - asked} ms, too late to use`);
+          this.showToast(`${spec.device} ready — hold ${spec.icon} to record.`);
+          return;
+        }
+        console.info(`skychat: the ${devices} opened in ${Date.now() - asked} ms`);
 
         // The hold ended while the permission prompt was up: there's nothing to
         // record, so let the tracks go and tell the user to hold again.
@@ -8162,7 +8218,9 @@
         this.rec.bytes = 0;
         this.rec.disk = disk;
         recorder.ondataavailable = ev => this._recChunk(ev);
-        recorder.onstop = () => this._finishRecording();
+        // Only for its own take: a stop that arrives after the take was
+        // finished by hand must not end the next one.
+        recorder.onstop = () => { if (this.rec.recorder === recorder) this._finishRecording(); };
         recorder.onerror = ev => this._recRecorderError(ev);
         // A capture device can vanish mid-take — unplugged, or claimed by
         // another app. 'ended' is final, so wind the take up and keep what was
@@ -8175,13 +8233,22 @@
         this.rec.ext = codec.ext;
         this.rec.dest = { key, isGroup: !!this.group };
         this.rec.startedAt = Date.now();
-        this.rec.pending = false;
-        this.rec.active = true;
 
         // Chunked, not one blob at the end: with a timeslice the recorder hands
         // over a piece every few seconds, which is what lets a long take be
         // streamed to disk instead of accumulating in memory.
-        recorder.start(this._recSliceMs());
+        try {
+          recorder.start(this._recSliceMs());
+        } catch (err) {
+          // Nothing started, so no onstop will come to release the devices.
+          console.warn('skychat: the recorder would not start:', (err && err.message) || err);
+          this._recReset();
+          this._recDiscardDisk(disk);
+          this.showToast(`Can't start recorder: ${(err && err.message) || 'unknown error'}`, 'error');
+          return;
+        }
+        this.rec.pending = false;
+        this.rec.active = true;
         this._recShowUI(true);
         if (kind === 'video') this._recCheckCameras();
         this._recStartMeter(stream); // after the UI is up, so the canvas can be measured
@@ -8763,11 +8830,23 @@
         if (!this.rec.active || this.rec.stopping) return;
         this.rec.stopping = true;
         this.rec.cancelled = !!cancel;
+        const recorder = this.rec.recorder;
+        // An inactive recorder has stopped already and fires no onstop.
+        if (!recorder || recorder.state === 'inactive') {
+          this._finishRecording();
+          return;
+        }
         try {
-          this.rec.recorder.stop();
+          recorder.stop();
         } catch (err) {
           this._finishRecording(); // recorder already dead — unwind by hand
+          return;
         }
+        this.rec.stopTimer = setTimeout(() => {
+          if (this.rec.recorder !== recorder || !this.rec.stopping) return;
+          console.warn('skychat: the recorder never reported stopping; ending the take by hand');
+          this._finishRecording();
+        }, this._recStopTimeoutMs());
       }
 
       _finishRecording() {
@@ -8783,6 +8862,7 @@
         };
         const spec = this._recSpec();
         const ms = Date.now() - take.startedAt;
+        console.info(`skychat: ${spec.noun.toLowerCase()} ended after ${ms} ms${take.cancelled ? ', cancelled' : ''}`);
         this._recReset();
         this._recShowUI(false);
 
@@ -8831,6 +8911,8 @@
         this.rec.flipping = false;
         this.rec.pointerId = null;
         if (this.rec.clockTimer) clearInterval(this.rec.clockTimer);
+        if (this.rec.stopTimer) clearTimeout(this.rec.stopTimer);
+        this.rec.stopTimer = null;
         this.rec.kind = 'mic';
         this.rec.active = false;
         this.rec.pending = false;

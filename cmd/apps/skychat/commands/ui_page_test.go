@@ -38,3 +38,27 @@ func TestPageStorageWritesAreGuarded(t *testing.T) {
 		t.Errorf("index.html:%d writes localStorage outside a try; use this._store: %s", i+1, strings.TrimSpace(line))
 	}
 }
+
+// TestRecordingCannotLatch pins the three ways a voice or video take used
+// to stay stuck for the life of the page: a getUserMedia that never
+// settles, a recorder that throws on start after the take was marked
+// active, and a recorder that never fires onstop.
+func TestRecordingCannotLatch(t *testing.T) {
+	page := embeddedPage(t)
+	for _, want := range []string{
+		"const watchdog = setInterval(",
+		"window.skywirePermissionPrompt",
+		"          recorder.start(this._recSliceMs());\n        } catch (err) {",
+		"if (!recorder || recorder.state === 'inactive') {",
+		"this.rec.stopTimer = setTimeout(",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("index.html lost %q", want)
+		}
+	}
+	start := strings.Index(page, "recorder.start(this._recSliceMs());")
+	active := strings.Index(page, "this.rec.active = true;")
+	if start < 0 || active < 0 || active < start {
+		t.Error("a take must be marked active only after recorder.start returns")
+	}
+}

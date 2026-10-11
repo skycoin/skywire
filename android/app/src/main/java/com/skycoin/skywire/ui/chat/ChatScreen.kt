@@ -102,6 +102,7 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     ) { grants ->
         val request = pendingMedia
         pendingMedia = null
+        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
         request?.grantOrDeny { resource ->
             ChatWebView.androidPermission(resource)?.let { grants[it] == true } ?: false
         }
@@ -222,6 +223,9 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                         // a launch that never comes back.
                                         pendingMedia?.deny()
                                         pendingMedia = request
+                                        // The page times a device that does not
+                                        // open; time on this dialog is the user's.
+                                        view.evaluateJavascript("window.skywirePermissionPrompt = true", null)
                                         mediaPermissions.launch(needed.toTypedArray())
                                     }
                                 },
