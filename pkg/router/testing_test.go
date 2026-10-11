@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/testing_test.go
 package router
 
@@ -5,10 +7,11 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/rpc"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

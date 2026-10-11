@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 
@@ -465,10 +466,12 @@ func dmsgEndpoints(h *Host) (mux hostMux) {
 	return mux
 }
 
+//go:generate go run ../../internal/rpcgen -type WhitelistGateway=registerWhitelistGateway,LocalPtyGateway=registerLocalPtyGateway,ProxiedPtyGateway=registerProxiedPtyGateway,sessionPtyGateway=registerSessionPtyGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+
 func handleWhitelist(h *Host) handleFunc {
 	//	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
 	return func(_ context.Context, _ *url.URL, rpcS *rpc.Server) error {
-		return rpcS.RegisterName(WhitelistRPCName, NewWhitelistGateway(h.wl))
+		return registerWhitelistGateway(rpcS, WhitelistRPCName, NewWhitelistGateway(h.wl))
 	}
 }
 
@@ -486,7 +489,7 @@ func handlePty(h *Host) handleFunc {
 				gw.detach()
 				h.log().Debug("PTY stream detached (session kept alive).")
 			}()
-			return rpcS.RegisterName(PtyRPCName, gw)
+			return registerSessionPtyGateway(rpcS, PtyRPCName, gw)
 		}
 		// Classic path: one pty per connection, killed when the stream ends.
 		pty := NewPty()
@@ -496,7 +499,7 @@ func handlePty(h *Host) handleFunc {
 				WithError(pty.Stop()).
 				Debug("PTY stopped.")
 		}()
-		return rpcS.RegisterName(PtyRPCName, NewPtyGateway(pty))
+		return registerLocalPtyGateway(rpcS, PtyRPCName, &LocalPtyGateway{ses: pty})
 	}
 }
 
@@ -536,6 +539,6 @@ func handleProxy(h *Host) handleFunc {
 				WithError(ptyC.Close()).
 				Debug("Closed proxy pty client.")
 		}()
-		return rpcS.RegisterName(PtyRPCName, NewProxyGateway(ptyC))
+		return registerProxiedPtyGateway(rpcS, PtyRPCName, &ProxiedPtyGateway{ptyC: ptyC})
 	}
 }

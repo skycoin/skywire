@@ -6,8 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"sync/atomic"
+	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -23,11 +30,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
-	"io"
-	"net"
-	"net/rpc"
-	"sync/atomic"
-	"time"
 )
 
 // closeOnConsecTimeouts is how many CONSECUTIVE per-call deadline

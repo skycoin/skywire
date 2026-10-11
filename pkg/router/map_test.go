@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/map_test.go
 package router
 
@@ -6,9 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/rpc"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"

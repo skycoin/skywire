@@ -346,7 +346,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 					Timeout: timeout,
 				}
 				rpcS := rpc.NewServer()
-				if err := rpcS.Register(gw); err != nil {
+				if err := RegisterSetupRPCGateway(rpcS, rpcName, gw); err != nil {
 					log.WithError(err).Error("Failed to register vstream RPC gateway")
 					stream.Close()  //nolint:errcheck,gosec
 					handlerCancel() //nolint:gosec
@@ -405,7 +405,7 @@ func (sn *Node) Serve(ctx context.Context, m setupmetrics.Metrics) error {
 			Timeout: timeout,
 		}
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(gw); err != nil {
+		if err := RegisterSetupRPCGateway(rpcS, rpcName, gw); err != nil {
 			log.WithError(err).Error("Failed to register RPC gateway")
 			conn.Close()    //nolint:errcheck,gosec,gosec
 			handlerCancel() //nolint:gosec

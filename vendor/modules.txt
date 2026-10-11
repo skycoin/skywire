@@ -74,7 +74,7 @@ github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
 github.com/0magnet/go-dsp/dsputils
 github.com/0magnet/go-dsp/fft
 github.com/0magnet/go-dsp/window
-# github.com/0magnet/gobrpc v0.0.0
+# github.com/0magnet/gobrpc v0.0.1-0.20261006154710-85a8811cd35f
 ## explicit; go 1.25.0
 github.com/0magnet/gobrpc
 github.com/0magnet/gobrpc/gobimpl

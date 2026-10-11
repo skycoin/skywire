@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/coverage_extras_test.go
 //
 // Focused unit coverage for small, pure-logic helpers that had no direct

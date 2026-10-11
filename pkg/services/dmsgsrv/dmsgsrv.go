@@ -19,12 +19,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -576,7 +577,7 @@ func (s *service) serveRouteSetup(ctx context.Context, dmsgC *dmsg.Client) {
 		}
 
 		rpcS := rpc.NewServer()
-		if regErr := rpcS.Register(gw); regErr != nil {
+		if regErr := router.RegisterSetupRPCGateway(rpcS, "SetupRPCGateway", gw); regErr != nil {
 			snLog.WithError(regErr).Error("Failed to register setup RPC")
 			conn.Close() //nolint:errcheck,gosec
 			continue

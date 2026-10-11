@@ -11,11 +11,12 @@ import (
 	mathrand "math/rand"
 	"mime"
 	"net"
-	nrpc "net/rpc"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	nrpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"

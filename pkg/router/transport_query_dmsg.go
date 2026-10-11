@@ -9,14 +9,13 @@
 // trusted-RSN allowlist, and returns its own transport list.
 //
 // Both halves are served over gob RPC to match the existing setup-node path
-// (net/rpc server, gobrpc client — wire-compatible), so no new codec is
+// (a gobrpc server and client), so no new codec is
 // introduced. The visor wires both halves at startup (init_router.go).
 package router
 
 import (
 	"context"
 	"errors"
-	"net/rpc"
 	"time"
 
 	gobrpc "github.com/0magnet/gobrpc"
@@ -93,8 +92,8 @@ func ServeTransportQueryListener(ctx context.Context, dmsgC *dmsg.Client, gw *Tr
 		_ = lis.Close() //nolint:errcheck
 	}()
 
-	rpcS := rpc.NewServer()
-	if err := rpcS.RegisterName(transportQueryRPCName, gw); err != nil {
+	rpcS := gobrpc.NewServer()
+	if err := registerTransportQueryRPCGateway(rpcS, transportQueryRPCName, gw); err != nil {
 		return err
 	}
 

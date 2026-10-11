@@ -191,12 +191,7 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 func (p *Proc) AwaitConn() bool {
 	<-p.connCh
 	rpcS := rpc.NewServer()
-	// registerIngressRPC is build-tagged: native registers the gateway via
-	// gobrpc/net-rpc's reflection-based RegisterName, while the TinyGo build
-	// registers each method as a reflection-free gobrpc HandleFunc — TinyGo's
-	// runtime reflect can't enumerate/invoke methods (reflect.Type.Method), so
-	// the reflection path panics and wedges the in-process app the browser
-	// wasm-visor launches. Same mechanism gobrpc uses for the visor edge RPC.
+	// TinyGo builds register reflection-free handlers, see rpc_register_tinygo.go.
 	if err := registerIngressRPC(rpcS, p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}

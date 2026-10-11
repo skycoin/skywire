@@ -63,7 +63,7 @@ GET /dmsg-discovery/entry/{pk} (server entry)
       "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
       "server": {
         "address": "172.105.179.5:30085",
-        "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
+        "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.skywire.dev/dmsg",
         "availableSessions": 0
       }
     }
@@ -107,7 +107,7 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.skywire.dev/dmsg",
           "availableSessions": 0
         }
       },
@@ -118,7 +118,7 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skywire.dev/dmsg",
           "availableSessions": 0
         }
       }
@@ -149,7 +149,7 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.skywire.dev/dmsg",
           "availableSessions": 0
         }
       },
@@ -160,7 +160,7 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skywire.dev/dmsg",
           "availableSessions": 0
         }
       }
@@ -175,7 +175,7 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
           "address": "172.105.179.5:30085",
-          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://ajkrc67y2ruh3lgv66weyja7acagb4mxfeivkks3m63w6dtzel24o.skywire.dev/dmsg",
           "availableSessions": 0
         }
       },
@@ -186,7 +186,7 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
-          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skywire.dev/dmsg",
           "availableSessions": 0
         }
       }
