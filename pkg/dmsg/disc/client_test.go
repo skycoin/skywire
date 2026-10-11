@@ -993,3 +993,23 @@ func TestClientSendsVersion(t *testing.T) {
 	_, _ = c.Entry(context.Background(), pk) //nolint:errcheck
 	require.Equal(t, buildinfo.Version(), <-got)
 }
+
+// A transport set on the client after NewHTTP is the one requests use: the
+// dmsg transport is wired that way, since it needs the dmsg client first.
+func TestClientUsesTransportSetLater(t *testing.T) {
+	var used bool
+	hc := &http.Client{}
+	c := disc.NewHTTP("dmsg://02aa:80", hc, logging.MustGetLogger("test"))
+	hc.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		used = true
+		require.Equal(t, buildinfo.Version(), r.Header.Get(buildinfo.VersionHeader))
+		return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody, Header: http.Header{}, Request: r}, nil
+	})
+	pk, _ := cipher.GenerateKeyPair()
+	_, _ = c.Entry(context.Background(), pk) //nolint:errcheck
+	require.True(t, used, "the request went through the transport set after NewHTTP")
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
