@@ -358,8 +358,8 @@ func visorBWTable(day *store.VisorBWDay, roles, versions map[string]string) char
 		return rows[i].pk < rows[j].pk
 	})
 	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date + " (UTC day)",
-		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
-			len(day.Visors), day.Transports, day.SameNetworkExcluded)}
+		Note: fmt.Sprintf("%d visors sent bytes over %d transports, each counted only as far as the other edge confirms receiving it. %d transports only one edge reported are not counted, and %d between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
+			len(day.Visors), day.Transports, day.Unverified, day.SameNetworkExcluded)}
 	if len(rows) > topVisorsByBandwidth {
 		rows = rows[:topVisorsByBandwidth]
 	}
