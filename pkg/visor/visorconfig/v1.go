@@ -25,6 +25,8 @@ type V1 struct {
 	DmsgWeb   *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb *SkynetWebConfig     `json:"skynet_web,omitempty"`
 	Wisp      *WispConfig          `json:"wisp,omitempty"`
+	// HostBridge is the host bridge the visor uses for host sockets.
+	HostBridge *HostBridgeConfig `json:"host_bridge,omitempty"`
 	// Resolvers declares ADDITIONAL resolving proxies beyond the dmsg_web /
 	// skynet_web pair above — each with its own port, bind address, domain
 	// suffix and (for a dmsg one) its own identity. Purely additive: absent,
@@ -1161,6 +1163,32 @@ func (v1 *V1) UpdatePtyWhitelist(pks []cipher.PubKey) error {
 		v1.Pty = &Pty{}
 	}
 	v1.Pty.Whitelist = pks
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// HostBridgeConfig is the host bridge a browser visor uses for the sockets
+// of its host, kept so the visor reconnects to it at boot. See
+// pkg/hostbridge and `skywire cli visor hostbridge`.
+type HostBridgeConfig struct {
+	// URL is the one the bridge prints, token included.
+	URL      string                    `json:"url"`
+	Forwards []HostBridgeForwardConfig `json:"forwards"`
+}
+
+// HostBridgeForwardConfig passes connections to Host, on the bridge's host,
+// to Local, an address the visor dials.
+type HostBridgeForwardConfig struct {
+	Host  string `json:"host"`
+	Local string `json:"local"`
+}
+
+// UpdateHostBridge sets the host bridge section, nil to remove it, and saves
+// the config.
+func (v1 *V1) UpdateHostBridge(hb *HostBridgeConfig) error {
+	v1.mu.Lock()
+	v1.HostBridge = hb
 	v1.mu.Unlock()
 
 	return v1.flush(v1)

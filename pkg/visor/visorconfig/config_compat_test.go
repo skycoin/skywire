@@ -4,7 +4,11 @@ package visorconfig
 
 import (
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestPtyLegacyKeyAccepted: an operator config.json carrying the
@@ -85,4 +89,33 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestV1JSONMirrorsEveryField fails when V1 gains a JSON field that v1JSON,
+// the unmarshal mirror, lacks. Such a field is dropped on every load.
+func TestV1JSONMirrorsEveryField(t *testing.T) {
+	tags := func(typ reflect.Type) map[string]bool {
+		out := map[string]bool{}
+		for i := 0; i < typ.NumField(); i++ {
+			f := typ.Field(i)
+			name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if f.Anonymous || name == "" || name == "-" {
+				continue
+			}
+			out[name] = true
+		}
+		return out
+	}
+	mirror := tags(reflect.TypeOf(v1JSON{}))
+	for name := range tags(reflect.TypeOf(V1{})) {
+		require.True(t, mirror[name], "v1JSON lacks %q, so loading a config drops it", name)
+	}
+}
+
+func TestHostBridgeSurvivesLoad(t *testing.T) {
+	var v V1
+	require.NoError(t, json.Unmarshal([]byte(`{"host_bridge":{"url":"ws://127.0.0.1:3438/t","forwards":[{"host":"127.0.0.1:1080","local":"127.0.0.1:1080"}]}}`), &v))
+	require.NotNil(t, v.HostBridge)
+	require.Equal(t, "ws://127.0.0.1:3438/t", v.HostBridge.URL)
+	require.Equal(t, []HostBridgeForwardConfig{{Host: "127.0.0.1:1080", Local: "127.0.0.1:1080"}}, v.HostBridge.Forwards)
 }

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -237,4 +238,24 @@ func TestSessionCloseFreesHostSockets(t *testing.T) {
 func TestEmptyTokenRefused(t *testing.T) {
 	_, err := NewServer(Config{})
 	require.Error(t, err)
+}
+
+func TestResolveToken(t *testing.T) {
+	tok, err := ResolveToken("given", "")
+	require.NoError(t, err)
+	require.Equal(t, "given", tok)
+
+	path := filepath.Join(t.TempDir(), "sub", "token")
+	first, err := ResolveToken("", path)
+	require.NoError(t, err)
+	require.Len(t, first, 32)
+	again, err := ResolveToken("", path)
+	require.NoError(t, err)
+	require.Equal(t, first, again, "a restart must keep the token")
+
+	a, err := ResolveToken("", "none")
+	require.NoError(t, err)
+	b, err := ResolveToken("", "none")
+	require.NoError(t, err)
+	require.NotEqual(t, a, b)
 }
