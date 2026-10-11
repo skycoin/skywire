@@ -21,6 +21,10 @@ import (
 
 const unknown = "unknown"
 
+// VersionHeader carries a visor's version on its requests to deployment
+// services, which count requests by it.
+const VersionHeader = "SW-Version"
+
 // Variables set via -ldflags during build
 // $ go build -mod=vendor -ldflags="-X 'github.com/skycoin/skywire/pkg/buildinfo.version=$(git describe)' -X 'github.com/skycoin/skywire/pkg/buildinfo.date=$(date -u "+%Y-%m-%dT%H:%M:%SZ")' -X 'github.com/skycoin/skywire/pkg/buildinfo.commit=$(git rev-list -1 HEAD)'" .
 var (

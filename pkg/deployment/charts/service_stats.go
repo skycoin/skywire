@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/httputil"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -32,6 +33,7 @@ const (
 	prefixReq     = "http.req."
 	prefixCode    = "http.code."
 	prefixHTTPOut = "http.out."
+	prefixVer     = "http.ver."
 	keyHTTPP50    = "http.p50"
 	keyHTTPP95    = "http.p95"
 )
@@ -57,6 +59,7 @@ type ServiceStats struct {
 	reqs    map[string]float64
 	codes   map[string]float64
 	out     map[string]float64
+	vers    map[string]float64
 	timings []float64
 }
 
@@ -73,7 +76,7 @@ func NewServiceStats(name string) *ServiceStats {
 	inProcess.names = append(inProcess.names, name)
 	inProcess.mu.Unlock()
 	return &ServiceStats{name: name, names: map[uint16]string{}, prevNet: map[string]dmsg.PortTraffic{},
-		reqs: map[string]float64{}, codes: map[string]float64{}, out: map[string]float64{}}
+		reqs: map[string]float64{}, codes: map[string]float64{}, out: map[string]float64{}, vers: map[string]float64{}}
 }
 
 // sharedBy names every service running in this process when there is more
@@ -124,14 +127,15 @@ func (s *ServiceStats) Handler(next http.Handler) http.Handler {
 		if pattern == "" {
 			pattern = firstSegment(r.URL.Path)
 		}
-		s.record(r.Method+" "+pattern, rw.status, rw.n, time.Since(start))
+		s.record(r.Method+" "+pattern, callerVersion(r), rw.status, rw.n, time.Since(start))
 	})
 }
 
-func (s *ServiceStats) record(endpoint string, status int, n int64, took time.Duration) {
+func (s *ServiceStats) record(endpoint, version string, status int, n int64, took time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reqs[endpoint]++
+	s.vers[version]++
 	s.codes[strconv.Itoa(status/100)+"xx"]++
 	s.out[endpoint] += float64(n)
 	if len(s.timings) < maxTimings {
@@ -235,6 +239,9 @@ func (s *ServiceStats) Collect(v map[string]float64) {
 	for k, n := range s.codes {
 		v[prefixCode+k] = n
 	}
+	for k, n := range s.vers {
+		v[prefixVer+k] = n
+	}
 	for k, n := range s.out {
 		v[prefixHTTPOut+k] = n
 	}
@@ -243,7 +250,7 @@ func (s *ServiceStats) Collect(v map[string]float64) {
 		v[keyHTTPP50] = s.timings[len(s.timings)/2]
 		v[keyHTTPP95] = s.timings[len(s.timings)*95/100]
 	}
-	s.reqs, s.codes, s.out, s.timings = map[string]float64{}, map[string]float64{}, map[string]float64{}, s.timings[:0]
+	s.reqs, s.codes, s.out, s.vers, s.timings = map[string]float64{}, map[string]float64{}, map[string]float64{}, map[string]float64{}, s.timings[:0]
 }
 
 // Wrap adds this interval's figures to every sample collect takes.
@@ -305,6 +312,7 @@ func (s *ServiceStats) Charts(f *Frame, from, to time.Time) []Chart {
 	if len(f.Keys(prefixReq)) > 0 {
 		out = append(out,
 			chart("HTTP requests, by endpoint", "Requests per 5 minutes, by method and route.", Stacked, nil, f.Group(prefixReq, 8)),
+			chart("HTTP requests, by caller version", "Requests per 5 minutes, by the version the caller sent. None is a visor too old to send one.", Stacked, nil, f.Group(prefixVer, 8)),
 			chart("HTTP responses, by status", "Responses per 5 minutes, by status class.", Stacked, nil, f.Group(prefixCode, 0)),
 			chart("HTTP bytes sent, by endpoint", "Response bytes per 5 minutes, by method and route.", Stacked, Bytes, f.Group(prefixHTTPOut, 8)),
 			chart("HTTP response time", "Median and 95th percentile time to answer, per 5 minutes.", Lines, ms, []Series{
@@ -382,4 +390,13 @@ func openFiles() (int, bool) {
 		return 0, false
 	}
 	return len(names), true
+}
+
+// callerVersion is the version a request's caller sent, or "none".
+func callerVersion(r *http.Request) string {
+	v := r.Header.Get(buildinfo.VersionHeader)
+	if v == "" || len(v) > 64 {
+		return "none"
+	}
+	return v
 }

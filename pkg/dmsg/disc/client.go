@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -48,7 +50,7 @@ func NewHTTP(address string, client *http.Client, log *logging.Logger) APIClient
 		WithField("addr", address).
 		Debug("Created HTTP client.")
 	return &httpClient{
-		client:  client,
+		client:  withVersion(client),
 		address: address,
 		log:     log,
 	}
@@ -510,4 +512,38 @@ func (c *httpClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey
 	}
 
 	return entries, nil
+}
+
+// withVersion returns a copy of c that sends this build's version on every
+// request, so the discovery can count requests by caller version. A browser
+// would preflight the extra header, so js builds leave it out.
+func withVersion(c *http.Client) *http.Client {
+	if runtime.GOOS == "js" {
+		return c
+	}
+	if c == nil {
+		c = http.DefaultClient
+	}
+	cp := *c
+	base := cp.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	cp.Transport = versionTransport{base}
+	return &cp
+}
+
+type versionTransport struct{ base http.RoundTripper }
+
+func (t versionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
+	return t.base.RoundTrip(r)
+}
+
+// CloseIdleConnections passes on to the wrapped transport.
+func (t versionTransport) CloseIdleConnections() {
+	if c, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		c.CloseIdleConnections()
+	}
 }

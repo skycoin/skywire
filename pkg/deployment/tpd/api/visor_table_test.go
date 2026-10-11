@@ -27,12 +27,12 @@ func TestVisorTable(t *testing.T) {
 	}
 	api := &API{
 		transportsCache: []*transport.Entry{tp(a, b, "stcpr"), tp(a, c, "sudph"), tp(a, c, "stcpr"), tp(a, a, "stcpr")},
-		uptimesCache:    []store.VisorSummary{{PK: a, Online: true}, {PK: idle, Online: true}},
+		uptimesCache:    []store.VisorSummary{{PK: a, Online: true, Version: "v1.3.100"}, {PK: idle, Online: true}},
 	}
 	tbl := api.visorTable(context.Background())
-	require.Equal(t, []string{"Public key", "Role", "Online", "Total", "stcpr", "sudph"}, tbl.Head)
+	require.Equal(t, []string{"Public key", "Version", "Role", "Online", "Total", "stcpr", "sudph"}, tbl.Head)
 	require.Len(t, tbl.Rows, 4)
-	require.Equal(t, []string{a.Hex(), "", "yes", "3", "2", "1"}, tbl.Rows[0], "the busiest visor first; its self transport is left out")
-	require.Equal(t, []string{idle.Hex(), "", "yes", "0", "", ""}, tbl.Rows[3], "an online visor without transports comes last")
+	require.Equal(t, []string{a.Hex(), "v1.3.100", "", "yes", "3", "2", "1"}, tbl.Rows[0], "the busiest visor first; its self transport is left out")
+	require.Equal(t, []string{idle.Hex(), "", "", "yes", "0", "", ""}, tbl.Rows[3], "an online visor without transports comes last")
 	require.Contains(t, tbl.Note, "4 visors with 3 transports, 2 of them online")
 }

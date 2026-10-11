@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/httputil"
 )
 
@@ -21,8 +22,12 @@ func TestServiceStatsCountsByRoute(t *testing.T) {
 	r.Get("/entries/{pk}", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("hello")) }) //nolint:errcheck
 	r.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 	h := s.Handler(r)
-	for _, p := range []string{"/entries/a", "/entries/b", "/missing", "/nowhere/x"} {
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, p, nil))
+	for i, p := range []string{"/entries/a", "/entries/b", "/missing", "/nowhere/x"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		if i < 3 {
+			req.Header.Set(buildinfo.VersionHeader, "v1.3.100")
+		}
+		h.ServeHTTP(httptest.NewRecorder(), req)
 	}
 
 	v := map[string]float64{}
@@ -33,6 +38,8 @@ func TestServiceStatsCountsByRoute(t *testing.T) {
 	require.Equal(t, 2.0, v[prefixCode+"2xx"])
 	require.Equal(t, 2.0, v[prefixCode+"4xx"])
 	require.Equal(t, 10.0, v[prefixHTTPOut+"GET /entries/{pk}"])
+	require.Equal(t, 3.0, v[prefixVer+"v1.3.100"])
+	require.Equal(t, 1.0, v[prefixVer+"none"], "a caller that sends no version")
 	require.Contains(t, v, keyHTTPP50)
 	require.Contains(t, v, keyGoroutines)
 	require.Contains(t, v, keyHeap)

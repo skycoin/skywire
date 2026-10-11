@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -977,4 +978,18 @@ func TestHTTPClientAllServers_ConnectionRefused(t *testing.T) {
 	client := disc.NewHTTP("http://127.0.0.1:1", &http.Client{Timeout: 100 * time.Millisecond}, log)
 	_, err := client.AllServers(context.Background())
 	require.Error(t, err)
+}
+
+// Every request carries this build's version for the discovery's charts.
+func TestClientSendsVersion(t *testing.T) {
+	got := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.Header.Get(buildinfo.VersionHeader)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := disc.NewHTTP(srv.URL, &http.Client{}, logging.MustGetLogger("test"))
+	pk, _ := cipher.GenerateKeyPair()
+	_, _ = c.Entry(context.Background(), pk) //nolint:errcheck
+	require.Equal(t, buildinfo.Version(), <-got)
 }
