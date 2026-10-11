@@ -1,5 +1,4 @@
 //go:build darwin && !withoutsystray && !tinygo
-// +build darwin,!withoutsystray
 
 // Package visor pkg/visor/gui_darwin.go c3-vis-core
 package visor
