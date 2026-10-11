@@ -55,6 +55,13 @@ var (
 // API register all the API endpoints.
 // It implements a net/http.Handler.
 type API struct {
+	// versions caches the key to version map behind versionOf.
+	versions struct {
+		mu sync.Mutex
+		at time.Time
+		m  map[cipher.PubKey]string
+	}
+
 	// Stats, when set, adds the process and traffic charts to the status page.
 	Stats *charts.ServiceStats
 

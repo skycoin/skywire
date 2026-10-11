@@ -36,3 +36,11 @@ func TestVisorTable(t *testing.T) {
 	require.Equal(t, []string{idle.Hex(), "", "", "yes", "0", "", ""}, tbl.Rows[3], "an online visor without transports comes last")
 	require.Contains(t, tbl.Note, "4 visors with 3 transports, 2 of them online")
 }
+
+func TestVersionOf(t *testing.T) {
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	api := &API{uptimesCache: []store.VisorSummary{{PK: a, Version: "v1.3.100"}, {PK: b}}}
+	require.Equal(t, "v1.3.100", api.versionOf(a))
+	require.Empty(t, api.versionOf(b))
+}

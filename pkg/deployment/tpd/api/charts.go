@@ -47,6 +47,7 @@ type tpdCharts struct {
 // as the charts page.
 func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
 	c := &tpdCharts{st: st}
+	charts.SetVersionLookup(api.versionOf)
 	c.page = &charts.Page{
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
