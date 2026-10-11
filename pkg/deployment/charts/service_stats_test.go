@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 )
 
@@ -51,4 +52,33 @@ func TestServiceStatsCountsByRoute(t *testing.T) {
 	s.Collect(v)
 	require.NotContains(t, v, prefixReq+"GET /missing")
 	require.Contains(t, v, keyCPU, "CPU is a rate, known from the second sample on")
+}
+
+// A caller that sends no version is looked up by its key: the one it signs
+// with, or its dmsg address.
+func TestCallerVersionLookup(t *testing.T) {
+	signer, _ := cipher.GenerateKeyPair()
+	overDmsg, _ := cipher.GenerateKeyPair()
+	unknown, _ := cipher.GenerateKeyPair()
+	SetVersionLookup(func(pk cipher.PubKey) string {
+		return map[cipher.PubKey]string{signer: "v1.3.99", overDmsg: "v1.3.98"}[pk]
+	})
+	t.Cleanup(func() { versionOf.Store(nil) })
+
+	req := func(remote, public, version string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = remote
+		if public != "" {
+			r.Header.Set("SW-Public", public)
+		}
+		if version != "" {
+			r.Header.Set(buildinfo.VersionHeader, version)
+		}
+		return r
+	}
+	require.Equal(t, "v1.3.100", callerVersion(req(overDmsg.Hex()+":80", "", "v1.3.100")), "a sent version wins")
+	require.Equal(t, "v1.3.99", callerVersion(req("1.2.3.4:5", signer.Hex(), "")))
+	require.Equal(t, "v1.3.98", callerVersion(req(overDmsg.Hex()+":80", "", "")))
+	require.Equal(t, "none", callerVersion(req(unknown.Hex()+":80", "", "")))
+	require.Equal(t, "none", callerVersion(req("1.2.3.4:5", "", "")))
 }
