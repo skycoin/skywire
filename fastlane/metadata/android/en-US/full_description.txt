@@ -2,6 +2,7 @@ Skywire is a decentralized network run by its users. This app runs a full Skywir
 
 <ul>
 <li><b>SkyChat</b>: end-to-end encrypted messages, groups, voice calls and file sharing, carried peer to peer over Skywire with no central chat server.</li>
+<li><b>Skymail</b> (beta): mail between Skywire nodes, sent to an address made from the node's key and kept on the phone. It does not reach ordinary e-mail.</li>
 <li><b>SkyVPN</b>: route the whole phone's traffic through a Skywire VPN server, with an optional killswitch.</li>
 <li><b>SkySOCKS</b>: a local SOCKS5 proxy through a public Skywire proxy server, for apps that support one.</li>
 <li><b>SkyDNS</b>: open .dmsg and .skynet sites in any app on the phone.</li>
