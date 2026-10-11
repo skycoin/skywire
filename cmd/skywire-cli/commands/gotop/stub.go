@@ -1,4 +1,4 @@
-//go:build withoutgotop
+//go:build withoutgotop || tinygo
 
 // Package cligotop cmd/skywire-cli/commands/gotop/stub.go c4-vis-cli
 package cligotop

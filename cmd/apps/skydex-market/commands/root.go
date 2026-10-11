@@ -1,4 +1,4 @@
-//go:build !(js && wasm)
+//go:build !(js && wasm) && !tinygo
 
 // Package commands cmd/apps/skydex-market/commands/root.go
 //

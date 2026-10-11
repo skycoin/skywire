@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/transport_query.go c2-net-routing
 //
 // RSN-oracle transport-list query protocol (phase-1).

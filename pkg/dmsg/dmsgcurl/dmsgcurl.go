@@ -12,17 +12,17 @@ import (
 	"path/filepath"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/fastjson"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-var jsonite = jsoniter.ConfigFastest
+var jsonite = fastjson.JSON
 
 // DmsgCurl contains the logic for dmsgcurl (curl over dmsg).
 type DmsgCurl struct {

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/setup_path_stats.go c2-net-routing
 //
 // Which setup path this visor's routes actually took, on the VISOR side.

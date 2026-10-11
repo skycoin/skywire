@@ -192,6 +192,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// Go's loader for the one module. It is std-Go's wasm_exec.js because the
 	// module is a std-Go build; the loader and the module are a pair.
 	serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
+	// bottle picks this loader instead for a module that imports WASI, as
+	// TinyGo builds do.
+	if len(wasmhv.WasmExecTinyGoJS) > 0 {
+		serveBytes("/wasm_exec_tinygo.js", "text/javascript", wasmhv.WasmExecTinyGoJS)
+	}
 	serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 	// The vnet service worker: real same-origin /vnet/<port>/ URLs into the
 	// page's virtual loopback, so the nested browser renders in-page servers

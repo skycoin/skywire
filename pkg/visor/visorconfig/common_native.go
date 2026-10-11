@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package visorconfig pkg/visor/visorconfig/common_native.go c3-vis-core
 //
 // Native (non-WASM) implementation of Common.flush — writes a

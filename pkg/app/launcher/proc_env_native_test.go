@@ -1,4 +1,4 @@
-//go:build !tinygo && !js
+//go:build !js
 
 package launcher
 

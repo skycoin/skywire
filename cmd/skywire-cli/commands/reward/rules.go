@@ -2,16 +2,11 @@
 package clireward
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"regexp"
 
-	markdown "github.com/MichaelMure/go-term-markdown"
 	"github.com/spf13/cobra"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/term"
 
 	"github.com/skycoin/skywire/rewards"
@@ -42,16 +37,12 @@ the original markdown source, or --html to render it as an HTML fragment.`,
 			// Preprocess to replace ~text~ with ~~text~~ for strikethrough
 			re := regexp.MustCompile(`~(.*?)~`)
 			rules := re.ReplaceAllString(rewards.MainnetRules, "~~$1~~")
-			var buf bytes.Buffer
-			md := goldmark.New(
-				goldmark.WithExtensions(extension.Strikethrough),
-				goldmark.WithRendererOptions(html.WithXHTML()), // Optional: add XHTML compatibility
-			)
-			if err := md.Convert([]byte(rules), &buf); err != nil {
+			out, err := rulesHTML(rules)
+			if err != nil {
 				fmt.Println("Error rendering markdown as HTML:", err)
 				os.Exit(1)
 			}
-			fmt.Println(buf.String())
+			fmt.Println(out)
 			os.Exit(0)
 		}
 		terminalWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -59,6 +50,6 @@ the original markdown source, or --html to render it as an HTML fragment.`,
 			terminalWidth = 80
 		}
 		leftPad := 6
-		fmt.Printf("%s\n", markdown.Render(rewards.MainnetRules, terminalWidth, leftPad))
+		fmt.Printf("%s\n", rulesTerminal(rewards.MainnetRules, terminalWidth, leftPad))
 	},
 }

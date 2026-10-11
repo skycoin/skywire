@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/transport_query_dmsg.go c2-net-routing
 //
 // dmsg-direct (phase-1) delivery for the RSN-oracle transport-list query.
