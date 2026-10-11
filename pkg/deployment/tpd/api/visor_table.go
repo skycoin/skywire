@@ -66,11 +66,12 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 	})
 
 	roles := api.serverRoles(ctx)
+	versions := api.visorVersions()
 	t := charts.Table{
 		Title: "Transports by visor",
 		Note: fmt.Sprintf("%d visors with %d transports, %d of them online. A transport counts for both its visors. Visors that run a dmsg server are tinted, blue when it is registered and green when it serves a hypervisor's LAN.",
 			len(list), tps, len(online)),
-		Head: append([]string{"Public key", "Role", "Online", "Total"}, types...),
+		Head: append([]string{"Public key", "Version", "Role", "Online", "Total"}, types...),
 		Tall: true,
 	}
 	for _, r := range list {
@@ -79,7 +80,7 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 		if online[r.pk] {
 			on = "yes"
 		}
-		cells := []string{pk, roleName[roles[pk]], on, strconv.Itoa(r.total)}
+		cells := []string{pk, versions[pk], roleName[roles[pk]], on, strconv.Itoa(r.total)}
 		for _, typ := range types {
 			n := ""
 			if v := r.byType[typ]; v > 0 {
@@ -91,4 +92,15 @@ func (api *API) visorTable(ctx context.Context) charts.Table {
 		t.Marks = append(t.Marks, roleColor[roles[pk]])
 	}
 	return t
+}
+
+// visorVersions is the version each visor last reported, by hex public key.
+func (api *API) visorVersions() map[string]string {
+	out := map[string]string{}
+	for _, u := range api.getUptimesFromCache() {
+		if u.Version != "" {
+			out[u.PK.Hex()] = u.Version
+		}
+	}
+	return out
 }

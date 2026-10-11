@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/services"
 )
@@ -27,9 +28,11 @@ func (v *Visor) statusBoard() *charts.Board {
 // statusSummary lists the visor, the dmsg server it runs and every embedded
 // service, each by the public key it answers on.
 func (v *Visor) statusSummary() *charts.Table {
-	t := &charts.Table{Title: "Services", Head: []string{"Service", "Public key", "State", "Store"}}
+	// Everything listed runs in this process, so shares its version.
+	ver := buildinfo.Version()
+	t := &charts.Table{Title: "Services", Head: []string{"Service", "Public key", "Version", "State", "Store"}}
 	if v.conf != nil {
-		t.Rows = append(t.Rows, []string{"visor", v.conf.PK.Hex(), "running", ""})
+		t.Rows = append(t.Rows, []string{"visor", v.conf.PK.Hex(), ver, "running", ""})
 	}
 	if srv := v.RolesSnapshot().DmsgServer; srv.Enabled || srv.Running {
 		state := "starting"
@@ -40,7 +43,7 @@ func (v *Visor) statusSummary() *charts.Table {
 		if !srv.PK.Null() {
 			pk = srv.PK.Hex()
 		}
-		t.Rows = append(t.Rows, []string{"dmsg server", pk, state, ""})
+		t.Rows = append(t.Rows, []string{"dmsg server", pk, ver, state, ""})
 	}
 	for _, st := range v.embeddedServiceStates() {
 		state := "running"
@@ -60,7 +63,7 @@ func (v *Visor) statusSummary() *charts.Table {
 		if addr == "" {
 			addr = st.PlainHTTP
 		}
-		t.Rows = append(t.Rows, []string{name, addr, state, st.State.Store})
+		t.Rows = append(t.Rows, []string{name, addr, ver, state, st.State.Store})
 	}
 	return t
 }
