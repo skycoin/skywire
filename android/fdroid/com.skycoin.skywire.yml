@@ -100,6 +100,7 @@ Builds:
     # package.json files are npm metadata that vendored Go modules carry.
     # The desktop's browse cookie jar (public suffix tables) and wallet page
     # (skycoin-lite wasm) are vendored too, and the mobile build has neither.
+    # Nor does it have the transport graph view's compiled wasm (netview).
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
       - docs/examples/routing-policies/wasm/*/*.wasm
@@ -108,6 +109,7 @@ Builds:
       - vendor/golang.org/x/net/publicsuffix/data/nodes
       - vendor/golang.org/x/net/publicsuffix/data/children
       - vendor/github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo/skycoin-lite.wasm.gz
+      - pkg/tpviz/netview/netview.wasm.gz
     # A generated file the mobile binary embeds with go:embed, so it has to
     # stay: the pty web terminal page, gzipped HTML.
     scanignore:
