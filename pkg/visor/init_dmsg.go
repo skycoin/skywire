@@ -566,19 +566,28 @@ func (v *Visor) seedDmsgServiceEntries(dmsgC *dmsg.Client, log *logging.Logger) 
 	if len(serverPKs) == 0 {
 		return
 	}
-	// A visor whose only server is its own seeds that server, so its client
-	// can dial it before discovery lists it. Elsewhere discovery has the entries.
+	// A visor whose only server is its own seeds that server, so its client can
+	// dial it before discovery lists it. Elsewhere discovery has the entries.
+	servers := map[cipher.PubKey]*dmsgdisc.Entry{}
 	for _, srv := range v.conf.Dmsg.Servers {
 		if v.dmsgSelfOnly && srv != nil && srv.Server != nil {
-			dmsgC.SeedEntryCache(srv.Static, srv)
+			servers[srv.Static] = srv
 		}
 	}
 	pks := v.dmsgServicePKs()
 	for _, pk := range pks {
-		dmsgC.SeedEntryCache(pk, &dmsgdisc.Entry{
-			Static: pk,
-			Client: &dmsgdisc.Client{DelegatedServers: serverPKs},
-		})
+		entry := &dmsgdisc.Entry{Static: pk}
+		// The visor's own key is both a service and the server: one entry, both roles.
+		if srv, ok := servers[pk]; ok {
+			cp := *srv
+			entry = &cp
+			delete(servers, pk)
+		}
+		entry.Client = &dmsgdisc.Client{DelegatedServers: serverPKs}
+		dmsgC.SeedEntryCache(pk, entry)
+	}
+	for pk, srv := range servers {
+		dmsgC.SeedEntryCache(pk, srv)
 	}
 	if len(pks) > 0 {
 		log.WithField("count", len(pks)).Info("Seeded DMSG entry cache with deployment service PKs")
