@@ -253,6 +253,8 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		entryResolve = v.newDmsgEntryCXOResolver()
 	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, entryResolve, v.MasterLogger())
+	selfOnly := dmsgConf.Server != nil && dmsgConf.Server.Enabled && dmsgConf.Server.ConfigPath == "" &&
+		!dmsgc.SkipSelfServer(v.conf.PK, &dmsgConf)
 	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
 	// skywire route to that visor's dmsg relay (init_dmsg_relay.go).
 	dmsgC.SetSessionDialer(skynetSessionDialer)
@@ -307,6 +309,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	v.dmsgC = dmsgC
 	v.dmsgDC = dmsgC // single client: dmsgDC consumers (router, resolver, vpn) ride dmsgC
 	v.dmsgHTTP = httpC
+	v.dmsgSelfOnly = selfOnly
 	v.initLock.Unlock()
 	// The other half of the skynet carrier: serve attached peers as a dmsg relay.
 	v.initDmsgRelay(ctx, dmsgC)
@@ -337,7 +340,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	//     backoff (5s → 60s), so 5 attempts is on the order of
 	//     2–3 minutes before shutdown.
 	const dmsgInitTimeout = 30 * time.Second
-	if v.opts.DmsgServer != "" {
+	switch {
+	case selfOnly:
+		// The only server is this visor's own, which starts after this stage.
+		log.Info("DMSG: this visor's own dmsg server is its only one; not waiting for the client")
+	case v.opts.DmsgServer != "":
 		maxAttempts := v.opts.DmsgServerMaxAttempts
 		if maxAttempts <= 0 {
 			maxAttempts = 5
@@ -367,7 +374,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 			}
 		}
 		ticker.Stop()
-	} else {
+	default:
 		select {
 		case <-dmsgC.Ready():
 			log.Info("DMSG client connected and ready.")
@@ -1094,7 +1101,7 @@ func dmsgOnlyDisc(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Logger)
 // shared identity + a single dmsg client — so a visor can also be a dmsg
 // server without a redundant transit client. The client-side self-session
 // guard (SkipSelfServer, wired in dmsgc.New) keeps v.dmsgC from dialing this
-// co-resident server.
+// co-resident server while it knows another one to connect through.
 // dmsgWSTLSCacheDirName is where a folded dmsg server keeps its autocert
 // certificate cache when ws_tls_cache_dir is unset: beside the visor config,
 // which is where the standalone server this fold replaced already kept it.
@@ -1118,11 +1125,15 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// Wait for the visor's dmsg client to be ready — the server's discovery
-	// registration rides its sessions.
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-dmsgC.Ready():
+	// registration rides its sessions. When this server is the only one, the
+	// client can only become ready through it, so serve first; srv.Serve
+	// retries the registration until the client's session to it exists.
+	if !v.dmsgSelfOnly {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-dmsgC.Ready():
+		}
 	}
 
 	// Discovery PK for dmsg-only registration: the visor's dmsg discovery
@@ -1231,11 +1242,8 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// the server already used), so the DNS record still points at the right
 	// place — but the TLS front did NOT survive it; see below.
 	if shared && v.dmsgFactory != nil {
-		suffix := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
-		// Gate on the deployment knowing this key, exactly as the standalone
-		// service does: a third party running this binary must never advertise
-		// the deployment's domain for a PK with no DNS record.
-		if suffix != "" && deployment.Prod.IsKnownDmsgServer(v.conf.PK) {
+		suffix, fromDeployment := foldedWSSSuffix(srvCfg, v.conf.PK)
+		if suffix != "" {
 			wssHost := v.conf.PK.DNSLabel() + "." + suffix
 			wssURL := "wss://" + wssHost + "/dmsg"
 			v.dmsgFactory.SetDmsgWSHandler(srv.WSHandler(wssURL))
@@ -1259,7 +1267,11 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 						cacheDir = filepath.Join(filepath.Dir(p), dmsgWSTLSCacheDirName)
 					}
 				}
-				if tlsLis := dmsgsrv.ServeWSTLS(log, srv, tlsAddr, cacheDir, wssHost, wssURL, deployment.Prod.WSSAliasHosts(v.conf.PK.DNSLabel())...); tlsLis != nil {
+				var aliases []string
+				if fromDeployment {
+					aliases = deployment.Prod.WSSAliasHosts(v.conf.PK.DNSLabel())
+				}
+				if tlsLis := dmsgsrv.ServeWSTLS(log, srv, tlsAddr, cacheDir, wssHost, wssURL, aliases...); tlsLis != nil {
 					v.pushCloseStack("dmsg_server_wss", tlsLis.Close)
 				}
 			}
@@ -1648,6 +1660,18 @@ func initDmsgServerFromFile(_ context.Context, v *Visor, log *logging.Logger, pa
 		return nil
 	})
 	return nil
+}
+
+// foldedWSSSuffix is the domain suffix of a folded server's wss name. Its own
+// suffix wins, and the deployment's applies only to a key the deployment lists, as in dmsgsrv.
+func foldedWSSSuffix(srvCfg *dmsgc.DmsgServerConfig, pk cipher.PubKey) (suffix string, fromDeployment bool) {
+	if s := strings.TrimPrefix(srvCfg.WSSDomainSuffix, "."); s != "" {
+		return s, false
+	}
+	if s := strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, "."); s != "" && deployment.Prod.IsKnownDmsgServer(pk) {
+		return s, true
+	}
+	return "", false
 }
 
 // dmsgQUICAdvertisedAddr is the QUIC endpoint a folded dmsg server advertises:

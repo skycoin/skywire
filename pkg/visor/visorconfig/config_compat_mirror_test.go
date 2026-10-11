@@ -123,3 +123,24 @@ func TestV1UnmarshalCopiesEverySectionBack(t *testing.T) {
 		t.Fatalf("only %d sections checked; the reflection walk is not seeing V1's fields", len(checked))
 	}
 }
+
+// The folded dmsg server's wss_domain_suffix survives a load and save of the
+// whole visor config.
+func TestV1KeepsDmsgServerWSSDomainSuffix(t *testing.T) {
+	raw := []byte(`{"dmsg":{"discovery":"dmsg://0208f9b6b6bd2fcf9c6ac1fa8a7bde5b5ad3a3e2d2f0f8a4d7e0c1b2a3d4e5f6a7:80",` +
+		`"server":{"enabled":true,"public_address":"203.0.113.7:8080","wss_domain_suffix":"dmsg.example.net"}}}`)
+	var v V1
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Dmsg == nil || v.Dmsg.Server == nil || v.Dmsg.Server.WSSDomainSuffix != "dmsg.example.net" {
+		t.Fatalf("wss_domain_suffix lost on load: %+v", v.Dmsg)
+	}
+	out, err := json.Marshal(&v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"wss_domain_suffix":"dmsg.example.net"`) {
+		t.Fatalf("wss_domain_suffix lost on save: %s", out)
+	}
+}

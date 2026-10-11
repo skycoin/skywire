@@ -166,9 +166,11 @@ type Values struct {
 
 	// Deployment runs a whole deployment in the visor, reached at this public
 	// host[:port] — writes DEPLOYMENT. DeploymentRedis is its redis — writes
-	// DEPLOYMENTREDIS.
-	Deployment      string
-	DeploymentRedis string
+	// DEPLOYMENTREDIS. DeploymentWSSSuffix names its dmsg server's wss front —
+	// writes DEPLOYMENTWSSSUFFIX.
+	Deployment          string
+	DeploymentRedis     string
+	DeploymentWSSSuffix string
 	// Skydeploy is the services-config the visor uses in place of prod's,
 	// for a visor that joins a private deployment — writes SKYDEPLOY.
 	Skydeploy string
@@ -375,6 +377,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.NoDmsgServer, "no-dmsg-server", false, "stop running a dmsg server inside the visor — writes DMSGSERVER=false in skywire.conf")
 	cmd.Flags().StringVar(&v.Deployment, "deployment", "", "run a whole deployment in this visor and use it instead of prod. Takes the public host[:port] of its dmsg server (port 8080 by default); the address resolver takes UDP port+13 — writes DEPLOYMENT in skywire.conf")
 	cmd.Flags().StringVar(&v.DeploymentRedis, "deployment-redis", "", "redis URL or socket path for the deployment; empty keeps its entries in memory — writes DEPLOYMENTREDIS in skywire.conf")
+	cmd.Flags().StringVar(&v.DeploymentWSSSuffix, "deployment-wss-suffix", "", "domain suffix of the deployment dmsg server's wss front, wss://<pk label>.<suffix>/dmsg, for browser visors — writes DEPLOYMENTWSSSUFFIX in skywire.conf")
 	cmd.Flags().StringVar(&v.Skydeploy, "skydeploy", "", "services-config file of a private deployment to join, used in place of prod's; autoconfig sets it on the skywire unit — writes SKYDEPLOY in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgServerPublic, "dmsg-server-public", "", "host:port the in-visor dmsg server advertises; empty advertises whatever its listener resolves to, which is only right on a LAN — writes DMSGSERVERPUBLIC in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgServerWSTLS, "dmsg-server-ws-tls", "", "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host — writes DMSGSERVERWSTLS in skywire.conf")
@@ -551,9 +554,11 @@ var envMap = map[string]EnvMapping{
 		Note: "Runs the dmsg server on the VISOR's own key, sharing TRANSPORTPORT — pin TRANSPORTPORT to a reachable port. Ignored when DMSGSERVERCONF is set."},
 	"no-dmsg-server": {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true, Default: "false"},
 	"deployment": {Key: "DEPLOYMENT", Format: EnvFormatString,
-		Note: "Runs dmsg discovery, a dmsg server, setup and transport setup nodes, transport and service discovery, the address resolver and the route finder in this visor, and points the visor at them instead of prod. The dmsg server port and UDP port+13 must be reachable. `skywire cli config deployment` prints the services-config other visors join with."},
+		Note: "Runs dmsg discovery, a dmsg server on the visor's key, setup and transport setup nodes, transport and service discovery, the address resolver and the route finder in this visor, and points the visor at them instead of prod. The dmsg server port, which becomes the transport port, and UDP port+13 must be reachable. `skywire cli config deployment` prints the services-config other visors join with."},
 	"deployment-redis": {Key: "DEPLOYMENTREDIS", Format: EnvFormatString,
 		Note: "Redis URL or socket path for the deployment. Empty keeps every entry in memory, so a restart starts the deployment empty."},
+	"deployment-wss-suffix": {Key: "DEPLOYMENTWSSSUFFIX", Format: EnvFormatString,
+		Note: "Domain suffix of the deployment dmsg server's wss front, wss://<pk label>.<suffix>/dmsg, for browser visors. Point a DNS name for that host at this one."},
 	"skydeploy": {Key: "SKYDEPLOY", Format: EnvFormatString,
 		Note: "The services-config of a private deployment, used in place of prod's, from `skywire cli config deployment` on its host. Autoconfig sets it on the skywire unit as well. A deployment host gets it set to its own export."},
 	"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString,

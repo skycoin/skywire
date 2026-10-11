@@ -20,13 +20,15 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgc"
 	svcblock "github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Ports of a generated deployment, from the dmsg server's TCP port. Only
 // that port and the address resolver's UDP port must be reachable from
-// outside. The dmsg server serves its health on loopback, the port after its own.
+// outside. The dmsg server runs on the visor key and shares its transport
+// port, which is pinned to the dmsg port.
 const (
 	deployDmsgPort   = 8080
 	deployDiscOffset = 10
@@ -36,9 +38,10 @@ const (
 )
 
 var (
-	deploymentHost  string
-	deploymentRedis string
-	deploymentPath  string
+	deploymentHost      string
+	deploymentRedis     string
+	deploymentWSSSuffix string
+	deploymentPath      string
 )
 
 func init() {
@@ -64,13 +67,16 @@ Another visor joins the deployment with it:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		var c struct {
-			PK               cipher.PubKey    `json:"pk"`
+			PK   cipher.PubKey `json:"pk"`
+			Dmsg struct {
+				Server *dmsgc.DmsgServerConfig `json:"server"`
+			} `json:"dmsg"`
 			EmbeddedServices []svcblock.Block `json:"embedded_services"`
 		}
 		if err := json.Unmarshal(raw, &c); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%s: %w", path, err))
 		}
-		svc, err := deploymentServices(c.PK, c.EmbeddedServices)
+		svc, err := deploymentServices(c.PK, c.EmbeddedServices, c.Dmsg.Server)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%s: %w", path, err))
 		}
@@ -92,9 +98,21 @@ func configureDeployment(pk cipher.PubKey) error {
 	if err != nil {
 		return err
 	}
-	svc, err := deploymentServices(pk, blocks)
+	srv, port, err := deploymentDmsgServer(deploymentHost, deploymentWSSSuffix, blocks)
 	if err != nil {
 		return err
+	}
+	svc, err := deploymentServices(pk, blocks, srv)
+	if err != nil {
+		return err
+	}
+	if srv != nil {
+		if dmsgServerConf != "" {
+			return fmt.Errorf("--deployment runs its dmsg server on the visor key; drop --dmsg-server-conf")
+		}
+		dmsgServerOwnKey = true
+		dmsgServerPublicAddr = srv.PublicAddress
+		transportPort = port
 	}
 	conf.EmbeddedServices = blocks
 	conf.DeploymentStatusAddr = statusAddr(deploymentHost)
@@ -111,8 +129,9 @@ func configureDeployment(pk cipher.PubKey) error {
 
 // deploymentBlocks returns old with a block added for each deployment service
 // it lacks. Transport and service discovery, the route finder and the address
-// resolver run under the visor's key, pk, behind path prefixes. The others need
-// keys of their own.
+// resolver run under the visor's key, pk, behind path prefixes. The dmsg server
+// runs on that key too, folded into the visor, unless old already has a
+// dmsg-server block of its own. The others need keys of their own.
 func deploymentBlocks(host, redis string, pk cipher.PubKey, old []svcblock.Block) ([]svcblock.Block, error) {
 	host, port, err := deploymentAddr(host)
 	if err != nil {
@@ -133,10 +152,14 @@ func deploymentBlocks(host, redis string, pk cipher.PubKey, old []svcblock.Block
 	}
 
 	srvAddr := net.JoinHostPort(host, strconv.Itoa(port))
-	if pub := blockString(old, "dmsg-server", "public_address"); pub != "" {
-		srvAddr = pub
+	srvPK := pk
+	if have["dmsg-server"] {
+		srvPK, _ = blockKey(old, "dmsg-server")
+		if pub := blockString(old, "dmsg-server", "public_address"); pub != "" {
+			srvAddr = pub
+		}
 	}
-	entry := disc.Entry{Static: keys["dmsg-server"].pk, Server: &disc.Server{Address: srvAddr}}
+	entry := disc.Entry{Static: srvPK, Server: &disc.Server{Address: srvAddr}}
 	discURL := fmt.Sprintf("dmsg://%s:80", keys["dmsg-discovery"].pk.Hex())
 	// Each service reaches the deployment through its own discovery and
 	// server. Without these settings it would dial prod's.
@@ -150,9 +173,6 @@ func deploymentBlocks(host, redis string, pk cipher.PubKey, old []svcblock.Block
 	}
 
 	fields := map[string]map[string]any{
-		"dmsg-server": {"public_address": srvAddr, "local_address": fmt.Sprintf(":%d", port),
-			"health_endpoint_address": fmt.Sprintf("127.0.0.1:%d", port+1),
-			"discovery_dmsg":          discURL, "max_sessions": 2048, "log_level": "info"},
 		"dmsg-discovery": {"addr": fmt.Sprintf("127.0.0.1:%d", port+deployDiscOffset),
 			"dmsg_servers": []disc.Entry{entry}},
 		"setup-node": {"dmsg": dmsgConf, "log_level": "info",
@@ -204,19 +224,39 @@ func deploymentBlocks(host, redis string, pk cipher.PubKey, old []svcblock.Block
 }
 
 // deploymentTypes are the services of a generated deployment, in start order.
-var deploymentTypes = []string{"dmsg-server", "dmsg-discovery", "setup-node", "transport-setup",
+var deploymentTypes = []string{"dmsg-discovery", "setup-node", "transport-setup",
 	"transport-discovery", "route-finder", "service-discovery", "address-resolver"}
 
 // ownKeyTypes are the services that cannot run under the visor's key.
-var ownKeyTypes = []string{"dmsg-server", "dmsg-discovery", "setup-node", "transport-setup"}
+var ownKeyTypes = []string{"dmsg-discovery", "setup-node", "transport-setup"}
 
-var deploymentNames = map[string]string{"dmsg-server": "dmsgs", "dmsg-discovery": "dmsgd",
+var deploymentNames = map[string]string{"dmsg-discovery": "dmsgd",
 	"setup-node": "sn", "transport-setup": "tps", "transport-discovery": "tpd",
 	"route-finder": "rf", "service-discovery": "sd", "address-resolver": "ar"}
 
+// deploymentDmsgServer is the visor's dmsg server for a deployment at host
+// and the port it serves on. It is nil when blocks run a dmsg-server of their own.
+func deploymentDmsgServer(host, wssSuffix string, blocks []svcblock.Block) (*dmsgc.DmsgServerConfig, int, error) {
+	for _, b := range blocks {
+		if b.Type == "dmsg-server" {
+			return nil, 0, nil
+		}
+	}
+	h, port, err := deploymentAddr(host)
+	if err != nil {
+		return nil, 0, err
+	}
+	return &dmsgc.DmsgServerConfig{
+		Enabled:         true,
+		PublicAddress:   net.JoinHostPort(h, strconv.Itoa(port)),
+		WSSDomainSuffix: strings.TrimPrefix(wssSuffix, "."),
+	}, port, nil
+}
+
 // deploymentServices is the services-config of the deployment in blocks,
-// which a visor with key pk runs.
-func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.Services, error) {
+// which a visor with key pk runs. srv is the visor's own dmsg server, used
+// when blocks have no dmsg-server.
+func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block, srv *dmsgc.DmsgServerConfig) (visorconfig.Services, error) {
 	var svc visorconfig.Services
 	find := func(t string) (svcblock.Block, bool) {
 		for _, b := range blocks {
@@ -240,7 +280,7 @@ func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.
 		}
 		return k, nil
 	}
-	srvPK, err := keyOf("dmsg-server")
+	srvEntry, suffix, err := deploymentServerEntry(pk, blocks, srv, keyOf)
 	if err != nil {
 		return svc, err
 	}
@@ -256,20 +296,8 @@ func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.
 	if err != nil {
 		return svc, err
 	}
-	srvAddr := blockString(blocks, "dmsg-server", "public_address")
-	if srvAddr == "" {
-		return svc, fmt.Errorf("dmsg-server has no public_address")
-	}
-	var srv deployment.DmsgServerEntry
-	srv.Static = srvPK.Hex()
-	srv.Server.Address = srvAddr
-	// A browser visor can only reach the server over wss, at the name the
-	// server derives from its key and wss_domain_suffix.
-	if suffix := strings.TrimPrefix(blockString(blocks, "dmsg-server", "wss_domain_suffix"), "."); suffix != "" {
-		srv.Server.AddressWS = "wss://" + srvPK.DNSLabel() + "." + suffix + "/dmsg"
-		svc.WSSDomainSuffix = suffix
-	}
-	svc.DmsgServers = []deployment.DmsgServerEntry{srv}
+	svc.WSSDomainSuffix = suffix
+	svc.DmsgServers = []deployment.DmsgServerEntry{srvEntry}
 	svc.DmsgDiscoveryDmsg = fmt.Sprintf("dmsg://%s:80", discPK.Hex())
 	svc.RouteSetupNodes = []cipher.PubKey{snPK}
 	svc.TransportSetupPKs = []cipher.PubKey{tpsPK}
@@ -297,6 +325,41 @@ func deploymentServices(pk cipher.PubKey, blocks []svcblock.Block) (visorconfig.
 		}
 	}
 	return svc, nil
+}
+
+// deploymentServerEntry is the deployment's dmsg server entry and its wss
+// suffix: a dmsg-server block's, or else the visor's own server srv on key pk.
+func deploymentServerEntry(pk cipher.PubKey, blocks []svcblock.Block, srv *dmsgc.DmsgServerConfig,
+	keyOf func(string) (cipher.PubKey, error)) (deployment.DmsgServerEntry, string, error) {
+	var e deployment.DmsgServerEntry
+	srvPK, addr, suffix := pk, "", ""
+	if k, err := keyOf("dmsg-server"); err == nil {
+		srvPK = k
+		addr = blockString(blocks, "dmsg-server", "public_address")
+		suffix = blockString(blocks, "dmsg-server", "wss_domain_suffix")
+		if addr == "" {
+			return e, "", fmt.Errorf("dmsg-server has no public_address")
+		}
+	} else {
+		for _, b := range blocks {
+			if b.Type == "dmsg-server" {
+				return e, "", err
+			}
+		}
+		if srv == nil || !srv.Enabled || srv.ConfigPath != "" || srv.PublicAddress == "" {
+			return e, "", fmt.Errorf("no dmsg-server in embedded_services and no dmsg.server with a public_address on the visor key")
+		}
+		addr, suffix = srv.PublicAddress, srv.WSSDomainSuffix
+	}
+	e.Static = srvPK.Hex()
+	e.Server.Address = addr
+	// A browser visor can only reach the server over wss, at the name the
+	// server derives from its key and wss_domain_suffix.
+	suffix = strings.TrimPrefix(suffix, ".")
+	if suffix != "" {
+		e.Server.AddressWS = "wss://" + srvPK.DNSLabel() + "." + suffix + "/dmsg"
+	}
+	return e, suffix, nil
 }
 
 // blockKey is the keypair of the old block of type t, or a new one.

@@ -498,8 +498,9 @@ func init() {
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerPublicAddr, "dmsg-server-public", "${DMSGSERVERPUBLIC}", "address that in-visor dmsg server advertises (host:port); empty advertises whatever its listener resolves to")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgServerWSTLSAddr, "dmsg-server-ws-tls", "${DMSGSERVERWSTLS}", "address (\":443\") where the in-visor dmsg server self-terminates TLS for its wss front via Let's Encrypt; empty leaves TLS to a reverse proxy on this host")
 	gHiddenFlags = append(gHiddenFlags, "dmsg-server-ws-tls")
-	skyenvStringVar(genConfigCmd.Flags(), &deploymentHost, "deployment", "${DEPLOYMENT}", "run a whole deployment in this visor and use it instead of prod. Takes the public host[:port] of its dmsg server (port 8080 by default); the address resolver takes UDP port+13")
+	skyenvStringVar(genConfigCmd.Flags(), &deploymentHost, "deployment", "${DEPLOYMENT}", "run a whole deployment in this visor and use it instead of prod. Takes the public host[:port] of its dmsg server (port 8080 by default), which runs on the visor key and becomes the transport port; the address resolver takes UDP port+13")
 	skyenvStringVar(genConfigCmd.Flags(), &deploymentRedis, "deployment-redis", "${DEPLOYMENTREDIS}", "redis URL or socket path for the deployment; empty keeps its entries in memory")
+	skyenvStringVar(genConfigCmd.Flags(), &deploymentWSSSuffix, "deployment-wss-suffix", "${DEPLOYMENTWSSSUFFIX}", "domain suffix of the deployment dmsg server's wss front, wss://<pk label>.<suffix>/dmsg, for browser visors")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayAddr, "dmsg-relay-addr", "${DMSGRELAYADDR}", "loopback host:port for the dmsg relay acceptor, for local services that cannot use the unix socket (a different user than the visor). Requires --dmsg-relay-keys")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgRelayKeys, "dmsg-relay-keys", "${DMSGRELAYKEYS}", "public keys allowed to attach to the dmsg relay, comma-separated. Required with --dmsg-relay-addr: a TCP listener has no filesystem gate")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgRelay, "no-dmsg-relay", "${NODMSGRELAY:-false}", "do not serve the local dmsg relay acceptor at all (it is served by default)")
@@ -1642,6 +1643,9 @@ func configureLauncher(log *logging.Logger) {
 			Enabled:       true,
 			PublicAddress: dmsgServerPublicAddr,
 			WSTLSAddress:  dmsgServerWSTLSAddr,
+		}
+		if deploymentHost != "" {
+			conf.Dmsg.Server.WSSDomainSuffix = strings.TrimPrefix(deploymentWSSSuffix, ".")
 		}
 	}
 

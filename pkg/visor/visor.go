@@ -190,6 +190,10 @@ type Visor struct {
 	// server's key and address rather than only what the config asked for.
 	dmsgSrvRole atomic.Pointer[visorapi.DmsgServerRole]
 
+	// dmsgSelfOnly is set when the visor's own-key dmsg server is the only one it
+	// knows, so its client connects to that server and nothing waits for the client first.
+	dmsgSelfOnly bool
+
 	// dmsgSrv is the running own-key in-process dmsg server, kept so the
 	// state API can report the clients CONNECTED TO it. Every co-resident
 	// visor+server ("hub") runs this mode; config_path mode keeps the server

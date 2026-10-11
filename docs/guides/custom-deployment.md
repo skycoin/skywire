@@ -35,20 +35,26 @@ Either way the visor config gets an `embedded_services` block per service,
 and the visor uses this deployment instead of prod. Transport discovery,
 service discovery, the address resolver and the route finder run under the
 visor's own key, at `dmsg://<visor pk>:80/tpd`, `/sd`, `/ar` and `/rf`. The
-dmsg server, dmsg discovery, setup node and transport setup node each get a
-key of their own, written into their block.
+dmsg server runs on the visor's key too, folded into the visor as its
+`dmsg.server` block, and is the only dmsg server the visor knows, so the
+visor connects to it like any other client would. Dmsg discovery, the setup
+node and the transport setup node each get a key of their own, written into
+their block.
 
 Ports, from the dmsg server's port P:
 
 | Port | Protocol | Reach | Used by |
 |------|----------|-------|---------|
-| P | TCP and UDP | public | dmsg server (TCP, ws, QUIC and WebTransport) |
+| P | TCP and UDP | public | the visor's transport port, shared by the dmsg server (TCP, ws, QUIC and WebTransport) and the visor's transports |
 | P+13 | UDP | public | address resolver, for UDP hole punching |
-| P+1 | TCP | 127.0.0.1 | dmsg server health |
 | P+2 | TCP | 127.0.0.1 | status page of the services, for a reverse proxy |
 | P+10 | TCP | 127.0.0.1 | dmsg discovery |
 
-Only P and P+13 need to be open in a firewall or forwarded.
+Only P and P+13 need to be open in a firewall or forwarded. The generator
+pins `transport.transport_port` to P. A dmsg server folded into the visor has
+no health port of its own. `skywire cli visor state` reports it instead.
+Deployments generated before this change keep their `dmsg-server` block,
+which serves its health on P+1, as described under regenerating below.
 
 Check it with `skywire cli visor state --select services`. It lists each
 service with its address, whether it is running, and its store.
@@ -62,9 +68,14 @@ a public name.
 
 A regenerate keeps every block already in the config as it is, with its key
 and any edits made to it, and only adds the blocks that are missing. The
-keys of the four services that have their own live only in those blocks, so
-back up the visor config. A new key for the dmsg server or dmsg discovery
-means every joined visor needs the new services-config.
+keys of the three services that have their own live only in those blocks, so
+back up the visor config. A new key for the visor or dmsg discovery means
+every joined visor needs the new services-config.
+
+A config generated before the dmsg server moved onto the visor's key has a
+`dmsg-server` block with a key of its own. A regenerate keeps that block, and
+the deployment keeps working exactly as before. Only a config without one
+gets the server folded into the visor.
 
 ## Join a visor
 
@@ -113,22 +124,26 @@ to prod's own servers.
 To give a deployment's dmsg server a name:
 
 1. Pick a domain you control, say `dmsg.example.net`.
-2. Add to the `dmsg-server` block in the visor config's
-   `embedded_services`:
+2. Set it in `/etc/skywire.conf` and run `skywire autoconfig`:
 
-   ```json
-   "wss_domain_suffix": "dmsg.example.net",
-   "ws_tls_address": ":443",
-   "ws_tls_cache_dir": "/opt/skywire/dmsg-autocert"
+   ```
+   DEPLOYMENTWSSSUFFIX='dmsg.example.net'
+   DMSGSERVERWSTLS=':443'
    ```
 
-   With `ws_tls_address` the server gets its own Let's Encrypt certificate
-   and serves wss on :443, so nothing else may use :443 on that host. If a
-   reverse proxy such as Caddy already owns :443, leave `ws_tls_address`
-   out. The server then logs the exact Caddy site block to add, of the form
+   or pass `--deployment-wss-suffix dmsg.example.net --dmsg-server-ws-tls :443`
+   to `config gen`. Both write `wss_domain_suffix` and `ws_tls_address` into
+   the visor config's `dmsg.server` block. A deployment that still has a
+   `dmsg-server` block takes `wss_domain_suffix`, `ws_tls_address` and
+   `ws_tls_cache_dir` in that block instead.
+
+   With `ws_tls_address` the server gets its own Let's Encrypt certificate,
+   kept in `dmsg-autocert` beside the visor config, and serves wss on :443,
+   so nothing else may use :443 on that host. If a reverse proxy such as
+   Caddy already owns :443, leave it out and add a site block of the form
    `<label>.dmsg.example.net { reverse_proxy 127.0.0.1:P }`.
-3. Restart the visor and read the label from its log, on the line starting
-   `dmsg-ws: advertising wss`.
+3. Read the label from `skywire cli config deployment`. The server's
+   `address_ws` is `wss://<label>.dmsg.example.net/dmsg`.
 4. Add an A record (and AAAA, if the server has IPv6)
    `<label>.dmsg.example.net` pointing at that server's public IP. One
    record per server. Do not point a wildcard at one host, since each server

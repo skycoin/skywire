@@ -176,6 +176,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addString("DMSGSERVERPUBLIC", "dmsg-server-public", autoconfigVals.DmsgServerPublic)
 	addString("DEPLOYMENT", "deployment", autoconfigVals.Deployment)
 	addString("DEPLOYMENTREDIS", "deployment-redis", autoconfigVals.DeploymentRedis)
+	addString("DEPLOYMENTWSSSUFFIX", "deployment-wss-suffix", autoconfigVals.DeploymentWSSSuffix)
 	addString("SKYDEPLOY", "skydeploy", autoconfigVals.Skydeploy)
 	addString("DMSGSERVERWSTLS", "dmsg-server-ws-tls", autoconfigVals.DmsgServerWSTLS)
 

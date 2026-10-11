@@ -4,6 +4,7 @@ package spec
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -24,5 +25,28 @@ func TestDmsgServerConfig_ConfigPathRoundTrip(t *testing.T) {
 	}
 	if out.Server == nil || !out.Server.Enabled || out.Server.ConfigPath != in.Server.ConfigPath {
 		t.Fatalf("server block lost: %+v\n%s", out.Server, b)
+	}
+}
+
+// wss_domain_suffix names the folded server's wss front and must survive the
+// codec, which writes the server block by hand.
+func TestDmsgServerConfig_WSSDomainSuffixRoundTrip(t *testing.T) {
+	in := DmsgConfig{
+		Discovery: "dmsg://0208f9b6b6bd2fcf9c6ac1fa8a7bde5b5ad3a3e2d2f0f8a4d7e0c1b2a3d4e5f6a7:80",
+		Server:    &DmsgServerConfig{Enabled: true, PublicAddress: "203.0.113.7:8080", WSSDomainSuffix: "dmsg.example.net"},
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"wss_domain_suffix":"dmsg.example.net"`) {
+		t.Fatalf("wss_domain_suffix not written: %s", b)
+	}
+	var out DmsgConfig
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if out.Server == nil || *out.Server != *in.Server {
+		t.Fatalf("server block changed: %+v\n%s", out.Server, b)
 	}
 }
