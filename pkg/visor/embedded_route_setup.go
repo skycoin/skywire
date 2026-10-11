@@ -4,8 +4,9 @@ package visor
 import (
 	"context"
 	"errors"
-	"net/rpc"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -145,7 +146,7 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 		}
 
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(gw); err != nil {
+		if err := router.RegisterSetupRPCGateway(rpcS, "SetupRPCGateway", gw); err != nil {
 			ers.log.WithError(err).Error("Failed to register RPC gateway")
 			conn.Close() //nolint:errcheck,gosec
 			continue

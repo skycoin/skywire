@@ -10,8 +10,9 @@ package commands
 import (
 	"context"
 	"errors"
-	"net/rpc"
 	"testing"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )

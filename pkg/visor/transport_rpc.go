@@ -10,9 +10,11 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/cipher"
-	"net/rpc"
 	"sync"
+
+	rpc "github.com/0magnet/gobrpc"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"

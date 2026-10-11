@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/setup_batch_test.go
 package router
 

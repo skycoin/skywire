@@ -4,8 +4,9 @@ package visor
 import (
 	"errors"
 	"fmt"
-	"net/rpc"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 
@@ -31,6 +32,8 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
+//go:generate go run ../../internal/rpcgen -type RPC=registerVisorRPC,TPSRPCGateway=registerTPSRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+
 type RPC struct {
 	visor visorapi.API
 	log   logrus.FieldLogger
@@ -43,7 +46,7 @@ func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
 		log:   v.MasterLogger().PackageLogger("visor_rpc:" + remoteName),
 	}
 
-	if err := rpcS.RegisterName(visorapi.RPCPrefix, rpcG); err != nil {
+	if err := registerVisorRPC(rpcS, visorapi.RPCPrefix, rpcG); err != nil {
 		return nil, fmt.Errorf("failed to create visor RPC server: %w", err)
 	}
 

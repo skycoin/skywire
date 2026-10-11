@@ -32,6 +32,9 @@ type Server = rpc.Server
 // Call is net/rpc.Call.
 type Call = rpc.Call
 
+// ServerError is net/rpc.ServerError.
+type ServerError = rpc.ServerError
+
 // NewClient mirrors net/rpc.NewClient.
 var NewClient = rpc.NewClient
 

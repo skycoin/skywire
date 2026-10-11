@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/rpc"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 
