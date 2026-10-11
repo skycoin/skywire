@@ -34,6 +34,12 @@ func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
 // expired transport's counterparty stays recoverable.
 const bandwidthHistoryTTL = 14 * 24 * time.Hour
 
+// bandwidthPrevTTL keeps a reporter's last counters past any gap in applied
+// reports, such as a TPD restart. Without them a report re-counts its lifetime.
+const bandwidthPrevTTL = 6 * time.Hour
+
+var bandwidthPrevTTLSeconds = int64(bandwidthPrevTTL / time.Second)
+
 // bandwidthEdgesKey stores a transport's real edge pair ("<edge0hex>,<edge1hex>")
 // so recoverBandwidthEdges can identify BOTH edges of an expired transport even
 // when only one edge ever published bandwidth (the common case). Without it the
@@ -81,8 +87,7 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	// One atomic round trip: the delta against the reporter's previous
 	// snapshot (a counter reset counts from zero), the per-transport and
 	// per-visor daily hashes, and the day's network total (see
-	// redis_daily_totals.go). The previous snapshot lives 10 minutes,
-	// which rides out missed report cycles.
+	// redis_daily_totals.go).
 	keys := []string{
 		s.bandwidthPrevKey(transportID, reporterHex),
 		s.bandwidthDailyKey(transportID, now),
@@ -93,7 +98,7 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	}
 	moved, err := bandwidthScript.Run(ctx, s.client, keys,
 		reporterHex, currentSent, currentRecv, now.Unix(), typeOrUnknown(tpType),
-		int64((10*time.Minute)/time.Second), historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor(),
+		bandwidthPrevTTLSeconds, historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor(),
 	).Int()
 	if err != nil {
 		return err
