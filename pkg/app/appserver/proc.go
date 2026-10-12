@@ -247,11 +247,13 @@ func (p *Proc) startInProcess() error {
 		}
 	}
 
+	runDone := make(chan struct{})
 	go func() {
 		// Internal apps use their isolated logger directly via p.log
 		// Do NOT replace global os.Stdout/os.Stderr as it causes race conditions
 		// when multiple internal apps run concurrently
 
+		defer close(runDone)
 		defer func() {
 			if r := recover(); r != nil {
 				p.errMx.Lock()
@@ -388,6 +390,13 @@ func (p *Proc) startInProcess() error {
 		p.rpcGW.cm.CloseAll()
 		p.rpcGW.lm.CloseAll()
 
+		// Stop returns once waitMx is free. Until RunFunc has returned the app
+		// still serves its listeners and writes its files.
+		select {
+		case <-runDone:
+		case <-time.After(inProcessStopWait):
+			p.log.Warnf("App had not returned %s after it was stopped", inProcessStopWait)
+		}
 		p.waitMx.Unlock()
 	}()
 
