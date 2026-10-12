@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -30,7 +32,7 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mux-bw-tui: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -50,7 +52,7 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 	stream, err := client.StreamMuxBandwidth(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mux-bw-tui: StreamMuxBandwidth call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	model := newMuxBwTUIModel(targetPK, req)
@@ -63,7 +65,7 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 	cancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mux-bw-tui: TUI: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	// The screen is cleared on exit, so print the final dashboard where

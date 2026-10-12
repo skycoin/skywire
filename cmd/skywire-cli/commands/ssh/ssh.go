@@ -189,7 +189,7 @@ ssh-shaped alias over that path.`,
 		resp, err := (&cli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, sshEnv, nil, timeout)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "pty shell: %v\n", err) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		reportSSHExec(cmd, resp)
 		return nil
@@ -264,11 +264,11 @@ func resolveSSHIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "pty shell: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if conf.SK == zero {
 			fmt.Fprintf(os.Stderr, "pty shell: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		sk = conf.SK
 	}
@@ -279,7 +279,7 @@ func resolveSSHIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 	pk, err := sk.PubKey()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pty shell: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	return pk, sk
 }
@@ -304,9 +304,9 @@ func reportSSHExec(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	}
 	if resp.TimedOut {
 		fmt.Fprintf(cmd.ErrOrStderr(), "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
-		os.Exit(124)
+		cmdutil.Exit(124)
 	}
 	if resp.ExitCode != 0 {
-		os.Exit(resp.ExitCode)
+		cmdutil.Exit(resp.ExitCode)
 	}
 }

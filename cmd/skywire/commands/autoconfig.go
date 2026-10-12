@@ -300,7 +300,7 @@ var autoconfigCmd *cobra.Command
 func autoconfigRun(cmd *cobra.Command, args []string) {
 	if os.Getenv("NOAUTOCONFIG") == "true" {
 		fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
-		os.Exit(0)
+		cmdutil.Exit(0)
 	}
 
 	msg2("Configuring skywire")
@@ -347,7 +347,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	if len(edits) > 0 {
 		if err := updateSkyenvFile(target, edits); err != nil {
 			fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		editedKeys := make([]string, 0, len(edits))
 		for _, e := range edits {
@@ -378,16 +378,16 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	if resolved.skyenvMissing {
 		fmt.Printf("%s>>> FATAL:%s SKYENV=%s does not exist\n", colorRed, colorReset, os.Getenv("SKYENV"))
 		fmt.Printf("            a missing skyenv file reads as empty, so every value would fall back to its default\n")
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	if err := generateConfig(resolved, hvArg, edits); err != nil {
 		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	if err := exportDeployment(&resolved); err != nil {
 		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
@@ -412,7 +412,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 				}
 				return defaultSkyenvPath()
 			}())
-		os.Exit(100)
+		cmdutil.Exit(100)
 	}
 	msg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s%s%s", colorBlue, colorReset, colorPurple, resolved.configPath, colorReset))
 

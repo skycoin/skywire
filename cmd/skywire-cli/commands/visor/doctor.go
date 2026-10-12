@@ -17,9 +17,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -127,9 +128,9 @@ gate on doctor without parsing the output.`,
 		}
 		switch report.Verdict {
 		case verdictRed:
-			os.Exit(2)
+			cmdutil.Exit(2)
 		case verdictYellow:
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

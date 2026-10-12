@@ -4,8 +4,9 @@ package clivpn
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -141,7 +142,7 @@ var vpnSrvStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 

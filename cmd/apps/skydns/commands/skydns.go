@@ -4,10 +4,11 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ var RootCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		if err := RunSkyDNS(ctx, nil); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

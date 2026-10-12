@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -129,7 +131,7 @@ Server entries come from the live discovery (fetched over dmsg, like
 		printProbeTable(entries, results)
 		for _, r := range results {
 			if !r.OK {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 		}
 		return nil

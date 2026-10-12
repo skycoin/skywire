@@ -39,6 +39,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
 )
@@ -105,7 +107,7 @@ Needs a browser started with --remote-debugging-port=9222.`,
 		if err := driveShell(shellPort, shellURL, shellOut, shellLoad, shellBoot,
 			shellSettle, shellNoConsole, shellKeepTabs, args); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

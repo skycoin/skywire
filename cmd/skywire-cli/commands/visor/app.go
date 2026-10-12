@@ -12,6 +12,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -113,7 +115,7 @@ var lsAppsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		if lsAppsLive {
@@ -196,7 +198,7 @@ var startAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		launcherMode := ""
@@ -257,7 +259,7 @@ to configure it before starting.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.AddApp(args[0], args[1]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -278,7 +280,7 @@ add' or 'skycoin daemon add'.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.DeleteApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -302,7 +304,7 @@ Examples:
 		shellStr := args[1]
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		// Tokenize via the visorconfig parser so the CLI matches
 		// the server-side semantics exactly.
@@ -335,7 +337,7 @@ without dropping to a config edit.`,
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppEnv(args[0], key, value))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -362,7 +364,7 @@ var stopAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -376,7 +378,7 @@ var registerAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if appName == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
@@ -409,7 +411,7 @@ var deregisterAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if procKey == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("required flag not specified"))
@@ -442,7 +444,7 @@ var setAppAutostartCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -463,7 +465,7 @@ var setAppRoutingPolicyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(args[0], args[1]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -486,7 +488,7 @@ var setAppPKCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppPK(args[0], pk))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -503,7 +505,7 @@ var restartAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.RestartApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -521,7 +523,7 @@ var connsAppCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		summaries, err := rpcClient.GetAppConnectionsSummary(args[0])
 		internal.Catch(cmd.Flags(), err)
@@ -558,7 +560,7 @@ var setAppKillswitchCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppKillswitch(args[0], killswitch))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -582,7 +584,7 @@ var setAppSecureCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppSecure(args[0], secure))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -604,7 +606,7 @@ clears the whitelist (open to all authenticated peers).`,
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppWhitelist(args[0], whitelist))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -623,7 +625,7 @@ var setAppNetworkInterfaceCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAppNetworkInterface(args[0], netifc))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -647,7 +649,7 @@ var appLogsSinceCmd = &cobra.Command{
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		logs, err := rpcClient.LogsSince(t, args[0])
 		internal.Catch(cmd.Flags(), err)

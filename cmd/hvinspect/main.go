@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	cdplog "github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
@@ -86,7 +88,7 @@ func getJSON(u string, v interface{}) error {
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: hvinspect <url> [waitSeconds] [outPrefix]")
-		os.Exit(2)
+		cmdutil.Exit(2)
 	}
 	url := os.Args[1]
 	wait := 7 * time.Second
@@ -115,7 +117,7 @@ func main() {
 		ws, tid, err := resolveCDP(cdpBase, url)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "CDP attach:", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		attachID = tid
 		allocCtx, cancelA = chromedp.NewRemoteAllocator(context.Background(), ws)

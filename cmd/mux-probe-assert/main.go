@@ -33,6 +33,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // Tally holds the parsed fields from mux-route-probe.sh's stdout
@@ -98,23 +100,23 @@ func main() {
 
 	if baselinePath == "" {
 		flag.Usage()
-		os.Exit(exitUsage)
+		cmdutil.Exit(exitUsage)
 	}
 
 	baseline, err := loadBaseline(baselinePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load baseline %q: %v\n", baselinePath, err)
-		os.Exit(exitUsage)
+		cmdutil.Exit(exitUsage)
 	}
 
 	tally, err := parseTally(os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse tally: %v\n", err)
-		os.Exit(exitUsage)
+		cmdutil.Exit(exitUsage)
 	}
 
 	code := assertTally(tally, baseline, os.Stderr)
-	os.Exit(code)
+	cmdutil.Exit(code)
 }
 
 func loadBaseline(path string) (Baseline, error) {

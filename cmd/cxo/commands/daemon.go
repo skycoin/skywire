@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
@@ -85,14 +87,14 @@ func runDaemon(_ *cobra.Command, _ []string) {
 	if skHex != "" {
 		sk, err := cipher.SecKeyFromHex(skHex)
 		if err != nil {
-			log.Fatalf("invalid --sk: %v", err)
+			cmdutil.Fatalf("invalid --sk: %v", err)
 		}
 		cfg.SecKey = sk
 	}
 
 	n, err := node.NewNode(cfg)
 	if err != nil {
-		log.Fatal(err)
+		cmdutil.Fatal(err)
 	}
 	defer n.Close() //nolint:errcheck,gosec
 
@@ -122,7 +124,7 @@ func waitInterrupt() {
 
 func acceptAllSubscriptions(c *node.Conn, pk cipher.PubKey) (_ error) {
 	if err := c.Node().Share(pk); err != nil {
-		log.Fatal("DB failure:", err)
+		cmdutil.Fatal("DB failure:", err)
 	}
 	return
 }

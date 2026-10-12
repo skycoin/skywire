@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/got"
 	"github.com/spf13/cobra"
 
@@ -218,7 +220,7 @@ Examples:
 		}
 
 		if resp.StatusCode >= 400 {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -338,5 +340,5 @@ func humanBytes(b uint64) string {
 
 func fatal(err error) {
 	fmt.Fprintf(os.Stderr, "got: %v\n", err)
-	os.Exit(1)
+	cmdutil.Exit(1)
 }

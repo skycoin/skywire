@@ -179,10 +179,10 @@ var execCmd = &cobra.Command{
 		}
 		if resp.TimedOut {
 			fmt.Fprintf(os.Stderr, "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
-			os.Exit(124)
+			cmdutil.Exit(124)
 		}
 		if resp.ExitCode != 0 {
-			os.Exit(resp.ExitCode)
+			cmdutil.Exit(resp.ExitCode)
 		}
 		return nil
 	},

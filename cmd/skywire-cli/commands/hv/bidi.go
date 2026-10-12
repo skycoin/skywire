@@ -51,6 +51,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/wfdrive/bidi"
 	"github.com/spf13/cobra"
 )
@@ -171,7 +173,7 @@ func withBiDi(port string, fresh bool, timeout time.Duration, fn func(*bidi.Driv
 		select {
 		case <-sig:
 			d.End()
-			os.Exit(130)
+			cmdutil.Exit(130)
 		case <-done:
 		}
 	}()
@@ -271,7 +273,7 @@ Needs a browser started with --remote-debugging-port=9223 --remote-allow-origins
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

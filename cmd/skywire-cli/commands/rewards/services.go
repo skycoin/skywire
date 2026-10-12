@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"text/template"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 )
@@ -69,7 +71,7 @@ var rewardCmd = &cobra.Command{
 			fmt.Println("_wdate=" + rewardshDate)
 		}
 		fmt.Println(string(rewardSH))
-		os.Exit(0)
+		cmdutil.Exit(0)
 	},
 }
 

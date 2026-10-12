@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/progkit"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
@@ -26,13 +28,13 @@ var RootCmd = &cobra.Command{
 			data, err := os.ReadFile(filename) //nolint:gosec
 			if err != nil && !os.IsNotExist(err) {
 				fmt.Fprintf(os.Stderr, "edit: %v\n", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			content = string(data)
 		}
 		if err := run(filename, content); err != nil {
 			fmt.Fprintf(os.Stderr, "edit: %v\n", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

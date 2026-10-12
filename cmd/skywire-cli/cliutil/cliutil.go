@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
@@ -37,7 +39,7 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
 		writeJSONError(os.Stderr, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	log.Fatal(err)
 }

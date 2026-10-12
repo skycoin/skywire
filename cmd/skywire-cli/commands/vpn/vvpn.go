@@ -110,7 +110,7 @@ var startCmd = &cobra.Command{
 			}
 			rpcClient.KillApp("vpn-client") //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}()
 
 		// --verbose: open a gRPC log stream BEFORE StartVPNClientWithMode
@@ -229,7 +229,7 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)

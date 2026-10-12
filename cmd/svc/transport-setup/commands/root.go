@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,7 +124,7 @@ Generate Keys:
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
 		if configFile == "" {
-			log.Fatal("please specify config file")
+			cmdutil.Fatal("please specify config file")
 		}
 		const loggerTag = "transport_setup"
 		logger := logging.MustGetLogger(loggerTag)
@@ -155,14 +154,14 @@ var addTPCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		err := pk1.Set(fromPK)
 		if err != nil {
-			log.Fatalf("-1 invalid public key: %v\n", err)
+			cmdutil.Fatalf("-1 invalid public key: %v\n", err)
 		}
 		err = pk2.Set(toPK)
 		if err != nil {
-			log.Fatalf("-2 invalid public key: %v\n", err)
+			cmdutil.Fatalf("-2 invalid public key: %v\n", err)
 		}
 		if tpType != "dmsg" && tpType != "stcpr" && tpType != "sudph" {
-			log.Fatal("invalid transport type specified: ", tpType)
+			cmdutil.Fatal("invalid transport type specified: ", tpType)
 		}
 		addtp := api.TransportRequest{
 			From: pk1,
@@ -171,11 +170,11 @@ var addTPCmd = &cobra.Command{
 		}
 		addtpJSON, err := json.Marshal(addtp)
 		if err != nil {
-			log.Fatalf("Error occurred: %v\n", err)
+			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		res, err := script.Echo(string(addtpJSON)).Post(tpsnAddr + "/add").String()
 		if err != nil {
-			log.Fatalf("Error occurred: %v\n", err)
+			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		if nice {
 			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
@@ -196,11 +195,11 @@ var rmTPCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		err := pk1.Set(fromPK)
 		if err != nil {
-			log.Fatalf("invalid public key: %v\n", err)
+			cmdutil.Fatalf("invalid public key: %v\n", err)
 		}
 		tpid, err := uuid.Parse(tpID)
 		if err != nil {
-			log.Fatalf("invalid tp id: %v\n", err)
+			cmdutil.Fatalf("invalid tp id: %v\n", err)
 		}
 		rmtp := api.UUIDRequest{
 			From: pk1,
@@ -208,11 +207,11 @@ var rmTPCmd = &cobra.Command{
 		}
 		rmtpJSON, err := json.Marshal(rmtp)
 		if err != nil {
-			log.Fatalf("Error occurred: %v\n", err)
+			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		res, err := script.Echo(string(rmtpJSON)).Post(tpsnAddr + "/remove").String()
 		if err != nil {
-			log.Fatalf("Error occurred: %v\n", err)
+			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		if nice {
 			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
@@ -232,7 +231,7 @@ var listTPCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		res, err := script.Get(tpsnAddr + "/" + fromPK + "/transports").String()
 		if err != nil {
-			log.Fatal("something unexpected happened: ", err, res)
+			cmdutil.Fatal("something unexpected happened: ", err, res)
 		}
 		if nice {
 			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))

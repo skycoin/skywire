@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -297,7 +299,7 @@ var addPvCmd = &cobra.Command{
 			}
 
 			if totalFail > 0 && totalSuccess == 0 {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			return
 		}
@@ -433,7 +435,7 @@ var addPvCmd = &cobra.Command{
 		}
 
 		if failCount > 0 && successCount == 0 {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }
