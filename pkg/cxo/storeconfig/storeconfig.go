@@ -24,18 +24,7 @@ type Config struct {
 
 const redisPasswordEnvName = "REDIS_PASSWORD"
 
-const (
-	pgUser     = "PG_USER"
-	pgPassword = "PG_PASSWORD"
-	pgDatabase = "PG_DATABASE"
-)
-
 // RedisPassword returns Redis password which is read from an environment variable.
 func RedisPassword() string {
 	return os.Getenv(redisPasswordEnvName)
-}
-
-// PostgresCredential return prostgres credential needed on services
-func PostgresCredential() (string, string, string) {
-	return os.Getenv(pgUser), os.Getenv(pgPassword), os.Getenv(pgDatabase)
 }

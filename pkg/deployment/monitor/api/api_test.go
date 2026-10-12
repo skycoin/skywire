@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/monitor/store"
 	nm "github.com/skycoin/skywire/pkg/deployment/monitor/types"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -46,7 +46,7 @@ func newMockServer(t *testing.T, data *mockData) *httptest.Server {
 		require.NoError(t, json.NewEncoder(w).Encode(v))
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/uptimes", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.uptimes) })
 	r.Get("/all-transports", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.transports) })
 	r.Get("/dmsg-discovery/visorEntries", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, data.dmsgd) })
@@ -75,7 +75,7 @@ func newTestAPI(t *testing.T, url string) (*API, store.Store) {
 	s, err := store.New(storeconfig.Config{Type: storeconfig.Memory})
 	require.NoError(t, err)
 
-	urls := ServicesURLs{TPD: url, DMSGD: url, SD: url, AR: url, UT: url}
+	urls := ServicesURLs{TPD: url, DMSGD: url, SD: url, AR: url}
 	api := New(s, logging.MustGetLogger("nm-test"), urls, NetworkMonitorConfig{CleaningDelay: 0})
 	return api, s
 }
@@ -166,7 +166,7 @@ func TestUpdateNetworkStatus(t *testing.T) {
 		"stcpr": {"e", "f"},
 		"vpn":   {"g"},
 	}
-	api.utData = map[string]bool{"v1": true, "v2": true}
+	api.onlineVisors = map[string]bool{"v1": true, "v2": true}
 
 	require.NoError(t, api.updateNetworkStatus())
 
@@ -185,35 +185,34 @@ func TestUpdateNetworkStatus(t *testing.T) {
 	assert.Equal(t, 7, status.LastCleaning.AllDeadEntriesCleaned)
 }
 
-// TestFetchUTData covers the happy path plus the empty, bad-json, request-error
+// TestFetchOnlineVisors covers the happy path plus the empty, bad-json, request-error
 // and canceled-context failure modes.
 func TestFetchUTData(t *testing.T) {
 	t.Run("happy", func(t *testing.T) {
-		data := &mockData{uptimes: []uptimes{{Key: "v1", Online: true}, {Key: "v2", Online: false}}}
+		data := &mockData{uptimes: []uptimes{{PK: "v1", Online: true}, {PK: "v2", Online: false}}}
 		srv := newMockServer(t, data)
 		api, _ := newTestAPI(t, srv.URL)
 
-		require.NoError(t, api.fetchUTData(context.Background()))
-		assert.Len(t, api.utData, 2)
-		assert.True(t, api.utData["v1"])
+		require.NoError(t, api.fetchOnlineVisors(context.Background()))
+		assert.Equal(t, map[string]bool{"v1": true}, api.onlineVisors, "only online visors count")
 	})
 
 	t.Run("empty is error", func(t *testing.T) {
 		srv := newMockServer(t, &mockData{uptimes: []uptimes{}})
 		api, _ := newTestAPI(t, srv.URL)
-		assert.Error(t, api.fetchUTData(context.Background()))
+		assert.Error(t, api.fetchOnlineVisors(context.Background()))
 	})
 
 	t.Run("canceled context", func(t *testing.T) {
 		api, _ := newTestAPI(t, "http://example")
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		assert.Equal(t, context.DeadlineExceeded, api.fetchUTData(ctx))
+		assert.Equal(t, context.DeadlineExceeded, api.fetchOnlineVisors(ctx))
 	})
 
 	t.Run("request error", func(t *testing.T) {
 		api, _ := newTestAPI(t, "http://127.0.0.1:0")
-		assert.Error(t, api.fetchUTData(context.Background()))
+		assert.Error(t, api.fetchOnlineVisors(context.Background()))
 	})
 }
 
@@ -272,7 +271,7 @@ func TestFetchServiceData(t *testing.T) {
 func TestCheckingEntries(t *testing.T) {
 	api, _ := newTestAPI(t, "http://example")
 	api.initCleaning()
-	api.utData = map[string]bool{"online": true}
+	api.onlineVisors = map[string]bool{"online": true}
 
 	// First pass: "offline" is unknown to UT, so it becomes pending (not dead).
 	require.NoError(t, api.checkingEntries(context.Background(), []string{"online", "offline"}, "sd", "vpn"))
@@ -314,7 +313,7 @@ func TestTpdCleaning(t *testing.T) {
 	srv := newMockServer(t, data)
 	api, _ := newTestAPI(t, srv.URL)
 	api.initCleaning()
-	api.utData = map[string]bool{} // both edges offline
+	api.onlineVisors = map[string]bool{} // both edges offline
 	api.pendingDeaths["tpd"][id.String()] = true
 
 	require.NoError(t, api.tpdCleaning(context.Background()))
@@ -335,7 +334,7 @@ func TestCleaningServiceWithDeregister(t *testing.T) {
 	srv := newMockServer(t, data)
 	api, _ := newTestAPI(t, srv.URL)
 	api.initCleaning()
-	api.utData = map[string]bool{}              // deadpk is offline
+	api.onlineVisors = map[string]bool{}        // deadpk is offline
 	api.pendingDeaths["dmsgd"]["deadpk"] = true // already pending → dies this pass
 
 	require.NoError(t, api.cleaningService(context.Background(), "dmsgd", ""))
@@ -368,7 +367,7 @@ func TestCleanNetwork(t *testing.T) {
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
 	data := &mockData{
-		uptimes:    []uptimes{{Key: pk1.Hex(), Online: true}},
+		uptimes:    []uptimes{{PK: pk1.Hex(), Online: true}},
 		transports: []*transport.Entry{{ID: uuid.New(), Edges: [2]cipher.PubKey{pk1, pk2}}},
 		dmsgd:      []string{pk1.Hex()},
 		ar:         visorTransports{Sudph: []string{pk1.Hex()}, Stcpr: []string{pk1.Hex()}},

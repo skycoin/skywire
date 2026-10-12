@@ -13,5 +13,5 @@ func MaxPulsesBitsExport(band, lm int) int {
 	if !ok {
 		return -1
 	}
-	return int(cache[cache[0]])
+	return int(cache.bits[cache.bits[0]])
 }

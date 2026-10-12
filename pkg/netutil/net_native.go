@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package netutil pkg/netutil/net_native.go c0-com-util
 //
 // Network-interface enumeration + the ipinfo.io HTTP probe. Split out of net.go

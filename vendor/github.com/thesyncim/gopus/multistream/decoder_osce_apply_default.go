@@ -14,9 +14,9 @@ func (d *streamState) applyOSCEPostSilk(_ []float32, _ int, _ silk.Bandwidth, _ 
 func (d *streamState) applyOSCEPLCSilk(_ []float32, _ int, _ silk.Bandwidth, _ bool) {
 }
 
-func (d *streamState) installOSCELACESilkPostfilterHook(_ silk.Bandwidth, _ bool) func() {
-	return func() {}
-}
+func (d *streamState) installOSCELACESilkPostfilterHook(_ silk.Bandwidth, _ bool) {}
+
+func (d *streamState) clearOSCELACESilkPostfilterHook() {}
 
 func (d *streamState) markOSCEInactiveIfModeIneligible(_ streamTOC, _ []float32, _ int) {
 }

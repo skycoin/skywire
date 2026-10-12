@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy/preset"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
@@ -387,7 +388,9 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 		return nil, ErrTrpMangerNotAvailable
 	}
 
-	ctx := context.Background()
+	// A transport added by hand dials what the address resolver says now, not
+	// a card or feed answer that a restart of the peer has made stale.
+	ctx := addrresolver.AskResolver(context.Background())
 
 	if timeout > 0 {
 		var cancel context.CancelFunc

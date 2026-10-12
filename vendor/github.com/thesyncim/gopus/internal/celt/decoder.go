@@ -1,27 +1,15 @@
 package celt
 
-import "github.com/thesyncim/gopus/internal/extsupport"
+import (
+	"github.com/thesyncim/gopus/internal/extsupport"
+	"github.com/thesyncim/gopus/internal/rangecoding"
+)
 
-// DecodeFrame decodes a complete CELT frame from raw bytes.
-// If data is nil, empty, or a single byte, performs Packet Loss Concealment (PLC) instead of decoding.
-// data: raw CELT frame bytes (without Opus framing), or len <= 1 for PLC
-// frameSize: expected output samples (120, 240, 480, or 960)
-// Returns: PCM samples as float32 slice, interleaved if stereo
-//
-// The decoding pipeline:
-// 1. Initialize range decoder
-// 2. Decode frame header flags (silence, transient, intra)
-// 3. Decode energy envelope (coarse + fine)
-// 4. Compute bit allocation
-// 5. Decode bands via PVQ
-// 6. Synthesis: IMDCT + windowing + overlap-add
-// 7. Apply de-emphasis filter
-//
-// Reference: RFC 6716 Section 4.3, libopus celt/celt_decoder.c celt_decode_with_ec()
+// DecodeFrame decodes a CELT payload without Opus framing. frameSize is the
+// per-channel sample count. Payloads of at most one byte request packet-loss
+// concealment. The result is interleaved float32 PCM for stereo decoders.
 func (d *Decoder) DecodeFrame(data []byte, frameSize int) ([]float32, error) {
-	// Track channel count for transition detection (normal decode uses decoder's channels)
-	channels := int(d.channels)
-	d.handleChannelTransition(channels)
+	d.handleChannelTransition(int(d.channels))
 	var qextPayload []byte
 	if extsupport.QEXT {
 		qextPayload = d.takeQEXTPayload()
@@ -31,69 +19,79 @@ func (d *Decoder) DecodeFrame(data []byte, frameSize int) ([]float32, error) {
 	if len(data) <= 1 {
 		return d.decodePLC(frameSize)
 	}
-
-	setup, err := d.prepareDecodeFrame(data, frameSize)
-	if err != nil {
-		return nil, err
+	if !d.validFrameSize(frameSize) {
+		return nil, ErrInvalidFrameSize
 	}
+	rd := &d.rangeDecoderScratch
+	rd.Init(data)
+	return d.decodeFrame(rd, frameSize, qextPayload)
+}
+
+// DecodeFrameWithDecoder decodes a CELT frame from an initialized range
+// decoder, starting at band 0. Callers that need Hybrid band accumulation use
+// [Decoder.AccumulateFrameHybridWithPacketStereo].
+func (d *Decoder) DecodeFrameWithDecoder(rd *rangecoding.Decoder, frameSize int) ([]float32, error) {
+	if rd == nil {
+		return nil, ErrNilDecoder
+	}
+	if !d.validFrameSize(frameSize) {
+		return nil, ErrInvalidFrameSize
+	}
+	d.handleChannelTransition(int(d.channels))
+	return d.decodeFrame(rd, frameSize, nil)
+}
+
+// decodeFrame is celt_decode_with_ec() for a received full-band frame whose
+// stream channel count matches the decoder:
+//  1. Decode the silence flag and frame header flags
+//  2. Decode energy envelope (coarse + fine)
+//  3. Compute bit allocation
+//  4. Decode bands via PVQ
+//  5. Synthesis: IMDCT + windowing + overlap-add, postfilter
+//  6. De-emphasis
+func (d *Decoder) decodeFrame(rd *rangecoding.Decoder, frameSize int, qextPayload []byte) ([]float32, error) {
+	d.beginDecodedPacketPLCState()
+	d.prepareMonoEnergyFromStereo()
+	d.SetRangeDecoder(rd)
+
+	mode := d.modeConfig(frameSize)
+	lm := mode.LM
+	end := d.effectiveEndBand(frameSize)
 	start := 0
-	rd := setup.rd
-	mode := setup.mode
-	lm := setup.lm
-	end := setup.end
-	prev1Energy := setup.prev1Energy
-	prev1LogE := setup.prev1LogE
-	prev2LogE := setup.prev2LogE
+	channels := int(d.channels)
+	prev1LogE, prev2LogE := d.prevLogE, d.prevLogE2
 
-	totalBits := len(data) * 8
-	tell := rd.Tell()
-	silence := false
-	if tell >= totalBits {
-		silence = true
-	} else if tell == 1 {
-		silence = rd.DecodeBit(15) == 1
-	}
-	if silence {
-		return d.handleDecodedSilenceFrame(frameSize, lm, prev1Energy, rd), nil
-	}
-
+	totalBits := rd.StorageBits()
+	silence := decodeSilenceFlag(rd, totalBits)
 	header := d.decodeFrameHeader(rd, totalBits, frameSize, start, end, lm, mode.ShortBlocks)
-	postfilterGain := header.postfilterGain
-	postfilterPeriod := header.postfilterPeriod
-	postfilterTapset := header.postfilterTapset
-	transient := header.transient
-	intra := header.intra
-	shortBlocks := header.shortBlocks
 
-	// Step 1: Decode coarse energy
-	energies := d.decodeCoarseEnergyGLogInto(ensureGLogSlice(&d.scratchEnergies, end*channels), end, intra, lm)
-
-	allocation := d.decodeBandAllocation(rd, totalBits, start, end, lm, transient)
-	tfRes := allocation.tfRes
-	spread := allocation.spread
-	antiCollapseRsv := allocation.antiCollapseRsv
-	pulses := allocation.pulses
-	fineQuant := allocation.fineQuant
-	finePriority := allocation.finePriority
-	intensity := allocation.intensity
-	dualStereo := allocation.dualStereo
-	balance := allocation.balance
-	codedBands := allocation.codedBands
-
-	spectrum := d.decodeFrameSpectrum(qextPayload, rd, totalBits, frameSize, start, end, lm, shortBlocks, spread, antiCollapseRsv, energies, fineQuant, finePriority, pulses, tfRes, intensity, dualStereo, balance, codedBands)
-	qext := spectrum.qext
+	energies := d.decodeCoarseEnergyGLogInto(ensureGLogSliceNoClear(&d.scratchEnergies, end*channels), end, header.intra, lm)
+	allocation := d.decodeBandAllocation(rd, totalBits, start, end, lm, header.transient)
+	spectrum := d.decodeFrameSpectrum(qextPayload, rd, totalBits, frameSize, start, end, lm, header.shortBlocks, allocation.spread, allocation.antiCollapseRsv, energies,
+		allocation.fineQuant, allocation.finePriority, allocation.pulses, allocation.tfRes, allocation.intensity, allocation.dualStereo, allocation.balance, allocation.codedBands)
 	coeffsL := spectrum.coeffsL
 	coeffsR := spectrum.coeffsR
+	if d.synthTrace != nil {
+		// decodeFrameSpectrum has finalized band energies; this snapshot is the
+		// exact input to libopus's anti_collapse() boundary.
+		d.synthTrace.captureAntiCollapsePre(coeffsL, coeffsR, channels, frameSize, spectrum.collapse, allocation.pulses, d.rng)
+	}
 	if spectrum.antiCollapseOn {
 		if pm := d.perMode; pm != nil {
-			antiCollapseGLogMode(coeffsL, coeffsR, spectrum.collapse, lm, channels, start, end, energies, prev1LogE, prev2LogE, pulses, d.rng, pm.eBands, pm.nbEBands)
+			antiCollapseGLogMode(coeffsL, coeffsR, spectrum.collapse, lm, channels, start, end, energies, prev1LogE, prev2LogE, allocation.pulses, d.rng, pm.eBands, pm.nbEBands)
 		} else {
-			antiCollapseGLog(coeffsL, coeffsR, spectrum.collapse, lm, channels, start, end, energies, prev1LogE, prev2LogE, pulses, d.rng)
+			antiCollapseGLog(coeffsL, coeffsR, spectrum.collapse, lm, channels, start, end, energies, prev1LogE, prev2LogE, allocation.pulses, d.rng)
 		}
 	}
+	if d.synthTrace != nil {
+		d.synthTrace.captureAntiCollapsePost(coeffsL, coeffsR, channels, frameSize)
+	}
+	if silence {
+		applyDecodedSilence(energies, coeffsL, coeffsR, spectrum.qext)
+	}
 	d.applyPendingPLCPrefilterAndFold()
-	samples := d.synthesizeDecodedFrame(frameSize, mode.LM, end, lm, shortBlocks, transient, postfilterPeriod, postfilterGain, postfilterTapset, energies, coeffsL, coeffsR, qext)
-	if err := d.finalizeDecodedFrameState(frameSize, start, end, lm, transient, energies, prev1Energy, qext, rd); err != nil {
+	samples := d.synthesizeDecodedFrame(frameSize, mode.LM, end, lm, header.shortBlocks, header.transient, header.postfilterPeriod, header.postfilterGain, header.postfilterTapset, energies, coeffsL, coeffsR, spectrum.qext)
+	if err := d.finalizeDecodedFrameState(frameSize, start, end, lm, header.transient, energies, spectrum.qext, rd); err != nil {
 		return nil, err
 	}
 	return samples, nil

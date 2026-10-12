@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/leg_rehome.go c2-net-routing
 //
 // Leg RE-HOME: an ACTIVE route group adopts the already-built route chain of a

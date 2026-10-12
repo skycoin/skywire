@@ -131,8 +131,7 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 		if e == nil {
 			continue
 		}
-		tpType := string(e.Type)
-		if tpType != "stcpr" && tpType != "sudph" {
+		if !tracksUptime(string(e.Type)) {
 			continue
 		}
 		if s.beats.recorded(e.ID, at) {
@@ -140,18 +139,18 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 		}
 		idStr := e.ID.String()
 		key := tpUptimeKey(idStr, date)
-		pipe.HSet(ctx, key, "type", tpType, "last_seen", at.Unix())
-		pipe.Expire(ctx, key, 8*24*time.Hour)
+		pipe.HSet(ctx, key, "type", string(e.Type), "last_seen", at.Unix())
+		pipe.Expire(ctx, key, tpUptimeTodayTTL)
 		pipe.SAdd(ctx, onlineKey, idStr)
 		tlKey := tpUptimeTimelineKey(idStr, date)
 		pipe.SetBit(ctx, tlKey, slot, 1)
-		pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+		pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
 		written = append(written, e.ID)
 	}
 	if len(written) == 0 {
 		return nil
 	}
-	pipe.Expire(ctx, onlineKey, 8*24*time.Hour)
+	pipe.Expire(ctx, onlineKey, tpUptimeTodayTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		s.log.WithError(err).Warn("RecordTransportHeartbeats: failed to persist transport heartbeats")
 		return err

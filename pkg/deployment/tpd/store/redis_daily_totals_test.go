@@ -108,3 +108,23 @@ func TestGetNetworkMetricsReadsCompleteDaysFromTotals(t *testing.T) {
 	require.EqualValues(t, 500, resp.Cumulative.Bandwidth)
 	require.EqualValues(t, 500, resp.Cumulative.ByType["sudph"].Bandwidth)
 }
+
+// A reporter's last counters outlive a TPD restart, so a later report counts
+// only what moved and not the transport's whole lifetime again.
+func TestBandwidthPrevOutlivesRestart(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	a, _ := cipher.GenerateKeyPair()
+	id := uuid.New().String()
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 1000, 500, "stcpr"))
+	ttl, err := s.client.TTL(ctx, s.bandwidthPrevKey(id, a.Hex())).Result()
+	require.NoError(t, err)
+	require.InDelta(t, bandwidthPrevTTL, ttl, float64(time.Minute))
+
+	// Fifteen minutes on, the old ten minute TTL would have dropped it.
+	require.NoError(t, s.client.Expire(ctx, s.bandwidthPrevKey(id, a.Hex()), bandwidthPrevTTL-15*time.Minute).Err())
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 1100, 600, "stcpr"))
+	sent, err := s.client.HGet(ctx, s.bandwidthDailyKey(id, time.Now().UTC()), a.Hex()+":sent").Int64()
+	require.NoError(t, err)
+	require.EqualValues(t, 1100, sent, "the second report adds 100, not 1100")
+}

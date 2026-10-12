@@ -20,7 +20,8 @@ import (
 
 // ServeWSTLS terminates TLS for wssHost on addr with an autocert-managed
 // certificate cached in cacheDir, and serves dmsg-over-WebSocket there,
-// advertising advertisedWSURL. It only ADDS a listener: the plain-ws port and
+// advertising advertisedWSURL. aliasHosts get certificates and are answered
+// too, without being advertised. It only ADDS a listener: the plain-ws port and
 // the wss advert are untouched, so it coexists with an external front.
 //
 // Best-effort by design. If addr cannot be bound (a reverse proxy or another
@@ -29,13 +30,13 @@ import (
 // address autocert's TLS-ALPN-01 challenge runs on, i.e. :443.
 //
 // The returned listener is the caller's to close; nil means nothing was bound.
-func ServeWSTLS(log *logging.Logger, srv *dmsg.Server, addr, cacheDir, wssHost, advertisedWSURL string) net.Listener {
+func ServeWSTLS(log *logging.Logger, srv *dmsg.Server, addr, cacheDir, wssHost, advertisedWSURL string, aliasHosts ...string) net.Listener {
 	if addr == "" || wssHost == "" || cacheDir == "" {
 		return nil
 	}
 	acm := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(wssHost),
+		HostPolicy: autocert.HostWhitelist(append([]string{wssHost}, aliasHosts...)...),
 		Cache:      autocert.DirCache(cacheDir),
 	}
 	tlsLis, err := tls.Listen("tcp", addr, acm.TLSConfig())

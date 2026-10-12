@@ -5,8 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/rpc"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/google/uuid"
 
@@ -141,7 +142,7 @@ func (tps *embeddedTPS) Serve(ctx context.Context) error {
 
 		rpcS := rpc.NewServer()
 		// Register as "SetupRPCGateway" to match what health checks expect
-		if err := rpcS.RegisterName("SetupRPCGateway", gw); err != nil {
+		if err := registerTPSRPCGateway(rpcS, "SetupRPCGateway", gw); err != nil {
 			tps.log.WithError(err).Error("Failed to register TPS RPC gateway")
 			conn.Close() //nolint:errcheck,gosec
 			continue

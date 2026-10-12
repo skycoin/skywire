@@ -8,12 +8,12 @@ const MaxNeurons = 32
 
 // AnalysisDenseLayer represents a fully connected layer in the analysis MLP.
 // It mirrors libopus DenseLayer (src/mlp.h); weights are stored as the original
-// 8-bit quantized values and dequantized with WeightsScale on first use.
+// 8-bit quantized values. The float32 cache stores those values without scaling.
 type AnalysisDenseLayer struct {
 	// Bias holds one int8 bias per output neuron (libopus "bias").
 	Bias []int8
-	// InputWeights is the row-major NbInputs*NbNeurons int8 weight matrix
-	// (libopus "input_weights").
+	// InputWeights stores NbInputs rows of NbNeurons int8 weights (libopus
+	// "input_weights"); the neuron index is contiguous within each input row.
 	InputWeights []int8
 	// NbInputs is the layer input dimension (libopus "nb_inputs").
 	NbInputs int
@@ -23,8 +23,9 @@ type AnalysisDenseLayer struct {
 	// tansig (libopus "sigmoid").
 	Sigmoid bool
 
-	// inputWeightsF32 caches the dequantized InputWeights to avoid repeated
-	// int8->float32 conversion.
+	// inputWeightsF32 caches the unscaled InputWeights as float32 to avoid
+	// repeated int8->float32 conversion. ComputeDense applies WeightsScale after
+	// the bias and dot product have been accumulated.
 	inputWeightsF32 []float32
 }
 
@@ -45,7 +46,8 @@ type AnalysisGRULayer struct {
 	// NbNeurons is the hidden-state dimension (libopus "nb_neurons").
 	NbNeurons int
 
-	// inputWeightsF32 and recurrentWeightsF32 cache the dequantized weights.
+	// inputWeightsF32 and recurrentWeightsF32 cache the unscaled int8 values as
+	// float32. ComputeGRU applies WeightsScale after each bias-plus-dot result.
 	inputWeightsF32     []float32
 	recurrentWeightsF32 []float32
 }
@@ -94,7 +96,7 @@ func gemmAccum(out []float32, weights []int8, rows, cols, colStride int, x []flo
 		wOff := j * colStride
 		w := weights[wOff : wOff+rows]
 		for i := range rows {
-			out[i] += float32(w[i]) * xj
+			out[i] += analysisMLPGemmProduct(float32(w[i]), xj)
 		}
 	}
 }
@@ -114,8 +116,8 @@ func gemmAccumF32(out []float32, weights []float32, rows, cols, colStride int, x
 		for j := range cols {
 			xj := x[j]
 			w := weights[j*colStride:]
-			o0 += w[0] * xj
-			o1 += w[1] * xj
+			o0 += analysisMLPGemmProduct(w[0], xj)
+			o1 += analysisMLPGemmProduct(w[1], xj)
 		}
 		out[0] = o0
 		out[1] = o1
@@ -130,30 +132,30 @@ func gemmAccumF32(out []float32, weights []float32, rows, cols, colStride int, x
 		for j := range cols {
 			xj := x[j]
 			w := weights[j*colStride:]
-			o0 += w[0] * xj
-			o1 += w[1] * xj
-			o2 += w[2] * xj
-			o3 += w[3] * xj
-			o4 += w[4] * xj
-			o5 += w[5] * xj
-			o6 += w[6] * xj
-			o7 += w[7] * xj
-			o8 += w[8] * xj
-			o9 += w[9] * xj
-			o10 += w[10] * xj
-			o11 += w[11] * xj
-			o12 += w[12] * xj
-			o13 += w[13] * xj
-			o14 += w[14] * xj
-			o15 += w[15] * xj
-			o16 += w[16] * xj
-			o17 += w[17] * xj
-			o18 += w[18] * xj
-			o19 += w[19] * xj
-			o20 += w[20] * xj
-			o21 += w[21] * xj
-			o22 += w[22] * xj
-			o23 += w[23] * xj
+			o0 += analysisMLPGemmProduct(w[0], xj)
+			o1 += analysisMLPGemmProduct(w[1], xj)
+			o2 += analysisMLPGemmProduct(w[2], xj)
+			o3 += analysisMLPGemmProduct(w[3], xj)
+			o4 += analysisMLPGemmProduct(w[4], xj)
+			o5 += analysisMLPGemmProduct(w[5], xj)
+			o6 += analysisMLPGemmProduct(w[6], xj)
+			o7 += analysisMLPGemmProduct(w[7], xj)
+			o8 += analysisMLPGemmProduct(w[8], xj)
+			o9 += analysisMLPGemmProduct(w[9], xj)
+			o10 += analysisMLPGemmProduct(w[10], xj)
+			o11 += analysisMLPGemmProduct(w[11], xj)
+			o12 += analysisMLPGemmProduct(w[12], xj)
+			o13 += analysisMLPGemmProduct(w[13], xj)
+			o14 += analysisMLPGemmProduct(w[14], xj)
+			o15 += analysisMLPGemmProduct(w[15], xj)
+			o16 += analysisMLPGemmProduct(w[16], xj)
+			o17 += analysisMLPGemmProduct(w[17], xj)
+			o18 += analysisMLPGemmProduct(w[18], xj)
+			o19 += analysisMLPGemmProduct(w[19], xj)
+			o20 += analysisMLPGemmProduct(w[20], xj)
+			o21 += analysisMLPGemmProduct(w[21], xj)
+			o22 += analysisMLPGemmProduct(w[22], xj)
+			o23 += analysisMLPGemmProduct(w[23], xj)
 		}
 		out[0], out[1], out[2], out[3] = o0, o1, o2, o3
 		out[4], out[5], out[6], out[7] = o4, o5, o6, o7
@@ -174,38 +176,38 @@ func gemmAccumF32(out []float32, weights []float32, rows, cols, colStride int, x
 		for j := range cols {
 			xj := x[j]
 			w := weights[j*colStride:]
-			o0 += w[0] * xj
-			o1 += w[1] * xj
-			o2 += w[2] * xj
-			o3 += w[3] * xj
-			o4 += w[4] * xj
-			o5 += w[5] * xj
-			o6 += w[6] * xj
-			o7 += w[7] * xj
-			o8 += w[8] * xj
-			o9 += w[9] * xj
-			o10 += w[10] * xj
-			o11 += w[11] * xj
-			o12 += w[12] * xj
-			o13 += w[13] * xj
-			o14 += w[14] * xj
-			o15 += w[15] * xj
-			o16 += w[16] * xj
-			o17 += w[17] * xj
-			o18 += w[18] * xj
-			o19 += w[19] * xj
-			o20 += w[20] * xj
-			o21 += w[21] * xj
-			o22 += w[22] * xj
-			o23 += w[23] * xj
-			o24 += w[24] * xj
-			o25 += w[25] * xj
-			o26 += w[26] * xj
-			o27 += w[27] * xj
-			o28 += w[28] * xj
-			o29 += w[29] * xj
-			o30 += w[30] * xj
-			o31 += w[31] * xj
+			o0 += analysisMLPGemmProduct(w[0], xj)
+			o1 += analysisMLPGemmProduct(w[1], xj)
+			o2 += analysisMLPGemmProduct(w[2], xj)
+			o3 += analysisMLPGemmProduct(w[3], xj)
+			o4 += analysisMLPGemmProduct(w[4], xj)
+			o5 += analysisMLPGemmProduct(w[5], xj)
+			o6 += analysisMLPGemmProduct(w[6], xj)
+			o7 += analysisMLPGemmProduct(w[7], xj)
+			o8 += analysisMLPGemmProduct(w[8], xj)
+			o9 += analysisMLPGemmProduct(w[9], xj)
+			o10 += analysisMLPGemmProduct(w[10], xj)
+			o11 += analysisMLPGemmProduct(w[11], xj)
+			o12 += analysisMLPGemmProduct(w[12], xj)
+			o13 += analysisMLPGemmProduct(w[13], xj)
+			o14 += analysisMLPGemmProduct(w[14], xj)
+			o15 += analysisMLPGemmProduct(w[15], xj)
+			o16 += analysisMLPGemmProduct(w[16], xj)
+			o17 += analysisMLPGemmProduct(w[17], xj)
+			o18 += analysisMLPGemmProduct(w[18], xj)
+			o19 += analysisMLPGemmProduct(w[19], xj)
+			o20 += analysisMLPGemmProduct(w[20], xj)
+			o21 += analysisMLPGemmProduct(w[21], xj)
+			o22 += analysisMLPGemmProduct(w[22], xj)
+			o23 += analysisMLPGemmProduct(w[23], xj)
+			o24 += analysisMLPGemmProduct(w[24], xj)
+			o25 += analysisMLPGemmProduct(w[25], xj)
+			o26 += analysisMLPGemmProduct(w[26], xj)
+			o27 += analysisMLPGemmProduct(w[27], xj)
+			o28 += analysisMLPGemmProduct(w[28], xj)
+			o29 += analysisMLPGemmProduct(w[29], xj)
+			o30 += analysisMLPGemmProduct(w[30], xj)
+			o31 += analysisMLPGemmProduct(w[31], xj)
 		}
 		out[0], out[1], out[2], out[3] = o0, o1, o2, o3
 		out[4], out[5], out[6], out[7] = o4, o5, o6, o7
@@ -223,13 +225,13 @@ func gemmAccumF32(out []float32, weights []float32, rows, cols, colStride int, x
 		w := weights[wOff : wOff+rows]
 		i := 0
 		for ; i+3 < rows; i += 4 {
-			out[i] += w[i] * xj
-			out[i+1] += w[i+1] * xj
-			out[i+2] += w[i+2] * xj
-			out[i+3] += w[i+3] * xj
+			out[i] += analysisMLPGemmProduct(w[i], xj)
+			out[i+1] += analysisMLPGemmProduct(w[i+1], xj)
+			out[i+2] += analysisMLPGemmProduct(w[i+2], xj)
+			out[i+3] += analysisMLPGemmProduct(w[i+3], xj)
 		}
 		for ; i < rows; i++ {
-			out[i] += w[i] * xj
+			out[i] += analysisMLPGemmProduct(w[i], xj)
 		}
 	}
 }
@@ -247,54 +249,54 @@ func gemmAccumF32Rows24Pair(out0, out1 []float32, weights []float32, cols, colSt
 	for j := range cols {
 		xj := x[j]
 		w := weights[j*colStride:]
-		a0 += w[0] * xj
-		b0 += w[24] * xj
-		a1 += w[1] * xj
-		b1 += w[25] * xj
-		a2 += w[2] * xj
-		b2 += w[26] * xj
-		a3 += w[3] * xj
-		b3 += w[27] * xj
-		a4 += w[4] * xj
-		b4 += w[28] * xj
-		a5 += w[5] * xj
-		b5 += w[29] * xj
-		a6 += w[6] * xj
-		b6 += w[30] * xj
-		a7 += w[7] * xj
-		b7 += w[31] * xj
-		a8 += w[8] * xj
-		b8 += w[32] * xj
-		a9 += w[9] * xj
-		b9 += w[33] * xj
-		a10 += w[10] * xj
-		b10 += w[34] * xj
-		a11 += w[11] * xj
-		b11 += w[35] * xj
-		a12 += w[12] * xj
-		b12 += w[36] * xj
-		a13 += w[13] * xj
-		b13 += w[37] * xj
-		a14 += w[14] * xj
-		b14 += w[38] * xj
-		a15 += w[15] * xj
-		b15 += w[39] * xj
-		a16 += w[16] * xj
-		b16 += w[40] * xj
-		a17 += w[17] * xj
-		b17 += w[41] * xj
-		a18 += w[18] * xj
-		b18 += w[42] * xj
-		a19 += w[19] * xj
-		b19 += w[43] * xj
-		a20 += w[20] * xj
-		b20 += w[44] * xj
-		a21 += w[21] * xj
-		b21 += w[45] * xj
-		a22 += w[22] * xj
-		b22 += w[46] * xj
-		a23 += w[23] * xj
-		b23 += w[47] * xj
+		a0 += analysisMLPGemmProduct(w[0], xj)
+		b0 += analysisMLPGemmProduct(w[24], xj)
+		a1 += analysisMLPGemmProduct(w[1], xj)
+		b1 += analysisMLPGemmProduct(w[25], xj)
+		a2 += analysisMLPGemmProduct(w[2], xj)
+		b2 += analysisMLPGemmProduct(w[26], xj)
+		a3 += analysisMLPGemmProduct(w[3], xj)
+		b3 += analysisMLPGemmProduct(w[27], xj)
+		a4 += analysisMLPGemmProduct(w[4], xj)
+		b4 += analysisMLPGemmProduct(w[28], xj)
+		a5 += analysisMLPGemmProduct(w[5], xj)
+		b5 += analysisMLPGemmProduct(w[29], xj)
+		a6 += analysisMLPGemmProduct(w[6], xj)
+		b6 += analysisMLPGemmProduct(w[30], xj)
+		a7 += analysisMLPGemmProduct(w[7], xj)
+		b7 += analysisMLPGemmProduct(w[31], xj)
+		a8 += analysisMLPGemmProduct(w[8], xj)
+		b8 += analysisMLPGemmProduct(w[32], xj)
+		a9 += analysisMLPGemmProduct(w[9], xj)
+		b9 += analysisMLPGemmProduct(w[33], xj)
+		a10 += analysisMLPGemmProduct(w[10], xj)
+		b10 += analysisMLPGemmProduct(w[34], xj)
+		a11 += analysisMLPGemmProduct(w[11], xj)
+		b11 += analysisMLPGemmProduct(w[35], xj)
+		a12 += analysisMLPGemmProduct(w[12], xj)
+		b12 += analysisMLPGemmProduct(w[36], xj)
+		a13 += analysisMLPGemmProduct(w[13], xj)
+		b13 += analysisMLPGemmProduct(w[37], xj)
+		a14 += analysisMLPGemmProduct(w[14], xj)
+		b14 += analysisMLPGemmProduct(w[38], xj)
+		a15 += analysisMLPGemmProduct(w[15], xj)
+		b15 += analysisMLPGemmProduct(w[39], xj)
+		a16 += analysisMLPGemmProduct(w[16], xj)
+		b16 += analysisMLPGemmProduct(w[40], xj)
+		a17 += analysisMLPGemmProduct(w[17], xj)
+		b17 += analysisMLPGemmProduct(w[41], xj)
+		a18 += analysisMLPGemmProduct(w[18], xj)
+		b18 += analysisMLPGemmProduct(w[42], xj)
+		a19 += analysisMLPGemmProduct(w[19], xj)
+		b19 += analysisMLPGemmProduct(w[43], xj)
+		a20 += analysisMLPGemmProduct(w[20], xj)
+		b20 += analysisMLPGemmProduct(w[44], xj)
+		a21 += analysisMLPGemmProduct(w[21], xj)
+		b21 += analysisMLPGemmProduct(w[45], xj)
+		a22 += analysisMLPGemmProduct(w[22], xj)
+		b22 += analysisMLPGemmProduct(w[46], xj)
+		a23 += analysisMLPGemmProduct(w[23], xj)
+		b23 += analysisMLPGemmProduct(w[47], xj)
 	}
 	out0[0], out0[1], out0[2], out0[3] = a0, a1, a2, a3
 	out0[4], out0[5], out0[6], out0[7] = a4, a5, a6, a7
@@ -325,78 +327,78 @@ func gemmAccumF32Rows24Triple(out0, out1, out2 []float32, weights []float32, col
 	for j := range cols {
 		xj := x[j]
 		w := weights[j*colStride:]
-		a0 += w[0] * xj
-		b0 += w[24] * xj
-		c0 += w[48] * xj
-		a1 += w[1] * xj
-		b1 += w[25] * xj
-		c1 += w[49] * xj
-		a2 += w[2] * xj
-		b2 += w[26] * xj
-		c2 += w[50] * xj
-		a3 += w[3] * xj
-		b3 += w[27] * xj
-		c3 += w[51] * xj
-		a4 += w[4] * xj
-		b4 += w[28] * xj
-		c4 += w[52] * xj
-		a5 += w[5] * xj
-		b5 += w[29] * xj
-		c5 += w[53] * xj
-		a6 += w[6] * xj
-		b6 += w[30] * xj
-		c6 += w[54] * xj
-		a7 += w[7] * xj
-		b7 += w[31] * xj
-		c7 += w[55] * xj
-		a8 += w[8] * xj
-		b8 += w[32] * xj
-		c8 += w[56] * xj
-		a9 += w[9] * xj
-		b9 += w[33] * xj
-		c9 += w[57] * xj
-		a10 += w[10] * xj
-		b10 += w[34] * xj
-		c10 += w[58] * xj
-		a11 += w[11] * xj
-		b11 += w[35] * xj
-		c11 += w[59] * xj
-		a12 += w[12] * xj
-		b12 += w[36] * xj
-		c12 += w[60] * xj
-		a13 += w[13] * xj
-		b13 += w[37] * xj
-		c13 += w[61] * xj
-		a14 += w[14] * xj
-		b14 += w[38] * xj
-		c14 += w[62] * xj
-		a15 += w[15] * xj
-		b15 += w[39] * xj
-		c15 += w[63] * xj
-		a16 += w[16] * xj
-		b16 += w[40] * xj
-		c16 += w[64] * xj
-		a17 += w[17] * xj
-		b17 += w[41] * xj
-		c17 += w[65] * xj
-		a18 += w[18] * xj
-		b18 += w[42] * xj
-		c18 += w[66] * xj
-		a19 += w[19] * xj
-		b19 += w[43] * xj
-		c19 += w[67] * xj
-		a20 += w[20] * xj
-		b20 += w[44] * xj
-		c20 += w[68] * xj
-		a21 += w[21] * xj
-		b21 += w[45] * xj
-		c21 += w[69] * xj
-		a22 += w[22] * xj
-		b22 += w[46] * xj
-		c22 += w[70] * xj
-		a23 += w[23] * xj
-		b23 += w[47] * xj
-		c23 += w[71] * xj
+		a0 += analysisMLPGemmProduct(w[0], xj)
+		b0 += analysisMLPGemmProduct(w[24], xj)
+		c0 += analysisMLPGemmProduct(w[48], xj)
+		a1 += analysisMLPGemmProduct(w[1], xj)
+		b1 += analysisMLPGemmProduct(w[25], xj)
+		c1 += analysisMLPGemmProduct(w[49], xj)
+		a2 += analysisMLPGemmProduct(w[2], xj)
+		b2 += analysisMLPGemmProduct(w[26], xj)
+		c2 += analysisMLPGemmProduct(w[50], xj)
+		a3 += analysisMLPGemmProduct(w[3], xj)
+		b3 += analysisMLPGemmProduct(w[27], xj)
+		c3 += analysisMLPGemmProduct(w[51], xj)
+		a4 += analysisMLPGemmProduct(w[4], xj)
+		b4 += analysisMLPGemmProduct(w[28], xj)
+		c4 += analysisMLPGemmProduct(w[52], xj)
+		a5 += analysisMLPGemmProduct(w[5], xj)
+		b5 += analysisMLPGemmProduct(w[29], xj)
+		c5 += analysisMLPGemmProduct(w[53], xj)
+		a6 += analysisMLPGemmProduct(w[6], xj)
+		b6 += analysisMLPGemmProduct(w[30], xj)
+		c6 += analysisMLPGemmProduct(w[54], xj)
+		a7 += analysisMLPGemmProduct(w[7], xj)
+		b7 += analysisMLPGemmProduct(w[31], xj)
+		c7 += analysisMLPGemmProduct(w[55], xj)
+		a8 += analysisMLPGemmProduct(w[8], xj)
+		b8 += analysisMLPGemmProduct(w[32], xj)
+		c8 += analysisMLPGemmProduct(w[56], xj)
+		a9 += analysisMLPGemmProduct(w[9], xj)
+		b9 += analysisMLPGemmProduct(w[33], xj)
+		c9 += analysisMLPGemmProduct(w[57], xj)
+		a10 += analysisMLPGemmProduct(w[10], xj)
+		b10 += analysisMLPGemmProduct(w[34], xj)
+		c10 += analysisMLPGemmProduct(w[58], xj)
+		a11 += analysisMLPGemmProduct(w[11], xj)
+		b11 += analysisMLPGemmProduct(w[35], xj)
+		c11 += analysisMLPGemmProduct(w[59], xj)
+		a12 += analysisMLPGemmProduct(w[12], xj)
+		b12 += analysisMLPGemmProduct(w[36], xj)
+		c12 += analysisMLPGemmProduct(w[60], xj)
+		a13 += analysisMLPGemmProduct(w[13], xj)
+		b13 += analysisMLPGemmProduct(w[37], xj)
+		c13 += analysisMLPGemmProduct(w[61], xj)
+		a14 += analysisMLPGemmProduct(w[14], xj)
+		b14 += analysisMLPGemmProduct(w[38], xj)
+		c14 += analysisMLPGemmProduct(w[62], xj)
+		a15 += analysisMLPGemmProduct(w[15], xj)
+		b15 += analysisMLPGemmProduct(w[39], xj)
+		c15 += analysisMLPGemmProduct(w[63], xj)
+		a16 += analysisMLPGemmProduct(w[16], xj)
+		b16 += analysisMLPGemmProduct(w[40], xj)
+		c16 += analysisMLPGemmProduct(w[64], xj)
+		a17 += analysisMLPGemmProduct(w[17], xj)
+		b17 += analysisMLPGemmProduct(w[41], xj)
+		c17 += analysisMLPGemmProduct(w[65], xj)
+		a18 += analysisMLPGemmProduct(w[18], xj)
+		b18 += analysisMLPGemmProduct(w[42], xj)
+		c18 += analysisMLPGemmProduct(w[66], xj)
+		a19 += analysisMLPGemmProduct(w[19], xj)
+		b19 += analysisMLPGemmProduct(w[43], xj)
+		c19 += analysisMLPGemmProduct(w[67], xj)
+		a20 += analysisMLPGemmProduct(w[20], xj)
+		b20 += analysisMLPGemmProduct(w[44], xj)
+		c20 += analysisMLPGemmProduct(w[68], xj)
+		a21 += analysisMLPGemmProduct(w[21], xj)
+		b21 += analysisMLPGemmProduct(w[45], xj)
+		c21 += analysisMLPGemmProduct(w[69], xj)
+		a22 += analysisMLPGemmProduct(w[22], xj)
+		b22 += analysisMLPGemmProduct(w[46], xj)
+		c22 += analysisMLPGemmProduct(w[70], xj)
+		a23 += analysisMLPGemmProduct(w[23], xj)
+		b23 += analysisMLPGemmProduct(w[47], xj)
+		c23 += analysisMLPGemmProduct(w[71], xj)
 	}
 	out0[0], out0[1], out0[2], out0[3] = a0, a1, a2, a3
 	out0[4], out0[5], out0[6], out0[7] = a4, a5, a6, a7
@@ -487,7 +489,8 @@ func (l *AnalysisGRULayer) ComputeGRU(state []float32, input []float32) {
 		}
 		gemmAccumF32(h[:n], l.recurrentWeightsF32[2*n:], n, n, stride, tmp[:n])
 		for i := range n {
-			state[i] = z[i]*state[i] + (1.0-z[i])*tansigApprox(WeightsScale*h[i])
+			candidate := round32((1.0 - z[i]) * tansigApprox(WeightsScale*h[i]))
+			state[i] = analysisMLPGRUStateUpdate(z[i], state[i], candidate)
 		}
 		return
 	}
@@ -535,6 +538,7 @@ func (l *AnalysisGRULayer) ComputeGRU(state []float32, input []float32) {
 		gemmAccum(h[:n], l.RecurrentWeights[2*n:], n, n, stride, tmp[:n])
 	}
 	for i := range n {
-		state[i] = z[i]*state[i] + (1.0-z[i])*tansigApprox(WeightsScale*h[i])
+		candidate := round32((1.0 - z[i]) * tansigApprox(WeightsScale*h[i]))
+		state[i] = analysisMLPGRUStateUpdate(z[i], state[i], candidate)
 	}
 }

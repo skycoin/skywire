@@ -6,6 +6,20 @@ Serve an endless chunked octet-stream on GET / at the reader's line rate
 (TCP backpressure sets the rate; the source itself never gaps). Run this on a
 visor the proxy exit can reach; point 'loadtest run --url' at it.
 
+GET /?bytes=N serves exactly N bytes of a deterministic pattern and names its
+SHA-256 in the X-Sha256 header, so a transfer can be checked for completeness
+AND integrity, not just size. POST or PUT /upload discards the body and
+answers {"bytes":N,"sha256":"…"} for the same check in the upload direction.
+
+/upload also takes an upload as acked, offset-addressed chunks, so an upload
+survives losing the tunnel under it: HEAD /upload advertises 'X-Chunked-Upload:
+bytes', then PUT /upload?id=<id>&bytes=<N> with 'Content-Range: bytes s-e/N'
+answers each chunk with 'X-Upload-Received: <durable prefix>' — 200 once the
+chunk is inside that prefix, 202 while it only waits out of order (still
+evictable, so keep it) — and the chunk that completes the object answers the
+same JSON a plain POST does. The body is hashed over the contiguous prefix and
+never held: out-of-order chunks wait in a bounded window (--upload-window).
+
 ## Usage
 
 ```
@@ -15,7 +29,10 @@ skywire cli proxy loadtest serve
 ## Flags
 
 ```
-  -a, --addr string   listen address for the endless byte source (default ":9999")
+  -a, --addr string            listen address for the endless byte source (default ":9999")
+      --upload-idle duration   expire a chunked upload that has made no progress for this long (default 2m0s)
+      --upload-sessions int    concurrent chunked uploads; the sink's memory ceiling is this times --upload-window (default 4)
+      --upload-window int      bytes one chunked upload may hold out of order (the sink never holds the object) (default 67108864)
 ```
 
 ## Global Flags

@@ -5,10 +5,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tps/config"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
@@ -38,12 +37,12 @@ func New(log *logging.Logger, conf config.Config) *API {
 	api := &API{logger: log, validator: v}
 	api.dmsgC = setupDmsgC(conf, log)
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.SetLoggerMiddleware(log))
 
 	r.Post("/add", api.addTransport)
@@ -75,10 +74,9 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	// supported for deployment services; conf.Dmsg.DiscoveryDmsg is
 	// required.
 	//
-	// The seed-server set is conf.Dmsg.Servers ∪ dmsg.Prod.DmsgServers,
-	// deduped by Static PK with operator-supplied entries first. A
-	// deployment may therefore omit conf.Dmsg.Servers and still
-	// bootstrap — the embedded Prod set is the default. Same merge
+	// The seed-server set is conf.Dmsg.Servers plus the embedded servers of
+	// the deployment whose discovery this is, deduped by Static PK. A private
+	// deployment gets none of prod's servers. Same merge
 	// shape as dmsgsrv.buildTransitDmsg (pkg/services/dmsgsrv/
 	// dmsgsrv.go) and the RSN (pkg/router/setupnode.go).
 	//
@@ -103,7 +101,7 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	httpC := &http.Client{}
 	dmsgDisc := disc.NewHTTP(conf.Dmsg.DiscoveryDmsg, httpC, log)
 
-	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers)+len(dmsg.Prod.DmsgServers))
+	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers))
 	seenPK := map[cipher.PubKey]struct{}{}
 	addServer := func(e *disc.Entry) {
 		if e == nil || e.Static.Null() || e.Server == nil {
@@ -118,8 +116,8 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	for _, e := range conf.Dmsg.Servers {
 		addServer(e)
 	}
-	for i := range dmsg.Prod.DmsgServers {
-		addServer(&dmsg.Prod.DmsgServers[i])
+	for _, e := range deployment.EmbeddedServersForDiscoveryDmsg(conf.Dmsg.DiscoveryDmsg) {
+		addServer(e)
 	}
 
 	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)

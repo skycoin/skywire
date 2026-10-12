@@ -60,7 +60,7 @@ const contextMenuCSS = `
 func (t *Terminal) wireContextMenu() {
 	t.menu = &contextMenu{t: t}
 	t.element.Call("addEventListener", "contextmenu", t.fn(func(_ js.Value, args []js.Value) any {
-		if t.NoContextMenu {
+		if t.NoContextMenu || args[0].Get("defaultPrevented").Bool() {
 			return nil
 		}
 		ev := args[0]

@@ -21,7 +21,10 @@ package deskhost
 import (
 	"context"
 	"fmt"
+	"io"
+	"sync/atomic"
 	"syscall/js"
+	"time"
 
 	"github.com/0magnet/sh/v3/interp"
 	"github.com/0magnet/websh/shell"
@@ -96,13 +99,17 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	hooks := js.ValueOf(map[string]interface{}{})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
+	// The command starts where the shell is, on the same tree.
+	hooks.Set("cwd", hc.Dir)
 	// Ctrl+C parity: the shell cancels ctx on ^C; forward that to the command
 	// instance's registered interrupt so a foreground visor shuts down like it
 	// would on SIGINT. hooks.instance is invoked SYNCHRONOUSLY by skywireExec
 	// with { interrupt }, before the command starts.
 	interruptCh := make(chan js.Value, 1)
+	var child js.Value // the process handle: stdin and resize, for a terminal
 	instF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
 		if len(a) > 0 && a[0].Truthy() {
+			child = a[0]
 			if f := a[0].Get("interrupt"); f.Type() == js.TypeFunction {
 				select {
 				case interruptCh <- f:
@@ -152,6 +159,112 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 		hooks.Set("env", js.ValueOf(env))
 	}
 
+	if term := onTerminal(s, hc); term != nil {
+		hooks.Set("stdin", "pipe")
+		hooks.Set("tty", term.opts)
+		defer s.WithSource("local")()
+		defer term.release()
+		exec.Invoke(js.ValueOf(jsArgs), hooks).Call("then", thenF).Call("catch", catchF)
+		return term.attach(s, hc, child, done)
+	}
 	exec.Invoke(js.ValueOf(jsArgs), hooks).Call("then", thenF).Call("catch", catchF)
 	return <-done
+}
+
+// terminal is what a command run on the shell's own terminal is given: the
+// terminal's size and raw mode, the keys typed, and resizes, as websh gives a
+// program it runs from the filesystem.
+type terminal struct {
+	opts  js.Value
+	onRaw js.Func
+	raw   atomic.Bool
+}
+
+// onTerminal is a terminal for the command when its output is the shell's
+// terminal, and nil when it is a pipe or a file.
+func onTerminal(s *shell.Shell, hc *interp.HandlerContext) *terminal {
+	if s == nil || s.Size == nil || s.IsTerminal == nil || !s.IsTerminal(hc.Stdout) {
+		return nil
+	}
+	t := &terminal{opts: js.Global().Get("Object").New()}
+	cols, rows := s.Size()
+	t.opts.Set("cols", cols)
+	t.opts.Set("rows", rows)
+	t.onRaw = js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+		on := len(a) > 0 && a[0].Truthy()
+		t.raw.Store(on)
+		if s.RawMode != nil {
+			s.RawMode(on)
+		}
+		return nil
+	})
+	t.opts.Set("onRaw", t.onRaw)
+	return t
+}
+
+func (t *terminal) release() { t.onRaw.Release() }
+
+// attach feeds the command the keys typed and the terminal's size until it
+// exits, and returns its exit code.
+func (t *terminal) attach(s *shell.Shell, hc *interp.HandlerContext, child js.Value, done <-chan int) int {
+	exited := make(chan struct{})
+	if child.Truthy() {
+		if in := child.Get("stdin"); in.Truthy() {
+			go feedStdin(hc.Stdin, in, exited)
+		}
+		if resize := child.Get("resize"); resize.Type() == js.TypeFunction {
+			go func() {
+				tick := time.NewTicker(250 * time.Millisecond)
+				defer tick.Stop()
+				lc, lr := s.Size()
+				for {
+					select {
+					case <-exited:
+						return
+					case <-tick.C:
+						if c, r := s.Size(); c != lc || r != lr {
+							lc, lr = c, r
+							resize.Invoke(c, r)
+						}
+					}
+				}
+			}()
+		}
+	}
+	code := <-done
+	close(exited)
+	if t.raw.Load() && s.RawMode != nil {
+		s.RawMode(false) // it left the terminal raw: killed, or it forgot
+	}
+	if s.WakeStdin != nil {
+		s.WakeStdin() // a key read for it after it is gone is the shell's again
+	}
+	return code
+}
+
+// feedStdin copies what is typed into the command's stdin until it exits.
+func feedStdin(r io.Reader, stdin js.Value, exited <-chan struct{}) {
+	if r == nil {
+		return
+	}
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Read(buf)
+		select {
+		case <-exited:
+			return
+		default:
+		}
+		if n > 0 {
+			u := js.Global().Get("Uint8Array").New(n)
+			js.CopyBytesToJS(u, buf[:n])
+			if !stdin.Call("write", u).Truthy() {
+				return
+			}
+		}
+		if err != nil {
+			stdin.Call("close")
+			return
+		}
+	}
 }

@@ -26,7 +26,7 @@ func TestDmsgServicePKs(t *testing.T) {
 		want int // number of PKs expected
 	}{
 		{
-			name: "all eight present → 8 pks",
+			name: "all seven present → 7 pks",
 			svc: Services{
 				DmsgDiscoveryDmsg:      "dmsg://" + pkA + ":80",
 				TransportDiscoveryDmsg: "dmsg://" + pkA + ":80",
@@ -34,10 +34,9 @@ func TestDmsgServicePKs(t *testing.T) {
 				RouteFinderDmsg:        "dmsg://" + pkA + ":80",
 				ServiceDiscoveryDmsg:   "dmsg://" + pkA + ":80",
 				ConfDmsg:               "dmsg://" + pkA + ":80",
-				UptimeTrackerDmsg:      "dmsg://" + pkA + ":80",
 				RewardSystemDmsg:       "dmsg://" + pkA + ":80",
 			},
-			want: 8,
+			want: 7,
 		},
 		{
 			name: "empty + unparseable slots skipped",

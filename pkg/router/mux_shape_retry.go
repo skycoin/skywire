@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/mux_shape_retry.go c2-net-routing
 //
 // The shape converger's RETRY BACKOFF, and the leg it picks to move.

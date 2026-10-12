@@ -39,7 +39,7 @@ Usage:
 ## Usage
 
 ```
-skywire svc sn
+skywire svc sn [flags]
 ```
 
 ## Subcommands

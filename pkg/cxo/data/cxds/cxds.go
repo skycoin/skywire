@@ -74,15 +74,3 @@ func encodeUint32(u uint32) (ub []byte) { //nolint:unparam
 func decodeUint32(ub []byte) uint32 {
 	return binary.BigEndian.Uint32(ub)
 }
-
-// increment slice
-func incSlice(b []byte) {
-	for i := len(b) - 1; i >= 0; i-- {
-		if b[i] == 0xff {
-			b[i] = 0
-			continue // increase next byte
-		}
-		b[i]++
-		return
-	}
-}

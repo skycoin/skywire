@@ -10,9 +10,8 @@ import "github.com/thesyncim/gopus/internal/fixedpoint"
 // allocation is avoided for SILK-only streams.
 //
 // For a packet whose every frame is handled by the integer CELT decoder, the
-// int16 and opus_res (int24) outputs are accumulated here so the int16/int24
-// public wrappers can read them directly, bypassing the lossy float32->int
-// conversion. fixedAllHandled records whether the in-flight packet qualified.
+// int16 and opus_res (int24) outputs are accumulated here so the
+// public wrappers can read them directly; float output uses RES2FLOAT. fixedAllHandled records whether the in-flight packet qualified.
 type decoderFixedFields struct {
 	fixedCELT    *fixedpoint.CELTDecoder
 	fixedCELTPCM []int16
@@ -31,7 +30,7 @@ type decoderFixedFields struct {
 	// moment any frame falls through to the float decoder.
 	fixedAllHandled bool
 	// fixedPacketActive guards the accumulation: it is true only between
-	// beginFixedPacket and the int16/int24 wrapper consuming the result.
+	// beginFixedPacket and the public PCM wrapper consuming the result.
 	fixedPacketActive bool
 
 	// fixedHybridRes is the per-frame interleaved opus_res scratch that holds the
@@ -85,8 +84,10 @@ type decoderFixedFields struct {
 	// integer output was finished by the opus_res-domain redundancy / transition
 	// crossfade. They are diagnostic counters used by the parity gate to confirm
 	// the paths are exercised.
-	fixedRedundancyApplied int
-	fixedTransitionApplied int
+	fixedRedundancyApplied           int
+	fixedTransitionApplied           int
+	fixedRedundancySilkToCeltApplied int
+	fixedRedundancyCeltToSilkApplied int
 
 	// fixedHybridPLCSilk receives the resampled int16 SILK PLC lowband captured
 	// during the float hybrid PLC decode (armed via the SILK decoder), used to

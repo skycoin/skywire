@@ -63,15 +63,13 @@ func VorbisWindow(i, overlap int) float32 {
 	return float32(math.Sin(0.5 * math.Pi * s * s))
 }
 
-// GetWindowBuffer returns the precomputed window buffer for the given overlap size.
-// For the standard CELT overlap of 120 samples, returns windowBuffer120.
-// Returns nil if no precomputed buffer exists for the size.
+// GetWindowBuffer returns the CELT window for overlap, as GetWindowBufferF32 does.
 func GetWindowBuffer(overlap int) []float32 {
 	return GetWindowBufferF32(overlap)
 }
 
-// GetWindowBufferF32 returns the precomputed float32 window buffer for the given overlap size.
-// Returns a freshly computed float32 buffer for non-standard sizes.
+// GetWindowBufferF32 returns the CELT window for overlap. Overlaps of 120,
+// 240, 480 and 960 share read-only tables; other sizes allocate a new window.
 func GetWindowBufferF32(overlap int) []float32 {
 	switch overlap {
 	case 120:

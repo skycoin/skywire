@@ -84,6 +84,8 @@ type Manager struct {
 	Logger *logging.Logger
 	Conf   *ManagerConfig
 	tps    map[uuid.UUID]*ManagedTransport
+	// dials runs one outbound dial per transport ID at a time.
+	dials  dialFlights
 	events tpEventRing
 	// lastCloses is the last close event per transport id, which — unlike the
 	// ring — open churn cannot evict.
@@ -1295,9 +1297,7 @@ func (tm *Manager) prepareAccept(transport network.Transport) (*ManagedTransport
 		})
 		tm.applyHandlers(mTp)
 
-		go func() {
-			mTp.Serve(tm.readCh)
-
+		mTp.Start(tm.readCh, func() {
 			tm.mx.Lock()
 			// Identity-checked delete: a concurrent dial/accept to the same
 			// peer resolves to this same deterministic tpID and may have
@@ -1308,7 +1308,7 @@ func (tm *Manager) prepareAccept(transport network.Transport) (*ManagedTransport
 				delete(tm.tps, mTp.Entry.ID)
 			}
 			tm.mx.Unlock()
-		}()
+		})
 
 		tm.tps[tpID] = mTp
 		tm.track(mTp)
@@ -1520,6 +1520,22 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	// tick) must not be handed back as if it were live — the stale-conn trap.
 	// Fall through to create a fresh one.
 
+	f, lead := tm.dials.join(tpID)
+	if !lead {
+		select {
+		case <-f.done:
+			return f.mTp, f.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	mTp, err := tm.dialAndSave(ctx, remote, netType, label, opts, tpID)
+	tm.dials.finish(tpID, f, mTp, err)
+	return mTp, err
+}
+
+// dialAndSave dials a new transport and stores it, unless one appeared meanwhile.
+func (tm *Manager) dialAndSave(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions, tpID uuid.UUID) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	client, ok := tm.netClients[netType]
 	tm.mx.RUnlock()
@@ -1554,7 +1570,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)
 	go mTp.DialAsync(ctx, errCh)
-	err = <-errCh
+	err := <-errCh
 	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
 		// Use closeWithoutDeregister since the transport was never registered with TPD
@@ -1580,7 +1596,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	// Serve runs for the transport's lifetime, not the dial's; its internal
 	// datagram-read context correctly derives from Background (a short-lived
 	// dial ctx would kill the QUIC datagram loop prematurely). #2607.
-	go mTp.Serve(tm.readCh) //nolint:gosec // G118: long-lived transport goroutine, not request-scoped
+	mTp.Start(tm.readCh, nil)
 
 	tm.Logger.Debugf("saved transport: remote(%s) type(%s) tpID(%s)", remote, netType, tpID)
 

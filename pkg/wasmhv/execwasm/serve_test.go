@@ -4,15 +4,18 @@ package execwasm
 import (
 	"bytes"
 	"compress/gzip"
-	"io"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestServeGz(t *testing.T) {
-	raw := bytes.Repeat([]byte("\x00asm module bytes "), 512)
+func writeModule(t *testing.T, raw []byte, manifest bool) (path string, gz []byte) {
+	t.Helper()
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	if _, err := zw.Write(raw); err != nil {
@@ -21,81 +24,70 @@ func TestServeGz(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	gz := buf.Bytes()
+	gz = buf.Bytes()
+	path = filepath.Join(t.TempDir(), ModuleName)
+	if err := os.WriteFile(path, gz, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if manifest {
+		sum := sha256.Sum256(gz)
+		m := fmt.Sprintf(`{"version":"v1","revision":"r","sha256":%q,"size":%d}`, hex.EncodeToString(sum[:]), len(gz))
+		if err := os.WriteFile(ManifestPath(path), []byte(m), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path, gz
+}
 
-	// gzip-accepting client gets the bytes as embedded.
+func TestServe(t *testing.T) {
+	raw := bytes.Repeat([]byte("\x00asm module bytes "), 512)
+	path, gz := writeModule(t, raw, true)
+	sum := sha256.Sum256(gz)
+	stamp := hex.EncodeToString(sum[:])[:16]
+	if got := Stamp(path); got != stamp {
+		t.Fatalf("Stamp = %q, want the manifest's %q", got, stamp)
+	}
+
 	r := httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil)
 	r.Header.Set("Accept-Encoding", "gzip, br")
 	w := httptest.NewRecorder()
-	ServeGz(w, r, gz, "abcd")
+	Serve(w, r, path)
 	if w.Code != 200 || w.Header().Get("Content-Encoding") != "gzip" || !bytes.Equal(w.Body.Bytes(), gz) {
-		t.Fatalf("gzip path: code=%d enc=%q len=%d", w.Code, w.Header().Get("Content-Encoding"), w.Body.Len())
+		t.Fatalf("gzip client: code %d encoding %q, %d bytes", w.Code, w.Header().Get("Content-Encoding"), w.Body.Len())
 	}
-	if w.Header().Get("ETag") != `"abcd"` {
-		t.Fatalf("etag %q", w.Header().Get("ETag"))
-	}
-
-	// identity client gets it inflated.
-	r = httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil)
-	w = httptest.NewRecorder()
-	ServeGz(w, r, gz, "abcd")
-	body, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if w.Code != 200 || w.Header().Get("Content-Encoding") != "" || !bytes.Equal(body, raw) {
-		t.Fatalf("identity path: code=%d enc=%q len=%d", w.Code, w.Header().Get("Content-Encoding"), len(body))
+	if w.Header().Get("ETag") != `"`+stamp+`"` {
+		t.Fatalf("ETag = %q", w.Header().Get("ETag"))
 	}
 
-	// conditional request short-circuits.
 	r = httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil)
-	r.Header.Set("If-None-Match", `"abcd"`)
 	w = httptest.NewRecorder()
-	ServeGz(w, r, gz, "abcd")
+	Serve(w, r, path)
+	if w.Code != 200 || w.Header().Get("Content-Encoding") != "" || !bytes.Equal(w.Body.Bytes(), raw) {
+		t.Fatalf("plain client: code %d encoding %q", w.Code, w.Header().Get("Content-Encoding"))
+	}
+
+	r = httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil)
+	r.Header.Set("If-None-Match", `"`+stamp+`"`)
+	w = httptest.NewRecorder()
+	Serve(w, r, path)
 	if w.Code != http.StatusNotModified {
-		t.Fatalf("conditional: code=%d", w.Code)
+		t.Fatalf("conditional request: code %d", w.Code)
 	}
 
-	// nothing embedded → 404.
 	w = httptest.NewRecorder()
-	ServeGz(w, httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil), nil, "")
+	Serve(w, httptest.NewRequest(http.MethodGet, "/skywire.wasm", nil), filepath.Join(t.TempDir(), ModuleName))
 	if w.Code != http.StatusNotFound {
-		t.Fatalf("absent: code=%d", w.Code)
+		t.Fatalf("missing module: code %d", w.Code)
 	}
 }
 
-// TestServe covers the embedded-only entry point in whichever state this build
-// is in: with a staged module it serves it under its stamp; without one it
-// sends the browser to the page origin's /skywire.wasm.
-func TestServe(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/tpviz-gl.wasm", nil)
-	r.Header.Set("Accept-Encoding", "gzip")
-	w := httptest.NewRecorder()
-	Serve(w, r)
-	if !Present() {
-		if w.Code != http.StatusFound || w.Header().Get("Location") != OriginPath {
-			t.Fatalf("absent: code=%d location=%q, want 302 → %s", w.Code, w.Header().Get("Location"), OriginPath)
-		}
-		t.Logf("no module embedded in this build: Serve redirects to %s", OriginPath)
-		return
+func TestStampWithoutManifest(t *testing.T) {
+	path, _ := writeModule(t, []byte("module"), false)
+	s := Stamp(path)
+	if len(s) != 16 {
+		t.Fatalf("Stamp = %q, want a size and mtime fingerprint", s)
 	}
-	if w.Code != 200 || w.Header().Get("Content-Type") != "application/wasm" || w.Header().Get("Content-Encoding") != "gzip" {
-		t.Fatalf("present: code=%d ct=%q enc=%q", w.Code, w.Header().Get("Content-Type"), w.Header().Get("Content-Encoding"))
-	}
-	if w.Header().Get("ETag") != `"`+Stamp()+`"` || !bytes.Equal(w.Body.Bytes(), Gz()) {
-		t.Fatalf("present: etag=%q stamp=%q len=%d", w.Header().Get("ETag"), Stamp(), w.Body.Len())
-	}
-}
-
-func TestLoaderJS(t *testing.T) {
-	exec := []byte("globalThis.Go = class { constructor() { this.argv = ['js']; } };\n")
-	out := string(LoaderJS(exec, "netview"))
-	if !strings.HasPrefix(out, string(exec)) {
-		t.Fatal("loader must start with the loader it wraps")
-	}
-	for _, want := range []string{"class extends _Go", "super();", "this.argv=['skywire','desk-host','--role','netview']", "HOME:'/home/user'", "USER:'user'"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("prelude missing %q", want)
-		}
+	if Stamp("") != "" || Stamp(filepath.Join(t.TempDir(), "none")) != "" {
+		t.Fatal("Stamp of no module is not empty")
 	}
 }

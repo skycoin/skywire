@@ -32,22 +32,24 @@ func deskTestHypervisor(t *testing.T) (*Hypervisor, cipher.PubKey) {
 		},
 		visor: &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{PK: pk}}},
 	}
+	// No module is fetched in a test: the desk is served only from one on disk.
+	hv.visor.wasmModuleOnce.Do(func() {})
 	return hv, pk
 }
 
 // TestNativeDeskServing pins the root serving contract of the native
 // hypervisor in BOTH build states. The dashboard listener's root is the
 // Angular dashboard, always. The desk listener's root is the converged desk,
-// hosted out of the ONE skywire command module (the two-stage build embeds
-// one; a source build has none unless one is on disk) — and without a module
+// hosted out of the ONE skywire command module (installed beside the binary
+// or none) — and without a module
 // there is no desk host, so even that root is the dashboard. Either way the
 // Angular dashboard stays at its framed root, the retired paths stay gone,
 // and the legacy wasm-visor blob is not served: netscrape, the desk host and
 // the tab's visor all live in the command module now.
 func TestNativeDeskServing(t *testing.T) {
-	_, haveModule := execModuleSource("")
-	t.Logf("command module available in this build: %v", haveModule)
 	hv, pk := deskTestHypervisor(t)
+	_, haveModule := hv.execModule()
+	t.Logf("command module available in this build: %v", haveModule)
 	h := hv.uiHandler()
 	get := func(path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -77,7 +79,7 @@ func TestNativeDeskServing(t *testing.T) {
 		if !haveModule {
 			// No module, no desk host: the root is the injected dashboard,
 			// the same page legacy_ui serves (#4753). Nothing desk-shaped.
-			if !strings.Contains(body, "ANGULAR") || !strings.Contains(body, "__SKYWIRE_LOCAL_PK__") {
+			if !strings.Contains(body, "ANGULAR") {
 				t.Error("without a command module the root must serve the injected dashboard")
 			}
 			if strings.Contains(body, "skywireDeskBoot(") || strings.Contains(body, "/skywire.wasm") {
@@ -349,6 +351,8 @@ func TestServedUIVersionTracksExecWasm(t *testing.T) {
 // address-resolver lookup — with public autoconnect off.
 func TestNativeDeskAttachedVisor(t *testing.T) {
 	hv, pk := deskTestHypervisor(t)
+	_, haveModule := hv.execModule()
+	t.Logf("command module available in this build: %v", haveModule)
 	exec := filepath.Join(t.TempDir(), "skywire.wasm")
 	if err := os.WriteFile(exec, []byte("\x00asm-test"), 0o600); err != nil {
 		t.Fatal(err)

@@ -98,6 +98,18 @@ type Node interface {
 	UIServerStatus() (*UIServerStatus, error)
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
+	// EmbeddedServiceControl stops, starts or restarts an embedded service that
+	// runs under its own key.
+	EmbeddedServiceControl(name, action string) error
+	// HostBridgeConnect connects the visor to the host bridge at url and
+	// keeps it connected. HostBridgeDisconnect ends it.
+	HostBridgeConnect(url string) error
+	HostBridgeDisconnect() error
+	HostBridgeStatus() (HostBridgeStatus, error)
+	// HostBridgeForward listens on host, an address on the bridge's host,
+	// and passes each connection to local. HostBridgeUnforward stops it.
+	HostBridgeForward(host, local string) (HostBridgeForward, error)
+	HostBridgeUnforward(host string) error
 	// Close closes the API connection (for RPC clients)
 	Close() error
 }
@@ -708,9 +720,12 @@ type DmsgPtyExecArgs struct {
 	RemotePort uint16
 	Req        pty.CommandExecReq
 	// Scheme: "" (default — MultiDialer chain), "dmsg" (force dmsg
-	// only), or "skynet" (force skynet only). Unknown values
-	// return a clear error rather than silently falling back.
+	// only), "skynet" (force skynet only), or "tcp" (the remote's
+	// direct-TCP pty listener at Addr, dialed as this visor). Unknown
+	// values return a clear error rather than silently falling back.
 	Scheme string
+	// Addr is the host:port of the direct-TCP listener for Scheme "tcp".
+	Addr string
 }
 
 // UptimeHistoryArgs is the request shape for API.UptimeHistory. All
@@ -1082,9 +1097,7 @@ type VisorCatResponse struct {
 // a new feed means adding a case to the visor's FetchCXO switch and
 // a row to the mapping table — nothing in between needs to know.
 type FetchCXOArgs struct {
-	// Feed is one of: "tpd-metrics", "tpd-uptime". (UT's standalone
-	// uptime tracker is intentionally absent — that service is being
-	// deprecated, so there's no point publishing it over CXO.)
+	// Feed is one of: "tpd-metrics", "tpd-uptime".
 	Feed string `json:"feed"`
 	// Path is the TreeStore path inside the feed, e.g.
 	// "metrics/days/7" or "uptimes/days/30".

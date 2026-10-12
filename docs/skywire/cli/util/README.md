@@ -12,7 +12,7 @@ skywire cli util
 
 ## Subcommands
 
-- [edit](edit/README.md) — Terminal text editor (femto)
+- [edit](edit/README.md) — Terminal text editor
 - [foreach](foreach/README.md) — Run a templated shell command against each target in parallel
 - [jq](jq/README.md) — jq-like JSON processor (gojq)
 - [nc](nc/README.md) — Pure-Go netcat (plain TCP/UDP, no skywire transport)

@@ -11,8 +11,8 @@ package opusmath
 // soft-knee (v + a*v*v), the peak search, and the coefficient update
 // a = (maxval-1)/(maxval*maxval) plus the 2.4e-7 nudge are all single precision,
 // as is the boundary-continuity ramp. If every sample is already within [-1, 1]
-// and all declipMem entries are zero, it returns without modifying x, exactly as
-// libopus short-circuits.
+// and all declipMem entries are zero, it returns without modifying x and resets
+// the state to positive zero, matching libopus's no-clipping result.
 func PCMSoftClip(x []float32, n, channels int, declipMem []float32) {
 	if channels < 1 || n < 1 || len(x) == 0 || len(declipMem) < channels {
 		return
@@ -29,7 +29,7 @@ func PCMSoftClip(x []float32, n, channels int, declipMem []float32) {
 		} else if v < -2 {
 			x[i] = -2
 			allWithinNeg1Pos1 = false
-		} else if v > 1 || v < -1 {
+		} else if !(v >= -1 && v <= 1) {
 			allWithinNeg1Pos1 = false
 		}
 	}
@@ -39,6 +39,7 @@ func PCMSoftClip(x []float32, n, channels int, declipMem []float32) {
 				goto applySoftClip
 			}
 		}
+		clear(declipMem[:channels])
 		return
 	}
 
@@ -104,7 +105,8 @@ applySoftClip:
 				if idxPrev >= len(x) {
 					break
 				}
-				if vref*x[idxPrev] < 0 {
+				// src/opus.c uses >= 0: unordered products end the region.
+				if !(vref*x[idxPrev] >= 0) {
 					break
 				}
 				start--
@@ -114,7 +116,7 @@ applySoftClip:
 				if idxEnd >= len(x) {
 					break
 				}
-				if vref*x[idxEnd] < 0 {
+				if !(vref*x[idxEnd] >= 0) {
 					break
 				}
 				val := float32Abs(x[idxEnd])

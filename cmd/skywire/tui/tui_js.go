@@ -4,8 +4,8 @@
 //
 // js/wasm stand-in for the interactive console. Install (install.go) already
 // degrades gracefully: when Run errors it prints the note to stderr and falls
-// back to the plain help that was asked for. A browser-hosted terminal that
-// can drive bubbletea over explicit I/O can lift this later.
+// back to the plain help that was asked for. The console runs each command as a
+// child process, which a browser cannot; the desk's shell is its counterpart there.
 package tui
 
 import (

@@ -23,11 +23,12 @@ skywire app skycoin web
 ## Flags
 
 ```
-      --btc-electrum-url string   Electrum server URL (e.g. ssl://electrum.blockstream.info:50002)
+      --btc-electrum-url string   Electrum server URLs, comma separated and tried in order, default for the built-in list, or none for no BTC (default "default")
       --btc-node-url string       Bitcoin Core RPC URL (e.g. http://user:pass@127.0.0.1:8332)
       --enable-seed-api           Enable the wallet seed API (requires --wallet-dir)
   -g, --gui-dir string            Custom GUI directory (overrides embedded GUI)
   -H, --host string               Host to bind to (default "127.0.0.1")
+      --no-listen                 Open no port; serve only through an embedding program's Mount
   -n, --node-url stringArray      Node URL (can be specified multiple times) (default [https://node.skycoin.com])
   -p, --port int                  Port to serve on (default 8001)
   -r, --pprofaddr string          pprof http port (default "localhost:6060")

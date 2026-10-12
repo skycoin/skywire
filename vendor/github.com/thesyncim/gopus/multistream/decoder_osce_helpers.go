@@ -18,6 +18,20 @@ func (d *streamState) setOSCELACEEnabled(enabled bool) {
 		return
 	}
 	d.osceLACEEnabled = enabled
+	d.osceLACEOverrideSet = true
+}
+
+// osceLACEEnabledForComplexity mirrors libopus's per-decode OSCE method
+// selection. An explicit SetOSCELACE call overrides automatic selection;
+// otherwise complexity 6 and above enables the complexity-selected method.
+func (d *streamState) osceLACEEnabledForComplexity() bool {
+	if d == nil {
+		return false
+	}
+	if d.osceLACEOverrideSet {
+		return d.osceLACEEnabled
+	}
+	return d.complexity >= 6
 }
 
 func (d *streamState) setOSCEBWEEnabled(enabled bool) {
@@ -46,8 +60,8 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 	if blob == nil || !models.OSCE {
 		if d.osceState != nil {
 			for ch := range d.osceState.laceRuntime {
-				_ = d.osceState.laceRuntime[ch].SetModel(nil)
-				_ = d.osceState.noLACERuntime[ch].SetModel(nil)
+				_ = d.osceState.laceRuntime[ch].SetModelPreservingState(nil)
+				_ = d.osceState.noLACERuntime[ch].SetModelPreservingState(nil)
 			}
 			d.osceState.laceModel = nil
 		}
@@ -68,7 +82,7 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 		}
 		d.osceState.laceModel = laceModel
 		for ch := range d.osceState.laceRuntime {
-			if err := d.osceState.laceRuntime[ch].SetModel(laceModel); err != nil {
+			if err := d.osceState.laceRuntime[ch].SetModelPreservingState(laceModel); err != nil {
 				for j := range d.osceState.laceRuntime {
 					_ = d.osceState.laceRuntime[j].SetModel(nil)
 					_ = d.osceState.noLACERuntime[j].SetModel(nil)
@@ -76,7 +90,7 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 				d.osceState.laceModel = nil
 				return err
 			}
-			if err := d.osceState.noLACERuntime[ch].SetModel(laceModel); err != nil {
+			if err := d.osceState.noLACERuntime[ch].SetModelPreservingState(laceModel); err != nil {
 				for j := range d.osceState.laceRuntime {
 					_ = d.osceState.laceRuntime[j].SetModel(nil)
 					_ = d.osceState.noLACERuntime[j].SetModel(nil)
@@ -85,8 +99,6 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 				return err
 			}
 		}
-		d.osceState.laceFeatureState[0].Reset()
-		d.osceState.laceFeatureState[1].Reset()
 	}
 
 	// OSCE BWE binding.
@@ -113,7 +125,7 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 		}
 		d.osceState.bweModel = bweModel
 		for ch := range d.osceState.bweRuntime {
-			if err := d.osceState.bweRuntime[ch].SetModel(blob); err != nil {
+			if err := d.osceState.bweRuntime[ch].SetModelPreservingState(blob); err != nil {
 				for j := range d.osceState.bweRuntime {
 					_ = d.osceState.bweRuntime[j].SetModel(nil)
 				}
@@ -121,15 +133,8 @@ func (d *streamState) bindOSCEModels(blob *dnnblob.Blob) error {
 				return err
 			}
 		}
-		d.osceState.bweFeatures[0].Reset()
-		d.osceState.bweFeatures[1].Reset()
 	}
 
-	// When both bindings end up empty, drop the lazy state so a follow-up
-	// SetDNNBlob(nil) leaves the streamState lean.
-	if d.osceState != nil && d.osceState.laceModel == nil && d.osceState.bweModel == nil {
-		d.osceState = nil
-	}
 	return nil
 }
 

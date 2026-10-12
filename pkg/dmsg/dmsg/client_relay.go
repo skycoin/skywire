@@ -396,10 +396,14 @@ func (ce *Client) isRelayPeer(pk cipher.PubKey) bool {
 // other errors get relayFailureBackoff.
 const relayTimeoutRetry = 30 * time.Second
 
-// relayBackoffFor picks the backoff a failed nominee dial earns.
+// relayBackoffFor picks the backoff a failed nominee dial earns. A dial that
+// found nothing listening, such as a local relay socket while its visor
+// restarts, is retried as soon as a timeout is.
 func relayBackoffFor(err error) time.Duration {
 	var nerr net.Error
-	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &nerr) && nerr.Timeout()) {
+	var opErr *net.OpError
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &nerr) && nerr.Timeout()) ||
+		(errors.As(err, &opErr) && opErr.Op == "dial") {
 		return relayTimeoutRetry
 	}
 	return relayFailureBackoff

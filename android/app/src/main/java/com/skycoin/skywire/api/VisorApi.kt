@@ -99,6 +99,16 @@ class VisorApi(context: Context) {
         .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
+    /**
+     * For sending mail, which the visor delivers before it answers: a dmsg
+     * dial and an SMTP exchange per recipient, and a skynet route setup for a
+     * .skynet address.
+     */
+    private val mailClient = client.newBuilder()
+        .readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(95, TimeUnit.SECONDS)
+        .build()
+
     private val sessionMutex = Mutex()
 
     @Volatile private var cachedPk: String? = null
@@ -558,6 +568,68 @@ class VisorApi(context: Context) {
         }
     }
 
+    // --- mail: the visor's Skymail mailbox ---
+
+    suspend fun mailStatus(): MailStatus = authedGet("/api/visors/${localPk()}/mail")
+
+    suspend fun mailList(folder: String): List<MailSummary> = authedGet(mailPath(folder))
+
+    /** The message reduced to text, and marked read. */
+    suspend fun mailRead(folder: String, id: String): MailMessage = authedGet(mailPath(folder, id))
+
+    suspend fun mailAttachment(folder: String, id: String, n: Int): ByteArray = withContext(Dispatchers.IO) {
+        getWithRelogin(mailPath(folder, id) + "/attachments/$n").use { resp ->
+            if (!resp.isSuccessful) throw IOException("attachment $n failed (${resp.code}): ${errorBody(resp)}")
+            resp.body.bytes()
+        }
+    }
+
+    suspend fun mailDelete(folder: String, id: String): Unit = withContext(Dispatchers.IO) {
+        deleteWithRelogin(mailPath(folder, id)).use { resp ->
+            if (!resp.isSuccessful) throw IOException("delete failed (${resp.code}): ${errorBody(resp)}")
+        }
+    }
+
+    /**
+     * Delivers now and answers per recipient. A send that reached nobody comes
+     * back as a result with [MailSendResult.error] set, not as an exception, so
+     * the screen can say which address failed and why.
+     */
+    suspend fun mailSend(msg: MailOutgoing): MailSendResult = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(MailOutgoing.serializer(), msg)
+        postWithRelogin("/api/visors/${localPk()}/mail/send", body, mailClient).use { resp ->
+            val text = resp.body.string()
+            val result = runCatching { json.decodeFromString(MailSendResult.serializer(), text) }.getOrNull()
+            when {
+                result != null && (resp.isSuccessful || result.error.isNotEmpty()) -> result
+                else -> throw IOException("send failed (${resp.code}): ${text.take(500)}")
+            }
+        }
+    }
+
+    /** Who may deliver; empty accepts everyone. */
+    suspend fun mailSetWhitelist(pks: List<String>): Unit = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("pks", kotlinx.serialization.json.JsonArray(pks.map(::JsonPrimitive)))
+        }.toString()
+        putWithRelogin("/api/visors/${localPk()}/mail/whitelist", body).use { resp ->
+            if (!resp.isSuccessful) throw IOException("whitelist failed (${resp.code}): ${errorBody(resp)}")
+        }
+    }
+
+    /** Turns the mailbox on or off at once; the visor keeps the choice with the mail. */
+    suspend fun mailSetEnabled(enabled: Boolean): Unit = withContext(Dispatchers.IO) {
+        val body = buildJsonObject { put("enable", JsonPrimitive(enabled)) }.toString()
+        putWithRelogin("/api/visors/${localPk()}/mail/settings", body).use { resp ->
+            if (!resp.isSuccessful) throw IOException("settings failed (${resp.code}): ${errorBody(resp)}")
+        }
+    }
+
+    private suspend fun mailPath(folder: String, id: String? = null): String {
+        val base = "/api/visors/${localPk()}/mail/${URLEncoder.encode(folder, "UTF-8")}"
+        return if (id == null) base else "$base/${URLEncoder.encode(id, "UTF-8")}"
+    }
+
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {
         get("/api/csrf").use { decode<CsrfToken>(it).token }
@@ -599,13 +671,25 @@ class VisorApi(context: Context) {
         return put(path, body, csrfToken())
     }
 
-    private suspend fun postWithRelogin(path: String, body: String): okhttp3.Response {
+    private suspend fun postWithRelogin(
+        path: String,
+        body: String,
+        client: OkHttpClient = this.client,
+    ): okhttp3.Response {
         val payload = { body.toRequestBody("application/json".toMediaType()) }
-        val first = post(path, payload(), csrfToken())
+        val first = post(path, payload(), csrfToken(), client)
         if (first.code != 401) return first
         first.close()
         ensureSession()
-        return post(path, payload(), csrfToken())
+        return post(path, payload(), csrfToken(), client)
+    }
+
+    private suspend fun deleteWithRelogin(path: String): okhttp3.Response {
+        val first = delete(path, csrfToken())
+        if (first.code != 401) return first
+        first.close()
+        ensureSession()
+        return delete(path, csrfToken())
     }
 
     // onCall hands the call out BEFORE it is executed, which is the only
@@ -636,6 +720,15 @@ class VisorApi(context: Context) {
                 .post(body)
                 .build(),
         ).also(onCall).execute()
+
+    private fun delete(path: String, csrf: String): okhttp3.Response =
+        client.newCall(
+            Request.Builder()
+                .url("$BASE$path")
+                .header(CSRF_HEADER, csrf)
+                .delete()
+                .build(),
+        ).execute()
 
     private fun put(path: String, body: String, csrf: String): okhttp3.Response =
         client.newCall(

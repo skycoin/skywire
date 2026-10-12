@@ -48,8 +48,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		return nil, ErrStcpEntryNotFound
 	}
 	c.announceDial(types.STCP, addr)
-	dialer := net.Dialer{}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	conn, err := c.socks().DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +75,7 @@ func (c *stcpClient) Start() error {
 }
 
 func (c *stcpClient) serve() {
-	lis, err := net.Listen("tcp", c.listenAddr)
+	lis, err := c.socks().Listen("tcp", c.listenAddr)
 	if err != nil {
 		c.log.Errorf("Failed to listen on %q: %v", c.listenAddr, err)
 		return

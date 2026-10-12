@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/cascade_source_test.go
 package router
 

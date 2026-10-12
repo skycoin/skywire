@@ -1,6 +1,9 @@
 package silk
 
-import "math/bits"
+import (
+	"math"
+	"math/bits"
+)
 
 func silkAbs32(x int32) int32 {
 	if x < 0 {
@@ -190,14 +193,7 @@ func silkAddPosSat32(a, b int32) int32 {
 }
 
 func silkSubSat32(a, b int32) int32 {
-	v := int64(a) - int64(b)
-	if v > int64((1<<31)-1) {
-		return int32((1 << 31) - 1)
-	}
-	if v < int64(-1<<31) {
-		return int32(-1 << 31)
-	}
-	return int32(v)
+	return int32(min(max(int64(a)-int64(b), math.MinInt32), math.MaxInt32))
 }
 
 func silkDiv32_16(a, b int32) int32 {

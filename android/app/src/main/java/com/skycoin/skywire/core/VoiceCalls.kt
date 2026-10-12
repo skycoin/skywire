@@ -163,6 +163,9 @@ object VoiceCalls {
      */
     private val names = MutableStateFlow<Map<String, String>>(emptyMap())
 
+    /** The same names, for screens that offer a contact to pick. */
+    val addressBook: StateFlow<Map<String, String>> = names.asStateFlow()
+
     internal fun setNames(book: Map<String, String>) {
         names.value = book.mapKeys { (pk, _) -> pk.lowercase() }
     }
@@ -240,6 +243,7 @@ internal class VoiceCallWatcher(context: Context) {
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         ensureChannels(app)
         var wasInCall = false
+        var wasWanted = false
         try {
             while (coroutineContext.isActive) {
                 // Before the calls, so a name is already in hand when one
@@ -256,10 +260,17 @@ internal class VoiceCallWatcher(context: Context) {
                     VoiceCalls.set(ringing, dialing, active)
                     showRinging(ringing.firstOrNull())
                     val inCall = active.isNotEmpty()
-                    if (inCall != wasInCall) {
-                        if (inCall) VoiceCallService.start(app) else VoiceCallService.stop(app)
-                        wasInCall = inCall
+                    // Up while a call is still being placed too: the
+                    // microphone can only be claimed while the user is on
+                    // screen, and a callee may answer after the phone is locked.
+                    val wanted = inCall || dialing.any { !it.state.ended }
+                    if (wanted && (!wasWanted || inCall != wasInCall)) {
+                        VoiceCallService.start(app, connected = inCall)
+                    } else if (!wanted && wasWanted) {
+                        VoiceCallService.stop(app)
                     }
+                    wasInCall = inCall
+                    wasWanted = wanted
                 }
                 // The tick, unless something happened that the next answer
                 // will be about. Hanging up nudges this so the visor is asked
@@ -274,7 +285,7 @@ internal class VoiceCallWatcher(context: Context) {
             VoiceCalls.clear()
             notifications.cancel(RINGING_NOTIFICATION_ID)
             showing = null
-            if (wasInCall) VoiceCallService.stop(app)
+            if (wasWanted) VoiceCallService.stop(app)
         }
     }
 
@@ -431,17 +442,19 @@ internal class VoiceCallWatcher(context: Context) {
         fun ensureChannels(context: Context) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Called again when the language changes, which renames the channels.
+            val text = AppLocale.localized(context)
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_RINGING,
-                    context.getString(R.string.call_channel_incoming),
+                    text.getString(R.string.call_channel_incoming),
                     NotificationManager.IMPORTANCE_HIGH,
                 ),
             )
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ONGOING,
-                    context.getString(R.string.call_channel_ongoing),
+                    text.getString(R.string.call_channel_ongoing),
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )

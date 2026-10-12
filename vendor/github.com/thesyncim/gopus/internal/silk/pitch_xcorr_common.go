@@ -7,6 +7,9 @@ func innerProductF32Acc(a, b []float32, length int) float32 {
 	_ = a[length-1] // BCE hint
 	_ = b[length-1] // BCE hint
 	var result float32
+	// celt_pitch_xcorr_c's non-unrolled path calls celt_inner_prod_c
+	// (celt/pitch.c:291-296; celt/pitch.h:159-166). GCC v3 emits a rounded
+	// product followed by an add here; the four-lag xcorr kernel uses FMAs.
 	for i := range length {
 		result += noFMA32(a[i], b[i])
 	}
@@ -36,37 +39,37 @@ func xcorrKernelFloat(x, y []float32, sum *[4]float32, length int) {
 		xIdx++
 		y3 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y0)
-		sum[1] += noFMA32(tmp, y1)
-		sum[2] += noFMA32(tmp, y2)
-		sum[3] += noFMA32(tmp, y3)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y0)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y1)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y2)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y3)
 
 		tmp = x[xIdx]
 		xIdx++
 		y0 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y1)
-		sum[1] += noFMA32(tmp, y2)
-		sum[2] += noFMA32(tmp, y3)
-		sum[3] += noFMA32(tmp, y0)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y1)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y2)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y3)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y0)
 
 		tmp = x[xIdx]
 		xIdx++
 		y1 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y2)
-		sum[1] += noFMA32(tmp, y3)
-		sum[2] += noFMA32(tmp, y0)
-		sum[3] += noFMA32(tmp, y1)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y2)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y3)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y0)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y1)
 
 		tmp = x[xIdx]
 		xIdx++
 		y2 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y3)
-		sum[1] += noFMA32(tmp, y0)
-		sum[2] += noFMA32(tmp, y1)
-		sum[3] += noFMA32(tmp, y2)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y3)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y0)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y1)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y2)
 		j += 4
 	}
 
@@ -75,10 +78,10 @@ func xcorrKernelFloat(x, y []float32, sum *[4]float32, length int) {
 		xIdx++
 		y3 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y0)
-		sum[1] += noFMA32(tmp, y1)
-		sum[2] += noFMA32(tmp, y2)
-		sum[3] += noFMA32(tmp, y3)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y0)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y1)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y2)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y3)
 		j++
 	}
 	if j < length {
@@ -86,18 +89,18 @@ func xcorrKernelFloat(x, y []float32, sum *[4]float32, length int) {
 		xIdx++
 		y0 = y[yIdx]
 		yIdx++
-		sum[0] += noFMA32(tmp, y1)
-		sum[1] += noFMA32(tmp, y2)
-		sum[2] += noFMA32(tmp, y3)
-		sum[3] += noFMA32(tmp, y0)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y1)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y2)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y3)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y0)
 		j++
 	}
 	if j < length {
 		tmp := x[xIdx]
 		y1 = y[yIdx]
-		sum[0] += noFMA32(tmp, y2)
-		sum[1] += noFMA32(tmp, y3)
-		sum[2] += noFMA32(tmp, y0)
-		sum[3] += noFMA32(tmp, y1)
+		sum[0] = pitchXcorrMAC32(sum[0], tmp, y2)
+		sum[1] = pitchXcorrMAC32(sum[1], tmp, y3)
+		sum[2] = pitchXcorrMAC32(sum[2], tmp, y0)
+		sum[3] = pitchXcorrMAC32(sum[3], tmp, y1)
 	}
 }

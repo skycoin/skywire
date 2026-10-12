@@ -25,7 +25,7 @@ func (c *Cache) Invalidate() {
 	c.Len = 0
 }
 
-// Empty reports whether any DRED payload is cached.
+// Empty reports whether the cache retains no DRED payload (Len is zero).
 func (c Cache) Empty() bool {
 	return c.Len == 0
 }

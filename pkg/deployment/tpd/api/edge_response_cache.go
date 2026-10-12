@@ -23,6 +23,7 @@ const edgeRespCacheTTL = 3 * time.Second
 // of edges actively being queried rather than all edges ever seen.
 type edgeRespCache struct {
 	ttl   time.Duration
+	now   func() time.Time
 	mu    sync.Mutex
 	slots map[cipher.PubKey]*respCacheSlot
 }
@@ -31,7 +32,7 @@ func newEdgeRespCache(ttl time.Duration) *edgeRespCache {
 	if ttl <= 0 {
 		ttl = edgeRespCacheTTL
 	}
-	return &edgeRespCache{ttl: ttl, slots: map[cipher.PubKey]*respCacheSlot{}}
+	return &edgeRespCache{ttl: ttl, now: time.Now, slots: map[cipher.PubKey]*respCacheSlot{}}
 }
 
 // body returns the marshaled JSON and its gzip-compressed form for the edge,
@@ -43,7 +44,7 @@ func (c *edgeRespCache) body(edge cipher.PubKey, compute func() ([]byte, error))
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	now := time.Now()
+	now := c.now()
 	if slot := c.slots[edge]; slot != nil && now.Before(slot.expiresAt) {
 		return slot.raw, slot.gz, nil
 	}

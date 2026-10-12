@@ -36,7 +36,6 @@ import (
 var (
 	sdURL         string
 	arURL         string
-	utURL         string
 	tpdURL        string
 	dmsgdURL      string
 	cleaningDelay int
@@ -105,7 +104,6 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&sdURL, "sd-url", deployment.Prod.ServiceDiscovery, "url to service discovery\n\r")
 	RootCmd.Flags().StringVar(&arURL, "ar-url", deployment.Prod.AddressResolver, "url to address resolver\n\r")
-	RootCmd.Flags().StringVar(&utURL, "ut-url", deployment.Prod.UptimeTracker, "url to uptime tracker visor data\n\r")
 	RootCmd.Flags().StringVar(&tpdURL, "tpd-url", deployment.Prod.TransportDiscovery, "url to transport discovery\n\r")
 	RootCmd.Flags().StringVar(&dmsgdURL, "dmsgd-url", deployment.Prod.DmsgDiscovery, "url to dmsg discovery\n\r")
 	RootCmd.Flags().IntVarP(&cleaningDelay, "cleaning-delay", "d", 75, "time for delay between each service cleaning routine\n\r")
@@ -171,7 +169,6 @@ HTTP Endpoints:
 		var srvURLs api.ServicesURLs
 		srvURLs.SD = sdURL
 		srvURLs.AR = arURL
-		srvURLs.UT = utURL
 		srvURLs.DMSGD = dmsgdURL
 		srvURLs.TPD = tpdURL
 

@@ -110,7 +110,8 @@ func vt500TransitionTable() transitionTable {
 		table.add(0x9c, state, actionIgnore, stateGround)      // ST as terminator
 		table.add(0x1b, state, actionClear, stateEscape)       // ESC
 		table.add(0x9d, state, actionOscStart, stateOscString) // OSC
-		table.addMany([]int{0x98, 0x9e, 0x9f}, state, actionIgnore, stateSosPmApcString)
+		table.add(0x9f, state, actionOscStart, stateOscString) // APC: a string as OSC is, given to the APC handler
+		table.addMany([]int{0x98, 0x9e}, state, actionIgnore, stateSosPmApcString)
 		table.add(0x9b, state, actionClear, stateCsiEntry) // CSI
 		table.add(0x90, state, actionClear, stateDcsEntry) // DCS
 	}
@@ -135,7 +136,11 @@ func vt500TransitionTable() transitionTable {
 	table.addMany([]int{0x9c, 0x1b, 0x18, 0x1a, 0x07}, stateOscString, actionOscEnd, stateGround)
 	table.addMany(codeRange(0x1c, 0x20), stateOscString, actionIgnore, stateOscString)
 	// sos/pm/apc does nothing
-	table.addMany([]int{0x58, 0x5e, 0x5f}, stateEscape, actionIgnore, stateSosPmApcString)
+	table.addMany([]int{0x58, 0x5e}, stateEscape, actionIgnore, stateSosPmApcString)
+	// APC (ESC _) is collected as an OSC string is — the transition table has
+	// no room for actions of its own — and handed to the APC handler, which
+	// kitty's graphics protocol needs (ESC _ G ... ESC \).
+	table.add(0x5f, stateEscape, actionOscStart, stateOscString)
 	table.addMany(printables, stateSosPmApcString, actionIgnore, stateSosPmApcString)
 	table.addMany(executables, stateSosPmApcString, actionIgnore, stateSosPmApcString)
 	table.add(0x9c, stateSosPmApcString, actionIgnore, stateGround)
@@ -269,7 +274,12 @@ type Parser struct {
 	escHandlers     map[int][]EscHandler
 	oscParser       *OscParser
 	dcsParser       *DcsParser
-	errorHandler    func(state ParsingState) ParsingState
+	// apc is set while the string being collected began as APC, not OSC;
+	// apcBuf holds it, and apcHandler takes it whole.
+	apc          bool
+	apcBuf       []rune
+	apcHandler   func(data string) bool
+	errorHandler func(state ParsingState) ParsingState
 
 	printHandlerFb   PrintHandler
 	executeHandlerFb func(code uint32)
@@ -373,6 +383,12 @@ func (p *Parser) RegisterDcsHandler(id FunctionID, handler DcsHandler) {
 	p.dcsParser.RegisterHandler(p.identifier(id, [2]int{0x40, 0x7e}), handler)
 }
 
+// SetApcHandler sets what takes an APC string (ESC _ ... ESC \), whole;
+// nil drops them, as before.
+func (p *Parser) SetApcHandler(handler func(data string) bool) {
+	p.apcHandler = handler
+}
+
 // RegisterOscHandler adds an OSC command handler.
 func (p *Parser) RegisterOscHandler(ident int, handler OscHandlerIface) {
 	p.oscParser.RegisterHandler(ident, handler)
@@ -390,6 +406,7 @@ func (p *Parser) SetExecuteHandlerFallback(fn func(code uint32)) { p.executeHand
 // Reset returns the parser to its initial state.
 func (p *Parser) Reset() {
 	p.currentState = p.initialState
+	p.apc = false
 	p.oscParser.Reset()
 	p.dcsParser.Reset()
 	p.params.Reset()
@@ -517,7 +534,12 @@ func (p *Parser) Parse(data []uint32, length int) {
 			p.collect = 0
 			p.PrecedingJoinState = 0
 		case actionOscStart:
-			p.oscParser.Start()
+			p.apc = code == 0x5f || code == 0x9f
+			if p.apc {
+				p.apcBuf = p.apcBuf[:0]
+			} else {
+				p.oscParser.Start()
+			}
 		case actionOscPut:
 			// inner loop: 0x20 (SP) included, 0x7F (DEL) included
 			for j := i + 1; ; j++ {
@@ -525,13 +547,28 @@ func (p *Parser) Parse(data []uint32, length int) {
 					code = data[j]
 					return code < 0x20 || (code > 0x7f && code < nonASCIIPrintable)
 				}() {
-					p.oscParser.Put(data, i, j)
+					if p.apc {
+						if len(p.apcBuf)+j-i <= payloadLimit {
+							for _, c := range data[i:j] {
+								p.apcBuf = append(p.apcBuf, rune(c)) //nolint:gosec // a code point the parser decoded, below 0x110000
+							}
+						}
+					} else {
+						p.oscParser.Put(data, i, j)
+					}
 					i = j - 1
 					break
 				}
 			}
 		case actionOscEnd:
-			p.oscParser.End(code != 0x18 && code != 0x1a)
+			if p.apc {
+				if code != 0x18 && code != 0x1a && p.apcHandler != nil {
+					p.apcHandler(string(p.apcBuf))
+				}
+				p.apc = false
+			} else {
+				p.oscParser.End(code != 0x18 && code != 0x1a)
+			}
 			if code == 0x1b {
 				transition |= stateEscape
 			}

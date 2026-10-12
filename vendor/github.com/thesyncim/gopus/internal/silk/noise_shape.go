@@ -79,30 +79,22 @@ type NoiseShapeParams struct {
 	ARShpQ13         []int16 // Noise shaping AR coefficients (Q13, per subframe)
 
 	// Frame-level parameters
-	LambdaQ10     int32   // Rate-distortion tradeoff (Q10, opus_int-width)
+	Lambda        float32 // Rate-distortion tradeoff (silk_float Lambda)
 	CodingQuality float32 // Coding quality [0, 1]
 	InputQuality  float32 // Input quality [0, 1]
 }
 
-// computeLambdaQ10 recomputes the Lambda (rate-distortion tradeoff) using the
-// provided quantization offset type. This mirrors the logic in ComputeNoiseShapeParams.
-func computeLambdaQ10(signalType, speechActivityQ8, quantOffsetType, nStatesDelayedDecision int, codingQuality, inputQuality float32) int32 {
+// computeLambda returns the rate-distortion tradeoff Lambda of
+// silk_process_gains_FLP (silk/float/process_gains_FLP.c) for the frame's
+// quantization offset type.
+func computeLambda(signalType, speechActivityQ8, quantOffsetType, nStatesDelayedDecision int, codingQuality, inputQuality float32) float32 {
 	quantOffset := float32(silk_Quantization_Offsets_Q10[signalType>>1][quantOffsetType]) / 1024.0
-	lambda := lambdaOffset +
+	return lambdaOffset +
 		lambdaDelayedDecisions*float32(nStatesDelayedDecision) +
 		lambdaSpeechAct*float32(speechActivityQ8)/256.0 +
 		lambdaInputQuality*inputQuality +
 		lambdaCodingQuality*codingQuality +
 		lambdaQuantOffset*quantOffset
-
-	// Keep lambda in the valid range and match libopus float->int rounding.
-	if lambda < 0 {
-		lambda = 0
-	}
-	if lambda > 2.0 {
-		lambda = 2.0
-	}
-	return float32ToInt32RoundEven(lambda * 1024.0)
 }
 
 // ComputeNoiseShapeParams computes adaptive noise shaping parameters.
@@ -162,14 +154,7 @@ func (s *NoiseShapeState) ComputeNoiseShapeParams(
 		lambdaCodingQuality*params.CodingQuality +
 		lambdaQuantOffset*quantOffset
 
-	// Keep lambda in the valid range and match libopus float->int rounding.
-	if lambda < 0 {
-		lambda = 0
-	}
-	if lambda > 2.0 {
-		lambda = 2.0
-	}
-	params.LambdaQ10 = float32ToInt32RoundEven(lambda * 1024.0)
+	params.Lambda = lambda
 
 	// Compute Tilt (spectral noise tilt)
 	// Match libopus float precision: intermediate products in float32 (not constant-folded).

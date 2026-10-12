@@ -134,6 +134,24 @@ func KFBfly2(fout []FFTCpx, offset, n int) {
 	}
 }
 
+// kfBfly2CustomM1 is the CUSTOM_MODES m==1 branch of libopus
+// celt/kiss_fft.c kf_bfly2. It occurs for generated FFT sizes whose radix-2
+// stage has no preceding radix-4 stage.
+func kfBfly2CustomM1(fout []FFTCpx, n int) {
+	for i := 0; i < n; i++ {
+		f0, f1 := 2*i, 2*i+1
+		t := fout[f1]
+		fout[f1] = FFTCpx{
+			R: sub32Ovflw(fout[f0].R, t.R),
+			I: sub32Ovflw(fout[f0].I, t.I),
+		}
+		fout[f0] = FFTCpx{
+			R: add32Ovflw(fout[f0].R, t.R),
+			I: add32Ovflw(fout[f0].I, t.I),
+		}
+	}
+}
+
 // KFBfly4 is the radix-4 KISS-FFT butterfly from libopus celt/kiss_fft.c
 // (FIXED_POINT). It operates in place on fout starting at offset.
 //

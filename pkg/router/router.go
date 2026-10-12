@@ -765,6 +765,7 @@ type router struct {
 	pending          *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	pendingLegs      *pendingLegs                                    // aux mux legs buffered while their route group is still initializing (see router_pending_legs.go, #80)
 	rpcSrv           *rpc.Server
+	directSetup      directSetupState // peers that refused a one-hop setup without a setup node (direct_setup.go)
 	accept           chan routing.EdgeRules
 	adopted          chan net.Conn
 	done             chan struct{}
@@ -801,6 +802,11 @@ type router struct {
 	// → the oracle path is inert. Set via SetDstTransportOracle.
 	dstTpOracle   DstTransportOracle
 	dstTpOracleMu sync.Mutex
+
+	// tpListFetcher reads other visors' signed transport lists over transports
+	// for 3-hop routes. Set via SetTransportListFetcher.
+	tpListFetcher TransportListFetcher
+	tpListMu      sync.Mutex
 }
 
 // DstTransportOracle fetches a destination visor's OWN transport list
@@ -929,11 +935,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	go r.rulesGCLoop()
 	go r.poolArbiterLoop()
 
-	// Register the setup RPC gateway on r.rpcSrv. Build-tagged: native uses
-	// reflection (net/rpc-style Register); TinyGo uses explicit HandleFunc
-	// handlers, because TinyGo's runtime reflect can't enumerate/invoke methods
-	// (reflect.Type.Method hangs) — see router_setup_rpc_{native,tinygo}.go.
-	if err := r.registerSetupRPC(config.MasterLogger); err != nil {
+	if err := registerRPCGateway(r.rpcSrv, RPCName, NewRPCGateway(r, config.MasterLogger, r.conf.NoTransit)); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server: %w", err)
 	}
 

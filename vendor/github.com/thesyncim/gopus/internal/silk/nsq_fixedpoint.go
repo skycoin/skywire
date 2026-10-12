@@ -160,10 +160,8 @@ func silkNoiseShapeQuantizerFixed(
 // sLPC_Q14 buffer and idx points at buf[0] of the C pointer (i.e. the current
 // sample's predecessor window). order is 10 or 16.
 //
-// NOTE(dedup): the default-build nsq.go has a shortTermPrediction with
-// architecture-specific assembly fast paths; this gated variant keeps the
-// scalar reference inline so the FIXED_POINT port has no hidden dependency on
-// those paths and stays self-contained.
+// The fixed-point variant keeps the scalar reference inline, so it remains
+// self-contained across the build configurations.
 func silkNSQShortTermPredictionFixed(buf []int32, idx int, coef16 []int16, order int) int32 {
 	out := int32(silk_RSHIFT(int32(order), 1))
 	out = silk_SMLAWB(out, buf[idx], int32(coef16[0]))

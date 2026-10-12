@@ -50,6 +50,8 @@ func compressible(ct string) bool {
 	}
 	ct = strings.TrimSpace(ct)
 	switch {
+	case ct == "text/event-stream":
+		return false // streamed event by event
 	case strings.HasPrefix(ct, "text/"),
 		ct == "application/json", ct == "application/javascript", ct == "application/x-javascript",
 		ct == "application/xml", ct == "image/svg+xml",
@@ -73,6 +75,11 @@ type compressWriter struct {
 }
 
 func (c *compressWriter) WriteHeader(status int) {
+	if status < http.StatusOK {
+		// 1xx goes out at once: a WebSocket upgrade writes 101 and then hijacks.
+		c.ResponseWriter.WriteHeader(status)
+		return
+	}
 	if !c.decided {
 		c.status = status
 	}
@@ -118,7 +125,7 @@ func (c *compressWriter) decide(large bool) error {
 	}
 	c.ResponseWriter.WriteHeader(c.status)
 	if len(c.buf) > 0 {
-		_, err := c.ResponseWriter.Write(c.buf)
+		_, err := c.ResponseWriter.Write(c.buf) //nolint:gosec // passes the handler's own body through
 		c.buf = nil
 		return err
 	}

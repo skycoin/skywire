@@ -134,7 +134,7 @@ func (e *Encoder) NormalizeBands(mdctCoeffs []CeltNorm, energies []celtGLog, nbB
 // as that introduces quantization/roundtrip errors.
 //
 // Reference: libopus celt/bands.c compute_band_energies() (float path, lines 154-170)
-func ComputeLinearBandAmplitudes(mdctCoeffs []float32, nbBands, frameSize int) []celtEner {
+func ComputeLinearBandAmplitudes(mdctCoeffs []float32, nbBands, frameSize int) []CeltEner {
 	bandE := make([]celtEner, nbBands)
 	ComputeLinearBandAmplitudesInto(mdctCoeffs, nbBands, frameSize, bandE)
 	return bandE
@@ -349,8 +349,31 @@ func normalizeBandsWithBandEInto(mdctCoeffs []float32, nbBands, frameSize int, n
 	}
 }
 
+// normalizeBandsWithBandEIntoF32 is normalise_bands() for the standard band
+// layout with M = frameSize/Overlap. Narrow bands, the common case for short
+// frames, scale inline; wide ones use scaleFloat32Into.
 func normalizeBandsWithBandEIntoF32(mdctCoeffs []float32, nbBands, frameSize int, norm []celtNorm, bandE []celtEner) {
-	normalizeBandsWithBandEIntoF32BinMul(mdctCoeffs, nbBands, frameSize/Overlap, norm, bandE)
+	binMul := frameSize / Overlap
+	if binMul <= 0 {
+		return
+	}
+	nbBands = min(nbBands, MaxBands, len(bandE))
+	for band := range nbBands {
+		lo, hi := EBands[band]*binMul, EBands[band+1]*binMul
+		if hi > len(mdctCoeffs) {
+			return
+		}
+		g := float32(1.0) / max(float32(bandE[band]), float32(1e-27))
+		src := mdctCoeffs[lo:hi]
+		dst := norm[lo:hi]
+		if len(src) >= 16 {
+			scaleFloat32Into(dst, src, g)
+			continue
+		}
+		for i, v := range src {
+			dst[i] = v * g
+		}
+	}
 }
 
 func normalizeBandsWithBandEIntoF32BinMul(mdctCoeffs []float32, nbBands, binMul int, norm []celtNorm, bandE []celtEner) {
@@ -381,9 +404,7 @@ func normalizeBandsWithBandEIntoF32BinMulWidths(mdctCoeffs []float32, nbBands, b
 		}
 		g := float32(1.0) / amplitude
 
-		for i := range n {
-			norm[offset+i] = celtNorm(mdctCoeffs[offset+i] * g)
-		}
+		scaleFloat32Into(norm[offset:offset+n], mdctCoeffs[offset:offset+n], g)
 		offset += n
 	}
 }
@@ -391,16 +412,12 @@ func normalizeBandsWithBandEIntoF32BinMulWidths(mdctCoeffs []float32, nbBands, b
 // NormalizeBandsToArray normalizes bands into a single contiguous array (length = frameSize).
 // This mirrors libopus normalise_bands(): divide by the per-band LINEAR amplitude.
 //
-// CRITICAL FIX: This function now uses LINEAR band amplitudes computed directly from MDCT
-// coefficients, NOT log-domain energies converted back to linear. The log-domain roundtrip
-// was introducing quantization errors that corrupted PVQ encoding.
-//
-// The energies parameter is now IGNORED - we compute linear amplitudes directly from mdctCoeffs.
-// This matches libopus which calls compute_band_energies() to get linear bandE, then uses
-// that directly in normalise_bands().
+// Linear band amplitudes are computed directly from mdctCoeffs, matching
+// compute_band_energies followed by normalise_bands in libopus. The energies
+// argument is unused; normalization does not round-trip through log energies.
 //
 // Reference: libopus celt/bands.c normalise_bands() (float path, lines 172-187)
-func (e *Encoder) NormalizeBandsToArray(mdctCoeffs []float32, energies []celtGLog, nbBands, frameSize int) []celtNorm {
+func (e *Encoder) NormalizeBandsToArray(mdctCoeffs []float32, energies []celtGLog, nbBands, frameSize int) []CeltNorm {
 	if nbBands <= 0 || nbBands > MaxBands {
 		return nil
 	}

@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package network pkg/transport/network/tcp_liveness.go c2-net-transport
 package network
 

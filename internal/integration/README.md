@@ -102,12 +102,12 @@ The e2e tests run in Docker containers with the following architecture:
 
 - **3 visor nodes** (visor-a, visor-b, visor-c) - Main test nodes. visor-b is
   also the hypervisor for the other two.
-- **2 service containers** - `deployment-services` runs the nine deployment-side
-  services (transport-discovery, route-finder, dmsg-discovery, dmsg-server,
-  setup-node, service-discovery, address-resolver, transport-setup, stun-server)
-  as goroutines in one `skywire svc run` process, keeping each service's
-  hostname as a network alias; `redis` backs them all, one logical DB per
-  service. The standalone uptime-tracker is gone — uptime is integrated into the
+- **2 service containers** - `visor-s` is the deployment host, as on prod: one
+  visor that is also the dmsg server and runs every deployment service
+  (dmsg-discovery, transport-discovery, route-finder, service-discovery,
+  address-resolver, setup-node, transport-setup, stun) in its process under the
+  service's own key, keeping each service's hostname as a network alias;
+  `redis` backs them all, one logical DB per service. The standalone uptime-tracker is gone — uptime is integrated into the
   discovery services.
 - **1 test runner** - `e2e-test` (compose profile `test`, started by
   `make e2e-test`) executes the Go suite from inside the networks.

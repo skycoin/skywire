@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/fastjson"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-var json = jsoniter.ConfigFastest
+var json = fastjson.JSON
 
 const (
 	serviceKeyPrefix   = "service:"
@@ -56,8 +56,11 @@ func newRedisStore(ctx context.Context, client *redis.Client, logger *logging.Lo
 		done:   make(chan struct{}),
 	}
 
-	// Start background cleanup of expired set members
-	go s.cleanupExpiredServices(ctx)
+	// Start background cleanup of expired set members. With no TTL nothing
+	// expires, and a zero ticker would panic.
+	if ttl > 0 {
+		go s.cleanupExpiredServices(ctx)
+	}
 
 	return s, nil
 }

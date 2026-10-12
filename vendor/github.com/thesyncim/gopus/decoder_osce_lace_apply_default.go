@@ -4,9 +4,9 @@ package gopus
 
 import "github.com/thesyncim/gopus/internal/silk"
 
-func (d *Decoder) installOSCELACESilkPostfilterHook(_ Mode, _ silk.Bandwidth, _ bool) func() {
-	return func() {}
-}
+func (d *Decoder) installOSCELACESilkPostfilterHook(_ Mode, _ silk.Bandwidth, _ bool) {}
+
+func (d *Decoder) clearOSCELACESilkPostfilterHook() {}
 
 // osceLACEMarkInactiveIfModeIneligible is a no-op stub on the default
 // build. The `gopus_osce` build provides the

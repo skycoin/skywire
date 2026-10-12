@@ -1,0 +1,120 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;overflow:hidden;font:14px/1.35 ui-monospace,Menlo,Consolas,monospace}
+body{background:var(--bg);color:var(--fg)}
+input,button,textarea{box-sizing:border-box;width:100%;height:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--dim);border-radius:3px;padding:0 6px}
+input:focus,button:focus,textarea:focus{outline:none;border-color:var(--accent)}
+button{cursor:pointer;width:auto;min-width:100%}
+button:hover{background:var(--accent)}
+ul{list-style:none;margin:0;padding:0;height:100%;overflow:auto}
+li{padding:0 6px;white-space:pre;cursor:default}
+li.sel{background:var(--accent)}
+textarea{padding:2px 6px;resize:none;white-space:pre;overflow:auto;tab-size:4}
+pre{margin:0;height:100%;overflow-x:hidden;overflow-y:auto;white-space:pre;user-select:text}
+</style></head><body><div id="root" style="height:100%"></div><script>
+const root = document.getElementById('root');
+let kind = "", el = null, last = null, topLine = -1, sent = [];
+// A textarea counts in UTF-16 units, the program in runes.
+const units = (s, n) => Array.from(s).slice(0, n).join("").length;
+function theme(t) {
+  if (!t) return;
+  const s = document.body.style;
+  s.setProperty('--fg', t.fg); s.setProperty('--bg', t.bg);
+  s.setProperty('--accent', t.accent); s.setProperty('--dim', t.dim);
+}
+function build(m) {
+  root.textContent = ''; kind = m.kind; topLine = -1;
+  if (kind === 'input') {
+    el = document.createElement('input');
+    el.addEventListener('input', () => websh.send({type: 'change', value: el.value}));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') websh.send({type: 'submit', value: el.value}); });
+  } else if (kind === 'button') {
+    el = document.createElement('button');
+    el.addEventListener('click', () => websh.send({type: 'press'}));
+  } else if (kind === 'list') {
+    el = document.createElement('ul');
+    el.addEventListener('click', e => { const i = e.target.dataset.i; if (i !== undefined) websh.send({type: 'select', index: +i}); });
+    el.addEventListener('dblclick', e => { const i = e.target.dataset.i; if (i !== undefined) websh.send({type: 'activate', index: +i}); });
+  } else if (kind === 'area') {
+    el = document.createElement('textarea');
+    el.spellcheck = false;
+    const at = () => Array.from(el.value.slice(0, el.selectionStart)).length;
+    el.addEventListener('input', () => {
+      sent.push(el.value); if (sent.length > 64) sent.shift();
+      websh.send({type: 'change', value: el.value, index: at()});
+    });
+    const cur = () => websh.send({type: 'cursor', index: at()});
+    el.addEventListener('click', cur);
+    el.addEventListener('keyup', e => { if (/^(Arrow|Page|Home|End)/.test(e.key)) cur(); });
+  } else if (kind === 'text') {
+    el = document.createElement('pre');
+    el.addEventListener('scroll', () => {
+      const lh = el.firstChild ? el.firstChild.getBoundingClientRect().height : 19;
+      const i = Math.round(el.scrollTop / lh);
+      if (i !== topLine) { topLine = i; websh.send({type: 'scroll', index: i}); }
+    });
+  } else return;
+  root.appendChild(el);
+}
+function render(m) {
+  theme(m.theme);
+  if (m.kind !== kind) build(m);
+  if (kind === 'input') {
+    if (el.value !== (m.value || '')) el.value = m.value || '';
+    el.placeholder = m.placeholder || '';
+    if (m.focus && document.activeElement !== el) el.focus();
+  } else if (kind === 'button') {
+    el.textContent = m.label || '';
+  } else if (kind === 'list') {
+    const items = m.items || [];
+    if (!last || JSON.stringify(last.items) !== JSON.stringify(items)) {
+      el.textContent = '';
+      items.forEach((t, i) => { const li = document.createElement('li'); li.textContent = t; li.dataset.i = i; el.appendChild(li); });
+    }
+    [...el.children].forEach((li, i) => li.classList.toggle('sel', i === m.selected));
+    const s = el.children[m.selected]; if (s) s.scrollIntoView({block: 'nearest'});
+  } else if (kind === 'area') {
+    // Our own edits come back as echoes; only the program's own are applied.
+    const v = m.value || '', i = sent.indexOf(v);
+    if (i >= 0) sent = sent.slice(i + 1);
+    else if (el.value !== v) { el.value = v; const p = units(v, m.selected); el.setSelectionRange(p, p); }
+    if (m.focus && document.activeElement !== el) el.focus();
+  } else if (kind === 'text') {
+    el.textContent = '';
+    for (const line of (m.lines || [])) {
+      const div = document.createElement('div');
+      for (const sp of (line || [])) {
+        const span = document.createElement('span');
+        span.textContent = sp.t;
+        if (sp.f) span.style.color = sp.f;
+        if (sp.b) span.style.background = sp.b;
+        if (sp.w) span.style.fontWeight = 'bold';
+        div.appendChild(span);
+      }
+      if (!div.firstChild) div.textContent = ' ';
+      el.appendChild(div);
+    }
+    if (m.top !== topLine) {
+      topLine = m.top;
+      const lh = el.firstChild ? el.firstChild.getBoundingClientRect().height : 19;
+      el.scrollTop = m.top * lh;
+    }
+  }
+  last = m;
+}
+// Keys belong to the program, as in the cells: Esc, Tab and Ctrl with a letter
+// always, and every plain key when the element is not a text field. Ctrl+A,
+// C, V, X, Y and Z and Meta stay here, so copying and undo work.
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1 && !'acvxyz'.includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    websh.send({type: 'key', value: 'Ctrl+' + e.key.toLowerCase()});
+    return;
+  }
+  const leave = e.key === 'Escape' || e.key === 'Tab';
+  if (!leave && (kind === 'input' || kind === 'area' || e.ctrlKey || e.metaKey || e.altKey)) return;
+  e.preventDefault();
+  websh.send({type: 'key', value: e.shiftKey && e.key === 'Tab' ? 'Backtab' : e.key});
+});
+websh.onmessage(render);
+</script></body></html>

@@ -33,6 +33,7 @@ import (
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
@@ -86,6 +87,9 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// hostBridge is the session to a host bridge. See hostbridge.go.
+	hostBridge hostBridgeState
+
 	// tempLog is the log level set for a while from /debug/loglevel.
 	tempLog tempLogLevel
 
@@ -122,8 +126,18 @@ type Visor struct {
 	// dmsgHTTPTr is DmsgHTTP's shared keep-alive transport (dmsg_over_skynet.go).
 	dmsgHTTPOnce sync.Once
 	dmsgHTTPTr   *http.Transport
+
+	// wasmModuleRef refreshes the js/wasm module this visor serves for the
+	// desk (wasmmodule.go); nil when it does not.
+	wasmModuleOnce sync.Once
+	wasmModuleRef  *wasmModuleRefresher
+
 	// dmsgSkynet counts how dials to .dmsg peers went (dmsg_over_skynet.go).
-	dmsgSkynet  dmsgSkynetStats
+	dmsgSkynet dmsgSkynetStats
+	// reach holds this visor's reach card and the peers' it fetched (reach_card.go).
+	reach reachCards
+	// tpList caches the signed list GET /transports serves.
+	tpList      transportListCache
 	dmsgDC      *dmsg.Client       // dmsg direct client
 	dClient     dmsgdisc.APIClient // dmsg direct api client
 	dmsgHTTP    *http.Client       // dmsghttp client
@@ -178,6 +192,10 @@ type Visor struct {
 	// (nil = none), so `visor state --select roles` can report the running
 	// server's key and address rather than only what the config asked for.
 	dmsgSrvRole atomic.Pointer[visorapi.DmsgServerRole]
+
+	// dmsgSelfOnly is set when the visor's own-key dmsg server is the only one it
+	// knows, so its client connects to that server and nothing waits for the client first.
+	dmsgSelfOnly bool
 
 	// dmsgSrv is the running own-key in-process dmsg server, kept so the
 	// state API can report the clients CONNECTED TO it. Every co-resident
@@ -747,17 +765,25 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	// loop re-embeds + re-serves the latest wasm on every restart (no separate
 	// `hv serve` process). Off unless configured. Best-effort — a serve error
 	// is logged, not fatal.
+	// wasmVisor is the visor wasm_serve refreshes its module through, once it is up.
+	var wasmVisor atomic.Pointer[Visor]
 	if conf.Hypervisor != nil && conf.Hypervisor.WasmServe != nil && conf.Hypervisor.WasmServe.Addr != "" {
 		ws := conf.Hypervisor.WasmServe
 		go func() {
 			if err := ServeWasm(parentCtx, WasmServeConfig{
-				Addr:             ws.Addr,
-				TLS:              ws.TLS,
-				TLSCert:          ws.TLSCert,
-				TLSKey:           ws.TLSKey,
-				Harness:          ws.Harness,
-				Password:         ws.Password,
-				ExecWasmPath:     ws.ExecWasm,
+				Addr:         ws.Addr,
+				TLS:          ws.TLS,
+				TLSCert:      ws.TLSCert,
+				TLSKey:       ws.TLSKey,
+				Harness:      ws.Harness,
+				Password:     ws.Password,
+				ExecWasmPath: ws.ExecWasm,
+				module: func() *wasmModuleRefresher {
+					if v := wasmVisor.Load(); v != nil {
+						return v.wasmModule()
+					}
+					return nil
+				},
 				DeskHelpTerminal: ws.DeskHelpTerminal,
 				DeskDocsPort:     ws.DeskDocsPort,
 				BrowseSuffix:     ws.BrowseSuffix,
@@ -794,6 +820,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 
 	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
 	vis, ok := NewVisor(ctx, conf, opts, logBroadcaster, store)
+	wasmVisor.Store(vis)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -923,7 +950,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	if logLvl, err := logging.LevelFromString(logLevel); err != nil {
 		v.log.WithError(err).Warn("Failed to read log level from config.")
 	} else {
-		v.conf.MasterLogger().SetLevel(logLvl)
+		setLogLevel(v.conf.MasterLogger(), logLvl)
 	}
 
 	v.ctx = ctx
@@ -1562,6 +1589,24 @@ func (v *Visor) GetTransportTypeCounts() map[string]int {
 func (v *Visor) GetTransportCounts() (stcpr, sudph int) {
 	counts := v.GetTransportTypeCounts()
 	return counts[string(tptypes.STCPR)], counts[string(tptypes.SUDPH)]
+}
+
+// DmsgSessionCount is the visor's sessions with dmsg servers.
+func (v *Visor) DmsgSessionCount() int {
+	if v.dmsgC == nil {
+		return 0
+	}
+	return len(v.dmsgC.AllSessions())
+}
+
+// DmsgServerHealth is the load of the dmsg server this visor runs, or nil.
+func (v *Visor) DmsgServerHealth() *httputil.DmsgServerHealth {
+	srv := v.dmsgSrv.Load()
+	if srv == nil {
+		return nil
+	}
+	st := srv.Stats()
+	return httputil.DmsgServerHealthOf(st.ClientSessions, st.PeerSessions, st.ActiveStreams, st.StreamsRelayed, st.BytesUp, st.BytesDown)
 }
 
 // GetNetworkTypes returns the network types used by the visor.

@@ -49,6 +49,7 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.core.InstalledApp
 import com.skycoin.skywire.core.VpnAppMode
 import com.skycoin.skywire.core.VpnAppRouting
+import com.skycoin.skywire.core.chosenFirst
 import com.skycoin.skywire.ui.components.SectionCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -138,6 +139,9 @@ internal fun AppPickerSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var chosen by remember(initial) { mutableStateOf(initial) }
     var query by rememberSaveable { mutableStateOf("") }
+    // Ordered by what was chosen when the sheet opened, not by live ticks,
+    // so a row does not jump away from the finger that just ticked it.
+    val ordered = remember(apps, initial) { apps?.let { chosenFirst(it, initial) } }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -182,11 +186,11 @@ internal fun AppPickerSheet(
             )
             Spacer(Modifier.height(8.dp))
             when {
-                apps == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                ordered == null -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
                 else -> {
-                    val shown = apps.filter {
+                    val shown = ordered.filter {
                         query.isBlank() ||
                             it.label.contains(query, true) ||
                             it.packageName.contains(query, true)

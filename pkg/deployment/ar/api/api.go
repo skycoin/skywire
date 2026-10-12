@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+
+	kcp "github.com/0magnet/kcp-go/v5"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -52,6 +52,9 @@ var WhitelistPKs = nmpk.GetWhitelistPKs()
 
 // API represents the api of the address-resolver service.
 type API struct {
+	// Stats, when set, adds the process and traffic charts to the status page.
+	Stats *charts.ServiceStats
+
 	http.Handler
 
 	log   *logging.Logger
@@ -60,9 +63,10 @@ type API struct {
 	metrics                     armetrics.Metrics
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 
-	udpConnsMu sync.RWMutex
-	udpConns   map[cipher.PubKey]net.Conn
-	startedAt  time.Time
+	udpConnsMu    sync.RWMutex
+	udpConns      map[cipher.PubKey]net.Conn
+	sudphSessions sudphSessions
+	startedAt     time.Time
 
 	closeOnce sync.Once
 	closeC    chan struct{}
@@ -270,12 +274,12 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	// inert until SetBindingsCXOPublisher installs a publisher.
 	api.store = &bindNotifyStore{Store: s, api: api}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
@@ -289,7 +293,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
-	r.Group(func(r chi.Router) {
+	r.Group(func(r *httputil.Router) {
 		r.Use(httpauth.MakeMiddleware(nonceStore))
 
 		r.Post("/bind/stcpr", api.bind)
@@ -300,8 +304,9 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	})
 
 	r.Get("/health", api.health)
+	r.Get("/sudph-sessions", api.sudphSessionsHandler)
 	r.Get("/", api.ChartsPage)
-	r.With(middleware.Compress(5)).Get("/transports", api.transports)
+	r.With(httputil.CompressMin(httputil.CompressMinBytes, 5)).Get("/transports", api.transports)
 	r.Delete("/deregister/{network}", api.deregister)
 
 	nonceHandler := &httpauth.NonceHandler{Store: nonceStore}
@@ -570,8 +575,8 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	a.logger(r).Debugf("New /resolve request from %v", remoteAddr)
 
-	tpType := chi.URLParam(r, "type")
-	rawReceiverPK := chi.URLParam(r, "pk")
+	tpType := r.PathValue("type")
+	rawReceiverPK := r.PathValue("pk")
 	a.logger(r).Debugf("New /resolve request of type %v from %v", tpType, remoteAddr)
 
 	ctx := r.Context()
@@ -709,7 +714,7 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var netType types.Type
-	switch chi.URLParam(r, "network") {
+	switch r.PathValue("network") {
 	case "sudph":
 		netType = types.SUDPH
 	case "stcpr":
@@ -800,7 +805,7 @@ func (a *API) sendDialRequest(dialerPK, dialeePK cipher.PubKey, dialeeVisorData 
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	if _, err := conn.Write(data); err != nil {
+	if err := writeSUDPH(conn, data); err != nil {
 		return err
 	}
 
@@ -873,6 +878,9 @@ const sudphMaxInFlightHandshakes = 256
 
 // ListenUDP listens for UDP connections for SUDPH.
 func (a *API) ListenUDP(listener net.Listener) {
+	if kl, ok := listener.(*kcp.Listener); ok {
+		a.sudphSessions.lis.Store(kl)
+	}
 	a.log.Infof("Listening UDP on %v", listener.Addr())
 
 	// Semaphore bounding in-flight handshake goroutines.
@@ -894,6 +902,8 @@ func (a *API) ListenUDP(listener net.Listener) {
 			}
 			continue
 		}
+
+		conn = a.sudphSessions.track(conn)
 
 		// Non-blocking acquire: if the semaphore is full, drop
 		// the connection immediately rather than queueing.
@@ -947,6 +957,19 @@ func (a *API) sudphConnHandshake(conn net.Conn) {
 // Clients send heartbeats every 10s and re-register every 90s, so 3 minutes
 // is generous enough to detect dead connections without false positives.
 const sudphReadTimeout = 3 * time.Minute
+
+// sudphWriteTimeout bounds a write to a SUDPH session. A peer that stops
+// acking fills the KCP send window, and without it every lookup that
+// asks that peer to dial blocks forever and pins its own session.
+var sudphWriteTimeout = 10 * time.Second
+
+func writeSUDPH(conn net.Conn, b []byte) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(sudphWriteTimeout)); err != nil {
+		return err
+	}
+	_, err := conn.Write(b)
+	return err
+}
 
 // sudphInitialReadTimeout is the maximum time to wait for the initial
 // LocalAddresses payload after a successful handshake.
@@ -1072,7 +1095,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 				// notices, never reconnects, and its SUDPH entry goes
 				// stale. The echo gives the visor read loop a liveness
 				// deadline to trip. Best-effort.
-				if _, err := conn.Write(data); err != nil {
+				if err := writeSUDPH(conn, data); err != nil {
 					a.log.Debugf("Failed to echo SUDPH heartbeat to %v: %v", pk, err)
 					return
 				}

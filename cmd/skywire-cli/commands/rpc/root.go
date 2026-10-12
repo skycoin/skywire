@@ -507,7 +507,6 @@ func DmsgURLForHTTP(httpURL string) string {
 		deployment.Prod.DmsgDiscovery:      deployment.Prod.DmsgDiscoveryDmsg,
 		deployment.Prod.AddressResolver:    deployment.Prod.AddressResolverDmsg,
 		deployment.Prod.RouteFinder:        deployment.Prod.RouteFinderDmsg,
-		deployment.Prod.UptimeTracker:      deployment.Prod.UptimeTrackerDmsg,
 		deployment.Prod.ServiceDiscovery:   deployment.Prod.ServiceDiscoveryDmsg,
 	}
 	for httpBase, dmsgBase := range mappings {

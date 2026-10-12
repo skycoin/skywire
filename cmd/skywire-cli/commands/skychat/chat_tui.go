@@ -1,9 +1,8 @@
-//go:build !(js && wasm)
-
 // Package cliskychat cmd/skywire-cli/commands/skychat/chat_tui.go c5-cli-skychat
 //
-// The bubbletea machinery of the 1:1 chat TUI, split behind !(js && wasm) —
-// the command spec stays in chat.go; a js twin stubs runChatTUI/runUnifiedTUI.
+// The 1:1 chat screen, drawn with progkit. The command spec stays in chat.go.
+// In websh the message line is a real text field and the conversation
+// selectable text.
 package cliskychat
 
 import (
@@ -13,14 +12,22 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/0magnet/progkit"
+	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/color"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+)
+
+var (
+	titleStyle = tcell.StyleDefault.Bold(true).Foreground(color.PaletteColor(205))
+	dimStyle   = tcell.StyleDefault.Foreground(color.PaletteColor(241))
+	errStyle   = tcell.StyleDefault.Foreground(color.PaletteColor(196))
+	youStyle   = tcell.StyleDefault.Foreground(color.PaletteColor(39)).Bold(true)
+	peerStyle  = tcell.StyleDefault.Foreground(color.PaletteColor(213)).Bold(true)
 )
 
 // chatMsg is one rendered message in the history pane. Both incoming
@@ -34,89 +41,203 @@ type chatMsg struct {
 	Err     string // when set, this is a send-failure row (rendered red)
 }
 
-// incomingMsg wraps an SSE event for the Update loop.
-type incomingMsg struct {
-	msg chatMsg
-}
-
-// sseErrMsg signals the SSE stream errored / closed; the model
-// renders a status line so the operator knows incoming has stopped.
-type sseErrMsg struct {
-	err error
-}
-
-// sentMsg is the result of a postMessage call from the Enter handler.
-type sentMsg struct {
-	body string
-	err  error
-}
-
 type chatModel struct {
 	addr      string
 	recipient string
 	network   string
 
-	// awaitingRecipient is true when the operator launched the
-	// TUI without --to <pk>. The textinput is repurposed as a
-	// "paste the recipient PK here" prompt; Enter validates and
-	// flips the model into chat mode. Mirrors the GUI's "enter
-	// recipient PK in the header" flow.
+	// awaitingRecipient is true until a recipient PK is given: the line
+	// then takes the PK, and Enter switches to chatting.
 	awaitingRecipient bool
-	// recipientErr surfaces the last PK-parse failure inline so
-	// the operator sees why their paste didn't take, instead of
-	// staring at an unchanged prompt.
-	recipientErr string
+	recipientErr      string
 
+	mu      sync.Mutex
 	history []chatMsg
-	vp      viewport.Model
-	input   textinput.Model
-
-	width  int
-	height int
-	ready  bool
-
-	sseLive bool
 	sseErr  string
 
-	incoming <-chan chatMsg
-	sseErrCh <-chan error
+	view  *progkit.Text
+	input *progkit.Input
 }
 
 func runChatTUI(addr, recipient, network string) error {
-	in := textinput.New()
-	in.Focus()
-	in.CharLimit = 4096
-	if recipient == "" {
-		// Pick-a-peer mode: textinput accepts a 66-char hex PK.
-		// CharLimit bumped to fit a PK + small slack for paste
-		// noise. Prompt shape borrowed from the GUI's PK input.
-		in.Placeholder = "paste recipient PK (66 hex chars); Enter to confirm, Esc to quit"
-		in.Prompt = "to: "
-		in.CharLimit = 128
-	} else {
-		in.Placeholder = "type message; Enter to send, Esc to quit"
-		in.Prompt = "» "
+	app, err := progkit.Open()
+	if err != nil {
+		return err
 	}
+	defer app.Close()
 
 	inCh := make(chan chatMsg, 64)
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go streamSSE(ctx, addr, inCh, errCh)
 
 	m := &chatModel{
 		addr:              addr,
 		recipient:         recipient,
 		network:           network,
-		input:             in,
-		sseLive:           true,
-		incoming:          inCh,
-		sseErrCh:          errCh,
 		awaitingRecipient: recipient == "",
+		view:              &progkit.Text{ID: "history", Follow: true, Selectable: true},
+		input:             &progkit.Input{ID: "line"},
 	}
-	prog := tea.NewProgram(m, tea.WithAltScreen())
-	_, err := prog.Run()
-	cancel()
-	return err
+	m.setPlaceholder()
+	m.input.OnSubmit = func(text string) { m.submit(app, text) }
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-inCh:
+				m.append(msg)
+				app.Redraw()
+			case err := <-errCh:
+				m.mu.Lock()
+				m.sseErr = err.Error()
+				m.mu.Unlock()
+				app.Redraw()
+			}
+		}
+	}()
+
+	app.Run(m.draw, func(ev tcell.Event) bool {
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch {
+			case ev.Key() == tcell.KeyEscape, progkit.IsCtrl(ev, 'c'):
+				return false
+			case progkit.IsCtrl(ev, 'n'):
+				m.network = otherNetwork(m.network)
+			case ev.Key() == tcell.KeyPgUp, ev.Key() == tcell.KeyPgDn, ev.Key() == tcell.KeyUp, ev.Key() == tcell.KeyDown:
+				m.view.Key(ev)
+			default:
+				m.input.Key(ev)
+			}
+		case *tcell.EventMouse:
+			m.view.Mouse(ev)
+		}
+		return true
+	})
+	return nil
+}
+
+// otherNetwork cycles the network outgoing messages use. Messages already
+// delivered keep the network they went over.
+func otherNetwork(n string) string {
+	if n == "skynet" {
+		return "dmsg"
+	}
+	return "skynet"
+}
+
+func (m *chatModel) setPlaceholder() {
+	if m.awaitingRecipient {
+		m.input.Placeholder = "paste recipient PK (66 hex chars); Enter to confirm, Esc to quit"
+	} else {
+		m.input.Placeholder = "type message; Enter to send, Esc to quit"
+	}
+}
+
+func (m *chatModel) submit(app *progkit.App, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	m.input.SetValue("")
+	if m.awaitingRecipient {
+		var pk cipher.PubKey
+		if err := pk.Set(text); err != nil {
+			m.recipientErr = fmt.Sprintf("invalid PK: %v", err)
+			return
+		}
+		m.recipient = pk.String()
+		m.awaitingRecipient = false
+		m.recipientErr = ""
+		m.setPlaceholder()
+		return
+	}
+	addr, recipient, network := m.addr, m.recipient, m.network
+	go func() {
+		row := chatMsg{When: time.Now(), Sender: "you", Network: network, Body: text}
+		if _, err := postMessage(addr, recipient, text, network, 0); err != nil {
+			row.Network, row.Err = "", err.Error()
+		}
+		m.append(row)
+		app.Redraw()
+	}()
+}
+
+func (m *chatModel) append(msg chatMsg) {
+	m.mu.Lock()
+	m.history = append(m.history, msg)
+	m.mu.Unlock()
+}
+
+func (m *chatModel) draw(f *progkit.Frame) {
+	m.mu.Lock()
+	history := append([]chatMsg(nil), m.history...)
+	sseErr := m.sseErr
+	m.mu.Unlock()
+	rows := make([]convoMessage, len(history))
+	for i, h := range history {
+		rows[i] = convoMessage{When: h.When, Sender: h.Sender, Network: h.Network, Body: h.Body, Err: h.Err, Self: h.Sender == "you"}
+	}
+	m.view.SetLines(renderConvo(rows))
+
+	header, rest := f.Size().SplitTop(1)
+	body, foot := rest.SplitBottom(2)
+	x := progkit.DrawText(f.Screen, 0, header.Y, header.W, "skychat  ", titleStyle)
+	switch {
+	case m.awaitingRecipient && m.recipientErr != "":
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, m.recipientErr, errStyle)
+	case m.awaitingRecipient:
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, "pick a recipient PK below", dimStyle)
+	default:
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, "to "+m.recipient, dimStyle)
+	}
+	x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, fmt.Sprintf("  network=%s  addr=%s", m.network, m.addr), tcell.StyleDefault)
+	if sseErr != "" {
+		progkit.DrawText(f.Screen, x+2, header.Y, header.W-x-2, "[SSE down: "+sseErr+"]", errStyle)
+	}
+
+	m.view.Draw(f, body)
+
+	prompt := "» "
+	if m.awaitingRecipient {
+		prompt = "to: "
+	}
+	n := progkit.DrawText(f.Screen, 0, foot.Y, foot.W, prompt, tcell.StyleDefault)
+	m.input.Draw(f, progkit.Rect{X: n, Y: foot.Y, W: foot.W - n, H: 1}, true)
+	hint := "Enter send | ↑/↓ PgUp/PgDn scroll | Ctrl+N toggle network | Esc/Ctrl+C quit"
+	if m.awaitingRecipient {
+		hint = "Enter to confirm recipient | Ctrl+N toggle network | Esc/Ctrl+C quit"
+	}
+	progkit.DrawText(f.Screen, 0, foot.Y+1, foot.W, hint, dimStyle)
+}
+
+// renderConvo is a conversation as styled lines, oldest first.
+func renderConvo(hist []convoMessage) []progkit.Line {
+	if len(hist) == 0 {
+		return []progkit.Line{{{Text: "(no messages yet — type below and hit Enter)", Style: dimStyle}}}
+	}
+	out := make([]progkit.Line, 0, len(hist))
+	for _, msg := range hist {
+		sender := progkit.Span{Text: msg.Sender, Style: peerStyle}
+		if msg.Self {
+			sender = progkit.Span{Text: "you", Style: youStyle}
+		}
+		line := progkit.Line{{Text: msg.When.Format("15:04:05") + " ", Style: dimStyle}, sender}
+		if msg.Network != "" {
+			line = append(line, progkit.Span{Text: " /" + msg.Network, Style: dimStyle})
+		}
+		if msg.Err != "" {
+			line = append(line, progkit.Span{Text: fmt.Sprintf("  ✗ send failed: %s — %q", msg.Err, msg.Body), Style: errStyle})
+		} else {
+			line = append(line, progkit.Span{Text: "  " + msg.Body, Style: tcell.StyleDefault})
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // streamSSE connects to the skychat app's /sse endpoint, parses
@@ -170,243 +291,4 @@ func streamSSE(ctx context.Context, addr string, out chan<- chatMsg, errs chan<-
 	if err := scanner.Err(); err != nil && ctx.Err() == nil {
 		errs <- err
 	}
-}
-
-func (m *chatModel) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, m.waitIncoming(), m.waitSSEErr())
-}
-
-// waitIncoming returns a Cmd that blocks on the SSE channel until a
-// message arrives (or the channel closes), then delivers it as an
-// incomingMsg. The Update branch re-arms a fresh waitIncoming so the
-// pump is always primed.
-func (m *chatModel) waitIncoming() tea.Cmd {
-	return func() tea.Msg {
-		msg, ok := <-m.incoming
-		if !ok {
-			return sseErrMsg{err: fmt.Errorf("SSE channel closed")}
-		}
-		return incomingMsg{msg: msg}
-	}
-}
-
-func (m *chatModel) waitSSEErr() tea.Cmd {
-	return func() tea.Msg {
-		err, ok := <-m.sseErrCh
-		if !ok {
-			return nil
-		}
-		return sseErrMsg{err: err}
-	}
-}
-
-func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		headerH := 1
-		footerH := 2 // status + input
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-headerH-footerH)
-			m.vp.SetContent(m.renderHistory())
-			m.ready = true
-		} else {
-			m.vp.Width = msg.Width
-			m.vp.Height = msg.Height - headerH - footerH
-		}
-		m.input.Width = msg.Width - len(m.input.Prompt) - 1
-		m.width = msg.Width
-		m.height = msg.Height
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
-		case "ctrl+n":
-			// Cycle outgoing network type. Affects subsequent
-			// Sends only — already-delivered messages keep their
-			// per-message network tag. Header reflects the new
-			// value immediately. Pick-a-peer mode also honors
-			// this (operator can decide skynet vs dmsg before
-			// they even type the recipient PK).
-			if m.network == "skynet" {
-				m.network = "dmsg"
-			} else {
-				m.network = "skynet"
-			}
-			return m, nil
-		case "enter":
-			text := strings.TrimSpace(m.input.Value())
-			if text == "" {
-				return m, nil
-			}
-			// In pick-a-peer mode, Enter parses the PK and
-			// transitions into chat mode. The textinput is
-			// then reset with the chat-mode prompt + placeholder
-			// for the actual messaging flow.
-			if m.awaitingRecipient {
-				var pk cipher.PubKey
-				if err := pk.Set(text); err != nil {
-					m.recipientErr = fmt.Sprintf("invalid PK: %v", err)
-					m.input.Reset()
-					return m, nil
-				}
-				m.recipient = pk.String()
-				m.awaitingRecipient = false
-				m.recipientErr = ""
-				m.input.Reset()
-				m.input.Placeholder = "type message; Enter to send, Esc to quit"
-				m.input.Prompt = "» "
-				m.input.CharLimit = 4096
-				if m.ready {
-					// Header now shows the recipient, so the
-					// "to <prompt>" line widens; refit input.
-					m.input.Width = m.width - len(m.input.Prompt) - 1
-				}
-				return m, nil
-			}
-			m.input.Reset()
-			toAddr := m.addr
-			toRecipient := m.recipient
-			toNetwork := m.network
-			cmds = append(cmds, func() tea.Msg {
-				_, err := postMessage(toAddr, toRecipient, text, toNetwork, 0)
-				return sentMsg{body: text, err: err}
-			})
-		case "pgup":
-			m.vp.HalfPageUp()
-		case "pgdown":
-			m.vp.HalfPageDown()
-		}
-
-	case incomingMsg:
-		m.appendMsg(msg.msg)
-		cmds = append(cmds, m.waitIncoming())
-
-	case sentMsg:
-		if msg.err != nil {
-			m.appendMsg(chatMsg{
-				When:   time.Now(),
-				Sender: "you",
-				Body:   msg.body,
-				Err:    msg.err.Error(),
-			})
-		} else {
-			m.appendMsg(chatMsg{
-				When:    time.Now(),
-				Sender:  "you",
-				Network: m.network,
-				Body:    msg.body,
-			})
-		}
-
-	case sseErrMsg:
-		m.sseLive = false
-		if msg.err != nil {
-			m.sseErr = msg.err.Error()
-		}
-	}
-
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
-	if m.ready {
-		m.vp, cmd = m.vp.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-	return m, tea.Batch(cmds...)
-}
-
-// appendMsg pushes a row onto the history slice, re-renders, and
-// auto-scrolls to bottom if the user wasn't manually scrolled up.
-func (m *chatModel) appendMsg(msg chatMsg) {
-	m.history = append(m.history, msg)
-	if !m.ready {
-		return
-	}
-	wasAtBottom := m.vp.AtBottom()
-	m.vp.SetContent(m.renderHistory())
-	if wasAtBottom {
-		m.vp.GotoBottom()
-	}
-}
-
-func (m *chatModel) renderHistory() string {
-	if len(m.history) == 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).
-			Render("(no messages yet — type below and hit Enter)")
-	}
-	youStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-	peerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-
-	var b strings.Builder
-	for _, msg := range m.history {
-		ts := msg.When.Format("15:04:05")
-		var sender string
-		if msg.Sender == "you" {
-			sender = youStyle.Render("you")
-		} else {
-			sender = peerStyle.Render(shortPK(msg.Sender))
-		}
-		net := ""
-		if msg.Network != "" {
-			net = dimStyle.Render("/" + msg.Network)
-		}
-		body := msg.Body
-		if msg.Err != "" {
-			body = errStyle.Render(fmt.Sprintf("✗ send failed: %s — %q", msg.Err, msg.Body))
-		}
-		fmt.Fprintf(&b, "%s %s%s  %s\n", dimStyle.Render(ts), sender, net, body)
-	}
-	return b.String()
-}
-
-func (m *chatModel) View() string {
-	if !m.ready {
-		return "Initializing…\n"
-	}
-	hdrStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-
-	// Header differs between pick-a-peer and chat modes. In
-	// pick-a-peer the "to <pk>" slot is replaced with a prompt
-	// hint and (if applicable) the last parse error.
-	var header string
-	if m.awaitingRecipient {
-		hint := dimStyle.Render("pick a recipient PK below")
-		if m.recipientErr != "" {
-			hint = errStyle.Render(m.recipientErr)
-		}
-		header = fmt.Sprintf("%s  %s  network=%s  addr=%s",
-			hdrStyle.Render("skychat"), hint, m.network, m.addr)
-	} else {
-		header = fmt.Sprintf("%s  %s  network=%s  addr=%s",
-			hdrStyle.Render("skychat"),
-			dimStyle.Render("to "+shortPK(m.recipient)),
-			m.network, m.addr,
-		)
-	}
-	if !m.sseLive {
-		header += "  " + errStyle.Render("[SSE down: "+m.sseErr+"]")
-	}
-
-	var footer string
-	if m.awaitingRecipient {
-		footer = dimStyle.Render("Enter to confirm recipient | Ctrl+N toggle network | Esc/Ctrl+C quit")
-	} else {
-		footer = dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Ctrl+N toggle network | Esc/Ctrl+C quit")
-	}
-
-	var b strings.Builder
-	b.WriteString(header)
-	b.WriteString("\n")
-	b.WriteString(m.vp.View())
-	b.WriteString("\n")
-	b.WriteString(m.input.View())
-	b.WriteString("\n")
-	b.WriteString(footer)
-	return b.String()
 }

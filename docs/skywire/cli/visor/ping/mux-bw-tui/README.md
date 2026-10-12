@@ -10,7 +10,7 @@ The screen shows:
   * Live stats line — instant + avg + peak throughput, bytes pumped, active routes
   * Throughput sparkline — last 60 sample-interval ticks
   * RTT sparkline (when --probe-rtt) — last 60 probes
-  * Events log — scrollable viewport
+  * Events log — scrollable
 
 For automation / harness consumption use the NDJSON sibling
 'cli visor ping mux-bw' instead.

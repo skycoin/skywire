@@ -10,13 +10,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 func TestBindSkipsUnchangedWhileCXOHealthy(t *testing.T) {
 	var posts atomic.Int32
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Post("/bind/quic", func(w http.ResponseWriter, _ *http.Request) {
 		posts.Add(1)
 		w.WriteHeader(http.StatusOK)

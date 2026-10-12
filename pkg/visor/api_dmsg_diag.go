@@ -4,6 +4,7 @@ package visor
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
@@ -15,6 +16,7 @@ func (v *Visor) DmsgPorterStats() (*visorapi.DmsgPorterStatus, error) {
 	if v.dmsgC != nil {
 		s.MainPorts = v.dmsgC.PorterCount()
 	}
+	s.StreamCensus = dmsg.StreamCensus()
 	if v.embeddedRouteSetup != nil && v.embeddedRouteSetup.DmsgClient() != nil {
 		s.RSNPorts = v.embeddedRouteSetup.DmsgClient().PorterCount()
 	}

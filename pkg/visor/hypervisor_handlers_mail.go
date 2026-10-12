@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package visor pkg/visor/hypervisor_handlers_mail.go c3-vis-core
 package visor
 
@@ -9,21 +7,19 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
-// The hypervisor's view of a visor's mailbox, for the dashboard's mail tab.
+// The hypervisor's view of a visor's mailbox, for the dashboard's mail tab
+// and the phone app's mail screen.
 // Every route calls the visor's mail API, the same one `skywire cli mail` and
 // the desk's mail window use, so it works for remote visors too.
 
-// mailRoutes registers the mail routes. The mobile build has no dashboard and
-// stubs it out (hypervisor_handlers_mail_mobile.go).
-func (hv *Hypervisor) mailRoutes(r chi.Router) {
+// mailRoutes registers the mail routes.
+func (hv *Hypervisor) mailRoutes(r *httputil.Router) {
 	r.Get("/visors/{pk}/mail", hv.getMailStatus())
 	r.Post("/visors/{pk}/mail/send", hv.postMailSend())
 	r.Put("/visors/{pk}/mail/whitelist", hv.putMailWhitelist())
@@ -48,7 +44,7 @@ func (hv *Hypervisor) getMailStatus() http.HandlerFunc {
 
 func (hv *Hypervisor) getMailList() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		list, err := ctx.API.MailList(chi.URLParam(r, "folder"))
+		list, err := ctx.API.MailList(r.PathValue("folder"))
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -62,7 +58,7 @@ func (hv *Hypervisor) getMailList() http.HandlerFunc {
 
 func (hv *Hypervisor) getMailMessage() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		m, err := ctx.API.MailRead(chi.URLParam(r, "folder"), chi.URLParam(r, "id"))
+		m, err := ctx.API.MailRead(r.PathValue("folder"), r.PathValue("id"))
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
@@ -73,8 +69,8 @@ func (hv *Hypervisor) getMailMessage() http.HandlerFunc {
 
 func (hv *Hypervisor) getMailRaw() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		id := chi.URLParam(r, "id")
-		raw, err := ctx.API.MailRaw(chi.URLParam(r, "folder"), id)
+		id := r.PathValue("id")
+		raw, err := ctx.API.MailRaw(r.PathValue("folder"), id)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
@@ -87,12 +83,12 @@ func (hv *Hypervisor) getMailRaw() http.HandlerFunc {
 
 func (hv *Hypervisor) getMailAttachment() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		n, err := strconv.Atoi(chi.URLParam(r, "n"))
+		n, err := strconv.Atoi(r.PathValue("n"))
 		if err != nil || n < 0 {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("attachment number must be 0 or more"))
 			return
 		}
-		a, err := ctx.API.MailAttachment(chi.URLParam(r, "folder"), chi.URLParam(r, "id"), n)
+		a, err := ctx.API.MailAttachment(r.PathValue("folder"), r.PathValue("id"), n)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusNotFound, err)
 			return
@@ -108,7 +104,7 @@ func (hv *Hypervisor) getMailAttachment() http.HandlerFunc {
 
 func (hv *Hypervisor) deleteMailMessage() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		if err := ctx.API.MailDelete(chi.URLParam(r, "folder"), chi.URLParam(r, "id")); err != nil {
+		if err := ctx.API.MailDelete(r.PathValue("folder"), r.PathValue("id")); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}
@@ -132,7 +128,13 @@ func (hv *Hypervisor) postMailSend() http.HandlerFunc {
 		}
 		res, err := ctx.API.MailSend(msg)
 		if err != nil {
-			httputil.WriteJSON(w, r, http.StatusBadGateway, err)
+			// The per-recipient results say which address failed and why;
+			// the error alone only says that nothing went out.
+			body := map[string]any{"error": err.Error()}
+			if res != nil {
+				body["message_id"], body["recipients"] = res.MessageID, res.Recipients
+			}
+			httputil.WriteJSON(w, r, http.StatusBadGateway, body)
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, res)

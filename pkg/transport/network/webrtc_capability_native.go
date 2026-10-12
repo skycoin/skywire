@@ -1,4 +1,4 @@
-//go:build !tinygo && !(js && wasm)
+//go:build !(js && wasm) && (!tinygo || linux)
 
 // Package network pkg/transport/network/webrtc_capability_native.go c2-net-transport
 package network

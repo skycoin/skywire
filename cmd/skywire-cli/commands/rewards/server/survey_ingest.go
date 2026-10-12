@@ -25,10 +25,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	version "github.com/hashicorp/go-version"
 
 	"github.com/skycoin/skywire/pkg/deployment/rewards"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // maxSurveyBytes caps a pushed survey. A real node-info survey is a few KB; this
@@ -43,7 +43,7 @@ const maxSurveyBytes = 512 * 1024
 var surveyPushMinVersion string
 
 // registerSurveyIngestRoutes wires the visor survey-PUSH endpoints onto r1.
-func registerSurveyIngestRoutes(r1 *gin.Engine, wd string) {
+func registerSurveyIngestRoutes(r1 *http.ServeMux, wd string) {
 	surveyDir := filepath.Join(wd, "log_backups")
 
 	// POST /node-info — store the sender's own survey. Response contract:
@@ -51,19 +51,19 @@ func registerSurveyIngestRoutes(r1 *gin.Engine, wd string) {
 	//   403 {"stored":false,"eligible":false,"reason":"..."}  (ineligible version)
 	//   403 {"error":"..."}   (sender pushed a survey whose PK isn't its own)
 	//   401/400/413 for auth / malformed / oversized.
-	r1.POST("/node-info", func(c *gin.Context) {
-		remotePK := rewards.RemotePK(c)
+	r1.HandleFunc("POST /node-info", func(w http.ResponseWriter, r *http.Request) {
+		remotePK := rewards.RemotePK(r)
 		if remotePK.Null() {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated: no dmsg source pk"})
+			httputil.WriteJSON(w, r, http.StatusUnauthorized, map[string]any{"error": "unauthenticated: no dmsg source pk"})
 			return
 		}
-		body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxSurveyBytes+1))
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxSurveyBytes+1))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "read body"})
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]any{"error": "read body"})
 			return
 		}
 		if len(body) > maxSurveyBytes {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "survey too large"})
+			httputil.WriteJSON(w, r, http.StatusRequestEntityTooLarge, map[string]any{"error": "survey too large"})
 			return
 		}
 		var meta struct {
@@ -76,60 +76,60 @@ func registerSurveyIngestRoutes(r1 *gin.Engine, wd string) {
 			SkywireVersion string `json:"skywire_version"`
 		}
 		if err := json.Unmarshal(body, &meta); err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid survey json"})
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]any{"error": "invalid survey json"})
 			return
 		}
 		// The survey must be the sender's own: its self-reported PK must equal the
 		// dmsg-authenticated source PK. This is misbehavior, not an eligibility state.
 		if !strings.EqualFold(meta.PubKey, remotePK.Hex()) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "survey pk does not match sender"})
+			httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"error": "survey pk does not match sender"})
 			return
 		}
 		// Version gate: survey collection is the reward version-eligibility gate, so
 		// an ineligible version is refused (and reported so the visor can show it).
 		if surveyPushMinVersion != "" {
 			if ok, reason := versionEligible(meta.SkywireVersion, surveyPushMinVersion); !ok {
-				c.JSON(http.StatusForbidden, gin.H{"stored": false, "eligible": false, "reason": reason})
+				httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"stored": false, "eligible": false, "reason": reason})
 				return
 			}
 		}
 		// Store under the AUTHENTICATED pk, atomically (tmp + rename) so a concurrent
 		// reader/calc never sees a half-written survey.
 		pkDir := filepath.Join(surveyDir, remotePK.Hex())
-		if err := os.MkdirAll(pkDir, 0750); err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "store"})
+		if err := os.MkdirAll(pkDir, 0750); err != nil { //nolint:gosec // remotePK is the dmsg-authenticated sender
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]any{"error": "store"})
 			return
 		}
 		dst := filepath.Join(pkDir, "node-info.json")
 		tmp := dst + ".tmp"
 		if err := os.WriteFile(tmp, body, 0644); err != nil { //nolint:gosec // survey is world-readable like the pulled ones
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "write"})
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]any{"error": "write"})
 			return
 		}
-		if err := os.Rename(tmp, dst); err != nil {
-			_ = os.Remove(tmp) //nolint:errcheck
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "commit"})
+		if err := os.Rename(tmp, dst); err != nil { //nolint:gosec // dst is under the sender PK directory
+			_ = os.Remove(tmp) //nolint:errcheck,gosec // tmp is under the sender PK directory
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]any{"error": "commit"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"stored": true, "eligible": true})
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"stored": true, "eligible": true})
 	})
 
 	// GET /node-info/stored-checksum — the sha256 the reward system currently holds
 	// for the REQUESTER's own survey (keyed by the authenticated pk), so a visor can
 	// skip an unchanged push (conditional PUT). Empty sha256 = nothing stored yet.
-	r1.GET("/node-info/stored-checksum", func(c *gin.Context) {
-		remotePK := rewards.RemotePK(c)
+	r1.HandleFunc("GET /node-info/stored-checksum", func(w http.ResponseWriter, r *http.Request) {
+		remotePK := rewards.RemotePK(r)
 		if remotePK.Null() {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+			httputil.WriteJSON(w, r, http.StatusUnauthorized, map[string]any{"error": "unauthenticated"})
 			return
 		}
 		data, err := os.ReadFile(filepath.Join(surveyDir, remotePK.Hex(), "node-info.json")) //nolint:gosec
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"sha256": ""})
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"sha256": ""})
 			return
 		}
 		sum := sha256.Sum256(data)
-		c.JSON(http.StatusOK, gin.H{"sha256": hex.EncodeToString(sum[:])})
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"sha256": hex.EncodeToString(sum[:])})
 	})
 }
 

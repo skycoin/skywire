@@ -4,11 +4,10 @@ package dmsgserver
 import (
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -71,7 +70,7 @@ func TestNonceValuesReportsUnavailable(t *testing.T) {
 // A panic in a periodic task must never reach the goroutine that runs it: these
 // tasks publish metrics, and nothing served depends on them.
 func TestSafelyContainsAPanickingTask(t *testing.T) {
-	api := NewServerAPI(chi.NewRouter(), logging.MustGetLogger("test"), metrics.NewEmpty())
+	api := NewServerAPI(httputil.NewRouter(), logging.MustGetLogger("test"), metrics.NewEmpty())
 
 	ran := false
 	api.safely("panicking-task", func() {

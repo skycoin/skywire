@@ -36,10 +36,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	ghtml "github.com/yuin/goldmark/renderer/html"
 
 	"github.com/0magnet/bottle/vnet"
 
@@ -335,24 +331,6 @@ func proseIndex() []byte {
 		fmt.Fprintf(&b, "<p>index incomplete: %s</p>", html.EscapeString(walkErr.Error()))
 	}
 	return []byte(b.String())
-}
-
-// mdToHTML renders markdown the way `skywire cli reward rules --html` already
-// does, so the two agree on what markdown means here.
-func mdToHTML(src []byte) []byte {
-	var buf bytes.Buffer
-	md := goldmark.New(
-		goldmark.WithExtensions(extension.Strikethrough, extension.Table),
-		// Heading anchors: without them nothing can link to a SECTION, only to
-		// a file, and the desk needs to open this prose at the pairing procedure
-		// rather than at the top of a long page.
-		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
-		goldmark.WithRendererOptions(ghtml.WithUnsafe()),
-	)
-	if err := md.Convert(src, &buf); err != nil {
-		return []byte("<pre>" + err.Error() + "</pre>")
-	}
-	return buf.Bytes()
 }
 
 // docPage is the whole document, hoisted to a constant so the Fprintf that

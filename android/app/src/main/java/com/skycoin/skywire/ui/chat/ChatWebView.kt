@@ -23,6 +23,7 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.webview.JsDialogChromeClient
 import kotlinx.coroutines.delay
@@ -160,7 +161,10 @@ internal object ChatWebView {
             authAttempts = 0
             onHistoryChanged(view.canGoBack())
             // about:blank is the teardown load, not a chat page.
-            if (url != "about:blank") onPageReady()
+            if (url != "about:blank") {
+                ChatPageLog.add("webview: page loaded")
+                onPageReady()
+            }
         }
 
         override fun onReceivedError(
@@ -209,6 +213,10 @@ internal object ChatWebView {
             onPermissionRequest.invoke(request)
         }
 
+        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+            ChatPageLog.add("webview: page withdrew its request for ${request.resources.joinToString()}")
+        }
+
         override fun onShowFileChooser(
             view: WebView,
             callback: ValueCallback<Array<Uri>>,
@@ -220,6 +228,7 @@ internal object ChatWebView {
             // own errors land next to the app's logcat, and its server side
             // is one tap away under the bar's Logs action.
             Log.d(TAG, "${message.sourceId()}:${message.lineNumber()} ${message.message()}")
+            ChatPageLog.add("console ${message.messageLevel()} :${message.lineNumber()} ${message.message()}")
             return true
         }
     }
@@ -283,6 +292,31 @@ internal object ChatWebView {
         Log.w(TAG, "chat page never exposed its address dialog")
         return false
     }
+
+    /**
+     * Open the conversation a notification was about. The page only opens one
+     * it already has, and loads its contacts and groups after the document,
+     * so a cold start is retried for a while.
+     */
+    suspend fun openThread(view: WebView, thread: String): Boolean {
+        val script = """
+            (function () {
+              var chat = window.app;
+              return !!(chat && typeof chat.openThreadFromHost === 'function' &&
+                chat.openThreadFromHost(${JSONObject.quote(thread)}));
+            })()
+        """.trimIndent()
+        repeat(THREAD_ATTEMPTS) {
+            if (evaluate(view, script) == "true") return true
+            delay(THREAD_RETRY_MS)
+        }
+        Log.w(TAG, "chat page never opened the notified conversation")
+        return false
+    }
+
+    /** ~10 s: the group list waits on the visor's RPC, which may still be starting. */
+    private const val THREAD_ATTEMPTS = 40
+    private const val THREAD_RETRY_MS = 250L
 
     private suspend fun evaluate(view: WebView, script: String): String? =
         suspendCancellableCoroutine { continuation ->
@@ -350,6 +384,7 @@ internal object ChatWebView {
 
     /** Tear-down that actually stops the page: SSE otherwise keeps polling. */
     fun release(view: WebView) {
+        ChatPageLog.add("webview: page closed")
         view.stopLoading()
         view.webChromeClient = null
         view.loadUrl("about:blank")

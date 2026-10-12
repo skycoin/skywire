@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -36,6 +34,9 @@ const routesCeiling = 20
 
 // API represents the api of the route-finder service.
 type API struct {
+	// Stats, when set, adds the process and traffic charts to the status page.
+	Stats *charts.ServiceStats
+
 	http.Handler
 	reqsInFlightCountMiddleware *metricsutil.RequestsInFlightCountMiddleware
 	store                       store.Store
@@ -65,12 +66,12 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 	}
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(logger))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip route-finder JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).

@@ -8,7 +8,7 @@ func autocorrelationF32(out, in []float32, length, order int) {
 	_ = out[order-1]
 	for k := range order {
 		cnt := length - k
-		out[k] = float32(innerProductF32Libopus(in[:cnt], in[k:k+cnt], cnt))
+		out[k] = float32(innerProductFLP(in[:cnt], in[k:k+cnt], cnt))
 	}
 }
 
@@ -34,30 +34,32 @@ func schurF32(refl, autoCorr []float32, order int) float32 {
 		}
 		return 0
 	}
-	// Match libopus silk/float/schur_FLP.c: C is a C double work array.
-	var C [maxShapeLpcOrder + 1][2]silkCReal
+	// Match libopus silk/float/schur_FLP.c: C is a C double work array,
+	// kept here as its two columns c0 = C[.][0] and c1 = C[.][1].
+	var c0, c1 [maxShapeLpcOrder + 1]silkCReal
 	for k := 0; k <= order; k++ {
-		C[k][0] = silkCReal(autoCorr[k])
-		C[k][1] = silkCReal(autoCorr[k])
+		c0[k] = silkCReal(autoCorr[k])
+		c1[k] = silkCReal(autoCorr[k])
 	}
 	// Match libopus silk_max_float(C[0][1], 1e-9f):
 	// compare against float32 literal, then use that exact value in double domain.
 	minDen := silkCReal(float32(1e-9))
 	for k := 0; k < order; k++ {
-		den := C[0][1]
+		den := c1[0]
 		if den < minDen {
 			den = minDen
 		}
-		rc := -C[k+1][0] / den
+		rc := -c0[k+1] / den
 		refl[k] = float32(rc)
-		for n := 0; n < order-k; n++ {
-			c1 := C[n+k+1][0]
-			c2 := C[n][1]
-			C[n+k+1][0] = c1 + c2*rc
-			C[n][1] = c2 + c1*rc
+		hi := c0[k+1 : order+1]
+		lo := c1[:len(hi)]
+		for n, x := range hi {
+			y := lo[n]
+			hi[n] = x + y*rc
+			lo[n] = y + x*rc
 		}
 	}
-	return float32(C[0][1])
+	return float32(c1[0])
 }
 
 func k2aF32(a, rc []float32, order int) {
@@ -84,8 +86,14 @@ func bwexpanderF32(ar []float32, order int, chirp float32) {
 	}
 }
 
-func lpcAnalysisFilterF32(rLPC, predCoef, s []float32, length, order int) {
+// lpcAnalysisFilterF32Scalar is silk_LPC_analysis_filter_FLP one output
+// sample at a time.
+func lpcAnalysisFilterF32Scalar(rLPC, predCoef, s []float32, length, order int) {
 	if order > length {
+		return
+	}
+	if lpcAnalysisUsesV3FMA && (order == 6 || order == 8 || order == 10 || order == 12 || order == 16) {
+		lpcAnalysisFilterF32ScalarV3(rLPC, predCoef, s, length, order)
 		return
 	}
 	// BCE hints: ensure all slice accesses in the unrolled loops are in-bounds.
@@ -157,6 +165,22 @@ func lpcAnalysisFilterF32(rLPC, predCoef, s []float32, length, order int) {
 	}
 }
 
+func lpcAnalysisFilterF32ScalarV3(rLPC, predCoef, s []float32, length, order int) {
+	for ix := order; ix < length; ix++ {
+		// GCC's v3 SILK kernel starts with a rounded tap-1 product, then fuses
+		// tap 0 and the remaining taps into that accumulator.
+		pred := round32(s[ix-2] * predCoef[1])
+		pred = silkLPCFMA32(s[ix-1], predCoef[0], pred)
+		for k := 2; k < order; k++ {
+			pred = silkLPCFMA32(s[ix-1-k], predCoef[k], pred)
+		}
+		rLPC[ix] = s[ix] - pred
+	}
+	for i := range order {
+		rLPC[i] = 0
+	}
+}
+
 func applySineWindowFLP32(pxWin, px []float32, winType, length int) {
 	if length == 0 || length&3 != 0 {
 		return
@@ -166,7 +190,7 @@ func applySineWindowFLP32(pxWin, px []float32, winType, length int) {
 	const piF32 = float32(3.1415926536)
 	freq := piF32 / float32(length+1)
 	// Approximation of 2 * cos(f)
-	c := float32(2.0) - freq*freq
+	c := silkFMA32(-freq, freq, 2.0)
 
 	var S0, S1 float32
 	if winType < 2 {
@@ -180,10 +204,10 @@ func applySineWindowFLP32(pxWin, px []float32, winType, length int) {
 	for k := 0; k < length; k += 4 {
 		pxWin[k+0] = px[k+0] * 0.5 * (S0 + S1)
 		pxWin[k+1] = px[k+1] * S1
-		S0 = c*S1 - S0
+		S0 = silkFMSUB32(c, S1, S0)
 		pxWin[k+2] = px[k+2] * 0.5 * (S1 + S0)
 		pxWin[k+3] = px[k+3] * S0
-		S1 = c*S0 - S1
+		S1 = silkFMSUB32(c, S0, S1)
 	}
 }
 
@@ -211,7 +235,7 @@ func (e *Encoder) computePitchResidual(numSubframes int) ([]float32, int, int, p
 	// LTP memory + LA_SHAPE lookahead + current frame. LA_PITCH is covered
 	// by the LA_SHAPE region (LA_SHAPE >= LA_PITCH).
 	input32 := ensureFloat32Slice(&e.scratchPitchInput32, needed)
-	src := e.inputBuffer
+	src := e.xBuf
 	// Split into two loops to eliminate per-sample bounds check.
 	copyLen := min(needed, len(src))
 	if copyLen > 0 {

@@ -10,7 +10,7 @@
 // REMOTE visors: its HTTP API (`POST /add`, `POST /remove`, `GET /{pk}/transports`)
 // dials the target visor over dmsg (DmsgTransportSetupPort) and drives that
 // visor's TransportGateway RPC. In the deployment it runs inside
-// deployment-services with its HTTP API on TCP :80 (transport-setup.json `port`),
+// visor-s with its HTTP API on TCP :80 (transport-setup.json `port`),
 // reachable from the test-runner as http://transport-setup:80 (extra_hosts →
 // 174.0.0.17). The managed visors trust the transport-setup PK via their
 // `transport_setup` config, so the RPC is authorized.

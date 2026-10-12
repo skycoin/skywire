@@ -35,7 +35,7 @@ skywire cli proxy switch
 ```
   -n, --name string              app whose route to switch (default "skysocks-client")
       --ready-timeout duration   how long to wait for the new leg to carry before retiring the old primary (default 20s)
-      --rg uint16                rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)
+      --rg uint16                rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'
       --route string             new route JSON file ('-' = stdin); shape is 'cli route calc --json' output (default "-")
 ```
 

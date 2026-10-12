@@ -1,16 +1,13 @@
-// Package lpcnetplc implements the libopus LPCNet packet-loss concealment and
-// DRED recovery decoder.
+// Package lpcnetplc implements the LPCNet feature prediction, pitch analysis,
+// and FARGAN synthesis used by libopus's neural packet-loss concealment and
+// DRED recovery paths. Model loaders bind the feature predictor, [PitchDNN],
+// and [FARGAN] layers from a validated dnnblob.Blob; [State] retains the
+// per-decoder feature queue, PCM history, and recurrent predictor state.
 //
-// It ports the deep PLC pipeline from libopus 1.6.1 dnn/lpcnet_plc.c and its
-// neural building blocks: the feature-prediction model (Model / LoadModel), the
-// burg/pitch analysis front end (Analysis), the PitchDNN pitch-period network
-// (PitchDNN) and the FARGAN auto-regressive vocoder (FARGAN / FARGANConditioner)
-// that resynthesizes time-domain audio. State carries the per-decoder
-// concealment state that the DRED recovery path mutates before resynthesis.
-//
-// All weights are bound from a validated dnnblob.Blob; the math mirrors libopus
-// bit-for-bit and is held in place by the parity tests in this package and the
-// decoder PLC/DRED parity tests that consume it.
+// The implementation follows libopus 1.6.1's `dnn/lpcnet_plc.c`, `dnn/nnet.c`,
+// `dnn/pitchdnn.c`, and `dnn/fargan.c`. Numerical guarantees apply to matched
+// reference builds. Target-specific floating-point operation order can produce
+// different output across targets.
 package lpcnetplc
 
 import "github.com/thesyncim/gopus/internal/opusmath"

@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,7 +75,7 @@ func TestServer_Wrap(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/foo", nil)
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", func(writer http.ResponseWriter, request *http.Request) {
@@ -115,7 +114,7 @@ func TestServer_Wrap(t *testing.T) {
 			httputil.WriteJSON(writer, request, http.StatusOK, "")
 		}
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", handler)
 		m.ServeHTTP(w, r)
@@ -141,7 +140,7 @@ func TestServer_Wrap(t *testing.T) {
 			httputil.WriteJSON(writer, request, http.StatusOK, "")
 		}
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", handler)
 		m.ServeHTTP(w, r)
@@ -172,7 +171,7 @@ func TestServer_Wrap(t *testing.T) {
 			httputil.WriteJSON(writer, request, http.StatusOK, "")
 		}
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", handler)
 		m.ServeHTTP(w, r)
@@ -199,7 +198,7 @@ func TestServer_Wrap(t *testing.T) {
 			httputil.WriteJSON(writer, request, http.StatusOK, "")
 		}
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", handler)
 		m.ServeHTTP(w, r)
@@ -223,7 +222,7 @@ func TestServer_Wrap(t *testing.T) {
 			httputil.WriteJSON(writer, request, http.StatusOK, "")
 		}
 
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", handler)
 		m.ServeHTTP(w, r)
@@ -300,7 +299,7 @@ func TestServer_Wrap_DmsgIdentity(t *testing.T) {
 	newHandler := func(t *testing.T, gotPK *cipher.PubKey) http.Handler {
 		mock, err := NewNonceStore(ctx, storeConfig, "")
 		require.NoError(t, err)
-		m := chi.NewRouter()
+		m := httputil.NewRouter()
 		m.Use(MakeMiddleware(mock))
 		m.Post("/foo", func(w http.ResponseWriter, r *http.Request) {
 			pk, _ := r.Context().Value(ContextAuthKey).(cipher.PubKey)

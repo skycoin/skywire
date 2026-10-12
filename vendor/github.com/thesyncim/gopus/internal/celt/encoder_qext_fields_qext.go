@@ -27,6 +27,21 @@ func (e *Encoder) clearLastQEXTPayload() {
 	}
 }
 
+func (e *Encoder) resetQEXTEnergyHistory() {
+	if e.qext != nil {
+		clear(e.qext.oldBandE)
+	}
+}
+
+func (e *Encoder) ensureQEXTOldBandE(channels int) []celtGLog {
+	state := e.ensureQEXTState()
+	n := MaxBands * channels
+	if len(state.oldBandE) < n {
+		state.oldBandE = ensureGLogSliceNoClear(&state.oldBandE, n)
+	}
+	return state.oldBandE[:n]
+}
+
 func (e *Encoder) setLastQEXTPayload(payload []byte) {
 	e.ensureQEXTState().lastPayload = payload
 }

@@ -1,4 +1,4 @@
-//go:build !withoutgotop
+//go:build !withoutgotop && !tinygo
 
 // Package cligotop root_test.go: unit tests for the gotop CLI's pure
 // formatting helpers, the in-memory log capture, the text-mode stats

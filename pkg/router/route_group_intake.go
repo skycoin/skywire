@@ -500,30 +500,38 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 			// watched here; the latter was previously missing
 			// and caused the send-on-closed-channel panic
 			// documented in the function-level defer.
-			select {
-			case <-rg.closed:
-				return io.ErrClosedPipe
-			case <-rg.remoteClosed:
-				return io.ErrClosedPipe
-			case rg.readCh <- d:
-			case <-time.After(30 * time.Second):
-				rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
+			if err := rg.deliver(d); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
 
 	// Legacy path: deliver payload directly
+	return rg.deliver(packet.Payload())
+}
+
+// deliver hands d to the reader, dropping it if readCh stays full for 30s.
+// The timer starts only when readCh is full, not once per packet.
+func (rg *RouteGroup) deliver(d []byte) error {
 	select {
 	case <-rg.closed:
 		return io.ErrClosedPipe
 	case <-rg.remoteClosed:
 		return io.ErrClosedPipe
-	case rg.readCh <- packet.Payload():
+	case rg.readCh <- d:
+		return nil
+	default:
+	}
+	select {
+	case <-rg.closed:
+		return io.ErrClosedPipe
+	case <-rg.remoteClosed:
+		return io.ErrClosedPipe
+	case rg.readCh <- d:
 	case <-time.After(30 * time.Second):
 		rg.logger.Warn("Dropping packet: readCh full for 30s (application not reading)")
 	}
-
 	return nil
 }
 

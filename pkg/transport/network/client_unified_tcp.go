@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package network pkg/transport/network/client_unified_tcp.go c2-net-transport
 //
 // The unified transport port (TCP side): bind ONE master TCP listener and route
@@ -45,7 +43,7 @@ func (f *ClientFactory) EnableDefaultTCPDemux(stcprPort int) error {
 // bindTCPDemux binds a TCP listener on :port (port 0 → random) and installs the
 // stcpr+WS cmux over it.
 func (f *ClientFactory) bindTCPDemux(port int) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := f.sockets().Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("tcp cmux (stcpr+ws) port %d: %w", port, err)
 	}

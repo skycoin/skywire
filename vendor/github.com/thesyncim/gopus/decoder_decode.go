@@ -5,33 +5,33 @@ import (
 	"github.com/thesyncim/gopus/internal/silk"
 )
 
-// Decode decodes an Opus packet into float32 PCM samples.
+// Decode decodes data into interleaved float32 PCM in pcm. The buffer length is
+// measured in samples across all channels; the returned sample count is per
+// channel, and the first n*Channels elements contain the output.
 //
-// data: Opus packet data, or nil for Packet Loss Concealment (PLC).
-// pcm: Output buffer for decoded samples. Must be large enough to hold
-// frameSize * frameCount * channels samples, where frameSize and frameCount
-// are determined from the packet TOC and frame code.
+// An empty data slice performs packet-loss concealment. Its requested duration
+// comes from len(pcm)/Channels and must be a positive multiple of 2.5 ms. If pcm
+// has exactly DecoderConfig.MaxPacketSamples*Channels elements and a packet has
+// already been decoded or concealed, Decode uses the most recent output
+// duration as the concealment request. Before the first decode, a valid
+// full-buffer request returns zeroed PCM.
 //
-// Returns the number of samples per channel decoded, or an error.
-//
-// When data is nil, the decoder performs packet loss concealment using
-// the last successfully decoded frame parameters. Before the first packet has
-// been decoded, cold PLC returns zeroed audio and a nil error.
-//
-// Buffer sizing: For 60ms frames at 48kHz stereo, pcm must have at least
-// 2880 * 2 = 5760 elements. For multi-frame packets (code 1/2/3), the buffer
-// must be large enough for all frames combined.
-//
-// Multi-frame packets (RFC 6716 Section 3.2):
-//   - Code 0: 1 frame (most common)
-//   - Code 1: 2 equal-sized frames
-//   - Code 2: 2 different-sized frames
-//   - Code 3: Arbitrary number of frames (1-48)
+// Deliberately sized PLC requests larger than MaxPacketSamples are honored;
+// MaxPacketSamples and MaxPacketBytes limit coded packets. Decode returns an
+// error for malformed packets, packet-limit violations, invalid PLC durations,
+// or a short output buffer.
 func (d *Decoder) Decode(data []byte, pcm []float32) (int, error) {
+	if len(pcm) < int(d.channels) {
+		// The public libopus wrappers reject frame_size <= 0 before packet parsing
+		// (src/opus_decoder.c: opus_decode, opus_decode24, opus_decode_float).
+		// gopus keeps ErrBufferTooSmall as its
+		// empty-output facade result and returns before touching decoder state.
+		return 0, ErrBufferTooSmall
+	}
 	if d.is96kHz() {
 		return d.decode96kFloat32(data, pcm)
 	}
-	return d.decodeFloat32(data, pcm, true)
+	return d.decodePublicFloat32(data, pcm)
 }
 
 func (d *Decoder) decodeFloat32(data []byte, pcm []float32, clearSoftClipOnPacket bool) (int, error) {
@@ -46,116 +46,7 @@ func (d *Decoder) decodeFloat32(data []byte, pcm []float32, clearSoftClipOnPacke
 	}
 
 	if len(data) == 0 {
-		frameSize, err := d.plcOutputFrameSize(len(pcm))
-		if err != nil {
-			return 0, err
-		}
-		// libopus opus_demo (src/opus_demo.c, lost branch ~L1142) always drives
-		// PLC with OPUS_GET_LAST_PACKET_DURATION as frame_size, never the
-		// maximum decode buffer. gopus derives the requested PLC duration from
-		// the output buffer length, so a caller that hands over a full
-		// maxPacketSamples buffer (the conventional "size unknown, give me
-		// room" sentinel documented on Decode) would otherwise conceal the
-		// whole buffer instead of one packet. When the buffer is exactly the
-		// max-packet size and a real packet has already been decoded, fall back
-		// to the cached last-packet duration to match opus_demo. Deliberately
-		// sized requests -- including overlong ones larger than the max buffer
-		// -- are still honored verbatim (see the API-rate overlong PLC tests).
-		if frameSize == d.maxPacketSamples && int(d.lastPacketDuration) > 0 {
-			frameSize = int(d.lastPacketDuration)
-		}
-		packetFrameSize := int(d.lastFrameSize)
-		if packetFrameSize <= 0 {
-			packetFrameSize = frameSize
-		}
-		neuralReady := dredPossible && d.dredNeuralConcealmentAvailable()
-		n := frameSize
-		usedNeuralConcealment := false
-		if neuralReady && d.prevMode == ModeSILK && channels >= 1 && channels <= 2 {
-			n, usedNeuralConcealment, err = d.decodeSILKNeuralPLCInto(pcm, frameSize, plcDecodeState{
-				packetFrameSize:    packetFrameSize,
-				mode:               d.prevMode,
-				bandwidth:          d.lastBandwidth,
-				packetStereo:       d.prevPacketStereo,
-				useDecoderPLCState: true,
-			})
-		} else if d.dredNeuralConcealmentAvailable() && sampleRate == 16000 && (d.prevMode == ModeCELT || d.prevMode == ModeHybrid) && channels >= 1 && channels <= 2 {
-			// libopus opus_decode(NULL) runs FRAME_PLC_NEURAL (pure LPCNet
-			// concealment, no DRED) for lost CELT/Hybrid frames whenever the DNN
-			// model is loaded -- it does NOT fall back to the classical
-			// pitch/noise PLC, and it does not depend on any queued DRED sidecar.
-			// Mirror that without queuing cached DRED features (dred==NULL means
-			// the FRAME_DRED branch is not taken). The 16 kHz API gate matches
-			// the established gopus neural-CELT-PLC scope (and the zero-alloc
-			// 48 kHz core-model contract): only the 16 kHz API rate exercises
-			// this path in the parity matrix.
-			n, usedNeuralConcealment, err = d.decodeCELTNeuralPLCInto(pcm, frameSize, plcDecodeState{
-				packetFrameSize:    packetFrameSize,
-				mode:               d.prevMode,
-				bandwidth:          d.lastBandwidth,
-				packetStereo:       d.prevPacketStereo,
-				useDecoderPLCState: true,
-			})
-		}
-		if err != nil {
-			return 0, err
-		}
-		// libopus opus_decode(NULL,...) passes dred==NULL, so the cached-DRED
-		// FEC-feature feed gated on `dred != NULL && process_stage == 2`
-		// (opus_decoder.c:736) is skipped and a public packet-loss decode runs
-		// PLAIN PLC, consuming no cached DRED. Mirror that here for CELT/hybrid
-		// (and the 16 kHz CELT neural path): do NOT auto-apply cached DRED on a
-		// public Decode(nil). DRED is only applied through the explicit
-		// DRED-decode path (decodeExplicitDREDFloat). This matches the SILK
-		// public-loss reconciliation done in cc04ecf0.
-		if !usedNeuralConcealment {
-			n, err = d.decodePLCChunksInto(pcm, frameSize, plcDecodeState{
-				packetFrameSize:    packetFrameSize,
-				mode:               d.prevMode,
-				bandwidth:          d.lastBandwidth,
-				packetStereo:       d.prevPacketStereo,
-				useDecoderPLCState: true,
-			})
-		}
-		if err != nil {
-			return 0, err
-		}
-		frameSize = n
-		// libopus enables OSCE_MODE_SILK_BBWE during PLC whenever the
-		// internal sample rate is 16 kHz and the API sample rate is 48 kHz
-		// (`data == NULL` branch in opus_decoder.c). The gopus equivalent
-		// gate uses the previous packet's mode/bandwidth as the BWE
-		// eligibility signal: only SILK WB carries the 16 kHz internal SR
-		// that BWE expects. Stereo and DRED neural concealment paths are
-		// intentionally excluded so the BWE never overwrites richer
-		// concealment output.
-		//
-		// LACE/NoLACE does not enhance packet-loss frames in libopus:
-		// `silk_decode_frame` calls `osce_reset` on the lost branch.
-		// Keep that state transition here before optional BWE runs on the
-		// concealed SILK lowband.
-		if extsupport.OSCERuntime {
-			packetStereoLocal := d.prevPacketStereo
-			if d.lastPacketMode == ModeSILK &&
-				d.lastBandwidth == BandwidthWideband &&
-				sampleRate == 48000 && d.osceLACEActive() {
-				d.resetOSCELACEPostfilterState(packetStereoLocal)
-			}
-			if !usedNeuralConcealment && d.lastPacketMode == ModeSILK &&
-				d.lastBandwidth == BandwidthWideband &&
-				sampleRate == 48000 && d.osceBWEActive() {
-				d.maybeApplyOSCEBWEPostSilk(pcm[:frameSize*channels], frameSize, ModeSILK, silk.BandwidthWideband, packetStereoLocal)
-			}
-		}
-		d.applyOutputGain(pcm[:frameSize*channels])
-
-		d.lastFrameSize = int32(packetFrameSize)
-		d.lastPacketDuration = int32(frameSize)
-		d.lastDataLen = 0
-		if dredPossible && !usedNeuralConcealment && d.dredGoodPacketMarkerActive() {
-			d.markDREDConcealed()
-		}
-		return frameSize, nil
+		return d.decodeLossFloat32(pcm, dredPossible)
 	}
 
 	if len(data) > d.maxPacketBytes {
@@ -179,15 +70,33 @@ func (d *Decoder) decodeFloat32(data []byte, pcm []float32, clearSoftClipOnPacke
 
 	needed := totalSamples * channels
 	if len(pcm) < needed {
+		// libopus parses the complete packet before it checks the output
+		// capacity. Keep malformed framing ahead of ErrBufferTooSmall while
+		// limiting this extra parse to the rejected-buffer path.
+		if err := validatePacketFraming(data); err != nil {
+			return 0, err
+		}
 		return 0, ErrBufferTooSmall
 	}
 
-	if dredPossible {
-		if endRawDREDCapture := d.beginDREDRawMonoGoodFrameCapture(toc.Mode); endRawDREDCapture != nil {
-			defer endRawDREDCapture()
-		}
+	if d.beginDREDRawMonoFrameCapture(toc.Mode) {
+		return d.decodePacketFloat32Captured(data, pcm, toc, frameCode, frameSize, totalSamples, dredPossible, clearSoftClipOnPacket)
 	}
+	return d.decodePacketFloat32(data, pcm, toc, frameCode, frameSize, totalSamples, dredPossible, clearSoftClipOnPacket)
+}
 
+// decodePacketFloat32Captured is decodePacketFloat32 inside a DRED raw mono
+// frame capture, which it ends once the packet is decoded. The capture's defer
+// lives here so decodeFloat32 itself carries no defer.
+func (d *Decoder) decodePacketFloat32Captured(data []byte, pcm []float32, toc *TOC, frameCode byte, frameSize, totalSamples int, dredPossible, clearSoftClipOnPacket bool) (int, error) {
+	defer d.endDREDRawMonoFrameCapture()
+	return d.decodePacketFloat32(data, pcm, toc, frameCode, frameSize, totalSamples, dredPossible, clearSoftClipOnPacket)
+}
+
+// decodePacketFloat32 decodes the frames of a validated packet into pcm and
+// updates the per-packet decoder state.
+func (d *Decoder) decodePacketFloat32(data []byte, pcm []float32, toc *TOC, frameCode byte, frameSize, totalSamples int, dredPossible, clearSoftClipOnPacket bool) (int, error) {
+	channels := int(d.channels)
 	if frameCode == 0 {
 		// libopus opus_packet_parse_impl (src/opus.c): non-self-delimited last
 		// frame must not exceed 1275 bytes ("last_size > 1275 → OPUS_INVALID_PACKET").
@@ -260,6 +169,92 @@ func (d *Decoder) decodeFloat32(data []byte, pcm []float32, clearSoftClipOnPacke
 		d.clearSoftClipMem()
 	}
 	return totalSamples, nil
+}
+
+// decodeLossFloat32 conceals one lost packet into pcm (decodeFloat32 with no
+// data).
+func (d *Decoder) decodeLossFloat32(pcm []float32, dredPossible bool) (int, error) {
+	channels := int(d.channels)
+	sampleRate := int(d.sampleRate)
+	frameSize, err := d.plcOutputFrameSize(len(pcm))
+	if err != nil {
+		return 0, err
+	}
+	// libopus opus_demo (src/opus_demo.c, lost branch ~L1142) always drives
+	// PLC with OPUS_GET_LAST_PACKET_DURATION as frame_size, never the
+	// maximum decode buffer. gopus derives the requested PLC duration from
+	// the output buffer length, so a caller that hands over a full
+	// maxPacketSamples buffer (the conventional "size unknown, give me
+	// room" sentinel documented on Decode) would otherwise conceal the
+	// whole buffer instead of one packet. When the buffer is exactly the
+	// max-packet size and a real packet has already been decoded, fall back
+	// to the cached last-packet duration to match opus_demo. Deliberately
+	// sized requests -- including overlong ones larger than the max buffer
+	// -- are still honored verbatim (see the API-rate overlong PLC tests).
+	if frameSize == d.maxPacketSamples && int(d.lastPacketDuration) > 0 {
+		frameSize = int(d.lastPacketDuration)
+	}
+	packetFrameSize := int(d.lastFrameSize)
+	if packetFrameSize <= 0 {
+		packetFrameSize = frameSize
+	}
+	if d.prevMode == ModeSILK || d.prevMode == ModeHybrid {
+		if d.beginDREDRawMonoFrameCapture(d.prevMode) {
+			defer d.endDREDRawMonoFrameCapture()
+		}
+	}
+	// The public loss path passes no DRED feature queue to the codec.
+	// libopus selects main-model neural PLC when deep PLC is enabled at
+	// complexity 5 or higher; sidecar availability does not enable it.
+	state := plcDecodeState{
+		packetFrameSize:    packetFrameSize,
+		mode:               d.prevMode,
+		bandwidth:          d.lastBandwidth,
+		packetStereo:       d.prevPacketStereo,
+		useDecoderPLCState: true,
+	}
+	n, usedNeuralConcealment, err := d.decodeNeuralPLCInto(pcm, frameSize, state, false)
+	if err != nil {
+		return 0, err
+	}
+	// opus_decode(NULL,...) passes no DRED sidecar. Public loss follows the
+	// selected PLC path, including neural concealment when its gates pass.
+	// Cached DRED features are consumed only by explicit DRED decode.
+	if !usedNeuralConcealment {
+		n, err = d.decodePLCChunksInto(pcm, frameSize, state)
+	}
+	if err != nil {
+		return 0, err
+	}
+	frameSize = n
+	// libopus enables OSCE_MODE_SILK_BBWE during PLC whenever the
+	// internal sample rate is 16 kHz and the API sample rate is 48 kHz
+	// (`data == NULL` branch in opus_decoder.c). The gopus equivalent
+	// gate uses the previous packet's mode/bandwidth as the BWE
+	// eligibility signal: only SILK WB carries the 16 kHz internal SR
+	// that BWE expects. Stereo and DRED neural concealment paths are
+	// intentionally excluded so the BWE never overwrites richer
+	// concealment output.
+	//
+	// LACE/NoLACE resets at each internal SILK loss boundary before CNG
+	// and frame gluing. Optional BWE processes the resulting lowband here.
+	if extsupport.OSCERuntime {
+		packetStereoLocal := d.prevPacketStereo
+		if !usedNeuralConcealment && d.lastPacketMode == ModeSILK &&
+			d.lastBandwidth == BandwidthWideband &&
+			sampleRate == 48000 && d.osceBWEActive() {
+			d.maybeApplyOSCEBWEPostSilk(pcm[:frameSize*channels], frameSize, ModeSILK, silk.BandwidthWideband, packetStereoLocal)
+		}
+	}
+	d.applyOutputGain(pcm[:frameSize*channels])
+
+	d.lastFrameSize = int32(packetFrameSize)
+	d.lastPacketDuration = int32(frameSize)
+	d.lastDataLen = 0
+	if dredPossible && !usedNeuralConcealment && d.dredGoodPacketMarkerActive() {
+		d.markDREDConcealed()
+	}
+	return frameSize, nil
 }
 
 func (d *Decoder) decodeMultiFrameFloat32(pcm []float32, data []byte, toc *TOC, frameCode byte, frameSize int) (int, error) {
@@ -385,6 +380,7 @@ func (d *Decoder) decodeMultiFrameFloat32(pcm []float32, data []byte, toc *TOC, 
 
 		if vbr {
 			var frameLens [48]int
+			explicitTotal := 0
 			for i := 0; i < m-1; i++ {
 				frameLen, bytesRead, err := parseFrameLength(data, offset)
 				if err != nil {
@@ -392,33 +388,22 @@ func (d *Decoder) decodeMultiFrameFloat32(pcm []float32, data []byte, toc *TOC, 
 				}
 				offset += bytesRead
 				frameLens[i] = frameLen
+				explicitTotal += frameLen
 			}
+			// opus_packet_parse_impl validates every length before opus_decode
+			// advances any frame state, including the implicit final length.
+			lastFrameLen := len(data) - offset - padding - explicitTotal
+			if lastFrameLen < 0 || lastFrameLen > maxOpusFrameBytes {
+				return 0, ErrInvalidPacket
+			}
+			frameLens[m-1] = lastFrameLen
 			frameDataOffset := offset
-			for i := 0; i < m-1; i++ {
+			for i := range m {
 				frameLen := frameLens[i]
-				if frameDataOffset+frameLen > len(data)-padding {
-					return 0, ErrInvalidPacket
-				}
 				if err := decodeFrame(i, data[frameDataOffset:frameDataOffset+frameLen]); err != nil {
 					return 0, err
 				}
 				frameDataOffset += frameLen
-			}
-			lastFrameLen := len(data) - frameDataOffset - padding
-			if lastFrameLen < 0 {
-				return 0, ErrInvalidPacket
-			}
-			if frameDataOffset+lastFrameLen > len(data)-padding {
-				return 0, ErrInvalidPacket
-			}
-			// libopus opus_packet_parse_impl (src/opus.c): the VBR last frame size
-			// is implicit (last_size), so it can exceed 1275; reject when
-			// last_size > 1275 ("last_size > 1275 → OPUS_INVALID_PACKET").
-			if lastFrameLen > maxOpusFrameBytes {
-				return 0, ErrInvalidPacket
-			}
-			if err := decodeFrame(m-1, data[frameDataOffset:frameDataOffset+lastFrameLen]); err != nil {
-				return 0, err
 			}
 		} else {
 			frameDataLen := len(data) - offset - padding
@@ -450,37 +435,42 @@ func (d *Decoder) decodeMultiFrameFloat32(pcm []float32, data []byte, toc *TOC, 
 	return offsetSamples, nil
 }
 
-// DecodeWithFEC decodes an Opus packet, optionally recovering a lost frame using FEC.
-//
-// This mirrors libopus decode_fec semantics: when fec is true, the decoder
-// uses in-band LBRR data if present and otherwise falls back to packet loss
-// concealment instead of returning a missing-FEC error.
+// DecodeWithFEC decodes data into interleaved float32 PCM and returns samples
+// per channel. When fec is false, it behaves like Decode. When fec is true,
+// data is the packet received after a loss and len(pcm)/Channels requests the
+// missing duration; the request must be a positive multiple of 2.5 ms. The
+// decoder recovers in-band FEC when usable LBRR is present and otherwise
+// performs packet-loss concealment. Empty data also performs concealment. This
+// call does not decode the supplied packet's primary frame: call Decode with
+// the same packet afterward.
 func (d *Decoder) DecodeWithFEC(data []byte, pcm []float32, fec bool) (int, error) {
+	if len(pcm) < int(d.channels) {
+		return 0, ErrBufferTooSmall
+	}
 	if !fec {
 		return d.Decode(data, pcm)
 	}
-	// At 96 kHz, FEC uses the same routing as regular decode (PLC path).
-	// SILK/Hybrid FEC is not supported at 96 kHz (no SILK resampler path).
-	if d.is96kHz() {
-		return d.decode96kFloat32(nil, pcm)
-	}
+	return d.decodeFECPublicFloat32(data, pcm)
+}
+
+func (d *Decoder) decodeWithFECFloat32(data []byte, pcm []float32) (int, error) {
 	sampleRate := int(d.sampleRate)
 
 	if len(data) > 0 {
-		// libopus opus_decode runs opus_packet_parse_impl on the packet before the
-		// decode_fec branch (src/opus_decoder.c:781) and returns its error on a
-		// malformed packet, exactly as the plain decode path does. Validate the
-		// full frame structure here so DecodeWithFEC rejects the same packets as
-		// Decode (e.g. an odd-length code-1 packet) rather than running FEC/PLC on
-		// a structurally invalid bitstream.
-		if _, err := ParsePacket(data); err != nil {
-			return 0, err
+		if len(data) > d.maxPacketBytes {
+			return 0, ErrPacketTooLarge
 		}
-		toc, frameCount, err := packetFrameCount(data)
+		requestedFrameSize, err := d.requestedOutputFrameSize(len(pcm))
 		if err != nil {
 			return 0, err
 		}
-		requestedFrameSize, err := d.requestedOutputFrameSize(len(pcm))
+		// Match opus_decode_native in libopus src/opus_decoder.c: validate the
+		// requested FEC duration before parsing the packet, then reject malformed
+		// framing before attempting FEC or falling back to concealment.
+		if err := validatePacketFraming(data); err != nil {
+			return 0, err
+		}
+		toc, frameCount, err := packetFrameCount(data)
 		if err != nil {
 			return 0, err
 		}
@@ -516,7 +506,13 @@ func (d *Decoder) DecodeWithFEC(data []byte, pcm []float32, fec bool) (int, erro
 				if extsupport.DREDRuntime && d.dredCachedPayloadActive() {
 					return d.decodePLCForFECWithState(pcm, requestedFrameSize, frameSize, toc.Mode, toc.Bandwidth, toc.Stereo)
 				}
-				return d.decodeNoLBRRFECFallback(pcm, requestedFrameSize, frameSize, toc.Mode, toc.Bandwidth, toc.Stereo)
+				d.storeFECDataForDecode(firstFrameData, toc, frameCount, frameSize)
+				n, err := d.decodeFECFrame(pcm, requestedFrameSize)
+				if err != nil {
+					d.clearFECState()
+					return 0, err
+				}
+				return n, nil
 			}
 			d.storeFECData(firstFrameData, toc, frameCount, frameSize)
 			if n, err := d.decodeFECFrame(pcm, requestedFrameSize); err == nil {
@@ -535,8 +531,15 @@ func (d *Decoder) DecodeWithFEC(data []byte, pcm []float32, fec bool) (int, erro
 	return d.decodePLCForFEC(pcm, frameSize)
 }
 
-// DecodeInt16 decodes an Opus packet into int16 PCM samples.
+// DecodeInt16 decodes data into interleaved signed 16-bit PCM in pcm. The
+// returned sample count is per channel; pcm must hold n*Channels elements, and
+// the first n*Channels elements contain the output. An empty data slice performs
+// packet-loss concealment, with the requested duration derived from pcm's
+// per-channel length.
 func (d *Decoder) DecodeInt16(data []byte, pcm []int16) (int, error) {
+	if len(pcm) < int(d.channels) {
+		return 0, ErrBufferTooSmall
+	}
 	if d.is96kHz() {
 		return d.decodeInt1696k(data, pcm)
 	}
@@ -596,6 +599,9 @@ func (d *Decoder) DecodeInt16(data []byte, pcm []int16) (int, error) {
 	}
 	needed := totalSamples * channels
 	if len(pcm) < needed {
+		if err := validatePacketFraming(data); err != nil {
+			return 0, err
+		}
 		return 0, ErrBufferTooSmall
 	}
 
@@ -609,15 +615,17 @@ func (d *Decoder) DecodeInt16(data []byte, pcm []int16) (int, error) {
 	return n, nil
 }
 
-// DecodeInt24 decodes an Opus packet into 24-bit PCM samples stored in int32.
-//
-// data: Opus packet data, or nil for Packet Loss Concealment (PLC).
-// pcm: Output buffer for decoded samples. Each element carries a signed
-// 24-bit value in the range [-8388608, 8388607] (= ±2^23), right-justified
-// in int32 — the same convention as libopus opus_decode24().
-//
-// Returns the number of samples per channel decoded, or an error.
+// DecodeInt24 decodes data into interleaved 24-bit-scale PCM stored in pcm.
+// Each int32 holds a right-justified signed value; the nominal 24-bit range is
+// [-8388608, 8388607]. The libopus RES2INT24 conversion does not soft-clip or
+// clamp to that range: a +1.0 sample maps to 8388608, and output gain can also
+// produce values outside the nominal 24-bit interval. The returned sample count
+// is per channel; pcm must hold n*Channels elements. An empty data slice
+// performs packet-loss concealment.
 func (d *Decoder) DecodeInt24(data []byte, pcm []int32) (int, error) {
+	if len(pcm) < int(d.channels) {
+		return 0, ErrBufferTooSmall
+	}
 	if d.is96kHz() {
 		return d.decodeInt2496k(data, pcm)
 	}
@@ -650,7 +658,10 @@ func (d *Decoder) DecodeInt24(data []byte, pcm []int32) (int, error) {
 
 	if len(pcm) >= d.maxPacketSamples*channels {
 		d.ensureScratchPCM(d.maxPacketSamples * channels)
-		n, err := d.decodeFloat32(data, d.scratchPCM, false)
+		// opus_decode24 disables output soft clipping and clears the int16
+		// soft-clip history after a received packet. PLC returns before that
+		// state update, so keep its separate path above unchanged.
+		n, err := d.decodeFloat32(data, d.scratchPCM, true)
 		if err != nil {
 			return 0, err
 		}
@@ -673,11 +684,14 @@ func (d *Decoder) DecodeInt24(data []byte, pcm []int32) (int, error) {
 	}
 	needed := totalSamples * channels
 	if len(pcm) < needed {
+		if err := validatePacketFraming(data); err != nil {
+			return 0, err
+		}
 		return 0, ErrBufferTooSmall
 	}
 
 	d.ensureScratchPCM(needed)
-	n, err := d.decodeFloat32(data, d.scratchPCM, false)
+	n, err := d.decodeFloat32(data, d.scratchPCM, true)
 	if err != nil {
 		return 0, err
 	}
@@ -686,11 +700,11 @@ func (d *Decoder) DecodeInt24(data []byte, pcm []int32) (int, error) {
 	return n, nil
 }
 
-// DecodeInt24Slice decodes an Opus packet into 24-bit PCM samples and returns a
-// new int32 slice. Each element carries a right-justified signed 24-bit value.
-//
-// This is a convenience method that allocates the output buffer.
-// For performance-critical code, use DecodeInt24 with a pre-allocated buffer.
+// DecodeInt24Slice decodes data into a newly allocated, caller-owned
+// interleaved PCM slice. Each int32 holds a right-justified signed 24-bit-scale
+// value using the same unsaturated conversion as DecodeInt24. The slice contains
+// n*Channels elements for n samples per channel. For empty data, it requests the
+// most recent output duration, or MaxPacketSamples when LastPacketDuration is zero.
 func (d *Decoder) DecodeInt24Slice(data []byte) ([]int32, error) {
 	channels := int(d.channels)
 	var frameSize int

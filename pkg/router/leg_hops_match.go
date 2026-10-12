@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/leg_hops_match.go c2-net-routing
 //
 // One hop length per packet-level group (leg.hops_match).

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package disc pkg/dmsg/disc/fallback.go c1-net-dmsg
 //
 // Build-tag-gated off the WASM path because it imports pkg/logging

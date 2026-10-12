@@ -211,23 +211,25 @@ func newBFSFixture(seed int64, visors, degree int, reachable bool) bfsFixture {
 // every hop bound. This is the correctness argument for the rewrite — the route
 // selected cannot change.
 func TestLocalRouteBFSMatchesLegacy(t *testing.T) {
-	for _, reachable := range []bool{true, false} {
-		for seed := int64(1); seed <= 12; seed++ {
-			for _, maxHops := range []int{2, 3, 5, 7} {
-				f := newBFSFixture(seed, 60, 3, reachable)
-				if len(f.localTps) == 0 {
-					continue
+	for _, degree := range []int{3, 12} {
+		for _, reachable := range []bool{true, false} {
+			for seed := int64(1); seed <= 12; seed++ {
+				for _, maxHops := range []int{2, 3, 5, 7} {
+					f := newBFSFixture(seed, 60, degree, reachable)
+					if len(f.localTps) == 0 {
+						continue
+					}
+					name := fmt.Sprintf("deg=%d/reach=%v/seed=%d/max=%d", degree, reachable, seed, maxHops)
+					t.Run(name, func(t *testing.T) {
+						wantPath, wantLevel, wantOK := legacyLocalRouteBFS(
+							f.src, f.dst, f.localTps, f.graph, nil, 2, maxHops)
+						gotPath, gotLevel, gotOK := localRouteBFS(
+							f.src, f.dst, f.localTps, f.graph, nil, 2, maxHops)
+						assert.Equal(t, wantOK, gotOK, "found-ness must match")
+						assert.Equal(t, wantLevel, gotLevel, "hop count must match")
+						assert.Equal(t, wantPath, gotPath, "selected path must match exactly")
+					})
 				}
-				name := fmt.Sprintf("reach=%v/seed=%d/max=%d", reachable, seed, maxHops)
-				t.Run(name, func(t *testing.T) {
-					wantPath, wantLevel, wantOK := legacyLocalRouteBFS(
-						f.src, f.dst, f.localTps, f.graph, nil, 2, maxHops)
-					gotPath, gotLevel, gotOK := localRouteBFS(
-						f.src, f.dst, f.localTps, f.graph, nil, 2, maxHops)
-					assert.Equal(t, wantOK, gotOK, "found-ness must match")
-					assert.Equal(t, wantLevel, gotLevel, "hop count must match")
-					assert.Equal(t, wantPath, gotPath, "selected path must match exactly")
-				})
 			}
 		}
 	}
@@ -292,6 +294,7 @@ func BenchmarkLocalRouteBFS(b *testing.B) {
 		{"reachable/1k-visors/max5", 1000, 4, 5, true},
 		{"unreachable/1k-visors/max5", 1000, 4, 5, false},
 		{"unreachable/2k-visors/max7", 2000, 4, 7, false},
+		{"unreachable/3k-visors-deg30/max7", 3000, 30, 7, false},
 	}
 	for _, c := range cases {
 		f := newBFSFixture(42, c.visors, c.degree, c.reachable)

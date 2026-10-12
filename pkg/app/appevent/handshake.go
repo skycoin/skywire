@@ -33,7 +33,7 @@ func DoReqHandshake(conf appcommon.ProcConfig, subs *Subscriber) (net.Conn, []io
 		log := l.WithField("src", "events_gateway")
 
 		rpcS := rpc.NewServer()
-		if err := rpcS.RegisterName(conf.ProcKey.String(), NewRPCGateway(log, subs)); err != nil {
+		if err := registerRPCGateway(rpcS, conf.ProcKey.String(), NewRPCGateway(log, subs)); err != nil {
 			panic(err) // should never happen
 		}
 		go rpcS.Accept(lis)

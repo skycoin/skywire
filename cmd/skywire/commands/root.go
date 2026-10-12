@@ -26,6 +26,7 @@ import (
 	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
 	dmsgprobe "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
+	hostbridge "github.com/skycoin/skywire/cmd/hostbridge/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	visor "github.com/skycoin/skywire/cmd/skywire-visor/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
@@ -83,6 +84,7 @@ func init() {
 		cxo.RootCmd,
 		appsCmd,
 		doc.RootCmd,
+		hostbridge.RootCmd,
 	)
 
 	// --json / --jq / --shape and the `--help --json` machine description on the

@@ -32,9 +32,12 @@ func corrMatrixFLP(x []float32, subfrLen, order int, out []float32) {
 		// Calculate X[:,j]'*X[:,j]
 		term1 := x[ptr1Idx-j]
 		term2 := x[ptr1Idx+subfrLen-j]
-		prod1 := float32(term1 * term1)
-		prod2 := float32(term2 * term2)
-		energy += silkCReal(prod1 - prod2)
+		// corrMatrix_FLP.c keeps the first product in the float expression but
+		// rounds the subtracted product first. This lets the target compiler use
+		// its native FMA policy for the first product, matching the paired C
+		// object (FMADD after a rounded negative product on arm64).
+		delta := term1*term1 - noFMA32(term2, term2)
+		energy += silkCReal(delta)
 		out[j*order+j] = float32(energy)
 	}
 
@@ -43,7 +46,7 @@ func corrMatrixFLP(x []float32, subfrLen, order int, out []float32) {
 		// Calculate X[:,0]'*X[:,lag]
 		xPtr1 := x[ptr1Idx:]
 		xPtr2 := x[ptr2Idx:]
-		inner := innerProductF32Libopus(xPtr1, xPtr2, subfrLen)
+		inner := innerProductFLP(xPtr1, xPtr2, subfrLen)
 		innerF32 := float32(inner)
 		out[lag*order] = innerF32
 		out[lag] = innerF32
@@ -54,9 +57,11 @@ func corrMatrixFLP(x []float32, subfrLen, order int, out []float32) {
 			term2 := x[ptr2Idx-j]
 			term3 := x[ptr1Idx+subfrLen-j]
 			term4 := x[ptr2Idx+subfrLen-j]
-			prod1 := float32(term1 * term2)
-			prod2 := float32(term3 * term4)
-			inner += silkCReal(prod1 - prod2)
+			// Preserve corrMatrix_FLP.c's float expression order for the rolling
+			// update: C leaves the first product contractible and materializes the
+			// trailing product before subtraction.
+			delta := term1*term2 - noFMA32(term3, term4)
+			inner += silkCReal(delta)
 			innerF32 = float32(inner)
 			out[(lag+j)*order+j] = innerF32
 			out[j*order+(lag+j)] = innerF32
@@ -81,7 +86,7 @@ func corrVectorFLP(x, y []float32, subfrLen, order int, out []float32) {
 	ptr1Idx := order - 1
 	for lag := range order {
 		xSlice := x[ptr1Idx:]
-		out[lag] = float32(innerProductF32Libopus(xSlice, y, subfrLen))
+		out[lag] = float32(innerProductFLP(xSlice, y, subfrLen))
 		ptr1Idx--
 	}
 }
@@ -152,63 +157,71 @@ func findLTPFLP(XX, xX []float32, residual []float32, resStart int, lag []int32,
 }
 
 func silkVQWMatEC(ind *int8, resNrgQ15 *int32, rateDistQ8 *int32, gainQ7 *int32, XX_Q17 []int32, xX_Q17 []int32, cb_Q7 []int8, cb_gain_Q7 []uint8, cl_Q5 []uint8, subfrLen int, maxGainQ7 int32, L int) {
+	xx := (*[ltpOrderConst * ltpOrderConst]int32)(XX_Q17)
 	var neg_xX_Q24 [ltpOrderConst]int32
 	for i := range ltpOrderConst {
 		neg_xX_Q24[i] = -silkLSHIFT(xX_Q17[i], 7)
 	}
 
-	*rateDistQ8 = maxInt32
-	*resNrgQ15 = maxInt32
-	*ind = 0
+	bestRateDistQ8 := maxInt32
+	bestResNrgQ15 := maxInt32
+	bestInd := 0
+	bestGainQ7 := *gainQ7
 
-	for k := range L {
-		cbRow := cb_Q7[k*ltpOrderConst:]
-		gainTmpQ7 := int32(cb_gain_Q7[k])
+	cbGains := cb_gain_Q7[:L]
+	cl := cl_Q5[:len(cbGains)]
+	for k, g := range cbGains {
+		cbRow := (*[ltpOrderConst]int8)(cb_Q7[k*ltpOrderConst : (k+1)*ltpOrderConst])
+		gainTmpQ7 := int32(g)
 		penalty := silkLSHIFT(silkMax32(gainTmpQ7-maxGainQ7, 0), 11)
 
 		sum1_Q15 := ltpQuantSum1Q15
 
-		sum2_Q24 := silkMLA(neg_xX_Q24[0], XX_Q17[1], int32(cbRow[1]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[2], int32(cbRow[2]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[3], int32(cbRow[3]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[4], int32(cbRow[4]))
+		sum2_Q24 := silkMLA(neg_xX_Q24[0], xx[1], int32(cbRow[1]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[2], int32(cbRow[2]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[3], int32(cbRow[3]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[4], int32(cbRow[4]))
 		sum2_Q24 = silkLSHIFT(sum2_Q24, 1)
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[0], int32(cbRow[0]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[0], int32(cbRow[0]))
 		sum1_Q15 = silkSMLAWB(sum1_Q15, sum2_Q24, int32(cbRow[0]))
 
-		sum2_Q24 = silkMLA(neg_xX_Q24[1], XX_Q17[7], int32(cbRow[2]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[8], int32(cbRow[3]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[9], int32(cbRow[4]))
+		sum2_Q24 = silkMLA(neg_xX_Q24[1], xx[7], int32(cbRow[2]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[8], int32(cbRow[3]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[9], int32(cbRow[4]))
 		sum2_Q24 = silkLSHIFT(sum2_Q24, 1)
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[6], int32(cbRow[1]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[6], int32(cbRow[1]))
 		sum1_Q15 = silkSMLAWB(sum1_Q15, sum2_Q24, int32(cbRow[1]))
 
-		sum2_Q24 = silkMLA(neg_xX_Q24[2], XX_Q17[13], int32(cbRow[3]))
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[14], int32(cbRow[4]))
+		sum2_Q24 = silkMLA(neg_xX_Q24[2], xx[13], int32(cbRow[3]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[14], int32(cbRow[4]))
 		sum2_Q24 = silkLSHIFT(sum2_Q24, 1)
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[12], int32(cbRow[2]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[12], int32(cbRow[2]))
 		sum1_Q15 = silkSMLAWB(sum1_Q15, sum2_Q24, int32(cbRow[2]))
 
-		sum2_Q24 = silkMLA(neg_xX_Q24[3], XX_Q17[19], int32(cbRow[4]))
+		sum2_Q24 = silkMLA(neg_xX_Q24[3], xx[19], int32(cbRow[4]))
 		sum2_Q24 = silkLSHIFT(sum2_Q24, 1)
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[18], int32(cbRow[3]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[18], int32(cbRow[3]))
 		sum1_Q15 = silkSMLAWB(sum1_Q15, sum2_Q24, int32(cbRow[3]))
 
 		sum2_Q24 = silkLSHIFT(neg_xX_Q24[4], 1)
-		sum2_Q24 = silkMLA(sum2_Q24, XX_Q17[24], int32(cbRow[4]))
+		sum2_Q24 = silkMLA(sum2_Q24, xx[24], int32(cbRow[4]))
 		sum1_Q15 = silkSMLAWB(sum1_Q15, sum2_Q24, int32(cbRow[4]))
 
 		if sum1_Q15 >= 0 {
 			bitsResQ8 := silkSMULBB(int32(subfrLen), silkLin2Log(sum1_Q15+penalty)-(15<<7))
-			bitsTotQ8 := silkADD_LSHIFT32(bitsResQ8, int32(cl_Q5[k]), 2)
-			if bitsTotQ8 <= *rateDistQ8 {
-				*rateDistQ8 = bitsTotQ8
-				*resNrgQ15 = sum1_Q15 + penalty
-				*ind = int8(k)
-				*gainQ7 = gainTmpQ7
+			bitsTotQ8 := silkADD_LSHIFT32(bitsResQ8, int32(cl[k]), 2)
+			if bitsTotQ8 <= bestRateDistQ8 {
+				bestRateDistQ8 = bitsTotQ8
+				bestResNrgQ15 = sum1_Q15 + penalty
+				bestInd = k
+				bestGainQ7 = gainTmpQ7
 			}
 		}
 	}
+	*rateDistQ8 = bestRateDistQ8
+	*resNrgQ15 = bestResNrgQ15
+	*ind = int8(bestInd)
+	*gainQ7 = bestGainQ7
 }
 
 func silkQuantLTPGains(B_Q14 []int16, cbkIndex []int8, periodicityIndex *int8, sumLogGainQ7 *int32, predGainQ7 *int32, XX_Q17 []int32, xX_Q17 []int32, subfrLen, nbSubfr int) {

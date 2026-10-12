@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/pool_legs.go c2-net-routing
 //
 // POOL-SOURCED MUX LEGS — grow an active tunnel on the routes its own STANDBY

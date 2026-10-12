@@ -1,11 +1,11 @@
 //go:build gopus_fixed_point
 
-// CELT fixed-point encode-side prefilter ported from libopus celt/celt_encoder.c
+// CELT fixed-point encode-side prefilter from libopus celt/celt_encoder.c
 // run_prefilter and its celt/pitch.c dependencies, under FIXED_POINT (non-QEXT,
-// float API enabled, ENABLE_RES24). This increment covers the value-producing
-// stage: the pitch analysis (pitch_downsample + pitch_search + remove_doubling),
-// the single-tone fallback, the gain/qg quantisation and tapset decision, and
-// the post-filter parameter bitstream emission (octave/period/gain/tapset).
+// float API enabled, ENABLE_RES24). It computes pitch analysis
+// (pitch_downsample + pitch_search + remove_doubling), the single-tone fallback,
+// gain/qg quantisation and tapset selection, and post-filter parameter emission
+// (octave/period/gain/tapset).
 //
 // The comb_filter prefiltering of the time-domain input is wired by the caller
 // using the already-ported CombFilter/CombFilterConst (celt_comb.go); see
@@ -16,11 +16,6 @@
 //	opus_val16          -> int16
 //	opus_val32/celt_sig -> int32
 //	celt_coef           -> int16 (non-QEXT)
-//
-// pitch_downsample/pitch_search/remove_doubling are ported locally here under
-// distinct names; the FIXED_POINT integer variants are not present elsewhere in
-// this package. NOTE(dedup): if a future workstream needs these kernels outside
-// the prefilter, lift them to a shared celt_pitch.go-style file.
 package fixedpoint
 
 import "github.com/thesyncim/gopus/internal/rangecoding"
@@ -398,6 +393,8 @@ type PrefilterParams struct {
 	PrefilterPeriod int
 	PrefilterGain   int16
 	PrefilterTapset int
+	// Scale is QEXT_SCALE for the selected mode (1 at 48 kHz, 2 at 96 kHz).
+	Scale int
 
 	// Enabled, Complexity, LossRate map to the run_prefilter enabled flag,
 	// st->complexity and st->loss_rate.
@@ -448,23 +445,29 @@ type PrefilterResult struct {
 // cancel-pitch energy check; those operate on the time-domain signal and are
 // wired by the caller using CombFilter/CombFilterConst.
 func PrefilterAnalysis(pre [][]int32, cc, n int, p PrefilterParams, scratch *celtEncodeScratch) PrefilterResult {
-	maxPeriod := combFilterMaxPeriod
-	minPeriod := combFilterMinPeriod
+	scale := p.Scale
+	if scale < 1 {
+		scale = 1
+	}
+	maxPeriod := combFilterMaxPeriod * scale
+	minPeriod := combFilterMinPeriod * scale
 
 	var pitchIndex int
 	var gain1 int16
 
-	if p.Enabled && p.Toneishness > 532676608 { // QCONST32(.99f, 29)
+	if p.Enabled && p.Toneishness > 531502208 { // QCONST32(.99f, 29) in fixed_generic.h
 		multiple := 1
 		toneFreq := p.ToneFreq
-		if int32(toneFreq) >= 25736 { // QCONST16(3.1416f, 13)
+		scaledToneFreq := int32(toneFreq) * int32(scale)
+		if scaledToneFreq >= 25736 { // QCONST16(3.1416f, 13)
 			toneFreq = 25736 - toneFreq // QCONST16(3.141593f,13) == 25736
+			scaledToneFreq = int32(toneFreq) * int32(scale)
 		}
-		for int32(toneFreq) >= int32(multiple)*3195 { // QCONST16(0.39f, 13) = 3195
+		for scaledToneFreq >= int32(multiple)*3195 { // QCONST16(0.39f, 13) = 3195
 			multiple++
 		}
-		if int32(toneFreq) > 50 { // QCONST16(0.006148f, 13) = 50
-			pitchIndex = imin((51472*multiple+int(toneFreq)/2)/int(toneFreq), combFilterMaxPeriod-2)
+		if scaledToneFreq > 50 { // QCONST16(0.006148f, 13) = 50
+			pitchIndex = imin((51472*multiple+int(scaledToneFreq)/2)/int(scaledToneFreq), combFilterMaxPeriod-2)
 		} else {
 			pitchIndex = combFilterMinPeriod
 		}
@@ -481,9 +484,10 @@ func PrefilterAnalysis(pre [][]int32, cc, n int, p PrefilterParams, scratch *cel
 		pitchIndex = maxPeriod - pitchIndex
 
 		gain1 = removeDoubling(pitchBuf, 0, maxPeriod, minPeriod, n, &pitchIndex, p.PrefilterPeriod, p.PrefilterGain, scratch)
-		if pitchIndex > maxPeriod-2 {
-			pitchIndex = maxPeriod - 2
+		if pitchIndex > maxPeriod-2*scale {
+			pitchIndex = maxPeriod - 2*scale
 		}
+		pitchIndex /= scale
 		gain1 = mult16x16q15(int16(22938), gain1) // QCONST16(.7f,15)
 		if p.LossRate > 2 {
 			gain1 = int16(half32(int32(gain1)))

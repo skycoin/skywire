@@ -4,10 +4,11 @@ package visor
 import (
 	"context"
 	"fmt"
-	"net/rpc"
 	"sort"
 	"sync"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"

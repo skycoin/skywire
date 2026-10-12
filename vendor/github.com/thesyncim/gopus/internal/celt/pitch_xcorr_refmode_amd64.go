@@ -1,7 +1,9 @@
-//go:build amd64 && !purego
+//go:build amd64 && goexperiment.simd && !nosimd && !purego
 
 package celt
 
+import "simd/archsimd"
+
 func libopusFloatPitchXCorrUsesAVX2FMA() bool {
-	return amd64UsePitchXcorrAVX2FMA
+	return archsimd.X86.AVX2() && archsimd.X86.FMA()
 }

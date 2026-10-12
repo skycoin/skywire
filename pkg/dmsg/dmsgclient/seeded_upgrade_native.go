@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package dmsgclient pkg/dmsg/dmsgclient/seeded_upgrade_native.go c1-net-dmsg
 package dmsgclient
 
@@ -20,7 +18,7 @@ import (
 // seeded_upgrade_tinygo.go. seedServers is unused here — the native path keeps
 // the proven RegisteringFallbackDiscClient to avoid changing native standalone
 // tools; it can adopt the seededDiscClient later.
-func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, dClient disc.APIClient, seedServers []*disc.Entry, discDmsgAddr string) error {
+func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, dClient disc.APIClient, seedServers []*disc.Entry, discDmsgAddr string) error { //nolint:unparam // matches the TinyGo version, which can fail
 	_ = seedServers
 	dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 	httpDisc := disc.NewHTTP(discDmsgAddr, dmsgHTTP, log)

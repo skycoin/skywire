@@ -41,7 +41,7 @@ var streamingCommands = map[string]string{
 	"commands/visor/ping/mux_bandwidth_tui_impl.go": "a live bandwidth TUI",
 	"commands/proxy/mux_plot.go":                    "a live per-leg bandwidth+RTT terminal chart; there is no document to emit",
 	"commands/tp/tp-viz.go":                         "starts a visualizer HTTP server; it serves pages, it does not return a value",
-	"commands/visor/ping/tree_tui.go":               "an interactive Bubble Tea TUI over a live BFS walk",
+	"commands/visor/ping/tree_tui.go":               "an interactive TUI over a live BFS walk",
 	"commands/reward/rules.go":                      "prints the mainnet rules as markdown or rendered HTML — a document to read, not data",
 	"commands/rewards/services.go":                  "emits shell script bodies meant to be piped into sh or redirected to a file",
 	"commands/rewards/calc.go":                      "writes its results to files; stdout is a human narrative of how the calculation went",

@@ -151,7 +151,7 @@ func TestFormatEntryLine(t *testing.T) {
 			ts:       now,
 		})
 		if len(line) > 200 {
-			// The truncation isn't byte-exact (lipgloss styling and
+			// The truncation isn't byte-exact (SGR styling and
 			// prefix add overhead), but a 200-char error string in
 			// the source should produce a line well under 200 chars.
 			t.Errorf("long error should be truncated; line length = %d", len(line))

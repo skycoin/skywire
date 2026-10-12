@@ -5,7 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/rpc"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -84,7 +85,7 @@ func (ts *TransportListener) Serve(ctx context.Context) {
 		}
 		gw := &TransportGateway{tm: ts.tm, log: ts.log}
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(gw); err != nil {
+		if err := registerTransportGateway(rpcS, "TransportGateway", gw); err != nil {
 			ts.log.WithError(err).Error("failed to register rpc")
 		}
 		ts.log.WithField("remote_conn", remotePK).Debug("Serving rpc")

@@ -10,7 +10,7 @@ Combines data from:
 - Uptime Tracker: online/offline status (color-coded rows)
 
 Shows public keys with their advertised services and transport counts by
-type (stcpr/sudph/dmsg/stcp). Filter with --country, --version, --min
+type (stcpr/squicr/sudph/stcp/webrtc/swsr/swtr/dmsg). Filter with --country, --version, --min
 (minimum transport count); --noton keeps offline/not-in-UT visors. --json
 emits the combined rows as machine-readable output.
 

@@ -1,9 +1,7 @@
-//go:build !(js && wasm)
-
 // Package cliskychat cmd/skywire-cli/commands/skychat/tui_unified_io.go c4-vis-cli
 //
 // IO helpers for the unified TUI. Wraps the chat-app's /history/peers
-// HTTP endpoint and the visor's group RPC surface so the bubbletea
+// HTTP endpoint and the visor's group RPC surface so the screen
 // model can stay focused on the view shape.
 //
 // Group poll auto-reconnects on RPC connection drops using the

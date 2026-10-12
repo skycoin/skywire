@@ -298,6 +298,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("wisp")
 		marshalWispNative(w, v.Wisp, o.indent+1)
 	}
+	if v.HostBridge != nil {
+		o.field("host_bridge")
+		marshalHostBridgeNative(w, v.HostBridge, o.indent+1)
+	}
 	if v.Resolvers != nil {
 		o.field("resolvers")
 		marshalResolversNative(w, v.Resolvers, o.indent+1)
@@ -333,11 +337,6 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		w.WriteString("null")
 	} else {
 		marshalRoutingNative(w, v.Routing, o.indent+1)
-	}
-
-	if v.UptimeTracker != nil {
-		o.field("uptime_tracker")
-		marshalUptimeTrackerNative(w, v.UptimeTracker, o.indent+1)
 	}
 
 	// launcher (no omitempty)
@@ -1127,17 +1126,6 @@ func marshalRoutingNative(w *strings.Builder, r *visorconfig.Routing, indent int
 	o.close()
 }
 
-func marshalUptimeTrackerNative(w *strings.Builder, u *visorconfig.UptimeTracker, indent int) {
-	o := newObjNative(w, indent)
-	o.field("addr")
-	writeQuotedNative(w, u.Addr)
-	if u.AddrDmsg != "" {
-		o.field("addr_dmsg")
-		writeQuotedNative(w, u.AddrDmsg)
-	}
-	o.close()
-}
-
 func marshalPublicVisorNative(w *strings.Builder, p *visorconfig.PublicVisorConfig, indent int) {
 	o := newObjNative(w, indent)
 	if p.RegistrationTimeout != 0 {
@@ -1450,6 +1438,38 @@ func marshalSkymailNative(w *strings.Builder, s *visorconfig.SkymailConfig, inde
 	if s.MaxAge != 0 {
 		o.field("max_age")
 		writeDurationNative(w, s.MaxAge)
+	}
+	o.close()
+}
+
+func marshalHostBridgeNative(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
+	o := newObjNative(w, indent)
+	o.field("url")
+	writeQuotedNative(w, s.URL)
+	o.field("forwards")
+	switch {
+	case s.Forwards == nil:
+		w.WriteString("null")
+	case len(s.Forwards) == 0:
+		w.WriteString("[]")
+	default:
+		w.WriteByte('[')
+		for i, f := range s.Forwards {
+			if i > 0 {
+				w.WriteByte(',')
+			}
+			w.WriteByte('\n')
+			writeIndentNative(w, o.indent+1)
+			fo := newObjNative(w, o.indent+1)
+			fo.field("host")
+			writeQuotedNative(w, f.Host)
+			fo.field("local")
+			writeQuotedNative(w, f.Local)
+			fo.close()
+		}
+		w.WriteByte('\n')
+		writeIndentNative(w, o.indent)
+		w.WriteByte(']')
 	}
 	o.close()
 }

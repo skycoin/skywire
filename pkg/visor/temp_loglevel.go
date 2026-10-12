@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
 
@@ -61,7 +62,7 @@ func (v *Visor) SetTempLogLevel(level logrus.Level, ttl time.Duration) (logserve
 	t.level = level
 	t.until = time.Now().Add(ttl)
 	t.timer = time.AfterFunc(ttl, func() { v.expireTempLogLevel(gen) })
-	ml.SetLevel(level)
+	setLogLevel(ml, level)
 	v.log.WithField("level", level).WithField("base", t.base).
 		WithField("until", t.until.Format(time.RFC3339)).Info("Log level set temporarily")
 	return v.logLevelStatusLocked(), nil
@@ -99,7 +100,7 @@ func (v *Visor) restoreLogLevelLocked() {
 	if ml.GetLevel() != t.level {
 		return
 	}
-	ml.SetLevel(t.base)
+	setLogLevel(ml, t.base)
 	v.log.WithField("level", t.base).Info("Temporary log level ended")
 }
 
@@ -115,4 +116,13 @@ func (v *Visor) logLevelStatusLocked() logserver.LogLevelStatus {
 		st.Until = &until
 	}
 	return st
+}
+
+// setLogLevel sets the visor's level and the process-wide one that the
+// embedded services and library packages log through.
+func setLogLevel(ml *logging.MasterLogger, level logrus.Level) {
+	if ml != nil {
+		ml.SetLevel(level)
+	}
+	logging.SetLevel(level)
 }

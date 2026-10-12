@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/rpc"
 	"net/url"
 	"path"
 	"strings"
+
+	rpc "github.com/0magnet/gobrpc"
 )
 
 type muxEntry struct {

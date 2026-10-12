@@ -80,7 +80,7 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 			continue
 		}
 
-		// Online = has 2+ p2p transports (stcpr/sudph).
+		// Online = has 2+ transports of any type but dmsg.
 		// This indicates genuine peer-to-peer network participation,
 		// not just dmsg infrastructure connectivity.
 		online := p2pCounts[pkHex] >= minP2PTransportsOnline
@@ -159,6 +159,14 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	return timelines
 }
 
+// A transport's day hash (type, last_seen) and the day's online set are only
+// ever read for today, so they outlive the day by half a day instead of
+// keeping eight. The timeline, read back a week, keeps eight.
+const (
+	tpUptimeTodayTTL    = 36 * time.Hour
+	tpUptimeTimelineTTL = 8 * 24 * time.Hour
+)
+
 func tpUptimeKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s", serviceName, tpID, date)
 }
@@ -167,13 +175,16 @@ func tpUptimeOnlineKey(date string) string {
 	return fmt.Sprintf("%s:tp-uptime:online:%s", serviceName, date)
 }
 
+// tracksUptime reports whether a transport type gets an uptime timeline:
+// every type but dmsg, as for a visor's online count.
+func tracksUptime(tpType string) bool { return tpType != "" && tpType != "dmsg" }
+
 func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
 }
 
 func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error {
-	// Only track p2p transport types.
-	if tpType != "stcpr" && tpType != "sudph" {
+	if !tracksUptime(tpType) {
 		return nil
 	}
 
@@ -192,14 +203,14 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	pipe.HSet(ctx, key, "type", tpType)
 	pipe.HSet(ctx, key, "last_seen", at.Unix())
-	pipe.Expire(ctx, key, 8*24*time.Hour)
+	pipe.Expire(ctx, key, tpUptimeTodayTTL)
 
 	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
-	pipe.Expire(ctx, tpUptimeOnlineKey(date), 8*24*time.Hour)
+	pipe.Expire(ctx, tpUptimeOnlineKey(date), tpUptimeTodayTTL)
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
-	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		// Reward-critical (see RecordHeartbeat): surface store failures at Warn
@@ -238,7 +249,7 @@ func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, stagingKey, string(bitmap), time.Minute)
 	pipe.BitOpOr(ctx, tlKey, tlKey, stagingKey)
-	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
 	pipe.Del(ctx, stagingKey)
 	_, err := pipe.Exec(ctx)
 	return err
@@ -331,7 +342,7 @@ func (s *redisStore) GetTransportUptimeByVisor(ctx context.Context, pk cipher.Pu
 
 	ids := make([]uuid.UUID, 0, len(entries))
 	for _, e := range entries {
-		if e.Type == "stcpr" || e.Type == "sudph" {
+		if tracksUptime(string(e.Type)) {
 			ids = append(ids, e.ID)
 		}
 	}

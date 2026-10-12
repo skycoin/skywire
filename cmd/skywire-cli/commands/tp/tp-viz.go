@@ -28,7 +28,6 @@ var (
 	vizCacheDirDMSG  string
 	vizCacheMaxAge   int
 	vizTPDURL        string
-	vizUTURL         string
 	vizSDURL         string
 	vizDMSGURL       string
 	vizNoCache       bool
@@ -51,7 +50,6 @@ func init() {
 	// The standalone uptime tracker is decommissioned; default empty so tp-viz
 	// does not fetch a dead clearnet endpoint. Pass --ut-url explicitly only for
 	// a custom standalone uptime source.
-	vizCmd.Flags().StringVarP(&vizUTURL, "ut-url", "w", "", "uptime tracker URL (empty = disabled)")
 	vizCmd.Flags().StringVar(&vizSDURL, "sd-url", deployment.Prod.ServiceDiscovery, "service discovery URL")
 	vizCmd.Flags().StringVar(&vizDMSGURL, "dmsg-url", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
 	vizCmd.Flags().BoolVar(&vizNoCache, "no-cache", false, "disable caching, always fetch fresh data")
@@ -142,7 +140,6 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 		cfg.CacheDirDMSG = vizCacheDirDMSG
 		cfg.CacheMaxAge = vizCacheMaxAge
 		cfg.TPDURL = vizTPDURL
-		cfg.UTURL = vizUTURL
 		cfg.SDURL = vizSDURL
 		cfg.DMSGURL = vizDMSGURL
 		cfg.NoCache = vizNoCache

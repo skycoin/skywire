@@ -8,18 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestNew_HealthEndpoint(t *testing.T) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("test")
 	m := metrics.NewEmpty()
 
@@ -35,7 +35,7 @@ func TestNew_HealthEndpoint(t *testing.T) {
 }
 
 func TestSetDmsgServer(t *testing.T) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("test")
 	m := metrics.NewEmpty()
 
@@ -49,7 +49,7 @@ func TestSetDmsgServer(t *testing.T) {
 }
 
 func TestHealthEndpoint_ResponseFields(t *testing.T) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("test")
 	m := metrics.NewEmpty()
 
@@ -70,7 +70,7 @@ func TestHealthEndpoint_ResponseFields(t *testing.T) {
 }
 
 func TestRunBackgroundTasks_Cancellation(t *testing.T) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("test")
 	m := metrics.NewEmpty()
 
@@ -96,7 +96,7 @@ func TestRunBackgroundTasks_Cancellation(t *testing.T) {
 }
 
 func TestRunBackgroundTasks_WithNilServer(t *testing.T) {
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	log := logging.MustGetLogger("test")
 	m := metrics.NewEmpty()
 

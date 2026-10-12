@@ -19,6 +19,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"net/url"
+	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -203,7 +204,6 @@ type Services struct {
 	RouteFinder        string          `json:"route_finder,omitempty"`
 	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
 	TransportSetupPKs  []cipher.PubKey `json:"transport_setup,omitempty"`
-	UptimeTracker      string          `json:"uptime_tracker,omitempty"`
 	ServiceDiscovery   string          `json:"service_discovery,omitempty"`
 	StunServers        []string        `json:"stun_servers,omitempty"`
 	DNSServer          string          `json:"dns_server,omitempty"`
@@ -221,21 +221,27 @@ type Services struct {
 	// known fleet server (IsKnownDmsgServer) — a third party running this binary
 	// never mis-advertises this domain for a PK with no DNS record.
 	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
+	// WSSDomainAliases are earlier suffixes a known server still answers on
+	// and gets certificates for, without advertising them, so browser modules
+	// built with an old name keep reaching it while the fleet moves.
+	WSSDomainAliases []string `json:"wss_domain_aliases,omitempty"`
 	// BrowseOriginSuffix is the deployment-wide domain the "real-origin" browse
 	// path (pkg/visor/meshproxy.go, the wasm SW browse origin, and the hosted
-	// Caddy front) serves untrusted mesh content under — e.g. ".haltingstate.net"
+	// Caddy front) serves untrusted mesh content under — e.g. ".theskywirenetwork.net"
 	// (a SEPARATE eTLD+1 from the visor app on WSSDomainSuffix, so untrusted
 	// browsed content is cookie/origin-isolated from the visor identity). Lives
 	// here so the domain is defined in exactly one place instead of being
 	// hardcoded across the serve flags / config-gen / docs; consumers read it via
 	// deployment.Prod.BrowseOriginSuffix. Empty (the local default) means the
 	// browse origin uses ".mesh.localhost" (loopback, secure-context, no cert).
-	BrowseOriginSuffix     string `json:"browse_origin_suffix,omitempty"`
+	BrowseOriginSuffix string `json:"browse_origin_suffix,omitempty"`
+	// WasmModuleSource is the visor that serves the current js/wasm module over
+	// dmsg. Visors refresh their copy from it when the desk is opened.
+	WasmModuleSource       string `json:"wasm_module_source,omitempty"`
 	DmsgDiscoveryDmsg      string `json:"dmsg_discovery_dmsg,omitempty"`
 	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
 	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`
 	RouteFinderDmsg        string `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string `json:"uptime_tracker_dmsg,omitempty"`
 	ServiceDiscoveryDmsg   string `json:"service_discovery_dmsg,omitempty"`
 	// Reward system
 	RewardSystem     string `json:"reward_system,omitempty"`
@@ -263,9 +269,6 @@ func (s *Services) BackfillClearnetFromDmsg() {
 	}
 	if s.RouteFinder == "" {
 		s.RouteFinder = s.RouteFinderDmsg
-	}
-	if s.UptimeTracker == "" {
-		s.UptimeTracker = s.UptimeTrackerDmsg
 	}
 	if s.ServiceDiscovery == "" {
 		s.ServiceDiscovery = s.ServiceDiscoveryDmsg
@@ -302,3 +305,14 @@ var TestConf Conf
 // + SKYDEPLOY override) and config_js.go (js, copies from the
 // generated static literals). See the package doc above for the
 // rationale on the split.
+
+// WSSAliasHosts are the alias host names of a server with DNS label label.
+func (s *Services) WSSAliasHosts(label string) []string {
+	var hosts []string
+	for _, a := range s.WSSDomainAliases {
+		if a = strings.TrimPrefix(a, "."); a != "" {
+			hosts = append(hosts, label+"."+a)
+		}
+	}
+	return hosts
+}

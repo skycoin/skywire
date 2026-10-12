@@ -5,7 +5,7 @@
 └─┐├┴┐└┬┘││││├┬┘├┤ 
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
 <version>
-built with go1.27.1 on <build-date>
+built with go1.27.2-X:nodwarf5
 ```
 
 ## Usage
@@ -20,7 +20,7 @@ skywire
 - [cli](cli/README.md) — Command Line Interface for skywire
 - [cxo](cxo/README.md) — CXO object distribution system
 - [dmsg](dmsg/README.md) — DMSG services & utilities
-- [skycoin](skycoin/README.md) — skycoin daemon & cli
+- [hostbridge](hostbridge/README.md) — Lend a browser visor this host's sockets
 - [svc](svc/README.md) — Skywire services
 - [visor](visor/README.md) — Skywire Visor
 

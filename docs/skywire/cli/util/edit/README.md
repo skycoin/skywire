@@ -2,7 +2,7 @@
 
 [← skywire cli util](../README.md)
 
-Embedded terminal text editor with syntax highlighting (Ctrl+S save, Ctrl+Q quit)
+Small terminal text editor (Ctrl+S save, Ctrl+Q quit). In the browser shell it edits in a real text area.
 
 ## Usage
 

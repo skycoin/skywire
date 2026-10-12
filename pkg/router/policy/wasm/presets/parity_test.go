@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 package presets
 
 // parity_test.go is the gate-1 "byte-identical decisions" property extended to

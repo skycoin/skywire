@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,9 +19,9 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/gin-gonic/gin"
 	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
@@ -285,7 +286,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 		return "", fmt.Errorf("inject request: %w", err)
 	}
 	injectReq.Header.Set("Content-Type", "application/json")
-	injectResp, err := http.DefaultClient.Do(injectReq)
+	injectResp, err := http.DefaultClient.Do(injectReq) //nolint:gosec // nodeURL is the operator-set login node
 	if err != nil {
 		return "", fmt.Errorf("inject failed: %w", err)
 	}
@@ -299,9 +300,9 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	return txID, nil
 }
 
-// registerLoginRoutes adds login-related routes to the gin router.
+// registerLoginRoutes adds login-related routes to the mux.
 // When loginEnabled is false, the login page shows a "not available" message.
-func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
+func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 	backupsDir := filepath.Join(wd, "log_backups")
 
 	// Periodically clean up expired challenges and sessions
@@ -329,9 +330,9 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 	}()
 
 	// Login page
-	r.GET("/login", func(c *gin.Context) {
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		c.Writer.WriteHeader(http.StatusOK)
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Login")
 		l += navlinks
@@ -340,7 +341,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			l += "<h1>Login</h1>"
 			l += "<p class='info'>Login is not currently available on this instance.</p>"
 			l += "</body></html>"
-			c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+			w.Write([]byte(l)) //nolint:errcheck,gosec
 			return
 		}
 
@@ -351,32 +352,32 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l += "<br><button type='submit'>Start verification</button>"
 		l += "</form>"
 
-		if msg := c.Query("msg"); msg != "" {
+		if msg := r.URL.Query().Get("msg"); msg != "" {
 			l += "<p class='error'>" + strings.ReplaceAll(msg, "<", "&lt;") + "</p>"
 		}
-		if msg := c.Query("info"); msg != "" {
+		if msg := r.URL.Query().Get("info"); msg != "" {
 			l += "<p class='info'>" + strings.ReplaceAll(msg, "<", "&lt;") + "</p>"
 		}
 
 		l += "</body></html>"
-		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		w.Write([]byte(l)) //nolint:errcheck,gosec
 	})
 
 	// Login POST — look up address, create verification challenge
-	r.POST("/login", func(c *gin.Context) {
+	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
 		if !loginEnabled {
-			c.Redirect(http.StatusFound, "/login?msg=Login+is+not+currently+available")
+			http.Redirect(w, r, "/login?msg=Login+is+not+currently+available", http.StatusFound)
 			return
 		}
-		address := strings.TrimSpace(c.PostForm("address"))
+		address := strings.TrimSpace(r.PostFormValue("address"))
 		if address == "" {
-			c.Redirect(http.StatusFound, "/login?msg=Please+enter+a+reward+address")
+			http.Redirect(w, r, "/login?msg=Please+enter+a+reward+address", http.StatusFound)
 			return
 		}
 
 		visors := findVisorsByRewardAddress(backupsDir, address)
 		if len(visors) == 0 {
-			c.Redirect(http.StatusFound, "/login?msg=No+visors+found+for+this+address")
+			http.Redirect(w, r, "/login?msg=No+visors+found+for+this+address", http.StatusFound)
 			return
 		}
 
@@ -385,7 +386,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		// For single addresses: use the address directly
 		_, isXpub, vaErr := rewardconfig.ValidateRewardAddress(address)
 		if vaErr != nil {
-			c.Redirect(http.StatusFound, "/login?msg=Invalid+address:+"+vaErr.Error())
+			http.Redirect(w, r, "/login?msg="+url.QueryEscape("Invalid address: "+vaErr.Error()), http.StatusFound)
 			return
 		}
 		loginAddress := address
@@ -393,8 +394,8 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			// Check xpub depth before attempting derivation
 			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
 				fmt.Printf("Login chain: xpub depth error for %s...\n", address[:20])
-				c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-				c.Writer.WriteHeader(http.StatusBadRequest)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusBadRequest)
 				l := loginPageHeader("Login Error")
 				l += navlinks
 				l += "<h1>Wrong xpub key level</h1>"
@@ -413,12 +414,12 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 				l += "<pre>skywire reward ACCOUNT_XPUB</pre>"
 				l += "<p><a href='/login'>Back to login</a></p>"
 				l += "</body></html>"
-				c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+				w.Write([]byte(l)) //nolint:errcheck,gosec
 				return
 			}
 			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
 			if err != nil {
-				c.Redirect(http.StatusFound, "/login?msg=Failed+to+derive+login+address+from+xpub:+"+err.Error())
+				http.Redirect(w, r, "/login?msg="+url.QueryEscape("Failed to derive login address from xpub: "+err.Error()), http.StatusFound)
 				return
 			}
 			loginAddress = derived
@@ -437,7 +438,7 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 				txID, err := sendCoinsOnLoginChain(loginNodeAddr, loginAddress, "1.000000")
 				if err != nil {
 					fmt.Printf("Warning: failed to fund login address: %v\n", err)
-					c.Redirect(http.StatusFound, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.")
+					http.Redirect(w, r, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.", http.StatusFound)
 					return
 				}
 				fundedTxID = txID
@@ -465,14 +466,14 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		pendingLoginsMu.Unlock()
 		fmt.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
 
-		c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge)
+		http.Redirect(w, r, "/login/verify?challenge="+challenge, http.StatusFound)
 	})
 
 	// Verification page — instructs user to send coins back
-	r.GET("/login/verify", func(c *gin.Context) {
-		challenge := c.Query("challenge")
+	mux.HandleFunc("GET /login/verify", func(w http.ResponseWriter, r *http.Request) {
+		challenge := r.URL.Query().Get("challenge")
 		if challenge == "" {
-			c.Redirect(http.StatusFound, "/login?msg=Invalid+verification+link")
+			http.Redirect(w, r, "/login?msg=Invalid+verification+link", http.StatusFound)
 			return
 		}
 
@@ -481,12 +482,12 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		pendingLoginsMu.RUnlock()
 
 		if !ok || time.Now().After(pending.ExpiresAt) {
-			c.Redirect(http.StatusFound, "/login?msg=Verification+expired")
+			http.Redirect(w, r, "/login?msg=Verification+expired", http.StatusFound)
 			return
 		}
 
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		c.Writer.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Verify Wallet Ownership")
 		l += navlinks
@@ -494,13 +495,13 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 
 		// Use the current request's host as the node URL for the wallet
 		scheme := "https"
-		if c.Request.TLS == nil {
+		if r.TLS == nil {
 			scheme = "http"
 		}
-		if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+		if fwdProto := r.Header.Get("X-Forwarded-Proto"); fwdProto != "" {
 			scheme = fwdProto
 		}
-		nodeURL := scheme + "://" + c.Request.Host
+		nodeURL := scheme + "://" + r.Host
 
 		l += "<h3>Step 1: Open the Skycoin Web Wallet</h3>"
 		l += "<p>Start the wallet connected to the login chain:</p>"
@@ -531,23 +532,23 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 		l += "<noscript><p>JavaScript is required for auto-detection. "
 		l += "<a href='/login/check?challenge=" + challenge + "&redirect=1'>Click here to check manually</a></p></noscript>"
 		l += "</body></html>"
-		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		w.Write([]byte(l)) //nolint:errcheck,gosec
 	})
 
 	// Check if verification transaction is confirmed
-	r.GET("/login/check", func(c *gin.Context) {
-		challenge := c.Query("challenge")
+	mux.HandleFunc("GET /login/check", func(w http.ResponseWriter, r *http.Request) {
+		challenge := r.URL.Query().Get("challenge")
 
 		pendingLoginsMu.RLock()
 		pending, ok := pendingLogins[challenge]
 		pendingLoginsMu.RUnlock()
 
 		if !ok || time.Now().After(pending.ExpiresAt) {
-			if c.Query("redirect") == "1" {
-				c.Redirect(http.StatusFound, "/login?msg=Verification+expired")
+			if r.URL.Query().Get("redirect") == "1" {
+				http.Redirect(w, r, "/login?msg=Verification+expired", http.StatusFound)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"confirmed": false, "error": "expired"})
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": false, "error": "expired"})
 			return
 		}
 
@@ -579,51 +580,51 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			pendingLoginsMu.Unlock()
 
 			// Set session cookie
-			c.SetCookie("session", sessionID, 86400, "/", "", false, true)
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: sessionID, MaxAge: 86400, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // also served as plain http over dmsg, so no Secure
 
-			if c.Query("redirect") == "1" {
-				c.Redirect(http.StatusFound, "/account")
+			if r.URL.Query().Get("redirect") == "1" {
+				http.Redirect(w, r, "/account", http.StatusFound)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"confirmed": true})
+			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": true})
 			return
 		}
 
-		if c.Query("redirect") == "1" {
-			c.Redirect(http.StatusFound, "/login/verify?challenge="+challenge+"&msg=Transaction+not+yet+confirmed")
+		if r.URL.Query().Get("redirect") == "1" {
+			http.Redirect(w, r, "/login/verify?challenge="+url.QueryEscape(challenge)+"&msg=Transaction+not+yet+confirmed", http.StatusFound)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"confirmed": false})
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"confirmed": false})
 	})
 
 	// Account page — shows visor data for logged-in user
-	r.GET("/account", func(c *gin.Context) {
+	mux.HandleFunc("GET /account", func(w http.ResponseWriter, r *http.Request) {
 		if !loginEnabled {
-			c.Redirect(http.StatusFound, "/login?msg=Login+is+not+currently+available")
+			http.Redirect(w, r, "/login?msg=Login+is+not+currently+available", http.StatusFound)
 			return
 		}
-		sessionID, err := c.Cookie("session")
+		sessionCookie, err := r.Cookie("session")
 		if err != nil {
-			c.Redirect(http.StatusFound, "/login?msg=Please+log+in")
+			http.Redirect(w, r, "/login?msg=Please+log+in", http.StatusFound)
 			return
 		}
 
 		sessionsMu.RLock()
-		sess, ok := sessions[sessionID]
+		sess, ok := sessions[sessionCookie.Value]
 		sessionsMu.RUnlock()
 
 		if !ok || time.Now().After(sess.ExpiresAt) {
 			if ok {
 				sessionsMu.Lock()
-				delete(sessions, sessionID)
+				delete(sessions, sessionCookie.Value)
 				sessionsMu.Unlock()
 			}
-			c.Redirect(http.StatusFound, "/login?msg=Session+expired")
+			http.Redirect(w, r, "/login?msg=Session+expired", http.StatusFound)
 			return
 		}
 
-		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		c.Writer.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 
 		l := loginPageHeader("Account")
 		l += "<style>table.rewards { border-collapse: collapse; width: 100%; } table.rewards th, table.rewards td { border: 1px solid #444; padding: 6px 10px; text-align: left; } table.rewards th { background: #222; }</style>"
@@ -658,27 +659,27 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 
 		l += "<p><a href='/logout'>Logout</a></p>"
 		l += "</body></html>"
-		c.Writer.Write([]byte(l)) //nolint:errcheck,gosec
+		w.Write([]byte(l)) //nolint:errcheck,gosec
 	})
 
 	// Authenticated survey endpoint — only serves surveys for visors in the user's session
-	r.GET("/account/survey/:pk", func(c *gin.Context) {
-		sessionID, err := c.Cookie("session")
+	mux.HandleFunc("GET /account/survey/{pk}", func(w http.ResponseWriter, r *http.Request) {
+		sessionCookie, err := r.Cookie("session")
 		if err != nil {
-			c.Redirect(http.StatusFound, "/login?msg=Please+log+in")
+			http.Redirect(w, r, "/login?msg=Please+log+in", http.StatusFound)
 			return
 		}
 
 		sessionsMu.RLock()
-		sess, ok := sessions[sessionID]
+		sess, ok := sessions[sessionCookie.Value]
 		sessionsMu.RUnlock()
 
 		if !ok || time.Now().After(sess.ExpiresAt) {
-			c.Redirect(http.StatusFound, "/login?msg=Session+expired")
+			http.Redirect(w, r, "/login?msg=Session+expired", http.StatusFound)
 			return
 		}
 
-		pk := c.Param("pk")
+		pk := r.PathValue("pk")
 
 		// Verify this PK belongs to the logged-in user's visors
 		authorized := false
@@ -689,31 +690,32 @@ func registerLoginRoutes(r *gin.Engine, wd string, loginEnabled bool) {
 			}
 		}
 		if !authorized {
-			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized for this visor"})
+			httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"error": "not authorized for this visor"})
 			return
 		}
 
 		surveyPath := filepath.Join(backupsDir, pk, "node-info.json")
 		surveyData, err := os.ReadFile(surveyPath) //nolint:gosec
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "survey not available"})
+			httputil.WriteJSON(w, r, http.StatusNotFound, map[string]any{"error": "survey not available"})
 			return
 		}
 
 		// Serve as JSON
-		c.Data(http.StatusOK, "application/json", surveyData)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(surveyData) //nolint:errcheck,gosec
 	})
 
 	// Logout
-	r.GET("/logout", func(c *gin.Context) {
-		sessionID, err := c.Cookie("session")
+	mux.HandleFunc("GET /logout", func(w http.ResponseWriter, r *http.Request) {
+		sessionCookie, err := r.Cookie("session")
 		if err == nil {
 			sessionsMu.Lock()
-			delete(sessions, sessionID)
+			delete(sessions, sessionCookie.Value)
 			sessionsMu.Unlock()
 		}
-		c.SetCookie("session", "", -1, "/", "", false, true)
-		c.Redirect(http.StatusFound, "/login?info=Logged+out")
+		http.SetCookie(w, &http.Cookie{Name: "session", MaxAge: -1, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // also served as plain http over dmsg, so no Secure
+		http.Redirect(w, r, "/login?info=Logged+out", http.StatusFound)
 	})
 }
 

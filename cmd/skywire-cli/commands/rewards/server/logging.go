@@ -3,45 +3,80 @@ package clirewardsserver
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
-type ginHandler struct {
-	Router *gin.Engine
+// statusWriter records the status code a handler wrote, for the request log.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
 }
 
-func (h *ginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.Router.ServeHTTP(w, r)
+func (s *statusWriter) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
 }
 
-func loggingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
+func (s *statusWriter) Write(p []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(p)
+}
+
+func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// flush sends what a handler has written so far, for the pages that stream.
+func flush(w http.ResponseWriter) {
+	http.NewResponseController(w).Flush() //nolint:errcheck,gosec
+}
+
+func logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		c.Next()
+		sw := &statusWriter{ResponseWriter: w}
+		next.ServeHTTP(sw, r)
+		if sw.status == 0 {
+			sw.status = http.StatusOK
+		}
 		latency := time.Since(start)
 		if latency > time.Minute {
 			latency = latency.Truncate(time.Second)
 		}
-		reqHost := c.Request.Host
+		reqHost := r.Host
 
 		fmt.Printf("[FIBER] %s |%s %3d %s| %13v | %15s | %72s | %18s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
-			getBackgroundColor(c.Writer.Status()),
-			c.Writer.Status(),
+			getBackgroundColor(sw.status),
+			sw.status,
 			resetColor(),
 			latency,
-			c.ClientIP(),
-			c.Request.RemoteAddr,
+			clientIP(r),
+			r.RemoteAddr,
 			reqHost,
-			getMethodColor(c.Request.Method),
-			c.Request.Method,
+			getMethodColor(r.Method),
+			r.Method,
 			resetColor(),
-			c.Request.URL.Path,
+			r.URL.Path,
 		)
+	})
+}
+
+// clientIP is the first X-Forwarded-For hop when a proxy set one, else the peer.
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip, _, _ := strings.Cut(fwd, ",")
+		return strings.TrimSpace(ip)
 	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 func getBackgroundColor(statusCode int) string {
 	switch {

@@ -1,4 +1,4 @@
-//go:build mobile && !(js && wasm)
+//go:build mobile && !(js && wasm) && !tinygo
 
 // Package visor pkg/visor/rewards_ui_mobile.go c3-vis-core
 package visor

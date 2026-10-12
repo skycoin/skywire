@@ -2,18 +2,33 @@
 
 [← skywire cli proxy mux](../README.md)
 
-Set the STEADY active download width — the floor number of active mux legs
-the adaptive engine converges to when idle (more than one spreads a bulk flow
-proactively before saturation instead of ramping from a single leg). Applies
-LIVE on the next tick; clamped to [1, cap]. Set per-visor, per-end.
+Set the number of ACTIVE mux legs the named app's dials ask for. With no
+argument the app's current value is printed ("inherit" when it has none).
 
-Example:
-  skywire cli proxy mux width 8    # keep 8 legs active by default
+PER APP (-n, default skysocks-client), read by the visor's dial path for the
+app that owns the dial; bounded by that app's mux cap when it has one. It
+shapes route groups dialed from now on.
+
+--visor-wide sets the process-global steady active download width the adaptive
+engine converges to when idle — the floor every app without an override
+inherits — live on the next tick, clamped to [1, cap].
+
+Examples:
+  skywire cli proxy mux width 2                # skysocks-client's legs
+  skywire cli proxy mux width                  # read it back
+  skywire cli proxy mux width 8 --visor-wide   # the adaptive engine's floor
 
 ## Usage
 
 ```
-skywire cli proxy mux width <n>
+skywire cli proxy mux width [n]
+```
+
+## Flags
+
+```
+  -n, --name string   app whose mux width to read or set (default "skysocks-client")
+      --visor-wide    set the process-global adaptive value every app without an override inherits, instead of this app's
 ```
 
 ## Global Flags

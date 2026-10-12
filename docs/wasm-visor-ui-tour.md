@@ -116,7 +116,7 @@ per-target origin — `<id>.<suffix>`, where the id is a hash of the canonical
 target, because a wildcard certificate matches exactly one label and so cannot
 carry the target in the hostname — and the frame loads there. The address bar
 still reads `http://home.dmsg/` while the document behind it is at something
-like `https://74wqe524hg2qkjaxctxo.haltingstate.net/`: a genuine,
+like `https://74wqe524hg2qkjaxctxo.theskywirenetwork.net/`: a genuine,
 separate origin with its own storage and its own script world, which the desk
 that opened it cannot read into. netscrape inverts the rewrite for display, the
 same way it keeps `vnet:8001` in the bar for the dashboard. See
@@ -210,12 +210,11 @@ address that served it is out of reach.
 skywire cli hv serve --tls -a 127.0.0.1:8443
 ```
 
-builds the single-file page from the embedded wasm module and serves it over
-HTTPS; accept the local certificate once and the visor boots in the tab. The
-module comes from the binary itself — from the two-stage build (`make
-build-embedded`, which every published binary has) or from `--exec-wasm` — so
-the served desk is the running `skywire` version, and a plain source build with
-no module refuses to serve.
+builds the single-file page and serves it, with the wasm module, over HTTPS;
+accept the local certificate once and the visor boots in the tab. The module
+is the one installed beside the binary (`skywire.wasm.gz`, which every package
+ships; `make wasm-module` puts one beside a source build) or `--exec-wasm`, and
+`hv serve` refuses to start without one.
 
 A visor hosts the same surface itself from `hypervisor.wasm_serve.addr`, and a
 hypervisor serves it beside the dashboard at `hypervisor.desk_addr` (`:8010`).

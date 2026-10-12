@@ -26,11 +26,11 @@ skywire cli visor ping [pk]
 
 - [bandwidth](bandwidth/README.md) — Test bandwidth to a visor
 - [mux-bw](mux-bw/README.md) — Multiplexed-route bandwidth + queueing-delay probe (human output by default; --json for NDJSON)
-- [mux-bw-tui](mux-bw-tui/README.md) — Interactive Bubble Tea TUI for the multiplexed-route bandwidth probe
+- [mux-bw-tui](mux-bw-tui/README.md) — Interactive TUI for the multiplexed-route bandwidth probe
 - [policy-bw](policy-bw/README.md) — Policy-driven multiplexed-route bandwidth rig — proves a routing-policy preset is adaptive over a live mux
 - [stop-all](stop-all/README.md) — Stop all active ping connections
 - [test](test/README.md) — Test the visor with public visors on network
-- [tree](tree/README.md) — Interactive Bubble Tea TUI for the ping-tree (server-side BFS over the skywire route graph)
+- [tree](tree/README.md) — Interactive TUI for the ping-tree (server-side BFS over the skywire route graph)
 - [tree-stream](tree-stream/README.md) — Stream a server-side BFS ping-tree as human-readable rows + summary (or NDJSON with --json)
 
 ## Flags

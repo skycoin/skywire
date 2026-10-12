@@ -28,10 +28,8 @@ func computeQEXTBandAmplitudesF32Into(mdctCoeffs []float32, cfg *qextModeConfig,
 			bandE[i] = celtEner(1e-27)
 			continue
 		}
-		sum := float32(1e-27)
-		for _, v := range mdctCoeffs[start:stop] {
-			sum += v * v
-		}
+		coeffBand := mdctCoeffs[start:stop:stop]
+		sum := noFMA32Add(float32(1e-27), celtInnerProdF32LibopusOrder(coeffBand))
 		bandE[i] = celtEner(opusmath.SqrtF32(sum))
 	}
 }
@@ -91,7 +89,7 @@ func (e *Encoder) encodeQEXTCoarseEnergyWithEncoder(re *rangecoding.Encoder, ene
 	if re == nil || nbBands <= 0 {
 		return false
 	}
-	channels := int(e.channels)
+	channels := e.codedChannels()
 	needed := nbBands * channels
 	if len(energies) < needed || len(quantizedEnergies) < needed || len(errorVals) < needed {
 		return false
@@ -104,6 +102,7 @@ func (e *Encoder) encodeQEXTCoarseEnergyWithEncoder(re *rangecoding.Encoder, ene
 	savedPrev := e.prevEnergy
 	savedDelayed := e.delayedIntra
 	savedCoarseAvail := e.coarseAvailableBytes
+	savedCoarseSet := e.coarseAvailableSet
 	savedFrameBits := e.frameBits
 	savedQuant := e.scratch.quantizedEnergies
 	savedErr := e.scratch.coarseError
@@ -112,6 +111,7 @@ func (e *Encoder) encodeQEXTCoarseEnergyWithEncoder(re *rangecoding.Encoder, ene
 		e.prevEnergy = savedPrev
 		e.delayedIntra = savedDelayed
 		e.coarseAvailableBytes = savedCoarseAvail
+		e.coarseAvailableSet = savedCoarseSet
 		e.frameBits = savedFrameBits
 		e.scratch.quantizedEnergies = savedQuant
 		e.scratch.coarseError = savedErr
@@ -125,6 +125,7 @@ func (e *Encoder) encodeQEXTCoarseEnergyWithEncoder(re *rangecoding.Encoder, ene
 		e.delayedIntra = 0
 	}
 	e.coarseAvailableBytes = int32(nbAvailableBytes)
+	e.coarseAvailableSet = true
 	e.frameBits = int32(re.StorageBits())
 	e.scratch.quantizedEnergies = quantizedEnergies[:needed]
 	e.scratch.coarseError = errorVals[:needed]

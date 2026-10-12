@@ -1,4 +1,4 @@
-//go:build unix
+//go:build unix && !tinygo
 
 // Package vpn pkg/vpn/share_unix.go c4-app-vpn
 package vpn

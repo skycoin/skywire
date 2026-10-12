@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/setupnode_teardown_test.go
 package router
 

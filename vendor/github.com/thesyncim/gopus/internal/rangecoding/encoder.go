@@ -344,8 +344,8 @@ func (e *Encoder) Done() []byte {
 		if e.buf != nil {
 			start := int(e.offs)
 			endIdx := int(e.storage - e.endOffs)
-			for i := start; i < endIdx; i++ {
-				e.buf[i] = 0
+			if start < endIdx {
+				clear(e.buf[start:endIdx])
 			}
 		}
 		if used > 0 {
@@ -415,6 +415,13 @@ func (e *Encoder) Done() []byte {
 	return e.buf[:packedSize]
 }
 
+// AdvanceTell counts the bits up to bits as written (zeros), so Tell reports
+// bits: celt_encode_with_ec's "pretend we've filled all the remaining bits with
+// zeros" for a silent frame (enc->nbits_total += tell - ec_tell(enc)).
+func (e *Encoder) AdvanceTell(bits int) {
+	e.nbitsTotal += int32(bits - e.Tell())
+}
+
 // Tell returns the number of bits written to the combined stream so far,
 // rounded up to the nearest whole bit. This is the libopus ec_tell macro
 // (nbits_total - EC_ILOG(rng)) and counts both range-coded symbols and raw bits.
@@ -427,16 +434,14 @@ func (e *Encoder) Tell() int {
 // It is the bit-exact port of libopus ec_tell_frac, including the eight-entry
 // correction table that refines the fractional bit count from the range.
 func (e *Encoder) TellFrac() int {
-	correction := [8]uint32{35733, 38967, 42495, 46340, 50535, 55109, 60097, 65535}
-
 	nbits := int(e.nbitsTotal) << 3
 	l := int(ilog(e.rng))
 	r := e.rng >> (uint(l) - 16)
-	b := int((r >> 12) - 8)
-	if r > correction[b] {
-		b++
-	}
-	return nbits - ((l << 3) + b)
+	// r lies in [2^15, 2^16), so b is 0..7; the mask only drops the bounds
+	// check.
+	b := (r >> 12) - 8
+	b += (tellFracCorrection[b&7] - r) >> 31
+	return nbits - ((l << 3) + int(b))
 }
 
 // Range returns the current range value.
@@ -503,7 +508,20 @@ type EncoderState struct {
 	ext        uint32
 	err        int32
 	shrunk     bool
-	buf        []byte
+	// buf holds the packet bytes from bufOffs to storage.
+	bufOffs uint32
+	buf     []byte
+}
+
+// ReserveBufferCapacity reserves reusable storage for a future encoder
+// snapshot without changing the snapshot's logical length or scalar fields.
+func (state *EncoderState) ReserveBufferCapacity(capacity int) {
+	if state == nil || capacity <= cap(state.buf) {
+		return
+	}
+	buf := make([]byte, len(state.buf), capacity)
+	copy(buf, state.buf)
+	state.buf = buf
 }
 
 // SaveState captures the current encoder state for later restoration.
@@ -517,6 +535,41 @@ func (e *Encoder) SaveState() *EncoderState {
 // SaveStateInto captures the current encoder state into a pre-allocated state struct.
 // This is the allocation-free version of SaveState for hot paths.
 func (e *Encoder) SaveStateInto(state *EncoderState) {
+	e.saveScalarState(state)
+	e.saveBytes(state, 0)
+}
+
+// SaveStateSinceInto captures the encoder state like SaveStateInto, but saves
+// only the packet bytes from the front offset of the earlier state since to the
+// end of storage: the span that coding after since can have changed. It is the
+// libopus pattern of an ec_ctx copy plus a copy of the bytes from the saved
+// ec_range_bytes() onward (celt/bands.c theta RDO, celt/quant_bands.c
+// quant_coarse_energy()). RestoreState writes that span back.
+func (e *Encoder) SaveStateSinceInto(state, since *EncoderState) {
+	e.saveScalarState(state)
+	e.saveBytes(state, min(since.offs, e.storage))
+}
+
+func (e *Encoder) saveBytes(state *EncoderState, from uint32) {
+	state.bufOffs = from
+	n := int(e.storage - from)
+	if cap(state.buf) < n {
+		state.buf = make([]byte, n)
+	} else {
+		state.buf = state.buf[:n]
+	}
+	copy(state.buf, e.buf[from:e.storage])
+}
+
+// SaveStateShallowInto captures only the scalar encoder state, like a libopus
+// ec_ctx struct copy. The saved state is for RestoreStateShallow; it holds no
+// packet bytes, so RestoreState must not be used with it.
+func (e *Encoder) SaveStateShallowInto(state *EncoderState) {
+	e.saveScalarState(state)
+	state.buf = state.buf[:0]
+}
+
+func (e *Encoder) saveScalarState(state *EncoderState) {
 	state.storage = e.storage
 	state.offs = e.offs
 	state.endOffs = e.endOffs
@@ -529,20 +582,6 @@ func (e *Encoder) SaveStateInto(state *EncoderState) {
 	state.ext = e.ext
 	state.err = e.err
 	state.shrunk = e.shrunk
-
-	// Save the whole active storage. libopus theta RDO restores a shallow
-	// ec_ctx plus the byte span dirtied by the first trial; saving the full
-	// active buffer preserves the same middle-gap bytes for every caller.
-	if e.storage > 0 {
-		if cap(state.buf) < int(e.storage) {
-			state.buf = make([]byte, e.storage)
-		} else {
-			state.buf = state.buf[:e.storage]
-		}
-		copy(state.buf, e.buf[:e.storage])
-	} else {
-		state.buf = state.buf[:0]
-	}
 }
 
 func (e *Encoder) restoreScalarState(state *EncoderState) {
@@ -564,7 +603,7 @@ func (e *Encoder) restoreScalarState(state *EncoderState) {
 func (e *Encoder) RestoreState(state *EncoderState) {
 	e.restoreScalarState(state)
 	if len(state.buf) > 0 {
-		copy(e.buf[:state.storage], state.buf)
+		copy(e.buf[state.bufOffs:state.storage], state.buf)
 	}
 }
 
@@ -622,33 +661,31 @@ func (e *Encoder) EncodeUniform(val uint32, ft uint32) {
 	if ft <= 1 {
 		return // Only one possible value, nothing to encode
 	}
-
-	// Calculate number of bits needed
+	// ec_enc_uint: with more than EC_UINT_BITS bits of range the high bits go
+	// through ec_encode and the low ftb bits through ec_enc_bits, both
+	// written out here so the common PVQ index path makes no further calls.
 	ftb := uint(ilog(ft - 1))
 	if ftb > EC_SYM_BITS {
-		// Multi-byte case: encode high bits with range coder, low bits raw
 		ftb -= EC_SYM_BITS
-		ft1 := (ft - 1) >> ftb
-		e.encodeUniformInternal(val>>ftb, ft1+1)
-		// Encode low bits raw
-		e.EncodeRawBits(val&((1<<ftb)-1), ftb)
-	} else {
-		// Single-byte case
-		e.encodeUniformInternal(val, ft)
+		e.encodeUniformInternal(val>>ftb, ((ft-1)>>ftb)+1)
+		if uint(e.nendBits)+ftb > EC_WINDOW_SIZE {
+			e.flushEndWindow()
+		}
+		e.endWindow |= (val & (1<<ftb - 1)) << uint(e.nendBits)
+		e.nendBits += int32(ftb)
+		e.nbitsTotal += int32(ftb)
+		return
 	}
+	e.encodeUniformInternal(val, ft)
 }
 
-// encodeUniformInternal encodes a uniform value when ft <= 256.
-// Uses the same approach as Encode() for uniformly distributed values.
+// encodeUniformInternal is ec_encode(val, val+1, ft) for a uniform symbol.
 func (e *Encoder) encodeUniformInternal(val uint32, ft uint32) {
-	// For uniform distribution, fl=val, fh=val+1
-	// Using the Encode formula adapted for uniform case
 	r := e.rng / ft
 	if val > 0 {
 		e.val += e.rng - r*(ft-val)
 		e.rng = r
 	} else {
-		// val == 0: stay at current position
 		e.rng -= r * (ft - 1)
 	}
 	e.normalize()
@@ -663,20 +700,28 @@ func (e *Encoder) EncodeRawBits(val uint32, bits uint) {
 	if bits == 0 {
 		return
 	}
-	window := e.endWindow
-	used := int(e.nendBits)
-	if used+int(bits) > EC_WINDOW_SIZE {
-		for used >= EC_SYM_BITS {
-			e.writeEndByte(byte(window & EC_SYM_MAX))
-			window >>= EC_SYM_BITS
-			used -= EC_SYM_BITS
-		}
+	if uint(e.nendBits)+bits > EC_WINDOW_SIZE {
+		e.flushEndWindow()
 	}
-	window |= val << used
-	used += int(bits)
-	e.endWindow = window
-	e.nendBits = int32(used)
+	e.endWindow |= val << uint(e.nendBits)
+	e.nendBits += int32(bits)
 	e.nbitsTotal += int32(bits)
+}
+
+// flushEndWindow writes the whole bytes of the raw-bit window to the end of
+// the buffer, the ec_enc_bits refill that makes room for a new value.
+//
+//go:noinline
+func (e *Encoder) flushEndWindow() {
+	window := e.endWindow
+	used := e.nendBits
+	for used >= EC_SYM_BITS {
+		e.writeEndByte(byte(window & EC_SYM_MAX))
+		window >>= EC_SYM_BITS
+		used -= EC_SYM_BITS
+	}
+	e.endWindow = window
+	e.nendBits = used
 }
 
 // writeEndByte writes a byte to the end of the buffer (growing backwards).

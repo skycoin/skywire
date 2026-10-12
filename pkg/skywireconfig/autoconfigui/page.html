@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skywire autoconfig</title>
+<style>
+:root{--bg:#fff;--fg:#1c1c1c;--dim:#666;--line:#ddd;--chg:#fff3c4;--acc:#0b5fff}
+@media (prefers-color-scheme:dark){:root{--bg:#161616;--fg:#e8e8e8;--dim:#9a9a9a;--line:#333;--chg:#4a3f10;--acc:#6ea0ff}}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;margin:0 auto;max-width:60rem;padding:0 16px 6rem}
+h1{font-size:1.2rem}fieldset{border:1px solid var(--line);margin:1rem 0;border-radius:6px}
+legend{font-weight:600;padding:0 .4rem}
+.f{padding:.4rem .2rem;border-bottom:1px solid var(--line)}.f:last-child{border:0}
+.f.chg{background:var(--chg)}label{font-family:monospace;font-weight:600}
+.help{color:var(--dim);font-size:.85rem;margin-top:.15rem}
+input[type=text],input[type=number],input[type=password]{width:100%;box-sizing:border-box;margin-top:.2rem;padding:.3rem;background:var(--bg);color:var(--fg);border:1px solid var(--line)}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:.6rem 16px;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+button{padding:.4rem .9rem;border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:4px;cursor:pointer}
+button.s{background:none;color:var(--acc)}
+pre{white-space:pre-wrap;word-break:break-all;background:var(--line);padding:.6rem;border-radius:4px}
+.err{color:#c00}
+</style>
+</head>
+<body>
+<h1>skywire autoconfig</h1>
+<div id="path" class="help"></div>
+<div id="form"></div>
+<pre id="out" hidden></pre>
+<div class="bar">
+<label><input type="checkbox" id="norestart"> do not restart the service</label>
+<button class="s" id="print">Print command</button>
+<button id="save">Save and apply</button>
+<span id="count" class="help"></span>
+</div>
+<script>
+const token = new URLSearchParams(location.search).get('token') || '';
+let fields = [];
+const form = document.getElementById('form'), out = document.getElementById('out');
+const inputs = {};
+async function call(path, body) {
+  const r = await fetch(path, {method: body ? 'POST' : 'GET', headers: {'X-Token': token, 'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+  return r.json();
+}
+function val(f) { return f.type === 'bool' ? String(inputs[f.name].checked) : inputs[f.name].value; }
+function values() {
+  const v = {};
+  for (const f of fields) v[f.name] = val(f);
+  return {values: v, no_restart: document.getElementById('norestart').checked};
+}
+function refresh() {
+  let n = 0;
+  for (const f of fields) {
+    const c = val(f) !== f.current;
+    inputs[f.name].closest('.f').classList.toggle('chg', c);
+    if (c) n++;
+  }
+  document.getElementById('count').textContent = n + ' changed';
+}
+function render(m) {
+  fields = m.fields;
+  document.getElementById('path').textContent = m.path;
+  form.replaceChildren();
+  const groups = [];
+  for (const f of fields) if (!groups.includes(f.group)) groups.push(f.group);
+  for (const g of groups) {
+    const fs = document.createElement('fieldset');
+    const lg = document.createElement('legend'); lg.textContent = g; fs.append(lg);
+    for (const f of fields.filter(x => x.group === g)) {
+      const d = document.createElement('div'); d.className = 'f';
+      const l = document.createElement('label'); l.textContent = f.name; l.htmlFor = 'f-' + f.name;
+      const i = document.createElement('input'); i.id = 'f-' + f.name;
+      if (f.type === 'bool') { i.type = 'checkbox'; i.checked = f.current === 'true'; i.style.marginLeft = '.5rem'; }
+      else { i.type = f.secret ? 'password' : f.type === 'int' ? 'number' : 'text'; i.value = f.current; if (f.default) i.placeholder = 'default ' + f.default; }
+      i.addEventListener('input', refresh); i.addEventListener('change', refresh);
+      inputs[f.name] = i;
+      const h = document.createElement('div'); h.className = 'help';
+      h.textContent = f.help + (f.note ? ' Note: ' + f.note : '') + ' [' + f.env_key + ']';
+      d.append(l, i, h); fs.append(d);
+    }
+    form.append(fs);
+  }
+  refresh();
+}
+function show(text, err) { out.hidden = false; out.className = err ? 'err' : ''; out.textContent = text; out.scrollIntoView(); }
+document.getElementById('print').onclick = async () => {
+  const r = await call('/api/print', values());
+  show(r.error || r.command, !!r.error);
+};
+document.getElementById('save').onclick = async () => {
+  if (!confirm('Write the changes to the skyenv file and run autoconfig?')) return;
+  const r = await call('/api/apply', values());
+  show((r.output || '') + (r.error ? '\n' + r.error : '\napplied'), !!r.error);
+  if (r.model) render(r.model);
+};
+call('/api/model').then(r => render(r.model));
+</script>
+</body>
+</html>

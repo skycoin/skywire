@@ -32,7 +32,7 @@ skywire cli proxy mux auto <fastest|balanced|resilient>
       --dry-run          print the prune/grow decision without acting
       --min-hops int     hop-count floor for legs added when growing toward the preset (>=2 keeps grown legs multihop) (default 2)
   -n, --name string      app to adapt (default "skysocks-client")
-      --rg uint16        rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)
+      --rg uint16        rg selector: the route group's own port as 'mux info' prints it (desc.dst_port; its src_port also matches). Only needed when the app has multiple active rg's — e.g. 'proxy start --tunnels N'
   -w, --watch duration   re-evaluate every interval (e.g. 5s); 0 = decide once and exit
 ```
 

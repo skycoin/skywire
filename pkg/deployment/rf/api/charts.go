@@ -26,6 +26,8 @@ const (
 	chartNoRoute     = "rf.noroute"
 	chartFailed      = "rf.failed"
 	chartMeanMs      = "rf.ms"
+	chartP50Ms       = "rf.p50"
+	chartP95Ms       = "rf.p95"
 	chartHopsPrefix  = "rf.hops."
 	chartFoundPrefix = "rf.found."
 	chartGraphVisors = "graph.visors"
@@ -60,12 +62,15 @@ func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, 
 	page := &charts.Page{
 		Title: "Skywire route finder",
 		About: strings.Split(a.dmsgAddr, ":")[0],
+		Stats: a.Stats,
+		Store: st,
+		Log:   log,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return a.buildCharts(ctx, st, c, r, now)
 		},
 	}
 	a.chartsPage.Store(page)
-	go charts.Run(ctx, st, func(ctx context.Context) (map[string]float64, error) { return a.collectCharts(ctx, c) }, log)
+	go charts.Run(ctx, st, a.Stats.Wrap(func(ctx context.Context) (map[string]float64, error) { return a.collectCharts(ctx, c) }), log)
 }
 
 // ChartsPage serves the charts page, or 404 when charts are not running.
@@ -95,6 +100,10 @@ func (a *API) collectCharts(ctx context.Context, c *rfCharts) (map[string]float6
 	v[chartFailed] = float64(cur.failed - prev.failed)
 	if req > 0 {
 		v[chartMeanMs] = float64((cur.elapsed-prev.elapsed)/time.Millisecond) / float64(req)
+	}
+	if t := a.stats.takeTimes(); len(t) > 0 {
+		v[chartP50Ms] = t[len(t)/2]
+		v[chartP95Ms] = t[len(t)*95/100]
 	}
 	for h := 1; h <= maxCountedHops; h++ {
 		v[chartHopsPrefix+strconv.Itoa(h)] = float64(cur.hops[h] - prev.hops[h])
@@ -237,8 +246,12 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 			{Name: "transports", Vals: f.Values(chartGraphTps, false)},
 		}),
 	}}
-	mean := chart("Time to answer", "Mean time to answer a route request.", charts.Lines,
-		[]charts.Series{{Name: "mean", Vals: f.Values(chartMeanMs, false)}})
+	mean := chart("Route search time", "Time from a route request's arrival to its answer: the median, the 95th percentile and the mean per 5 minutes.", charts.Lines,
+		[]charts.Series{
+			{Name: "median", Vals: f.Values(chartP50Ms, false)},
+			{Name: "95th percentile", Vals: f.Values(chartP95Ms, false)},
+			{Name: "mean", Vals: f.Values(chartMeanMs, false)},
+		})
 	mean.Format = ms
 	out.Charts = append(out.Charts, mean)
 
@@ -257,17 +270,18 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, c *rfCharts, r c
 		if v, ok := f.Latest(k + "rate"); ok {
 			rate = pct(v)
 		}
-		reqs = append(reqs, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"req", false), Cells: []string{state, rate}})
-		rates = append(rates, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"rate", false)})
+		ver := c.nodeVersion(pk)
+		reqs = append(reqs, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"req", false), Cells: []string{ver, state, rate}})
+		rates = append(rates, charts.Series{Name: pk.Hex(), Vals: f.Values(k+"rate", false), Cells: []string{ver}})
 		lat = append(lat,
 			charts.Series{Name: pk.Hex() + " p50", Vals: f.Values(k+"p50", false)},
 			charts.Series{Name: pk.Hex() + " p95", Vals: f.Values(k+"p95", false)})
 	}
 	sn := chart("Route setup requests", "Setups each route setup node handled, per 5 minutes.", charts.Lines, reqs)
-	sn.Legend = []string{"Setup node", "Now", "Success rate", "Requests"}
+	sn.Legend = []string{"Setup node", "Version", "Now", "Success rate", "Requests"}
 	rt := chart("Route setup success rate", "Successful setups as a share of finished ones.", charts.Lines, rates)
 	rt.Format = pct
-	rt.Legend = []string{"Setup node", "Success rate"}
+	rt.Legend = []string{"Setup node", "Version", "Success rate"}
 	lt := chart("Route setup latency", "Median and 95th percentile time of successful setups.", charts.Lines, lat)
 	lt.Format = ms
 	lt.Legend = []string{"Setup node and percentile", "Latency"}
@@ -292,4 +306,19 @@ func foundSeries(f *charts.Frame) []charts.Series {
 		out = append(out, charts.Series{Name: name, Vals: f.Values(chartFoundPrefix+strconv.Itoa(n), true)})
 	}
 	return out
+}
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (a *API) Charts() *charts.Page {
+	return a.chartsPage.Load()
+}
+
+// nodeVersion is the version a setup node reported on its last /stats read.
+func (c *rfCharts) nodeVersion(pk cipher.PubKey) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if s := c.prevNode[pk]; s != nil {
+		return s.Version
+	}
+	return ""
 }

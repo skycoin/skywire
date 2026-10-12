@@ -53,7 +53,8 @@ func (s *redisStore) netDailySinceKey() string {
 // plus a pipeline.
 //
 // KEYS: prev, daily, visorAll, visorDaily, netDaily, netSince
-// ARGV: reporter, sent, recv, now, type, prevTTL, histTTL, visorAllTTL, date
+// ARGV: reporter, sent, recv, now, type, prevTTL, histTTL, visorAllTTL, date,
+// dailyTTL (the transport's daily hash; see bw_archive.go)
 var bandwidthScript = redis.NewScript(`
 local function int(v) return string.format('%d', v) end
 local cs, cr = tonumber(ARGV[2]), tonumber(ARGV[3])
@@ -84,7 +85,7 @@ if total > max then
   redis.call('HINCRBY', KEYS[5], 'type:' .. ARGV[5], grow)
   redis.call('EXPIRE', KEYS[5], ARGV[7])
 end
-redis.call('EXPIRE', KEYS[2], ARGV[7])
+redis.call('EXPIRE', KEYS[2], ARGV[10])
 
 redis.call('SADD', KEYS[3], ARGV[1])
 redis.call('EXPIRE', KEYS[3], ARGV[8])

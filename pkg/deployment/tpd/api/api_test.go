@@ -303,47 +303,12 @@ func TestGETTransportByEdge(t *testing.T) {
 	})
 }
 
-func TestGETAllTransports(t *testing.T) {
-	mock := newTestStore(t)
-	nonceStoreConfig := storeconfig.Config{Type: storeconfig.Memory}
-
-	ctx := context.Background()
-	nonceMock, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, "")
-	require.NoError(t, err)
-
-	api := New(nil, mock, nonceMock, false, tpdiscmetrics.NewEmpty(), "", "")
-
-	entry1 := newTestEntry()
-	sEntry1 := &transport.SignedEntry{Entry: entry1, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry1))
-
-	entry2 := newTestEntry()
-	sEntry2 := &transport.SignedEntry{Entry: entry2, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry2))
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/all-transports", nil)
-	r.Header = validHeaders(t, nil)
-	api.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-
-	var resp []*transport.Entry
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-
-	require.Len(t, resp, 2)
-
-	t.Run("Persistence", func(t *testing.T) {
-		found, err := mock.GetAllTransports(ctx, true)
-		require.NoError(t, err)
-		for i, f := range found {
-			if f.ID == resp[i].ID {
-				assert.EqualValues(t, *f, *resp[i])
-			} else {
-				j := (i + 1) % 2
-				assert.EqualValues(t, *f, *resp[j])
-			}
-		}
-	})
+// The full transport list is no longer served: it was most of TPD's egress.
+// Routers read the routing feed instead.
+func TestGETAllTransportsIsGone(t *testing.T) {
+	api := newTestAPI(t)
+	w := serveUnique(api, 0, http.MethodGet, "/all-transports", nil, nil)
+	require.Equal(t, http.StatusGone, w.Code, w.Body.String())
 }
 
 func TestGETIncrementingNonces(t *testing.T) {
@@ -464,7 +429,6 @@ func TestPublicReadEndpoints(t *testing.T) {
 		"/versions",
 		"/versions?v=v2",
 		"/versions/" + pk,
-		"/all-transports?status=true",
 	}
 	for i, p := range paths {
 		w := serveUnique(api, i, http.MethodGet, p, nil, nil)
@@ -658,11 +622,6 @@ func TestCXOPublisherErrorTracking(t *testing.T) {
 	// recordError / LastError only touch mu + lastError, so zero-value
 	// struct literals are safe (no CXO node required).
 	boom := errors.New("boom")
-
-	a := &AllTransportsCXOPublisher{}
-	require.NoError(t, a.LastError())
-	a.recordError(boom)
-	require.Error(t, a.LastError())
 
 	m := &MetricsCXOPublisher{}
 	m.recordError(boom)

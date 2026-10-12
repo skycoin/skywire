@@ -33,20 +33,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall/js"
-	"time"
 
 	"github.com/0magnet/afero"
 	"github.com/0magnet/sh/v3/interp"
 	"github.com/0magnet/websh/shell"
 	"github.com/0magnet/websh/shell/browser"
-	xterm "github.com/0magnet/xterm-go"
+	"github.com/0magnet/websh/web"
 )
 
 // wasmShellFS is the ONE in-tab filesystem shared by every websh terminal and
@@ -493,262 +491,19 @@ var registerVisorApplets = sync.OnceFunc(func() {
 	registerSkywireCmd()
 })
 
-// shellSession is one open terminal window: a terminal, a shell, and the
-// plumbing between them.
-type shellSession struct {
-	term   *xterm.Terminal
-	sh     *shell.Shell
-	editor *shell.LineEditor
-
-	running   bool
-	rawInput  bool
-	cancelRun context.CancelFunc
-	stdinW    *io.PipeWriter
-	lines     chan string
-
-	funcs []js.Func // released on close
-}
-
-// openShell builds a terminal + shell inside el and starts the read loop.
-func openShell(el js.Value) *shellSession {
+// openShell mounts a websh session on el: the terminal, the shell, its
+// line editor and the progressive host, over the desk's shared filesystem,
+// with the visor's applets registered.
+func openShell(el js.Value) (*web.Session, error) {
 	registerVisorApplets()
-	// the browser's own console, reachable from the shell: `js <expr>` and
-	// `logs` (which backfills from browse.js's window.skywireLog, so visor
-	// output from before this window opened is there too)
 	browser.Register()
-	// the mesh as the shell's network: dcurl / dial / aliases, addressing
-	// peers by public key over the visor's dmsg session
 	registerMeshApplets()
-	// curl with -x socks5h:// support over the virtual loopback — replaces
-	// websh's fetch()-based curl, so it must register after browser.Register.
 	registerCurl()
-
-	term := xterm.New(nil)
-	term.Open(el)
-	term.Fit()
-	if err := term.EnableWebGL(); err != nil {
-		fmt.Println("wasm-visor: shell using DOM renderer:", err)
-	}
-
-	s := &shellSession{term: term, lines: make(chan string, 8)}
-	out := shellWriter{term}
-	stdinR, stdinW := io.Pipe()
-	s.stdinW = stdinW
-
-	vfs := sharedShellFS()
-	sh, err := shell.New(vfs, stdinR, out, out, deskShellEnv()...)
-	if err != nil {
-		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
-		return s
-	}
-	// A console is an interactive shell: only then do `cmd &` jobs outlive
-	// the line that started them. Applied before the first Run, so a reset
-	// after `exit` keeps it.
-	if err := interp.Interactive(true)(sh.Runner); err != nil {
-		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
-		return s
-	}
-	s.sh = sh
-	sh.RawMode = func(on bool) { s.rawInput = on }
-	sh.Size = func() (int, int) { return term.Core.Cols(), term.Core.Rows() }
-	if err := sh.PopulateBin(); err != nil {
-		term.WriteString("failed to populate /bin: " + err.Error() + "\r\n")
-	}
-
-	s.editor = &shell.LineEditor{
-		Echo: func(str string) { term.WriteString(str) },
-		Redraw: func(content string, back int) {
-			line := "\r\x1b[2K" + s.prompt() + content
-			if back > 0 {
-				line += fmt.Sprintf("\x1b[%dD", back)
-			}
-			term.WriteString(line)
-		},
-		Submit:      func(line string) { s.lines <- line },
-		Interrupt:   func() { s.sh.CancelPending(); s.writePrompt() },
-		EOF:         func() { term.WriteString("\r\n(close the window to end this session)\r\n"); s.writePrompt() },
-		ClearScreen: func() { term.WriteString("\x1b[2J\x1b[H"); s.writePrompt(); term.WriteString(s.editor.Line()) },
-		Complete:    s.complete,
-	}
-
-	term.Core.OnData = func(data string) {
-		switch {
-		case s.running && s.rawInput:
-			// a full-screen applet (edit, less) owns the terminal
-			go func() { _, _ = s.stdinW.Write([]byte(data)) }() //nolint:errcheck
-		case s.running:
-			if strings.Contains(data, "\x03") {
-				if s.cancelRun != nil {
-					s.cancelRun()
-				}
-				return
-			}
-			term.WriteString(strings.ReplaceAll(data, "\r", "\r\n"))
-			go func() { _, _ = s.stdinW.Write([]byte(strings.ReplaceAll(data, "\r", "\n"))) }() //nolint:errcheck
-		default:
-			s.editor.Input(data)
-		}
-	}
-
-	// the history builtin reads the line editor's list
-	if err := sh.UseHistory(s.editor.History, s.editor.ClearHistory); err != nil {
-		term.WriteString("history unavailable: " + err.Error() + "\r\n")
-	}
-
-	// keep the grid in step with the WinBox window as it is resized
-	if ro := js.Global().Get("ResizeObserver"); ro.Truthy() {
-		cb := js.FuncOf(func(js.Value, []js.Value) any {
-			term.Fit()
-			return nil
-		})
-		s.funcs = append(s.funcs, cb)
-		ro.New(cb).Call("observe", el)
-	}
-
-	go s.run()
-
-	s.writePrompt()
-	return s
-}
-
-// shellWriter adapts shell output (LF) to the terminal (CRLF).
-type shellWriter struct{ term *xterm.Terminal }
-
-func (w shellWriter) Write(p []byte) (int, error) {
-	w.term.WriteString(strings.ReplaceAll(string(p), "\n", "\r\n"))
-	return len(p), nil
-}
-
-func (s *shellSession) prompt() string {
-	if s.sh == nil {
-		return "$ "
-	}
-	if s.sh.Pending() {
-		return "\x1b[1;33m>\x1b[0m "
-	}
-	dir := s.sh.Dir()
-	if strings.HasPrefix(dir, "/home/user") {
-		dir = "~" + dir[len("/home/user"):]
-	}
-	name := "visor"
-	if pk := visorPK(); len(pk) >= 6 {
-		name = pk[:6]
-	}
-	return "\x1b[1;32m" + name + "\x1b[0m:\x1b[1;34m" + dir + "\x1b[0m$ "
-}
-
-func (s *shellSession) writePrompt() { s.term.WriteString(s.prompt()) }
-
-// complete resolves tab completion: commands for the first word, virtual
-// filesystem paths after it.
-func (s *shellSession) complete(word string, isFirstWord bool) []string {
-	if isFirstWord && !strings.Contains(word, "/") {
-		var out []string
-		for _, name := range append(shell.AppletNames(), shellBuiltins...) {
-			if strings.HasPrefix(name, word) {
-				out = append(out, name)
-			}
-		}
-		sort.Strings(out)
-		return out
-	}
-	dir, base := filepath.Split(word)
-	search := dir
-	if !filepath.IsAbs(search) {
-		search = filepath.Join(s.sh.Dir(), dir)
-	}
-	infos, err := afero.ReadDir(s.sh.FS, filepath.Clean(search))
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, info := range infos {
-		if !strings.HasPrefix(info.Name(), base) {
-			continue
-		}
-		cand := dir + info.Name()
-		if info.IsDir() {
-			cand += "/"
-		}
-		out = append(out, cand)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// shellBuiltins are the interpreter builtins offered by tab completion.
-var shellBuiltins = []string{
-	"cd", "pwd", "echo", "printf", "read", "exit", "export", "unset",
-	"source", "test", "true", "false", "set", "shift", "local", "declare",
-	"eval", "alias", "unalias", "type", "return", "break", "continue",
-	"pushd", "popd", "dirs", "let", "getopts", "wait",
-	"jobs", "kill", "disown", "fg", "bg", "enable", "compgen", "history",
-	"builtin", "umask", "times", "trap", "shopt", "mapfile", "readarray",
-}
-
-// run executes submitted lines one at a time, off the JS event loop so the
-// terminal stays responsive while a command works.
-func (s *shellSession) run() {
-	for line := range s.lines {
-		if !s.sh.Pending() {
-			s.editor.AddHistory(line)
-		}
-		// Canceling this at the end of the line is safe: the interpreter
-		// detaches background jobs from it, so `sleep 30 &` survives to the
-		// next prompt as it would in bash. close() stops them instead.
-		runCtx, cancel := context.WithCancel(context.Background())
-		s.cancelRun = cancel
-		s.running = true
-
-		_, err := s.sh.Run(runCtx, line)
-
-		s.running = false
-		s.cancelRun = nil
-		cancel()
-
-		if err != nil && !strings.HasPrefix(err.Error(), "exit status") {
-			s.term.WriteString("websh: " + strings.ReplaceAll(err.Error(), "\n", "\r\n") + "\r\n")
-		}
-		// bash announces the background jobs that have ended before it draws
-		// a prompt, and nothing in the interpreter reports one unasked, so
-		// without this a job that finished is never mentioned. It is also
-		// what reaps them: a job the shell has reported leaves the table, so
-		// a long-lived tab does not accumulate every job it ever ran. Not
-		// between the lines of an unfinished statement, where bash is also
-		// quiet, and not under the line's own context, just canceled.
-		if !s.sh.Pending() {
-			s.sh.ReportJobs(context.Background())
-		}
-		s.writePrompt()
-	}
-}
-
-func (s *shellSession) close() {
-	if s.lines != nil {
-		close(s.lines)
-		s.lines = nil
-	}
-	if s.cancelRun != nil {
-		s.cancelRun()
-	}
-	if s.sh != nil {
-		// Background jobs outlive the line that started them, so closing the
-		// window is what ends them. Bounded, since this runs on the JS
-		// event loop and a job that ignores cancellation must not hang it.
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		s.sh.Runner.StopJobs(ctx)
-		cancel()
-	}
-	if s.stdinW != nil {
-		_ = s.stdinW.Close() //nolint:errcheck
-	}
-	if s.term != nil {
-		s.term.Dispose()
-	}
-	for _, f := range s.funcs {
-		f.Release()
-	}
-	s.funcs = nil
+	return web.NewSession(el, web.Options{
+		FS:   sharedShellFS(),
+		Host: "visor",
+		Env:  deskShellEnv(),
+	})
 }
 
 // jsOpenShell implements skywireShell.open(el): mount a terminal running websh
@@ -777,23 +532,20 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 
 	var (
 		mu      sync.Mutex
-		s       *shellSession
+		s       *web.Session
 		closed  bool
 		pending []string // run() lines queued before the session is up
 	)
-	submit := func(sess *shellSession, cmd string) {
-		sess.term.WriteString(cmd + "\r\n")
-		go func() {
-			defer func() { _ = recover() }() //nolint:errcheck // session closed under us — drop the line
-			sess.lines <- cmd
-		}()
-	}
 	go func() {
-		sess := openShell(el)
+		sess, err := openShell(el)
+		if err != nil {
+			js.Global().Get("console").Call("error", "desk shell: "+err.Error())
+			return
+		}
 		mu.Lock()
 		if closed {
 			mu.Unlock()
-			sess.close()
+			sess.Close()
 			return
 		}
 		s = sess
@@ -801,11 +553,11 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 		pending = nil
 		mu.Unlock()
 		for _, cmd := range queued {
-			submit(sess, cmd)
+			sess.Submit(cmd)
 		}
 	}()
 
-	get := func() *shellSession { mu.Lock(); defer mu.Unlock(); return s }
+	get := func() *web.Session { mu.Lock(); defer mu.Unlock(); return s }
 	handle := js.Global().Get("Object").New()
 	closeFn := js.FuncOf(func(js.Value, []js.Value) any {
 		mu.Lock()
@@ -813,19 +565,19 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 		sess := s
 		mu.Unlock()
 		if sess != nil {
-			sess.close()
+			sess.Close()
 		}
 		return nil
 	})
 	fitFn := js.FuncOf(func(js.Value, []js.Value) any {
 		if sess := get(); sess != nil {
-			sess.term.Fit()
+			sess.Term.Fit()
 		}
 		return nil
 	})
 	focusFn := js.FuncOf(func(js.Value, []js.Value) any {
 		if sess := get(); sess != nil {
-			sess.term.Focus()
+			sess.Term.Focus()
 		}
 		return nil
 	})
@@ -846,7 +598,7 @@ func jsOpenShell(_ js.Value, args []js.Value) interface{} {
 		}
 		mu.Unlock()
 		if sess != nil {
-			submit(sess, cmd)
+			sess.Submit(cmd)
 		}
 		return nil
 	})

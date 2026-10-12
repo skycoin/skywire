@@ -1,8 +1,8 @@
-//go:build tinygo && !(js && wasm)
+//go:build tinygo && !linux && !(js && wasm)
 
 // Package network pkg/transport/network/webrtc_tinygo.go c2-net-transport
 //
-// WebRTC carrier stub for non-browser TinyGo targets (wasip1, bare-metal): there
+// WebRTC carrier stub for TinyGo targets other than linux and the browser: there
 // is no RTCPeerConnection and pion doesn't compile here, so dial and accept fail
 // closed. The browser carrier lives in webrtc_browser.go; Start + the dmsg
 // signaling listener are shared (untagged) in webrtc.go and harmlessly produce a

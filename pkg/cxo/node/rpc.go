@@ -5,13 +5,16 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/rpc"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skycoin/src/cipher"
 
 	swcipher "github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 )
+
+//go:generate go run ../../../internal/rpcgen -type RPC=registerNodeRPC,TCPRPC=registerTCPRPC,UDPRPC=registerUDPRPC,RootRPC=registerRootRPC,DMSGRPC=registerDMSGRPC -o rpc_register_tinygo.go -native rpc_register_native.go
 
 // wrap the RPC
 type rpcServer struct {
@@ -30,13 +33,13 @@ func (n *Node) newRPC() (r *rpcServer) {
 
 func (r *rpcServer) Listen(address string) (err error) {
 
-	r.r.RegisterName("node", &RPC{r.n}) //nolint:errcheck,gosec
+	registerNodeRPC(r.r, "node", &RPC{r.n}) //nolint:errcheck,gosec
 
-	r.r.RegisterName("tcp", &TCPRPC{r.n}) //nolint:errcheck,gosec
-	r.r.RegisterName("udp", &UDPRPC{r.n}) //nolint:errcheck,gosec
+	registerTCPRPC(r.r, "tcp", &TCPRPC{r.n}) //nolint:errcheck,gosec
+	registerUDPRPC(r.r, "udp", &UDPRPC{r.n}) //nolint:errcheck,gosec
 
-	r.r.RegisterName("root", &RootRPC{r.n}) //nolint:errcheck,gosec
-	r.r.RegisterName("dmsg", &DMSGRPC{r.n}) //nolint:errcheck,gosec
+	registerRootRPC(r.r, "root", &RootRPC{r.n}) //nolint:errcheck,gosec
+	registerDMSGRPC(r.r, "dmsg", &DMSGRPC{r.n}) //nolint:errcheck,gosec
 
 	if r.l, err = net.Listen("tcp", address); err != nil {
 		return

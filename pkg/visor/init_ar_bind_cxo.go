@@ -84,6 +84,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	})
 	if err != nil {
 		log.WithError(err).Warn("AR-bind-CXO: publisher init failed; continuing with HTTP/UDP AR registration only")
+		bp.SetBindPublishHook(v.noteReachBind)
 		return nil
 	}
 	v.trackCXOPublisher(skyenv.DmsgVisorARBindCXOPort, pub)
@@ -93,6 +94,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// the AR client's bind goroutine and must not block; Put coalesces into the
 	// next BatchWindow tick, so it returns at once.
 	bp.SetBindPublishHook(func(netType string, payload addrresolver.LocalAddresses) {
+		v.noteReachBind(netType, payload)
 		b, mErr := json.Marshal(payload)
 		if mErr != nil {
 			log.WithError(mErr).Debug("AR-bind-CXO: marshal bind payload failed")

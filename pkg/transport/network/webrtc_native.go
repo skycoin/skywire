@@ -1,4 +1,4 @@
-//go:build !tinygo && !(js && wasm)
+//go:build !(js && wasm) && (!tinygo || linux)
 
 // Package network pkg/transport/network/webrtc_native.go c2-net-transport
 //
@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/webrtc/v4"
 	"github.com/pion/datachannel"
 	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor"
-	"github.com/pion/webrtc/v4"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -312,6 +312,8 @@ type dcConn struct {
 	closed    bool
 	closeErr  error
 	rDeadline time.Time
+	// pushFn is the PushSource notify, run on every wake.
+	pushFn func()
 
 	// relOnce guards the teardown of raw/pc/signal, which is NOT the same
 	// event as closed. See release.
@@ -387,7 +389,39 @@ func (c *dcConn) readPump() {
 	}
 }
 
-func (c *dcConn) wake() { close(c.notify); c.notify = make(chan struct{}) }
+func (c *dcConn) wake() {
+	close(c.notify)
+	c.notify = make(chan struct{})
+	if c.pushFn != nil {
+		c.pushFn()
+	}
+}
+
+// SetReadNotify implements PushSource. fn runs with c.mu held and must not
+// call into c.
+func (c *dcConn) SetReadNotify(fn func()) {
+	c.mu.Lock()
+	c.pushFn = fn
+	c.mu.Unlock()
+}
+
+// TryRead implements PushSource: Read without waiting.
+func (c *dcConn) TryRead(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.buf) > 0 {
+		n := copy(p, c.buf)
+		c.buf = c.buf[n:]
+		return n, nil
+	}
+	if c.closed {
+		if c.closeErr != nil {
+			return 0, c.closeErr
+		}
+		return 0, io.EOF
+	}
+	return 0, nil
+}
 
 func (c *dcConn) fail(err error) {
 	c.mu.Lock()
@@ -564,3 +598,5 @@ func releaseSignaling(signal io.Closer) {
 		signal.Close() //nolint:errcheck,gosec
 	}
 }
+
+var _ PushSource = (*dcConn)(nil)

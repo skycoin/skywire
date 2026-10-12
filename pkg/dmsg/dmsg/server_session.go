@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -263,6 +264,7 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// fleet-wide, 2026-09-10). The announce is idempotent: (re)register, ack.
 	if ss.entity.acceptPeerAnnouncements {
 		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil && ann.Verify(ss.rPK) == nil {
+			ss.settleFiling(notFiled)
 			accepted := ss.isPeer || ss.entity.peerAnnounceAllowed(ss.rPK)
 			if accepted {
 				ss.entity.promoteToPeer(ss.rPK, ss.SessionCommon)
@@ -298,6 +300,11 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	// impersonate anyone; what it spends is this server's relay capacity,
 	// charged in bridgeStream.
 	relayed := req.SrcAddr.PK != ss.rPK
+	if relayed {
+		ss.settleFiling(filedAsBefore)
+	} else {
+		ss.settleFiling(filedClient)
+	}
 	if relayed && !ss.isPeer && !ss.entity.acceptRelayedRequests {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return ErrReqInvalidSrcPK
@@ -447,8 +454,11 @@ func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser,
 	// Wrap both streams with idle-timeout deadlines. Ownership of the
 	// underlying yamux streams passes to CopyReadWriteCloser, which
 	// closes both sides when either direction errors out.
-	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
-	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
+	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout, read: &ss.entity.relay.up}
+	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout, read: &ss.entity.relay.down}
+	ss.entity.relay.streams.Add(1)
+	ss.entity.relay.active.Add(1)
+	defer ss.entity.relay.active.Add(-1)
 
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Serving stream.")
@@ -465,17 +475,25 @@ func (ss *ServerSession) bridge(log logrus.FieldLogger, yStr io.ReadWriteCloser,
 type idleTimeoutConn struct {
 	rwc     io.ReadWriteCloser
 	timeout time.Duration
+	// read, when set, counts the bytes read from rwc.
+	read *atomic.Uint64
 }
 
 func (c *idleTimeoutConn) Read(p []byte) (int, error) {
-	if conn, ok := c.rwc.(net.Conn); ok {
+	// Asserted on the method, not net.Conn: a QUIC stream has it without
+	// being a net.Conn, and must not keep the 5 s handshake deadline.
+	if conn, ok := c.rwc.(interface{ SetReadDeadline(time.Time) error }); ok {
 		conn.SetReadDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
-	return c.rwc.Read(p)
+	n, err := c.rwc.Read(p)
+	if n > 0 && c.read != nil {
+		c.read.Add(uint64(n))
+	}
+	return n, err
 }
 
 func (c *idleTimeoutConn) Write(p []byte) (int, error) {
-	if conn, ok := c.rwc.(net.Conn); ok {
+	if conn, ok := c.rwc.(interface{ SetWriteDeadline(time.Time) error }); ok {
 		conn.SetWriteDeadline(time.Now().Add(c.timeout)) //nolint:errcheck,gosec
 	}
 	return c.rwc.Write(p)

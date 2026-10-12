@@ -92,7 +92,7 @@ func init() {
 			"Installed before the app starts; backend dispatched by file extension. "+
 			"Pass an empty string or \"none\" to clear a previously-installed override.")
 	lsAppsCmd.Flags().BoolVarP(&lsAppsLive, "live", "L", false,
-		"live-refresh mode (bubbletea TUI, 1s tick); shows app status transitions in place")
+		"live-refresh mode (TUI, 1s tick); shows app status transitions in place")
 }
 
 var argCmd = &cobra.Command{

@@ -1,4 +1,4 @@
-//go:build !arm64 || race || purego
+//go:build !amd64 || !goexperiment.simd || nosimd || purego
 
 package silk
 

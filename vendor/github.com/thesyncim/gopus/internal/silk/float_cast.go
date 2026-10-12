@@ -2,13 +2,12 @@ package silk
 
 import "math"
 
-// round32 forces x to float32 precision. Go's arm64 backend may contract a*b+c
-// into a single FMADD (one rounding), which diverges from scalar libopus (two
-// roundings); wrapping the product as round32(a*b) materializes it at float32
-// precision so a surrounding add/sub cannot fuse, matching the scalar reference
-// on every build. It is the cheap barrier — an FMUL+FADD pair rather than the
-// FMUL+FMOV+FMOV+FADD of a Float32bits round-trip — and a no-op on amd64 and the
-// purego oracle, which do not contract FP.
+// round32 forces x to float32 precision. Go's arm64 backend and amd64 v3 can
+// contract a*b+c into a single FMA (one rounding); wrapping the product as
+// round32(a*b) materializes it at float32 precision so a surrounding add/sub
+// cannot fuse when the C expression rounds the product separately. It is the
+// cheap barrier — an FMUL+FADD pair rather than the FMUL+FMOV+FMOV+FADD of a
+// Float32bits round-trip — and a no-op on targets that do not contract FP.
 func round32(x float32) float32 {
 	return float32(x)
 }
@@ -25,12 +24,11 @@ func noFMA32(a, b float32) float32 {
 }
 
 // noFMA64 returns a*b as a C double, forcing the product to materialize before
-// the caller adds or subtracts it. This mirrors the noFMA32 use when we need
-// to prevent the compiler from contracting a multiply-add into a single FMA.
-//
-//go:noinline
+// the caller adds or subtracts it. As in round32, the explicit conversion
+// rounds the product, and Go never contracts an explicitly rounded product
+// into an FMA, so the barrier holds after inlining.
 func noFMA64(a, b silkCReal) silkCReal {
-	return a * b
+	return silkCReal(a * b)
 }
 
 // float32ToInt32RoundEven mirrors lrintf-style round-to-nearest-even for

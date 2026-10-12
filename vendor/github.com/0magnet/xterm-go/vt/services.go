@@ -44,6 +44,9 @@ type CoreService struct {
 	// OnData receives data headed for the pty (user input and
 	// terminal query responses).
 	OnData func(data string)
+	// OnReply, when set, receives what the terminal sends of its own accord
+	// (query replies, reports) instead of OnData.
+	OnReply func(data string)
 	// OnUserInput fires on user-originated input (e.g. to clear the
 	// selection).
 	OnUserInput func()
@@ -93,6 +96,13 @@ func (c *CoreService) TriggerDataEvent(data string, wasUserInput bool) {
 		c.OnUserInput()
 	}
 
+	// What the terminal says by itself — a reply to a query, a report — goes
+	// to OnReply where the embedder tells the two apart, so a shell does not
+	// take a DA reply for typing.
+	if !wasUserInput && c.OnReply != nil {
+		c.OnReply(data)
+		return
+	}
 	if c.OnData != nil {
 		c.OnData(data)
 	}

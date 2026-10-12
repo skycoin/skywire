@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -42,6 +43,11 @@ func TestSinkSurvivesAFlood(t *testing.T) {
 		inFlight.Add(-1)
 	})
 	t.Cleanup(func() { SetLogSink(nil) })
+	// A visor started earlier in the process set the process level from its
+	// config (#5545), which would filter the debug lines before the sink.
+	prev := logging.GetLevel()
+	logging.SetLevel(logrus.DebugLevel)
+	t.Cleanup(func() { logging.SetLevel(prev) })
 
 	log := logging.MustGetLogger("sink-flood")
 	start := time.Now()

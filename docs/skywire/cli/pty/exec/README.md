@@ -26,7 +26,10 @@ Transport (--transport, default auto):
   dmsg    force via-visor dmsg.
   skynet  force via-visor skynet.
   tcp     direct noise-TCP; needs a host:port target (--via or a
-          tcp://<pk>@host:port positional).
+          tcp://<pk>@host:port positional). The local visor dials it
+          as itself, so the remote whitelist sees the visor's key. With
+          --sk, DMSGPTY_SK, --visor-key or --via-visor this CLI dials it
+          instead, which also works while the visor is down.
 --standalone is not supported here (no standalone-dmsg exec path yet).
 
 Target grammar — in addition to the bare <pk>:

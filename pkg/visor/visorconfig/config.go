@@ -71,10 +71,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: false,
 	}
-	// The standalone uptime-tracker is deprecated — uptime is now tracked by
-	// the discovery services (TPD et al.). Generated configs no longer include
-	// an `uptime_tracker` block; the field is nil and initUptimeTracker skips
-	// it. Runtime readers all nil-guard conf.UptimeTracker.
 	conf.CLIAddr = skyenv.RPCAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
@@ -160,6 +156,5 @@ type DmsgHTTPServersData struct {
 	TransportDiscovery string        `json:"transport_discovery"`
 	AddressResolver    string        `json:"address_resolver"`
 	RouteFinder        string        `json:"route_finder"`
-	UptimeTracker      string        `json:"uptime_tracker"`
 	ServiceDiscovery   string        `json:"service_discovery"`
 }

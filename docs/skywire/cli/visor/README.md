@@ -19,6 +19,7 @@ skywire cli visor
 - [go](go/README.md) — Go runtime statistics
 - [goroutines](goroutines/README.md) — Fetch + summarize the visor's pprof goroutine dump
 - [halt](halt/README.md) — Stop a running visor
+- [hostbridge](hostbridge/README.md) — Use the sockets of a host bridge
 - [hv](hv/README.md) — Hypervisor
 - [info](info/README.md) — Summary of visor info
 - [ip](ip/README.md) — IP information of network
@@ -31,6 +32,8 @@ skywire cli visor
 - [reinit](reinit/README.md) — Reinitiate modules
 - [resume](resume/README.md) — Resume a suspended visor
 - [reward](reward/README.md) — Show reward history for a visor
+- [services](services/README.md) — List the deployment services this visor embeds
+- [skyenv](skyenv/README.md) — Show or edit the visor's /etc/skywire.conf
 - [start](start/README.md) — Start visor
 - [state](state/README.md) — Curated snapshot of the visor's live internal runtime state
 - [suspend](suspend/README.md) — Suspend visor (tear down networking, keep local RPC)

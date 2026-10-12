@@ -3,7 +3,7 @@
 package silk
 
 // This file assembles the libopus FIXED_POINT SILK encoder LPC search,
-// silk_find_LPC_FIX from silk/fixed/find_LPC_FIX.c. It wires the already-ported
+// silk_find_LPC_FIX from silk/fixed/find_LPC_FIX.c. It wires the
 // Burg estimator (silkBurgModifiedFixed), the default-build integer A2NLSF /
 // NLSF2A / NLSF interpolation helpers (silkA2NLSF / silkNLSF2A /
 // interpolateNLSF), the LPC analysis filter (silkLPCAnalysisFilterFixed), and

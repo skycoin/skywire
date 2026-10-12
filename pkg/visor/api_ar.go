@@ -53,7 +53,7 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 // that hash to dial it — so "am I registered for WT, and under which cert?" is
 // a question an operator needs answered, and it was previously unanswerable
 // from the CLI.
-var arSelfTypes = []string{"stcpr", "sudph", "wt"}
+var arSelfTypes = []string{"stcpr", "sudph", "squicr", "wt"}
 
 // arSelfState caches the visor's own AR-side bind state, populated by a
 // refresh loop that calls Resolve(self) periodically.
@@ -91,6 +91,13 @@ func (s *arSelfState) age() time.Duration {
 func (s *arSelfState) stamp() {
 	s.mu.Lock()
 	s.refreshedAt = time.Now()
+	s.mu.Unlock()
+}
+
+// invalidate makes the next read refresh the records first.
+func (s *arSelfState) invalidate() {
+	s.mu.Lock()
+	s.refreshedAt = time.Time{}
 	s.mu.Unlock()
 }
 

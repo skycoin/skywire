@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package network pkg/transport/network/ws_native.go c2-net-transport
 //

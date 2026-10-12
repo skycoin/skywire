@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/mux_control_frame.go c2-net-routing
 //
 // IN-BAND leg control: the re-home and split request/ack/refusal/commit

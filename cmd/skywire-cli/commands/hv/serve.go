@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 var (
@@ -26,6 +27,7 @@ var (
 	serveBrowseOrigin string
 	serveVOrigin      string
 	serveExecWasm     string
+	serveExecTinyGoJS string
 	serveBootReports  string
 )
 
@@ -41,7 +43,8 @@ func init() {
 	serveCmd.Flags().StringVar(&serveBrowseSuffix, "browse-suffix", "", fmt.Sprintf("browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (%q from services-config.json)", deployment.Prod.BrowseOriginSuffix))
 	serveCmd.Flags().StringVar(&serveBrowseOrigin, "browse-origin", "", "ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)")
 	serveCmd.Flags().StringVar(&serveVOrigin, "v-origin", "", "the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or \"*\" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)")
-	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module embedded by the two-stage build (make build-embedded; every published binary). Without one, serve refuses to start")
+	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start")
+	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
 	RootCmd.AddCommand(serveCmd)
 }
@@ -54,12 +57,11 @@ var serveCmd = &cobra.Command{
 Serves the desk: the tab as a Linux host, whose terminal runs the ONE skywire
 command module (/skywire.wasm — the desk host, the in-tab visor and every
 'skywire' command) and whose nested browser opens the hypervisor UI that visor
-serves. Everything comes from THIS binary — the module the two-stage build
-embeds (make build-embedded; every published binary has it) or --exec-wasm — so
-the served build reflects the running skywire version: restart the process
-after an update (e.g. wire it to a systemd service that restarts on
-auto-update) and put a reverse proxy (Caddy) in front on a subdomain. A plain
-source build has no module and serve refuses to start.
+serves. The module is the one installed beside this binary (skywire.wasm.gz,
+which every package ships) or --exec-wasm, served as it is: this command has
+no visor to refresh it through. Restart the process after an update (e.g. wire
+it to a systemd service that restarts on auto-update) and put a reverse proxy
+(Caddy) in front on a subdomain. Without a module serve refuses to start.
 
 The same surface can be hosted BY the visor itself (one binary, one process):
 set hypervisor.wasm_serve.addr in the visor config. This command is the
@@ -69,6 +71,14 @@ Keyless: no key is baked in; each visitor's browser mints + persists its own
 ephemeral key (localStorage). That is what makes serving from a domain safe — the
 page never asks anyone to type a secret key.`,
 	Run: func(cmd *cobra.Command, _ []string) {
+		if serveExecTinyGoJS != "" {
+			js, err := os.ReadFile(filepath.Clean(serveExecTinyGoJS))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "read --exec-js-tinygo:", err)
+				os.Exit(1)
+			}
+			wasmhv.WasmExecTinyGoJS = js
+		}
 		// Hosted mode (a browse-origin bootstrap addr is set → Caddy fronts
 		// *.<suffix>) with no explicit suffix sources the browse-origin domain
 		// from the embedded deployment config instead of hardcoding it, so the

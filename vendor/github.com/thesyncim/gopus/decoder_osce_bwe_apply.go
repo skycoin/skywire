@@ -7,41 +7,20 @@ import (
 	"github.com/thesyncim/gopus/internal/silk"
 )
 
-// maybeApplyOSCEBWEPostSilk runs the OSCE BWE 16 kHz -> 48 kHz forward pass on
-// the SILK lowband output and writes the bandwidth-extended PCM into `out`,
-// overwriting the standard silk_resampler output.
+// maybeApplyOSCEBWEPostSilk replaces standard resampler output with OSCE
+// bandwidth extension from 16 kHz to 48 kHz. It requires enabled BWE controls,
+// loaded models, complexity >= 4, and 10 or 20 ms of wideband SILK-only output.
+// PLC uses the preceding packet's mode and bandwidth for the same eligibility
+// checks, matching OSCE_MODE_SILK_BBWE in libopus silk/dec_API.c.
 //
-// The hook mirrors the libopus SILK_BBWE extended mode:
+// out holds frameSize*channels interleaved samples at the API rate. Each coded
+// channel has independent feature and model state. Transitions use a 10 ms
+// crossfade between BWE and standard resampler output when the preceding mode
+// requires one. Feature extraction follows osce_bwe_calculate_features in
+// dnn/osce_features.c.
 //
-//	st->DecControl.osce_extended_mode == OSCE_MODE_SILK_BBWE
-//
-// which triggers when:
-//   - the OSCE BWE control is enabled (SetOSCEBWE(true))
-//   - a valid OSCE BWE model was bound via SetDNNBlob
-//   - the packet was decoded as SILK-only at WB internal sample rate (or PLC
-//     is running with the previous packet matching that profile)
-//   - the API sample rate is 48 kHz
-//
-// Phase 3 of the wiring computes the per-10ms BBWENet feature vector from the
-// raw int16 SILK lowband samples via the ported `osce_bwe_calculate_features`
-// (see internal/osce/bwe/features.go). On transitions between BWE-active and
-// BWE-inactive frames the helper runs a 10 ms cross-fade between the BWE
-// output and the standard silk_resampler output, mirroring
-// osce_bwe_cross_fade_10ms in libopus dec_API.c. Errors from the runtime
-// (e.g. unsupported frame size) fall through silently so the standard
-// resampler output is retained.
-//
-// `out` is the gopus output buffer holding `frameSize * channels` float32
-// samples in [-1, 1]. Returns true when the BWE pass executed and overwrote
-// the output; returns false when conditions are not met (callers keep the
-// standard resampler output untouched).
-//
-// Stereo handling: libopus runs `osce_bwe(...)` independently on each SILK
-// lowband channel using a per-channel `silk_OSCE_BWE_struct` (see
-// `silk/dec_API.c` around `OSCE_MODE_SILK_BBWE`). The gopus runtime mirrors
-// that by keeping `[2]osceBWE.State` slots in `decoderOSCEBWEState`. For a
-// stereo packet at a stereo decoder both per-channel runtimes are invoked
-// sequentially and the result is interleaved into `out`.
+// The result reports whether BWE output is written. A false result can still
+// update transition state and apply a fade-out from the preceding BWE frame.
 func (d *Decoder) maybeApplyOSCEBWEPostSilk(
 	out []float32,
 	frameSize int,
@@ -265,13 +244,9 @@ func (d *Decoder) maybeApplyOSCEBWEPostSilk(
 		return false
 	}
 
-	// If the previous frame did NOT run BWE we are transitioning into BWE.
-	// libopus cross-fades the BWE output (fadein) against the standard
-	// silk_resampler output (fadeout). The standard output is already in
-	// `out` (channels==1 here -- stereo is bypassed above). Mix the BWE
-	// buffer in via osceBWECrossFade10ms which writes the cross-fade
-	// samples directly back into the BWE output buffer; we then overwrite
-	// `out` from there.
+	// Fade in after SILK-only or Hybrid output. A mono packet can target
+	// either one or two API channels; use the left resampler channel for
+	// the fade before duplicating the mono BWE result for stereo output.
 	if fadeInIntoBWE {
 		if d.channels == 1 {
 			osceBWECrossFade10ms(state.applyOut48[:in48Per], out[:in48Per], 480)

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/leg_adopt.go c2-net-routing
 //
 // Leg ADOPTION — the last move of the shape axis: a LEG RESERVE becomes a

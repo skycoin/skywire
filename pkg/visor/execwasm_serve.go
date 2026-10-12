@@ -3,31 +3,31 @@ package visor
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
 )
 
 // execModuleSource resolves where the skywire command module comes from: an
-// explicit path (the --exec-wasm flag or hypervisor.wasm_serve.exec_wasm, a
-// developer override), else the module embedded by the two-stage build.
-// path=="" with ok=true means embedded; ok=false means this build has none.
+// explicit path (the --exec-wasm flag or hypervisor.wasm_serve.exec_wasm),
+// else the module installed beside the binary. ok is false when there is none.
 func execModuleSource(explicit string) (path string, ok bool) {
 	if explicit != "" {
 		return explicit, true
 	}
-	return "", execwasm.Present()
+	p := execwasm.DefaultPath()
+	if p == "" {
+		return "", false
+	}
+	if _, err := os.Stat(p); err != nil {
+		return p, false
+	}
+	return p, true
 }
 
-// serveExecWasm answers GET /skywire.wasm from path when set, else from the
-// embedded module (execwasm.ServeEmbedded: gzip as embedded when the client
-// accepts it, inflated on the fly otherwise, streamed out of the binary's
-// read-only mapping rather than a heap copy of it).
+// serveExecWasm answers GET /skywire.wasm from the module at path.
 func serveExecWasm(w http.ResponseWriter, r *http.Request, path string) {
 	w.Header().Set("Content-Type", "application/wasm")
 	w.Header().Set("Cache-Control", "no-cache")
-	if path != "" {
-		http.ServeFile(w, r, path)
-		return
-	}
-	execwasm.ServeEmbedded(w, r)
+	execwasm.Serve(w, r, path)
 }

@@ -1,5 +1,4 @@
-//go:build !windows && !tinygo && !js
-// +build !windows,!tinygo,!js
+//go:build !windows && !js
 
 // Package appserver pkg/app/appserver/proc_credential_unix.go c2-vis-appsvc
 //

@@ -15,9 +15,8 @@ package celt
 //   - preemph differs (96 kHz coefficients).
 //   - nbShortMdcts (8) and maxLM (3) are unchanged.
 //
-// The MDCT twiddle and window tables are the doubled-length variants; both are
-// computed here from the same closed forms libopus uses in clt_mdct_init and
-// modes.c, and are byte/numeric-verified against the libopus qext oracle in
+// The MDCT twiddle and overlap window tables use libopus's static coefficients;
+// both are checked against the selected QEXT libopus mode in
 // mode_hd96k_qext_test.go.
 type HD96kMode struct {
 	Fs            int
@@ -59,26 +58,23 @@ var hd96kLogN = func() []int16 {
 	return b
 }()
 
-// hd96kWindow is the overlap=240 Vorbis window (libopus window240).
+// hd96kWindow is libopus's static overlap=240 window.
 var hd96kWindow = func() []float32 {
 	w := make([]float32, 240)
-	for i := range w {
-		w[i] = VorbisWindow(i, 240)
-	}
+	copy(w, GetWindowBufferF32(240))
 	return w
 }()
 
-// hd96kMdctTrig builds the concatenated MDCT twiddle table for the native
-// 96 kHz mode (libopus mdct_twiddles1920[3600]). For each shift s the segment
-// holds N>>s>>1 cosine values trig[i] = cos(2*pi*(i+0.125)/(N>>s)), matching
-// clt_mdct_init's per-shift loop and gopus's buildMDCTTrigF32.
+// hd96kMdctTrig contains the concatenated static MDCT twiddle segments for the
+// native 96 kHz mode (libopus mdct_twiddles1920[3600]). The N=3840 segment
+// uses the pinned QEXT table; the shorter segments match standard CELT tables.
 var hd96kMdctTrig = func() []float32 {
 	const n = 3840
 	const maxShift = 3
 	total := n - ((n / 2) >> maxShift)
 	trig := make([]float32, 0, total)
 	for shift := 0; shift <= maxShift; shift++ {
-		trig = append(trig, buildMDCTTrigF32(n>>shift)...)
+		trig = append(trig, getMDCTTrigF32(n>>shift)...)
 	}
 	return trig
 }()

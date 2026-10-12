@@ -64,6 +64,7 @@ import com.skycoin.skywire.core.VoiceCalls
 import com.skycoin.skywire.ui.call.CallScreen
 import com.skycoin.skywire.ui.chat.ChatScreen
 import com.skycoin.skywire.ui.dex.DexScreen
+import com.skycoin.skywire.ui.mail.MailScreen
 import com.skycoin.skywire.ui.fleet.FleetScreen
 import com.skycoin.skywire.ui.home.HomeScreen
 import com.skycoin.skywire.ui.hub.HubScreen
@@ -120,6 +121,13 @@ fun SkywireApp() {
     LaunchedEffect(chatLink) {
         if (chatLink != null && currentRoute != Routes.CHAT) {
             navController.navigateToTab(Routes.CHAT)
+        }
+    }
+    // A tapped mail notification opens Skymail; the screen opens the message.
+    val mailLink by DeepLinks.pendingMail.collectAsState()
+    LaunchedEffect(mailLink) {
+        if (mailLink != null && currentRoute != Routes.MAIL) {
+            navController.navigate(Routes.MAIL) { launchSingleTop = true }
         }
     }
 
@@ -346,6 +354,9 @@ fun SkywireApp() {
             }
             composable(Routes.DEX) {
                 DexScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.MAIL) {
+                MailScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.FLEET) {
                 FleetScreen(

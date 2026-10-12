@@ -13,7 +13,7 @@ skywire cli visor dmsg-servers
 ## Flags
 
 ```
-  -L, --live   live-refresh mode (bubbletea TUI, 1s tick); shows DMSG server latencies updating in place
+  -L, --live   live-refresh mode (TUI, 1s tick); shows DMSG server latencies updating in place
 ```
 
 ## Global Flags

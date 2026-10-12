@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/mux_shape_converge.go c2-net-routing
 //
 // The shape CONVERGER — the half of docs/design/mux-shape-axis.md that moves.

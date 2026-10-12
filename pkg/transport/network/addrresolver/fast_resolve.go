@@ -25,6 +25,19 @@ func (c *httpClient) SetResolveFastPath(fn FastResolve) {
 	c.fastResolve.Store(&fn)
 }
 
+type askResolverKey struct{}
+
+// AskResolver marks ctx so Resolve asks the address resolver, past the fast
+// path and a remembered not-found. Both can outlive a peer restart by minutes.
+func AskResolver(ctx context.Context) context.Context {
+	return context.WithValue(ctx, askResolverKey{}, true)
+}
+
+func asksResolver(ctx context.Context) bool {
+	ask, _ := ctx.Value(askResolverKey{}).(bool)
+	return ask
+}
+
 // sameHost mirrors the address resolver's sameIP, so an answer from the fast
 // path marks IsLocal exactly as GET /resolve would.
 func sameHost(addr1, addr2 string) bool {

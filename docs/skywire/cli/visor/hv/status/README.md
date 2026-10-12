@@ -2,7 +2,7 @@
 
 [← skywire cli visor hv](../README.md)
 
-Check if hypervisor is enabled
+Whether the hypervisor is enabled, and where its web UI is
 
 ## Usage
 

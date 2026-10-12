@@ -2,7 +2,7 @@
 
 The `skywire svc` umbrella exposes the deployment-service binaries
 (address-resolver, route-finder, service-discovery, transport-discovery,
-uptime-tracker, etc.) under one cobra tree.
+setup-node, etc.) under one cobra tree.
 
 Command-line documentation lives at
 [/docs/skywire/svc/README.md](../../docs/skywire/svc/README.md) and is

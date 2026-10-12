@@ -55,8 +55,10 @@ type Tracker struct {
 	// empty (all its transports closed) is sink-Deleted and dropped from
 	// this map so it stops occupying the Root. Guarded by mu.
 	publishedShards map[uint8][32]byte
-	lastDay         string // YYYY-MM-DD UTC of the most recent sample
-	lastPruned      time.Time
+	// publishedCheckpoints is the same for the checkpoint shards.
+	publishedCheckpoints map[uint8][32]byte
+	lastDay              string // YYYY-MM-DD UTC of the most recent sample
+	lastPruned           time.Time
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -98,6 +100,8 @@ type TransportProbe struct {
 	// SameNetwork marks a transport to a visor on this one's own network
 	// (transport.ManagedTransport.SameNetwork).
 	SameNetwork bool
+	// Sent and Recv are the stream digest checkpoints of the current conn.
+	Sent, Recv telemetrywire.DirCheckpoints
 }
 
 // LatencyTriple carries the live min/max/avg snapshot. Tracker
@@ -142,15 +146,16 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 		publishKeep = time.Duration(conf.RetentionDays) * 24 * time.Hour
 	}
 	return &Tracker{
-		store:           store,
-		log:             conf.Logger,
-		probes:          probes,
-		interval:        conf.SampleInterval,
-		keep:            time.Duration(conf.RetentionDays) * 24 * time.Hour,
-		publishKeep:     publishKeep,
-		sink:            noopSink{},
-		baselines:       make(map[uuid.UUID]bandwidthBaseline),
-		publishedShards: make(map[uint8][32]byte),
+		store:                store,
+		log:                  conf.Logger,
+		probes:               probes,
+		interval:             conf.SampleInterval,
+		keep:                 time.Duration(conf.RetentionDays) * 24 * time.Hour,
+		publishKeep:          publishKeep,
+		sink:                 noopSink{},
+		baselines:            make(map[uuid.UUID]bandwidthBaseline),
+		publishedShards:      make(map[uint8][32]byte),
+		publishedCheckpoints: make(map[uint8][32]byte),
 	}
 }
 
@@ -211,18 +216,20 @@ func (t *Tracker) Close() error {
 
 func (t *Tracker) loop(ctx context.Context) {
 	defer close(t.done)
-	tick := time.NewTicker(t.interval)
-	defer tick.Stop()
 
 	// Take an immediate sample so the first observations don't have
 	// to wait an interval — keeps `current` populated at startup.
 	t.safeSample(time.Now())
 
+	// Later samples fall on wall-clock interval boundaries, so the two edges
+	// of a transport snapshot its stream checkpoints at nearly the same moment.
 	for {
+		wait := time.NewTimer(time.Until(time.Now().Truncate(t.interval).Add(t.interval)))
 		select {
 		case <-ctx.Done():
+			wait.Stop()
 			return
-		case now := <-tick.C:
+		case now := <-wait.C:
 			t.safeSample(now)
 		}
 	}
@@ -281,6 +288,7 @@ func (t *Tracker) sample(now time.Time) {
 	// alone) from "probe returned zero live transports" (delete every
 	// previously-published shard leaf).
 	var entries []telemetrywire.Entry
+	var checkpoints []telemetrywire.CheckpointEntry
 	var ranProbe bool
 
 	txErr := t.store.UpdateSample(func(stx *SampleTx) error {
@@ -294,6 +302,9 @@ func (t *Tracker) sample(now time.Time) {
 						Debug("Failed to record transport sample")
 				} else {
 					entries = append(entries, e)
+				}
+				if ck := (telemetrywire.CheckpointEntry{ID: tp.ID, Sent: tp.Sent, Recv: tp.Recv}); ck.HasAny() {
+					checkpoints = append(checkpoints, ck)
 				}
 			}
 		}
@@ -333,6 +344,7 @@ func (t *Tracker) sample(now time.Time) {
 	}
 
 	t.publishShards(entries, ranProbe)
+	t.publishCheckpoints(checkpoints, ranProbe)
 }
 
 // publishShards groups this tick's live-transport entries into the 16
@@ -704,5 +716,49 @@ func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
 				t.sinkDelete(transportTimelinePath(id, d))
 			}
 		}
+	}
+}
+
+// publishCheckpoints mirrors the transports' stream checkpoints as one leaf
+// per shard, like publishShards, re-Putting only shards whose content changed
+// and deleting shards left with none.
+func (t *Tracker) publishCheckpoints(entries []telemetrywire.CheckpointEntry, ranProbe bool) {
+	if !ranProbe {
+		return
+	}
+	byShard := make(map[uint8][]telemetrywire.CheckpointEntry)
+	for _, e := range entries {
+		sh := telemetrywire.ShardOf(e.ID)
+		byShard[sh] = append(byShard[sh], e)
+	}
+	t.mu.Lock()
+	sink := t.sink
+	var ops []SinkOp
+	var deletes []string
+	for sh, es := range byShard {
+		sort.Slice(es, func(i, j int) bool { return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0 })
+		blob := telemetrywire.EncodeCheckpointShard(sh, es)
+		sig := sha256.Sum256(blob)
+		if prev, ok := t.publishedCheckpoints[sh]; ok && prev == sig {
+			continue
+		}
+		t.publishedCheckpoints[sh] = sig
+		ops = append(ops, SinkOp{Path: telemetrywire.CheckpointLeafPath(sh), Value: blob})
+	}
+	for sh := range t.publishedCheckpoints {
+		if _, still := byShard[sh]; !still {
+			deletes = append(deletes, telemetrywire.CheckpointLeafPath(sh))
+			delete(t.publishedCheckpoints, sh)
+		}
+	}
+	t.mu.Unlock()
+	if sink == nil {
+		return
+	}
+	if len(ops) > 0 {
+		sink.PutBatch(ops)
+	}
+	for _, path := range deletes {
+		sink.Delete(path)
 	}
 }

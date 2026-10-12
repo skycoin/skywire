@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/cascade_route.go c2-net-routing
 //
 // createRouteGroupCascade implements the two-phase cascade protocol

@@ -62,12 +62,14 @@ type ReadWriter struct {
 
 	rawInput *bufio.Reader
 	input    bytes.Buffer
+	plain    []byte // reused plaintext of the frame being read, under rMx
 
 	rErr error
 	rMx  sync.Mutex
 
 	wErr error
 	wMx  sync.Mutex
+	wbuf []byte // reused frame being written, under wMx
 }
 
 // NewReadWriter constructs a new ReadWriter.
@@ -76,6 +78,7 @@ func NewReadWriter(rw io.ReadWriter, ns *Noise) *ReadWriter {
 		origin:   rw,
 		ns:       ns,
 		rawInput: bufio.NewReaderSize(rw, maxFrameSize*2), // can fit 2 frames.
+		wbuf:     make([]byte, 0, maxFrameSize),
 	}
 }
 
@@ -92,15 +95,19 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 	}
 
 	for {
-		ciphertext, err := ReadRawFrame(rw.rawInput)
+		// Decrypt straight out of the read buffer into a reused one.
+		ciphertext, size, err := peekRawFrame(rw.rawInput)
 		if err != nil {
 			return 0, rw.processReadError(err)
 		}
-
-		plaintext, err := rw.ns.DecryptUnsafe(ciphertext)
+		plaintext, err := rw.ns.decryptAppend(rw.plain[:0], ciphertext)
+		if _, derr := rw.rawInput.Discard(size); derr != nil && err == nil {
+			err = fmt.Errorf("unexpected error when discarding %d bytes: %w", size, derr)
+		}
 		if err != nil {
 			return 0, rw.processReadError(err)
 		}
+		rw.plain = plaintext
 
 		if len(plaintext) == 0 {
 			continue
@@ -138,11 +145,6 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 		return 0, rw.wErr
 	}
 
-	// Check for timeout errors.
-	if _, err = rw.origin.Write(nil); err != nil {
-		return 0, err
-	}
-
 	for len(p) > 0 {
 		// Enforce max frame size.
 		wn := len(p)
@@ -150,11 +152,15 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 			wn = maxPayloadSize
 		}
 
-		wb, err := WriteRawFrame(rw.origin, rw.ns.EncryptUnsafe(p[:wn]))
+		// Encrypt into the reused frame after its 2 byte length prefix.
+		frame := rw.ns.encryptAppend(rw.wbuf[:prefixSize], p[:wn])
+		binary.BigEndian.PutUint16(frame, uint16(len(frame)-prefixSize)) //nolint:gosec // at most maxFrameSize
+		rw.wbuf = frame[:0]
+		written, err := rw.origin.Write(frame)
 		if err != nil {
 			// when a short write occurs, it is hard to recover from so we
 			// consider it a permanent error
-			if len(wb) != 0 {
+			if written != 0 {
 				err = &netError{
 					err:     fmt.Errorf("%v: %w", io.ErrShortWrite, err),
 					timeout: false,
@@ -370,4 +376,26 @@ func (rw *ReadWriter) Unread() []byte {
 	out := make([]byte, n)
 	copy(out, b)
 	return out
+}
+
+// peekRawFrame returns the ciphertext of the next frame, still inside r's
+// buffer, and the frame's full size to discard once it has been used.
+func peekRawFrame(r *bufio.Reader) (ciphertext []byte, size int, err error) {
+	prefixB, err := r.Peek(prefixSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	prefix := int(binary.BigEndian.Uint16(prefixB))
+	if prefix > maxPrefixValue {
+		return nil, 0, &netError{
+			err:     fmt.Errorf("noise prefix value %dB exceeds maximum %dB", prefix, maxPrefixValue),
+			timeout: false,
+			temp:    false,
+		}
+	}
+	b, err := r.Peek(prefixSize + prefix)
+	if err != nil {
+		return nil, 0, err
+	}
+	return b[prefixSize:], prefixSize + prefix, nil
 }

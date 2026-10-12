@@ -8,7 +8,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/require"
 
@@ -109,10 +107,7 @@ func TestRemoveTransport_Rejects(t *testing.T) {
 func TestGetTransports_BadPK(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/not-a-pk/transports", nil)
-	// Inject the chi URL param the handler reads via chi.URLParam.
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("pk", "not-a-pk")
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	r.SetPathValue("pk", "not-a-pk")
 
 	testAPI().getTransports(w, r)
 	// A bad PK must be rejected before the dmsg dial (regression guard for the

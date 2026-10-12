@@ -221,7 +221,11 @@ func opusFFTImpl(st *KissFFTState, fout []FFTCpx, downshift int) {
 		switch st.factors[2*i] {
 		case 2:
 			fftDownshift(fout, st.nfft, &downshift, 1)
-			KFBfly2(fout, 0, fstride[i])
+			if m == 1 {
+				kfBfly2CustomM1(fout, fstride[i])
+			} else {
+				KFBfly2(fout, 0, fstride[i])
+			}
 		case 4:
 			fftDownshift(fout, st.nfft, &downshift, 2)
 			KFBfly4(fout, 0, st.twiddles, fstride[i]<<shift, m, fstride[i], m2)

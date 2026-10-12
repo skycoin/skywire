@@ -36,12 +36,12 @@ func init() {
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%v", visorconfig.PackageConfig()))
 	pkCmd.AddCommand(pkDNSLabelCmd)
-	summaryCmd.Flags().BoolVarP(&summaryLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows Time Online incrementing and uptime graphs updating in place")
+	summaryCmd.Flags().BoolVarP(&summaryLive, "live", "L", false, "live-refresh mode (TUI, 1s tick); shows Time Online incrementing and uptime graphs updating in place")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(readyCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
-	dmsgServersCmd.Flags().BoolVarP(&dmsgServersLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows DMSG server latencies updating in place")
+	dmsgServersCmd.Flags().BoolVarP(&dmsgServersLive, "live", "L", false, "live-refresh mode (TUI, 1s tick); shows DMSG server latencies updating in place")
 	RootCmd.AddCommand(dmsgServersCmd)
 	RootCmd.AddCommand(runtimeLogsCmd)
 	RootCmd.AddCommand(runtimeStatsCmd)
@@ -141,7 +141,7 @@ var summaryCmd = &cobra.Command{
 		}
 
 		// --live: hand off to the livetui watcher and stay in a
-		// bubbletea loop until the user quits. Refresh callback
+		// TUI loop until the user quits. Refresh callback
 		// re-fetches the summary on each tick, so "Time Online"
 		// increments and the 24h rolling-uptime graphs update.
 		if summaryLive {

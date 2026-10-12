@@ -16,6 +16,7 @@ skywire cli visor hv
 ## Subcommands
 
 - [add](add/README.md) — Connect to a remote hypervisor at runtime (survives restart, not config regen)
+- [auth](auth/README.md) — Whether the hypervisor UI requires a login, at runtime
 - [cpk](cpk/README.md) — Public key of remote hypervisor(s) set in config
 - [disable](disable/README.md) — Disable the hypervisor entirely (DMSG-RPC + tracking + web UI) at runtime
 - [enable](enable/README.md) — Enable the hypervisor (DMSG-RPC + tracking + web UI) at runtime
@@ -24,7 +25,7 @@ skywire cli visor hv
 - [passwd](passwd/README.md) — Set the hypervisor UI admin password
 - [pk](pk/README.md) — Public key of remote hypervisor(s)
 - [rm](rm/README.md) — Disconnect from a remote hypervisor at runtime (survives restart, not config regen)
-- [status](status/README.md) — Check if hypervisor is enabled
+- [status](status/README.md) — Whether the hypervisor is enabled, and where its web UI is
 - [tui](tui/README.md) — Hypervisor terminal UI
 - [ui](ui/README.md) — Open Hypervisor UI in default browser
 

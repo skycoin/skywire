@@ -8,8 +8,8 @@ that run Postfix.
 The mailbox receives mail to <anything>@<base32-pk>.skynet (or .dmsg)
 on port 25 over skywire and keeps it in a Maildir. It needs no MTA,
 domain or certificate: the transport authenticates every sender's PK.
-It runs by default on the wasm visor; set "skymail": {"enable": true}
-in the config to run it on a native visor.
+It runs on every visor unless the config's "skymail" section or
+"skywire cli mail settings enable=false" turns it off.
 
 The bridge accepts SMTP from a co-located Postfix's transport_map
 and dials peer visors over the visor's existing dmsg client. With

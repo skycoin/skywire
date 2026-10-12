@@ -4,6 +4,28 @@ package gopus
 
 import "github.com/thesyncim/gopus/internal/fixedpoint"
 
+const fixedResToFloat32Scale = float32(1.0 / 8388608.0)
+
+// fixedDecodePLCFloat32 attempts CELT-only multistream PLC in opus_res and
+// converts the mapped result with RES2FLOAT semantics.
+func (d *MultistreamDecoder) fixedDecodePLCFloat32(pcm []float32, frameSize int) (bool, error) {
+	res, handled, err := d.dec.DecodePLCToResFixed(frameSize)
+	if err != nil || !handled {
+		return handled, err
+	}
+	channels := int(d.channels)
+	if channels <= 0 || len(res)%channels != 0 {
+		return false, ErrInvalidFrameSize
+	}
+	if len(res) > len(pcm) {
+		return false, ErrBufferTooSmall
+	}
+	for i, sample := range res {
+		pcm[i] = float32(sample) * fixedResToFloat32Scale
+	}
+	return true, nil
+}
+
 // fixedDecodeInt16 attempts the FIXED_POINT integer multistream decode for an
 // int16-output packet. It routes each elementary stream through the integer
 // opus_res path and applies the surround channel mapping in the integer domain,

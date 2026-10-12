@@ -41,7 +41,7 @@ var (
 
 func init() {
 	cxoStatusCmd.Flags().BoolVarP(&cxoStatusLive, "live", "L", false,
-		"live-refresh mode (bubbletea TUI, 1s tick); shows snapshot growth / lastSyncAt updates in place")
+		"live-refresh mode (TUI, 1s tick); shows snapshot growth / lastSyncAt updates in place")
 	cxoRefreshCmd.Flags().BoolVar(&cxoRefreshAll, "all", false,
 		"refresh every feed the manager knows about (otherwise <feed> arg is required)")
 	cxoRefreshCmd.Flags().DurationVar(&cxoRefreshWait, "timeout", 0,

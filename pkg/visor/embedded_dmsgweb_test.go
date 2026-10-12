@@ -38,7 +38,6 @@ func TestServiceAliasMap(t *testing.T) {
 		},
 		Routing:          &visorconfig.Routing{RouteFinderDmsg: rfURL},
 		Launcher:         &visorconfig.Launcher{ServiceDiscDmsg: sdURL},
-		UptimeTracker:    &visorconfig.UptimeTracker{Addr: "http://ut.skycoin.com"}, // HTTP only → omitted
 		RewardSystemDmsg: rewardURL,
 	}
 

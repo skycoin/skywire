@@ -29,7 +29,7 @@ func TestComputeCountsFromPerKeyStats(t *testing.T) {
 	fetch := fakeFetch(map[string]string{
 		"sd /api/services?type=visor": `[{"address":"` + pkA + `:44","geo":{"country":"DE"},"version":"v1.3.99"}]`,
 		"sd /api/services?type=proxy": `[{"address":"` + pkA + `:3","geo":{"country":"DE"}}]`,
-		"ut /uptimes?v=v2":            `[{"pk":"` + pkA + `","on":true},{"pk":"` + pkB + `","on":false}]`,
+		"tpd /uptimes?v=v2":           `[{"pk":"` + pkA + `","on":true},{"pk":"` + pkB + `","on":false}]`,
 		// Legacy names fold into their canonical columns; a type with no
 		// column ("sudpr") still counts toward TPD's total.
 		"tpd /all-transports/per-key-stats": `{

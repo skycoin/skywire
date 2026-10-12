@@ -1,12 +1,15 @@
+//go:build !tinygo
+
 // Package router pkg/router/rule_ingress_test.go
 package router
 
 import (
 	"context"
 	"net"
-	"net/rpc"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

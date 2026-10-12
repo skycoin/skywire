@@ -1,73 +1,88 @@
 # Contributing to gopus
 
-Thanks for helping improve `gopus`.
+Use a minimal reproduction for bugs and describe the intended API or behavior
+for feature requests. Include the build tags, Go version, CPU target, input and
+controls needed to reproduce codec differences. Report security issues through
+[SECURITY.md](SECURITY.md).
 
-## Before You Open an Issue
+## Codec changes
 
-- Bug reports: use the bug report template and include a minimal reproduction.
-- Feature ideas: use the feature request template and describe the API or behavior you want.
-- Usage questions or docs gaps: use the support question template and point to the code or documentation that blocked you.
-- Security issues: follow [SECURITY.md](SECURITY.md) and do not report them publicly.
+The pinned reference is libopus 1.6.1 in `tmp_check/opus-1.6.1/`. Follow the
+[parity contract](reports/validation.md#parity-contract): preserve exact API,
+protocol, integer and established packet/range/PCM checks. An unexplained
+floating-point difference remains a failure; accepting a narrow numerical bound
+requires first-divergence, quality/recovery and executable regression evidence.
+Document undefined C behavior with its source and reproducer.
 
-Maintainer triage is best effort. Small, reproducible reports and narrowly scoped pull requests move fastest.
+- Pair scalar Go with scalar C and SIMD Go with C using the same effective
+  instructions, feature flags, input, controls and stream history.
+- Match libopus scalar widths in state, signal and scratch storage. Run
+  `make test-type-parity`; do not refresh its baseline to hide new debt.
+- Preserve zero steady-state allocations. Warm new hot paths and require
+  `testing.AllocsPerRun(...) == 0` for their caller-buffer use.
+- Keep fixtures and the pinned reference fixed unless the change explicitly
+  updates them with reviewable evidence. Fix causes rather than weakening gates.
+- Measure runtime changes against matched builds and record the revision,
+  compiler target, dispatch and benchmark method.
 
-## Project Expectations
+## Source documentation
 
-Please keep the project priorities in mind:
+Use Go doc comments that begin with the declared name. Explain behavior callers
+need: units, channel layout, buffer ownership, valid inputs, returned counts,
+errors and state changes. Link related identifiers with Go doc links. Put
+examples in example tests and keep package comments focused on their APIs.
 
-1. Parity with libopus in quality and features
-2. Performance
-3. Maintainability
-4. Documentation
-5. Dead-test cleanup
+Internal comments should explain invariants or numerical choices. Cite the C
+helper when an unusual width, rounding boundary or operation order is required.
+Avoid repeating the implementation or narrating its history. Run `gofmt` on Go
+files you change.
 
-When a change touches codec behavior:
-
-- Cross-check codec math and bitstream decisions against libopus 1.6.1 before changing behavior.
-- Prefer matching libopus over heuristic fixes unless fixture evidence justifies a divergence.
-- Match libopus scalar widths for runtime state, signal buffers, and scratch buffers. Run `make test-type-parity`; do not refresh the baseline to hide new `float64`/`complex128` debt.
-- Preserve zero allocations in the real-time encode/decode hot paths.
-- Treat `testvectors/testdata/` and `tmp_check/` as fixed references unless the change is explicitly about fixtures or the pinned libopus snapshot.
-
-For docs and public-facing material:
-
-- Keep the README current; it is the single source of truth for support claims,
-  release state, verification gates, and required CI checks.
-- Keep extra Markdown focused on public policy or runnable examples.
+The README is the entry point for usage, support and release state.
+[reports/validation.md](reports/validation.md) holds the correctness contract,
+coverage and performance evidence; keep its measurements tied to their actual
+revisions. Add separate Markdown only for a distinct policy or runnable example.
 
 ## Verification
 
-Run focused checks for the area you touched while iterating.
+Run focused package tests during iteration. For codec changes, test scalar and
+SIMD builds and applicable feature tags against their matching C references.
+`make ensure-libopus` builds the pinned reference; some quality paths also need
+`ffmpeg` and `opusdec`.
 
-Common commands:
-
-```bash
+```sh
 go test ./...
+make test-build-contract
 make test-type-parity
+make lint
+make test-consumer-smoke
+make test-examples-smoke
 make test-quality
 make bench-guard
 make verify-production
+make verify-production-exhaustive
+make release-evidence
 ```
 
-Notes:
+Feature-specific checks include `make test-dnn-blob-parity`,
+`make test-qext-parity`, `make test-dred-tag`, `make test-extra-controls-parity`
+and `make test-custom-parity`. Documentation changes need link, example and
+contract checks; they do not require the full codec bundle.
 
-- `make ensure-libopus` bootstraps the pinned libopus 1.6.1 reference used by parity and quality checks.
-- Some validation paths expect `ffmpeg` and `opusdec` to be available.
-- Docs-only changes do not need the full codec verification bundle, but please sanity-check links, commands, and examples.
+Before publishing a tag, its commit must pass the required checks listed in the
+README and `make release-evidence` must produce a PASS summary.
 
-## Pull Requests
+## Pull requests and development hooks
 
-Please keep pull requests scoped and change-focused.
+Keep changes focused. Describe the problem, observable behavior and verification
+commands; include regression tests for behavior changes. Use descriptive branch
+names and commit messages.
 
-Good pull requests usually include:
+To enable the repository's commit-message hook:
 
-- A short problem statement
-- The user-visible or codec-visible behavior change
-- Focused tests or fixtures when behavior changes
-- The commands you ran to validate the change
+```sh
+git config core.hooksPath .githooks
+chmod +x .githooks/prepare-commit-msg
+```
 
-Keep branch names, commit messages, and PR titles generic and descriptive.
-
-## Community
-
-By participating in this project, you agree to follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+The hook removes the Cursor agent co-author trailer before finalizing a commit.
+Participation follows [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

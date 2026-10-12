@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_dial_select.go c2-net-routing
 package router
 
@@ -30,6 +28,7 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
 	}
+	r.routeSource.requests.Add(1)
 
 	// Check if force local routes is enabled
 	forceLocal := r.forceLocalRoutes.Load()
@@ -64,6 +63,30 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 	// US->AU->US at 2.3s instead of over its 3ms direct transport). Skip the
 	// oracle for a direct dial.
 	directDial := opts != nil && (opts.EnsureDirectTransport || opts.UseExistingTpOnly)
+
+	// A one-hop route over a transport this visor already holds needs neither
+	// the route finder nor the oracle: either would only name that transport.
+	// baseMinHops is 1 only when nothing (per dial or visor-wide min_hops) asked
+	// for more than one hop, so a min_hops=3 visor never gets one here. A
+	// diversify dial whose sibling already holds that transport falls through
+	// to find another first hop. With no live transport the dial falls through
+	// too, since EnsureDirectTransport may still be creating one (#4552).
+	if src != dst && baseMinHops == 1 {
+		if hop, ok := r.directHop(src, dst); ok {
+			fwd := []routing.Hop{hop}
+			if opts != nil && opts.DiversifyTransports && r.firstHopExcluded(fwd, opts) {
+				opts.note("direct hop %s is held by a sibling; looking further", hop.TpID.String()[:8])
+			} else {
+				log.WithField("transport", hop.TpID).
+					Debug("1-hop route over the existing transport; skipping the route finder")
+				r.routeSource.directHops.Add(1)
+				if opts != nil {
+					opts.note("direct-hop %s", hop.TpID.String()[:8])
+				}
+				return fwd, reverseHops(fwd), nil
+			}
+		}
+	}
 	if src != dst && !directDial {
 		hi := baseMinHops
 		if e := opts.EffectiveMinHops(true); uint16(e) > hi { //nolint:gosec
@@ -73,7 +96,11 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 			hi = uint16(e) //nolint:gosec
 		}
 		if hi <= 2 {
-			if oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts); oErr == nil {
+			oFwd, oRev, oErr := r.oracle2HopRoutes(ctx, log, src, dst, opts)
+			if !errors.Is(oErr, errRSNOracleInert) {
+				r.routeSource.oracleAttempts.Add(1)
+			}
+			if oErr == nil {
 				// The oracle knows nothing of a diversify dial's first-hop
 				// exclusions, and it returns before the finder filter below: it
 				// handed every extra tunnel the same direct first hop its sibling
@@ -86,38 +113,20 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 					if opts.DiversifyTransports {
 						opts.note("oracle: path over a free first hop")
 					}
+					r.routeSource.oracleRoutes.Add(1)
 					return oFwd, oRev, nil
 				}
 			} else if !errors.Is(oErr, errRSNOracleInert) {
 				log.WithError(oErr).Debug("RSN-oracle 2-hop path missed; falling through to route finder")
 			}
 		}
-	}
-
-	// A --direct dial over an EXISTING direct transport does not need the route
-	// finder: the route it would return is the transport this visor is already
-	// holding. Three comments (here at the baseMinHops downgrade, on
-	// EnsureDirectTransport in router.go, and at the app-server flag site) have
-	// long claimed UseExistingTpOnly "bypasses the route-finder", but nothing
-	// implemented it — useExistingOnly only skipped the transport-CREATION hooks,
-	// so every --direct dial still paid an RF round-trip to be told about its own
-	// transport (#4552).
-	//
-	// Guarded on baseMinHops == 1, which the caller sets only when a transport to
-	// dst is already known AND nothing (per-dial or visor-global min_hops) asked
-	// for more than one hop — so an operator running min_hops=3 is never silently
-	// handed a 1-hop route here.
-	//
-	// If no live transport is found we fall through to the route finder rather
-	// than failing: --direct means "prefer the direct leg", and EnsureDirectTransport
-	// may still be creating one.
-	if directDial && baseMinHops == 1 {
-		if hop, ok := r.directHop(src, dst); ok {
-			fwd := []routing.Hop{hop}
-			log.WithField("transport", hop.TpID).
-				Debug("--direct: 1-hop route over the existing transport; skipping the route finder")
-			opts.note("direct-hop %s", hop.TpID.String()[:8])
-			return fwd, reverseHops(fwd), nil
+		// One ring further out: the neighbors' own lists give the middle edge.
+		if hi <= 3 && (r.conf.MaxHops == 0 || r.conf.MaxHops >= 3) {
+			if lFwd, lRev, lErr := r.listRoutes3Hop(ctx, log, src, dst, opts); lErr == nil {
+				return lFwd, lRev, nil
+			} else if !errors.Is(lErr, errListRoutesInert) {
+				log.WithError(lErr).Debug("3-hop route from transport lists missed; falling through to route finder")
+			}
 		}
 	}
 

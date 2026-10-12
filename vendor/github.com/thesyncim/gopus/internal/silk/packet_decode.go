@@ -1,6 +1,10 @@
 package silk
 
-import "github.com/thesyncim/gopus/internal/rangecoding"
+import (
+	"errors"
+
+	"github.com/thesyncim/gopus/internal/rangecoding"
+)
 
 // frameParams maps a SILK frame duration to the number of 20 ms SILK frames in
 // the packet and the number of 5 ms subframes per frame. A 10 ms frame has one
@@ -99,4 +103,46 @@ func resetSideChannelState(st *decoderState) {
 	st.lastGainIndex = 10
 	st.prevSignalType = typeNoVoiceActivity
 	st.firstFrameAfterReset = true
+}
+
+// ErrInvalidPacket indicates the packet data is malformed.
+var ErrInvalidPacket = errors.New("silk: invalid packet")
+
+// DecodeStereoEncoded decodes a range-coded SILK stereo packet back to
+// separate left/right channel float32 slices at 48 kHz.
+//
+// The input must be a complete SILK stereo bitstream, as PacketEncoder.Encode
+// or the libopus stereo encoder produces it.
+// The packet contains range-coded VAD/LBRR header bits, stereo prediction
+// indices, mid and side channel frame data.
+//
+// Returns left and right channels (each 48 kHz, length = frameSizeSamples).
+func DecodeStereoEncoded(encoded []byte, bandwidth Bandwidth) (left, right []float32, err error) {
+	if len(encoded) < 2 {
+		return nil, nil, ErrInvalidPacket
+	}
+
+	// Compute expected 48 kHz frame size from bandwidth (20 ms frame).
+	config := GetBandwidthConfig(bandwidth)
+	frameSamples := config.SampleRate * 20 / 1000
+	frameSizeSamples48 := frameSamples * 48000 / config.SampleRate
+
+	// Use the proper stereo decoder which handles range-coded SILK stereo
+	// packets (VAD/LBRR header, stereo prediction, mid/side frames, MS-to-LR).
+	decoder := NewDecoder()
+	interleaved, err := decoder.DecodeStereo(encoded, bandwidth, frameSizeSamples48, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// De-interleave [L0, R0, L1, R1, ...] into separate left/right slices.
+	n := len(interleaved) / 2
+	left = make([]float32, n)
+	right = make([]float32, n)
+	for i := range n {
+		left[i] = interleaved[i*2]
+		right[i] = interleaved[i*2+1]
+	}
+
+	return left, right, nil
 }

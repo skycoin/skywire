@@ -26,6 +26,11 @@ type Aggregator interface {
 // the same way in every service, on the host's nodes where the host lends
 // them, closes them when the service stops, and reports them in State.
 type CXOSet struct {
+	// Stats, when set, names each feed's port on the status page.
+	Stats interface {
+		NamePort(port uint16, name string)
+	}
+
 	mu   sync.Mutex
 	aggs []cxoAgg
 	pubs []cxoPub
@@ -59,6 +64,9 @@ type cxoPub struct {
 // recorded; the service carries on without that aggregator.
 func (s *CXOSet) StartAggregator(ctx context.Context, host CXOHost, log *logging.Logger,
 	name string, port uint16, build func(n *node.Node) (Aggregator, error)) {
+	if s.Stats != nil {
+		s.Stats.NamePort(port, "cxo "+name+" (in)")
+	}
 	var n *node.Node
 	if host != nil {
 		n = host.CXONode(port)
@@ -88,6 +96,9 @@ func (s *CXOSet) StartAggregator(ctx context.Context, host CXOHost, log *logging
 // when ctx ends. err, if set, is recorded and logged instead.
 func (s *CXOSet) AddPublisher(ctx context.Context, log *logging.Logger, name string, port uint16,
 	pub Publisher, err error) {
+	if s.Stats != nil {
+		s.Stats.NamePort(port, "cxo "+name)
+	}
 	rec := cxoPub{name: name, port: port}
 	if err != nil {
 		rec.err = err.Error()

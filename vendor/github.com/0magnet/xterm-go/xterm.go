@@ -99,8 +99,16 @@ type Terminal struct {
 	sel      *selection
 	selInput selectionInput
 	menu     *contextMenu
+	// a11y is the screen reader support, while it is on (a11y_js.go).
+	a11y *accessibility
+	// touch is the one-finger gesture in progress (touch_js.go).
+	touch touchState
 
 	cellW, cellH float64
+	// images are the inline pictures, in imgLayer (images.go).
+	images      []*inlineImage
+	imgLayer    js.Value
+	imagesWired bool
 
 	keyDownHandled       bool
 	renderQueued         bool
@@ -175,6 +183,10 @@ func (t *Terminal) Open(parent js.Value) {
 	t.textarea.Set("autocapitalize", "off")
 	t.textarea.Set("autocomplete", "off")
 	t.textarea.Set("spellcheck", false)
+	// What a screen reader calls the place it is typing into, as xterm.js
+	// labels it.
+	t.textarea.Call("setAttribute", "aria-label", a11yPromptLabel)
+	t.textarea.Call("setAttribute", "aria-multiline", "false")
 
 	t.compositionView = document.Call("createElement", "div")
 	t.compositionView.Set("className", "xterm-composition-view")
@@ -192,6 +204,9 @@ func (t *Terminal) Open(parent js.Value) {
 	t.renderer = &domRenderer{t}
 	t.wireCoreEvents()
 	t.wireDomEvents()
+	if opts.ScreenReaderMode {
+		t.a11y = newAccessibility(t)
+	}
 	t.scheduleRender(true)
 	t.Focus()
 
@@ -294,6 +309,9 @@ func (t *Terminal) wireCoreEvents() {
 		t.allDirty = true
 		t.updateScrollArea()
 		t.scheduleRender(false)
+		if t.a11y != nil {
+			t.a11y.refresh(0, t.Core.Rows()-1)
+		}
 	}
 	t.Core.OnResize = func(cols, rows int) {
 		// Reflow rewraps the buffer, so the cells a selection names are no
@@ -302,6 +320,9 @@ func (t *Terminal) wireCoreEvents() {
 		t.refreshRowEls()
 		t.updateScrollArea()
 		t.renderer.onResize()
+		if t.a11y != nil {
+			t.a11y.resize()
+		}
 		t.scheduleRender(true)
 		// Last, and after the renderer: a consumer told about the new size
 		// before the renderer has been reallocated for it may act on the new
@@ -333,10 +354,79 @@ func (t *Terminal) wireCoreEvents() {
 			t.OnBell()
 		}
 	}
+	// What a screen reader hears as output arrives. The core reports
+	// characters only in screen reader mode; a line feed it always reports,
+	// so that one is checked here. Whatever an embedder set on these before
+	// Open still runs.
+	prevChar, prevTab, prevLF := t.Core.OnA11yChar, t.Core.OnA11yTab, t.Core.OnLineFeed
+	t.Core.OnA11yChar = func(c string) {
+		if t.a11y != nil {
+			t.a11y.announce.char(c)
+		}
+		if prevChar != nil {
+			prevChar(c)
+		}
+	}
+	t.Core.OnA11yTab = func(n int) {
+		if t.a11y != nil {
+			t.a11y.announce.tab(n)
+		}
+		if prevTab != nil {
+			prevTab(n)
+		}
+	}
+	t.Core.OnLineFeed = func() {
+		if t.a11y != nil {
+			t.a11y.announce.char("\n")
+		}
+		if prevLF != nil {
+			prevLF()
+		}
+	}
+	// CSI 14 t and 16 t: the text area and one cell, in device pixels, for a
+	// program that draws pictures to fit its cells. Answered only where the
+	// embedder enabled them (Options.WindowOptions).
+	t.Core.OnWindowsOptionsReport = func(kind int) {
+		dpr := js.Global().Get("devicePixelRatio").Float()
+		if dpr <= 0 {
+			dpr = 1
+		}
+		px := func(v float64) int { return int(v*dpr + 0.5) }
+		switch kind {
+		case vt.ReportCellSizePixels:
+			t.Core.Input("\x1b[6;"+strconv.Itoa(px(t.cellH))+";"+strconv.Itoa(px(t.cellW))+"t", false)
+		case vt.ReportWinSizePixels:
+			t.Core.Input("\x1b[4;"+strconv.Itoa(px(t.cellH*float64(t.Core.Rows())))+";"+strconv.Itoa(px(t.cellW*float64(t.Core.Cols())))+"t", false)
+		}
+	}
+	t.wireSixel()
+	// OSC 22: the pointer a program asked for, over the screen. Inline, so
+	// it outranks the stylesheet's I-beam and the arrow it shows when a
+	// program has the mouse; "" hands the choice back to those.
+	t.Core.OnPointerShape = func(css string) {
+		t.screen.Get("style").Set("cursor", css)
+	}
 	t.Core.OnColor = func(events []vt.ColorEvent) {
 		changed := false
 		for _, e := range events {
 			switch e.Type {
+			case vt.ColorRequestReport:
+				// OSC 4 / 10 / 11 / 12 with "?": the color now in use.
+				var css, ident string
+				switch e.Index {
+				case vt.SpecialColorForeground:
+					css, ident = t.colors.Foreground, "10"
+				case vt.SpecialColorBackground:
+					css, ident = t.colors.Background, "11"
+				case vt.SpecialColorCursor:
+					css, ident = t.colors.Cursor, "12"
+				default:
+					if e.Index < 0 || e.Index >= 256 {
+						continue
+					}
+					css, ident = t.colors.Ansi[e.Index], "4;"+strconv.Itoa(e.Index)
+				}
+				t.Core.Input("\x1b]"+ident+";"+xParseColor(cssToRGB(css))+"\x1b\\", false)
 			case vt.ColorRequestSet:
 				css := rgbCSS(e.Color)
 				switch e.Index {
@@ -383,6 +473,24 @@ func (t *Terminal) wireCoreEvents() {
 }
 
 func (t *Terminal) wireDomEvents() {
+	// Focus reports (mode 1004), for a program that dims or pauses when the
+	// person looks away.
+	for ev, seq := range map[string]string{"focus": "\x1b[I", "blur": "\x1b[O"} {
+		t.textarea.Call("addEventListener", ev, t.fn(func(js.Value, []js.Value) any {
+			if t.Core.CoreService().DecPrivateModes.SendFocus {
+				t.Core.Input(seq, false)
+			}
+			return nil
+		}))
+	}
+	// Leaving the terminal is the end of what the live region was saying.
+	t.textarea.Call("addEventListener", "blur", t.fn(func(js.Value, []js.Value) any {
+		if t.a11y != nil {
+			t.a11y.clearLiveRegion()
+		}
+		return nil
+	}))
+
 	// IME composition
 	t.textarea.Call("addEventListener", "compositionstart", t.fn(func(js.Value, []js.Value) any {
 		t.composition.CompositionStart()
@@ -423,6 +531,23 @@ func (t *Terminal) wireDomEvents() {
 			Key:      ev.Get("key").String(),
 			Code:     ev.Get("code").String(),
 		}
+		// A program that asked for the kitty keyboard protocol gets the keys
+		// it encodes that way; the rest go the legacy way below.
+		if flags := t.Core.InputHandler().KittyFlags(); flags != 0 {
+			event := vt.KittyPress
+			if ev.Get("repeat").Bool() {
+				event = vt.KittyRepeat
+			}
+			if seq, ok := vt.KittyKey(kev, flags, event); ok {
+				ev.Call("preventDefault")
+				ev.Call("stopPropagation")
+				t.keyDownHandled = true
+				t.sel.drop()
+				t.a11yKey(seq)
+				t.Core.Input(seq, true)
+				return nil
+			}
+		}
 		isMac := strings.Contains(window.Get("navigator").Get("platform").String(), "Mac")
 		result := vt.EvaluateKeyboardEvent(kev, t.Core.CoreService().DecPrivateModes.ApplicationCursorKeys, isMac, false)
 		switch result.Type {
@@ -453,9 +578,33 @@ func (t *Terminal) wireDomEvents() {
 			t.keyDownHandled = true
 			// Typing is the end of caring about what was selected.
 			t.sel.drop()
+			t.a11yKey(result.Key)
 			t.Core.Input(result.Key, true)
 		} else if result.Cancel {
 			ev.Call("preventDefault")
+		}
+		return nil
+	}))
+
+	// keyup: a key's release, for a program that asked the kitty keyboard
+	// protocol to report them.
+	t.textarea.Call("addEventListener", "keyup", t.fn(func(_ js.Value, args []js.Value) any {
+		flags := t.Core.InputHandler().KittyFlags()
+		if flags&vt.KittyEventTypes == 0 {
+			return nil
+		}
+		ev := args[0]
+		kev := &vt.KeyboardEvent{
+			AltKey:   ev.Get("altKey").Bool(),
+			CtrlKey:  ev.Get("ctrlKey").Bool(),
+			ShiftKey: ev.Get("shiftKey").Bool(),
+			MetaKey:  ev.Get("metaKey").Bool(),
+			KeyCode:  ev.Get("keyCode").Int(),
+			Key:      ev.Get("key").String(),
+			Code:     ev.Get("code").String(),
+		}
+		if seq, ok := vt.KittyKey(kev, flags, vt.KittyRelease); ok {
+			t.Core.Input(seq, true)
 		}
 		return nil
 	}))
@@ -476,6 +625,7 @@ func (t *Terminal) wireDomEvents() {
 			ev.Call("preventDefault")
 			ev.Call("stopPropagation")
 			t.sel.drop()
+			t.a11yKey(key)
 			t.Core.Input(key, true)
 		}
 		return nil
@@ -490,9 +640,16 @@ func (t *Terminal) wireDomEvents() {
 		return nil
 	}))
 
+	// A mouse event something over the terminal has already handled
+	// (preventDefault) is not the terminal's: a widget laid over its cells
+	// lets it on to the document, where a handler of its own is listening.
+	// The wheel, the touches and the context menu read the same mark.
 	// focus terminal on click, and start a selection unless the application
 	// has asked for the mouse itself
 	t.element.Call("addEventListener", "mousedown", t.fn(func(_ js.Value, args []js.Value) any {
+		if args[0].Get("defaultPrevented").Bool() {
+			return nil
+		}
 		if t.selectionMouseDown(args[0]) {
 			return nil
 		}
@@ -500,11 +657,17 @@ func (t *Terminal) wireDomEvents() {
 		return nil
 	}))
 	t.element.Call("addEventListener", "mouseup", t.fn(func(_ js.Value, args []js.Value) any {
+		if args[0].Get("defaultPrevented").Bool() {
+			return nil
+		}
 		t.reportMouse(args[0], vt.MouseActionUp)
 		t.Focus()
 		return nil
 	}))
 	t.element.Call("addEventListener", "mousemove", t.fn(func(_ js.Value, args []js.Value) any {
+		if args[0].Get("defaultPrevented").Bool() {
+			return nil
+		}
 		if t.Core.MouseService().AreMouseEventsActive() {
 			t.reportMouse(args[0], vt.MouseActionMove)
 		}
@@ -514,10 +677,14 @@ func (t *Terminal) wireDomEvents() {
 	// watched on the document.
 	t.wireSelection()
 	t.wireContextMenu()
+	t.wireTouch()
 
 	// wheel: scroll our own viewport (or report to the app)
 	t.element.Call("addEventListener", "wheel", t.fn(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
+		if ev.Get("defaultPrevented").Bool() {
+			return nil
+		}
 		if t.Core.MouseService().AreMouseEventsActive() {
 			t.reportWheel(ev)
 			ev.Call("preventDefault")
@@ -609,6 +776,23 @@ func (t *Terminal) Paste(data string) {
 		data = "\x1b[200~" + data + "\x1b[201~"
 	}
 	t.Core.Input(data, true)
+}
+
+// ScrollToPreviousPrompt scrolls the last shell prompt above the view to its
+// top, from the OSC 133 marks a shell writes (vt/semantic.go). It reports
+// whether there was one.
+func (t *Terminal) ScrollToPreviousPrompt() bool { return t.Core.ScrollToPreviousPrompt() }
+
+// ScrollToNextPrompt scrolls the next prompt below the top of the view to
+// the top, or to the bottom when there is none; it reports whether the view
+// moved.
+func (t *Terminal) ScrollToNextPrompt() bool { return t.Core.ScrollToNextPrompt() }
+
+// LastCommandOutput is what the last finished command printed between its
+// OSC 133 C and D marks, its exit status (-1 if the shell gave none), and
+// whether there is one: false before any, or once its lines are gone.
+func (t *Terminal) LastCommandOutput() (text string, exit int, ok bool) {
+	return t.Core.LastCommandOutput()
 }
 
 // Write feeds pty output (UTF-8 bytes) into the terminal.
@@ -715,6 +899,17 @@ func (t *Terminal) render() {
 		return
 	}
 	t.renderer.renderRows(start, end)
+	t.placeImages()
+	if t.a11y != nil {
+		t.a11y.refresh(start, end)
+	}
+}
+
+// a11yKey tells screen reader support about a key press.
+func (t *Terminal) a11yKey(k string) {
+	if t.a11y != nil {
+		t.a11y.key(k)
+	}
 }
 
 // domRenderer is the default renderer: rows as divs of styled spans.
@@ -1024,6 +1219,10 @@ func (t *Terminal) Dispose() {
 	}
 	t.menu.hide()
 	t.unwireSelection()
+	if t.a11y != nil {
+		t.a11y.dispose()
+		t.a11y = nil
+	}
 	if t.resizeObserver.Truthy() {
 		t.resizeObserver.Call("disconnect")
 		t.resizeObserver = js.Value{}
@@ -1066,6 +1265,9 @@ func ensureStylesheet() {
 .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #6b727c; }
 .xterm .xterm-viewport::-webkit-scrollbar-corner { background: transparent; }
 .xterm .xterm-screen { position: relative; z-index: 1; cursor: text; }
+/* One finger over the screen is the terminal's (touch_js.go); two are the
+   browser's, for zooming the page. */
+.xterm .xterm-screen { touch-action: pinch-zoom; }
 /* When mouse events are enabled (eg. tmux), revert to the standard pointer
    cursor. The clicks belong to the application now rather than to the
    selection, and an I-beam over a full-screen UI offers the wrong thing. */
@@ -1077,7 +1279,10 @@ func ensureStylesheet() {
    selections that disagree with each other. */
 .xterm .xterm-rows { line-height: normal; letter-spacing: 0; white-space: pre; user-select: none; }
 .xterm .xterm-rows > div { overflow: hidden; }
-.xterm .xterm-rows span { display: inline-block; }
+/* Aligned to the top of the row rather than to a baseline: a run drawn in a
+   fallback font (CJK, say) has a taller ascent, and on the baseline it pushed
+   every span in its row a couple of pixels down from the rows around it. */
+.xterm .xterm-rows span { display: inline-block; vertical-align: top; }
 .xterm .xb { font-weight: bold; }
 .xterm .xi { font-style: italic; }
 .xterm .xd { opacity: 0.5; }
@@ -1087,6 +1292,16 @@ func ensureStylesheet() {
   display: none; position: absolute; white-space: nowrap; z-index: 5;
 }
 .xterm .xterm-composition-view.active { display: block; }
+/* Screen reader mode (a11y_js.go), as xterm.css has it: the tree lies over the
+   rows with its text transparent, and the live region is off the page. */
+.xterm .xterm-accessibility {
+  position: absolute; left: 0; top: 0; bottom: 0; right: 0;
+  z-index: 10; color: transparent; pointer-events: none;
+}
+.xterm .xterm-accessibility-tree { font-family: monospace; user-select: text; white-space: pre; }
+.xterm .xterm-accessibility-tree *::selection { color: transparent; }
+.xterm .xterm-accessibility-tree > div { transform-origin: left; width: fit-content; }
+.xterm .live-region { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 ` + contextMenuCSS
 	styleEl := document.Call("createElement", "style")
 	styleEl.Set("textContent", css)
@@ -1138,11 +1353,30 @@ func (t *Terminal) RefreshGlyphs() {
 // The WebGL renderer holds a texture atlas built for the old cell, so it is
 // rebuilt: nothing else here knows how to tell it its glyphs changed size.
 func (t *Terminal) SetFontSize(px float64) {
-	if !t.opened || px <= 0 || px == t.Core.Options.FontSize {
+	t.SetFont(t.Core.Options.FontFamily, px)
+}
+
+// SetFontFamily draws the terminal in family (a CSS font-family list) from
+// now on, measuring its cells again: a program that brings its own font, a
+// person who prefers another. A font loaded with the FontFace API must have
+// finished loading first, or the cells are measured in its fallback.
+func (t *Terminal) SetFontFamily(family string) {
+	t.SetFont(family, t.Core.Options.FontSize)
+}
+
+// FontFamily is the font-family list the terminal is drawing in.
+func (t *Terminal) FontFamily() string { return t.Core.Options.FontFamily }
+
+// SetFont changes family and size together, with one measure and one
+// rebuild of the renderer.
+func (t *Terminal) SetFont(family string, px float64) {
+	if !t.opened || px <= 0 || family == "" || (px == t.Core.Options.FontSize && family == t.Core.Options.FontFamily) {
 		return
 	}
 	t.Core.Options.FontSize = px
+	t.Core.Options.FontFamily = family
 	t.element.Get("style").Set("fontSize", jsPx(px))
+	t.element.Get("style").Set("fontFamily", family)
 	t.measureCharSize()
 	t.refreshRowEls()
 	t.updateScrollArea()
@@ -1153,6 +1387,9 @@ func (t *Terminal) SetFontSize(px float64) {
 		_ = t.EnableWebGL() //nolint:errcheck // it worked a moment ago; the DOM renderer is the fallback either way
 	}
 	t.Fit()
+	if t.a11y != nil {
+		t.a11y.refreshDimensions()
+	}
 	t.scheduleRender(true)
 }
 

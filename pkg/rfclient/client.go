@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package rfclient pkg/rfclient/client.go c2-net-routing
 //
 // This file holds the net/http-backed implementation (NewHTTP) and is

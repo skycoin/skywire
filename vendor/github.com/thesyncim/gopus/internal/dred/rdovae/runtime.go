@@ -1,8 +1,6 @@
 package rdovae
 
 import (
-	"runtime"
-
 	"github.com/thesyncim/gopus/internal/dnnblob"
 	"github.com/thesyncim/gopus/internal/dnnmath"
 )
@@ -15,15 +13,13 @@ const (
 
 const maxInputs = 2048
 
-// Match the pinned libopus DNN kernels selected by the helper build. Linux
-// parity helpers explicitly disable x86 intrinsics, so amd64 stays on the
-// scalar path instead of simulating libopus' optional vector kernels. Keep
-// these as constants so the unused arch branch folds away.
-const (
-	useArm64DNNVectorKernels = runtime.GOARCH == "arm64"
-	useX86DNNVectorKernels   = false
-	useNearestEvenQuant      = useArm64DNNVectorKernels || useX86DNNVectorKernels
-)
+// Match the DNN kernels in the instruction-paired libopus DRED build.
+const useArm64DNNVectorKernels = rdovaeNEONEnabled
+
+// useX86DNNVectorKernels selects libopus's AVX2/FMA compute_linear, whose
+// dnn/vec_avx.h kernels quantize integer-matrix inputs to unsigned bytes and
+// pair them with the USE_SU_BIAS biases.
+var useX86DNNVectorKernels = dnnmath.X86VectorKernels
 
 type decoderState struct {
 	initialized bool
@@ -41,6 +37,7 @@ type runtimeScratch struct {
 	recur     [3 * MaxRNNNeurons]float32
 	act       [MaxRNNNeurons]float32
 	quant     [maxInputs]int8
+	quantSU   [maxInputs]uint8
 }
 
 // Processor owns reusable DRED decoder runtime state and scratch so callers
@@ -245,10 +242,15 @@ func computeLinear(layer *LinearLayer, out, in []float32, scratch *runtimeScratc
 			sgemv(out[:n], layer.FloatWeights, n, m, n, in[:m])
 		}
 	} else if !layer.Weights.Empty() {
+		// dnn/nnet_arch.h selects subias for integer matrices on x86's
+		// USE_SU_BIAS path. Float matrices retain the ordinary bias.
+		if useX86DNNVectorKernels {
+			bias = layer.Subias
+		}
 		if !layer.WeightsIdx.Empty() {
-			sparseCGEMV8x4(out[:n], layer.Weights, layer.WeightsIdx, layer.Scale, n, m, in[:m], scratch.quant[:m])
+			sparseCGEMV8x4(out[:n], layer.Weights, layer.WeightsIdx, layer.Scale, n, m, in[:m], scratch)
 		} else {
-			cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], scratch.quant[:m])
+			cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m], scratch)
 		}
 	} else {
 		clear(out[:n])
@@ -262,6 +264,10 @@ func computeLinear(layer *LinearLayer, out, in []float32, scratch *runtimeScratc
 }
 
 func sgemv(out []float32, weights FloatTensor, rows, cols, colStride int, x []float32) {
+	if useX86DNNVectorKernels {
+		dnnmath.SGEMVX86(out, weights, rows, cols, colStride, x)
+		return
+	}
 	if useArm64DNNVectorKernels {
 		sgemvFused(out, weights, rows, cols, colStride, x)
 		return
@@ -293,6 +299,10 @@ func sgemvSplit(out []float32, weights FloatTensor, rows, cols, colStride int, x
 
 func sparseSGEMV(out []float32, weights FloatTensor, idx IntTensor, x []float32) {
 	rows := len(out)
+	if useX86DNNVectorKernels {
+		dnnmath.SparseSGEMV8x4X86(out, weights, idx, rows, x)
+		return
+	}
 	clear(out)
 	wOffset := 0
 	idxPos := 0
@@ -309,21 +319,26 @@ func sparseSGEMV(out []float32, weights FloatTensor, idx IntTensor, x []float32)
 			x3 := x[pos+3]
 			for k := range 8 {
 				base := wOffset + k
-				y[k] += weights.At(base)*x0 +
-					weights.At(base+8)*x1 +
-					weights.At(base+16)*x2 +
-					weights.At(base+24)*x3
+				y[k] = fma32(weights.At(base), x0, y[k])
+				y[k] = fma32(weights.At(base+8), x1, y[k])
+				y[k] = fma32(weights.At(base+16), x2, y[k])
+				y[k] = fma32(weights.At(base+24), x3, y[k])
 			}
 			wOffset += SparseBlockSize
 		}
 	}
 }
 
-func cgemv8x4(out []float32, weights Int8Tensor, scale FloatTensor, rows, cols int, x []float32, q []int8) {
+func cgemv8x4(out []float32, weights Int8Tensor, scale FloatTensor, rows, cols int, x []float32, scratch *runtimeScratch) {
+	if useX86DNNVectorKernels {
+		dnnmath.CGEMV8x4X86(out, weights, scale, rows, cols, x, scratch.quantSU[:cols])
+		return
+	}
+	q := scratch.quant[:cols]
 	for i := range cols {
 		q[i] = quantizeInput(x[i])
 	}
-	if useNearestEvenQuant {
+	if useArm64DNNVectorKernels {
 		for row := 0; row < rows; row += 8 {
 			var acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7 int
 			wOffset := row * cols
@@ -377,12 +392,16 @@ func cgemv8x4(out []float32, weights Int8Tensor, scale FloatTensor, rows, cols i
 	}
 }
 
-func sparseCGEMV8x4(out []float32, weights Int8Tensor, idx IntTensor, scale FloatTensor, rows, cols int, x []float32, q []int8) {
-	_ = cols
+func sparseCGEMV8x4(out []float32, weights Int8Tensor, idx IntTensor, scale FloatTensor, rows, cols int, x []float32, scratch *runtimeScratch) {
+	if useX86DNNVectorKernels {
+		dnnmath.SparseCGEMV8x4X86(out, weights, idx, scale, rows, cols, x, scratch.quantSU[:cols])
+		return
+	}
+	q := scratch.quant[:cols]
 	for i := range x {
 		q[i] = quantizeInput(x[i])
 	}
-	if useNearestEvenQuant {
+	if useArm64DNNVectorKernels {
 		wOffset := 0
 		idxPos := 0
 		for row := 0; row < rows; row += 8 {
@@ -461,7 +480,7 @@ func computeActivation(output, input []float32, n, activation int) {
 }
 
 func quantizeInput(x float32) int8 {
-	if useNearestEvenQuant {
+	if useArm64DNNVectorKernels {
 		return dnnmath.Cgemv8x4QuantizeInput(x)
 	}
 	return dnnmath.Cgemv8x4QuantizeInputScalar(x)

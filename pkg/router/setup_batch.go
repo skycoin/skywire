@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/setup_batch.go c2-net-routing
 //
 // The setup-node side of the batched route-setup protocol

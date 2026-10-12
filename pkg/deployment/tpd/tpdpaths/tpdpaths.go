@@ -7,13 +7,6 @@
 // VictoriaMetrics, which the mobile build cannot compile for iOS.
 package tpdpaths
 
-// All-transports feed: the network-wide transport snapshot, with and
-// without the self transports.
-const (
-	AllTransportsPathWithSelf    = "transports/all/with-self"
-	AllTransportsPathWithoutSelf = "transports/all/without-self"
-)
-
 // Routing feed: one shard per visor, at RoutingPathPrefix + <pk hex>, the
 // transport list route calculation reads (see RoutingCXOPublisher in
 // pkg/deployment/tpd/api).

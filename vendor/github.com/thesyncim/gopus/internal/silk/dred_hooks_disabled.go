@@ -13,11 +13,15 @@ type dredHookState struct{}
 // is only wired under the gopus_dred or gopus_osce tags.
 func (d *Decoder) SetRawMonoFrameHook(_ RawMonoFrameHook) {}
 
+func (d *Decoder) SetRawMonoLossFrameHook(_ RawMonoFrameHook) {}
+
 // SetDeepPLCLossMonoHook is a no-op in the default build; the deep-PLC loss hook
 // is only wired under the gopus_dred or gopus_osce tags.
 func (d *Decoder) SetDeepPLCLossMonoHook(_ DeepPLCLossMonoHook) {}
 
 func (d *Decoder) fireRawMonoFrameHook(_ int, _ *decoderState, _ []int16) {}
+
+func (d *Decoder) fireRawMonoLossFrameHook(_ int, _ *decoderState, _ []int16) {}
 
 func (d *Decoder) hasDeepPLCLossMonoHook() bool {
 	return false

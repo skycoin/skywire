@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/0magnet/afero"
 	"github.com/0magnet/sh/v3/expand"
@@ -29,6 +30,10 @@ type Shell struct {
 	RawMode func(on bool)
 	// Size, when set, reports the terminal dimensions.
 	Size func() (cols, rows int)
+	// IsTerminal, when set, reports whether w is the terminal itself rather
+	// than a pipe or a file: a program run from the filesystem with its
+	// stdout there is given a terminal of its own (exec_js.go).
+	IsTerminal func(w io.Writer) bool
 	// WakeStdin, when set, makes a Read blocked on the terminal's stdin return
 	// with no data. An applet that reads keys on its own goroutine (ssh) calls
 	// it when its session ends on its own, rather than waiting for a key.
@@ -51,6 +56,11 @@ type Shell struct {
 	// FIRST and win a name clash, so an embedder cannot quietly replace cd or
 	// echo with something else.
 	Exec func(ctx context.Context, args []string) (code int, handled bool)
+
+	// source is whose output the terminal is showing now: "page" (this
+	// program's own), "local" (a program launched from the filesystem) or
+	// "remote" (a network session). See Source.
+	source atomic.Pointer[string]
 
 	parser  *syntax.Parser
 	pending strings.Builder // continuation lines of an incomplete input
@@ -369,4 +379,23 @@ func openHeredoc(f *syntax.File) bool {
 		return !open
 	})
 	return open
+}
+
+// Source is whose output the terminal is showing now: "page" — the program
+// this shell is part of, and its applets — unless a command says otherwise
+// with WithSource. A host decides by it what a request in that output may do
+// (PROTOCOL.md, Trust).
+func (s *Shell) Source() string {
+	if p := s.source.Load(); p != nil {
+		return *p
+	}
+	return "page"
+}
+
+// WithSource marks the output from now on as src, until the returned func
+// puts back what it was: a program launched from the filesystem is "local",
+// a network session "remote".
+func (s *Shell) WithSource(src string) (restore func()) {
+	old := s.source.Swap(&src)
+	return func() { s.source.Store(old) }
 }

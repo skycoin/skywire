@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -203,6 +204,8 @@ type circuitBreaker struct {
 // its own mutex during Snapshot so the struct is safe to marshal and
 // return.
 type StatsSnapshot struct {
+	// Version is the build of the setup node that answered.
+	Version   string    `json:"version,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	UptimeSec int64     `json:"uptime_sec"`
 
@@ -961,6 +964,7 @@ func (c *Collector) Snapshot() StatsSnapshot {
 
 	// Copy counters.
 	snap := StatsSnapshot{
+		Version:          buildinfo.Version(),
 		StartedAt:        c.startedAt,
 		UptimeSec:        int64(time.Since(c.startedAt).Seconds()),
 		TotalRequests:    c.total,

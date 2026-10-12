@@ -13,13 +13,16 @@ skywire dmsg socks server
 ## Flags
 
 ```
-  -D, --dmsg-disc string   dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -F, --dmsgconf string    dmsghttp-config path
+      --attach socket      attach to a local visor's dmsg relay socket (holds no server sessions, publishes no entry, keeps this key)
+  -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
+  -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -D, --dmsgconf string    dmsghttp-config path
   -q, --dport uint16       dmsg port to serve socks5 (default 1081)
-  -z, --http               use regular http to connect to dmsg discovery
       --pprofaddr string   pprof http port (default "localhost:6060")
       --pprofmode string   [ cpu | mem | mutex | block | trace | http ]
+  -e, --sess int           number of DMSG Servers to connect to (default 2)
   -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
   -w, --wl string          whitelist keys, comma separated
 ```
 

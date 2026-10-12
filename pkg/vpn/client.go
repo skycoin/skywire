@@ -103,11 +103,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		return nil, fmt.Errorf("error getting RF IP: %w", err)
 	}
 
-	utIP, err := uptimeTrackerIPFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("error getting UT IP: %w", err)
-	}
-
 	stcpEntities, err := stcpEntitiesFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Skywire-TCP entities: %w", err)
@@ -127,10 +122,6 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 	if arIP != nil {
 		directIPs = append(directIPs, arIP)
-	}
-
-	if utIP != nil {
-		directIPs = append(directIPs, utIP)
 	}
 
 	defaultGateway, err := DefaultNetworkGateway()
@@ -674,10 +665,6 @@ func addressResolverIPFromEnv() (net.IP, error) {
 
 func rfIPFromEnv() (net.IP, error) {
 	return optionalIPFromEnv(RFAddrEnvKey)
-}
-
-func uptimeTrackerIPFromEnv() (net.IP, error) {
-	return optionalIPFromEnv(UptimeTrackerAddrEnvKey)
 }
 
 func tpRemoteIPsFromEnv() ([]net.IP, error) {

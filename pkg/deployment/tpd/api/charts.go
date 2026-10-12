@@ -47,10 +47,14 @@ type tpdCharts struct {
 // as the charts page.
 func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
 	c := &tpdCharts{st: st}
+	charts.SetVersionLookup(api.versionOf)
 	c.page = &charts.Page{
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
 		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
+		Stats: api.Stats,
+		Store: st,
+		Log:   log,
 		Build: func(ctx context.Context, r charts.Range, now time.Time) (charts.Content, error) {
 			return api.buildCharts(ctx, c, r, now)
 		},
@@ -58,7 +62,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
 		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
 	api.chartState.Store(c)
-	go charts.Run(ctx, st, api.collectCharts, log)
+	go charts.Run(ctx, st, api.Stats.Wrap(api.collectCharts), log)
 }
 
 // ChartsPage serves the charts page, or 404 when charts are not running.
@@ -164,6 +168,7 @@ func (api *API) buildCharts(ctx context.Context, c *tpdCharts, r charts.Range, n
 	if daily := c.dailyAggregate(ctx, api.store); len(daily) > 0 {
 		out.Charts = append(out.Charts, dailyBandwidthChart(daily), dailyLatencyChart(daily))
 	}
+	out.Tables = append(out.Tables, api.visorTable(ctx))
 	if t, ok := api.visorBandwidthTable(ctx, c, now); ok {
 		out.Tables = append(out.Tables, t)
 	}
@@ -324,12 +329,15 @@ func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.
 			return charts.Table{}, false
 		}
 		day := store.ComputeVisorBW(records, date)
+		if len(day.Visors) == 0 {
+			return charts.Table{}, false
+		}
 		c.visorBW = &day
 	}
-	return visorBWTable(c.visorBW, api.serverRoles(ctx)), true
+	return visorBWTable(c.visorBW, api.serverRoles(ctx), api.visorVersions()), true
 }
 
-func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
+func visorBWTable(day *store.VisorBWDay, roles, versions map[string]string) charts.Table {
 	type row struct {
 		pk     string
 		total  uint64
@@ -350,23 +358,45 @@ func visorBWTable(day *store.VisorBWDay, roles map[string]string) charts.Table {
 		return rows[i].pk < rows[j].pk
 	})
 	t := charts.Table{Title: "Top visors by bytes sent, " + day.Date + " (UTC day)",
-		Note: fmt.Sprintf("%d visors sent bytes over %d transports. %d transports between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
-			len(day.Visors), day.Transports, day.SameNetworkExcluded),
-		Head: []string{"Public key", "Role", "Sent", "By type"}}
-	for i, r := range rows {
-		if i == topVisorsByBandwidth {
-			break
+		Note: fmt.Sprintf("%d visors sent bytes over %d transports, each counted only as far as the other edge confirms receiving it. %d transports only one edge reported are not counted, and %d between visors on the same network are left out, as in rewards pool 2. Visors that run a dmsg server are tinted, blue when it is registered in dmsg discovery and green when it serves a hypervisor's LAN.",
+			len(day.Visors), day.Transports, day.Unverified, day.SameNetworkExcluded)}
+	if len(rows) > topVisorsByBandwidth {
+		rows = rows[:topVisorsByBandwidth]
+	}
+	// One column per transport type the listed visors used, the busiest first.
+	byType := map[string]uint64{}
+	for _, r := range rows {
+		for typ, n := range r.byType {
+			byType[typ] += n
 		}
-		types := make([]string, 0, len(r.byType))
-		for typ := range r.byType {
-			types = append(types, typ)
+	}
+	types := make([]string, 0, len(byType))
+	for typ := range byType {
+		types = append(types, typ)
+	}
+	sort.Slice(types, func(a, b int) bool {
+		if byType[types[a]] != byType[types[b]] {
+			return byType[types[a]] > byType[types[b]]
 		}
-		sort.Slice(types, func(a, b int) bool { return r.byType[types[a]] > r.byType[types[b]] })
-		parts := make([]string, 0, len(types))
+		return types[a] < types[b]
+	})
+	t.Head = []string{"Public key", "Version", "Role", "Sent"}
+	for _, typ := range types {
+		if typ == "" {
+			typ = "unknown"
+		}
+		t.Head = append(t.Head, typ)
+	}
+	for _, r := range rows {
+		row := []string{r.pk, versions[r.pk], roleName[roles[r.pk]], charts.Bytes(float64(r.total))}
 		for _, typ := range types {
-			parts = append(parts, typ+" "+charts.Bytes(float64(r.byType[typ])))
+			cell := ""
+			if n := r.byType[typ]; n > 0 {
+				cell = charts.Bytes(float64(n))
+			}
+			row = append(row, cell)
 		}
-		t.Rows = append(t.Rows, []string{r.pk, roleName[roles[r.pk]], charts.Bytes(float64(r.total)), strings.Join(parts, ", ")})
+		t.Rows = append(t.Rows, row)
 		t.Marks = append(t.Marks, roleColor[roles[r.pk]])
 	}
 	return t
@@ -387,4 +417,12 @@ func (api *API) roleColors(ctx context.Context) map[string]string {
 		out[pk] = roleColor[r]
 	}
 	return out
+}
+
+// Charts is the charts page, or nil until StartCharts runs.
+func (api *API) Charts() *charts.Page {
+	if c := api.chartState.Load(); c != nil {
+		return c.page
+	}
+	return nil
 }

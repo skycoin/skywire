@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/clirewards"
+	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -258,21 +259,11 @@ type BandwidthData struct {
 
 // tpdTransport represents a transport from TPD /metrics endpoint with edge info
 type tpdTransport struct {
-	ID    string   `json:"id"`
-	Type  string   `json:"type"`
-	Live  bool     `json:"live"`
-	Edges []string `json:"edges"`
-	Daily []struct {
-		Date string `json:"date"`
-		A    *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"a,omitempty"`
-		B *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"b,omitempty"`
-	} `json:"daily"`
+	ID    string                        `json:"id"`
+	Type  string                        `json:"type"`
+	Live  bool                          `json:"live"`
+	Edges []string                      `json:"edges"`
+	Daily []tpdstore.DailyEdgeBandwidth `json:"daily"`
 }
 
 var bwCollectCmd = &cobra.Command{
@@ -471,50 +462,19 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			continue
 		}
 
-		// Sender-side per-edge totals. Mirrors the same three-branch
-		// trust model `skywire cli tp metrics` uses (see
-		// cmd/skywire-cli/commands/tp/tp-metrics.go:verifiedBandwidth):
-		// when both edges report on a day, cap each side's sent by the
-		// counterparty's recv; when only one side has reported (the
-		// common case — edges re-register on different schedules), trust
-		// that side's own counters. Without the unilateral-trust
-		// branches, virtually every transport was discarded because at
-		// any given moment only one edge has a fresh daily record.
-		//
-		// An edge whose record is present but {sent:0, recv:0} is
-		// treated as "hasn't reported real data yet" rather than
-		// "verified zero traffic" — same rationale as the cli.
-		//
-		// TODO(B2): the both-reported branch used to cap each side's
-		// sent by the counterparty's recv (min(A.Sent, B.Recv) +
-		// min(B.Sent, A.Recv)). That anti-inflation cap collapsed
-		// dual-edge pool 2 contribution to ~0 whenever the receiver-
-		// side counter was zero — the dominant symptom of B2 (TPD
-		// upsert clobbers the prior side's perspective when the
-		// counterparty heartbeats). The cap has been temporarily
-		// removed; both branches now trust the sender unconditionally,
-		// matching the unilateral-trust branches below. Restore the
-		// min() cap once v1.3.63 (with the TPD per-edge merge upsert)
-		// is the required minimum version and the dual-edge ratio is
-		// reliably >50%. See operator announcement 2026-06-03.
+		// Verified sender-side per-edge totals, by the rule TPD's settled
+		// day and the reward server use (tpdstore.SenderBytes): each edge's
+		// sent capped by what the other edge received, and nothing for a
+		// transport only one edge reported. Both edges report on 90 to 97%
+		// of transports now, so the B2 condition that removed the cap holds.
 		var sentA, sentB uint64
 		for _, d := range tp.Daily {
 			if dateFilter != "" && d.Date != dateFilter {
 				continue
 			}
-			aReported := d.A != nil && (d.A.Sent > 0 || d.A.Recv > 0)
-			bReported := d.B != nil && (d.B.Sent > 0 || d.B.Recv > 0)
-			switch {
-			case aReported && bReported:
-				sentA += d.A.Sent
-				sentB += d.B.Sent
-			case aReported:
-				sentA += d.A.Sent
-				sentB += d.A.Recv
-			case bReported:
-				sentA += d.B.Recv
-				sentB += d.B.Sent
-			}
+			a, b := tpdstore.SenderBytes(d)
+			sentA += a
+			sentB += b
 		}
 		if sentA == 0 && sentB == 0 {
 			continue

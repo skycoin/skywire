@@ -53,6 +53,10 @@ func (d *Decoder) dredNeuralConcealmentAvailable() bool {
 	return false
 }
 
+func (d *Decoder) dredFECFeaturesQueued() bool {
+	return false
+}
+
 func (d *Decoder) dredCachedPayloadActive() bool {
 	return false
 }
@@ -87,13 +91,21 @@ func (d *Decoder) decodeCELTNeuralPLCInto(_ []float32, _ int, _ plcDecodeState) 
 	return 0, false, nil
 }
 
-func (d *Decoder) beginHybridDREDLowbandHook() (cleanup func(), used func() bool) {
-	return func() {}, func() bool { return false }
-}
+func (d *Decoder) beginHybridDREDLowbandHook() bool { return false }
 
-func (d *Decoder) beginDREDRawMonoGoodFrameCapture(_ Mode) func() {
-	return func() {}
-}
+func (d *Decoder) beginDREDFECLowbandHook() bool { return false }
+
+func (d *Decoder) prepareDREDHistoryForSILKTransition() {}
+
+func (d *Decoder) prepareDREDHistoryForCELTTransition() {}
+
+func (d *Decoder) clearDREDBlendAfterCELTPacket() {}
+
+func (d *Decoder) endHybridDREDLowbandHook() {}
+
+func (d *Decoder) beginDREDRawMonoFrameCapture(_ Mode) bool { return false }
+
+func (d *Decoder) endDREDRawMonoFrameCapture() {}
 
 func (d *Decoder) maybeCacheDREDPayload(_ []byte) {}
 

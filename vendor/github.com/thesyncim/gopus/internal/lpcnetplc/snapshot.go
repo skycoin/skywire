@@ -17,6 +17,7 @@ type StateSnapshot struct {
 	FECReadPos  int
 	FECFillPos  int
 	FECSkip     int
+	FEC         [MaxFEC][NumFeatures]float32
 	Features    [NumTotalFeatures]float32
 	Cont        [ContVectors * NumFeatures]float32
 	PCM         [PLCBufSize]float32
@@ -57,6 +58,7 @@ func (s *State) Snapshot() StateSnapshot {
 	copy(snap.Features[:], s.features[:])
 	copy(snap.Cont[:], s.cont[:])
 	copy(snap.PCM[:], s.pcm[:])
+	copy(snap.FEC[:], s.fec[:])
 	copy(snap.PLCNet.GRU1[:], s.plcNet.gru1[:])
 	copy(snap.PLCNet.GRU2[:], s.plcNet.gru2[:])
 	for i := range s.plcBak {

@@ -123,8 +123,9 @@ func newPeerConnection(iceServers js.Value) (js.Value, error) {
 }
 
 // wireLocalCandidates forwards locally-gathered ICE candidates to the peer over
-// the signaling channel (trickle ICE).
-func wireLocalCandidates(pc js.Value, sc *signalConn) {
+// the signaling channel (trickle ICE). The returned func detaches and releases
+// the handler, which otherwise keeps sc and its dmsg stream in memory for good.
+func wireLocalCandidates(pc js.Value, sc *signalConn) (unwire func()) {
 	onCand := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
 		cand := args[0].Get("candidate")
 		if !cand.Truthy() {
@@ -145,6 +146,10 @@ func wireLocalCandidates(pc js.Value, sc *signalConn) {
 		return nil
 	})
 	pc.Set("onicecandidate", onCand)
+	return func() {
+		pc.Set("onicecandidate", js.Null())
+		onCand.Release()
+	}
 }
 
 // pumpRemoteSignals reads signaling messages from sc and applies them to pc.
@@ -219,7 +224,7 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 		}
 	}()
 
-	wireLocalCandidates(pc, sc)
+	defer wireLocalCandidates(pc, sc)()
 	go pumpRemoteSignals(ctx, pc, sc, nil)
 
 	offer, err := awaitJS(pc.Call("createOffer"))
@@ -236,6 +241,7 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 		return nil, err
 	}
 	established = true
+	conn.releaseSignaling()
 	return conn, nil
 }
 
@@ -266,8 +272,12 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 		return nil
 	})
 	pc.Set("ondatachannel", onDC)
+	defer func() {
+		pc.Set("ondatachannel", js.Null())
+		onDC.Release()
+	}()
 
-	wireLocalCandidates(pc, sc)
+	defer wireLocalCandidates(pc, sc)()
 	go pumpRemoteSignals(ctx, pc, sc, func(offerSDP string) error {
 		desc := map[string]interface{}{"type": "offer", "sdp": offerSDP}
 		if _, err := awaitJS(pc.Call("setRemoteDescription", desc)); err != nil {
@@ -291,6 +301,7 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 			return nil, err
 		}
 		established = true
+		conn.releaseSignaling()
 		return conn, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -394,7 +405,7 @@ func (c *webRTCConn) waitOpen(ctx context.Context) error {
 	case <-c.openCh:
 		return c.openErr
 	case <-ctx.Done():
-		c.Close() //nolint:errcheck
+		c.Close() //nolint:errcheck,gosec
 		return ctx.Err()
 	}
 }
@@ -505,13 +516,35 @@ func (c *webRTCConn) Close() error {
 		c.closeErr = net.ErrClosed
 	}
 	c.wake()
+	signal := c.signal
+	c.signal = nil
 	c.mu.Unlock()
 	c.dc.Call("close")
 	c.pc.Call("close")
-	if c.signal != nil {
-		c.signal.Close() //nolint:errcheck
+	if signal != nil {
+		signal.Close() //nolint:errcheck,gosec
 	}
+	// An unreleased js.Func keeps this conn in memory for good.
+	for _, ev := range []string{"onopen", "onmessage", "onclose", "onerror", "onbufferedamountlow"} {
+		c.dc.Set(ev, js.Null())
+	}
+	for _, h := range c.handlers {
+		h.Release()
+	}
+	c.handlers = nil
 	return nil
+}
+
+// releaseSignaling closes the dmsg signaling stream once the DataChannel is
+// open, as the native build does: nothing reads it after that.
+func (c *webRTCConn) releaseSignaling() {
+	c.mu.Lock()
+	signal := c.signal
+	c.signal = nil
+	c.mu.Unlock()
+	if signal != nil {
+		signal.Close() //nolint:errcheck,gosec
+	}
 }
 
 func (c *webRTCConn) LocalAddr() net.Addr  { return webrtcAddr{} }

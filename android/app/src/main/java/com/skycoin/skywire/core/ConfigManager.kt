@@ -1,6 +1,7 @@
 package com.skycoin.skywire.core
 
 import android.content.Context
+import android.util.Log
 import com.skycoin.skywire.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,6 +76,7 @@ class ConfigManager(
                 ),
             )
         }
+        restoreInterruptedRegen()
         if (!paths.configFile.exists()) {
             val gen = runGen()
             if (!gen.ok) {
@@ -90,6 +92,9 @@ class ConfigManager(
                     ),
                 )
             }
+            markGenerated()
+        } else if (updatedSinceGenerated()) {
+            regenerateAfterUpdate()
         }
         try {
             applyPhoneProfile(
@@ -146,6 +151,48 @@ class ConfigManager(
     )
 
     private suspend fun runGen(): CommandResult = runCommand(genArgs(), timeoutSeconds = 90)
+
+    // --- app updates ---
+
+    /** When this package was last installed or updated; an update ships a new core. */
+    private fun installedAt(): Long = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+    }.getOrDefault(0L)
+
+    private fun updatedSinceGenerated(): Boolean =
+        paths.configStampFile.takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull() != installedAt()
+
+    private fun markGenerated() {
+        runCatching { paths.configStampFile.writeText(installedAt().toString()) }
+    }
+
+    /**
+     * Regenerate the config for the core an update installed, so it runs on
+     * that core's defaults. `-r` keeps the secret key, the apps' argv and the
+     * routing choices; [applyPhoneProfile] then re-applies the phone's own
+     * settings, remote management and Fleet among them. A failed regenerate,
+     * or one that would change the key, puts the old config back. Tried once
+     * per update, so a failing generator cannot slow every start.
+     */
+    private suspend fun regenerateAfterUpdate() {
+        markGenerated()
+        val before = publicKey() ?: return
+        paths.configFile.copyTo(paths.configBackupFile, overwrite = true)
+        val gen = runGen()
+        if (!gen.ok || publicKey() != before) {
+            Log.w(TAG, "config regenerate after update failed (exit ${gen.exitCode}), keeping the old config")
+            paths.configBackupFile.copyTo(paths.configFile, overwrite = true)
+        }
+        paths.configBackupFile.delete()
+    }
+
+    /** A backup still on disk means a regenerate never finished; its config is the good one. */
+    private fun restoreInterruptedRegen() {
+        val backup = paths.configBackupFile
+        if (!backup.exists()) return
+        backup.copyTo(paths.configFile, overwrite = true)
+        backup.delete()
+    }
 
     /**
      * The edits `config gen` cannot express:
@@ -611,6 +658,7 @@ class ConfigManager(
         }
 
     private companion object {
+        const val TAG = "SkywireConfig"
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
         const val VPN_APP = "vpn-client"

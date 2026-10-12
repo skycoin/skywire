@@ -1,5 +1,3 @@
-// encoder.go implements the public Encoder API for Opus encoding.
-
 package gopus
 
 import (
@@ -8,20 +6,19 @@ import (
 	"github.com/thesyncim/gopus/types"
 )
 
-// Application hints the encoder for optimization.
+// Application selects the encoder's operating profile. The standard profiles tune
+// encoding for speech, general audio, or low delay; the restricted profiles force
+// SILK-only or CELT-only encoding and can be selected only at construction.
 type Application int
 
 const (
-	// ApplicationVoIP optimizes for speech transmission with low latency.
-	// Prefers SILK mode for speech frequencies.
+	// ApplicationVoIP tunes the encoder for interactive speech.
 	ApplicationVoIP Application = iota
 
-	// ApplicationAudio optimizes for music and high-quality audio.
-	// Prefers CELT/Hybrid mode for full-bandwidth audio.
+	// ApplicationAudio tunes the encoder for general audio.
 	ApplicationAudio
 
 	// ApplicationLowDelay minimizes algorithmic delay.
-	// Uses CELT mode exclusively with small frame sizes.
 	ApplicationLowDelay
 
 	// ApplicationRestrictedSilk forces SILK-only encoding.
@@ -33,8 +30,7 @@ const (
 	ApplicationRestrictedCelt
 )
 
-// Signal represents a hint about the input signal type.
-// This helps the encoder optimize for speech or music content.
+// Signal is a hint about the input signal type.
 type Signal = types.Signal
 
 const (
@@ -46,7 +42,7 @@ const (
 	SignalMusic = types.SignalMusic
 )
 
-// BitrateMode controls how the encoder sizes packets.
+// BitrateMode selects variable, constrained-variable, or constant bitrate.
 type BitrateMode = encoder.BitrateMode
 
 const (
@@ -58,7 +54,7 @@ const (
 	BitrateModeCBR = encoder.ModeCBR
 )
 
-// EncoderMode controls the encoder's forced coding mode.
+// EncoderMode selects automatic coding-mode selection or forces a coding mode.
 type EncoderMode = encoder.Mode
 
 const (
@@ -73,16 +69,15 @@ const (
 )
 
 const (
-	// BitrateAuto lets the encoder pick the bitrate from the sample rate,
-	// channel count, and application (libopus OPUS_AUTO). It is the default.
+	// BitrateAuto asks the encoder to choose a bitrate from the stream format and
+	// application (libopus OPUS_AUTO).
 	BitrateAuto = encoder.BitrateAuto
 	// BitrateMax tells the encoder to use as many bits as the output buffer
 	// allows for each frame (libopus OPUS_BITRATE_MAX).
 	BitrateMax = encoder.BitrateMax
 )
 
-// In-band FEC modes for SetInBandFEC. These mirror the libopus
-// OPUS_SET_INBAND_FEC values.
+// In-band FEC modes accepted by SetInBandFEC.
 const (
 	// InBandFECDisabled turns in-band forward error correction off (value 0).
 	InBandFECDisabled = encoder.InBandFECDisabled
@@ -93,31 +88,25 @@ const (
 	InBandFECMusicSafe = encoder.InBandFECMusicSafe
 )
 
-// EncoderConfig configures an Encoder instance.
+// EncoderConfig describes the input format and application profile for an
+// Encoder.
 type EncoderConfig struct {
-	// SampleRate must be one of: 8000, 12000, 16000, 24000, 48000.
+	// SampleRate must be 8000, 12000, 16000, 24000, or 48000 Hz.
+	// Builds with gopus_qext also accept 96000 Hz.
 	SampleRate int
 	// Channels must be 1 (mono) or 2 (stereo).
 	Channels int
-	// Application hints the encoder for optimization.
+	// Application selects the operating profile. Its zero value, ApplicationVoIP,
+	// is used when the field is omitted. Restricted profiles force one coding mode
+	// and can be selected only when NewEncoder creates the encoder.
 	Application Application
 }
 
-// Encoder encodes PCM audio samples into Opus packets.
-//
-// An Encoder instance maintains internal state and is NOT safe for concurrent use.
-// Each goroutine should create its own Encoder instance.
-//
-// The encoder supports three modes:
-//   - SILK: optimized for speech at lower bitrates
-//   - CELT: optimized for music and high-quality audio
-//   - Hybrid: combines SILK and CELT for wideband speech
-//
-// The mode is automatically selected based on the Application hint and bandwidth settings.
-//
-// Zero-allocation design: All scratch buffers are pre-allocated at construction time.
-// The Encode and EncodeInt16 methods perform zero heap allocations in the hot path
-// when called with properly sized caller-provided buffers.
+// Encoder encodes one interleaved PCM stream into Opus packets. Construct it
+// with NewEncoder; the zero value is not ready for use. Encoder retains codec
+// state across calls and is not safe for concurrent use, so use one Encoder per
+// stream. Encode, EncodeInt16, and EncodeInt24 write packets into caller-provided
+// buffers; the Slice methods return owned packet slices.
 type Encoder struct {
 	enc                 *encoder.Encoder
 	sampleRate          int32
@@ -133,9 +122,11 @@ type Encoder struct {
 	encoderHD96kFields
 }
 
-// NewEncoder creates a new Opus encoder.
-//
-// Returns an error if the config is invalid.
+// NewEncoder returns an initialized Encoder for cfg. Its configured frame size
+// starts at 20 ms and its target bitrate starts at 64,000 bits per second. A
+// zero-valued Application selects ApplicationVoIP. It returns
+// ErrInvalidSampleRate, ErrInvalidChannels, or ErrInvalidApplication when cfg
+// contains an unsupported value.
 func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
 	if !validSampleRate(cfg.SampleRate) {
 		return nil, ErrInvalidSampleRate
@@ -147,9 +138,9 @@ func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
 		return nil, ErrInvalidApplication
 	}
 
-	// Under gopus_qext, 96 kHz requests route through the 48 kHz internal
-	// pipeline with 2:1 decimation at the input boundary.
-	// C ref: opus_encoder.c opus_encoder_init() ENABLE_QEXT gate (Fs != 96000).
+	// The public 96 kHz API stores its default frame size in 48 kHz-equivalent
+	// samples; the core encoder retains native Fs for SILK and CELT state.
+	// C ref: opus_encoder.c opus_encoder_init() ENABLE_QEXT rate selection.
 	internalRate := cfg.SampleRate
 	if cfg.SampleRate == 96000 {
 		internalRate = 48000
@@ -163,7 +154,7 @@ func NewEncoder(cfg EncoderConfig) (*Encoder, error) {
 	}
 
 	enc := &Encoder{
-		enc:                 encoder.NewEncoder(internalRate, cfg.Channels),
+		enc:                 encoder.NewEncoder(cfg.SampleRate, cfg.Channels),
 		sampleRate:          int32(cfg.SampleRate),
 		channels:            int32(cfg.Channels),
 		frameSize:           int32(internalRate / 50), // Default 20ms at the internal rate

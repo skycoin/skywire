@@ -1,4 +1,4 @@
-//go:build !tinygo && !js
+//go:build !js
 
 // Package appcommon pkg/app/appcommon/log_store_native.go c2-vis-appsvc
 //

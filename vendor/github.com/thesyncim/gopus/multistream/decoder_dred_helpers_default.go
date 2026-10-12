@@ -2,6 +2,8 @@
 
 package multistream
 
+import "github.com/thesyncim/gopus/internal/dnnblob"
+
 type decoderDREDState struct{}
 
 func (d *Decoder) dredState() *decoderDREDState {
@@ -24,8 +26,15 @@ func (d *Decoder) invalidateDREDPayloadState() {}
 
 func (d *Decoder) maybeCacheDREDPayload(_ int, _ []byte) {}
 
-func (d *Decoder) beginDREDRawMonoGoodFrameCapture(_ int, _ *streamState, _ int, _ []byte) func() {
-	return nil
+func (d *Decoder) clearRawSILKHistory() {}
+
+func (d *Decoder) bindDREDNeuralModels(_ *dnnblob.Blob, _ dnnblob.DecoderModelState) {}
+
+func (d *Decoder) beginDREDRawMonoFrameCapture(_ int, _ *streamState, _ int, _ []byte) bool {
+	return false
+}
+
+func (d *Decoder) endDREDRawMonoFrameCapture(_ int, _ *streamState) {
 }
 
 func (d *Decoder) markDREDUpdated(_ int) {}

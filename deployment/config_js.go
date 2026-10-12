@@ -10,15 +10,14 @@
 // etc.) that encoding/json needs, so dragging it into the install-
 // page WASM build was blocking `tinygo build -target wasm`.
 //
-// SKYDEPLOY env-override has no analog here: browsers don't expose
-// process env vars, and the install-page WASM ships its own
-// deployment-default bundle. Operators who need a custom deployment
-// edit services-config.json and rebuild (then re-run
-// `go generate ./deployment/` to refresh data_static_js.go).
+// SKYDEPLOY is honored when a command is given it in its environment, as
+// natively. A browser visor started by autoconfig loads the SKYDEPLOY of
+// its skywire.conf instead (cmd/skywire/commands/autoconfig_exec_js.go).
 package deployment
 
 import (
 	"log"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -50,5 +49,12 @@ func init() {
 	}
 	if TestConf.Conf == "" {
 		TestConf.Conf = Test.ConfDmsg
+	}
+	// SKYDEPLOY works as it does natively for a command given it in its
+	// environment. A bad file is logged, not fatal, so the desk still boots.
+	if path := os.Getenv("SKYDEPLOY"); path != "" {
+		if err := LoadFile(path); err != nil {
+			log.Printf("SKYDEPLOY=%s: %v", path, err)
+		}
 	}
 }

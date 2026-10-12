@@ -81,6 +81,24 @@ func (d *Decoder) readByte() byte {
 	return 0
 }
 
+// normalized is the ec_dec_normalize loop on the range and value a symbol
+// decode leaves. Symbol decoders store its results with
+// d.rng, d.val = d.normalized(rng, val): both stay in registers through the
+// loop, so the next symbol does not wait on a store and reload of either.
+//
+//go:nosplit
+func (d *Decoder) normalized(rng, val uint32) (uint32, uint32) {
+	for rng <= EC_CODE_BOT {
+		d.nbitsTotal += EC_SYM_BITS
+		rng <<= EC_SYM_BITS
+		sym := uint32(d.rem) << EC_SYM_BITS
+		d.rem = int32(d.readByte())
+		sym = (sym | uint32(d.rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
+		val = (val<<EC_SYM_BITS + EC_SYM_MAX&^sym) & (EC_CODE_TOP - 1)
+	}
+	return rng, val
+}
+
 // normalize ensures rng > EC_CODE_BOT by reading more bytes.
 // This is the core renormalization loop from RFC 6716 Section 4.1.1.
 //
@@ -115,9 +133,7 @@ func (d *Decoder) DecodeICDF(icdf []uint8, ftb uint) int {
 		t := s
 		s = r * uint32(prob)
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
@@ -154,46 +170,34 @@ func (d *Decoder) DecodeICDF8Unchecked(icdf []uint8) int {
 		dval := d.val
 		s := r * uint32(icdf[0])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 0
 		}
 		t = s
 		s = r * uint32(icdf[1])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 1
 		}
 		t = s
 		s = r * uint32(icdf[2])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 2
 		}
 		t = s
 		s = r * uint32(icdf[3])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 3
 		}
 		t = s
 		s = r * uint32(icdf[4])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 4
 		}
-		d.val = dval
-		d.rng = s
-		d.normalize()
+		d.rng, d.val = d.normalized(s, dval)
 		return 5
 	case 8:
 		r := d.rng >> 8
@@ -201,62 +205,46 @@ func (d *Decoder) DecodeICDF8Unchecked(icdf []uint8) int {
 		dval := d.val
 		s := r * uint32(icdf[0])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 0
 		}
 		t = s
 		s = r * uint32(icdf[1])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 1
 		}
 		t = s
 		s = r * uint32(icdf[2])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 2
 		}
 		t = s
 		s = r * uint32(icdf[3])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 3
 		}
 		t = s
 		s = r * uint32(icdf[4])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 4
 		}
 		t = s
 		s = r * uint32(icdf[5])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 5
 		}
 		t = s
 		s = r * uint32(icdf[6])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return 6
 		}
-		d.val = dval
-		d.rng = s
-		d.normalize()
+		d.rng, d.val = d.normalized(s, dval)
 		return 7
 	}
 	s := d.rng
@@ -268,17 +256,13 @@ func (d *Decoder) DecodeICDF8Unchecked(icdf []uint8) int {
 		t := s
 		s = r * uint32(icdf[ret])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 		t = s
 		s = r * uint32(icdf[ret+1])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret + 1
 		}
 	}
@@ -286,15 +270,11 @@ func (d *Decoder) DecodeICDF8Unchecked(icdf []uint8) int {
 		t := s
 		s = r * uint32(icdf[ret])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return last
 }
 
@@ -313,15 +293,11 @@ func (d *Decoder) DecodeICDF8Linear(icdf []uint8) int {
 		t := s
 		s = r * uint32(icdf[ret])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return last
 }
 
@@ -340,15 +316,11 @@ func (d *Decoder) DecodeICDF8UncheckedN(icdf []uint8, n int) int {
 		t := s
 		s = r * uint32(icdf[ret])
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return last
 }
 
@@ -368,15 +340,11 @@ func (d *Decoder) DecodeICDF8UncheckedNOffset(icdf []uint8, off, n int) int {
 		t := s
 		s = r * uint32(prob)
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return last
 }
 
@@ -386,16 +354,14 @@ func (d *Decoder) DecodeICDF8UncheckedNOffset(icdf []uint8, off, n int) int {
 //go:nosplit
 func (d *Decoder) DecodeICDF2(icdf0 uint8, ftb uint) int {
 	t := d.rng
+	dval := d.val
 	r := t >> ftb
 	s := r * uint32(icdf0)
-	if d.val >= s {
-		d.val -= s
-		d.rng = t - s
-		d.normalize()
+	if dval >= s {
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 0
 	}
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return 1
 }
 
@@ -665,54 +631,40 @@ func (d *Decoder) DecodeICDF7_8Slice(icdf []uint8) int {
 	dval := d.val
 	s := r * uint32(icdf[0])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 0
 	}
 	t = s
 	s = r * uint32(icdf[1])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 1
 	}
 	t = s
 	s = r * uint32(icdf[2])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 2
 	}
 	t = s
 	s = r * uint32(icdf[3])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 3
 	}
 	t = s
 	s = r * uint32(icdf[4])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 4
 	}
 	t = s
 	s = r * uint32(icdf[5])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 5
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return 6
 }
 
@@ -726,238 +678,124 @@ func (d *Decoder) DecodeICDF9_8Slice(icdf []uint8) int {
 	dval := d.val
 	s := r * uint32(icdf[0])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 0
 	}
 	t = s
 	s = r * uint32(icdf[1])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 1
 	}
 	t = s
 	s = r * uint32(icdf[2])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 2
 	}
 	t = s
 	s = r * uint32(icdf[3])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 3
 	}
 	t = s
 	s = r * uint32(icdf[4])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 4
 	}
 	t = s
 	s = r * uint32(icdf[5])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 5
 	}
 	t = s
 	s = r * uint32(icdf[6])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 6
 	}
 	t = s
 	s = r * uint32(icdf[7])
 	if dval >= s {
-		d.val = dval - s
-		d.rng = t - s
-		d.normalize()
+		d.rng, d.val = d.normalized(t-s, dval-s)
 		return 7
 	}
-	d.val = dval
-	d.rng = s
-	d.normalize()
+	d.rng, d.val = d.normalized(s, dval)
 	return 8
 }
 
-// DecodeICDF2_8SignBlock applies binary 8-bit ICDF sign decoding to a
-// 16-sample pulse block. Positive entries are conditionally negated when the
-// decoded symbol is 0, matching repeated DecodeICDF2_8 calls. When pulseSum is
-// positive, it must be the exact sum of positive magnitudes in block and is
-// used to stop scanning once all sign-coded pulses have been consumed.
+// DecodeICDF2_8SignBlock16 decodes the sign of every positive entry of one
+// 16-sample SILK shell block, in order, with the binary 8-bit iCDF
+// {icdf0, 0}. Symbol 0 negates the entry and symbol 1 keeps it, which is
+// libopus silk/decode_pulses.c silk_decode_signs:
+// q[j] *= silk_dec_map(ec_dec_icdf(dec, icdf, 8)).
 //
-//go:nosplit
-func (d *Decoder) DecodeICDF2_8SignBlock(icdf0 uint8, block []int16, pulseSum int) {
-	_ = block[15]
-	d.DecodeICDF2_8SignBlock16(icdf0, (*[16]int16)(block[:16]), pulseSum)
-}
-
-// DecodeICDF2_8SignBlock16 applies binary 8-bit ICDF sign decoding to one
-// fixed SILK shell block. The array form lets hot SILK callers avoid carrying
-// slice bounds through the unrolled sign loop.
-//
-//go:nosplit
-func (d *Decoder) DecodeICDF2_8SignBlock16(icdf0 uint8, block *[16]int16, pulseSum int) {
+// Every entry must be non-negative, as the decoded pulse magnitudes are. The
+// loop visits only the positive entries, found from a bit mask built four
+// entries at a time, and updates the range state with masks instead of
+// branching on each sign, whose outcome is unpredictable.
+func (d *Decoder) DecodeICDF2_8SignBlock16(icdf0 uint8, block *[16]int16) {
+	nonzero := positiveMask4(block[0], block[1], block[2], block[3]) |
+		positiveMask4(block[4], block[5], block[6], block[7])<<4 |
+		positiveMask4(block[8], block[9], block[10], block[11])<<8 |
+		positiveMask4(block[12], block[13], block[14], block[15])<<12
+	if nonzero == 0 {
+		return
+	}
 	icdf := uint32(icdf0)
-	remaining := pulseSum
 	buf := d.buf
 	offs := d.offs
 	nbitsTotal := d.nbitsTotal
 	rng := d.rng
 	val := d.val
 	rem := d.rem
-	for i := 0; i < 16; i += 4 {
-		v := block[i]
-		if (v | block[i+1] | block[i+2] | block[i+3]) == 0 {
-			continue
+	for nonzero != 0 {
+		j := bits.TrailingZeros32(nonzero) & 15
+		nonzero &= nonzero - 1
+		s := (rng >> 8) * icdf
+		// neg is all ones when val >= s, which decodes symbol 0.
+		var neg uint32
+		if val >= s {
+			neg = ^uint32(0)
 		}
-		if v > 0 {
-			t := rng
-			s := (t >> 8) * icdf
-			if val >= s {
-				val -= s
-				rng = t - s
-				block[i] = -v
-			} else {
-				rng = s
-			}
-			for rng <= EC_CODE_BOT {
-				nbitsTotal += EC_SYM_BITS
-				rng <<= EC_SYM_BITS
+		val -= s & neg
+		rng = (rng-s)&neg | s&^neg
+		v := block[j]
+		block[j] = (v ^ int16(neg)) - int16(neg)
+		for rng <= EC_CODE_BOT {
+			nbitsTotal += EC_SYM_BITS
+			rng <<= EC_SYM_BITS
 
-				sym := uint32(rem)
-				if int(offs) < len(buf) {
-					rem = int32(buf[offs])
-					offs++
-				} else {
-					rem = 0
-				}
-				sym = (sym<<EC_SYM_BITS | uint32(rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
-				val = ((val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
-			}
-			if remaining > 0 {
-				remaining -= int(v)
-				if remaining <= 0 {
-					goto done
-				}
-			}
-		}
-		v = block[i+1]
-		if v > 0 {
-			t := rng
-			s := (t >> 8) * icdf
-			if val >= s {
-				val -= s
-				rng = t - s
-				block[i+1] = -v
+			sym := uint32(rem)
+			if int(offs) < len(buf) {
+				rem = int32(buf[offs])
+				offs++
 			} else {
-				rng = s
+				rem = 0
 			}
-			for rng <= EC_CODE_BOT {
-				nbitsTotal += EC_SYM_BITS
-				rng <<= EC_SYM_BITS
-
-				sym := uint32(rem)
-				if int(offs) < len(buf) {
-					rem = int32(buf[offs])
-					offs++
-				} else {
-					rem = 0
-				}
-				sym = (sym<<EC_SYM_BITS | uint32(rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
-				val = ((val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
-			}
-			if remaining > 0 {
-				remaining -= int(v)
-				if remaining <= 0 {
-					goto done
-				}
-			}
-		}
-		v = block[i+2]
-		if v > 0 {
-			t := rng
-			s := (t >> 8) * icdf
-			if val >= s {
-				val -= s
-				rng = t - s
-				block[i+2] = -v
-			} else {
-				rng = s
-			}
-			for rng <= EC_CODE_BOT {
-				nbitsTotal += EC_SYM_BITS
-				rng <<= EC_SYM_BITS
-
-				sym := uint32(rem)
-				if int(offs) < len(buf) {
-					rem = int32(buf[offs])
-					offs++
-				} else {
-					rem = 0
-				}
-				sym = (sym<<EC_SYM_BITS | uint32(rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
-				val = ((val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
-			}
-			if remaining > 0 {
-				remaining -= int(v)
-				if remaining <= 0 {
-					goto done
-				}
-			}
-		}
-		v = block[i+3]
-		if v > 0 {
-			t := rng
-			s := (t >> 8) * icdf
-			if val >= s {
-				val -= s
-				rng = t - s
-				block[i+3] = -v
-			} else {
-				rng = s
-			}
-			for rng <= EC_CODE_BOT {
-				nbitsTotal += EC_SYM_BITS
-				rng <<= EC_SYM_BITS
-
-				sym := uint32(rem)
-				if int(offs) < len(buf) {
-					rem = int32(buf[offs])
-					offs++
-				} else {
-					rem = 0
-				}
-				sym = (sym<<EC_SYM_BITS | uint32(rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
-				val = ((val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
-			}
-			if remaining > 0 {
-				remaining -= int(v)
-				if remaining <= 0 {
-					goto done
-				}
-			}
+			sym = (sym<<EC_SYM_BITS | uint32(rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
+			val = ((val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
 		}
 	}
-done:
 	d.offs = offs
 	d.nbitsTotal = nbitsTotal
 	d.rng = rng
 	d.val = val
 	d.rem = rem
+}
+
+// positiveMask4 returns a 4-bit mask with bit j set when the j-th of four
+// non-negative pulse magnitudes is positive. The magnitudes are packed into
+// 16-bit lanes; adding 0x7fff to a lane sets its top bit exactly when the lane
+// is non-zero and never carries into the next lane, and one multiply gathers
+// the four top bits into adjacent positions.
+func positiveMask4(a, b, c, d int16) uint32 {
+	w := uint64(uint16(a)) | uint64(uint16(b))<<16 | uint64(uint16(c))<<32 | uint64(uint16(d))<<48
+	top := ((w + 0x7fff7fff7fff7fff) & 0x8000800080008000) >> 15
+	return uint32((top*0x0000200040008001)>>45) & 0xf
 }
 
 // DecodeICDF16 decodes a symbol using a uint16 ICDF table.
@@ -977,9 +815,7 @@ func (d *Decoder) DecodeICDF16(icdf []uint16, ftb uint) int {
 		t := s
 		s = r * uint32(prob)
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
@@ -1007,9 +843,7 @@ func (d *Decoder) DecodeICDF16_8Unchecked(icdf []uint16) int {
 		t := s
 		s = r * uint32(prob)
 		if dval >= s {
-			d.val = dval - s
-			d.rng = t - s
-			d.normalize()
+			d.rng, d.val = d.normalized(t-s, dval-s)
 			return ret
 		}
 	}
@@ -1031,24 +865,25 @@ func (d *Decoder) DecodeICDF16_8Unchecked(icdf []uint16) int {
 func (d *Decoder) DecodeBit(logp uint) int {
 	r := d.rng
 	dval := d.val
-	s := r >> logp
+	// logp is at most 15, so the mask only lets the shift compile without
+	// Go's out-of-range shift handling.
+	s := r >> (logp & 31)
 
-	// Per libopus: bit is 1 when dval < s (bottom region).
-	ret := 0
+	// Per libopus: bit is 1 when dval < s (bottom region). one is all ones
+	// then, and the updates select with it instead of branching.
+	var one uint32
 	if dval < s {
-		ret = 1
-	} else {
-		d.val = dval - s
+		one = ^uint32(0)
 	}
+	d.rng, d.val = d.normalized(s&one|(r-s)&^one, dval-s&^one)
+	return int(one & 1)
+}
 
-	if ret == 1 {
-		d.rng = s
-	} else {
-		d.rng = r - s
-	}
-
-	d.normalize()
-	return ret
+// SkipToTell advances the decoder's bit accounting so Tell() reports exactly
+// targetBits, without consuming further input. It mirrors the CELT silence
+// handling in celt_decode_with_ec: dec->nbits_total += tell - ec_tell(dec).
+func (d *Decoder) SkipToTell(targetBits int) {
+	d.nbitsTotal += int32(targetBits - d.Tell())
 }
 
 // Tell returns the number of bits consumed from the combined stream so far,
@@ -1066,11 +901,10 @@ func (d *Decoder) TellFrac() int {
 	nbits := int(d.nbitsTotal) << 3
 	l := ilog(d.rng)
 	r := d.rng >> (l - 16)
-	b := int((r >> 12) - 8)
-	if r > tellFracCorrection[b] {
-		b++
-	}
-	return nbits - ((l << 3) + b)
+	b := (r >> 12) - 8
+	// b += r > correction[b], without a branch: both are below 1<<16.
+	b += (tellFracCorrection[b&7] - r) >> 31
+	return nbits - ((l << 3) + int(b))
 }
 
 // State returns the internal range decoder state (rng, val).
@@ -1400,13 +1234,11 @@ func (d *Decoder) DecodeBin(bits uint) uint32 {
 //go:nosplit
 func (d *Decoder) update(fl, fh, ft uint32) {
 	s := d.ext * (ft - fh)
-	d.val -= s
+	rng := d.rng - s
 	if fl > 0 {
-		d.rng = d.ext * (fh - fl)
-	} else {
-		d.rng -= s
+		rng = d.ext * (fh - fl)
 	}
-	d.normalize()
+	d.rng, d.val = d.normalized(rng, d.val-s)
 }
 
 // Update consumes the symbol whose model interval is [fl, fh) out of total ft,

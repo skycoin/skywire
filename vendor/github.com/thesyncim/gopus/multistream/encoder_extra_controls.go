@@ -8,6 +8,8 @@ import (
 )
 
 // DREDModelLoaded reports whether all stream encoders have a DRED-capable blob.
+// DRED methods in this file are available in builds tagged gopus_dred or
+// gopus_osce.
 func (e *Encoder) DREDModelLoaded() bool {
 	if len(e.encoders) == 0 {
 		return false
@@ -33,7 +35,8 @@ func (e *Encoder) DREDReady() bool {
 	return true
 }
 
-// SetDREDDuration propagates libopus-style DRED duration to all stream encoders.
+// SetDREDDuration sets the maximum number of 10 ms DRED redundancy frames for all
+// streams. Values from 0 through 104 are accepted; zero disables DRED emission.
 func (e *Encoder) SetDREDDuration(duration int) error {
 	if duration < 0 || duration > internaldred.MaxFrames {
 		return encoder.ErrInvalidDREDDuration
@@ -46,7 +49,8 @@ func (e *Encoder) SetDREDDuration(duration int) error {
 	return nil
 }
 
-// DREDDuration reports the DRED duration from the first stream encoder.
+// DREDDuration reports the configured DRED redundancy depth in 10 ms frames;
+// zero means DRED emission is disabled.
 func (e *Encoder) DREDDuration() int {
 	if len(e.encoders) > 0 {
 		return e.encoders[0].DREDDuration()

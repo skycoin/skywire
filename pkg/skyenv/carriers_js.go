@@ -1,4 +1,4 @@
-//go:build js && !tinygo
+//go:build js
 
 // Package skyenv pkg/skyenv/carriers_js.go c0-com-env
 package skyenv
@@ -12,9 +12,7 @@ package skyenv
 // visor's converge ticker (initDmsg) then re-dials wss sessions over to
 // wt. Listing wt ahead of ws is what arms that convergence
 // (prefersWTOverWS). Writing the pin into the config keeps the behavior
-// visible and editable rather than hidden in the runtime. Gated !tinygo
-// because the TinyGo install-page build generates configs for NATIVE
-// visors, which must not be pinned to browser carriers.
+// visible and editable rather than hidden in the runtime.
 var DefaultDmsgCarriers = []string{"wt", "ws"}
 
 // DefaultHypervisorHTTPAddr binds the browser visor's hypervisor UI to

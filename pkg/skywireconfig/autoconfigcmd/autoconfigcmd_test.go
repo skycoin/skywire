@@ -22,6 +22,7 @@ var allFlags = []string{
 	"stcpr", "sudph", "transport-port", "min-hops", "ar-transport-limit",
 	"no-direct-transports", "pty-rpc-exec", "lan-dmsg-port", "lan-dmsg-public",
 	"dmsg-server-conf", "dmsg-server", "no-dmsg-server", "dmsg-server-public",
+	"deployment", "deployment-redis", "deployment-wss-suffix", "skydeploy",
 	"dmsg-relay-addr", "dmsg-relay-keys", "no-dmsg-relay",
 	"dmsgweb-sk",
 	// Whitelists
@@ -259,11 +260,15 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 func TestEnvMap_InVisorDmsgServerAndLegacyUI(t *testing.T) {
 	m := EnvMap()
 	want := map[string]EnvMapping{
-		"hvdeskaddr":         {Key: "HVDESKADDR", Format: EnvFormatString},
-		"dmsg-server":        {Key: "DMSGSERVER", Format: EnvFormatBool},
-		"no-dmsg-server":     {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true},
-		"dmsg-server-public": {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString},
-		"dmsg-server-conf":   {Key: "DMSGSERVERCONF", Format: EnvFormatString},
+		"hvdeskaddr":            {Key: "HVDESKADDR", Format: EnvFormatString},
+		"dmsg-server":           {Key: "DMSGSERVER", Format: EnvFormatBool},
+		"no-dmsg-server":        {Key: "DMSGSERVER", Format: EnvFormatBool, Negate: true},
+		"dmsg-server-public":    {Key: "DMSGSERVERPUBLIC", Format: EnvFormatString},
+		"deployment":            {Key: "DEPLOYMENT", Format: EnvFormatString},
+		"deployment-redis":      {Key: "DEPLOYMENTREDIS", Format: EnvFormatString},
+		"deployment-wss-suffix": {Key: "DEPLOYMENTWSSSUFFIX", Format: EnvFormatString},
+		"skydeploy":             {Key: "SKYDEPLOY", Format: EnvFormatString},
+		"dmsg-server-conf":      {Key: "DMSGSERVERCONF", Format: EnvFormatString},
 	}
 	for flag, w := range want {
 		got, ok := m[flag]

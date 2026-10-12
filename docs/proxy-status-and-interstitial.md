@@ -126,12 +126,12 @@ For a warning-free `https://`, the status pages are **also** served through the
 browse-origin listener (`pkg/visor/meshproxy.go`, gated by `BrowseOrigin.Enable`),
 which already terminates TLS with the deployment's **real** wildcard cert
 (`BrowseOrigin.TLSCert`/`TLSKey`, or a fronting Caddy) under `BrowseOrigin.Suffix`
-(e.g. `.haltingstate.net`). Reached at a **single-label** host so a single-level
+(e.g. `.theskywirenetwork.net`). Reached at a **single-label** host so a single-level
 wildcard (`*.<suffix>`) covers it:
 
-    https://status-skysocks.haltingstate.net/
-    https://status-dmsg.haltingstate.net/
-    https://status-skynet.haltingstate.net/
+    https://status-skysocks.theskywirenetwork.net/
+    https://status-dmsg.theskywirenetwork.net/
+    https://status-skynet.theskywirenetwork.net/
 
 `meshStatusHandler` intercepts these hosts on the browse-origin mux (both
 `subdomain` and `port` modes) **before** the reverse proxy, renders the same

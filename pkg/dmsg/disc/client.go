@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package disc pkg/dmsg/disc/client.go c1-net-dmsg
 //
 // HTTP-based APIClient. Build-tag-gated to keep net/http out of the
@@ -15,9 +13,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -91,6 +91,11 @@ func (c *httpClient) do(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	if requestInFlight(ctx) && overDmsg(c.address) {
 		return nil, fmt.Errorf("%w (%s)", ErrCircularDiscovery, c.address)
+	}
+	// The caller may set client.Transport after NewHTTP (the dmsg transport needs
+	// the dmsg client this serves), so the header goes on the request, not the client.
+	if runtime.GOOS != "js" {
+		req.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
 	}
 	return c.client.Do(req.WithContext(withRequestInFlight(ctx)))
 }

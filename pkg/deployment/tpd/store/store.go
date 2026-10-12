@@ -61,6 +61,11 @@ type MetricsQuery struct {
 type EdgeBandwidth struct {
 	Sent uint64 `json:"sent"` // Cumulative bytes sent
 	Recv uint64 `json:"recv"` // Cumulative bytes received
+	// Verified is how much of what this edge sent the other edge's stream
+	// checkpoints confirm. Checked is set once both reported the same conn that
+	// day, which is when Verified caps what this edge is paid (checkpoints.go).
+	Verified uint64 `json:"verified,omitempty"`
+	Checked  bool   `json:"checked,omitempty"`
 }
 
 // TransportLatency contains latency statistics for a transport in microseconds.

@@ -7,14 +7,12 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
 // registerNodeProxy sets up reverse proxy routes for a fiber/skycoin node API.
 // This allows skycoin-web to connect to the reward system URL as its node endpoint,
 // with /api/v1/* and /api/v2/* proxied to the local fiber node.
-func registerNodeProxy(r *gin.Engine, targetURL string) error {
+func registerNodeProxy(mux *http.ServeMux, targetURL string) error {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return fmt.Errorf("invalid node URL %q: %w", targetURL, err)
@@ -30,34 +28,25 @@ func registerNodeProxy(r *gin.Engine, targetURL string) error {
 	}
 
 	// Handle CORS for skycoin-web thin client
-	corsMiddleware := func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
+	corsProxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
 		if origin != "" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		c.Next()
-	}
+		proxy.ServeHTTP(w, r)
+	})
 
-	proxyHandler := func(c *gin.Context) {
-		proxy.ServeHTTP(c.Writer, c.Request)
-	}
-
-	// Register routes for node API versions
-	for _, prefix := range []string{"/api/v1", "/api/v2"} {
-		group := r.Group(prefix)
-		group.Use(corsMiddleware)
-		group.Any("/*path", proxyHandler)
-	}
-
-	// Also proxy /csrf endpoint which skycoin-web needs for POST requests
-	r.GET("/csrf", corsMiddleware, proxyHandler)
+	mux.Handle("/api/v1/", corsProxy)
+	mux.Handle("/api/v2/", corsProxy)
+	// skycoin-web needs /csrf for POST requests
+	mux.Handle("GET /csrf", corsProxy)
 
 	fmt.Printf("Proxying /api/v1/*, /api/v2/*, /csrf → %s\n", targetURL)
 	return nil

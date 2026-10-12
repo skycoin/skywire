@@ -5,11 +5,12 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/rpc"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 

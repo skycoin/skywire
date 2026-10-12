@@ -29,6 +29,11 @@ type SessionCommon struct {
 	rPK    cipher.PubKey // remote pk
 	isPeer bool          // true if this session is with a peer server
 
+	// filing, when set, holds an accepted session out of the session map until
+	// its first stream shows whether it is a peer link or a client. See
+	// Server.fileSession.
+	filing *sessionFiling
+
 	// carrier records how this session's byte pipe was dialed — one of
 	// CarrierTCP / CarrierWS / CarrierWT / CarrierQUIC (empty for accepted
 	// server-side sessions). It lets a browser client that bootstrapped over
@@ -616,3 +621,26 @@ type prefixedConn struct {
 }
 
 func (c *prefixedConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// filingKind is what an accepted session's first stream showed it to be.
+type filingKind int
+
+const (
+	filedAsBefore filingKind = iota // filed the way every session always was
+	filedClient                     // a client running on a server's key
+	notFiled                        // a peer link, kept only as a peer, or a session that ended first
+)
+
+// sessionFiling decides once how an accepted session is filed.
+type sessionFiling struct {
+	once sync.Once
+	file func(filingKind)
+}
+
+// settleFiling files the session the first time it is called and blocks
+// concurrent callers until that is done.
+func (sc *SessionCommon) settleFiling(kind filingKind) {
+	if f := sc.filing; f != nil {
+		f.once.Do(func() { f.file(kind) })
+	}
+}

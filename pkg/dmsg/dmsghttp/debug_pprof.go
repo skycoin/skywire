@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package dmsghttp pkg/dmsg/dmsghttp/debug_pprof.go c1-net-dmsg
 package dmsghttp

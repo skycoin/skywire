@@ -2,66 +2,19 @@
 
 package celt
 
-// Native 96 kHz CELT encode driver (Opus HD / QEXT).
+// Native 96 kHz CELT analysis uses libopus mode96000_1920_240: a 3840-point
+// long MDCT, overlap 240 and up to eight short blocks. Base bands use the shared
+// eBand5ms/logN400 layout; qextEBands240 carries the extension bands.
 //
-// EnableHD96kMode switches a CELT encoder into the native 96 kHz HD mode
-// (libopus mode96000_1920_240): 1920-sample frames, 3840-sample long MDCT,
-// overlap 240, 8 short blocks. It mirrors the decoder's EnableHD96kMode
-// (decoder_hd96k_decode_qext.go) on the analysis side: the base bands reuse the
-// shared eBand5ms / logN400 layout, while the >20 kHz content is carried by the
-// QEXT extension-band encode chain (qextEBands240).
+// EnableHD96kMode sets Fs, overlap history, HD pre-emphasis and scaled comb-filter
+// periods. The prefilter processes even and odd sample phases independently,
+// using a half-rate window and twice the standard history reach. Analysis and
+// normalization use mode band edges scaled by M=1<<LM.
 //
-// The deterministic analysis front-end is already mode-parametric and
-// oracle-verified against the libopus QEXT reference:
-//   - forward long/transient MDCT at the HD lengths (hd96kMDCTForward /
-//     hd96kMDCTForwardShort in mdct_hd96k_qext.go), pinned bit-exact (amd64) in
-//     mdct_hd96k_qext_test.go;
-//   - the size-driven band-energy / normalisation / coarse+fine energy / PVQ
-//     band quant kernels accept frameSize, lm and band-edge overrides.
-//
-// EnableHD96kMode threads the analysis overlap (240), the 2-tap HD pre-emphasis
-// coefficients (HD96kMode.Preemph) and Fs=96000 into the encoder state, and
-// grows/clears the overlap-history buffer for overlap=240, exactly as the
-// decoder grows its synthesis overlap.
-//
-// The pre-filter comb (run_prefilter) runs at the HD scale: max_period =
-// QEXT_SCALE(COMBFILTER_MAXPERIOD) = 2048, min_period = 2*COMBFILTER_MINPERIOD,
-// with pitch_index /= qext_scale before comb_filter (celt/prefilter.go via
-// Encoder.combScale/combMaxPeriod/combMinPeriod), so the encoded postfilter
-// pitch parameters are bit-exact vs the reference. The comb itself dispatches to
-// comb_filter_qext when overlap==240 (combFilterWithInputSig ->
-// combFilterWithInputSigQEXT in prefilter_hd96k_qext.go): each even/odd sample
-// phase is filtered independently at N/2 with a half-rate window and
-// 2*COMBFILTER_MAXPERIOD history reach, so the filtered signal fed into the MDCT
-// matches libopus.
-//
-// The native HD96k analysis MDCT is wired into EncodeFrame: the long/short
-// forward MDCT runs at overlap=240 and the native 3840/480 transform lengths
-// (computeMDCTWithHistory* honour the passed overlap rather than the 48 kHz
-// package constant), and band energies use the libopus bin multiplier M=1<<LM
-// (eBands[i]*M) instead of frameSize/120, which mis-scaled the HD bin edges by
-// 2x. With the correct analysis, the QEXT packet-space reservation reserves
-// qext_bytes=21 (payload 20) for both mono and stereo CBR @256k (mono main
-// payload is 616 like stereo), and the coarse-energy intra decision matches the
-// reference (stereo intra=1; stereo coarse band energies decode bit-identically).
-//
-// The band-data analysis normalises with the libopus bin multiplier M=1<<LM
-// (band edges eBands[i]*M), threaded through EncodeFrame for the HD scale rather
-// than frameSize/120, so the normalised spectrum feeding
-// tf_analysis/spreading_decision/alloc_trim and quant_all_bands matches the
-// reference. The TF resolution, spreading, alloc-trim, intensity, dual-stereo and
-// coded-band allocation are now bit-exact, and the stereo PVQ band data matches
-// through band 15.
-//
-// What is NOT yet wired here (the remaining native-encode increments, tracked
-// against the native 96 kHz encode oracle in
-// internal/libopustest/qext_encode96k_oracle.go):
-//   - Residual band-data divergences from float-precision knife edges: the mono
-//     6 kHz-tone band dynalloc boost (the documented HD-scale comb_filter analysis
-//     residual) and the stereo band-16 high-complexity theta-RDO decision.
-//   - The top-level Opus packet framing of the reserved extension payload
-//     (encoder_96k_qext.go) still resamples 2:1 rather than emitting a native
-//     96 kHz QEXT packet.
+// EncodeFrame carries these mode parameters through MDCT, band energy, PVQ and
+// extension allocation. The public encoder routes supported CELT durations
+// through this native path; application-limited cases use its compatibility
+// path. The selected-C oracle lives in internal/libopustest/qext_encode96k_oracle.go.
 
 // EnableHD96kMode reconfigures the encoder analysis state for the native 96 kHz
 // HD mode. It is idempotent and must be called before encoding 96 kHz frames.

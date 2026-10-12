@@ -74,13 +74,19 @@ func CeltSynthesis(mdct *MDCTLookup, window []int16, eBands []int16,
 		shift = maxLM - LM
 	}
 
-	freq := make([]int32, N)
+	var local [celtMaxFrameSize]int32
+	var freq []int32
+	if N <= len(local) {
+		freq = local[:N]
+	} else {
+		freq = make([]int32, N)
+	}
 
 	switch {
 	case CC == 2 && C == 1:
 		// Copying a mono stream to two channels. freq2 is a scratch view into
 		// out_syn[1] at offset overlap/2.
-		DenormaliseBands(x, freq, oldBandE, eBands, shortMdctSize, start, effEnd, M, downsample, silence)
+		denormaliseBandsQ15(x, freq, oldBandE, eBands, shortMdctSize, start, effEnd, M, downsample, silence)
 		freq2 := outSyn[1][overlap/2:]
 		// Store a temporary copy in the output buffer because the IMDCT
 		// destroys its input.
@@ -94,8 +100,8 @@ func CeltSynthesis(mdct *MDCTLookup, window []int16, eBands []int16,
 	case CC == 1 && C == 2:
 		// Downmixing a stereo stream to mono. freq2 reuses out_syn[0] as temp.
 		freq2 := outSyn[0][overlap/2:]
-		DenormaliseBands(x, freq, oldBandE, eBands, shortMdctSize, start, effEnd, M, downsample, silence)
-		DenormaliseBands(x[N:], freq2, oldBandE[nbEBands:], eBands, shortMdctSize, start, effEnd, M, downsample, silence)
+		denormaliseBandsQ15(x, freq, oldBandE, eBands, shortMdctSize, start, effEnd, M, downsample, silence)
+		denormaliseBandsQ15(x[N:], freq2, oldBandE[nbEBands:], eBands, shortMdctSize, start, effEnd, M, downsample, silence)
 		for i := 0; i < N; i++ {
 			freq[i] = add32(half32(freq[i]), half32(freq2[i]))
 		}
@@ -105,7 +111,7 @@ func CeltSynthesis(mdct *MDCTLookup, window []int16, eBands []int16,
 	default:
 		// Normal case (mono or stereo).
 		for c := 0; c < CC; c++ {
-			DenormaliseBands(x[c*N:], freq, oldBandE[c*nbEBands:], eBands, shortMdctSize, start, effEnd, M, downsample, silence)
+			denormaliseBandsQ15(x[c*N:], freq, oldBandE[c*nbEBands:], eBands, shortMdctSize, start, effEnd, M, downsample, silence)
 			for b := 0; b < B; b++ {
 				mdct.MDCTBackward(freq[b:], outSyn[c][NB*b:], window, overlap, shift, B)
 			}

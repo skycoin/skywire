@@ -22,6 +22,30 @@ func (d *Decoder) ensureSILKPLCState(channel int) *plc.SILKPLCState {
 	return d.silkPLCState[channel]
 }
 
+// concealSILKFrame is the silk_PLC_conceal() step of silk_PLC(lost=1) for one
+// channel: it returns n concealed Q0 samples, held in the channel's reusable
+// concealment buffer, from the channel's PLC state and decoder history. A
+// channel concealed before any frame decoded since its last reset
+// (first_frame_after_reset) conceals with cleared LPC coefficients, as
+// silk_PLC_conceal clears psPLC->prevLPC_Q12 in that case.
+func (d *Decoder) concealSILKFrame(channel int, st *decoderState, n int) []int16 {
+	state := d.ensureSILKPLCState(channel)
+	if st.firstFrameAfterReset {
+		clear(state.PrevLPCQ12[:])
+	}
+	out := d.plcConcealQ0For(channel, n)
+	plc.ConcealSILKWithLTPInto(d.plcDecoderView(channel), state, int(st.lossCnt), out, &d.plcKernelScratch[channel])
+	return out
+}
+
+// concealLagPrev returns the pitch lag silk_PLC_conceal leaves in
+// psDecCtrl->pitchL, which silk_decode_frame stores as lagPrev after a
+// concealed frame.
+func (d *Decoder) concealLagPrev(channel int) int32 {
+	state := d.ensureSILKPLCState(channel)
+	return (state.PitchLQ8 + 128) >> 8
+}
+
 // updateSILKPLCStateFromCtrl snapshots the parameters of a successfully decoded
 // frame (signal type, pitch lags, LTP coefficients and scale, gains, LPC
 // coefficients and rate) into the channel's PLC state so the next lost frame can

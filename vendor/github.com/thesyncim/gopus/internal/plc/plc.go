@@ -1,47 +1,18 @@
-// Package plc implements Opus-level Packet Loss Concealment (PLC): the
-// machinery that synthesizes plausible audio for frames whose packets were
-// lost, dropped, or arrived too late. Concealment avoids the jarring silence
-// and clicks that would otherwise occur, which is essential for real-time
-// audio over unreliable transports.
+// Package plc implements the codec-specific concealment used after a lost Opus
+// frame. The SILK path predicts speech from pitch and LPC history; the CELT
+// path decays band energies, fills uncoded spectrum, and runs CELT synthesis.
+// Hybrid decoding uses the SILK path for the low band and CELT for the high
+// band, as described in RFC 6716 Section 4.2.8 and libopus's `silk/PLC.c` and
+// `celt/celt_decoder.c`.
 //
-// # Layout
+// [State] stores the last frame's mode, size, channel count, and the package's
+// loss counter and fade envelope. The codec-specific signal history remains in
+// the owning SILK and CELT decoder states; keep those states with one stream and
+// serialize access. Most callers should use the top-level gopus decoder, which
+// supplies the required history.
 //
-// The package is organized around the three Opus operating modes, matching how
-// libopus 1.6.1 splits concealment between its two codec layers:
-//
-//   - State (this file) is the mode-agnostic loss bookkeeping and fade-out
-//     cadence: how many consecutive frames have been lost and the residual
-//     gain to apply. It coordinates which per-mode routine runs.
-//   - silk_plc.go ports the SILK speech concealment from libopus silk/PLC.c
-//     (silk_PLC_conceal / silk_PLC_update) plus the fixed-point helpers from
-//     silk/Inlines.h and silk/MacroCount.h that it depends on. This is the
-//     bit-exact path used for SILK and the low band of Hybrid frames.
-//   - celt_plc.go provides the CELT (music / fullband) concealment: band-energy
-//     decay with per-band noise fill and IMDCT resynthesis, mirroring the
-//     spectral-fold strategy of celt/celt_decoder.c celt_decode_lost. It also
-//     serves the high band of Hybrid frames (ConcealCELTHybrid).
-//
-// # libopus references
-//
-//   - RFC 6716 Section 4.2.8 (Packet Loss Concealment)
-//   - libopus silk/PLC.c, silk/PLC.h (SILK concealment + constants)
-//   - libopus celt/celt_decoder.c (celt_decode_lost, the CELT loss path)
-//   - libopus silk/dec_API.c (silk_Decode loss/FEC dispatch)
-//
-// # Type discipline
-//
-// State and SILKPLCState mirror the libopus C struct field widths exactly
-// (opus_int32 -> int32, opus_int16 -> int16, opus_val16 -> float32), because
-// the fixed-point SILK path relies on intermediate truncation and overflow
-// behavior that only reproduces with matching integer widths. type_parity_test.go
-// guards these widths.
-//
-// # Stability
-//
-// Most applications should use the top-level gopus decoder APIs, which drive
-// this package internally with decoder-owned state. The interfaces and
-// functions here are low-level implementation details and may change before the
-// first release.
+// The fixed-point SILK path preserves the reference Q-format widths and
+// arithmetic.
 package plc
 
 // Mode indicates which Opus operating mode the last good frame used, and hence
@@ -63,7 +34,7 @@ const (
 	ModeHybrid
 )
 
-// MaxConcealedFrames is the consecutive-loss count past which State.IsExhausted
+// MaxConcealedFrames is the consecutive-loss count at which State.IsExhausted
 // reports the stream as concealed-out and callers should emit silence. Roughly
 // 100ms at 20ms frames (5 frames). This is the gopus-level safety ceiling on
 // top of the per-mode attenuation; libopus has no single equivalent constant
@@ -193,8 +164,9 @@ func (s *State) LastChannels() int {
 	return int(s.lastChannels)
 }
 
-// IsExhausted returns true if PLC has exceeded its maximum concealment.
-// After this, the output should effectively be silence.
+// IsExhausted returns true when the consecutive-loss ceiling is reached or the
+// fade factor falls to 0.001 or lower. Callers can use it to replace further
+// predicted output with silence.
 func (s *State) IsExhausted() bool {
 	return s.lostCount >= MaxConcealedFrames || s.fadeFactor <= 0.001
 }

@@ -21,29 +21,142 @@ const DelayCompensation = 192
 // for internal processing, matching libopus CELT_SIG_SCALE.
 const CELTSigScale = 32768.0
 
-const (
-	maxAbsF32SignBit = uint32(1) << 31
-	maxAbsF32InfBits = uint32(0x7f800000)
-)
-
-func updateMaxAbsBitsF32(maxBits uint32, v float32) uint32 {
-	bits := math.Float32bits(v) &^ maxAbsF32SignBit
-	if bits <= maxAbsF32InfBits && bits > maxBits {
-		return bits
+func rawMaxAbsStep(maxVal, minVal, sample float32) (float32, float32) {
+	// celt_maxabs16 updates both extrema with MAX16/MIN16. Their second
+	// operand wins a tie or an unordered comparison, including signed zero.
+	if !(maxVal > sample) {
+		maxVal = sample
 	}
-	return maxBits
+	if !(minVal < sample) {
+		minVal = sample
+	}
+	return maxVal, minVal
 }
 
+// rawMaxMinScanScalar is celt_maxabs16's sequential MAX16/MIN16 loop.
+func rawMaxMinScanScalar(x []float32, maxVal, minVal float32) (float32, float32) {
+	for _, sample := range x {
+		maxVal, minVal = rawMaxAbsStep(maxVal, minVal, sample)
+	}
+	return maxVal, minVal
+}
+
+// rawMaxMinScanStuffed folds native samples [from, to) into the running
+// MAX16/MIN16 extrema. pcm is the zero-stuffed core frame, where native
+// sample i of the channels-interleaved input sits at
+// (i/channels)*upsample*channels + i%channels; the scan stops at the end of
+// pcm.
+func rawMaxMinScanStuffed(pcm []float32, from, to, channels, upsample int, maxVal, minVal float32) (float32, float32) {
+	if from >= to {
+		return maxVal, minVal
+	}
+	c := from % channels
+	index := (from/channels)*upsample*channels + c
+	skip := (upsample - 1) * channels
+	for i := from; i < to && index < len(pcm); i++ {
+		maxVal, minVal = rawMaxAbsStep(maxVal, minVal, pcm[index])
+		index++
+		if c++; c == channels {
+			c = 0
+			index += skip
+		}
+	}
+	return maxVal, minVal
+}
+
+// preemphMonoScalar is celt_preemphasis's single-tap loop over mono pcm: m =
+// coef*s carries into the next output.
+func preemphMonoScalar(pcm, out []float32, coef, m float32) float32 {
+	out = out[:len(pcm)]
+	for i, v := range pcm {
+		scaled := v * float32(CELTSigScale)
+		out[i] = scaled - m
+		m = coef * scaled
+	}
+	return m
+}
+
+// preemphStereoPlanarScalar is celt_preemphasis's single-tap loop for both
+// channels of interleaved stereo pcm, writing each channel to its own planar
+// output the way celt_encode_with_ec fills in+c*(N+overlap)+overlap.
+func preemphStereoPlanarScalar(pcm, outL, outR []float32, coef float32, state [2]float32) [2]float32 {
+	outR = outR[:len(outL)]
+	src := pcm[:2*len(outL)]
+	mL, mR := state[0], state[1]
+	for i := range outL {
+		// src advances one sample pair per step, so each iteration checks
+		// its bounds once.
+		_ = src[1]
+		scaledL := src[0] * float32(CELTSigScale)
+		scaledR := src[1] * float32(CELTSigScale)
+		src = src[2:]
+		outL[i] = scaledL - mL
+		outR[i] = scaledR - mR
+		mL = coef * scaledL
+		mR = coef * scaledR
+	}
+	return [2]float32{mL, mR}
+}
+
+func rawMaxAbsResult(maxVal, minVal float32) float32 {
+	negativeMin := -minVal
+	if maxVal > negativeMin {
+		return maxVal
+	}
+	return negativeMin
+}
+
+// rawInputSilence follows celt_encoder.c's sample_max scans. C uses the coded
+// channel count for the contiguous raw-input scan even when the physical PCM
+// and pre-emphasis use two channels. The scans read the native-rate input:
+// with native set pcm holds it directly; otherwise at sub-48 kHz rates pcm is
+// zero-stuffed into the core frame and each scanned native sample maps through
+// upsample.
+func (e *Encoder) rawInputSilence(pcm []float32, frameSize, overlap int, native bool) bool {
+	channels := int(e.channels)
+	codedChannels := int(e.streamChannels)
+	if codedChannels <= 0 || codedChannels > channels {
+		codedChannels = channels
+	}
+	upsample := e.effectiveUpsample()
+	firstEnd := codedChannels * (frameSize - overlap) / upsample
+	overlapEnd := firstEnd + codedChannels*overlap/upsample
+	var firstMaxVal, firstMinVal, overlapMaxVal, overlapMinVal float32
+	if upsample == 1 || native {
+		firstLimit := min(firstEnd, len(pcm))
+		firstMaxVal, firstMinVal = rawMaxMinScan(pcm[:firstLimit], firstMaxVal, firstMinVal)
+		overlapLimit := min(overlapEnd, len(pcm))
+		overlapMaxVal, overlapMinVal = rawMaxMinScan(pcm[firstLimit:overlapLimit], overlapMaxVal, overlapMinVal)
+	} else {
+		firstMaxVal, firstMinVal = rawMaxMinScanStuffed(pcm, 0, firstEnd, channels, upsample, firstMaxVal, firstMinVal)
+		overlapMaxVal, overlapMinVal = rawMaxMinScanStuffed(pcm, firstEnd, overlapEnd, channels, upsample, overlapMaxVal, overlapMinVal)
+	}
+	firstMax := rawMaxAbsResult(firstMaxVal, firstMinVal)
+	newOverlapMax := rawMaxAbsResult(overlapMaxVal, overlapMinVal)
+	sampleMax := e.overlapMax
+	if !(sampleMax > firstMax) {
+		sampleMax = firstMax
+	}
+	e.overlapMax = newOverlapMax
+	if !(sampleMax > newOverlapMax) {
+		sampleMax = newOverlapMax
+	}
+	silenceThreshold := float32(math.Ldexp(1, -int(e.lsbDepth)))
+	return sampleMax <= silenceThreshold
+}
+
+// noFMA32Mul, noFMA32Add and noFMA32Sub are mul32, add32 and sub32 spelled
+// out, so each call inlines as a single level.
 func noFMA32Mul(a, b float32) float32 {
-	return mul32(a, b)
+	return float32(a * b)
 }
 
 func noFMA32Add(a, b float32) float32 {
-	return add32(a, b)
+	return float32(a + b)
 }
 
 func noFMA32Sub(a, b float32) float32 {
-	return sub32(a, b)
+	return float32(a - b)
 }
 
 // ApplyPreemphasis applies the pre-emphasis filter to PCM input samples.
@@ -186,110 +299,122 @@ func (e *Encoder) applyPreemphasisWithScalingCore(pcm []float32, output []float3
 	}
 }
 
-func (e *Encoder) applyPreemphasisWithScalingAndSilenceCore(pcm []float32, output []float32, frameSize, overlap int) bool {
+// applyPreemphasisWithScalingAndSilenceCore runs celt_encode_with_ec's
+// sample_max silence scan and celt_preemphasis over channels-interleaved pcm.
+// in is celt_encode_with_ec's planar buffer: channel c occupies
+// in[c*(frameSize+overlap):(c+1)*(frameSize+overlap)], and pre-emphasis fills
+// the frameSize samples after that channel's overlap head.
+func (e *Encoder) applyPreemphasisWithScalingAndSilenceCore(pcm, in []float32, frameSize, overlap int) bool {
 	if frameSize <= 0 || e.channels <= 0 || len(pcm) == 0 {
 		e.overlapMax = 0
 		return true
 	}
-	if overlap < 0 {
-		overlap = 0
-	}
-	if overlap > frameSize {
-		overlap = frameSize
-	}
-
+	overlap = min(max(overlap, 0), frameSize)
 	channels := int(e.channels)
-	total := min(frameSize*channels, len(pcm))
-	if total > len(output) {
-		total = len(output)
-	}
-	if total <= 0 {
+	stride := frameSize + overlap
+	n := min(frameSize, len(pcm)/channels, len(in)/channels-overlap)
+	if n <= 0 {
 		e.overlapMax = 0
 		return true
 	}
-
-	split := min(max((frameSize-overlap)*channels, 0), total)
+	outL := in[overlap : overlap+n]
+	var outR []float32
+	if channels == 2 {
+		outR = in[stride+overlap : stride+overlap+n]
+	}
+	pcm = pcm[:n*channels]
 
 	// Native 96 kHz HD mode uses libopus's 2-tap pre-emphasis
 	// (celt_preemphasis() coef[1] != 0 path). hd96kPreemph[1] == 0 selects the
 	// single-tap 48 kHz path below, keeping it byte-identical.
 	if e.hd96kPreemph[1] != 0 {
-		return e.applyPreemphasis2TapAndSilenceCore(pcm, output, total, split, channels)
+		silence := e.rawInputSilence(pcm, n, n-min(frameSize-overlap, n), false)
+		e.applyPreemphasis2Tap(pcm, outL, outR)
+		return silence
 	}
-
+	silence := e.rawInputSilence(pcm, frameSize, overlap, false)
 	coef := float32(PreemphCoef)
-	var firstMaxBits, overlapMaxBits uint32
 	if channels == 1 {
-		state := float32(e.preemphState[0])
-		for i := 0; i < split; i++ {
-			v := pcm[i]
-			firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, v)
-			scaled := v * float32(CELTSigScale)
-			y := scaled - state
-			output[i] = y
-			state = coef * scaled
-		}
-		for i := split; i < total; i++ {
-			v := pcm[i]
-			overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, v)
-			scaled := v * float32(CELTSigScale)
-			y := scaled - state
-			output[i] = y
-			state = coef * scaled
-		}
-		e.preemphState[0] = celtSig(state)
-	} else {
-		stateL := float32(e.preemphState[0])
-		stateR := float32(e.preemphState[1])
-		i := 0
-		for ; i+1 < split; i += 2 {
-			vL := pcm[i]
-			vR := pcm[i+1]
-			firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, vL)
-			firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, vR)
-			scaledL := vL * float32(CELTSigScale)
-			scaledR := vR * float32(CELTSigScale)
-			yL := scaledL - stateL
-			yR := scaledR - stateR
-			output[i] = yL
-			output[i+1] = yR
-			stateL = coef * scaledL
-			stateR = coef * scaledR
-		}
-		for ; i+1 < total; i += 2 {
-			vL := pcm[i]
-			vR := pcm[i+1]
-			overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, vL)
-			overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, vR)
-			scaledL := vL * float32(CELTSigScale)
-			scaledR := vR * float32(CELTSigScale)
-			yL := scaledL - stateL
-			yR := scaledR - stateR
-			output[i] = yL
-			output[i+1] = yR
-			stateL = coef * scaledL
-			stateR = coef * scaledR
-		}
-		e.preemphState[0] = celtSig(stateL)
-		e.preemphState[1] = celtSig(stateR)
+		e.preemphState[0] = preemphMono(pcm, outL, coef, e.preemphState[0])
+		return silence
 	}
-
-	e.overlapMax = float32(0)
-	if overlapMaxBits != 0 {
-		e.overlapMax = math.Float32frombits(overlapMaxBits)
-	}
-	sampleMax := e.overlapMax
-	firstMax := math.Float32frombits(firstMaxBits)
-	if firstMax > sampleMax {
-		sampleMax = firstMax
-	}
-	silenceThreshold := float32(math.Ldexp(1, -int(e.lsbDepth)))
-	return sampleMax <= silenceThreshold
+	state := preemphStereoPlanar(pcm, outL, outR, coef, [2]float32{e.preemphState[0], e.preemphState[1]})
+	e.preemphState[0], e.preemphState[1] = state[0], state[1]
+	return silence
 }
 
-// applyPreemphasis2TapAndSilenceCore applies libopus's 2-tap CELT pre-emphasis
-// (celt_preemphasis() coef[1] != 0 path) used by the native 96 kHz HD mode,
-// while tracking the overlap-region silence max exactly as the single-tap path.
+// applyPreemphasisUpsampled is applyPreemphasisWithScalingAndSilenceCore for a
+// sub-48 kHz frame whose pcm holds the native-rate input (frameSize/upsample
+// samples per channel). celt_encode_with_ec scans that input for sample_max,
+// and celt_preemphasis zero-stuffs it into the core frame, so native sample i
+// filters at core position i*upsample and the positions between filter zeros.
+func (e *Encoder) applyPreemphasisUpsampled(pcm, in []float32, frameSize, overlap int) bool {
+	channels := int(e.channels)
+	upsample := e.effectiveUpsample()
+	overlap = min(max(overlap, 0), frameSize)
+	stride := frameSize + overlap
+	n := min(frameSize, len(pcm)/channels*upsample, len(in)/channels-overlap)
+	if n <= 0 || upsample < 2 {
+		e.overlapMax = 0
+		return true
+	}
+	silence := e.rawInputSilence(pcm, frameSize, overlap, true)
+	coef := float32(PreemphCoef)
+	for c := range channels {
+		out := in[c*stride+overlap:][:n]
+		e.preemphState[c] = preemphUpsampled(pcm[c:], channels, upsample, out, coef, e.preemphState[c])
+	}
+	return silence
+}
+
+// preemphUpsampled is celt_preemphasis's single-tap loop over one channel of
+// zero-stuffed input: out[j] takes native sample src[(j/upsample)*step] when j
+// is a multiple of upsample and a zero sample otherwise, with the same scaled
+// - m and m = coef*scaled steps as preemphMonoScalar. Past the first stuffed
+// zero after a native sample both m and the output are the constants that
+// zero input yields. upsample is at least 2. It returns the updated m.
+func preemphUpsampled(src []float32, step, upsample int, out []float32, coef, m float32) float32 {
+	var zero float32
+	mZero := float32(coef * zero)
+	outZero := zero - mZero
+	groups := len(out) / upsample
+	if groups > 0 {
+		head := src[:(groups-1)*step+1]
+		for g := 0; g < groups; g++ {
+			j := g * upsample
+			scaled := head[g*step] * float32(CELTSigScale)
+			out[j] = scaled - m
+			// The explicit conversion rounds m before the subtraction, as
+			// the stuffed loop does, so no fused multiply-subtract forms.
+			out[j+1] = zero - float32(coef*scaled)
+			m = mZero
+		}
+		if upsample > 2 {
+			for g := 0; g < groups; g++ {
+				fill := out[g*upsample+2 : (g+1)*upsample]
+				for k := range fill {
+					fill[k] = outZero
+				}
+			}
+		}
+	}
+	if j := groups * upsample; j < len(out) {
+		// A partial final group filters the same way up to the end of out.
+		scaled := src[groups*step] * float32(CELTSigScale)
+		out[j] = scaled - m
+		m = float32(coef * scaled)
+		for k := j + 1; k < len(out); k++ {
+			out[k] = zero - m
+			m = mZero
+		}
+	}
+	return m
+}
+
+// applyPreemphasis2Tap applies libopus's 2-tap CELT pre-emphasis
+// (celt_preemphasis() coef[1] != 0 path) used by custom and 96 kHz modes to
+// interleaved pcm, writing each channel to its planar output (outR is nil for
+// mono).
 //
 // Float build (SIG_SHIFT=0, RES2SIG = CELT_SIG_SCALE*x):
 //
@@ -298,69 +423,43 @@ func (e *Encoder) applyPreemphasisWithScalingAndSilenceCore(pcm []float32, outpu
 //	out[i] = tmp + m
 //	m      = coef1*out[i] - coef0*tmp
 //
-// with coef = HD96kMode.Preemph = {coef0, coef1, coef2, coef3}.
-func (e *Encoder) applyPreemphasis2TapAndSilenceCore(pcm, output []float32, total, split, channels int) bool {
+// The second product rounds before the first product contracts with the
+// subtraction, matching the selected C build of celt_preemphasis().
+func (e *Encoder) applyPreemphasis2Tap(pcm, outL, outR []float32) {
 	coef0 := e.hd96kPreemph[0]
 	coef1 := e.hd96kPreemph[1]
 	coef2 := e.hd96kPreemph[2]
-
-	var firstMaxBits, overlapMaxBits uint32
-	if channels == 1 {
+	if outR == nil {
 		m := float32(e.preemphState[0])
-		for i := range total {
-			v := pcm[i]
-			if i < split {
-				firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, v)
-			} else {
-				overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, v)
-			}
+		pcm = pcm[:len(outL)]
+		for i, v := range pcm {
 			x := v * float32(CELTSigScale)
 			tmp := noFMA32Mul(coef2, x)
 			y := noFMA32Add(tmp, m)
-			output[i] = y
-			m = noFMA32Sub(noFMA32Mul(coef1, y), noFMA32Mul(coef0, tmp))
+			outL[i] = y
+			m = fma32(coef1, y, -noFMA32Mul(coef0, tmp))
 		}
 		e.preemphState[0] = celtSig(m)
-	} else {
-		mL := float32(e.preemphState[0])
-		mR := float32(e.preemphState[1])
-		i := 0
-		for ; i+1 < total; i += 2 {
-			vL := pcm[i]
-			vR := pcm[i+1]
-			if i < split {
-				firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, vL)
-				firstMaxBits = updateMaxAbsBitsF32(firstMaxBits, vR)
-			} else {
-				overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, vL)
-				overlapMaxBits = updateMaxAbsBitsF32(overlapMaxBits, vR)
-			}
-			xL := vL * float32(CELTSigScale)
-			xR := vR * float32(CELTSigScale)
-			tmpL := noFMA32Mul(coef2, xL)
-			tmpR := noFMA32Mul(coef2, xR)
-			yL := noFMA32Add(tmpL, mL)
-			yR := noFMA32Add(tmpR, mR)
-			output[i] = yL
-			output[i+1] = yR
-			mL = noFMA32Sub(noFMA32Mul(coef1, yL), noFMA32Mul(coef0, tmpL))
-			mR = noFMA32Sub(noFMA32Mul(coef1, yR), noFMA32Mul(coef0, tmpR))
-		}
-		e.preemphState[0] = celtSig(mL)
-		e.preemphState[1] = celtSig(mR)
+		return
 	}
-
-	e.overlapMax = float32(0)
-	if overlapMaxBits != 0 {
-		e.overlapMax = math.Float32frombits(overlapMaxBits)
+	mL := float32(e.preemphState[0])
+	mR := float32(e.preemphState[1])
+	pcm = pcm[:2*len(outL)]
+	outR = outR[:len(outL)]
+	for i := range outL {
+		xL := pcm[2*i] * float32(CELTSigScale)
+		xR := pcm[2*i+1] * float32(CELTSigScale)
+		tmpL := noFMA32Mul(coef2, xL)
+		tmpR := noFMA32Mul(coef2, xR)
+		yL := noFMA32Add(tmpL, mL)
+		yR := noFMA32Add(tmpR, mR)
+		outL[i] = yL
+		outR[i] = yR
+		mL = fma32(coef1, yL, -noFMA32Mul(coef0, tmpL))
+		mR = fma32(coef1, yR, -noFMA32Mul(coef0, tmpR))
 	}
-	sampleMax := e.overlapMax
-	firstMax := math.Float32frombits(firstMaxBits)
-	if firstMax > sampleMax {
-		sampleMax = firstMax
-	}
-	silenceThreshold := float32(math.Ldexp(1, -int(e.lsbDepth)))
-	return sampleMax <= silenceThreshold
+	e.preemphState[0] = celtSig(mL)
+	e.preemphState[1] = celtSig(mR)
 }
 
 // ApplyPreemphasisWithScaling applies pre-emphasis with signal scaling.
@@ -457,30 +556,5 @@ func (e *Encoder) applyDCRejectScratch(pcm []float32) []float32 {
 	output := ensureFloat32Slice(&e.scratch.dcRejectedF32, len(pcm))
 
 	e.applyDCRejectCore(pcm, output)
-	return output
-}
-
-// ApplyPreemphasisWithScalingScratch applies pre-emphasis with scaling using
-// pre-allocated scratch buffers. This is the zero-allocation version of
-// ApplyPreemphasisWithScaling, suitable for use from the hybrid encoding path.
-func (e *Encoder) ApplyPreemphasisWithScalingScratch(pcm []float32) []float32 {
-	return e.applyPreemphasisWithScalingScratch(pcm)
-}
-
-// applyPreemphasisWithScalingScratch applies pre-emphasis with scaling using scratch buffer.
-func (e *Encoder) applyPreemphasisWithScalingScratch(pcm []float32) []float32 {
-	if len(pcm) == 0 {
-		return nil
-	}
-
-	// Use scratch buffer
-	output := e.scratch.preemph
-	if len(output) < len(pcm) {
-		output = make([]float32, len(pcm))
-		e.scratch.preemph = output
-	}
-	output = output[:len(pcm)]
-
-	e.applyPreemphasisWithScalingCore(pcm, output)
 	return output
 }

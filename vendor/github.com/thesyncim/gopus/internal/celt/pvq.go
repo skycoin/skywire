@@ -25,7 +25,7 @@ func decodeUniformPVQIndex(rd *rangecoding.Decoder, ft uint32) uint32 {
 // Returns: normalized celt_norm vector of length n with unit L2 norm.
 //
 // If k == 0, returns a zero vector (caller should fold from another band).
-func (d *Decoder) DecodePVQ(n, k int) []celtNorm {
+func (d *Decoder) DecodePVQ(n, k int) []CeltNorm {
 	if k == 0 || n <= 0 {
 		// No pulses - return zero vector (will be folded)
 		return make([]celtNorm, n)
@@ -50,7 +50,7 @@ func (d *Decoder) DecodePVQ(n, k int) []celtNorm {
 
 // NormalizeVector scales a CELT norm vector to unit L2 norm.
 // If the input vector has zero energy, returns the input unchanged.
-func NormalizeVector(v []celtNorm) []celtNorm {
+func NormalizeVector(v []celtNorm) []CeltNorm {
 	if len(v) == 0 {
 		return v
 	}
@@ -113,7 +113,7 @@ func (d *Decoder) DecodeStereoTheta(qn int) int {
 // Returns: mid gain, side gain (both in [0, 1])
 //
 // Reference: libopus celt/bands.c
-func ThetaToGains(itheta, qn int) (mid, side opusVal16) {
+func ThetaToGains(itheta, qn int) (mid, side OpusVal16) {
 	if qn <= 0 {
 		return 1.0, 0.0
 	}
@@ -136,7 +136,7 @@ func ThetaToGains(itheta, qn int) (mid, side opusVal16) {
 // opposite signs (determined by a single bit).
 //
 // Reference: RFC 6716 Section 4.3.4.3
-func (d *Decoder) DecodeIntensityStereo(mid []celtNorm) (left, right []celtNorm) {
+func (d *Decoder) DecodeIntensityStereo(mid []celtNorm) (left, right []CeltNorm) {
 	n := len(mid)
 	left = make([]celtNorm, n)
 	right = make([]celtNorm, n)

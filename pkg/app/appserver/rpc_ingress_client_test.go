@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package appserver pkg/app/appserver/rpc_ingress_client_test.go
 package appserver
 
@@ -6,9 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/rpc"
 	"testing"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -10,6 +10,31 @@ const (
 	plcDecodeBufferSize = 2048
 )
 
+func (d *Decoder) qextDecodeScale() int {
+	if extsupport.QEXT && d.sampleRate == 96000 {
+		if d.customScaleBase == 180 || d.customScaleBase == 240 || d.customScaleBase == 0 && d.synthOverlap == 240 {
+			return 2
+		}
+	}
+	return 1
+}
+
+func (d *Decoder) plcDecodeBufferLen() int {
+	return plcDecodeBufferSize * d.qextDecodeScale()
+}
+
+func (d *Decoder) plcCombFilterMaxPeriod() int {
+	return combFilterMaxPeriod * d.qextDecodeScale()
+}
+
+func (d *Decoder) plcCombFilterMinPeriod() int {
+	return combFilterMinPeriod * d.qextDecodeScale()
+}
+
+func (d *Decoder) plcCombFilterHistoryLen() int {
+	return combFilterMaxPeriod*d.qextDecodeScale() + 2
+}
+
 var combFilterGains = [3][3]float32{
 	{0.3066406250, 0.2170410156, 0.1296386719},
 	{0.4638671875, 0.2680664062, 0.0000000000},
@@ -66,346 +91,6 @@ func sanitizePostfilterParams(t0, t1 int, g0, g1 float32, tap0, tap1 int) (int, 
 	return t0, t1, tap0, tap1
 }
 
-func (d *Decoder) updatePostfilterHistory(samples []float32, frameSize int, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	d.materializePostfilterHistoryFromPLC()
-	d.postfilterMemFromPLC = false
-	d.postfilterMemPLCBacked = false
-	if d.channels <= 1 {
-		hist := d.postfilterMem[:history]
-		if frameSize >= history {
-			copyFloat32ToSig(hist, samples[frameSize-history:frameSize])
-			return
-		}
-		copy(hist, hist[frameSize:])
-		copyFloat32ToSig(hist[history-frameSize:], samples[:frameSize])
-		return
-	}
-	if d.channels == 2 {
-		histL := d.postfilterMem[:history]
-		histR := d.postfilterMem[history : 2*history]
-		if frameSize >= history {
-			src := (frameSize - history) * 2
-			for i := range history {
-				histL[i] = celtSig(samples[src])
-				histR[i] = celtSig(samples[src+1])
-				src += 2
-			}
-			return
-		}
-		copy(histL, histL[frameSize:])
-		copy(histR, histR[frameSize:])
-		dst := history - frameSize
-		src := 0
-		for i := range frameSize {
-			histL[dst+i] = celtSig(samples[src])
-			histR[dst+i] = celtSig(samples[src+1])
-			src += 2
-		}
-		return
-	}
-
-	channels := int(d.channels)
-	for ch := range channels {
-		hist := d.postfilterMem[ch*history : (ch+1)*history]
-		if frameSize >= history {
-			src := (frameSize-history)*channels + ch
-			for i := range history {
-				hist[i] = celtSig(samples[src])
-				src += channels
-			}
-			continue
-		}
-		copy(hist, hist[frameSize:])
-		src := ch
-		dst := history - frameSize
-		for i := range frameSize {
-			hist[dst+i] = celtSig(samples[src])
-			src += channels
-		}
-	}
-}
-
-func (d *Decoder) updatePLCDecodeHistory(samples []float32, frameSize int, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	d.postfilterMemFromPLC = false
-	d.postfilterMemPLCBacked = false
-	channels := int(d.channels)
-	if len(d.plcDecodeMem) != history*channels {
-		d.plcDecodeMem = make([]celtSig, history*channels)
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-	}
-	if d.channels == 2 && history == plcDecodeBufferSize {
-		histL := d.plcDecodeMem[:history]
-		histR := d.plcDecodeMem[history : 2*history]
-		if frameSize >= history {
-			src := (frameSize - history) * 2
-			for i := range history {
-				histL[i] = celtSig(samples[src])
-				histR[i] = celtSig(samples[src+1])
-				src += 2
-			}
-			d.plcDecodeMemRingActive = false
-			d.plcDecodeMemRingStart = 0
-			return
-		}
-		start := d.plcDecodeMemRingStart
-		if !d.plcDecodeMemRingActive {
-			start = 0
-		}
-		updateInterleavedStereoHistoryRingSig(histL, histR, samples, frameSize, history, start)
-		start += frameSize
-		if start >= history {
-			start %= history
-		}
-		d.plcDecodeMemRingStart = start
-		d.plcDecodeMemRingActive = start != 0
-		return
-	}
-	d.materializePLCDecodeHistory()
-	if d.channels <= 1 {
-		hist := d.plcDecodeMem[:history]
-		if frameSize >= history {
-			copyFloat32ToSig(hist, samples[frameSize-history:frameSize])
-			return
-		}
-		copy(hist, hist[frameSize:])
-		copyFloat32ToSig(hist[history-frameSize:], samples[:frameSize])
-		return
-	}
-	if d.channels == 2 {
-		histL := d.plcDecodeMem[:history]
-		histR := d.plcDecodeMem[history : 2*history]
-		if frameSize >= history {
-			src := (frameSize - history) * 2
-			for i := range history {
-				histL[i] = celtSig(samples[src])
-				histR[i] = celtSig(samples[src+1])
-				src += 2
-			}
-			return
-		}
-		copy(histL, histL[frameSize:])
-		copy(histR, histR[frameSize:])
-		dst := history - frameSize
-		src := 0
-		for i := range frameSize {
-			histL[dst+i] = celtSig(samples[src])
-			histR[dst+i] = celtSig(samples[src+1])
-			src += 2
-		}
-		return
-	}
-
-	channels = int(d.channels)
-	for ch := 0; ch < channels; ch++ {
-		hist := d.plcDecodeMem[ch*history : (ch+1)*history]
-		if frameSize >= history {
-			src := (frameSize-history)*channels + ch
-			for i := range history {
-				hist[i] = celtSig(samples[src])
-				src += channels
-			}
-			continue
-		}
-		copy(hist, hist[frameSize:])
-		src := ch
-		dst := history - frameSize
-		for i := range frameSize {
-			hist[dst+i] = celtSig(samples[src])
-			src += channels
-		}
-	}
-}
-
-func slidePlanarHistoryPrefixSig(hist []celtSig, frameSize, history int) {
-	keep := history - frameSize
-	if keep <= 0 {
-		return
-	}
-	if keep <= 128 {
-		_ = hist[frameSize+keep-1]
-		_ = hist[keep-1]
-		copy(hist[:keep], hist[frameSize:frameSize+keep])
-		return
-	}
-	_ = hist[frameSize+keep-1]
-	_ = hist[keep-1]
-	copy(hist[:keep], hist[frameSize:frameSize+keep])
-}
-
-func reverseSigInPlace(x []celtSig) {
-	for i, j := 0, len(x)-1; i < j; i, j = i+1, j-1 {
-		x[i], x[j] = x[j], x[i]
-	}
-}
-
-func rotateSigLeftInPlace(x []celtSig, n int) {
-	if len(x) == 0 {
-		return
-	}
-	n %= len(x)
-	if n == 0 {
-		return
-	}
-	reverseSigInPlace(x[:n])
-	reverseSigInPlace(x[n:])
-	reverseSigInPlace(x)
-}
-
-func updateInterleavedStereoHistoryRingSig(histL, histR []celtSig, samples []float32, frameSize, history, start int) {
-	if start < 0 || start >= history {
-		start = 0
-	}
-	first := min(history-start, frameSize)
-	src := 0
-	for i := 0; i < first; i++ {
-		histL[start+i] = celtSig(samples[src])
-		histR[start+i] = celtSig(samples[src+1])
-		src += 2
-	}
-	for i := 0; i < frameSize-first; i++ {
-		histL[i] = celtSig(samples[src])
-		histR[i] = celtSig(samples[src+1])
-		src += 2
-	}
-}
-
-func (d *Decoder) materializePLCDecodeHistory() {
-	if d == nil || !d.plcDecodeMemRingActive {
-		return
-	}
-	history := plcDecodeBufferSize
-	channels := int(d.channels)
-	if channels <= 0 || len(d.plcDecodeMem) < history*channels {
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-		return
-	}
-	start := d.plcDecodeMemRingStart
-	if start <= 0 || start >= history {
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-		return
-	}
-	for ch := range channels {
-		hist := d.plcDecodeMem[ch*history : (ch+1)*history]
-		rotateSigLeftInPlace(hist, start)
-	}
-	d.plcDecodeMemRingActive = false
-	d.plcDecodeMemRingStart = 0
-}
-
-func (d *Decoder) markPostfilterHistoryFromPLC() {
-	d.postfilterMemFromPLC = true
-	d.postfilterMemPLCBacked = true
-}
-
-func (d *Decoder) markPostfilterHistoryMaterialized() {
-	d.postfilterMemFromPLC = false
-	d.postfilterMemPLCBacked = true
-}
-
-func (d *Decoder) materializePostfilterHistoryFromPLC() {
-	if d == nil || !d.postfilterMemFromPLC {
-		return
-	}
-	channels := int(d.channels)
-	if channels <= 0 {
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-		return
-	}
-	history := combFilterHistory
-	if len(d.postfilterMem) != history*channels {
-		d.postfilterMem = make([]celtSig, history*channels)
-	}
-	if len(d.plcDecodeMem) < plcDecodeBufferSize*channels {
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-		return
-	}
-	ringStart := 0
-	if d.plcDecodeMemRingActive {
-		ringStart = d.plcDecodeMemRingStart
-		if ringStart < 0 || ringStart >= plcDecodeBufferSize {
-			ringStart = 0
-		}
-	}
-	srcStart := ringStart + plcDecodeBufferSize - history
-	if srcStart >= plcDecodeBufferSize {
-		srcStart -= plcDecodeBufferSize
-	}
-	for ch := range channels {
-		src := d.plcDecodeMem[ch*plcDecodeBufferSize : (ch+1)*plcDecodeBufferSize]
-		dst := d.postfilterMem[ch*history : (ch+1)*history]
-		if srcStart+history <= plcDecodeBufferSize {
-			copy(dst, src[srcStart:srcStart+history])
-			continue
-		}
-		first := plcDecodeBufferSize - srcStart
-		copy(dst[:first], src[srcStart:])
-		copy(dst[first:], src[:history-first])
-	}
-	d.markPostfilterHistoryMaterialized()
-}
-
-func (d *Decoder) materializePostfilterHistorySuffixFromPLC(need int) {
-	if d == nil || !d.postfilterMemFromPLC {
-		return
-	}
-	history := combFilterHistory
-	if need >= history {
-		d.materializePostfilterHistoryFromPLC()
-		return
-	}
-	if need <= 0 {
-		return
-	}
-	channels := int(d.channels)
-	if channels <= 0 {
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-		return
-	}
-	if len(d.postfilterMem) != history*channels {
-		d.postfilterMem = make([]celtSig, history*channels)
-	}
-	if len(d.plcDecodeMem) < plcDecodeBufferSize*channels {
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-		return
-	}
-	ringStart := 0
-	if d.plcDecodeMemRingActive {
-		ringStart = d.plcDecodeMemRingStart
-		if ringStart < 0 || ringStart >= plcDecodeBufferSize {
-			ringStart = 0
-		}
-	}
-	srcStart := ringStart + plcDecodeBufferSize - need
-	if srcStart >= plcDecodeBufferSize {
-		srcStart -= plcDecodeBufferSize
-	}
-	dstStart := history - need
-	for ch := range channels {
-		src := d.plcDecodeMem[ch*plcDecodeBufferSize : (ch+1)*plcDecodeBufferSize]
-		dst := d.postfilterMem[ch*history+dstStart : (ch+1)*history]
-		if srcStart+need <= plcDecodeBufferSize {
-			copy(dst, src[srcStart:srcStart+need])
-			continue
-		}
-		first := plcDecodeBufferSize - srcStart
-		copy(dst[:first], src[srcStart:])
-		copy(dst[first:], src[:need-first])
-	}
-}
-
 func postfilterHistoryNeed(t0, t1, t1b, t2 int) int {
 	need := max(t1b, max(t1, t0))
 	if t2 > need {
@@ -421,316 +106,87 @@ func postfilterHistoryNeed(t0, t1, t1b, t2 int) int {
 	return need
 }
 
-func updateMonoHistoryFromFloat32(hist []celtSig, samples []float32, frameSize, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	if frameSize >= history {
-		copyFloat32ToSig(hist[:history], samples[frameSize-history:frameSize])
-		return
-	}
-	slidePlanarHistoryPrefixSig(hist, frameSize, history)
-	copyFloat32ToSig(hist[history-frameSize:history], samples[:frameSize])
-}
-
-func updatePlanarHistoryFromFloat32(hist []celtSig, samples []float32, frameSize, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	if frameSize >= history {
-		copyFloat32ToSig(hist[:history], samples[frameSize-history:frameSize])
-		return
-	}
-	slidePlanarHistoryPrefixSig(hist, frameSize, history)
-	copyFloat32ToSig(hist[history-frameSize:history], samples[:frameSize])
-}
-
-func updatePlanarHistoryRingFromFloat32(hist []celtSig, samples []float32, frameSize, history, start int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	if frameSize >= history {
-		copyFloat32ToSig(hist[:history], samples[frameSize-history:frameSize])
-		return
-	}
-	if start < 0 || start >= history {
-		start = 0
-	}
-	first := min(history-start, frameSize)
-	copyFloat32ToSig(hist[start:start+first], samples[:first])
-	copyFloat32ToSig(hist[:frameSize-first], samples[first:frameSize])
-}
-
-func (d *Decoder) updatePLCDecodeHistoryStereoPlanarFromFloat32(left, right []float32, frameSize int, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	d.postfilterMemFromPLC = false
-	d.postfilterMemPLCBacked = false
-	channels := int(d.channels)
-	if len(d.plcDecodeMem) != history*channels {
-		d.plcDecodeMem = make([]celtSig, history*channels)
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-	}
-	histL := d.plcDecodeMem[:history]
-	histR := d.plcDecodeMem[history : 2*history]
-	if history != plcDecodeBufferSize || d.channels != 2 {
-		d.materializePLCDecodeHistory()
-		updatePlanarHistoryFromFloat32(histL, left, frameSize, history)
-		updatePlanarHistoryFromFloat32(histR, right, frameSize, history)
-		return
-	}
-	if frameSize >= history {
-		copyFloat32ToSig(histL, left[frameSize-history:frameSize])
-		copyFloat32ToSig(histR, right[frameSize-history:frameSize])
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-		return
-	}
-	start := d.plcDecodeMemRingStart
-	if !d.plcDecodeMemRingActive {
-		start = 0
-	}
-	updatePlanarHistoryRingFromFloat32(histL, left, frameSize, history, start)
-	updatePlanarHistoryRingFromFloat32(histR, right, frameSize, history, start)
-	start += frameSize
-	if start >= history {
-		start %= history
-	}
-	d.plcDecodeMemRingStart = start
-	d.plcDecodeMemRingActive = start != 0
-}
-
-func (d *Decoder) updatePLCDecodeHistoryMonoFromFloat32(samples []float32, frameSize int, history int) {
-	if frameSize <= 0 || history <= 0 {
-		return
-	}
-	d.postfilterMemFromPLC = false
-	d.postfilterMemPLCBacked = false
-	d.materializePLCDecodeHistory()
-	channels := int(d.channels)
-	if len(d.plcDecodeMem) != history*channels {
-		d.plcDecodeMem = make([]celtSig, history*channels)
-		d.plcDecodeMemRingActive = false
-		d.plcDecodeMemRingStart = 0
-	}
-	updateMonoHistoryFromFloat32(d.plcDecodeMem[:history], samples, frameSize, history)
-}
-
-func (d *Decoder) commitPostfilterStateNoGain(lm int, newPeriod int, newGain float32, newTapset int) {
-	d.postfilterPeriodOld = d.postfilterPeriod
-	d.postfilterGainOld = d.postfilterGain
-	d.postfilterTapsetOld = d.postfilterTapset
-	d.postfilterPeriod = int32(newPeriod)
-	d.postfilterGain = newGain
-	d.postfilterTapset = int32(newTapset)
-	if lm != 0 {
-		d.postfilterPeriodOld = d.postfilterPeriod
-		d.postfilterGainOld = d.postfilterGain
-		d.postfilterTapsetOld = d.postfilterTapset
-	}
-}
-
-func (d *Decoder) applyPostfilterNoGainMonoFromFloat32(samples []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	if frameSize <= 0 {
-		return
-	}
-	history := combFilterHistory
-	channels := int(d.channels)
-	if len(d.postfilterMem) != history*channels {
-		d.postfilterMem = make([]celtSig, history*channels)
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-	}
-	d.clampDecodePostfilterPeriods()
-	d.updatePLCDecodeHistoryMonoFromFloat32(samples, frameSize, plcDecodeBufferSize)
-	d.markPostfilterHistoryFromPLC()
-	d.commitPostfilterStateNoGain(lm, newPeriod, newGain, newTapset)
-}
-
-func (d *Decoder) applyPostfilterNoGainStereoPlanarFromFloat32(left, right []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	if frameSize <= 0 {
-		return
-	}
-	history := combFilterHistory
-	if len(d.postfilterMem) != history*2 {
-		d.postfilterMem = make([]celtSig, history*2)
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-	}
-	d.clampDecodePostfilterPeriods()
-	d.updatePLCDecodeHistoryStereoPlanarFromFloat32(left, right, frameSize, plcDecodeBufferSize)
-	d.markPostfilterHistoryFromPLC()
-	d.commitPostfilterStateNoGain(lm, newPeriod, newGain, newTapset)
-}
-
-func applyPostfilterChannelInPlaceFloat32(samples []float32, hist []celtSig, frameSize, history, lm int, t0, t1, t1b, t2 int, g0, g1, g2 float32, tap0, tap1, tap1b, tap2 int, window, windowSq []float32, overlap int) {
-	shortMdctSize := frameSize >> uint(lm)
-	if shortMdctSize <= 0 || shortMdctSize > frameSize {
-		shortMdctSize = frameSize
-	}
-
-	combFilterWithSquarePlanarFloat32(samples, hist, history, 0, t0, t1, shortMdctSize, g0, g1, tap0, tap1, window, windowSq, overlap)
-	if lm != 0 && shortMdctSize < frameSize {
-		combFilterWithSquarePlanarFloat32(samples, hist, history, shortMdctSize, t1b, t2, frameSize-shortMdctSize, g1, g2, tap1b, tap2, window, windowSq, overlap)
-	}
-}
-
+// postfilterWindowSquareF32 returns the squared mode window the comb-filter
+// cross-fade weights with (celt/celt.c comb_filter's window[i]*window[i]).
+// The squares depend only on the window, so they are computed once per window
+// and kept until the window or a reset changes them.
 func (d *Decoder) postfilterWindowSquareF32(overlap int) []float32 {
-	window := GetWindowBufferF32(overlap)
+	window := d.scratchIMDCTF32.modeWindow(overlap)
 	if len(window) == 0 {
 		return nil
+	}
+	if d.postfilterWindowSqOf == &window[0] && len(d.postfilterWindowSqF32) == len(window) {
+		return d.postfilterWindowSqF32
 	}
 	windowSq := ensureFloat32Slice(&d.postfilterWindowSqF32, len(window))
 	for i, w := range window {
 		windowSq[i] = noFMA32Mul(w, w)
 	}
+	d.postfilterWindowSqOf = &window[0]
 	return windowSq
 }
 
-func (d *Decoder) applyPostfilterStereoPlanarFromFloat32(left, right []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	if len(left) < frameSize || len(right) < frameSize || frameSize <= 0 {
-		return
-	}
-
-	history := combFilterHistory
-	if len(d.postfilterMem) != history*2 {
-		d.postfilterMem = make([]celtSig, history*2)
-		d.postfilterMemFromPLC = false
-		d.postfilterMemPLCBacked = false
-	}
-	d.clampDecodePostfilterPeriods()
-	if d.postfilterGainOld == 0 && d.postfilterGain == 0 && newGain == 0 {
-		d.updatePLCDecodeHistoryStereoPlanarFromFloat32(left, right, frameSize, plcDecodeBufferSize)
-		d.markPostfilterHistoryFromPLC()
-		d.commitPostfilterStateNoGain(lm, newPeriod, newGain, newTapset)
-		return
-	}
-
-	t0 := int(d.postfilterPeriodOld)
-	t1 := int(d.postfilterPeriod)
-	g0 := d.postfilterGainOld
-	g1 := d.postfilterGain
-	tap0 := int(d.postfilterTapsetOld)
-	tap1 := int(d.postfilterTapset)
-	t2 := newPeriod
-	g2 := newGain
-	tap2 := newTapset
-
-	t0, t1, tap0, tap1 = sanitizePostfilterParams(t0, t1, g0, g1, tap0, tap1)
-	t1b, t2, tap1b, tap2 := sanitizePostfilterParams(t1, t2, g1, g2, tap1, tap2)
-	d.materializePostfilterHistorySuffixFromPLC(postfilterHistoryNeed(t0, t1, t1b, t2))
-
-	overlap := d.synthOverlapLen()
-	window := GetWindowBufferF32(overlap)
-	windowSq := d.postfilterWindowSquareF32(overlap)
-	histL := d.postfilterMem[:history]
-	histR := d.postfilterMem[history : 2*history]
-	applyPostfilterChannelInPlaceFloat32(left, histL, frameSize, history, lm, t0, t1, t1b, t2, g0, g1, g2, tap0, tap1, tap1b, tap2, window, windowSq, overlap)
-	applyPostfilterChannelInPlaceFloat32(right, histR, frameSize, history, lm, t0, t1, t1b, t2, g0, g1, g2, tap0, tap1, tap1b, tap2, window, windowSq, overlap)
-
-	d.updatePLCDecodeHistoryStereoPlanarFromFloat32(left, right, frameSize, plcDecodeBufferSize)
-	d.markPostfilterHistoryFromPLC()
-	d.postfilterPeriodOld = d.postfilterPeriod
-	d.postfilterGainOld = d.postfilterGain
-	d.postfilterTapsetOld = d.postfilterTapset
-	d.postfilterPeriod = int32(newPeriod)
-	d.postfilterGain = newGain
-	d.postfilterTapset = int32(newTapset)
-	if lm != 0 {
-		d.postfilterPeriodOld = d.postfilterPeriod
-		d.postfilterGainOld = d.postfilterGain
-		d.postfilterTapsetOld = d.postfilterTapset
+// combFilterOverlapScalar is the scalar form of combFilterOverlap.
+func combFilterOverlapScalar(dst, d0, d1, wsq []float32, g00, g01, g02, g10, g11, g12 float32) {
+	n := len(dst)
+	d0 = d0[: n+4 : n+4]
+	d1 = d1[: n+4 : n+4]
+	wsq = wsq[:n]
+	for i := range dst {
+		// The five taps of output i, resliced once so the tap loads need no
+		// bounds checks.
+		t0 := d0[i : i+5 : i+5]
+		t1 := d1[i : i+5 : i+5]
+		f := wsq[i]
+		oneMinus := float32(1.0) - f
+		if combTargetV3FMA {
+			// GCC contracts the six tap products into the running sum for the
+			// x86-64-v3 libopus scalar overlap loop. The cross-fade weights,
+			// tap-pair sums, and per-tap coefficients remain separately rounded.
+			c00 := noFMA32Mul(oneMinus, g00)
+			c01 := noFMA32Mul(oneMinus, g01)
+			c02 := noFMA32Mul(oneMinus, g02)
+			c10 := noFMA32Mul(f, g10)
+			c11 := noFMA32Mul(f, g11)
+			c12 := noFMA32Mul(f, g12)
+			p01 := noFMA32Add(t0[3], t0[1])
+			p02 := noFMA32Add(t0[4], t0[0])
+			p11 := noFMA32Add(t1[3], t1[1])
+			p12 := noFMA32Add(t1[4], t1[0])
+			dst[i] = combFilterOverlapV3Accumulate(dst[i], c00, t0[2], c01, p01, c02, p02, c10, t1[2], c11, p11, c12, p12)
+			continue
+		}
+		dst[i] = dst[i] +
+			(oneMinus*g00)*t0[2] +
+			(oneMinus*g01)*(t0[3]+t0[1]) +
+			(oneMinus*g02)*(t0[4]+t0[0]) +
+			(f*g10)*t1[2] +
+			(f*g11)*(t1[3]+t1[1]) +
+			(f*g12)*(t1[4]+t1[0])
 	}
 }
 
-func (d *Decoder) applyPostfilterFloat32(samples []float32, frameSize, lm int, newPeriod int, newGain float32, newTapset int) {
-	if len(samples) == 0 || frameSize <= 0 || d.channels <= 0 {
-		return
-	}
-	if lm < 0 {
-		lm = 0
-	}
-	if d.hd96kPostfilterActive() {
-		d.applyHD96kPostfilterInterleaved(samples, frameSize, lm, newPeriod, newGain, newTapset)
-		return
-	}
-	if d.channels == 1 {
-		if d.postfilterGainOld == 0 && d.postfilterGain == 0 && newGain == 0 {
-			d.applyPostfilterNoGainMonoFromFloat32(samples[:frameSize], frameSize, lm, newPeriod, newGain, newTapset)
-			return
-		}
-		history := combFilterHistory
-		if len(d.postfilterMem) != history {
-			d.postfilterMem = make([]celtSig, history)
-			d.postfilterMemFromPLC = false
-			d.postfilterMemPLCBacked = false
-		}
-		d.clampDecodePostfilterPeriods()
-		t0 := int(d.postfilterPeriodOld)
-		t1 := int(d.postfilterPeriod)
-		g0 := d.postfilterGainOld
-		g1 := d.postfilterGain
-		tap0 := int(d.postfilterTapsetOld)
-		tap1 := int(d.postfilterTapset)
-		t2 := newPeriod
-		g2 := newGain
-		tap2 := newTapset
-		t0, t1, tap0, tap1 = sanitizePostfilterParams(t0, t1, g0, g1, tap0, tap1)
-		t1b, t2, tap1b, tap2 := sanitizePostfilterParams(t1, t2, g1, g2, tap1, tap2)
-		d.materializePostfilterHistorySuffixFromPLC(postfilterHistoryNeed(t0, t1, t1b, t2))
-		overlap := d.synthOverlapLen()
-		window := GetWindowBufferF32(overlap)
-		windowSq := d.postfilterWindowSquareF32(overlap)
-		applyPostfilterChannelInPlaceFloat32(samples[:frameSize], d.postfilterMem[:history], frameSize, history, lm, t0, t1, t1b, t2, g0, g1, g2, tap0, tap1, tap1b, tap2, window, windowSq, overlap)
-		d.updatePLCDecodeHistoryMonoFromFloat32(samples[:frameSize], frameSize, plcDecodeBufferSize)
-		d.markPostfilterHistoryFromPLC()
-		d.postfilterPeriodOld = d.postfilterPeriod
-		d.postfilterGainOld = d.postfilterGain
-		d.postfilterTapsetOld = d.postfilterTapset
-		d.postfilterPeriod = int32(newPeriod)
-		d.postfilterGain = newGain
-		d.postfilterTapset = int32(newTapset)
-		if lm != 0 {
-			d.postfilterPeriodOld = d.postfilterPeriod
-			d.postfilterGainOld = d.postfilterGain
-			d.postfilterTapsetOld = d.postfilterTapset
-		}
-		return
-	}
-
-	channels := int(d.channels)
-	if len(samples) < frameSize*channels {
-		return
-	}
-	work := ensureFloat32Slice(&d.postfilterScratchF32, frameSize*2)
-	left := work[:frameSize]
-	right := work[frameSize : frameSize*2]
-	for i := range frameSize {
-		left[i] = samples[i*channels]
-		right[i] = samples[i*channels+1]
-	}
-	d.applyPostfilterStereoPlanarFromFloat32(left, right, frameSize, lm, newPeriod, newGain, newTapset)
-	for i := range frameSize {
-		samples[i*channels] = left[i]
-		samples[i*channels+1] = right[i]
-	}
+//go:noinline
+func combFilterOverlapV3Accumulate(base, c00, t00, c01, t01, c02, t02, c10, t10, c11, t11, c12, t12 float32) float32 {
+	value := fma32(c00, t00, base)
+	value = fma32(c01, t01, value)
+	value = fma32(c02, t02, value)
+	value = fma32(c10, t10, value)
+	value = fma32(c11, t11, value)
+	return fma32(c12, t12, value)
 }
 
-func combPlanarAtFloat32(samples []float32, hist []celtSig, history, pos int) float32 {
-	if pos < history {
-		return float32(hist[pos])
+// combFilterConstSSEValue matches libopus celt/x86/pitch_sse.c:
+// comb_filter_const_sse() groups the outer tap products before the final add.
+// The AMD64 v3 C build contracts the center product and the outer side product.
+func combFilterConstSSEValue(base, g10, g11, g12, center, plus1, minus1, plus2, minus2 float32) float32 {
+	main := add32(base, mul32(g10, center))
+	sides := add32(mul32(g11, add32(minus1, plus1)), mul32(g12, add32(plus2, minus2)))
+	if combTargetV3FMA {
+		main = fma32(g10, center, base)
+		sides = fma32(g12, add32(plus2, minus2), mul32(g11, add32(minus1, plus1)))
 	}
-	return samples[pos-history]
-}
-
-func combFilterConstValue(base, g10, g11, g12, center, plus1, minus1, plus2, minus2 float32) float32 {
-	sum := base
-	sum += g10 * center
-	sum += g11 * (plus1 + minus1)
-	sum += g12 * (plus2 + minus2)
-	return sum
+	return add32(main, sides)
 }
 
 // combFilterConstDispatch runs the constant-gain comb body, handing whole
@@ -767,7 +223,13 @@ func combFilterConstDispatch(dst, delay []float32, g10, g11, g12 float32, x4, x3
 	return x4, x3, x2, x1, true
 }
 
-func combFilterConstFloat32Hist(dst []float32, delay []celtSig, g10, g11, g12 float32, x4, x3, x2, x1 float32) (float32, float32, float32, float32) {
+// combFilterConstFloat32 is the constant-gain part of libopus comb_filter,
+// dst[i] += g10*x[i-T] + g11*(x[i-T+1]+x[i-T-1]) + g12*(x[i-T+2]+x[i-T-2]),
+// where delay[i] is x[i-T+2] and x4..x1 carry x[-T-2..-T+1]. The first
+// sseCount outputs use the comb_filter_const_sse operation order; with the
+// amd64 SIMD kernel, whole blocks of four of them run as vectors, which
+// computes the same per-output expression. It returns the updated carries.
+func combFilterConstFloat32(dst, delay []float32, g10, g11, g12 float32, x4, x3, x2, x1 float32, sseCount int) (float32, float32, float32, float32) {
 	n := len(dst)
 	if n == 0 {
 		return x4, x3, x2, x1
@@ -778,45 +240,31 @@ func combFilterConstFloat32Hist(dst []float32, delay []celtSig, g10, g11, g12 fl
 	delay = delay[:n:n]
 	_ = dst[n-1]
 	_ = delay[n-1]
-	i := 0
-	for ; i+4 < n; i += 5 {
-		x0 := float32(delay[i])
-		dst[i] = combFilterConstValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
-
-		x4 = float32(delay[i+1])
-		dst[i+1] = combFilterConstValue(dst[i+1], g10, g11, g12, x1, x0, x2, x4, x3)
-
-		x3 = float32(delay[i+2])
-		dst[i+2] = combFilterConstValue(dst[i+2], g10, g11, g12, x0, x4, x1, x3, x2)
-
-		x2 = float32(delay[i+3])
-		dst[i+3] = combFilterConstValue(dst[i+3], g10, g11, g12, x4, x3, x0, x2, x1)
-
-		x1 = float32(delay[i+4])
-		dst[i+4] = combFilterConstValue(dst[i+4], g10, g11, g12, x3, x2, x4, x1, x0)
-	}
-	for ; i < n; i++ {
-		x0 := float32(delay[i])
-		dst[i] = combFilterConstValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
-		x4 = x3
-		x3 = x2
-		x2 = x1
-		x1 = x0
-	}
-	return x4, x3, x2, x1
-}
-
-func combFilterConstFloat32(dst, delay []float32, g10, g11, g12 float32, x4, x3, x2, x1 float32) (float32, float32, float32, float32) {
-	n := len(dst)
-	if n == 0 {
+	if combUsesSSE {
+		i := 0
+		for head := min(sseCount, 4); i < head; i++ {
+			x0 := delay[i]
+			dst[i] = combFilterConstSSEValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
+			x4, x3, x2, x1 = x3, x2, x1, x0
+		}
+		if blocks := (sseCount - i) &^ 3; blocks > 0 && i == 4 {
+			// delay[i-4+k] is x[i+k-T-2], the kernel's delay line.
+			combFilterConstSSE(dst[i:i+blocks], dst[i:i+blocks], delay[i-4:i+blocks], 0, blocks, g10, g11, g12)
+			i += blocks
+			x4, x3, x2, x1 = delay[i-4], delay[i-3], delay[i-2], delay[i-1]
+		}
+		for ; i < sseCount; i++ {
+			x0 := delay[i]
+			dst[i] = combFilterConstSSEValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
+			x4, x3, x2, x1 = x3, x2, x1, x0
+		}
+		for ; i < n; i++ {
+			x0 := delay[i]
+			dst[i] = combFilterConstValue(dst[i], g10, g11, g12, x2, x1, x3, x0, x4)
+			x4, x3, x2, x1 = x3, x2, x1, x0
+		}
 		return x4, x3, x2, x1
 	}
-	if a4, a3, a2, a1, ok := combFilterConstDispatch(dst, delay, g10, g11, g12, x4, x3, x2, x1); ok {
-		return a4, a3, a2, a1
-	}
-	delay = delay[:n:n]
-	_ = dst[n-1]
-	_ = delay[n-1]
 	i := 0
 	for ; i+4 < n; i += 5 {
 		x0 := delay[i]
@@ -843,147 +291,6 @@ func combFilterConstFloat32(dst, delay []float32, g10, g11, g12 float32, x4, x3,
 		x1 = x0
 	}
 	return x4, x3, x2, x1
-}
-
-func combFilterWithSquarePlanarFloat32(samples []float32, hist []celtSig, history, frameOffset int, t0, t1, n int, g0, g1 float32, tapset0, tapset1 int, window, windowSq []float32, overlap int) {
-	if n <= 0 {
-		return
-	}
-	if g0 == 0 && g1 == 0 {
-		return
-	}
-
-	if t0 < combFilterMinPeriod {
-		t0 = combFilterMinPeriod
-	}
-	if t1 < combFilterMinPeriod {
-		t1 = combFilterMinPeriod
-	}
-
-	if overlap > n {
-		overlap = n
-	}
-	if overlap > len(window) {
-		overlap = len(window)
-	}
-	if windowSq != nil && overlap > len(windowSq) {
-		overlap = len(windowSq)
-	}
-
-	if tapset0 < 0 || tapset0 >= len(combFilterGains) {
-		tapset0 = 0
-	}
-	if tapset1 < 0 || tapset1 >= len(combFilterGains) {
-		tapset1 = 0
-	}
-
-	g00 := combGain32(g0, tapset0, 0)
-	g01 := combGain32(g0, tapset0, 1)
-	g02 := combGain32(g0, tapset0, 2)
-	g10 := combGain32(g1, tapset1, 0)
-	g11 := combGain32(g1, tapset1, 1)
-	g12 := combGain32(g1, tapset1, 2)
-
-	start := history + frameOffset
-	base1 := start - t1 - 2
-	x1 := combPlanarAtFloat32(samples, hist, history, base1+3)
-	x2 := combPlanarAtFloat32(samples, hist, history, base1+2)
-	x3 := combPlanarAtFloat32(samples, hist, history, base1+1)
-	x4 := combPlanarAtFloat32(samples, hist, history, base1)
-
-	if g0 == g1 && t0 == t1 && tapset0 == tapset1 {
-		overlap = 0
-	}
-
-	i := 0
-	base0 := start - t0 - 2
-	if windowSq != nil && overlap > 0 && base0 >= 0 && base1 >= 0 && base0+overlap+4 <= history && base1+overlap+4 <= history {
-		delay0 := hist[base0 : base0+overlap+4]
-		delay1 := hist[base1 : base1+overlap+4]
-		x4 = float32(delay1[0])
-		x3 = float32(delay1[1])
-		x2 = float32(delay1[2])
-		x1 = float32(delay1[3])
-		windowSqView := windowSq[:overlap]
-		for ; i < overlap; i++ {
-			f := windowSqView[i]
-			oneMinus := float32(1.0) - f
-			x0 := float32(delay1[i+4])
-			sum := samples[frameOffset+i] +
-				(oneMinus*g00)*float32(delay0[i+2]) +
-				(oneMinus*g01)*(float32(delay0[i+3])+float32(delay0[i+1])) +
-				(oneMinus*g02)*(float32(delay0[i+4])+float32(delay0[i])) +
-				(f*g10)*x2 +
-				(f*g11)*(x1+x3) +
-				(f*g12)*(x0+x4)
-			samples[frameOffset+i] = sum
-			x4 = x3
-			x3 = x2
-			x2 = x1
-			x1 = x0
-		}
-	} else if windowSq != nil {
-		windowSqView := windowSq[:overlap]
-		for ; i < overlap; i++ {
-			f := windowSqView[i]
-			oneMinus := float32(1.0) - f
-			x0 := combPlanarAtFloat32(samples, hist, history, base1+i+4)
-			sum := samples[frameOffset+i] +
-				(oneMinus*g00)*combPlanarAtFloat32(samples, hist, history, base0+i+2) +
-				(oneMinus*g01)*(combPlanarAtFloat32(samples, hist, history, base0+i+3)+combPlanarAtFloat32(samples, hist, history, base0+i+1)) +
-				(oneMinus*g02)*(combPlanarAtFloat32(samples, hist, history, base0+i+4)+combPlanarAtFloat32(samples, hist, history, base0+i)) +
-				(f*g10)*x2 +
-				(f*g11)*(x1+x3) +
-				(f*g12)*(x0+x4)
-			samples[frameOffset+i] = sum
-			x4 = x3
-			x3 = x2
-			x2 = x1
-			x1 = x0
-		}
-	} else {
-		windowView := window[:overlap]
-		for ; i < overlap; i++ {
-			w := windowView[i]
-			f := w * w
-			oneMinus := float32(1.0) - f
-			x0 := combPlanarAtFloat32(samples, hist, history, base1+i+4)
-			sum := samples[frameOffset+i] +
-				(oneMinus*g00)*combPlanarAtFloat32(samples, hist, history, base0+i+2) +
-				(oneMinus*g01)*(combPlanarAtFloat32(samples, hist, history, base0+i+3)+combPlanarAtFloat32(samples, hist, history, base0+i+1)) +
-				(oneMinus*g02)*(combPlanarAtFloat32(samples, hist, history, base0+i+4)+combPlanarAtFloat32(samples, hist, history, base0+i)) +
-				(f*g10)*x2 +
-				(f*g11)*(x1+x3) +
-				(f*g12)*(x0+x4)
-			samples[frameOffset+i] = sum
-			x4 = x3
-			x3 = x2
-			x2 = x1
-			x1 = x0
-		}
-	}
-
-	if g1 == 0 {
-		return
-	}
-
-	x4 = combPlanarAtFloat32(samples, hist, history, base1+i)
-	x3 = combPlanarAtFloat32(samples, hist, history, base1+i+1)
-	x2 = combPlanarAtFloat32(samples, hist, history, base1+i+2)
-	x1 = combPlanarAtFloat32(samples, hist, history, base1+i+3)
-	histEnd := t1 - frameOffset - 2
-	histLimit := min(histEnd, n)
-	if i < histLimit {
-		dst := samples[frameOffset+i : frameOffset+histLimit]
-		delay := hist[base1+i+4 : base1+histLimit+4]
-		x4, x3, x2, x1 = combFilterConstFloat32Hist(dst, delay, g10, g11, g12, x4, x3, x2, x1)
-		i = histLimit
-	}
-	if i < n {
-		dst := samples[frameOffset+i : frameOffset+n]
-		delay := samples[frameOffset-t1+i+2 : frameOffset-t1+n+2]
-		combFilterConstFloat32(dst, delay, g10, g11, g12, x4, x3, x2, x1)
-	}
 }
 
 func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1 float32, tapset0, tapset1 int, window []float32, overlap int) {
@@ -1049,19 +356,43 @@ func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1
 	// a shift register removes 4 serial moves and lets the compiler reorder
 	// the FP work freely. The loop is short (~overlap) so unrolling is
 	// unnecessary; ILP comes from the 6 independent FMUL chains in `sum`.
+	// The five taps of each output are read through one five-element window of
+	// delay0 and delay1, so each iteration checks bounds once per delay line.
 	i := 0
-	for ; i < overlap; i++ {
-		w := window[i]
-		f := noFMA32Mul(w, w)
-		oneMinus := float32(1.0) - f
-		sum := float32(srcFrame[i]) +
-			(oneMinus*g00)*float32(delay0[i+2]) +
-			(oneMinus*g01)*(float32(delay0[i+3])+float32(delay0[i+1])) +
-			(oneMinus*g02)*(float32(delay0[i+4])+float32(delay0[i])) +
-			(f*g10)*float32(delay1[i+2]) +
-			(f*g11)*(float32(delay1[i+3])+float32(delay1[i+1])) +
-			(f*g12)*(float32(delay1[i+4])+float32(delay1[i]))
-		dstFrame[i] = celtSig(sum)
+	if overlap > 0 && combOverlapVector && overlap <= combOverlapMax {
+		// The vector cross-fade runs in place on dst, reading the delayed
+		// taps from src, so dst starts as a copy of the input.
+		var wsqBuf [combOverlapMax]float32
+		wsq := wsqBuf[:overlap]
+		for j, w := range window[:overlap] {
+			wsq[j] = noFMA32Mul(w, w)
+		}
+		dstO := dstFrame[:overlap]
+		copy(dstO, srcFrame[:overlap])
+		combFilterOverlap(dstO, delay0[:overlap+4], delay1[:overlap+4], wsq, g00, g01, g02, g10, g11, g12)
+		i = overlap
+	} else if overlap > 0 {
+		srcO := srcFrame[:overlap]
+		dstO := dstFrame[:len(srcO)]
+		win := window[:len(srcO)]
+		d0 := delay0[:len(srcO)+4]
+		d1 := delay1[:len(srcO)+4]
+		for j, x := range srcO {
+			w := win[j]
+			f := noFMA32Mul(w, w)
+			oneMinus := float32(1.0) - f
+			t0 := d0[j : j+5 : j+5]
+			t1 := d1[j : j+5 : j+5]
+			sum := float32(x) +
+				(oneMinus*g00)*float32(t0[2]) +
+				(oneMinus*g01)*(float32(t0[3])+float32(t0[1])) +
+				(oneMinus*g02)*(float32(t0[4])+float32(t0[0])) +
+				(f*g10)*float32(t1[2]) +
+				(f*g11)*(float32(t1[3])+float32(t1[1])) +
+				(f*g12)*(float32(t1[4])+float32(t1[0]))
+			dstO[j] = celtSig(sum)
+		}
+		i = overlap
 	}
 
 	if g1 == 0 {
@@ -1079,6 +410,14 @@ func combFilterWithInputSig(dst, src []celtSig, start int, t0, t1, n int, g0, g1
 	_ = delay1[n+4-1] // BCE hint
 	_ = srcFrame[n-1] // BCE hint
 	_ = dstFrame[n-1] // BCE hint
+	if combUsesSSE {
+		// libopus x86 builds that presume SSE bind comb_filter_const to
+		// comb_filter_const_sse, which sums the two side taps before adding
+		// them to the center term.
+		full := i + (n-i)&^3
+		combFilterConstSSE(dstFrame, srcFrame, delay1, i, full, g10, g11, g12)
+		i = full
+	}
 	for ; i+3 < n; i += 4 {
 		d0, d1 := float32(delay1[i]), float32(delay1[i+1])
 		d2, d3 := float32(delay1[i+2]), float32(delay1[i+3])

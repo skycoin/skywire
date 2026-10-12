@@ -8,7 +8,10 @@ func (e *Encoder) computeLTPScaleIndex(ltpPredGainQ7 int32, condCoding int) int 
 	}
 
 	roundLoss := max(e.packetLossPercent*e.nFramesPerPacket, 0)
-	if e.lbrrLTPRoundLoss {
+	if e.lbrrFlag != 0 {
+		// LBRR reduces the effective loss. In practice it does not square the
+		// loss because losses aren't independent, but that still works best; it
+		// never goes below 2%.
 		roundLoss = 2 + (roundLoss*roundLoss)/100
 	}
 

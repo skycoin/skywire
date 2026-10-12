@@ -6,7 +6,7 @@ package bwe
 // hop produces:
 //
 //   lmspec[0:32]  -- log-magnitude spectrogram on a 32-band ERB-style
-//                    filterbank computed from a Hann-windowed 320-sample DFT.
+//                    filterbank computed from a sine-windowed 320-sample DFT.
 //   instafreq[32:73]  -- normalised cross-power real parts for the first
 //                        41 DFT bins (instantaneous-frequency cos).
 //   instafreq[73:114] -- normalised cross-power imaginary parts (sin).
@@ -220,52 +220,38 @@ func (s *FeatureState) CalculateFeatures(features []float32, xq16k []int16) {
 			// libopus stores the un-scaled DFT samples (*nfft) and tacks on
 			// a 1e-9 bias to the real channel; the bias is harmless because
 			// it is dwarfed by even small signals after the *nfft scaling.
-			spec[2*k] = float32(bweWindowSize)*real(fftOut[k]) + 1e-9
+			// dnn/osce_features.c:osce_bwe_calculate_features uses an
+			// unsuffixed 1e-9: the scaled float is widened for this sum.
+			spec[2*k] = float32(opusmath.CReal(roundMul32(bweWindowSize, real(fftOut[k]))) + 1e-9)
 			spec[2*k+1] = float32(bweWindowSize) * imag(fftOut[k])
 			re1 := spec[2*k]
 			im1 := spec[2*k+1]
 			re2 := s.lastSpec[2*k]
 			im2 := s.lastSpec[2*k+1]
-			auxR := re1*re2 + im1*im2
-			auxI := im1*re2 - re1*im2
-			auxAbs := opusmath.SqrtF32(auxR*auxR + auxI*auxI)
-			invAbs := 1.0 / (auxAbs + 1e-9)
-			instafreq[k] = auxR * invAbs
-			instafreq[k+bweMaxInstaFreqBin+1] = auxI * invAbs
+			auxR := mulAdd32(re1, re2, roundMul32(im1, im2))
+			auxI := mulAdd32(im1, re2, -roundMul32(re1, im2))
+			// The same C helper evaluates sqrt in double, stores aux_abs
+			// as float, then performs both divisions in double because of 1e-9.
+			auxAbs := float32(opusmath.SqrtCReal(opusmath.CReal(mulAdd32(auxR, auxR, roundMul32(auxI, auxI)))))
+			denom := opusmath.CReal(auxAbs) + 1e-9
+			instafreq[k] = float32(opusmath.CReal(auxR) / denom)
+			instafreq[k+bweMaxInstaFreqBin+1] = float32(opusmath.CReal(auxI) / denom)
 		}
 
 		// ERB-scale magnitude spectrogram on the first 161 bins of the DFT.
 		for k := range bweSpecNumFreqs {
 			re := real(fftOut[k])
 			im := imag(fftOut[k])
-			magSpec[k] = float32(bweWindowSize) * opusmath.SqrtF32(re*re+im*im)
+			// C multiplies the double sqrt result before storing mag_spec.
+			magSpec[k] = float32(bweWindowSize * opusmath.SqrtCReal(opusmath.CReal(mulAdd32(re, re, roundMul32(im, im)))))
 		}
 		applyFilterbankBWE(lmspec, magSpec[:])
 		for k := range bweNumBands {
-			lmspec[k] = opusmath.LogF32(lmspec[k] + 1e-9)
+			// C log and its unsuffixed epsilon operate in double.
+			lmspec[k] = float32(opusmath.LogCReal(opusmath.CReal(lmspec[k]) + 1e-9))
 		}
 
 		// Update the previous-frame spectrum buffer.
 		copy(s.lastSpec[:], spec[:])
 	}
-}
-
-// applyFilterbankBWE mirrors `osce_features.c::apply_filterbank` specialised
-// to the 32-band BWE filterbank tables.
-func applyFilterbankBWE(out, in []float32) {
-	out[0] = 0
-	for b := range bweNumBands - 1 {
-		out[b+1] = 0
-		w0 := bandWeightsBWE[b]
-		w1 := bandWeightsBWE[b+1]
-		c0 := centerBinsBWE[b]
-		c1 := centerBinsBWE[b+1]
-		span := float32(c1 - c0)
-		for i := c0; i < c1; i++ {
-			frac := float32(c1-i) / span
-			out[b] += w0 * frac * in[i]
-			out[b+1] += w1 * (1 - frac) * in[i]
-		}
-	}
-	out[bweNumBands-1] += bandWeightsBWE[bweNumBands-1] * in[centerBinsBWE[bweNumBands-1]]
 }

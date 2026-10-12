@@ -67,7 +67,7 @@ func mac16x32Q15(c, a, b int32) int32 {
 //	tfChan     channel index selected by transient_analysis.
 //	importance per-band importance weights (length len).
 //	tfRes      output decisions, length len.
-func TFAnalysis(eBands []int16, length int, isTransient bool, tfRes []int, lambda int, x []int32, n0, lm int, tfEstimate int16, tfChan int, importance []int, scratch *celtEncodeScratch) int {
+func TFAnalysis(eBands []int16, length int, isTransient bool, tfRes []int32, lambda int, x []int32, n0, lm int, tfEstimate int16, tfChan int, importance []int, scratch *celtEncodeScratch) int {
 	// bias = MULT16_16_Q14(QCONST16(.04f,15), MAX16(-QCONST16(.25f,14), QCONST16(.5f,14)-tf_estimate))
 	const q04Q15 = int16(1311) // QCONST16(.04f,15)  = .5+.04*32768
 	const q25Q14 = int16(4096) // QCONST16(.25f,14)
@@ -121,7 +121,7 @@ func TFAnalysis(eBands []int16, length int, isTransient bool, tfRes []int, lambd
 		}
 
 		kMax := lm
-		if !(isTransient || narrow) {
+		if !isTransient && !narrow {
 			kMax = lm + 1
 		}
 		for k := 0; k < kMax; k++ {
@@ -210,9 +210,9 @@ func TFAnalysis(eBands []int16, length int, isTransient bool, tfRes []int, lambd
 	}
 	for i := length - 2; i >= 0; i-- {
 		if tfRes[i+1] == 1 {
-			tfRes[i] = path1[i+1]
+			tfRes[i] = int32(path1[i+1])
 		} else {
-			tfRes[i] = path0[i+1]
+			tfRes[i] = int32(path0[i+1])
 		}
 	}
 	return tfSelect
@@ -221,7 +221,7 @@ func TFAnalysis(eBands []int16, length int, isTransient bool, tfRes []int, lambd
 // TFEncode ports celt/celt_encoder.c tf_encode (FIXED_POINT). It encodes the
 // tf_res differential decisions and the tf_select bit, then rewrites tf_res into
 // the resolution offsets via tf_select_table. tfRes has at least end entries.
-func TFEncode(start, end int, isTransient bool, tfRes []int, lm, tfSelect int, enc *rangecoding.Encoder) {
+func TFEncode(start, end int, isTransient bool, tfRes []int32, lm, tfSelect int, enc *rangecoding.Encoder) {
 	itr := 0
 	if isTransient {
 		itr = 1
@@ -237,11 +237,11 @@ func TFEncode(start, end int, isTransient bool, tfRes []int, lm, tfSelect int, e
 		tfSelectRsv = 1
 	}
 	budget -= tfSelectRsv
-	curr := 0
-	tfChanged := 0
+	var curr int32
+	var tfChanged int32
 	for i := start; i < end; i++ {
 		if tell+logp <= budget {
-			enc.EncodeBit(tfRes[i]^curr, uint(logp))
+			enc.EncodeBit(int(tfRes[i]^curr), uint(logp))
 			tell = enc.Tell()
 			curr = tfRes[i]
 			tfChanged |= curr
@@ -255,13 +255,13 @@ func TFEncode(start, end int, isTransient bool, tfRes []int, lm, tfSelect int, e
 		}
 	}
 	if tfSelectRsv != 0 &&
-		tfSelectTable[lm][4*itr+0+tfChanged] != tfSelectTable[lm][4*itr+2+tfChanged] {
+		tfSelectTable[lm][4*itr+0+int(tfChanged)] != tfSelectTable[lm][4*itr+2+int(tfChanged)] {
 		enc.EncodeBit(tfSelect, 1)
 	} else {
 		tfSelect = 0
 	}
 	for i := start; i < end; i++ {
-		tfRes[i] = tfSelectTable[lm][4*itr+2*tfSelect+tfRes[i]]
+		tfRes[i] = int32(tfSelectTable[lm][4*itr+2*tfSelect+int(tfRes[i])])
 	}
 }
 
@@ -317,7 +317,7 @@ func AllocTrimAnalysis(eBands []int16, x []int32, bandLogE []int32, end, lm, c, 
 		minXC = min16(1024, abs16(minXC))
 
 		// logXC = celt_log2(QCONST32(1.001f, 20)-MULT16_16(sum, sum))
-		const q1001Q20 = int32(1049624) // QCONST32(1.001f,20)=.5+1.001*(1<<20)
+		const q1001Q20 = int32(1049625) // QCONST32(1.001f,20) in fixed_generic.h
 		logXC := int32(CeltLog2(q1001Q20 - mult16x16(int32(sum), int32(sum))))
 		// logXC2 = MAX16(HALF16(logXC), celt_log2(QCONST32(1.001f,20)-MULT16_16(minXC,minXC)))
 		logXC2 := max32(logXC>>1, int32(CeltLog2(q1001Q20-mult16x16(int32(minXC), int32(minXC)))))

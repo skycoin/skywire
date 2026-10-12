@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 package presets
 
 // tunables_wire_test.go proves the #4325 fix end-to-end: the runtime-tunable

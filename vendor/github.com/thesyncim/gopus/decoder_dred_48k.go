@@ -11,7 +11,7 @@ import "github.com/thesyncim/gopus/internal/lpcnetplc"
 // CELT wrapper to mirror channel-0 state into channel-1 and to interleave the
 // mono PCM across both output channels (celt_decoder.c:1066-1067).
 func (d *Decoder) applyDREDNeuralConcealment48kMono(pcm []float32, samplesPerChannel int) bool {
-	if d == nil || d.channels < 1 || d.channels > 2 || samplesPerChannel <= 0 {
+	if d == nil || d.sampleRate == 96000 || d.channels < 1 || d.channels > 2 || samplesPerChannel <= 0 {
 		return false
 	}
 	channels := int(d.channels)

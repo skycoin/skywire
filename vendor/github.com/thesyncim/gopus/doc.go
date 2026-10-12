@@ -1,95 +1,57 @@
-// Package gopus implements the Opus audio codec in pure Go.
+// Package gopus implements Opus audio encoding and decoding in pure Go.
+// It supports the SILK, CELT, and Hybrid modes defined by RFC 6716 and RFC 8251
+// without requiring cgo or an external codec library.
 //
-// It targets RFC 6716 compatibility with pinned libopus reference behavior,
-// uses caller-owned buffers for the main encode/decode API, and requires no cgo
-// dependency.
+// # Streams and samples
 //
-// # Quick Start
+// [Encoder] and [Decoder] process mono or stereo streams. Use [MultistreamEncoder]
+// and [MultistreamDecoder] for multichannel layouts. Codec instances retain
+// stream history and are not safe for concurrent use. Each independent stream
+// needs its own instance. Reset clears stream history; each Reset method
+// documents which controls it preserves.
 //
-// Encoding:
+// PCM is interleaved: each successive group of samples contains one sample per
+// channel. Float32 methods use normalized full scale; integer input methods use
+// signed 16-bit samples or right-justified 24-bit samples in int32 values.
+// [Decoder.DecodeInt24] writes int32 values at 24-bit PCM scale without clipping
+// to the signed 24-bit range. Frame sizes and decoded sample counts are measured per
+// channel at the configured sample rate. Encoders return packet byte counts.
 //
-//	enc, err := gopus.NewEncoder(gopus.EncoderConfig{
-//	    SampleRate:  48000,
-//	    Channels:    2,
-//	    Application: gopus.ApplicationAudio,
-//	})
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
+// # Buffers and packet loss
 //
-//	pcm := make([]float32, 960*2) // 20 ms stereo at 48 kHz
-//	packet := make([]byte, 4000)
-//	nPacket, err := enc.Encode(pcm, packet)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//	packet = packet[:nPacket]
+// Encode and Decode methods write into caller-provided buffers. Reusing codec
+// instances and adequately sized buffers avoids steady-state allocations in
+// the covered hot paths; constructors and initial warmup can allocate. A decode
+// buffer sized to [DecoderConfig].MaxPacketSamples times Channels holds the
+// largest packet allowed by that configuration. Only the returned sample count
+// times Channels elements contain decoded output.
 //
-// Decoding:
+// An empty packet passed to [Decoder.Decode] requests packet-loss concealment.
+// The output buffer length selects the requested duration, except that a full
+// configured-size buffer uses the last decoded packet's duration when available.
+// To recover a missing packet from the next packet's in-band FEC, call
+// [Decoder.DecodeWithFEC] with fec set to true, then call Decode with the same
+// packet to decode its primary audio. The decoder conceals the loss if FEC is
+// unavailable. Native 96 kHz FEC requests always use concealment and ignore
+// the supplied packet.
 //
-//	cfg := gopus.DefaultDecoderConfig(48000, 2)
-//	dec, err := gopus.NewDecoder(cfg)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
+// [Reader] and [Writer] adapt packet sources and sinks to little-endian PCM byte
+// streams. They require packet-aware transport interfaces; they do not frame a
+// byte stream of concatenated Opus packets. [ParsePacket] inspects packet framing,
+// and [Repacketizer] combines or separates compatible frames without re-encoding.
 //
-//	pcmOut := make([]float32, cfg.MaxPacketSamples*cfg.Channels)
-//	n, err := dec.Decode(packet, pcmOut)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-//	pcmOut = pcmOut[:n*cfg.Channels]
+// # Build configuration
 //
-// # PCM And Buffers
+// Go 1.27 or later is required. Ordinary builds use scalar Go kernels.
+// GOEXPERIMENT=simd enables Go SIMD kernels where implemented, with runtime CPU
+// checks and scalar fallbacks. The nosimd and purego build tags force scalar
+// kernels even when the experiment is enabled.
 //
-// Float32 samples are normalized to [-1.0, 1.0]. Int16 helpers are available
-// for common audio APIs. Stereo and multichannel PCM is interleaved.
-//
-// Decode output needs room for up to 5760 samples per channel, the default
-// 120 ms cap at 48 kHz. A 4000-byte encode buffer is sufficient for any Opus
-// packet.
-//
-// # Packet Loss
-//
-// Pass nil packet data to Decode to run packet loss concealment:
-//
-//	if packetLost {
-//	    n, err = dec.Decode(nil, pcmOut)
-//	} else {
-//	    n, err = dec.Decode(packet, pcmOut)
-//	}
-//
-// # Controls And Extensions
-//
-// Standard Opus controls such as bitrate, complexity, bandwidth, FEC, DTX,
-// gain, frame size, packet parsing, and multistream helpers are exposed on the
-// top-level types.
-//
-// Optional extension support is build dependent. Use SupportsOptionalExtension
-// before relying on an extension surface, and treat README.md as the support
-// matrix source of truth.
-//
-//	if SupportsOptionalExtension(OptionalExtensionQEXT) {
-//	    _ = enc.SetQEXT(true)
-//	}
-//
-// # Multistream
-//
-// NewMultistreamEncoderDefault and NewMultistreamDecoderDefault support 1-8
-// channels with the standard Vorbis-style channel mappings used by Ogg Opus.
-// Use the explicit multistream constructors for custom mappings.
-//
-// # Package Boundaries
-//
-// The public surface is this top-level gopus package plus four importable
-// packages: multistream (surround / ambisonics / projection), container/ogg
-// (Ogg Opus read/write), container/red (RFC 2198 RTP RED), and types (shared
-// Mode / Bandwidth / Signal enumerations). The top-level package re-exports the
-// common multistream constructors, so most applications need only gopus and, if
-// they handle files, container/ogg.
-//
-// The SILK, CELT, Hybrid, range-coder, PLC, and DNN building blocks live under
-// internal/ and are not importable; depend on the packages above instead.
-//
-// Encoder and Decoder instances are not safe for concurrent use.
+// Optional extensions require their matching build tags: gopus_qext for QEXT and
+// native 96 kHz, gopus_dred for DRED, gopus_osce for OSCE and deep PLC, and
+// gopus_custom_modes for Opus Custom. The gopus_fixed_point tag selects the
+// integer codec pipeline. [SupportsOptionalExtension] reports the supported API
+// surface of the current build; compiled extra controls may still report false.
+// DRED controls and standalone recovery APIs also compile with gopus_osce,
+// while the supported DRED probe requires gopus_dred.
 package gopus

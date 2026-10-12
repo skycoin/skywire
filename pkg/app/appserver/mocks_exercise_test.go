@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package appserver pkg/app/appserver/mocks_exercise_test.go: drives every
 // method of the mockery-generated MockProcManager and MockRPCIngressClient so
 // the generated implementations are exercised (and their .On/.Return wiring is

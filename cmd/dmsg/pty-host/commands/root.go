@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/0magnet/calvin"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/fastjson"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 )
@@ -32,7 +32,7 @@ const defaultEnvPrefix = "DMSGPTY"
 
 var log = logging.MustGetLogger("dmsgpty-host:init")
 
-var json = jsoniter.ConfigFastest
+var json = fastjson.JSON
 
 // variables
 var (

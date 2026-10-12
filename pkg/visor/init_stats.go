@@ -644,6 +644,7 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 			}
 			bw := tp.GetBandwidth()
 			lat := tp.GetLatencyStats()
+			sent, recv := tp.Checkpoints()
 			out = append(out, stats.TransportProbe{
 				ID:            tp.Entry.ID,
 				Edges:         []cipher.PubKey{tp.Entry.Edges[0], tp.Entry.Edges[1]},
@@ -654,6 +655,8 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 				ThroughputBps: tp.GetThroughputBps(),
 				LatencyMS:     stats.LatencyTriple{Min: lat.Min, Max: lat.Max, Avg: lat.Avg},
 				SameNetwork:   tp.SameNetwork(self, localIPs),
+				Sent:          wireCheckpoints(sent),
+				Recv:          wireCheckpoints(recv),
 			})
 			return true
 		})
@@ -729,4 +732,16 @@ func serviceStatesProbe(v *Visor) func() map[string]bool {
 		})
 		return states
 	}
+}
+
+// wireCheckpoints converts a transport's digest state to its telemetry form.
+func wireCheckpoints(s transport.DigestState) telemetrywire.DirCheckpoints {
+	d := telemetrywire.DirCheckpoints{Epoch: s.Epoch}
+	for i, cp := range s.Recent {
+		d.Recent[i] = telemetrywire.Checkpoint{Offset: cp.Offset, Digest: cp.Digest}
+	}
+	for i, cp := range s.Coarse {
+		d.Coarse[i] = telemetrywire.Checkpoint{Offset: cp.Offset, Digest: cp.Digest}
+	}
+	return d
 }

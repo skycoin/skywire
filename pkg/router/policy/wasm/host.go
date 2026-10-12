@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package wasm pkg/router/policy/wasm/host.go c2-net-routing
 // function bindings. The WASM guest imports these from the
 // "skywire" module; wazero provides them via

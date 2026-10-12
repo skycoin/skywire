@@ -28,10 +28,9 @@ import (
 // is the normal state of a visor whose operator never opened the dialog.
 var ErrProfileDisabled = errors.New("profile: store not initialized")
 
-// profileFetchBudget caps one remote profile fetch. Tight: it sits under a
-// user watching a name appear in a dialog that is already usable without
-// it, so failing fast and showing the key is better than a long wait.
-const profileFetchBudget = 8 * time.Second
+// profileFetchBudget caps one remote profile fetch, both paths together. The
+// dialogs that ask stay usable while it runs and say when it gave up.
+const profileFetchBudget = 20 * time.Second
 
 // profileStore returns the visor's own profile store, or nil.
 func (v *Visor) profileStore() *skychatprofile.Store {

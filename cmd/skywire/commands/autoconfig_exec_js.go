@@ -31,6 +31,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -62,6 +63,15 @@ func extraGenArgs() []string { return []string{"--nofetch"} }
 // sources the same env file autoconfig resolved (subprocess parity
 // with the native path, which passes it via cmd.Env).
 func execConfigGen(r resolvedConfig, args []string) error {
+	// There is no environment to set SKYDEPLOY in, and gen and the visor run in
+	// this process, so load the deployment here for both.
+	if r.skydeploy != "" {
+		if _, err := os.Stat(r.skydeploy); err == nil {
+			if err := deployment.LoadFile(r.skydeploy); err != nil {
+				return fmt.Errorf("SKYDEPLOY: %w", err)
+			}
+		}
+	}
 	if r.skyenvPath != "" {
 		if err := os.Setenv("SKYENV", r.skyenvPath); err != nil {
 			return err
@@ -98,3 +108,9 @@ func finishAutoconfig(r resolvedConfig) {
 		os.Exit(1)
 	}
 }
+
+// exportDeployment has nothing to do in a browser visor.
+func exportDeployment(*resolvedConfig) error { return nil }
+
+// syncDeploymentDropIn has no unit to change in a browser visor.
+func syncDeploymentDropIn(string) (bool, error) { return false, nil }

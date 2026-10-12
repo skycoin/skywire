@@ -32,11 +32,13 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
 var (
 	checkTimeout  time.Duration
 	checkWarnOnly bool
+	checkEmbedded bool
 )
 
 func init() {
@@ -45,6 +47,7 @@ func init() {
 	// `mdisc check --url ...` and `--testenv` are inherited here.
 	checkCmd.Flags().DurationVar(&checkTimeout, "timeout", 15*time.Second, "per-server probe timeout")
 	checkCmd.Flags().BoolVar(&checkWarnOnly, "warn-only", false, "always exit 0 (report problems without failing)")
+	checkCmd.Flags().BoolVar(&checkEmbedded, "embedded", false, "check the dmsg servers built into this binary instead of asking a discovery")
 }
 
 var checkCmd = &cobra.Command{
@@ -66,9 +69,16 @@ For each server entry:
 Exits nonzero if any ADVERTISED wss front fails its probe, so it can gate a
 scheduled CI job.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		entries, err := fetchAllServersAny(cmd, mdURL)
-		if err != nil {
-			return fmt.Errorf("fetch %s/dmsg-discovery/all_servers: %w", mdURL, err)
+		var entries []*disc.Entry
+		if checkEmbedded {
+			for i := range dmsg.Prod.DmsgServers {
+				entries = append(entries, &dmsg.Prod.DmsgServers[i])
+			}
+		} else {
+			var err error
+			if entries, err = fetchAllServersAny(cmd, mdURL); err != nil {
+				return fmt.Errorf("fetch %s/dmsg-discovery/all_servers: %w", mdURL, err)
+			}
 		}
 		if len(entries) == 0 {
 			return fmt.Errorf("discovery returned no dmsg servers")

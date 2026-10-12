@@ -7,18 +7,18 @@ process behind a reverse proxy.
 
 ## How it works
 
-The skywire binary **embeds** both the one skywire command module for js/wasm
-(`pkg/wasmhv/execwasm`, staged by `make build-embedded` — every published binary
-has it; a plain source build does not, and `hv serve` refuses to start without it
-or `--exec-wasm`) and the hypervisor UI. So:
+Every skywire package installs the one skywire command module for js/wasm beside
+the binary (`skywire.wasm.gz`, with its manifest `skywire.wasm.json`), and the
+binary embeds the hypervisor UI. `hv serve` serves that module as it is and
+refuses to start without one or `--exec-wasm`. So:
 
 ```
 skywire cli hv serve --addr 127.0.0.1:7999
 ```
 
-builds a **keyless, self-contained** page once at startup from whatever wasm + UI are in
-the *current* binary, and serves it over HTTP. Because the page reflects the running
-binary:
+builds a **keyless, self-contained** page once at startup from the UI in the
+*current* binary and serves it, with the module, over HTTP. Because the page
+reflects the running binary:
 
 > **serve == one long-running process; "update" == restart it after the binary updates.**
 
@@ -102,6 +102,7 @@ The page is built at process start, so restart the serve service after skywire u
 ## Notes
 
 - A browser whose desk fails to start posts what it saw to `boot-report`. `hv serve` logs it and keeps it in `skywire-desk-boot-reports.jsonl`. Give the unit `StateDirectory=skywire-wasm-visor-serve` so that file lands in `/var/lib/skywire-wasm-visor-serve/`, since `ProtectSystem=strict` leaves `/tmp` read-only.
+- The module is read from disk on every request, so replacing it needs no restart. A visor refreshes its own copy when someone opens its desk, from the visor that serves the current module. On that host, set `WASM_MODULE_UPDATE=true` in `/etc/skywire.conf` so `skywire-update` keeps the module current with each develop build.
 - Force a manual refresh of the served build: `sudo systemctl restart skywire-wasm-visor-serve.service`.
 - Future: ship `skywire-wasm-visor-serve.service` with the skywire package so this is a
   one-liner enable.

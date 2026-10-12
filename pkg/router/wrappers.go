@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/wrappers.go c2-net-routing
 package router
 
@@ -53,6 +51,9 @@ type setupNodeDialer struct {
 	// nil is what the embedded-RSN dialer gets: an embedded setup node is a
 	// local call, so there is no per-request round trip to coalesce.
 	batcher *setupBatcher
+
+	// cascade counts how route setups went, per path the request took.
+	cascade cascadeCounters
 }
 
 // SetCascadeOrigin wires the visor's CascadeHandler in as the source-origin
@@ -255,15 +256,24 @@ func (d *setupNodeDialer) Dial(
 	if d.cascadeEnabled(ctx) {
 		rules, cascErr := runSourceCascade(ctx, log, client.RPCClient(), d.cascadeOrigin, req)
 		if cascErr == nil {
+			d.cascade.okDmsg.Add(1)
 			return rules, connectedNode, nil
 		}
+		if setupConnLost(cascErr) {
+			// The connection to the setup node is gone, so a legacy request on
+			// it cannot succeed. The dial's retry gets a fresh setup client.
+			d.cascade.failedDmsg.Add(1)
+			return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", cascErr)
+		}
 		if !errors.Is(cascErr, errCascadeSignUnimplemented) {
+			d.cascade.failedDmsg.Add(1)
 			log.WithError(cascErr).Warn("Source-driven cascade failed, falling back to DMSG DialRouteGroup")
 		} else {
 			log.Debug("RSN lacks source-driven cascade RPCs (dmsg), falling back to DialRouteGroup")
 		}
 	}
 
+	d.cascade.legacyDmsg.Add(1)
 	resp, err := client.DialRouteGroup(ctx, req)
 	if err != nil {
 		return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", err)
@@ -302,14 +312,17 @@ func (d *setupNodeDialer) dialViaTransport(
 	if d.cascadeEnabled(ctx) {
 		rules, cascErr := runSourceCascade(ctx, log, rpcC, d.cascadeOrigin, req)
 		if cascErr == nil {
+			d.cascade.okTransport.Add(1)
 			return rules, nil
 		}
 		if !errors.Is(cascErr, errCascadeSignUnimplemented) {
+			d.cascade.failedTransport.Add(1)
 			return routing.EdgeRules{}, cascErr
 		}
 		log.Debug("RSN lacks source-driven cascade RPCs (vstream), falling back to DialRouteGroup")
 	}
 
+	d.cascade.legacyTransport.Add(1)
 	var rules routing.EdgeRules
 	call := rpcC.Go("SetupRPCGateway.DialRouteGroup", req, &rules, nil)
 
@@ -323,4 +336,10 @@ func (d *setupNodeDialer) dialViaTransport(
 		}
 		return rules, nil
 	}
+}
+
+// setupConnLost reports whether err means the RPC connection to the setup node
+// closed, as opposed to the setup node refusing the request.
+func setupConnLost(err error) bool {
+	return errors.Is(err, rpc.ErrShutdown) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }

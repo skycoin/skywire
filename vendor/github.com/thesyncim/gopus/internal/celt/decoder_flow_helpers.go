@@ -33,40 +33,47 @@ func denormalizeBandsPackedDownsampleIntoFloat32(dst []float32, src []celtNorm, 
 		prefix := min(edges[start]*M, len(dst))
 		clear(dst[:prefix])
 	}
-	f := min(edges[start]*M, len(dst))
+	// Band k covers src[edges[k]*M : edges[k+1]*M] and lands at the same
+	// offset of dst, as the freq and X cursors of libopus denormalise_bands()
+	// advance together.
+	limit := min(len(src), len(dst))
+	dstL, srcL := dst[:limit], src[:limit]
+	edges = edges[:end+1]
 
+	var gainBuf [denormGainBands]float32
+	var gains []float32
+	if end <= denormGainBands {
+		gains = gainBuf[:end]
+		denormalizeBandGains(gains, energies, start, end)
+	}
 	for band := start; band < end; band++ {
-		j := edges[band] * M
-		bandEnd := edges[band+1] * M
-		if j >= len(src) {
+		j := edges[band] << lm
+		if j >= limit {
 			break
 		}
-		if bandEnd > len(src) {
-			bandEnd = len(src)
+		bandEnd := min(edges[band+1]<<lm, limit)
+		if bandEnd <= j {
+			continue
 		}
-		gain := denormalizeBandGain(energies, band)
-		count := bandEnd - j
-		if room := len(dst) - f; count > room {
-			count = room
+		var gain float32
+		if gains != nil {
+			gain = gains[band]
+		} else {
+			gain = denormalizeBandGain(energies, band)
 		}
-		if count <= 0 {
-			if f >= len(dst) {
-				break
+		out := dstL[j:bandEnd]
+		in := srcL[j:bandEnd]
+		// Low bands are only a few bins wide; their vector call/setup cost
+		// beats the per-lane win, so keep them on the tight inline loop and
+		// vector only the wide bands. Each product is bare, so the result
+		// matches on every build.
+		if len(out) < 8 {
+			for k := range out {
+				out[k] = float32(in[k]) * gain
 			}
 			continue
 		}
-		// Low bands are only a few bins wide; their NEON call/setup cost beats the
-		// per-lane win, so keep them on the tight inline loop and vector only the
-		// wide bands. Each product is bare, so the result matches on every build.
-		if count < 8 {
-			for ; j < bandEnd && f < len(dst); j++ {
-				dst[f] = float32(src[j]) * gain
-				f++
-			}
-			continue
-		}
-		scaleFloat32IntoNEON(dst[f:f+count], src[j:j+count], gain)
-		f += count
+		scaleFloat32Into(out, in, gain)
 	}
 	if bound < len(dst) {
 		clear(dst[bound:])
@@ -74,164 +81,48 @@ func denormalizeBandsPackedDownsampleIntoFloat32(dst []float32, src []celtNorm, 
 }
 
 func (d *Decoder) synthesizeDecodedFrame(frameSize, modeLM, end, lm, shortBlocks int, transient bool, postfilterPeriod int, postfilterGain float32, postfilterTapset int, energies []celtGLog, coeffsL, coeffsR []celtNorm, qext *preparedQEXTDecode) []float32 {
-	// Step 6: Synthesis (IMDCT + window + overlap-add)
-	var samples []float32
 	channels := int(d.channels)
+	if d.synthTrace != nil {
+		d.synthTrace.captureBaseEnergy(energies, end, channels)
+		d.synthTrace.captureBaseNorm(0, coeffsL, frameSize)
+		if channels == 2 {
+			d.synthTrace.captureBaseNorm(1, coeffsR, frameSize)
+		}
+	}
+	if d.synthTrace != nil && extsupport.QEXT && qext != nil {
+		d.synthTrace.captureQEXTEnergy(qext.energies, qext.end, channels)
+		d.synthTrace.captureQEXTNorm(0, qext.coeffsL, frameSize)
+		if channels == 2 {
+			d.synthTrace.captureQEXTNorm(1, qext.coeffsR, frameSize)
+		}
+	}
+	// celt_synthesis: denormalise each channel's bands (and its QEXT bands)
+	// into the frequency buffer the inverse MDCT reads.
 	downsample := d.downsampleFactor()
-	outputFrameSize := frameSize
-	downsampleOutput := false
-	if downsample > 1 && frameSize%downsample == 0 {
-		apiFrameSize := frameSize / downsample
-		if len(d.directOutPCM) < frameSize*channels && len(d.directOutPCM) >= apiFrameSize*channels {
-			outputFrameSize = apiFrameSize
-			downsampleOutput = true
+	edges := d.modeEdges()
+	withQEXT := extsupport.QEXT && qext != nil && qext.end > 0
+	if withQEXT {
+		edges = EBands[:]
+	}
+	specL := ensureFloat32Slice(&d.scratchStereoF32, len(coeffsL))
+	denormalizeBandsPackedDownsampleIntoFloat32(specL, coeffsL, energies[:end], 0, end, lm, edges, downsample)
+	if withQEXT && qext.coeffsL != nil {
+		denormalizeBandsPackedDownsampleIntoFloat32(specL, qext.coeffsL, qext.energies[:qext.end], 0, qext.end, lm, qext.cfg.EBands, downsample)
+	}
+	var specR []float32
+	if channels == 2 {
+		specR = ensureFloat32Slice(&d.scratchSpecRF32, len(coeffsR))
+		denormalizeBandsPackedDownsampleIntoFloat32(specR, coeffsR, energies[end:], 0, end, lm, edges, downsample)
+		if withQEXT && qext.coeffsR != nil {
+			denormalizeBandsPackedDownsampleIntoFloat32(specR, qext.coeffsR, qext.energies[qext.end:], 0, qext.end, lm, qext.cfg.EBands, downsample)
 		}
 	}
-	// The native 96 kHz HD mode needs the HD-specific de-emphasis (2-tap) and
-	// comb-filter postfilter (comb_filter_qext), which live on the non-direct
-	// synthesis path. Disable the direct-output fast paths so HD frames route
-	// through Synthesize/SynthesizeStereo + the HD-aware deemphasis/postfilter,
-	// which still write into directOutPCM at the end of this function.
-	hdMode := d.synthOverlap == 240 || d.customScaleBase > 0
-	directStereoFloat32 := !hdMode && d.channels == 2 && len(d.directOutPCM) >= outputFrameSize*2
-	directMonoFloat32 := !hdMode && d.channels == 1 &&
-		len(d.directOutPCM) >= outputFrameSize &&
-		!transient &&
-		d.postfilterGainOld == 0 &&
-		d.postfilterGain == 0 &&
-		postfilterGain == 0
-
-	if d.channels == 2 {
-		energiesL := energies[:end]
-		energiesR := energies[end:]
-		var specL []float32
-		var specR []float32
-		if extsupport.QEXT && qext != nil && qext.end > 0 {
-			specL = ensureFloat32Slice(&d.scratchStereoF32, len(coeffsL))
-			specR = ensureFloat32Slice(&d.scratchSpecRF32, len(coeffsR))
-			denormalizeBandsPackedDownsampleIntoFloat32(specL, coeffsL, energiesL, 0, end, lm, EBands[:], downsample)
-			denormalizeBandsPackedDownsampleIntoFloat32(specR, coeffsR, energiesR, 0, end, lm, EBands[:], downsample)
-			if qext.coeffsL != nil {
-				denormalizeBandsPackedDownsampleIntoFloat32(specL, qext.coeffsL, qext.energies[:qext.end], 0, qext.end, lm, qext.cfg.EBands, downsample)
-			}
-			if qext.coeffsR != nil {
-				denormalizeBandsPackedDownsampleIntoFloat32(specR, qext.coeffsR, qext.energies[qext.end:], 0, qext.end, lm, qext.cfg.EBands, downsample)
-			}
-		} else {
-			specL = ensureFloat32Slice(&d.scratchStereoF32, len(coeffsL))
-			specR = ensureFloat32Slice(&d.scratchSpecRF32, len(coeffsR))
-			denormalizeBandsPackedDownsampleIntoFloat32(specL, coeffsL, energiesL, 0, end, lm, d.modeEdges(), downsample)
-			denormalizeBandsPackedDownsampleIntoFloat32(specR, coeffsR, energiesR, 0, end, lm, d.modeEdges(), downsample)
-		}
-		if directStereoFloat32 && !transient {
-			if d.synthTrace != nil {
-				d.synthTrace.captureSpec(0, specL[:frameSize])
-				d.synthTrace.captureSpec(1, specR[:frameSize])
-			}
-			samplesL, samplesR := d.synthesizeStereoPlanarLongToFloat32(specL, specR)
-			if d.synthTrace != nil {
-				d.synthTrace.captureIMDCT(0, samplesL[:frameSize])
-				d.synthTrace.captureIMDCT(1, samplesR[:frameSize])
-			}
-			if d.postfilterGainOld == 0 && d.postfilterGain == 0 && postfilterGain == 0 {
-				d.applyPostfilterNoGainStereoPlanarFromFloat32(samplesL[:frameSize], samplesR[:frameSize], frameSize, modeLM, postfilterPeriod, postfilterGain, postfilterTapset)
-			} else {
-				d.applyPostfilterStereoPlanarFromFloat32(samplesL[:frameSize], samplesR[:frameSize], frameSize, modeLM, postfilterPeriod, postfilterGain, postfilterTapset)
-			}
-			if downsampleOutput {
-				d.applyDeemphasisAndScaleStereoPlanarFloat32DownsampleToFloat32(d.directOutPCM[:outputFrameSize*2], samplesL[:frameSize], samplesR[:frameSize], downsample, 1.0/32768.0)
-			} else {
-				d.applyDeemphasisAndScaleStereoPlanarFloat32ToFloat32(d.directOutPCM[:frameSize*2], samplesL[:frameSize], samplesR[:frameSize], 1.0/32768.0)
-			}
-		} else if directStereoFloat32 {
-			if d.synthTrace != nil {
-				d.synthTrace.captureSpec(0, specL[:frameSize])
-				d.synthTrace.captureSpec(1, specR[:frameSize])
-			}
-			samplesL, samplesR := d.synthesizeStereoPlanar(specL, specR, transient, shortBlocks)
-			if d.synthTrace != nil {
-				d.synthTrace.captureIMDCT(0, samplesL[:frameSize])
-				d.synthTrace.captureIMDCT(1, samplesR[:frameSize])
-			}
-			d.applyPostfilterStereoPlanarFromFloat32(samplesL, samplesR, frameSize, modeLM, postfilterPeriod, postfilterGain, postfilterTapset)
-			if downsampleOutput {
-				d.applyDeemphasisAndScaleStereoPlanarFloat32DownsampleToFloat32(d.directOutPCM[:outputFrameSize*2], samplesL, samplesR, downsample, 1.0/32768.0)
-			} else {
-				d.applyDeemphasisAndScaleStereoPlanarFloat32ToFloat32(d.directOutPCM[:frameSize*2], samplesL, samplesR, 1.0/32768.0)
-			}
-		} else {
-			samples = d.SynthesizeStereo(specL, specR, transient, shortBlocks)
-		}
-	} else {
-		var specL []float32
-		if extsupport.QEXT && qext != nil && qext.end > 0 {
-			specL = ensureFloat32Slice(&d.scratchStereoF32, len(coeffsL))
-			denormalizeBandsPackedDownsampleIntoFloat32(specL, coeffsL, energies, 0, end, lm, EBands[:], downsample)
-			if qext.coeffsL != nil {
-				denormalizeBandsPackedDownsampleIntoFloat32(specL, qext.coeffsL, qext.energies[:qext.end], 0, qext.end, lm, qext.cfg.EBands, downsample)
-			}
-		} else {
-			specL = ensureFloat32Slice(&d.scratchStereoF32, len(coeffsL))
-			denormalizeBandsPackedDownsampleIntoFloat32(specL, coeffsL, energies, 0, end, lm, d.modeEdges(), downsample)
-		}
-		if directMonoFloat32 {
-			samplesF32 := d.synthesizeMonoLongToFloat32(specL)
-			d.applyPostfilterNoGainMonoFromFloat32(samplesF32, frameSize, modeLM, postfilterPeriod, postfilterGain, postfilterTapset)
-			if downsampleOutput {
-				d.applyDeemphasisAndScaleMonoFloat32DownsampleToFloat32(d.directOutPCM[:outputFrameSize], samplesF32, downsample, 1.0/32768.0)
-			} else {
-				d.applyDeemphasisAndScaleMonoFloat32ToFloat32(d.directOutPCM[:frameSize], samplesF32, 1.0/32768.0)
-			}
-		} else {
-			if d.synthTrace != nil {
-				d.synthTrace.captureSpec(0, specL[:frameSize])
-			}
-			samples = d.Synthesize(specL, transient, shortBlocks)
-			if d.synthTrace != nil {
-				d.synthTrace.captureIMDCT(0, samples[:frameSize])
-			}
-		}
-	}
-
-	if directStereoFloat32 || directMonoFloat32 {
-		return samples
-	}
-
-	d.applyPostfilterFloat32(samples, frameSize, modeLM, postfilterPeriod, postfilterGain, postfilterTapset)
-
-	// Step 7: Apply de-emphasis filter
-	if downsampleOutput && len(d.directOutPCM) >= outputFrameSize*channels {
-		d.applyDeemphasisAndScaleDownsampleToFloat32(d.directOutPCM[:outputFrameSize*channels], samples, downsample, 1.0/32768.0)
-		return nil
-	} else if len(d.directOutPCM) >= len(samples) {
-		d.applyDeemphasisAndScaleToFloat32(d.directOutPCM[:len(samples)], samples, 1.0/32768.0)
-	} else {
-		d.applyDeemphasisAndScale(samples, 1.0/32768.0)
-	}
-
-	return samples
+	return d.synthesizeFrame(specL, specR, frameSize, modeLM, shortBlocks, transient, postfilterPeriod, postfilterGain, postfilterTapset)
 }
 
-func (d *Decoder) finalizeDecodedFrameState(frameSize, start, end, lm int, transient bool, energies, prev1Energy []celtGLog, qext *preparedQEXTDecode, rd *rangecoding.Decoder) error {
-	// Update energy state for next frame.
-	d.updateLogEGLog(energies, end, transient)
-	d.setPrevEnergyGLogWithPrev(prev1Energy, energies)
-	// libopus mirrors the left channel into the right slot on every mono frame
-	// (`if (C==1) OPUS_COPY(&oldBandE[nbEBands], oldBandE, nbEBands)`), keeping
-	// oldBandE/oldLogE/oldLogE2 two-channel-symmetric. This must happen before the
-	// background-floor and outside-range updates so the right shadow stays a true
-	// copy: after a concealed loss the noise PLC only decays the left channel, and
-	// the recovery frame folds the (undecayed) right shadow back in.
-	d.replicateMonoEnergyToSecondChannel()
-	d.updateBackgroundEnergy(lm)
-
-	// Mirror libopus: clear energies/logs outside [start,end) for both channels.
+func (d *Decoder) finalizeDecodedFrameState(frameSize, start, end, lm int, transient bool, energies []celtGLog, qext *preparedQEXTDecode, rd *rangecoding.Decoder) error {
+	d.updateEnergyHistory(energies, start, end, lm, transient)
 	channels := int(d.channels)
-	clearChannels := channels
-	if channels == 1 && len(d.prevEnergy) >= d.predStride()*2 {
-		clearChannels = 2
-	}
-	d.clearFrameHistoryOutsideRange(start, end, clearChannels)
 	if extsupport.QEXT && qext != nil && qext.dec.Tell() > qext.dec.StorageBits() {
 		return ErrInvalidFrame
 	}
@@ -247,29 +138,59 @@ func (d *Decoder) finalizeDecodedFrameState(frameSize, start, end, lm int, trans
 	return nil
 }
 
-// replicateMonoEnergyToSecondChannel copies the left-channel energy-prediction
-// history (prevEnergy/prevLogE/prevLogE2) into the right-channel slot for a mono
-// decoder, matching libopus celt_decode_with_ec()'s per-frame mono shadow update
-// (`if (C==1) OPUS_COPY(&oldBandE[nbEBands], oldBandE, nbEBands)` followed by the
-// two-channel oldLogE/oldLogE2 refresh). backgroundLogE is left to
-// updateBackgroundEnergy, which preserves the two-channel symmetry once the
-// prediction history is symmetric. For a stereo decoder this is a no-op.
-func (d *Decoder) replicateMonoEnergyToSecondChannel() {
-	if d.channels != 1 {
-		return
-	}
+// updateEnergyHistory is the band-energy history update that ends
+// celt_decode_with_ec(): it stores the frame's band energies (compact layout
+// [c*end+band]) as oldBandE, mirrors a mono stream's energies into the second
+// channel, advances oldLogE/oldLogE2 and the backgroundLogE floor over both
+// channels, and resets the bands outside [start,end).
+func (d *Decoder) updateEnergyHistory(energies []celtGLog, start, end, lm int, transient bool) {
+	d.ensureBackgroundEnergyState()
 	stride := d.predStride()
-	if stride <= 0 || len(d.prevEnergy) < stride*2 {
-		return
-	}
 	nbEBands := min(d.modeNbEBands(), stride)
-	for band := 0; band < nbEBands; band++ {
-		d.prevEnergy[stride+band] = d.prevEnergy[band]
-		if len(d.prevLogE) >= stride*2 {
-			d.prevLogE[stride+band] = d.prevLogE[band]
+	oldBandE := d.prevEnergy[:2*stride]
+	oldLogE := d.prevLogE[:2*stride]
+	oldLogE2 := d.prevLogE2[:2*stride]
+	backgroundLogE := d.backgroundEnergy[:2*stride]
+	channels := int(d.channels)
+	for c := range channels {
+		copy(oldBandE[c*stride:c*stride+end], energies[c*end:(c+1)*end])
+	}
+	if channels == 1 {
+		copy(oldBandE[stride:stride+nbEBands], oldBandE[:nbEBands])
+	}
+	if !transient {
+		copy(oldLogE2, oldLogE)
+		copy(oldLogE, oldBandE)
+	} else {
+		for i, e := range oldBandE {
+			// MING(oldLogE[i], oldBandE[i])
+			if !(oldLogE[i] < e) {
+				oldLogE[i] = e
+			}
 		}
-		if len(d.prevLogE2) >= stride*2 {
-			d.prevLogE2[stride+band] = d.prevLogE2[band]
+	}
+	// In normal circumstances the noise floor rises by at most 2.4 dB/s;
+	// after a loss (DTX) it may rise by the whole missing duration.
+	maxBackgroundIncrease := float32(min(int(d.plcLossDuration)+1<<uint(lm), 160)) * 0.001
+	for i, e := range oldBandE {
+		// MING(backgroundLogE[i] + max_background_increase, oldBandE[i])
+		bg := backgroundLogE[i] + maxBackgroundIncrease
+		if !(bg < e) {
+			bg = e
+		}
+		backgroundLogE[i] = bg
+	}
+	for c := range 2 {
+		bandE := oldBandE[c*stride : c*stride+nbEBands]
+		logE := oldLogE[c*stride : c*stride+nbEBands]
+		logE2 := oldLogE2[c*stride : c*stride+nbEBands]
+		for i := range start {
+			bandE[i] = 0
+			logE[i], logE2[i] = -28, -28
+		}
+		for i := end; i < nbEBands; i++ {
+			bandE[i] = 0
+			logE[i], logE2[i] = -28, -28
 		}
 	}
 }

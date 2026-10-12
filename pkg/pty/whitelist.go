@@ -11,13 +11,12 @@ import (
 	"strings"
 	"sync"
 
-	jsoniter "github.com/json-iterator/go"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/fastjson"
 )
 
 var (
-	json = jsoniter.ConfigFastest
+	json = fastjson.JSON
 	wl   cipher.PubKeys
 	// wlMu protects the global wl and conf variables from concurrent access.
 	wlMu sync.Mutex

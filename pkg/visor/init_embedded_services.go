@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -37,9 +38,6 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 	if len(svcs) == 0 {
 		return nil
 	}
-	if v.dmsgHTTPMux == nil {
-		return fmt.Errorf("embedded services: dmsg HTTP mux not initialized")
-	}
 	host := services.Host{
 		DmsgClient: v.dmsgC,
 		PK:         v.conf.PK,
@@ -47,9 +45,23 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 		DmsgAddr:   fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort),
 		CXO:        visorCXOHost{v},
 	}
+	if addr := v.conf.DeploymentStatusAddr; addr != "" {
+		log.WithField("addr", addr).Info("Serving the deployment status page")
+		go func() {
+			if err := charts.Serve(ctx, addr, v.statusBoard()); err != nil {
+				log.WithError(err).Error("deployment status listener failed")
+			}
+		}()
+	}
 	for _, es := range svcs {
 		if es.err != nil {
 			return fmt.Errorf("embedded services: %w", es.err)
+		}
+		if es.standalone {
+			continue // started by initOwnKeyServices
+		}
+		if v.dmsgHTTPMux == nil {
+			return fmt.Errorf("embedded services: dmsg HTTP mux not initialized")
 		}
 		host.Log = es.log
 		handler, err := es.svc.Embed(ctx, host)
@@ -110,5 +122,144 @@ func servePlainHTTP(ctx context.Context, addr string, handler http.Handler, log 
 		_ = srv.Shutdown(shutdownCtx) //nolint:errcheck
 	}()
 	log.WithField("addr", lis.Addr().String()).Info("Embedded service also served on plain HTTP")
+	return nil
+}
+
+// Restart pacing for an own-key service that stopped on its own. Variables
+// so tests can shorten them.
+var (
+	ownKeyMinBackoff = 5 * time.Second
+	ownKeyMaxBackoff = 5 * time.Minute
+	// ownKeySteadyRun resets the backoff: a run this long was not a crash loop.
+	ownKeySteadyRun = 10 * time.Minute
+)
+
+// runOwnKeyService runs a service under its own key, as `svc run` would but
+// inside the visor, until ctx ends. It is built again from its block after
+// every stop, so a failure in one service never takes the visor down. An
+// operator can stop, start and restart it (EmbeddedServiceControl).
+func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
+	backoff := ownKeyMinBackoff
+	for {
+		es.mu.Lock()
+		stopped := es.stopped
+		es.mu.Unlock()
+		if stopped {
+			select {
+			case <-ctx.Done():
+				return
+			case <-es.wake:
+			}
+			continue
+		}
+		start := time.Now()
+		runCtx, cancel := context.WithCancel(ctx)
+		svc, err := es.factory(es.ownRaw, es.log)
+		if err == nil {
+			es.mu.Lock()
+			es.running, es.startErr, es.current, es.cancel = true, nil, svc, cancel
+			es.mu.Unlock()
+			es.log.WithField("pk", es.ownPK).Info("Embedded service started on its own")
+			err = svc.Run(runCtx)
+		}
+		cancel()
+		es.mu.Lock()
+		es.running, es.current, es.cancel = false, nil, nil
+		if err != nil {
+			es.startErr = err
+		}
+		restartNow, stopped := es.restartNow, es.stopped
+		es.restartNow = false
+		es.mu.Unlock()
+		switch {
+		case ctx.Err() != nil:
+			return
+		case restartNow:
+			es.log.Info("Embedded service restarted by the operator")
+			backoff = ownKeyMinBackoff
+			continue
+		case stopped:
+			es.log.Info("Embedded service stopped by the operator")
+			continue
+		}
+		if time.Since(start) > ownKeySteadyRun {
+			backoff = ownKeyMinBackoff
+		}
+		es.log.WithError(err).WithField("retry_in", backoff).Warn("Embedded service stopped; starting it again")
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		case <-es.wake:
+		}
+		es.mu.Lock()
+		es.restarts++
+		es.mu.Unlock()
+		backoff = min(backoff*2, ownKeyMaxBackoff)
+	}
+}
+
+// EmbeddedServiceControl stops, starts or restarts the embedded service named
+// name. Only a service under its own key runs apart from the visor; a mounted
+// one lives and dies with it.
+func (v *Visor) EmbeddedServiceControl(name, action string) error {
+	var es *embeddedService
+	for _, s := range v.embeddedServices() {
+		if s.block.Label() == name || s.block.Name == name {
+			es = s
+			break
+		}
+	}
+	if es == nil {
+		return fmt.Errorf("no embedded service named %q", name)
+	}
+	if !es.standalone {
+		return fmt.Errorf("%s is mounted on the visor and runs with it; give it a key of its own to control it apart", name)
+	}
+	es.mu.Lock()
+	defer es.mu.Unlock()
+	switch action {
+	case "stop":
+		es.stopped = true
+	case "start":
+		if !es.stopped {
+			return nil
+		}
+		es.stopped = false
+	case "restart":
+		es.stopped, es.restartNow = false, true
+	default:
+		return fmt.Errorf("unknown action %q: want stop, start or restart", action)
+	}
+	if es.cancel != nil {
+		es.cancel()
+	}
+	select {
+	case es.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// initOwnKeyServices starts the embedded services that run under their own
+// key. It depends on no other module: such a service has its own dmsg client
+// and identity, and the visor's own modules may need it before they finish,
+// as the address resolver client needs an address resolver run here.
+func initOwnKeyServices(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	for _, es := range v.embeddedServices() {
+		if !es.standalone {
+			continue
+		}
+		if es.err != nil {
+			return fmt.Errorf("embedded services: %w", es.err)
+		}
+		es.mu.Lock()
+		started := es.started
+		es.started = true
+		es.mu.Unlock()
+		if !started { // a resume runs the modules again
+			go v.runOwnKeyService(ctx, es)
+		}
+	}
 	return nil
 }

@@ -20,8 +20,8 @@
 //     and saturation exactly, including round-half-to-even and the rail clamps.
 //
 // The package is import-safe from both the default and the gopus_fixed_point
-// builds; it contains no build-tagged variants of its own except the fma32
-// helper, which is split per architecture only to control FMA contraction.
+// builds. Per-target helpers preserve contraction at the matching C rounding
+// boundaries.
 package opusmath
 
 import "math"
@@ -39,7 +39,7 @@ func CeltLog2(x float32) float32 {
 
 	rangeIdx := (bits >> 20) & 0x7
 	f := math.Float32frombits(bits)
-	f = f*celtLog2XNormCoeff[rangeIdx] - 1.0625
+	f = celtLog2NormalizeF32(f, celtLog2XNormCoeff[rangeIdx])
 	f = celtLog2CoeffA0 + f*(celtLog2CoeffA1+f*(celtLog2CoeffA2+f*(celtLog2CoeffA3+f*celtLog2CoeffA4)))
 	return float32(integer) + f + celtLog2YNormCoeff[rangeIdx]
 }
@@ -52,15 +52,21 @@ func CeltLog2(x float32) float32 {
 // exactly as libopus short-circuits. The float32 width and the fma32 fusion are
 // load-bearing for bit-exactness.
 func CeltExp2(x float32) float32 {
-	integer := int32(math.Floor(float64(x)))
+	// (int)floor(x): truncate, then step down for negative non-integers.
+	// NaN and out-of-range inputs keep the conversion's own result, as the
+	// float64 floor-then-convert does on each target.
+	integer := int32(x)
+	if float32(integer) > x && integer != math.MinInt32 {
+		integer--
+	}
 	if integer < -50 {
 		return 0
 	}
 	frac := x - float32(integer)
 
 	res := fma32(frac, fma32(frac, fma32(frac, fma32(frac, fma32(frac,
-		celtExp2CoeffA5, celtExp2CoeffA4), celtExp2CoeffA3), celtExp2CoeffA2),
-		celtExp2CoeffA1), celtExp2CoeffA0)
+		CeltExp2CoeffA5, CeltExp2CoeffA4), CeltExp2CoeffA3), CeltExp2CoeffA2),
+		CeltExp2CoeffA1), CeltExp2CoeffA0)
 
 	bits := math.Float32bits(res)
 	bits = uint32(int32(bits)+int32(uint32(integer)<<23)) & 0x7fffffff
@@ -91,7 +97,7 @@ func ISqrt32(x uint32) uint32 {
 	return r
 }
 
-// celtLog2Coeff* and celtExp2Coeff* are the FLOAT_APPROX polynomial
+// celtLog2Coeff* and CeltExp2Coeff* are the FLOAT_APPROX polynomial
 // coefficients from celt/mathops.h, written out to their full float32 decimal
 // expansion so the compiled constants are the same bit patterns libopus uses.
 // They must stay float32 (not untyped/float64) constants: rounding each
@@ -103,12 +109,13 @@ const (
 	celtLog2CoeffA3 float32 = 4.01971250772476196289062500e-01
 	celtLog2CoeffA4 float32 = -2.8415444493293762207031250e-01
 
-	celtExp2CoeffA0 float32 = 9.999999403953552246093750000000e-01
-	celtExp2CoeffA1 float32 = 6.931530833244323730468750000000e-01
-	celtExp2CoeffA2 float32 = 2.401536107063293457031250000000e-01
-	celtExp2CoeffA3 float32 = 5.582631751894950866699218750000e-02
-	celtExp2CoeffA4 float32 = 8.989339694380760192871093750000e-03
-	celtExp2CoeffA5 float32 = 1.877576694823801517486572265625e-03
+	// CeltExp2CoeffA0..A5 are exported for the vector celt_exp2 kernels.
+	CeltExp2CoeffA0 float32 = 9.999999403953552246093750000000e-01
+	CeltExp2CoeffA1 float32 = 6.931530833244323730468750000000e-01
+	CeltExp2CoeffA2 float32 = 2.401536107063293457031250000000e-01
+	CeltExp2CoeffA3 float32 = 5.582631751894950866699218750000e-02
+	CeltExp2CoeffA4 float32 = 8.989339694380760192871093750000e-03
+	CeltExp2CoeffA5 float32 = 1.877576694823801517486572265625e-03
 )
 
 // celtLog2XNormCoeff and celtLog2YNormCoeff are the eight-entry per-range

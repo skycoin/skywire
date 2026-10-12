@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
@@ -103,12 +101,12 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 		dmsgAddr:       dmsgAddr,
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 	// gzip JSON responses on the wire — this router is also served over
 	// dmsg, where every byte is relayed. Matches rf/ut/sd.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
@@ -254,7 +252,6 @@ func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {
 	dmsghttpConf.RouteFinder = a.services.RouteFinderDmsg
 	dmsghttpConf.ServiceDiscovery = a.services.ServiceDiscoveryDmsg
 	dmsghttpConf.TranspordDiscovery = a.services.TransportDiscoveryDmsg
-	dmsghttpConf.UptimeTracker = a.services.UptimeTrackerDmsg
 	return dmsghttpConf
 }
 

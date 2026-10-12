@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package tpdclient pkg/transport/tpdclient/client.go c2-net-transport
 package tpdclient
 

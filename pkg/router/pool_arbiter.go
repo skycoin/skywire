@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/pool_arbiter.go c2-net-routing
 //
 // The standby POOL ARBITER — a pooled tunnel is a stream reserve AND a

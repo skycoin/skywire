@@ -1,20 +1,15 @@
-//go:build !arm64 || purego
-
 package dnnmath
 
 import "math"
 
 // reciprocalEstimate32 reproduces the AArch64 FRECPE (single-precision reciprocal
-// estimate) instruction in portable Go. The arm64 build issues the hardware
-// instruction; this path mirrors its 8-bit table-based estimate bit-for-bit so
-// purego on arm64 matches the libopus NEON activation oracle, which feeds the
-// estimate straight into the sigmoid/tanh rational approximations without a
-// Newton-Raphson refinement step.
+// estimate) instruction in portable Go. The selected arm64 SIMD build issues
+// the hardware instruction; this helper mirrors its 8-bit table-based estimate
+// for callers that explicitly use the NEON activation arithmetic.
 //
 // The algorithm follows the ARM Architecture Reference Manual pseudocode for
 // FPRecipEstimate / RecipEstimate. reciprocalEstimate32 is only invoked on
-// arm64 (the NEON activation path is gated on runtime.GOARCH); other targets
-// compile it but never call it.
+// the NEON activation path. Other targets compile it but never call it.
 func reciprocalEstimate32(x float32) float32 {
 	bits := math.Float32bits(x)
 	sign := bits & 0x8000_0000

@@ -1,11 +1,11 @@
 // Package cliskychat cmd/skywire-cli/commands/skychat/chat.go c4-vis-cli
-// interactive bubbletea split-pane chat against the local skychat
+// interactive split-pane chat against the local skychat
 // app's HTTP/SSE interface.
 //
-// Top: scrollable viewport of message history (sent + received).
-// Bottom: textinput compose line. Enter sends; Esc / Ctrl+C quits.
+// Top: scrolling message history (sent + received).
+// Bottom: an input to compose. Enter sends; Esc / Ctrl+C quits.
 // A background goroutine reads the /sse stream and pushes incoming
-// messages into the bubbletea program via a channel; outgoing
+// messages into the screen; outgoing
 // messages POST to /message synchronously on Enter.
 //
 // `--to <pk>` pins the conversation to one remote. Messages from
@@ -23,7 +23,7 @@ import (
 
 var chatCmd = &cobra.Command{
 	Use:   "chat",
-	Short: "Interactive chat TUI (bubbletea split-pane)",
+	Short: "Interactive chat TUI (split pane)",
 	Long: `Interactive chat against the local skychat app.
 
 Without --to: launches the unified TUI — a conversation picker that

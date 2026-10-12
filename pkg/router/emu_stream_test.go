@@ -880,8 +880,15 @@ func TestStreamBench(t *testing.T) {
 		// live mesh's reorder wedges) or on the liveness path's hard-dead
 		// window. That case belongs in a cell of its own with the snub knobs
 		// swept, not in a bar that claims two seconds.
+		//
+		// The bar is what the cut costs, so these links lose nothing else. A
+		// tail loss anywhere in the rest of the object stalls the reader for a
+		// 2s PTO plus a round trip, and the widest gap would measure that.
 		skysettings.Apply(base) //nolint:errcheck
+		lossPct := cfg.lossPct
+		cfg.lossPct = 0
 		active, pool, p := build(t, 2, 1, 4, false)
+		cfg.lossPct = lossPct
 		all := append(append([]*tunnel{}, active...), pool...)
 
 		clk := new(readClock)

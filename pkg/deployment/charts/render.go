@@ -49,6 +49,11 @@ type Chart struct {
 	// Legend, when set, draws the legend as a table with these column headers.
 	// The first column is the series name and the last is its latest value.
 	Legend []string
+	// Process marks a chart of the whole process rather than one service. A
+	// Board draws these once, not in each section of a service sharing it.
+	Process bool
+	// Starts are the service's starts, drawn as markers where they fall in the chart's window.
+	Starts []Start
 
 	colors map[string]string
 }
@@ -195,9 +200,7 @@ func (c *Chart) SVG(id string) string {
 	top := math.Ceil(vmax/step) * step
 	yOf := func(v float64) float64 { return padT + plotH - v/top*plotH }
 
-	if c.Kind == Stacked {
-		sb.WriteString("<div class='body'>")
-	}
+	sb.WriteString("<div class='body'>")
 	fmt.Fprintf(&sb, "<div class='plot'><svg viewBox='0 0 %d %d' role='img' aria-label='%s'>", svgW, svgH, html.EscapeString(c.Title))
 	for v := 0.0; v <= top*1.0001; v += step {
 		y := yOf(v)
@@ -205,6 +208,7 @@ func (c *Chart) SVG(id string) string {
 		fmt.Fprintf(&sb, "<text class='ytick' x='%d' y='%.1f'>%s</text>", padL-8, y+4, html.EscapeString(c.format(v)))
 	}
 	c.xAxis(&sb)
+	c.startMarks(&sb)
 
 	if c.Kind == Stacked {
 		for si := range c.Series {
@@ -253,9 +257,7 @@ func (c *Chart) SVG(id string) string {
 	}
 	fmt.Fprintf(&sb, "<line class='cursor' x1='0' x2='0' y1='%d' y2='%d'/>", padT, padT+plotH)
 	sb.WriteString("</svg><div class='tip' hidden></div></div>")
-	if c.Kind == Stacked {
-		sb.WriteString("<div class='pie'></div></div>")
-	}
+	sb.WriteString("<div class='pie'></div></div>")
 	c.legend(&sb)
 	c.data(&sb)
 	sb.WriteString("</figure>")
@@ -341,32 +343,12 @@ func (c *Chart) monthTicks(sb *strings.Builder) {
 	fmt.Fprintf(sb, "<line class='axis' x1='%d' x2='%d' y1='%d' y2='%d'/>", padL, padL+plotW, padT+plotH, padT+plotH)
 }
 
+// legend draws a table legend for a chart whose series carry extra columns.
+// Otherwise the legend beside the pie, with each series' value, is the only one.
 func (c *Chart) legend(sb *strings.Builder) {
 	if len(c.Legend) > 0 {
 		c.legendTable(sb)
-		return
 	}
-	sb.WriteString("<ul class='legend'>")
-	for i := range c.Series {
-		s := c.Series[i]
-		if c.Kind == Stacked {
-			s = c.Series[len(c.Series)-1-i]
-		}
-		latest := ""
-		for j := len(s.Vals) - 1; j >= 0; j-- {
-			if !math.IsNaN(s.Vals[j]) {
-				latest = c.format(s.Vals[j])
-				break
-			}
-		}
-		title := ""
-		if s.Title != "" {
-			title = " title='" + html.EscapeString(s.Title) + "'"
-		}
-		fmt.Fprintf(sb, "<li%s><i style='background:%s'></i>%s <b>%s</b></li>",
-			title, c.color(s.Name), html.EscapeString(s.Name), html.EscapeString(latest))
-	}
-	sb.WriteString("</ul>")
 }
 
 // data embeds what the hover readout needs: x positions, labels and the
@@ -376,28 +358,34 @@ func (c *Chart) data(sb *strings.Builder) {
 		N string   `json:"n"`
 		C string   `json:"c"`
 		V []string `json:"v"`
-		// R is the raw value, for the pie beside a stacked chart.
+		// R is the raw value, for the pie and its legend beside the chart.
 		R []*float64 `json:"r,omitempty"`
 	}
 	// T, F and To are unix milliseconds and the geometry fields place the x
 	// axis, so the page can label time in the viewer's own zone. A chart of
 	// UTC days (Dt) keeps its server labels.
 	d := struct {
-		X  []float64 `json:"x"`
-		L  []string  `json:"l"`
-		T  []int64   `json:"t"`
-		W  int       `json:"w"`
-		S  []ser     `json:"s"`
-		St bool      `json:"st"`
-		Dt bool      `json:"dt"`
-		F  int64     `json:"f"`
-		To int64     `json:"to"`
-		G  [5]int    `json:"g"`
+		X  []float64   `json:"x"`
+		L  []string    `json:"l"`
+		T  []int64     `json:"t"`
+		W  int         `json:"w"`
+		S  []ser       `json:"s"`
+		St bool        `json:"st"`
+		Dt bool        `json:"dt"`
+		F  int64       `json:"f"`
+		To int64       `json:"to"`
+		G  [5]int      `json:"g"`
+		D  []startMark `json:"d,omitempty"`
 	}{W: svgW, St: c.Kind == Stacked, Dt: c.Dates, F: c.From.UnixMilli(), To: c.To.UnixMilli(),
 		G: [5]int{padL, plotW, padT, plotH, svgH}}
 	layout := dateTimeFmt
 	if c.Dates {
 		layout = dateFmt
+	}
+	for _, s := range c.Starts {
+		if !s.At.Before(c.From) && !s.At.After(c.To) {
+			d.D = append(d.D, startMark{X: math.Round(c.xOf(s.At)*10) / 10, T: s.At.UnixMilli(), V: s.Label()})
+		}
 	}
 	for _, t := range c.Times {
 		d.X = append(d.X, math.Round(c.xOf(t)*10)/10)
@@ -419,14 +407,11 @@ func (c *Chart) data(sb *strings.Builder) {
 				vs[i] = c.format(s.Vals[i])
 			}
 		}
-		sr := ser{N: s.Name, C: c.color(s.Name), V: vs}
-		if c.Kind == Stacked {
-			sr.R = make([]*float64, len(c.Times))
-			for i := range c.Times {
-				if i < len(s.Vals) && !math.IsNaN(s.Vals[i]) {
-					v := s.Vals[i]
-					sr.R[i] = &v
-				}
+		sr := ser{N: s.Name, C: c.color(s.Name), V: vs, R: make([]*float64, len(c.Times))}
+		for i := range c.Times {
+			if i < len(s.Vals) && !math.IsNaN(s.Vals[i]) {
+				v := s.Vals[i]
+				sr.R[i] = &v
 			}
 		}
 		d.S = append(d.S, sr)
@@ -518,4 +503,23 @@ func (c *Chart) color(name string) string {
 		return col
 	}
 	return Color(name)
+}
+
+type startMark struct {
+	X float64 `json:"x"`
+	T int64   `json:"t"`
+	V string  `json:"v"`
+}
+
+// startMarks draws a dashed line with a dot at the top for each start in the
+// chart's window.
+func (c *Chart) startMarks(sb *strings.Builder) {
+	for _, s := range c.Starts {
+		if s.At.Before(c.From) || s.At.After(c.To) {
+			continue
+		}
+		x := c.xOf(s.At)
+		fmt.Fprintf(sb, "<g class='start'><line x1='%.1f' x2='%.1f' y1='%d' y2='%d'/><circle cx='%.1f' cy='%d' r='3'/><title>%s started %s UTC</title></g>",
+			x, x, padT, padT+plotH, x, padT, html.EscapeString(s.Label()), s.At.Format(dateTimeFmt))
+	}
 }

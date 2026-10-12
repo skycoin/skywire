@@ -1,0 +1,2 @@
+# Frozen opusdec inputs are verified by SHA-256; check them out byte for byte.
+internal/celt/testdata/opusdec_frozen_inputs/** -text

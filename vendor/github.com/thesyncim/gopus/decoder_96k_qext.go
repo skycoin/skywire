@@ -20,32 +20,58 @@ func (d *Decoder) is96kHz() bool { return d.apiIs96kHz }
 // The top-level sample rate is 96000 so 20 ms CELT frames decode to 1920
 // samples/channel; the CELT decoder runs the native HD96k mode.
 func (d *Decoder) decode96kFloat32(data []byte, pcm []float32) (int, error) {
-	return d.decodeFloat32(data, pcm, true)
+	return d.decodePublicFloat32(data, pcm)
 }
 
-// decodeInt1696k decodes at 96 kHz into int16, routing through decode96kFloat32.
+// decodeInt1696k decodes at 96 kHz into int16 through the decoder-owned float
+// scratch used by raw packet decoding, then applies the int16 output stage.
 func (d *Decoder) decodeInt1696k(data []byte, pcm []int16) (int, error) {
+	d.beginFixedPacket()
+	defer d.endFixedPacket()
 	channels := int(d.channels)
-	needed := len(pcm)
-	scratch := make([]float32, needed)
-	n, err := d.decode96kFloat32(data, scratch)
+	// Reuse the decoder-owned float scratch used by the other public integer
+	// wrappers. Match the caller's exact length on every call: exposing a
+	// warmed larger scratch slice here would let an undersized output buffer
+	// decode farther than the public API permits.
+	d.ensureScratchPCM(len(pcm))
+	// Integer decode owns the soft-clip history. The public float wrapper clears
+	// that history after each Decode call, so route through the raw packet decode
+	// with clearing disabled before applying the int16 soft clip below.
+	n, err := d.decodeFloat32(data, d.scratchPCM, false)
 	if err != nil {
 		return 0, err
 	}
-	softClipAndFloat32ToInt16(pcm[:n*channels], scratch[:n*channels], n, channels, d.softClipMem[:])
+	d.fixedApplyDecodeGain(n * channels)
+	if len(data) == 0 {
+		// opus_decode_native returns from its PLC branch before soft clipping.
+		// Keep the existing clip history for the next received packet.
+		if !d.fixedInt16PLCOutput(pcm, n, channels) {
+			float32ToInt16NoSoftClip(pcm, d.scratchPCM, n, channels)
+		}
+	} else {
+		d.finishInt16Output(pcm, d.scratchPCM, n, channels)
+	}
 	return n, nil
 }
 
-// decodeInt2496k decodes at 96 kHz into int32 (24-bit), routing through decode96kFloat32.
+// decodeInt2496k decodes at 96 kHz into int32 (24-bit) through the
+// decoder-owned float scratch used by raw packet decoding.
 func (d *Decoder) decodeInt2496k(data []byte, pcm []int32) (int, error) {
+	d.beginFixedPacket()
+	defer d.endFixedPacket()
 	channels := int(d.channels)
-	needed := len(pcm)
-	scratch := make([]float32, needed)
-	n, err := d.decode96kFloat32(data, scratch)
+	// Keep the temporary float buffer decoder-owned and set its length to the
+	// caller's length for the same undersized-buffer behavior as Decode.
+	d.ensureScratchPCM(len(pcm))
+	// opus_decode24 disables clipping in opus_decode_native, which clears the
+	// int16 soft-clip history after a received packet. The native PLC branch
+	// returns before that clearing step.
+	n, err := d.decodeFloat32(data, d.scratchPCM, true)
 	if err != nil {
 		return 0, err
 	}
-	float32ToInt24Slice(pcm[:n*channels], scratch[:n*channels], n, channels)
+	d.fixedApplyDecodeGain(n * channels)
+	d.finishInt24Output(pcm, d.scratchPCM, n, channels)
 	return n, nil
 }
 
@@ -54,6 +80,7 @@ func (d *Decoder) decodeInt2496k(data []byte, pcm []int32) (int, error) {
 func init96kDecoder(d *Decoder) {
 	d.apiIs96kHz = true
 	d.sampleRate = 96000
+	d.hybridDecoder.SetAPISampleRate(96000)
 	// 20 ms at 96 kHz default frame size for PLC sizing.
 	d.lastFrameSize = 96000 / 50
 	// Switch the CELT decoder into the native HD96k mode (overlap 240,

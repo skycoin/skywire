@@ -13,12 +13,16 @@
 package visor
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxoregistry "github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -33,6 +37,25 @@ type embeddedService struct {
 	log    *logging.Logger
 	svc    services.Embeddable
 	err    error
+	// standalone is set for a block with a key other than the visor's, or
+	// one that cannot be mounted. It is rebuilt from ownRaw by factory on
+	// every start and runs as its own service; ownPK is its key, if known.
+	standalone bool
+	ownPK      cipher.PubKey
+	ownRaw     json.RawMessage
+	factory    services.Factory
+	// restarts counts how often an own-key service was started again.
+	restarts int
+	// current is the running own-key service instance, for its state.
+	current services.Service
+	// cancel ends the current run; stopped and restartNow are what the
+	// operator asked for; wake ends a wait for a stopped or backing-off service.
+	cancel     context.CancelFunc
+	stopped    bool
+	restartNow bool
+	wake       chan struct{}
+	// started is set once its runner is going, so a resume does not start a second.
+	started bool
 	// mu guards running (set once the service is mounted) and startErr,
 	// written during init and read by state queries.
 	mu       sync.Mutex
@@ -43,6 +66,9 @@ type embeddedService struct {
 type embeddedSet struct {
 	once sync.Once
 	svcs []*embeddedService
+	// board is the status page of svcs, built once.
+	boardOnce sync.Once
+	board     *charts.Board
 	// ports are the CXO ports the embedded services aggregate on.
 	ports map[uint16]bool
 }
@@ -52,6 +78,8 @@ type embeddedSet struct {
 // their storage) or the embedding module.
 func (v *Visor) embeddedServices() []*embeddedService {
 	v.embedded.once.Do(func() {
+		// A block's log_level must not set the visor's own.
+		services.SharedProcess()
 		v.embedded.ports = map[uint16]bool{}
 		seen := map[string]string{}
 		for i, b := range v.conf.EmbeddedServices {
@@ -63,12 +91,18 @@ func (v *Visor) embeddedServices() []*embeddedService {
 					i, es.label, b.Type, services.RegisteredTypes())
 				continue
 			}
-			if other, dup := seen[es.prefix]; dup {
-				es.err = fmt.Errorf("block #%d (%s) and %s both mount at %s", i, es.label, other, es.prefix)
+			raw, pk, hasKey, err := services.OwnKey(b.Raw)
+			if err != nil {
+				es.err = fmt.Errorf("block #%d (%s): key: %w", i, es.label, err)
 				continue
 			}
-			seen[es.prefix] = es.label
 			es.log = v.MasterLogger().PackageLogger(es.label)
+			if hasKey && pk != v.conf.PK {
+				// Its own key: run as the standalone service would, inside
+				// this process (init_embedded_services.go).
+				es.setStandalone(pk, raw, factory)
+				continue
+			}
 			svc, err := factory(b.Raw, es.log)
 			if err != nil {
 				es.err = fmt.Errorf("block #%d (%s): build: %w", i, es.label, err)
@@ -76,9 +110,19 @@ func (v *Visor) embeddedServices() []*embeddedService {
 			}
 			emb, ok := svc.(services.Embeddable)
 			if !ok {
-				es.err = fmt.Errorf("block #%d (%s): type %q cannot run inside the visor", i, es.label, b.Type)
+				if hasKey {
+					es.err = fmt.Errorf("block #%d (%s): type %q cannot be mounted under the visor's key", i, es.label, b.Type)
+					continue
+				}
+				// Keyless, or keyed in its own config file: run it as is.
+				es.setStandalone(services.ConfigPubKey(raw), raw, factory)
 				continue
 			}
+			if other, dup := seen[es.prefix]; dup {
+				es.err = fmt.Errorf("block #%d (%s) and %s both mount at %s", i, es.label, other, es.prefix)
+				continue
+			}
+			seen[es.prefix] = es.label
 			es.svc = emb
 			if agg, ok := svc.(services.CXOAggregating); ok {
 				for _, p := range agg.AggregatorPorts() {
@@ -88,6 +132,11 @@ func (v *Visor) embeddedServices() []*embeddedService {
 		}
 	})
 	return v.embedded.svcs
+}
+
+func (es *embeddedService) setStandalone(pk cipher.PubKey, raw json.RawMessage, factory services.Factory) {
+	es.standalone, es.ownPK, es.ownRaw, es.factory = true, pk, raw, factory
+	es.wake = make(chan struct{}, 1)
 }
 
 // hostCXOPubStorage is cxoPubStorage for a publisher on port: in memory
@@ -151,17 +200,32 @@ func (v *Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 			URL:       fmt.Sprintf("dmsg://%s:%d%s", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort, es.prefix),
 			PlainHTTP: blockAddr(es.block),
 		}
+		if es.standalone {
+			st.URL = ""
+			if !es.ownPK.Null() {
+				st.URL = "dmsg://" + es.ownPK.Hex()
+			}
+			st.OwnKey = true
+		}
 		es.mu.Lock()
-		running, startErr := es.running, es.startErr
+		running, startErr, restarts, stopped := es.running, es.startErr, es.restarts, es.stopped
 		es.mu.Unlock()
 		st.Running = running
+		st.Restarts = restarts
+		st.Stopped = stopped
 		switch {
 		case es.err != nil:
 			st.Error = es.err.Error()
 		case startErr != nil:
 			st.Error = startErr.Error()
 		}
-		if s, ok := es.svc.(services.Stater); ok && running {
+		var stater services.Service = es.svc
+		if es.standalone {
+			es.mu.Lock()
+			stater = es.current
+			es.mu.Unlock()
+		}
+		if s, ok := stater.(services.Stater); ok && running {
 			st.State = s.State()
 		}
 		out = append(out, st)

@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package visorconfig pkg/visor/visorconfig/read.go c3-vis-core
 //
 // Reader / ReadFile / ReadRaw load a V1 config from disk or an

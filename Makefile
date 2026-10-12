@@ -1,10 +1,10 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race
+.PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : ios-core ios-deps-check mobile-test
-.PHONY : generate services vet check-cg check-help check-inner check-ci
+.PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 # --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
@@ -97,8 +97,7 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # package.
 #
 # The js/wasm command module (exec-wasm) deliberately takes NO version
-# ldflags. It is built first and embedded into the native binary that follows,
-# so it cannot borrow that binary's stamped version. Instead it self-describes
+# ldflags. Instead it self-describes
 # from the VCS info the Go toolchain records automatically (debug.BuildInfo
 # vcs.revision / vcs.modified, written into a GOOS=js binary as plain text via
 # -buildvcs): buildinfo.VersionOrCommit() turns that into a
@@ -234,14 +233,12 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # (geoip db 30 MB, manager UI 6.8 MB, vendored browser wallet 11 MB, tpviz
 # legacy 2.8 MB) and selects the lite module set
 # (pkg/visor/init_modules_mobile.go): no host stats, metrics, server roles or
-# embedded infrastructure nodes. `nomsgpack` is gin's own tag: it drops the ugorji msgpack
-# codec (2.8 MB of code, the biggest third-party package in the payload) — gin
-# is on the phone only for the log server and the rewards server, both JSON.
+# embedded infrastructure nodes.
 # Output lands in the android project's jniLibs so Android
 # Studio picks it up directly. -checklinkname=0 is REQUIRED on GOOS=android:
 # the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
 ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
-MOBILE_TAGS := mobile,withoutsystray,nomsgpack
+MOBILE_TAGS := mobile,withoutsystray
 # Size budget for the android payload, in bytes (70 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
 # It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23
@@ -454,6 +451,13 @@ install-generate: ## Installs required execs for go generate.
 generate: ## Generate mocks and config README's
 	go generate ./...
 
+hostbridge-dist: ## Rebuild the TinyGo host bridges the wasm visor embeds (needs the 0magnet/tinygo fork as tinygo)
+	for t in linux/amd64 linux/arm64 linux/arm linux/386 darwin/amd64 darwin/arm64 windows/amd64; do \
+		os=$${t%/*}; arch=$${t#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		f=pkg/hostbridge/dist/skywire-hostbridge-$$os-$$arch$$ext; \
+		GOOS=$$os GOARCH=$$arch tinygo build -no-debug -o $$f ./cmd/hostbridge && gzip -9 -n -f $$f || exit 1; \
+	done
+
 doc-gen: ## Regenerate docs/skywire/ from the live cobra command tree
 	go run ./cmd/skywire doc --out docs/skywire
 
@@ -574,11 +578,21 @@ check-bundle-wasm: ## Warn if the committed routing-policy bundle.wasm differs f
 		ls -l "$$tmp" "$(CURDIR)/$(BUNDLE_WASM)"; rm -f "$$tmp"; \
 	fi
 
-# The Go/wasm WebGL tpviz view builds no separate tpviz-gl.wasm: it is a role
-# of the one skywire command module (`skywire desk-host --role netview`,
-# pkg/wasmhv/deskhost), which pkg/tpviz serves at /tpviz-gl.wasm out of the
-# copy the native binary embeds (make embed-exec-wasm). bundle.js in
-# pkg/tpviz/legacy/ loads it lazily when the "WebGL (Go)" view is selected.
+# The WebGL graph view is its own small module, committed gzipped. It is built
+# with the go.mod toolchain so the build is byte-reproducible and matches the
+# committed pkg/wasmhv/wasm_exec.js.
+NETVIEW_WASM = pkg/tpviz/netview/netview.wasm.gz
+NETVIEW_BUILD = GOTOOLCHAIN=go$$(awk '/^go /{print $$2}' go.mod) GOOS=js GOARCH=wasm go build -trimpath -buildvcs=false -ldflags='-s -w'
+
+netview-wasm: ## Rebuild the committed netview module (pkg/tpviz/netview)
+	@tmp=$$(mktemp) && $(NETVIEW_BUILD) -o "$$tmp" ./cmd/netview && gzip -9 -n -c "$$tmp" > $(NETVIEW_WASM) && rm -f "$$tmp"
+	@ls -l $(NETVIEW_WASM); echo "commit $(NETVIEW_WASM) with the change that needed it."
+
+check-netview-wasm: ## Fail if the committed netview module differs from a fresh build
+	@tmp=$$(mktemp) && $(NETVIEW_BUILD) -o "$$tmp" ./cmd/netview && gzip -9 -n -c "$$tmp" > "$$tmp.gz" && rm -f "$$tmp" && \
+	if cmp -s "$$tmp.gz" $(NETVIEW_WASM); then rm -f "$$tmp.gz"; echo "$(NETVIEW_WASM) is up to date."; else \
+		rm -f "$$tmp.gz"; echo "$(NETVIEW_WASM) is stale. Run 'make netview-wasm' and commit it."; exit 1; fi
+
 
 # embed-winbox was removed: the window manager now lives in
 # github.com/0magnet/winbox-go, which the Go desk host links directly. To
@@ -908,18 +922,13 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# once causes healthcheck timeouts because Go services are too
 	@# slow to initialize when competing for CPU.
 	@#
-	@# After #2471 the nine deployment-side services (tpd, rf,
-	@# dmsg-disc, dmsg-server, sn, sd, ar, tps, stun) collapse into
-	@# one `deployment-services` container; the previous per-service
-	@# staging is replaced by one wait on the supervisor. The five
-	@# per-service redis containers are now a single `redis` (each
-	@# service uses its own logical DB), and the deprecated
-	@# uptime-tracker + its postgres are gone (uptime is integrated
-	@# into the discovery services).
+	@# visor-s is the deployment host: one visor that is also the dmsg
+	@# server and runs every deployment service in its process under
+	@# the service's own key, as the production hosts do. All services
+	@# share one redis, each on its own logical DB.
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait redis"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services || { echo '=== deployment-services unhealthy — logs: ==='; docker compose logs --tail=150 deployment-services; exit 1; }"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-s || { echo '=== visor-s (embedded tpd/rf/ar/sd) unhealthy — logs: ==='; docker compose logs --tail=200 visor-s; exit 1; }"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — deployment-services (dmsg-server side) + visor-b logs: ==='; docker compose logs --tail=200 deployment-services; docker compose logs --tail=120 visor-b; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-s || { echo '=== visor-s (deployment services) unhealthy — logs: ==='; docker compose logs --tail=200 visor-s; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — visor-s + visor-b logs: ==='; docker compose logs --tail=200 visor-s; docker compose logs --tail=120 visor-b; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c || { echo '=== visor-a/visor-c unhealthy — logs: ==='; docker compose logs --tail=150 visor-a visor-c; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
@@ -970,21 +979,14 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
 		--pty-rpc-exec \
 		-o docker/integration/visorC.json
-	@# visor-S: hosts transport-discovery, route-finder, address-resolver and
-	@# service-discovery in-process (embedded_services); the four dmsg URLs
-	@# in services-config.json carry its key and the /tpd /rf /ar /sd prefixes.
-	@# config gen has no flag for the section, so it is added with jq; the
-	@# blocks are the old services.json entries minus their keys and dmsg
-	@# settings, plus their plain-HTTP addr for the suite's direct curls.
+	@# visor-S is the deployment host, as on prod: one visor that is also the
+	@# dmsg server (dmsg.server.config_path keeps the server's own key) and runs
+	@# every deployment service in its process under the service's own key
+	@# (embedded_services). The blocks are in docker/integration/visorS.jq.
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
 		go run . cli config gen -f --nofetch --sk e31d7e9cb497d8a39f211a5b012982a3546c7a3bdf50ed65fe6e8442a4297e5b \
 		-o docker/integration/visorS.json
-	jq --indent 2 '.launcher.apps |= map(.auto_start = false) | .embedded_services = [ \
-		{"type":"transport-discovery","name":"tpd","addr":":9094","redis":"redis://redis:6379/1","entry_timeout":"2m","uptime_db":"","store_data_path":"/var/lib/skywire/tpd/bandwidth"}, \
-		{"type":"route-finder","name":"rf","addr":":9092","redis":"redis://redis:6379/1"}, \
-		{"type":"service-discovery","name":"sd","addr":":9091","redis":"redis://redis:6379/2","entry_timeout":"2m"}, \
-		{"type":"address-resolver","name":"ar","addr":":9093","udp_addr":":9093","public_udp_addr":"174.0.0.18:9093","redis":"redis://redis:6379/3","entry_timeout":"2m"} ]' \
-		docker/integration/visorS.json > docker/integration/visorS.json.tmp && mv docker/integration/visorS.json.tmp docker/integration/visorS.json
+	jq --indent 2 -f docker/integration/visorS.jq docker/integration/visorS.json > docker/integration/visorS.json.tmp && mv docker/integration/visorS.json.tmp docker/integration/visorS.json
 	@echo "E2E visor configs regenerated."
 	@echo ""
 	@echo "NOTE: skychat should read \"--addr *:8001 --pair-enable\" in"
@@ -1142,13 +1144,7 @@ playground: ## Build the docs-site playground (static desk page: shell + skywire
 
 # --- one wasm module (#4484 convergence) --------------------------------------
 # The full skywire command module for GOOS=js: the desk's `skywire` command and
-# the tab visor. Built FIRST and gzipped into pkg/wasmhv/execwasm/blob/, then
-# the native binary is built with it embedded — the two-stage build every
-# distributed binary gets (publish-binary.yml, release.yml). The staged blob is
-# TRACKED (#4872), so a plain `make build` / `go build .` embeds whatever was
-# last committed there; restaging it modifies two tracked files, which is why
-# the release workflows hide them with `git update-index --assume-unchanged`
-# before building (a dirty tree stamps the binary "+dirty").
+# the tab visor. It is not embedded; a visor serves the copy beside its binary.
 EXEC_WASM_TAGS ?= withoutsystray withoutgotop
 
 exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
@@ -1156,51 +1152,5 @@ exec-wasm: ## Build the js/wasm command module to build/exec-wasm/skywire.wasm
 	GOOS=js GOARCH=wasm go build -trimpath -buildvcs=true -mod=vendor -tags "$(EXEC_WASM_TAGS)" -ldflags="-s -w" -o ./build/exec-wasm/skywire.wasm .
 	@ls -la ./build/exec-wasm/skywire.wasm
 
-# The module is built with -buildvcs=true, so ONE untracked file in the work
-# tree is enough for Go to record vcs.modified=true inside it, and every native
-# binary that embeds it then reports dev-<commit>-dirty for the rest of its
-# life. That is how the blob committed by #4872 came to be dirty: it was staged
-# from a tree with untracked bench/ dirs in it, and v1.3.94 shipped the result.
-# release.yml and publish-binary.yml gate their own stage-1 builds this way;
-# this is the same gate for the maintainer who restages the blob by hand.
-# EMBED_REQUIRE_CLEAN=0 overrides it for a throwaway local build.
-EMBED_REQUIRE_CLEAN ?= 1
-
-.PHONY: assert-clean-tree
-assert-clean-tree:
-	@test "$(EMBED_REQUIRE_CLEAN)" != "1" || test -z "$$(git status --porcelain)" || { \
-		echo "work tree is dirty — the staged js/wasm module would be stamped -dirty:"; \
-		git status --porcelain; \
-		echo "commit or clean the tree first, or set EMBED_REQUIRE_CLEAN=0 for a local build"; \
-		exit 1; }
-
-embed-exec-wasm: assert-clean-tree exec-wasm ## Stage the js/wasm command module for embedding (pkg/wasmhv/execwasm/blob/, tracked)
-	gzip -9 -n -c ./build/exec-wasm/skywire.wasm > ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-	@# Record which commit the module was built from, so the native binary can
-	@# say at serve time that it is serving a module older than itself. The
-	@# module is built with -buildvcs=true and is never inflated in memory, so
-	@# the revision is lifted here rather than scanned from 176 MB at runtime.
-	@# vcs.revision= is not at the start of a strings(1) line, so match the
-	@# substring rather than anchoring: an anchored sed silently records an
-	@# empty revision, which then reads as "stale" forever.
-	@strings -a ./build/exec-wasm/skywire.wasm | grep -oE 'vcs\.revision=[0-9a-f]{40}' \
-		| head -1 | cut -d= -f2 > ./pkg/wasmhv/execwasm/blob/revision.txt
-	@ls -la ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz
-	@echo "staged module revision: $$(cat ./pkg/wasmhv/execwasm/blob/revision.txt)"
-
-check-exec-wasm: ## Report whether the staged js/wasm command module matches HEAD
-	@test -f ./pkg/wasmhv/execwasm/blob/revision.txt || { \
-		echo "no staged js/wasm command module — run 'make embed-exec-wasm'"; exit 1; }
-	@staged=$$(cat ./pkg/wasmhv/execwasm/blob/revision.txt); head=$$(git rev-parse HEAD); \
-	if [ "$$staged" = "$$head" ]; then \
-		echo "staged js/wasm command module is current ($$head)"; \
-	else \
-		echo "STALE: the staged js/wasm command module is $$staged, HEAD is $$head"; \
-		echo "Run 'make embed-exec-wasm' and rebuild, or the desk serves older code than the binary."; \
-		exit 1; \
-	fi
-
-build-embedded: embed-exec-wasm build ## Two-stage build: the native binary with the js/wasm command module embedded
-
-clean-exec-wasm: ## Delete the staged js/wasm command module (it is tracked — `git checkout` the blob to get it back)
-	rm -f ./pkg/wasmhv/execwasm/blob/skywire.wasm.gz ./build/exec-wasm/skywire.wasm
+wasm-module: exec-wasm ## Put the js/wasm command module and its manifest beside ./skywire
+	sh ./scripts/wasm-module.sh ./build/exec-wasm/skywire.wasm . dev

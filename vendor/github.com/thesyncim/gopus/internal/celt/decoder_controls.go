@@ -72,6 +72,12 @@ func (d *Decoder) Bandwidth() CELTBandwidth {
 	return d.bandwidth
 }
 
+// SetCustomEndBand selects an explicit CELT end band from a custom frame
+// header. A non-positive value restores the mode's configured/default end.
+func (d *Decoder) SetCustomEndBand(endBand int) {
+	d.customEndBand = int32(endBand)
+}
+
 // SetComplexity sets decoder complexity (0-10).
 func (d *Decoder) SetComplexity(complexity int) error {
 	if complexity < 0 || complexity > 10 {
@@ -91,7 +97,9 @@ func (d *Decoder) SampleRate() int {
 	return int(d.sampleRate)
 }
 
-// SetAPISampleRate sets the Opus API sample rate used by CELT downsampling.
+// SetAPISampleRate selects a standard CELT API output rate: 48, 24, 16, 12, or
+// 8 kHz. Rates below 48 kHz use the corresponding downsample factor from the
+// 48 kHz CELT core; this control does not enable native 96 kHz HD mode.
 func (d *Decoder) SetAPISampleRate(sampleRate int) error {
 	switch sampleRate {
 	case 48000:

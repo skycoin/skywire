@@ -18,6 +18,9 @@ Example services.json:
     ]
   }
 
+A block may name its key file ("keyfile": "/run/secrets/tpd") instead of an inline
+"secret_key", like --keyfile for a single service.
+
 Use --list to see which service types are registered.
 
 ## Usage

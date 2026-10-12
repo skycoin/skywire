@@ -11,8 +11,8 @@ func (d *MultistreamDecoder) SetOSCEBWE(enabled bool) error {
 	return nil
 }
 
-// OSCEBWE reports decoder-side OSCE bandwidth-extension state for explicit
-// extra-controls builds.
+// OSCEBWE reports decoder-side OSCE bandwidth-extension state. This method is
+// available in builds tagged gopus_osce.
 func (d *MultistreamDecoder) OSCEBWE() (bool, error) {
 	return d.dec.OSCEBWE(), nil
 }
@@ -28,8 +28,8 @@ func (d *MultistreamDecoder) SetOSCELACE(enabled bool) error {
 	return nil
 }
 
-// OSCELACE reports decoder-side OSCE LACE/NoLACE postfilter activation state
-// for explicit extra-controls builds.
+// OSCELACE reports decoder-side OSCE LACE/NoLACE postfilter activation state.
+// This method is available in builds tagged gopus_osce.
 func (d *MultistreamDecoder) OSCELACE() (bool, error) {
 	return d.dec.OSCELACE(), nil
 }

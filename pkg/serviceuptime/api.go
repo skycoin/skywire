@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // CurrentSessionHandler serves GET /uptime/now → JSON SessionRecord.
@@ -89,10 +89,9 @@ func DatesHandler(store *Store) http.HandlerFunc {
 	}
 }
 
-// RegisterRoutes is a chi.Router convenience wrapper that mounts all
-// /uptime/* routes on r. Services using chi (TPD, AR, RF, UT) call
-// this from their api.New constructor.
-func RegisterRoutes(r chi.Router, recorder *Recorder) {
+// RegisterRoutes mounts all /uptime/* routes on r. TPD, AR, RF and UT
+// call this from their api.New constructor.
+func RegisterRoutes(r *httputil.Router, recorder *Recorder) {
 	r.Get("/uptime/now", CurrentSessionHandler(recorder))
 	r.Get("/uptime/sessions", SessionsHandler(recorder.Store()))
 	r.Get("/uptime/timeline", TimelineHandler(recorder.Store()))
@@ -102,7 +101,7 @@ func RegisterRoutes(r chi.Router, recorder *Recorder) {
 // RegisterReadOnlyRoutes mounts the read endpoints minus /uptime/now,
 // for callers with a Store but no live Recorder (e.g. an inspector
 // tool reading a copied bbolt file).
-func RegisterReadOnlyRoutes(r chi.Router, store *Store) {
+func RegisterReadOnlyRoutes(r *httputil.Router, store *Store) {
 	r.Get("/uptime/sessions", SessionsHandler(store))
 	r.Get("/uptime/timeline", TimelineHandler(store))
 	r.Get("/uptime/dates", DatesHandler(store))

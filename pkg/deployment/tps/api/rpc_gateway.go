@@ -6,8 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/rpc"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/google/uuid"
 
@@ -23,6 +24,8 @@ import (
 
 // ErrRemoteRemovalNotAllowed is returned when a remote caller tries to remove a transport.
 var ErrRemoteRemovalNotAllowed = errors.New("transport removal not allowed via remote interface")
+
+//go:generate go run ../../../../internal/rpcgen -type SetupRPCGateway=registerSetupRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
 
 // SetupRPCGateway handles RPC requests from remote visors over dmsg.
 type SetupRPCGateway struct {
@@ -192,7 +195,7 @@ func (api *API) ServeDmsg(ctx context.Context) error {
 		}
 
 		rpcS := rpc.NewServer()
-		if err := rpcS.Register(gw); err != nil {
+		if err := registerSetupRPCGateway(rpcS, "SetupRPCGateway", gw); err != nil {
 			log.WithError(err).Error("Failed to register RPC gateway")
 			conn.Close() //nolint:errcheck,gosec
 			continue

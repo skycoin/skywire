@@ -3,7 +3,7 @@
 package silk
 
 // silkEncoderFixedFields is empty in the default (float) build, keeping the
-// Encoder struct byte-unchanged and the integer SILK encode path unlinked.
+// integer SILK encode path unlinked.
 type silkEncoderFixedFields struct{}
 
 // fixedEncodeActive reports whether the integer SILK encode path is selected.
@@ -15,41 +15,34 @@ func (e *Encoder) fixedEncodeActive() bool { return false }
 const silkFixedEncodeBuild = false
 
 // encodeFrameFixedBody is never reached in the default build (fixedEncodeActive
-// returns false); the stub keeps EncodeFrame build-tag agnostic.
-func (e *Encoder) encodeFrameFixedBody(_ []float32, _, _, _, _, _ int, _, _, _, _ bool) []byte {
-	return nil
+// returns false); the stub keeps encodeFrame build-tag agnostic.
+func (e *Encoder) encodeFrameFixedBody(_ []int16, _, _, _ int, _, _ bool, _ int, _ bool) int32 {
+	return 0
 }
+
+// prefillFrameFixed is never reached in the default build (fixedEncodeActive
+// returns false).
+func (e *Encoder) prefillFrameFixed(_ []int16) {}
 
 // resetFixedState is a no-op in the default build.
 func (e *Encoder) resetFixedState() {}
 
-// stereoFrontEnd uses the float StereoLRToMSWithRates analysis in the default
-// build; the integer mid/side outputs are nil (unused on this path).
-func (e *Encoder) stereoFrontEnd(
-	left, right []float32,
-	frameLength, fsKHz int,
-	totalRateBps int,
-	prevSpeechActQ8 int32,
-	toMono bool,
-) (midOut, sideOut []float32, midI16, sideI16 []int16, ix StereoQuantIndices, midOnly bool, midRate, sideRate int, widthQ14 int16) {
-	midOut, sideOut, ix, midOnly, midRate, sideRate, widthQ14 = e.StereoLRToMSWithRates(
-		left, right, frameLength, fsKHz, totalRateBps, prevSpeechActQ8, toMono,
-	)
-	return midOut, sideOut, nil, nil, ix, midOnly, midRate, sideRate, widthQ14
+// resetFixedAnalysisHistory is a no-op in the default build.
+func (e *Encoder) resetFixedAnalysisHistory() {}
+
+// xBufToInt16 is the silk_float2short_array of x_buf in silk_setup_resamplers
+// (silk/control_codec.c): it rounds the first len(dst) samples of x_buf, kept
+// normalized to [-1, 1], to int16.
+func (e *Encoder) xBufToInt16(dst []int16) {
+	for k := range dst {
+		dst[k] = float32ToInt16(e.xBuf[k])
+	}
 }
 
-// stageStereoInt16 is a no-op in the default build (float mid/side feed the
-// per-channel encode directly).
-func (e *Encoder) stageStereoInt16(_ []int16) {}
-
-// stereoSideVADFixed reports that no integer side-VAD decision is available in
-// the default build; callers fall back to analyzer/external VAD flags.
-func (e *Encoder) stereoSideVADFixed(_ *Encoder, _ []int16, _, _ int, _ bool) (active, ok bool) {
-	return false, false
+// xBufFromInt16 is the silk_short2float_array back into x_buf in
+// silk_setup_resamplers (silk/control_codec.c).
+func (e *Encoder) xBufFromInt16(src []int16) {
+	for k, v := range src {
+		e.xBuf[k] = float32(v) * (1.0 / silkSampleScale)
+	}
 }
-
-// FixedLastVADFlag is always false in the default build (no integer encode path).
-func (e *Encoder) FixedLastVADFlag() bool { return false }
-
-// resetStereoSideFixedState is a no-op in the default build.
-func (e *Encoder) resetStereoSideFixedState() {}

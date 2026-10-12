@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package addrresolver pkg/transport/network/addrresolver/client_sudph.go c2-net-transport
 //
 // SUDPH (UDP hole-punching) is the only part of the AR client that pulls in
@@ -18,7 +16,7 @@ import (
 	"time"
 
 	kcp "github.com/0magnet/kcp-go/v5"
-	"github.com/AudriusButkevicius/pfilter"
+	"github.com/0magnet/pfilter"
 
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/transport/network/packetfilter"

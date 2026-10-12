@@ -4,8 +4,9 @@ package pty
 import (
 	"fmt"
 	"io"
-	"net/rpc"
 	"sync"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 

@@ -23,16 +23,17 @@ type SpreadingState struct {
 
 // SpreadingDecision ports celt/bands.c spreading_decision (FIXED_POINT). X is the
 // interleaved normalised spectrum (celt_norm), eBands is mode->eBands, nbEBands is
-// mode->nbEBands, end is effEnd, C is the channel count, M == 1<<LM. updateHF
+// mode->nbEBands, shortMDCTSize is mode->shortMdctSize, end is effEnd, C is the
+// channel count, M == 1<<LM. updateHF
 // gates the HF/tapset update (pf_on && !shortBlocks in the caller). spreadWeight
 // comes from dynalloc_analysis. It updates st in place and returns the decision.
 func SpreadingDecision(x []int32, eBands []int16, nbEBands, lastDecision int,
-	st *SpreadingState, updateHF, end, C, M int, spreadWeight []int) int {
+	st *SpreadingState, updateHF, end, C, M, shortMDCTSize int, spreadWeight []int) int {
 
 	sum := 0
 	nbBands := 0
 	hfSum := 0
-	N0 := M * celtShortMdctSize // M*m->shortMdctSize
+	N0 := M * shortMDCTSize // M*m->shortMdctSize
 
 	if M*(int(eBands[end])-int(eBands[end-1])) <= 8 {
 		return spreadNone
@@ -74,9 +75,10 @@ func SpreadingDecision(x []int32, eBands []int16, nbEBands, lastDecision int,
 		}
 		st.HFAverage = (st.HFAverage + hfSum) >> 1
 		hfSum = st.HFAverage
-		if st.TapsetDecision == 2 {
+		switch st.TapsetDecision {
+		case 2:
 			hfSum += 4
-		} else if st.TapsetDecision == 0 {
+		case 0:
 			hfSum -= 4
 		}
 		if hfSum > 22 {

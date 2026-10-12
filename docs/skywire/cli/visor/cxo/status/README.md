@@ -28,7 +28,7 @@ skywire cli visor cxo status
 ## Flags
 
 ```
-  -L, --live   live-refresh mode (bubbletea TUI, 1s tick); shows snapshot growth / lastSyncAt updates in place
+  -L, --live   live-refresh mode (TUI, 1s tick); shows snapshot growth / lastSyncAt updates in place
 ```
 
 ## Global Flags

@@ -71,6 +71,9 @@ const (
 // would be clobbered by the next package upgrade.
 const systemdDropIn = "/etc/systemd/system/skywire.service.d/skywire-user.conf"
 
+// deploymentDropIn sets SKYDEPLOY on the visor unit.
+var deploymentDropIn = "/etc/systemd/system/skywire.service.d/skywire-deployment.conf"
+
 // autoconfigVals holds the runtime values of the autoconfig flags.
 // Lives at package level so the Run function can read them; the
 // pkg/skywireconfig/autoconfigcmd factory wires the bindings.
@@ -171,6 +174,10 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addString("DMSGSERVERCONF", "dmsg-server-conf", autoconfigVals.DmsgServerConf)
 	addBool("DMSGSERVER", "dmsg-server", "no-dmsg-server", autoconfigVals.DmsgServer, autoconfigVals.NoDmsgServer)
 	addString("DMSGSERVERPUBLIC", "dmsg-server-public", autoconfigVals.DmsgServerPublic)
+	addString("DEPLOYMENT", "deployment", autoconfigVals.Deployment)
+	addString("DEPLOYMENTREDIS", "deployment-redis", autoconfigVals.DeploymentRedis)
+	addString("DEPLOYMENTWSSSUFFIX", "deployment-wss-suffix", autoconfigVals.DeploymentWSSSuffix)
+	addString("SKYDEPLOY", "skydeploy", autoconfigVals.Skydeploy)
 	addString("DMSGSERVERWSTLS", "dmsg-server-ws-tls", autoconfigVals.DmsgServerWSTLS)
 
 	// Whitelists
@@ -263,6 +270,10 @@ type resolvedConfig struct {
 	usrEnv      bool
 	pkgEnv      bool
 	skywireUser string // owner for PKGENV paths; empty = no chown
+	// deployment is DEPLOYMENT, a whole deployment this visor runs. skydeploy
+	// is SKYDEPLOY, the services-config the visor uses in place of prod's.
+	deployment  string
+	skydeploy   string
 	configPath  string // resolved skywire.json path
 	useUserUnit bool   // true = `systemctl --user`, false = system unit
 	noRestart   bool   // --no-restart: apply config but skip the service restart (pty-safe)
@@ -374,6 +385,10 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
 		os.Exit(1)
 	}
+	if err := exportDeployment(&resolved); err != nil {
+		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
+		os.Exit(1)
+	}
 
 	if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
 		mode := "PKGENV"
@@ -444,6 +459,12 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 					daemonReload = true
 				}
 			}
+		}
+		if changed, err := syncDeploymentDropIn(resolved.skydeploy); err != nil {
+			fmt.Printf("%sWarning:%s could not update %s: %v\n", colorYellow, colorReset, deploymentDropIn, err)
+		} else if changed {
+			msg3(fmt.Sprintf("Updated %s (SKYDEPLOY=%s)", deploymentDropIn, resolved.skydeploy))
+			daemonReload = true
 		}
 		if daemonReload {
 			_ = exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck,gosec
@@ -571,6 +592,8 @@ func resolveConfig() resolvedConfig {
 	r.pkgEnv = cmdutil.SkyenvBool("${PKGENV:-false}", r.skyenvPath)
 	r.usrEnv = cmdutil.SkyenvBool("${USRENV:-false}", r.skyenvPath)
 	r.skywireUser = cmdutil.SkyenvString("${SKYWIRE_USER:-}", r.skyenvPath)
+	r.deployment = cmdutil.SkyenvString("${DEPLOYMENT:-}", r.skyenvPath)
+	r.skydeploy = cmdutil.SkyenvString("${SKYDEPLOY:-}", r.skyenvPath)
 
 	// Implicit fallback when neither flag is set in the env file:
 	// root → package mode, otherwise user mode. Mirrors what the

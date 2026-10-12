@@ -8,36 +8,30 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
+	"github.com/skycoin/skywire/pkg/tpviz/netview"
 )
 
 // TestStatusWasmResponses checks the /main.wasm and /wasm_exec.js status routes
-// serve the skywire command module (run in its "netview" role) and Go's loader
-// that the GPU route-graph view instantiates same-origin. The loader is always
-// there; the module is 200 + gzip + the execwasm stamp as ETag when one is
-// embedded (the two-stage build), else 503.
+// serve the netview module and its loader, which the GPU route-graph view
+// instantiates same-origin.
 func TestStatusWasmResponses(t *testing.T) {
 	var wasmRaw bytes.Buffer
 	writeStatusWasmResponse(&wasmRaw)
 	wasmResp := parseResp(t, wasmRaw.Bytes())
-	if !execwasm.Present() {
-		if wasmResp.StatusCode != http.StatusServiceUnavailable {
-			t.Fatalf("/main.wasm status = %d without an embedded module, want 503", wasmResp.StatusCode)
-		}
-		t.Log("no skywire.wasm module embedded in this build (make embed-exec-wasm): /main.wasm is 503")
-	} else {
-		if wasmResp.StatusCode != http.StatusOK {
-			t.Fatalf("/main.wasm status = %d", wasmResp.StatusCode)
-		}
-		if ct := wasmResp.Header.Get("Content-Type"); ct != "application/wasm" {
-			t.Errorf("/main.wasm content-type = %q, want application/wasm", ct)
-		}
-		if ce := wasmResp.Header.Get("Content-Encoding"); ce != "gzip" {
-			t.Errorf("/main.wasm content-encoding = %q, want gzip", ce)
-		}
-		if et := wasmResp.Header.Get("ETag"); et != `"`+execwasm.Stamp()+`"` {
-			t.Errorf("/main.wasm etag = %q, want the execwasm stamp %q", et, execwasm.Stamp())
-		}
+	if wasmResp.StatusCode != http.StatusOK {
+		t.Fatalf("/main.wasm status = %d", wasmResp.StatusCode)
+	}
+	if ct := wasmResp.Header.Get("Content-Type"); ct != "application/wasm" {
+		t.Errorf("/main.wasm content-type = %q, want application/wasm", ct)
+	}
+	if ce := wasmResp.Header.Get("Content-Encoding"); ce != "gzip" {
+		t.Errorf("/main.wasm content-encoding = %q, want gzip", ce)
+	}
+	if et := wasmResp.Header.Get("ETag"); et != netview.ETag {
+		t.Errorf("/main.wasm etag = %q, want %q", et, netview.ETag)
+	}
+	if body, err := io.ReadAll(wasmResp.Body); err != nil || !bytes.Equal(body, netview.WasmGz) {
+		t.Errorf("/main.wasm body is not the netview module (err %v)", err)
 	}
 
 	execResp := parseResp(t, statusWasmExecResponse())
@@ -51,14 +45,14 @@ func TestStatusWasmResponses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "this.argv=['skywire','desk-host','--role','netview']") {
-		t.Error("/wasm_exec.js is not pinned to the netview role")
+	if !bytes.Equal(body, netview.ExecJS) {
+		t.Error("/wasm_exec.js is not the netview loader")
 	}
 }
 
 func parseResp(t *testing.T, raw []byte) *http.Response {
 	t.Helper()
-	resp, err := http.ReadResponse(bufio.NewReader(strings.NewReader(string(raw))), nil)
+	resp, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(raw)), nil)
 	if err != nil {
 		t.Fatalf("parse response: %v", err)
 	}

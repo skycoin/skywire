@@ -1,25 +1,25 @@
-// Package dnnmath provides the activation, exponent and input-quantization
-// kernels libopus' neural-network code (DRED, OSCE) relies on. Each kernel keeps
-// a scalar path that mirrors the generic libopus build and, on arm64, a NEON
-// path matching the SIMD reference so the DNN output is bit-exact per tier.
+// Package dnnmath provides float32 activation, exponent, quantization, and
+// small-vector kernels used by the optional DRED, OSCE, and LPCNet networks.
+// The scalar build follows libopus's generic kernels; the Go SIMD build selects
+// target-specific kernels where available. Compare each path with the matching
+// libopus build and dispatch.
 package dnnmath
 
 import (
 	"math"
-	"runtime"
 
 	"github.com/thesyncim/gopus/internal/opusmath"
 )
 
-var useNEONApproxActivation = runtime.GOARCH == "arm64"
-var useNEONCgemvQuantize = runtime.GOARCH == "arm64"
+const useNEONApproxActivation = dnnNEONEnabled
+const useNEONCgemvQuantize = dnnNEONEnabled
 
 // TanhApprox mirrors libopus' DNN ACTIVATION_TANH path.
 func TanhApprox(x float32) float32 {
 	if useNEONApproxActivation {
 		return tanhApproxNEON(x)
 	}
-	return TanhScalarApprox(x)
+	return tanhApproxX86(x)
 }
 
 // SigmoidScalarApprox mirrors libopus' generic DNN sigmoid path.
@@ -66,7 +66,7 @@ func SigmoidVectorApprox(out, in []float32, n int) {
 		}
 		return
 	}
-	SigmoidVectorScalarApprox(out, in, n)
+	sigmoidVectorX86(out, in, n)
 }
 
 // SigmoidVectorScalarApprox mirrors libopus' generic DNN sigmoid helper.
@@ -92,7 +92,7 @@ func TanhVectorApprox(out, in []float32, n int) {
 		}
 		return
 	}
-	TanhVectorScalarApprox(out, in, n)
+	tanhVectorX86(out, in, n)
 }
 
 // TanhVectorScalarApprox mirrors libopus' generic DNN tanh helper.
@@ -124,7 +124,7 @@ func ExpVectorApprox(out, in []float32, n int) {
 		}
 		return
 	}
-	ExpVectorScalarApprox(out, in, n)
+	expVectorX86(out, in, n)
 }
 
 // ExpVectorScalarApprox mirrors libopus' generic DNN exponent kernel.
@@ -147,9 +147,9 @@ func Exp2Approx(x float32) float32 {
 	return math.Float32frombits(bits)
 }
 
-// Cgemv8x4QuantizeInput mirrors libopus' cgemv8x4 input quantizer for the
-// active DNN vector path. ARM NEON uses nearest-even conversion after a
-// float32 multiply; the scalar fallback uses floor(0.5 + 127*x).
+// Cgemv8x4QuantizeInput mirrors libopus' ARM NEON quantizer, which uses
+// nearest-even conversion after a float32 multiply. Other scalar callers use
+// floor(0.5 + 127*x); the x86 SIMD kernels quantize inside CGEMV8x4X86.
 func Cgemv8x4QuantizeInput(x float32) int8 {
 	if useNEONCgemvQuantize {
 		return int8(opusmath.RoundToEvenF32ToInt32(float32(127) * x))

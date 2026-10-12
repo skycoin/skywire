@@ -24,8 +24,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -79,7 +77,7 @@ func (hv *Hypervisor) upstreamDiscProxy() *gohttputil.ReverseProxy {
 // proxy to upstream public discovery.
 func (hv *Hypervisor) discProxyEntryGet(upstream *gohttputil.ReverseProxy) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pkStr := chi.URLParam(r, "pk")
+		pkStr := r.PathValue("pk")
 		var pk cipher.PubKey
 		if err := pk.Set(pkStr); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid public key"})
@@ -117,7 +115,7 @@ func (hv *Hypervisor) discProxyForward(upstream *gohttputil.ReverseProxy) http.H
 // through to upstream. 404 when not locally known.
 func (hv *Hypervisor) discLocalEntryGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pkStr := chi.URLParam(r, "pk")
+		pkStr := r.PathValue("pk")
 		var pk cipher.PubKey
 		if err := pk.Set(pkStr); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid public key"})

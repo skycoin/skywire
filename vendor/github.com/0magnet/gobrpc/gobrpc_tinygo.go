@@ -24,6 +24,16 @@ type Call = gobimpl.Call
 // have no equivalent (this alias is TinyGo-only).
 type HandlerFunc = gobimpl.HandlerFunc
 
+// CallFunc and DecodeFunc are the gobimpl types for (*Server).HandleCall, which
+// runs each call in its own goroutine. TinyGo only, like HandlerFunc.
+type (
+	CallFunc   = gobimpl.CallFunc
+	DecodeFunc = gobimpl.DecodeFunc
+)
+
+// ServerError mirrors net/rpc.ServerError.
+type ServerError = gobimpl.ServerError
+
 // NewClient mirrors net/rpc.NewClient.
 var NewClient = gobimpl.NewClient
 

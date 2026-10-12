@@ -53,13 +53,10 @@ const (
 	frameKindProfileResponse = "profile_response"
 )
 
-// profileTimeout caps one profile round trip.
-//
-// Tighter than catalogTimeout because of where it is called from: the
-// address dialog fetches a profile while the user is mid-paste, and a
-// profile is decoration — a name that takes eight seconds to appear is
-// worse than no name at all, since the dialog is already usable without it.
-const profileTimeout = 5 * time.Second
+// profileTimeout caps one dial, and then one exchange, of a profile fetch.
+// A dmsg dial between two visors routinely takes several seconds, and at 5s
+// most lookups failed, which the contact form showed as "no name published".
+const profileTimeout = 15 * time.Second
 
 // ErrProfileUnreachable means the host could not be reached or answered
 // nothing — including a host running a build that predates profiles, which
@@ -214,28 +211,56 @@ func (m *Manager) FetchProfile(ctx context.Context, host cipher.PubKey) (profile
 	return out, nil
 }
 
-// profileRoundTrip writes the request and reads the answer, skynet first
-// then dmsg — the same preference order as every other skychat dial.
+// profileRoundTrip asks over skynet and dmsg at once and takes the first
+// answer. Tried in turn, a skynet dial that took seconds to fail left the dmsg
+// dial too little of the budget to connect.
 func profileRoundTrip(ctx context.Context, dmsgC *dmsg.Client, host cipher.PubKey, body []byte) ([]byte, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		frame []byte
+		err   error
+	}
+	results := make(chan result, 2)
+	attempts := 0
+	ask := func(dial func(context.Context) (net.Conn, error)) {
+		attempts++
+		go func() {
+			dialCtx, cancelDial := context.WithTimeout(ctx, profileTimeout)
+			defer cancelDial()
+			conn, err := dial(dialCtx)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer conn.Close() //nolint:errcheck
+			// The other path answered first: unblock this one's read.
+			stop := context.AfterFunc(ctx, func() { _ = conn.Close() }) //nolint:errcheck
+			defer stop()
+			frame, err := profileExchange(conn, body)
+			results <- result{frame: frame, err: err}
+		}()
+	}
 	skyAddr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: host, Port: routing.Port(ProbePort)}
-	if conn, dialErr := dialSkynetRelay(ctx, skyAddr); dialErr == nil {
-		frame, rtErr := profileExchange(conn, body)
-		_ = conn.Close() //nolint:errcheck
-		if rtErr == nil {
-			return frame, nil
+	ask(func(ctx context.Context) (net.Conn, error) { return dialSkynetRelay(ctx, skyAddr) })
+	if dmsgC != nil {
+		ask(func(ctx context.Context) (net.Conn, error) {
+			return dmsgC.DialStream(ctx, dmsg.Addr{PK: host, Port: ProbePort})
+		})
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		select {
+		case r := <-results:
+			if r.err == nil {
+				return r.frame, nil
+			}
+			lastErr = r.err
+		case <-ctx.Done():
+			return nil, fmt.Errorf("%w: %v", ErrProfileUnreachable, ctx.Err())
 		}
 	}
-	if dmsgC == nil {
-		return nil, ErrProfileUnreachable
-	}
-	dialCtx, cancel := context.WithTimeout(ctx, profileTimeout)
-	defer cancel()
-	stream, err := dmsgC.DialStream(dialCtx, dmsg.Addr{PK: host, Port: ProbePort})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrProfileUnreachable, err)
-	}
-	defer stream.Close() //nolint:errcheck
-	return profileExchange(stream, body)
+	return nil, fmt.Errorf("%w: %v", ErrProfileUnreachable, lastErr)
 }
 
 func profileExchange(c net.Conn, body []byte) ([]byte, error) {

@@ -33,6 +33,8 @@ func TestCollectChartsCountsRequestsPerInterval(t *testing.T) {
 	require.Equal(t, 1.0, v[chartNoRoute])
 	require.Equal(t, 1.0, v[chartHopsPrefix+"2"])
 	require.Equal(t, 40.0, v[chartMeanMs])
+	require.Equal(t, 40.0, v[chartP50Ms])
+	require.Equal(t, 40.0, v[chartP95Ms])
 
 	a.stats.request(1, 10*time.Millisecond)
 	a.stats.route(9)
@@ -41,6 +43,7 @@ func TestCollectChartsCountsRequestsPerInterval(t *testing.T) {
 	require.Equal(t, 0.0, v[chartNoRoute])
 	require.Equal(t, 1.0, v[chartHopsPrefix+"6"], "long routes count in the last bucket")
 	require.Equal(t, 10.0, v[chartMeanMs])
+	require.Equal(t, 10.0, v[chartP50Ms], "only the searches since the last sample")
 }
 
 func collect(t *testing.T, a *API, c *rfCharts) map[string]float64 {
@@ -52,7 +55,7 @@ func collect(t *testing.T, a *API, c *rfCharts) map[string]float64 {
 
 func TestCollectSetupNodes(t *testing.T) {
 	var mu sync.Mutex
-	snap := setupmetrics.StatsSnapshot{StartedAt: time.Unix(100, 0), TotalRequests: 10, Successful: 8, Failed: 2,
+	snap := setupmetrics.StatsSnapshot{Version: "v1.3.100", StartedAt: time.Unix(100, 0), TotalRequests: 10, Successful: 8, Failed: 2,
 		FailuresByReason: map[setupmetrics.FailureReason]uint64{"source_unreachable": 2},
 		RouteLengthHist:  map[int]uint64{1: 5, 2: 3},
 		LatencyMs:        setupmetrics.LatencyStats{Count: 8, P50: 120, P95: 900}}
@@ -76,6 +79,7 @@ func TestCollectSetupNodes(t *testing.T) {
 	require.Equal(t, 120.0, v[k+"p50"])
 	_, counted := v[k+"req"]
 	require.False(t, counted, "the first read is only a baseline")
+	require.Equal(t, "v1.3.100", c.nodeVersion(pk))
 
 	mu.Lock()
 	snap.TotalRequests, snap.Successful, snap.Failed = 15, 12, 3

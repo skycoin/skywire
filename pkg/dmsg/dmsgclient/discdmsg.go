@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -59,7 +60,7 @@ func NewDmsgDiscClient(dmsgC *dmsg.Client, discDmsgAddr string, log *logging.Log
 // — the handshake storm that dominated its CPU. See fetchPooled.
 func (c *dmsgDiscClient) do(ctx context.Context, method, path string, reqBody []byte) (httpResult, error) {
 	addr := dmsg.Addr{PK: c.discPK, Port: dmsg.DefaultDmsgHTTPPort}
-	return fetchPooled(ctx, c.dmsgC, addr, method, c.discPK.Hex(), path, nil, reqBody)
+	return fetchPooled(ctx, c.dmsgC, addr, method, c.discPK.Hex(), path, map[string]string{buildinfo.VersionHeader: buildinfo.Version()}, reqBody)
 }
 
 // discMessage mirrors disc.HTTPMessage's `message` field (disc.HTTPMessage

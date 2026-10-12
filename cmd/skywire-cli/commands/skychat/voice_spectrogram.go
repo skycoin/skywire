@@ -21,7 +21,9 @@ import (
 	"time"
 
 	"github.com/0magnet/audioprism-go/pkg/spectrogram"
-	"github.com/gdamore/tcell/v2"
+	"github.com/0magnet/progkit"
+	"github.com/gdamore/tcell/v3"
+	tcolor "github.com/gdamore/tcell/v3/color"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -192,21 +194,18 @@ func (v *specView) draw(screen tcell.Screen, x0, w, h int) {
 	}
 }
 
-// runSpectrogramTUI drives the tcell screen: an audio goroutine steps FFT columns
-// into a queue; the render loop (~60fps) folds them into history and repaints.
+// runSpectrogramTUI draws the spectrogram: an audio goroutine steps FFT
+// columns into a queue, and each frame (~60fps) folds them into history.
 func runSpectrogramTUI(src skycall.Source) error {
-	screen, err := tcell.NewScreen()
+	app, err := progkit.Open()
 	if err != nil {
 		return err
 	}
-	if err := screen.Init(); err != nil {
-		return err
-	}
-	defer screen.Fini()
-	screen.Clear()
+	defer app.Close()
 
 	view := newSpecView(spectrogram.SampleRate)
 	quit := make(chan struct{})
+	defer close(quit)
 
 	// Audio reader → step columns.
 	go func() {
@@ -228,114 +227,108 @@ func runSpectrogramTUI(src skycall.Source) error {
 			view.push(fbuf[:n])
 		}
 	}()
+	go redrawEvery(app, time.Second/60, quit)
 
-	// Event reader.
-	go func() {
-		for {
-			switch ev := screen.PollEvent().(type) {
-			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC ||
-					ev.Rune() == 'q' || ev.Rune() == 'Q' {
-					close(quit)
-					return
-				}
-			case *tcell.EventResize:
-				screen.Sync()
-			}
+	app.Run(func(f *progkit.Frame) {
+		if f.W <= 0 || f.H <= 1 {
+			return
 		}
-	}()
-
-	ticker := time.NewTicker(time.Second / 60)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-quit:
-			return nil
-		case <-ticker.C:
-		}
-		w, h := screen.Size()
-		if w <= 0 || h <= 1 {
-			continue
-		}
-		specH := h - 1 // bottom row = hint
 		view.drainInto()
-		screen.Clear()
-		view.draw(screen, 0, w, specH)
-		drawHint(screen, h-1, w, voiceSpectrogramMonitor)
-		screen.Show()
-	}
+		view.draw(f.Screen, 0, f.W, f.H-1) // bottom row = hint
+		drawHint(f.Screen, f.H-1, f.W, voiceSpectrogramMonitor)
+	}, spectrogramKey)
+	return nil
 }
 
 // runCallSpectrogramTUI polls the visor for an active call's sent/received PCM
 // and draws two side-by-side spectrograms (left: sent, right: received).
 func runCallSpectrogramTUI(rpc callAudioRPC, callID string) error {
-	screen, err := tcell.NewScreen()
+	app, err := progkit.Open()
 	if err != nil {
 		return err
 	}
-	if err := screen.Init(); err != nil {
-		return err
-	}
-	defer screen.Fini()
-	screen.Clear()
+	defer app.Close()
 
 	sent := newSpecView(callAudioRate)
 	recv := newSpecView(callAudioRate)
 	quit := make(chan struct{})
+	defer close(quit)
 
+	var mu sync.Mutex
+	var pollErr string
+	const pollMs = 60
+	tailN := callAudioRate * pollMs / 1000 // ~one poll-interval of new audio
 	go func() {
+		ticker := time.NewTicker(pollMs * time.Millisecond)
+		defer ticker.Stop()
 		for {
-			switch ev := screen.PollEvent().(type) {
-			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC ||
-					ev.Rune() == 'q' || ev.Rune() == 'Q' {
-					close(quit)
-					return
-				}
-			case *tcell.EventResize:
-				screen.Sync()
+			select {
+			case <-quit:
+				return
+			case <-ticker.C:
 			}
+			s, r, aerr := rpc.VoiceCallAudio(callID)
+			mu.Lock()
+			pollErr = ""
+			if aerr != nil {
+				pollErr = "call " + callID + ": " + aerr.Error() + "  (q to quit)"
+			}
+			mu.Unlock()
+			if aerr == nil {
+				sent.push(int16Tail(s, tailN))
+				recv.push(int16Tail(r, tailN))
+			}
+			app.Redraw()
 		}
 	}()
 
-	const pollMs = 60
-	tailN := callAudioRate * pollMs / 1000 // ~one poll-interval of new audio
-	ticker := time.NewTicker(pollMs * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-quit:
-			return nil
-		case <-ticker.C:
+	app.Run(func(f *progkit.Frame) {
+		mu.Lock()
+		msg := pollErr
+		mu.Unlock()
+		if msg != "" {
+			drawCentered(f, msg)
+			return
 		}
-		s, r, aerr := rpc.VoiceCallAudio(callID)
-		if aerr != nil {
-			drawCentered(screen, "call "+callID+": "+aerr.Error()+"  (q to quit)")
-			continue
-		}
-		sent.push(int16Tail(s, tailN))
-		recv.push(int16Tail(r, tailN))
 		sent.drainInto()
 		recv.drainInto()
-
-		w, h := screen.Size()
+		w, h := f.W, f.H
 		if w < 4 || h < 2 {
-			continue
+			return
 		}
 		specH := h - 1
 		mid := w / 2
-		leftW := mid - 1
-		if leftW < 1 {
-			leftW = 1
-		}
-		screen.Clear()
-		sent.draw(screen, 0, leftW, specH)
-		recv.draw(screen, mid, w-mid, specH)
+		leftW := max(mid-1, 1)
+		sent.draw(f.Screen, 0, leftW, specH)
+		recv.draw(f.Screen, mid, w-mid, specH)
 		for y := 0; y < specH; y++ { // divider
-			screen.SetContent(mid-1, y, '│', nil, tcell.StyleDefault.Foreground(tcell.ColorGray))
+			f.Screen.SetContent(mid-1, y, '│', nil, tcell.StyleDefault.Foreground(tcolor.Gray))
 		}
-		drawCallHint(screen, h-1, w, callID)
-		screen.Show()
+		drawCallHint(f.Screen, h-1, w, callID)
+	}, spectrogramKey)
+	return nil
+}
+
+// spectrogramKey quits on q, Esc or Ctrl+C.
+func spectrogramKey(ev tcell.Event) bool {
+	k, ok := ev.(*tcell.EventKey)
+	if !ok {
+		return true
+	}
+	t := progkit.Typed(k)
+	return !(k.Key() == tcell.KeyEscape || progkit.IsCtrl(k, 'c') || t == "q" || t == "Q")
+}
+
+func redrawEvery(app *progkit.App, d time.Duration, quit <-chan struct{}) {
+	t := time.NewTicker(d)
+	defer t.Stop()
+	for {
+		select {
+		case <-quit:
+			return
+		case <-t.C:
+			app.Redraw()
+		}
 	}
 }
 
@@ -353,7 +346,7 @@ func int16Tail(s []int16, n int) []float32 {
 
 func drawCallHint(screen tcell.Screen, y, w int, callID string) {
 	hint := []rune(" call " + callID + " — left: sent   right: received — q/Esc to quit ")
-	st := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
+	st := tcell.StyleDefault.Foreground(tcolor.White).Background(tcolor.Black)
 	for x := 0; x < w; x++ {
 		r := ' '
 		if x < len(hint) {
@@ -363,18 +356,9 @@ func drawCallHint(screen tcell.Screen, y, w int, callID string) {
 	}
 }
 
-func drawCentered(screen tcell.Screen, msg string) {
-	w, h := screen.Size()
-	screen.Clear()
-	runes := []rune(msg)
-	x := (w - len(runes)) / 2
-	if x < 0 {
-		x = 0
-	}
-	for i, r := range runes {
-		screen.SetContent(x+i, h/2, r, nil, tcell.StyleDefault)
-	}
-	screen.Show()
+func drawCentered(f *progkit.Frame, msg string) {
+	x := max((f.W-len([]rune(msg)))/2, 0)
+	progkit.DrawText(f.Screen, x, f.H/2, f.W-x, msg, tcell.StyleDefault)
 }
 
 func closeSource(src skycall.Source) error {
@@ -390,7 +374,7 @@ func drawHint(screen tcell.Screen, y, w int, monitor bool) {
 		src = "system audio (monitor)"
 	}
 	hint := []rune(" skychat voice spectrogram — source: " + src + " — q/Esc to quit ")
-	st := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
+	st := tcell.StyleDefault.Foreground(tcolor.White).Background(tcolor.Black)
 	for x := 0; x < w; x++ {
 		r := ' '
 		if x < len(hint) {

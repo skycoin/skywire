@@ -160,13 +160,14 @@ func (d *Decoder) decodeExplicitHybridDREDFloat(dred *DRED, dredOffsetSamples in
 	d.primeHybridDREDEntryHistory(frameSizeSamples)
 	queued := d.queueExplicitDREDRecovery(dred, dredOffsetSamples, frameSizeSamples)
 	var lowbandSnapshot *silk.DeepPLCLowbandSnapshot
-	cleanupHook := func() {}
-	usedHook := func() bool { return false }
+	hookInstalled := false
 	if d.dredNeuralConcealmentAvailable() && d.silkDecoder != nil {
 		lowbandSnapshot = d.silkDecoder.SnapshotDeepPLCLowbandMono()
-		cleanupHook, usedHook = d.beginHybridDREDLowbandHook()
+		hookInstalled = d.beginHybridDREDLowbandHook()
 	}
-	defer cleanupHook()
+	if hookInstalled {
+		defer d.endHybridDREDLowbandHook()
+	}
 	n, err := d.decodePLCChunksInto(pcm, frameSizeSamples, plcDecodeState{
 		packetFrameSize:    frameSizeSamples,
 		mode:               d.prevMode,
@@ -177,7 +178,7 @@ func (d *Decoder) decodeExplicitHybridDREDFloat(dred *DRED, dredOffsetSamples in
 	if err != nil {
 		return 0, err
 	}
-	if usedHook() {
+	if d.deepPLCHookUsed {
 		d.finishActiveDREDRecovery(n)
 	} else if queued.NeededFeatureFrames > 0 || d.dredRecoveryState() != nil {
 		d.advanceHybridDREDLowbandState(n, lowbandSnapshot)
@@ -221,12 +222,13 @@ func (d *Decoder) decodeExplicitSILKDREDFloat(dred *DRED, dredOffsetSamples int,
 	}
 	d.primeExplicitSILKDREDEntryHistory()
 	d.queueExplicitDREDRecovery(dred, dredOffsetSamples, frameSizeSamples)
-	cleanupHook := func() {}
-	usedHook := func() bool { return false }
+	hookInstalled := false
 	if d.dredNeuralConcealmentAvailable() && d.silkDecoder != nil {
-		cleanupHook, usedHook = d.beginHybridDREDLowbandHook()
+		hookInstalled = d.beginHybridDREDLowbandHook()
 	}
-	defer cleanupHook()
+	if hookInstalled {
+		defer d.endHybridDREDLowbandHook()
+	}
 	n, err := d.decodePLCChunksInto(pcm, frameSizeSamples, plcDecodeState{
 		packetFrameSize:    frameSizeSamples,
 		mode:               d.prevMode,
@@ -243,7 +245,7 @@ func (d *Decoder) decodeExplicitSILKDREDFloat(dred *DRED, dredOffsetSamples int,
 	// state advance so retained lpcnet/FARGAN continuity matches libopus.
 	channels := int(d.channels)
 	sampleRate := int(d.sampleRate)
-	if usedHook() {
+	if d.deepPLCHookUsed {
 		d.finishActiveDREDRecovery(n)
 	} else if channels == 2 && n > 0 && sampleRate > 0 {
 		// DRED neural concealment runs at 16 kHz; convert decoder-rate
@@ -272,7 +274,7 @@ func (d *Decoder) decodeExplicitSILKDREDFloat(dred *DRED, dredOffsetSamples int,
 // entry history but never queuing cached DRED features, so
 // applyDREDNeuralConcealment48kMono runs the neural-PLC (not DRED) branch.
 func (d *Decoder) decodeCELTNeuralPLCInto(pcm []float32, frameSizeSamples int, state plcDecodeState) (int, bool, error) {
-	if d == nil || (state.mode != ModeCELT && state.mode != ModeHybrid) {
+	if d == nil || d.sampleRate == 96000 || (state.mode != ModeCELT && state.mode != ModeHybrid) {
 		return 0, false, nil
 	}
 	if d.channels < 1 || d.channels > 2 || d.celtDecoder == nil || !d.dredNeuralConcealmentAvailable() {
@@ -287,7 +289,10 @@ func (d *Decoder) decodeCELTNeuralPLCInto(pcm []float32, frameSizeSamples int, s
 		return 0, false, nil
 	}
 	sampleRate := int(d.sampleRate)
-	chunkLimit := sampleRate / 25 * 3
+	// opus_decode_native() runs lost requests longer than F20 as a sequence
+	// of at-most-20 ms opus_decode_frame() calls. The neural CELT state and
+	// crossfade advance after each of those frames.
+	chunkLimit := sampleRate / 50
 	if chunkLimit <= 0 || frameSizeSamples <= chunkLimit {
 		// Prime the neural entry history (no cached-DRED queue) then run a single
 		// neural-PLC concealment frame.
@@ -324,7 +329,7 @@ func (d *Decoder) decodeCELTNeuralPLCInto(pcm []float32, frameSizeSamples int, s
 }
 
 func (d *Decoder) decodeSILKNeuralPLCInto(pcm []float32, frameSizeSamples int, state plcDecodeState) (int, bool, error) {
-	if d == nil || state.mode != ModeSILK || d.silkDecoder == nil || !d.dredNeuralConcealmentAvailable() {
+	if d == nil || (state.mode != ModeSILK && state.mode != ModeHybrid) || d.silkDecoder == nil || !d.dredNeuralConcealmentAvailable() {
 		return 0, false, nil
 	}
 	if d.channels < 1 || d.channels > 2 {
@@ -337,14 +342,25 @@ func (d *Decoder) decodeSILKNeuralPLCInto(pcm []float32, frameSizeSamples int, s
 	if !d.ensureDREDNeuralConcealmentRuntime() {
 		return 0, false, nil
 	}
+	if r := d.dredRecoveryState(); r != nil &&
+		r.dredPLC.Blend() == 0 &&
+		r.dredPLC.FECReadPos() == 0 &&
+		r.dredPLC.FECFillPos() == 0 &&
+		r.dredPLC.FECSkip() == 0 {
+		// Public Decode(nil) supplies no DRED feature queue, but main-model
+		// neural PLC still starts from the SILK PLC state's retained PCM history.
+		d.refreshDREDHistoryFromSILKDecoder()
+	}
 
-	cleanupHook, usedHook := d.beginHybridDREDLowbandHook()
-	defer cleanupHook()
+	hookInstalled := d.beginHybridDREDLowbandHook()
+	if hookInstalled {
+		defer d.endHybridDREDLowbandHook()
+	}
 	n, err := d.decodePLCChunksInto(pcm[:needed], frameSizeSamples, state)
 	if err != nil {
 		return n, false, err
 	}
-	return n, usedHook(), nil
+	return n, d.deepPLCHookUsed, nil
 }
 
 // primeExplicitSILKDREDEntryHistory seeds the DRED neural concealment entry

@@ -9,16 +9,16 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	jsoniter "github.com/json-iterator/go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/fastjson"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
 
-var json = jsoniter.ConfigFastest
+var json = fastjson.JSON
 
 // Entry cache bounds. 2048 entries easily covers the hot-key working
 // set (dmsg servers + active visors) at ~200KB. 5s TTL is short enough

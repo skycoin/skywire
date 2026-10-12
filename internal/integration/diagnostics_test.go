@@ -24,10 +24,13 @@ const (
 	// deployment. This is the same PK listed in transport_setup in
 	// services-config.json and in each visor's transport_setup config.
 	transportSetupPK = "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
-	// servicesPK is visor-s: transport-discovery, address-resolver,
-	// route-finder and service-discovery run inside it and answer on its dmsg
-	// port 80 under /tpd, /ar, /rf and /sd.
-	servicesPK = "032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977"
+	// tpdPK, arPK, rfPK and sdPK are the keys transport-discovery, the
+	// address resolver, route-finder and service-discovery run under inside
+	// visor-s, each answering on its own dmsg port 80.
+	tpdPK = "032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8"
+	arPK  = "0283c63541f61e21f3b490feb1f20c9b69e2ecea691268c243339c0dc7d1b553d7"
+	rfPK  = "0206f60cafeb0d1ab58dd8aba5a36daa707497642280c91a1043860141e23f5a66"
+	sdPK  = "028d2b274019b46e8ac68b1c147cf7ef2cdf799f0271d252efe87a73bdc847b83e"
 )
 
 // DiagContext bundles everything a diagnostic pass needs. The intent is that
@@ -375,11 +378,11 @@ func (env *TestEnv) checkVisorSelfHealthOverDmsg(visor string) bool {
 // parallel so one slow service doesn't serialize the whole diagnostic pass.
 func (env *TestEnv) checkServicesDmsgHealth() bool {
 	services := []struct {
-		name, prefix string
+		name, pk string
 	}{
-		{"transport-discovery", "/tpd"},
-		{"address-resolver", "/ar"},
-		{"route-finder", "/rf"},
+		{"transport-discovery", tpdPK},
+		{"address-resolver", arPK},
+		{"route-finder", rfPK},
 	}
 	type result struct {
 		name    string
@@ -389,8 +392,8 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 	}
 	results := make(chan result, len(services))
 	for _, svc := range services {
-		go func(name, prefix string) {
-			dmsgURL := fmt.Sprintf("dmsg://%s:80%s/health", servicesPK, prefix)
+		go func(name, pk string) {
+			dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
 			// Route through visor-a's established dmsg client (its RPC). A
 			// standalone client here can't bootstrap discovery over dmsg in
 			// this dmsg-only deployment: -Z/UseHTTP FATALs (no plain-HTTP
@@ -401,7 +404,7 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 			out, err := env.Exec(cmd)
 			healthy := err == nil && strings.Contains(out, "build_info")
 			results <- result{name: name, out: out, err: err, healthy: healthy}
-		}(svc.name, svc.prefix)
+		}(svc.name, svc.pk)
 	}
 	healthy := true
 	for i := 0; i < len(services); i++ {

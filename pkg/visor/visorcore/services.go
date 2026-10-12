@@ -46,8 +46,6 @@ type Services struct {
 	Conf     string
 	ConfDmsg string
 	// uptime tracker
-	UptimeTracker     string
-	UptimeTrackerDmsg string
 	// reward system (theskywirenetwork.net) — dmsg URL powers the "rewards" resolver
 	// alias so the in-tab browser can reach reward.dmsg / rewards.dmsg.
 	RewardSystem     string
@@ -92,13 +90,11 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		ServiceDiscoveryDmsg:   d.ServiceDiscoveryDmsg,
 		// Conf has no clearnet deployment default (deployment is dmsg-only for the
 		// config-bootstrap service); a v1.ConfService override below still applies.
-		ConfDmsg:          d.ConfDmsg,
-		UptimeTracker:     d.UptimeTracker,
-		UptimeTrackerDmsg: d.UptimeTrackerDmsg,
-		RewardSystem:      d.RewardSystem,
-		RewardSystemDmsg:  d.RewardSystemDmsg,
-		StunServers:       d.StunServers,
-		GeoIP:             d.GeoIP,
+		ConfDmsg:         d.ConfDmsg,
+		RewardSystem:     d.RewardSystem,
+		RewardSystemDmsg: d.RewardSystemDmsg,
+		StunServers:      d.StunServers,
+		GeoIP:            d.GeoIP,
 	}
 	if v1 == nil {
 		return s
@@ -134,10 +130,6 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 	}
 	s.Conf = pick(v1.ConfService, s.Conf)
 	s.ConfDmsg = pick(v1.ConfServiceDmsg, s.ConfDmsg)
-	if v1.UptimeTracker != nil {
-		s.UptimeTracker = pick(v1.UptimeTracker.Addr, s.UptimeTracker)
-		s.UptimeTrackerDmsg = pick(v1.UptimeTracker.AddrDmsg, s.UptimeTrackerDmsg)
-	}
 	// Reward system fields are top-level (not a sub-block).
 	s.RewardSystem = pick(v1.RewardSystem, s.RewardSystem)
 	s.RewardSystemDmsg = pick(v1.RewardSystemDmsg, s.RewardSystemDmsg)

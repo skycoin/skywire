@@ -8,8 +8,9 @@ package clilog
 
 import (
 	"context"
-	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -42,13 +43,19 @@ var pprofProfiles = map[string]string{
 // in init() to avoid drift from pprofProfiles.
 var pprofProfileNames []string
 
-var pprofSeconds int
+var (
+	pprofSeconds int
+	pprofDebug   int
+	pprofGC      bool
+)
 
 func init() {
 	for k := range pprofProfiles {
 		pprofProfileNames = append(pprofProfileNames, k)
 	}
 	singlePprofCmd.Flags().IntVarP(&pprofSeconds, "seconds", "n", 0, "for cpu/profile/trace: duration in seconds (visor default is 30)")
+	singlePprofCmd.Flags().IntVar(&pprofDebug, "debug", 0, "append debug=N, for a text form (goroutine 2 is the full dump with wait times, heap 1 ends with the runtime MemStats)")
+	singlePprofCmd.Flags().BoolVar(&pprofGC, "gc", false, "for heap/allocs: run a GC first (gc=1) so the profile holds live objects only")
 	RootCmd.AddCommand(singlePprofCmd)
 }
 
@@ -73,6 +80,12 @@ start it with: skywire cli config set flight_recorder=true
 
 For sampling profiles (cpu / profile / trace), --seconds controls
 the sample duration; the visor caps this at its pprof default (30s).
+--debug N appends debug=N and returns text instead of a binary profile:
+
+  skywire cli log pprof <pk> goroutine --debug 2
+  skywire cli log pprof <pk> heap --debug 1
+
+--gc runs a garbage collection before a heap or allocs profile.
 Whitelisted via the remote visor's survey_whitelist.`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -87,12 +100,7 @@ Whitelisted via the remote visor's survey_whitelist.`,
 			log.Fatalf("unknown profile %q (try: %v)", profile, pprofProfileNames)
 		}
 
-		path := "/debug/pprof/" + realProfile
-		// CPU/trace endpoints accept ?seconds=N; non-sampling profiles
-		// ignore it but it's safe to include unconditionally.
-		if pprofSeconds > 0 {
-			path = fmt.Sprintf("%s?seconds=%d", path, pprofSeconds)
-		}
+		path := pprofPath(realProfile, pprofSeconds, pprofDebug, pprofGC)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
@@ -114,4 +122,23 @@ Whitelisted via the remote visor's survey_whitelist.`,
 			log.Fatal(err)
 		}
 	},
+}
+
+// pprofPath builds the request path for a profile with its query options.
+func pprofPath(profile string, seconds, debug int, gc bool) string {
+	q := url.Values{}
+	if seconds > 0 {
+		q.Set("seconds", strconv.Itoa(seconds))
+	}
+	if debug > 0 {
+		q.Set("debug", strconv.Itoa(debug))
+	}
+	if gc {
+		q.Set("gc", "1")
+	}
+	path := "/debug/pprof/" + profile
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	return path
 }

@@ -25,18 +25,29 @@ type celtEncodeScratch struct {
 	surroundDynalloc []int32 // C*nbEBands surround dynalloc offsets
 	bandX            []int32 // C*N normalised bands
 	energyErr        []int32 // C*nbEBands coarse-energy error
+	qextBandE        []int32 // C*NB_QEXT_BANDS extension-band energies
+	qextBandLogE     []int32 // C*NB_QEXT_BANDS Q24 extension-band log energies
+	qextError        []int32 // C*NB_QEXT_BANDS extension coarse-energy error
+	qextErrorBackup  []int32 // C*nbEBands main error saved before QEXT fine energy
+	qextExtraPulses  []int32 // nbEBands+NB_QEXT_BANDS extra pulse budgets
+	qextExtraQuant   []int32 // nbEBands+NB_QEXT_BANDS extra fine-energy bits
+	qextDummy        rangecoding.Encoder
+	qextGeometry     celtBandGeometry
 	offsets          []int   // nbEBands dynalloc boosts
 	importance       []int   // nbEBands per-band importance
 	spreadWeight     []int   // nbEBands spreading weights
-	tfRes            []int   // nbEBands TF resolution decisions
+	tfRes            []int32 // nbEBands TF resolution decisions
+	qextTFRes        []int32 // QEXT geometry's zero TF decisions
 	offsets32        []int32 // nbEBands dynalloc boosts (int32 view)
+	caps             []int32 // nbEBands allocation caps
 	fineQuant        []int32 // nbEBands fine-energy bit counts
 	finePriority     []int32 // nbEBands fine-energy priorities
-	pulses           []int   // nbEBands pulse allocation
+	pulses           []int32 // nbEBands pulse allocation
 
 	// MDCTForward per-sub-block buffers (computeMDCTs calls it B*CC times).
-	mdctF  []int32  // N2 windowed reals
-	mdctF2 []FFTCpx // N4 pre-rotated complex bins
+	mdctF    []int32  // N2 windowed reals
+	mdctF2   []FFTCpx // N4 pre-rotated complex bins
+	qextMDCT qextMDCTScratch
 
 	// run_prefilter buffers.
 	prePeriodic [][]int32 // CC pitch-history rows of length N+maxPeriod
@@ -56,10 +67,16 @@ type celtEncodeScratch struct {
 
 	// Per-band scratch shared by AlgQuant / OpPvqSearch / the Hadamard
 	// (de)interleave; reused across every band of every frame.
-	pvqIy       []int   // AlgQuant codeword (N+3 headroom)
-	pvqY        []int32 // OpPvqSearch working codeword
-	pvqSignx    []bool  // OpPvqSearch sign mask
-	hadamardTmp []int32 // (de)interleaveHadamard transpose buffer
+	pvqIy        []int32  // AlgQuant codeword (N+3 headroom)
+	pvqY         []int32  // OpPvqSearch working codeword
+	pvqSignx     []bool   // OpPvqSearch sign mask
+	qextIy       []int32  // QEXT base pulse vector
+	qextUpIy     []int32  // QEXT refined pulse vector
+	qextRefine   []int32  // QEXT per-dimension refinement values
+	qextXNorm    []int32  // QEXT normalized absolute input
+	pvqCWRS      []uint32 // base and QEXT CWRS row scratch
+	qextRounding []int32  // QEXT PVQ refinement rounding scores
+	hadamardTmp  []int32  // (de)interleaveHadamard transpose buffer
 
 	// Analysis buffers.
 	toneLPC      []int32 // toneDetect LPC coeffs (length 2)
@@ -89,8 +106,10 @@ type celtEncodeScratch struct {
 	allocScratch celt.AllocEncodeScratch
 
 	// Stereo theta-RDO encoder snapshots, reused across bands/frames.
-	rdoSnapPre rangecoding.EncoderSnapshot
-	rdoSnap2   rangecoding.EncoderSnapshot
+	rdoSnapPre     rangecoding.EncoderSnapshot
+	rdoSnap2       rangecoding.EncoderSnapshot
+	qextRDOSnapPre rangecoding.EncoderSnapshot
+	qextRDOSnap2   rangecoding.EncoderSnapshot
 
 	pitchXLP4 []int16 // pitchSearch decimated input
 	pitchYLP4 []int16 // pitchSearch decimated reference

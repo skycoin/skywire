@@ -2,7 +2,7 @@
 package node
 
 import (
-	"net/rpc"
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skycoin/src/cipher"
 

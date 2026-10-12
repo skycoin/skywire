@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/buildinfo"
 )
 
 // Interval is how often a service samples its counts.
@@ -15,8 +17,13 @@ const Interval = 5 * time.Minute
 // drawn as a dip.
 type Collect func(ctx context.Context) (map[string]float64, error)
 
-// Run samples on every Interval boundary until ctx ends.
+// Run records this start of the service, then samples on every Interval
+// boundary until ctx ends.
 func Run(ctx context.Context, st Store, collect Collect, log logrus.FieldLogger) {
+	start := Start{At: time.Now().UTC(), Version: buildinfo.Version(), Commit: buildinfo.Commit()}
+	if err := st.AddStart(ctx, start); err != nil {
+		log.WithError(err).Warn("charts: could not record this start")
+	}
 	for {
 		now := time.Now()
 		next := now.Truncate(Interval).Add(Interval)

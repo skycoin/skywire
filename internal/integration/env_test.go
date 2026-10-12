@@ -64,15 +64,9 @@ func NewEnv() *TestEnv {
 		cli:      cli,
 		intraNet: "docker_intra",
 		serviceNames: []string{
-			// Nine deployment-side services (tpd, rf, dmsg-disc,
-			// dmsg-server, sn, sd, ar, tps, stun) collapsed into
-			// /deployment-services in compose. The standalone
-			// uptime-tracker was removed — uptime tracking is now
-			// integrated into the discovery services. network-monitor
-			// is intentionally disabled in the production deployment.
-			// tpd, rf, ar and sd have since moved into visor-s, a visor
-			// that runs them in-process under its own key.
-			"/deployment-services",
+			// visor-s is the deployment host: one visor that is also the
+			// dmsg server and runs every deployment service in its process
+			// under the service's own key, as the production hosts do.
 			"/visor-s",
 		},
 		visorNames: []string{
@@ -1406,9 +1400,9 @@ func (env *TestEnv) CheckServicesDmsgReachable(timeout time.Duration) error {
 		name string
 		url  string
 	}{
-		{"transport-discovery", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd/health"},
-		{"address-resolver", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/ar/health"},
-		{"route-finder", "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/rf/health"},
+		{"transport-discovery", "dmsg://032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8:80/health"},
+		{"address-resolver", "dmsg://0283c63541f61e21f3b490feb1f20c9b69e2ecea691268c243339c0dc7d1b553d7:80/health"},
+		{"route-finder", "dmsg://0206f60cafeb0d1ab58dd8aba5a36daa707497642280c91a1043860141e23f5a66:80/health"},
 	}
 
 	for _, svc := range services {
@@ -1621,8 +1615,8 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// Tail visor logs — this is often the quickest way to see route setup errors.
 	env.logContainerTail(senderNode, 100)
 	env.logContainerTail(recipientNode, 100)
-	// setup-node is collapsed into deployment-services post-#2471
-	env.logContainerTail("deployment-services", 100)
+	// setup-node runs in visor-s.
+	env.logContainerTail("visor-s", 100)
 
 	return nil, err
 }
@@ -2122,8 +2116,8 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 
 	// Log service container status and logs when visor fails due to service connectivity
 	env.GatherContainersInfo()
-	// All four collapsed into deployment-services post-#2471
-	for _, svc := range []string{"deployment-services"} {
+	// Every deployment service runs in visor-s.
+	for _, svc := range []string{"visor-s"} {
 		if c, ok := env.containers[svc]; ok {
 			env.logger.Infof("Service %s: state=%s status=%s", svc, c.State, c.Status)
 		}

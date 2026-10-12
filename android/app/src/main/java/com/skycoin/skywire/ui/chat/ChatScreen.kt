@@ -2,6 +2,7 @@ package com.skycoin.skywire.ui.chat
 
 import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -39,14 +40,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.ChatMedia
+import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.theme.LocalDarkTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Chat tab — skychat's own web UI, embedded.
@@ -102,9 +110,30 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     ) { grants ->
         val request = pendingMedia
         pendingMedia = null
+        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
+        ChatPageLog.add("webview: Android answered $grants" + if (request == null) " with no request waiting" else "")
+        // Only the missing permissions were asked for, so one the phone had
+        // already granted (the microphone, for a first video) is not in grants.
         request?.grantOrDeny { resource ->
-            ChatWebView.androidPermission(resource)?.let { grants[it] == true } ?: false
+            ChatWebView.androidPermission(resource)
+                ?.let { grants[it] ?: ChatWebView.hasPermission(context, it) } ?: false
         }
+    }
+
+    // Android's permission dialog is an Activity, so showing it pauses ours. No pause
+    // and no answer means none is coming, and the page's request would wait forever.
+    val activity = remember(context) { context.findActivity() as? LifecycleOwner }
+    LaunchedEffect(pendingMedia) {
+        val request = pendingMedia ?: return@LaunchedEffect
+        val lifecycle = activity?.lifecycle ?: return@LaunchedEffect
+        val shown = withTimeoutOrNull(PROMPT_SHOW_MS) {
+            lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
+        }
+        if (shown != null || pendingMedia !== request) return@LaunchedEffect
+        ChatPageLog.add("webview: Android showed no permission dialog, refusing ${request.resources.joinToString()}")
+        pendingMedia = null
+        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
+        request.deny()
     }
 
     // One rule for both ways back, so the ← in the header and the phone's own
@@ -124,6 +153,32 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     // of its own — the page's back would change the chat underneath it.
     BackHandler(enabled = fullscreen?.showing == true) { fullscreen?.exit() }
 
+    // The page's JavaScript thread, checked from outside while it is on
+    // screen. A page stuck in a loop or a wait looks like one ignoring taps.
+    val onScreen by AppVisibility.isForeground.collectAsState()
+    LaunchedEffect(webView, pageReady, onScreen) {
+        val view = webView ?: return@LaunchedEffect
+        if (!pageReady || !onScreen) return@LaunchedEffect
+        var sent = 0L
+        var stalled = false
+        while (true) {
+            delay(PAGE_PING_MS)
+            val now = SystemClock.elapsedRealtime()
+            if (sent == 0L) {
+                sent = now
+                view.evaluateJavascript("0") {
+                    val waited = (SystemClock.elapsedRealtime() - sent) / 1000
+                    if (stalled) ChatPageLog.add("webview: page answering again after $waited s")
+                    sent = 0L
+                    stalled = false
+                }
+            } else if (!stalled && now - sent >= PAGE_STALL_MS) {
+                stalled = true
+                ChatPageLog.add("webview: page has not answered for ${(now - sent) / 1000} s")
+            }
+        }
+    }
+
     // A skychat:// link another app opened us for. It waits here rather than
     // at the Activity for as long as it has to: the core may still be
     // connecting, and skychat only answers once it is. Cleared once the page
@@ -134,7 +189,11 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         val link = chatLink ?: return@LaunchedEffect
         val view = webView
         if (!pageReady || view == null) return@LaunchedEffect
-        ChatWebView.openAddress(view, link.address)
+        if (link.thread) {
+            ChatWebView.openThread(view, link.address)
+        } else {
+            ChatWebView.openAddress(view, link.address)
+        }
         DeepLinks.chatLinkHandled(link)
     }
 
@@ -198,6 +257,10 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                     val needed = request.resources
                                         .mapNotNull(ChatWebView::androidPermission)
                                         .filterNot { ChatWebView.hasPermission(ctx, it) }
+                                    ChatPageLog.add(
+                                        "webview: page asked for ${request.resources.joinToString()}" +
+                                            if (needed.isEmpty()) ", already granted" else ", asking Android for $needed",
+                                    )
                                     if (needed.isEmpty()) {
                                         request.grantOrDeny { resource ->
                                             ChatWebView.androidPermission(resource) != null
@@ -218,6 +281,9 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                                         // a launch that never comes back.
                                         pendingMedia?.deny()
                                         pendingMedia = request
+                                        // The page times a device that does not
+                                        // open; time on this dialog is the user's.
+                                        view.evaluateJavascript("window.skywirePermissionPrompt = true", null)
                                         mediaPermissions.launch(needed.toTypedArray())
                                     }
                                 },
@@ -347,3 +413,7 @@ private fun ChatStatus(
         }
     }
 }
+
+private const val PAGE_PING_MS = 2_000L
+private const val PAGE_STALL_MS = 5_000L
+private const val PROMPT_SHOW_MS = 5_000L

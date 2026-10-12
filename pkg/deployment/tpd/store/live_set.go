@@ -337,3 +337,13 @@ func (s *redisStore) edgeErr(entries []*transport.Entry) error {
 	}
 	return nil
 }
+
+// ShareStore publishes s as the transport set for url, for a route finder in
+// the same process, until ctx ends.
+func ShareStore(ctx context.Context, url string, s Store) {
+	liveStores.Store(url, s)
+	go func() {
+		<-ctx.Done()
+		liveStores.CompareAndDelete(url, s)
+	}()
+}

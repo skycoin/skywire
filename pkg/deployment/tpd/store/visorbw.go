@@ -29,6 +29,9 @@ type VisorBWDay struct {
 	// marked the other as on its own network.
 	Transports          int `json:"transports"`
 	SameNetworkExcluded int `json:"same_network_excluded"`
+	// Unverified is how many transports only one edge reported that day. Their
+	// bytes are not paid, since the other edge does not confirm them.
+	Unverified int `json:"unverified"`
 	// Visors maps a visor's public key (hex) to the bytes it sent that day,
 	// by transport type.
 	Visors map[string]map[string]uint64 `json:"visors"`
@@ -39,24 +42,37 @@ type VisorBWDay struct {
 // sent bytes, from bw-collect), so a leaf body IS a hist/<date>_bandwidth.json.
 const VisorBWVersion = 3
 
-// SenderBytes is what each edge of a transport sent on one day. Each edge
-// reports its own counters on its own schedule, so usually only one has a
-// fresh record: that side is trusted for both directions (its recv is what the
-// other sent). An edge whose record is all zeros has not reported yet. These
-// are the rules the reward system has paid pool 2 by since 2026-06-03.
+// SenderBytes is what each edge of a transport verifiably sent on one day: the
+// lesser of what it reports sending and what the other edge reports receiving.
+// A transport only one edge reported pays neither, since nothing confirms it.
+// Where both edges reported checkpoints of the same conn, it is also capped by
+// the bytes those checkpoints verify.
 func SenderBytes(d DailyEdgeBandwidth) (sentA, sentB uint64) {
-	aReported := d.A != nil && (d.A.Sent > 0 || d.A.Recv > 0)
-	bReported := d.B != nil && (d.B.Sent > 0 || d.B.Recv > 0)
-	switch {
-	case aReported && bReported:
-		return d.A.Sent, d.B.Sent
-	case aReported:
-		return d.A.Sent, d.A.Recv
-	case bReported:
-		return d.B.Recv, d.B.Sent
+	if !bothReported(d) {
+		return 0, 0
 	}
-	return 0, 0
+	return checkpointCap(min(d.A.Sent, d.B.Recv), d.A), checkpointCap(min(d.B.Sent, d.A.Recv), d.B)
 }
+
+// checkpointSlack is what a sender may be paid past what its checkpoints verify:
+// the bytes since the last checkpoint both edges shared, and those that
+// crossed the day boundary before their checkpoint was matched.
+func checkpointSlack(n uint64) uint64 { return max(256<<20, n/20) }
+
+// checkpointCap caps n, the bytes an edge sent by the counters, by what its
+// stream checkpoints verify, once the two edges reported the same conn.
+func checkpointCap(n uint64, sender *EdgeBandwidth) uint64 {
+	if !sender.Checked {
+		return n
+	}
+	return min(n, sender.Verified+checkpointSlack(n))
+}
+
+func bothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(d.B) }
+
+// reported is whether an edge has a record with any bytes in it. An all zero
+// record has not reported yet.
+func reported(e *EdgeBandwidth) bool { return e != nil && (e.Sent > 0 || e.Recv > 0) }
 
 // ComputeVisorBW reduces one day's per-transport records to per-visor sent
 // bytes by type, leaving out transports marked same-network that day.
@@ -78,7 +94,7 @@ func ComputeVisorBW(records []TransportMetric, date string) VisorBWDay {
 			continue
 		}
 		var sentA, sentB uint64
-		sameNetwork := false
+		sameNetwork, oneSided := false, false
 		for _, d := range tp.Daily {
 			if d.Date != date {
 				continue
@@ -87,8 +103,12 @@ func ComputeVisorBW(records []TransportMetric, date string) VisorBWDay {
 			sentA += a
 			sentB += b
 			sameNetwork = sameNetwork || d.SameNetwork
+			oneSided = oneSided || reported(d.A) != reported(d.B)
 		}
 		if sentA == 0 && sentB == 0 {
+			if oneSided && !sameNetwork {
+				out.Unverified++
+			}
 			continue
 		}
 		out.Transports++

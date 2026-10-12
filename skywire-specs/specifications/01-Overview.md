@@ -74,7 +74,6 @@ Centralized services that bootstrap and support the network:
 | Address Resolver | Maps visor PKs to IP addresses for direct transports | ar.skywire.skycoin.com | 80 |
 | Route Finder | Computes multi-hop route paths from the transport graph | rf.skywire.skycoin.com | 80 |
 | Service Discovery | Registers VPN, proxy, and other application services | sd.skycoin.com | 80 |
-| Uptime Tracker | Tracks visor online status for reward eligibility | ut.skywire.skycoin.com | 80 |
 | Config Bootstrapper | Provides initial visor configuration | conf.skywire.skycoin.com | — |
 
 ## DMSG Port Assignments

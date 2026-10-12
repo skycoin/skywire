@@ -24,7 +24,24 @@ func (e *Encoder) syncQEXTToCELT() {
 	}
 }
 
+func (e *Encoder) maxOutputPacketBytes() int {
+	capBytes := libopusMaxDataBytesCap
+	if e.qextActive() {
+		capBytes = hd96kQEXTPacketSizeCap
+	}
+	return capBytes * 6
+}
+
+func (e *Encoder) setCELTQEXTEnabled(enabled bool) {
+	if e.celtEncoder != nil {
+		e.celtEncoder.SetQEXTEnabled(enabled)
+	}
+}
+
 func (e *Encoder) lastQEXTPayload() []byte {
+	if payload, used := e.fixedQEXTPayloadIfUsed(); used {
+		return payload
+	}
 	if e.celtEncoder == nil {
 		return nil
 	}

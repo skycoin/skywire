@@ -2,6 +2,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -89,7 +90,10 @@ func (s *memoryStore) Services(_ context.Context, sType, version, country string
 		svc.DisplayNodeIP = false
 		out = append(out, svc)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Addr.PubKey().Hex() < out[j].Addr.PubKey().Hex() })
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i].Addr.PubKey(), out[j].Addr.PubKey()
+		return bytes.Compare(a[:], b[:]) < 0
+	})
 	return out, nil
 }
 

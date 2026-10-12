@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_leg_controls_test.go c2-net-routing
 package router
 

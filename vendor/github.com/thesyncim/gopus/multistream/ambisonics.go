@@ -1,6 +1,6 @@
-// Ambisonics support for Opus multistream encoder (channel mapping families 2 and 3).
+// Ambisonics support for Opus multistream channel mapping families 2 and 3.
 // This file implements ambisonics validation and channel mapping generation
-// per RFC 7845 and the libopus reference implementation.
+// per RFC 8486 Sections 3.1 and 3.2 and the libopus 1.6.1 reference.
 //
 // Ambisonics is a full-sphere surround sound technique that encodes spatial audio
 // as a set of spherical harmonic coefficients. The number of channels depends on
@@ -16,7 +16,8 @@
 // Family 2: ACN/SN3D ordering, all mono streams except optional stereo non-diegetic pair
 // Family 3: ACN/SN3D ordering, uses stereo coupled streams for channel pairs
 //
-// Reference: RFC 7845 Section 5.1.1.2, libopus opus_multistream_encoder.c
+// Reference: RFC 8486 Sections 3.1 and 3.2; libopus 1.6.1
+// src/opus_multistream_encoder.c and src/opus_projection_encoder.c.
 
 package multistream
 
@@ -276,8 +277,8 @@ func AmbisonicsMappingFamily3(channels int) ([]byte, error) {
 // for ambisonics encoding.
 //
 // Valid counts are (order+1)^2 or (order+1)^2 + 2 for orders 0-14:
-// 1, 4, 6, 9, 11, 16, 18, 25, 27, 36, 38, 49, 51, 64, 66, 81, 83, 100, 102,
-// 121, 123, 144, 146, 169, 171, 196, 198, 225, 227
+// 1, 3, 4, 6, 9, 11, 16, 18, 25, 27, 36, 38, 49, 51, 64, 66, 81, 83,
+// 100, 102, 121, 123, 144, 146, 169, 171, 196, 198, 225, 227.
 func IsValidAmbisonicsChannelCount(channels int) bool {
 	if channels < 1 || channels > 227 {
 		return false

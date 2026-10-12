@@ -82,21 +82,25 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.pairingMod = maker("pairing", initPairing, &m.dmsgC)
 	m.groupingMod = maker("grouping", initGrouping, &m.dmsgC)
 	m.voiceMod = maker("voice", initVoice, &m.dmsgC)
+	// Skymail: the phone's own mailbox on dmsg port 25, which the Android and
+	// iOS mail screens read and send through.
+	m.skymail = maker("skymail", initSkymail, &m.dmsgC)
 
 	// Dropped. Remote shell and file copy (the phone profile removes pty);
 	// the dmsghttp log server and system survey; host telemetry (stats), the
-	// uptime tracker and the transportability self-check; public-visor
+	// uptime heartbeat and the transportability self-check; public-visor
 	// advertising; every server role and embedded infrastructure node; the
-	// browsing proxies and resolvers; skymail; the tpviz UI server; node
-	// health; skynet port auto-registration and the self-probe; coin-node
-	// forwarding (the wallet calls nodes directly); the registration/AR/SD
-	// mirrors over CXO (the HTTP paths stay); and the deployment services
-	// embedded on dmsg :80.
+	// browsing proxies and resolvers; the skymail bridge; a browser visor's
+	// host bridge; the tpviz UI server; node health; skynet port
+	// auto-registration and the self-probe; coin-node forwarding (the wallet
+	// calls nodes directly); the registration/AR/SD mirrors over CXO (the HTTP
+	// paths stay); and the deployment services embedded on dmsg :80, under
+	// the visor's key or their own.
 	m.ptyModule = dropped("dmsg_pty")
 	m.dmsgHTTPLogServer = dropped("dmsghttp_logserver")
 	m.systemSurvey = dropped("system_survey")
 	m.statsMod = dropped("stats")
-	m.ut = dropped("uptime_tracker")
+	m.uptime = dropped("uptime")
 	m.tc = dropped("transportable")
 	m.pvs = dropped("public_visor")
 	m.dmsgSrv = dropped("dmsg_server")
@@ -105,12 +109,12 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.embRouteSetup = dropped("embedded_route_setup")
 	m.embDmsgWeb = dropped("embedded_dmsgweb")
 	m.embWisp = dropped("embedded_wisp")
+	m.hostBridge = dropped("host_bridge")
 	m.embFwdProxy = dropped("dmsg_forward_proxy")
 	m.embSkynetWeb = dropped("embedded_skynetweb")
 	m.embResolvers = dropped("embedded_resolvers")
 	m.meshProxy = dropped("mesh_proxy")
 	m.embSkymailBridge = dropped("embedded_skymail_bridge")
-	m.skymail = dropped("skymail")
 	m.uiServer = dropped("ui_server")
 	m.nodeHealth = dropped("node_health")
 	m.selfProbe = dropped("self_probe")
@@ -120,10 +124,11 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.arBindCXOMod = dropped("ar_bind_cxo")
 	m.sdRegCXOMod = dropped("sd_reg_cxo")
 	m.embeddedServices = dropped("embedded_services")
+	m.ownKeyServices = dropped("own_key_services")
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,
-		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod)
+		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.skymail)
 	// Hypervisor: the local API the app talks to (plus Fleet, opt-in).
 	m.hv = maker("hypervisor", initHypervisor, &m.vis)
 	return m

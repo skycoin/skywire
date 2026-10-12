@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package network pkg/transport/network/client_unified_udp.go c2-net-transport
 //
 // The unified transport port (UDP side): bind ONE master UDP socket and route the
@@ -29,7 +27,7 @@ func (f *ClientFactory) EnableUnifiedUDP(port int) error {
 	if port == 0 {
 		return nil
 	}
-	conn, err := net.ListenPacket("udp", fmt.Sprintf(":%d", port))
+	conn, err := f.sockets().ListenPacket("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("unified transport port %d: %w", port, err)
 	}

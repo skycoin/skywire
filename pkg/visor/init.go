@@ -90,8 +90,8 @@ type modules struct {
 	cli vinit.Module
 	// hypervisors to control this visor
 	hvs vinit.Module
-	// Uptime tracker
-	ut vinit.Module
+	// Uptime heartbeat to transport discovery
+	uptime vinit.Module
 	// Public visors: automatically establish connections to public visors
 	pvs vinit.Module
 	// Public visor: advertise current visor as public
@@ -106,6 +106,7 @@ type modules struct {
 	dmsgHTTPLogServer vinit.Module
 	// Embedded deployment services on the dmsg HTTP port
 	embeddedServices vinit.Module
+	ownKeyServices   vinit.Module
 	// System survey module
 	systemSurvey vinit.Module
 	// Dmsg http module
@@ -129,6 +130,7 @@ type modules struct {
 	// Embedded dmsgweb resolver (localhost SOCKS5 for .dmsg browsing)
 	embDmsgWeb vinit.Module
 	embWisp    vinit.Module
+	hostBridge vinit.Module
 	// Clearnet HTTP forward-proxy over dmsg (opt-in, whitelist-gated)
 	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
@@ -266,6 +268,11 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 				DelegatedServers: delegatedServers,
 			},
 			Static: serviceURL.Addr.PK,
+		}
+		// A service on a key that also runs a dmsg server, such as the visor's
+		// own, must not drop that server from the direct client.
+		if prev, perr := v.dClient.Entry(ctx, serviceURL.Addr.PK); perr == nil && prev.Server != nil {
+			clientEntry.Server = prev.Server
 		}
 
 		err = v.dClient.PostEntry(ctx, clientEntry)

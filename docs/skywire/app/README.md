@@ -21,6 +21,7 @@ skywire app
 - [skycoin](skycoin/README.md) — skycoin apps
 - [skydex-client](skydex-client/README.md) — SkyDEX - Client (Skywire decentralized exchange trading UI)
 - [skydex-market](skydex-market/README.md) — SkyDEX - Market (Skywire decentralized exchange backend)
+- [skydns](skydns/README.md) — open .dmsg and .skynet names in every app on this device
 - [skynet](skynet/README.md) — skywire port forwarding — pair of server (srv) and client (client) subcommands
 - [skysocks](skysocks/README.md) — skywire socks5 proxy — pair of server (serve) and client (client) subcommands
 - [vpn](vpn/README.md) — skywire VPN — pair of server (serve) and client (client) subcommands

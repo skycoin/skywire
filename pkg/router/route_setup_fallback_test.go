@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // route_setup_fallback_test.go — covers the cascade -> classic (legacy)
 // setup-node fallback plumbing. When a cascade-installed route fails its
 // data-plane handshake (the fingerprint of a destination that does not trust

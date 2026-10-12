@@ -18,5 +18,5 @@
     ]
   },
   "log_level": "debug",
-  "transport_discovery_dmsg": "dmsg://032d25e22934ad7d60b09f1acbc81db06501baaa07137637cad1cfd9bcfcfa2977:80/tpd"
+  "transport_discovery_dmsg": "dmsg://032edaa87383c6987eb5037fcf7281745e7db142c65a4f537589fe44d6b07c16a8:80"
 }

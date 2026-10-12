@@ -35,6 +35,26 @@ type HealthCheckResponse struct {
 	// UDPAddr is an address resolver's public SUDPH address: visors that
 	// reach it over dmsg register SUDPH with it. Empty when not configured.
 	UDPAddr string `json:"udp_address,omitempty"`
+	// DmsgSessions are the visor's own sessions with dmsg servers.
+	DmsgSessions int `json:"dmsg_sessions,omitempty"`
+	// DmsgServer is what the dmsg server this process runs is carrying.
+	DmsgServer *DmsgServerHealth `json:"dmsg_server,omitempty"`
+}
+
+// DmsgServerHealth is a dmsg server's load: its connections, and the
+// streams it relays and the bytes they carried since it started.
+type DmsgServerHealth struct {
+	ClientSessions int    `json:"client_sessions"`
+	PeerSessions   int    `json:"peer_sessions"`
+	ActiveStreams  int64  `json:"active_streams"`
+	StreamsRelayed uint64 `json:"streams_relayed"`
+	BytesUp        uint64 `json:"bytes_up"`
+	BytesDown      uint64 `json:"bytes_down"`
+}
+
+// DmsgServerHealthOf converts a server's Stats for /health.
+func DmsgServerHealthOf(clients, peers int, active int64, streams, up, down uint64) *DmsgServerHealth {
+	return &DmsgServerHealth{ClientSessions: clients, PeerSessions: peers, ActiveStreams: active, StreamsRelayed: streams, BytesUp: up, BytesDown: down}
 }
 
 // GetServiceHealth gets the response from the given service url

@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package network pkg/transport/network/client_unified_quic.go c2-net-transport
 //
 // sharedQUICMux multiplexes several QUIC-based application protocols onto ONE

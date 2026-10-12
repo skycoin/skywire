@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -20,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -178,7 +178,7 @@ func runHTTPSrv(t *testing.T, dc disc.APIClient, fName string) string {
 	require.NoError(t, err)
 	require.Empty(t, res.Failed, "ConnectToAllServers had failures: %v", res.Failed)
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.HandleFunc("/"+httpPath, func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, fName)
 	})

@@ -38,7 +38,7 @@ skywire cli tp add pv
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -o, --timeout duration   operation timeout
   -d, --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
-  -t, --type string        transport type (stcpr, sudph, dmsg)
+  -t, --type string        transport type (stcpr, squicr, sudph, stcp, webrtc, swsr, swtr, dmsg; default stcpr, swtr in a browser)
   -w, --uturl string       uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
 ```
 
