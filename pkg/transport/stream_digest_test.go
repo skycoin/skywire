@@ -39,8 +39,8 @@ func TestStreamDigestMatchesAcrossChunking(t *testing.T) {
 	s, r := sender.snapshot(), receiver.snapshot()
 	require.Equal(t, s, r)
 	require.NotZero(t, s.Epoch)
-	require.EqualValues(t, 3*CheckpointBase, s.Latest[0].Offset)
-	require.Zero(t, s.Latest[1].Offset, "256 MiB not reached")
+	require.EqualValues(t, 3*CheckpointBase, s.Recent[CheckpointRecent-1].Offset)
+	require.Zero(t, s.Coarse[0].Offset, "256 MiB not reached")
 }
 
 // One different byte changes every later checkpoint, and bytes of another
@@ -57,8 +57,8 @@ func TestStreamDigestDetectsDifference(t *testing.T) {
 	b.add(conn, data)
 	sa, sb := a.snapshot(), b.snapshot()
 	require.Equal(t, sa.Epoch, sb.Epoch, "the first 16 MiB still match")
-	require.NotEqual(t, sa.Latest[0].Digest, sb.Latest[0].Digest)
-	require.EqualValues(t, 2*CheckpointBase, sb.Latest[0].Offset)
+	require.NotEqual(t, sa.Recent[CheckpointRecent-1].Digest, sb.Recent[CheckpointRecent-1].Digest)
+	require.EqualValues(t, 2*CheckpointBase, sb.Recent[CheckpointRecent-1].Offset)
 }
 
 // A new connection starts a new stream.
@@ -118,15 +118,16 @@ func TestTransportCheckpointsMatchPeer(t *testing.T) {
 	}
 	require.Eventually(t, func() bool {
 		_, recv := receiver.Checkpoints()
-		return recv.Latest[0].Offset == CheckpointBase
+		return recv.Recent[CheckpointRecent-1].Offset == CheckpointBase
 	}, 10*time.Second, 20*time.Millisecond)
 	sent, _ := sender.Checkpoints()
 	_, recv := receiver.Checkpoints()
-	require.Equal(t, sent.Latest[0], recv.Latest[0])
+	require.Equal(t, sent, recv)
 	require.Equal(t, sent.Epoch, recv.Epoch)
 }
 
 // The telemetry carries every level a transport keeps.
 func TestCheckpointLevelsMatchWire(t *testing.T) {
 	require.Equal(t, CheckpointLevels, telemetrywire.CheckpointLevels)
+	require.Equal(t, CheckpointRecent, telemetrywire.CheckpointRecent)
 }
