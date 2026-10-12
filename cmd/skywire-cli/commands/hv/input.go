@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
 
@@ -93,7 +95,7 @@ gesture runs.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := inputRun(cmd, args); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

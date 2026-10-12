@@ -8,6 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -229,7 +231,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 

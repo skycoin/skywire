@@ -86,7 +86,7 @@ Example:
 		}
 		sf := cmdutil.ServiceFlags{Syslog: syslogAddr, SyslogNet: syslogNet, LogLevel: flags.LogLevel, Tag: flags.LogTag("dmsg_disc")}
 		if err := sf.Check(); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 		logger := sf.Logger()
 

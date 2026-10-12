@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -29,7 +31,7 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ping tree: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -37,7 +39,7 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 	stream, err := client.StreamPingTree(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ping tree: StreamPingTree call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	model := newPingTreeModel()
@@ -48,7 +50,7 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 		f, openErr := os.OpenFile(treeFlags.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
 		if openErr != nil {
 			fmt.Fprintf(os.Stderr, "ping tree: open --output file: %v\n", openErr)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer f.Close() //nolint:errcheck
 		model.outputFile = f
@@ -65,7 +67,7 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 	cancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ping tree: TUI: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	// The screen is cleared on exit, so print the final state where it

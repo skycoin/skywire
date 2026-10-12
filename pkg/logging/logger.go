@@ -49,6 +49,10 @@ type MasterLogger struct {
 	*logrus.Logger
 }
 
+// ExitFunc ends the program after a Fatal line. A host that runs commands in
+// its own process replaces it (cmdutil.Exit).
+var ExitFunc = os.Exit
+
 // NewMasterLogger creates a new package-aware logger with formatting string
 func NewMasterLogger() *MasterLogger {
 	hooks := make(logrus.LevelHooks)
@@ -65,8 +69,9 @@ func NewMasterLogger() *MasterLogger {
 				ForceColors:        false,
 				TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
 			},
-			Hooks: hooks,
-			Level: logrus.DebugLevel,
+			Hooks:    hooks,
+			Level:    logrus.DebugLevel,
+			ExitFunc: func(code int) { ExitFunc(code) },
 		},
 	}
 }

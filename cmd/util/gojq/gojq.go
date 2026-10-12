@@ -2,7 +2,7 @@
 package main
 
 import (
-	"log"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	cc "github.com/0magnet/coloredcobra"
 
@@ -23,6 +23,6 @@ func main() {
 		NoBottomNewline: true,
 	})
 	if err := clijq.RootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		cmdutil.Fatal(err)
 	}
 }

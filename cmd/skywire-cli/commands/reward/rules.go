@@ -6,6 +6,8 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -31,7 +33,7 @@ the original markdown source, or --html to render it as an HTML fragment.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if rawFile {
 			fmt.Println(rewards.MainnetRules)
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		if asHTML {
 			// Preprocess to replace ~text~ with ~~text~~ for strikethrough
@@ -40,10 +42,10 @@ the original markdown source, or --html to render it as an HTML fragment.`,
 			out, err := rulesHTML(rules)
 			if err != nil {
 				fmt.Println("Error rendering markdown as HTML:", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			fmt.Println(out)
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		terminalWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 		if err != nil {

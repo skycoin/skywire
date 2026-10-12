@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -65,7 +67,7 @@ var pkCmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
@@ -119,7 +121,7 @@ With one argument: detects the form and prints the other.
 		// No arg — query the running visor.
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
@@ -137,7 +139,7 @@ var summaryCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// --live: hand off to the livetui watcher and stay in a
@@ -247,7 +249,7 @@ var buildInfoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
@@ -266,7 +268,7 @@ var portsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		ports, err := rpcClient.Ports()
 		if err != nil {
@@ -303,7 +305,7 @@ var dmsgServersCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		if dmsgServersLive {
@@ -404,7 +406,7 @@ the raw per-entry JSON; otherwise entries are pretty-printed as
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		filter, ferr := newLogFilter(logMinLevel, logModuleRegex)
 		if ferr != nil {
@@ -604,7 +606,7 @@ var runtimeStatsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		stats, err := rpcClient.RuntimeStats()
 		if err != nil {

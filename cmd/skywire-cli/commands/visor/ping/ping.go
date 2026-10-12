@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -132,7 +134,7 @@ var pingCmd = &cobra.Command{
 		if createTp && !useDmsg {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			fmt.Printf("Creating %s transport to %s...\n", tpType, pk)
 			_, err = rpcClient.AddTransport(pk, tpType, 30*time.Second, "", false, false)
@@ -266,7 +268,7 @@ var testCmd = &cobra.Command{
 		pingConfig := visorapi.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		results, err := rpcClient.TestVisor(pingConfig)
 		internal.Catch(cmd.Flags(), err)

@@ -32,6 +32,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -161,7 +163,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -189,7 +191,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 	stream, err := client.StreamPingTree(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: StreamPingTree call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	// File tee (always NDJSON when --output is set).
@@ -198,7 +200,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		f, fErr := os.OpenFile(streamOutFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
 		if fErr != nil {
 			fmt.Fprintf(os.Stderr, "error: open --output file: %v\n", fErr)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer f.Close() //nolint:errcheck
 		fileEnc = json.NewEncoder(f)
@@ -225,7 +227,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 				break
 			}
 			fmt.Fprintf(os.Stderr, "error: stream recv: %v\n", recvErr)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// Always update stats so the summary is correct regardless of
@@ -236,7 +238,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		if fileEnc != nil {
 			if err := emitOne(fileEnc, marshaler, ev); err != nil {
 				fmt.Fprintf(os.Stderr, "error: emit to file: %v\n", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 		}
 
@@ -245,7 +247,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		case streamJSON:
 			if err := emitOne(stdoutEnc, marshaler, ev); err != nil {
 				fmt.Fprintf(os.Stderr, "error: emit: %v\n", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 		case streamQuiet:
 			// Suppress per-event rows; summary still prints at end.

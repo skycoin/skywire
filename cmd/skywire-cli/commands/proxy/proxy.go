@@ -256,7 +256,7 @@ var startCmd = &cobra.Command{
 
 		// In --verbose mode the SignalContext-driven cleanup path needs
 		// to print after the streamer has flushed its last entries, so
-		// the os.Exit(1) is gated on a non-verbose run. Verbose mode
+		// the cmdutil.Exit(1) is gated on a non-verbose run. Verbose mode
 		// instead returns from the Run func — letting the deferred
 		// rpcClient.Close + grpc.Close run cleanly.
 		var tCtxCancelFunc context.CancelFunc
@@ -276,7 +276,7 @@ var startCmd = &cobra.Command{
 			}
 			rpcClient.KillApp(clientName) //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}()
 
 		// --verbose: open a gRPC log stream BEFORE StartAppWithMode so

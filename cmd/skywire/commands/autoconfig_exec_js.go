@@ -31,6 +31,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -105,7 +107,7 @@ func finishAutoconfig(r resolvedConfig) {
 	RootCmd.SetArgs([]string{"visor", "-c", r.configPath})
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Printf("%s>>> FATAL:%s visor exited with error: %v\n", colorRed, colorReset, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 }
 

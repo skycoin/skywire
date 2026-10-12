@@ -34,6 +34,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/wfdrive/bidi"
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
@@ -81,7 +83,7 @@ running "hv drive" session instead of taking the single session for itself.`,
 	Run: func(_ *cobra.Command, args []string) {
 		if err := evalRun(args); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

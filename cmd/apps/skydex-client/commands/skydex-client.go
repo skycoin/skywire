@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"time"
@@ -91,7 +90,7 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, args []string) {
 		if err := RunSkydexClient(context.Background(), args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

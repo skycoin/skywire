@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
 
@@ -122,7 +124,7 @@ var RootCmd = &cobra.Command{
 				for range c {
 					sigCount++
 					if sigCount >= 3 {
-						os.Exit(1)
+						cmdutil.Exit(1)
 					}
 				}
 			}()

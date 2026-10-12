@@ -8,6 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -34,7 +36,7 @@ var daemonListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -99,7 +101,7 @@ a working multi-instance daemon entry in one command.`,
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// Add the new app entry.
@@ -169,7 +171,7 @@ var daemonStartCmd = &cobra.Command{
 		appName := skyenv.SkycoinDaemonName + "-" + args[0]
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StartApp(appName))
 		internal.PrintOutput(cmd.Flags(), nil, "OK\n")
@@ -184,7 +186,7 @@ var daemonStopCmd = &cobra.Command{
 		appName := skyenv.SkycoinDaemonName + "-" + args[0]
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(appName))
 		internal.PrintOutput(cmd.Flags(), nil, "OK\n")

@@ -34,6 +34,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 )
 
@@ -147,10 +149,10 @@ Exit codes:
 		// Non-JSON output was already streamed by runForeach. Just
 		// emit the exit code.
 		if anyTimeout {
-			os.Exit(2)
+			cmdutil.Exit(2)
 		}
 		if anyNonZero {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		return nil
 	},

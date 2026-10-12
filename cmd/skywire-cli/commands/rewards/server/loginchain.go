@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 )
 
@@ -249,7 +251,7 @@ func runLoginChain() {
 		fmt.Println("\nLogin chain: shutting down...")
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		peerCmd.Process.Kill()      //nolint:errcheck,gosec
-		os.Exit(0)
+		cmdutil.Exit(0)
 	}()
 
 	// Wait for peer to be healthy

@@ -3,10 +3,11 @@ package clivisor
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -41,7 +42,7 @@ reload of the browser visor. With --via, this edits a remote visor's file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		var st visorapi.SkyenvState
 		if len(args) == 0 && len(skyenvUnset) == 0 {

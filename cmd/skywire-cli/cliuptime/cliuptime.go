@@ -31,6 +31,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -745,5 +747,5 @@ func rollingLabels(hoursBack int) string {
 
 func fatal(c *cobra.Command, err error) {
 	fmt.Fprintf(c.ErrOrStderr(), "error: %v\n", err) //nolint:errcheck,gosec
-	os.Exit(1)
+	cmdutil.Exit(1)
 }

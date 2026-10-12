@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -253,7 +255,7 @@ func requestSkywireCmd(cmd *cobra.Command, method, rawURL string) error {
 		return err
 	}
 	if resp.statusCode >= 400 {
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	return nil
 }

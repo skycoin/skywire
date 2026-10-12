@@ -35,7 +35,7 @@ var servicesCmd = &cobra.Command{
 		go func() {
 			<-ctx.Done()
 			cancel()
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}()
 
 		servicesConf, err := fetchServicesConf(cmd.Flags())

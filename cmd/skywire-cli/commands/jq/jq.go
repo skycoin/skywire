@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
 )
@@ -55,14 +57,14 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 		query, err := gojq.Parse(filter)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "jq: invalid query: %v\n", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// Compile the query
 		code, err := gojq.Compile(query)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "jq: compile error: %v\n", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// Get inputs
@@ -74,7 +76,7 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 				fileInputs, err := readJSONFile(file)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "jq: %v\n", err)
-					os.Exit(1)
+					cmdutil.Exit(1)
 				}
 				inputs = append(inputs, fileInputs...)
 			}
@@ -82,7 +84,7 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 			stdinInputs, err := readJSONFromReader(os.Stdin)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "jq: %v\n", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			inputs = stdinInputs
 		}
@@ -117,7 +119,7 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 		}
 
 		if hasError {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }
