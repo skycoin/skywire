@@ -44,7 +44,7 @@ head).
   through both ends: a first run's account and login, the session cookie, CSRF
   tokens, an attachment up and one down; a refused connection keeps its
   URLError code; a stream fails at once.
-- **7.4 and 7.5 TUN.** The utun framing is in a file without a build tag, run
+- **7.4 and 7.5 TUN.** The utun framing is in a file built on every unix, run
   over a datagram socket pair: packets from the kernel lose their 4-byte
   header, packets written gain it, AF_INET 2 and Darwin's AF_INET6 30 as a
   big-endian uint32. The playbook said host byte order; wireguard-go's
