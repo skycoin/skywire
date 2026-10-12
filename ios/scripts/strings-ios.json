@@ -100,6 +100,26 @@
       "en": "This iPhone has no passcode, so there is nothing to check against. One is set in the Settings app, under Face ID & Passcode.",
       "zh-Hans": "这台 iPhone 没有设置密码，因此无从验证。可在“设置”App 的“面容 ID 与密码”中设置。",
       "es": "Este iPhone no tiene código, así que no hay nada con qué comprobar. Se pone en la app Ajustes, en Face ID y código."
+    },
+    "diag_core_host": {
+      "en": "Where the core runs",
+      "zh-Hans": "核心运行位置",
+      "es": "Dónde se ejecuta el núcleo"
+    },
+    "diag_core_host_hint": {
+      "en": "Debug builds only. In the app, the core stops when iOS suspends Skywire; in the packet tunnel, iOS keeps it running. Applies the next time Skywire opens. The Simulator cannot run the packet tunnel.",
+      "zh-Hans": "仅限调试版本。在应用内运行时，iOS 挂起 Skywire 后核心会停止；在数据包隧道中运行时，iOS 会让它保持运行。下次打开 Skywire 时生效。模拟器无法运行数据包隧道。",
+      "es": "Solo en compilaciones de depuración. En la app, el núcleo se detiene cuando iOS suspende Skywire; en el túnel de paquetes, iOS lo mantiene en marcha. Se aplica la próxima vez que abras Skywire. El simulador no puede ejecutar el túnel de paquetes."
+    },
+    "diag_core_host_app": {
+      "en": "In the app",
+      "zh-Hans": "应用内",
+      "es": "En la app"
+    },
+    "diag_core_host_tunnel": {
+      "en": "Packet tunnel",
+      "zh-Hans": "数据包隧道",
+      "es": "Túnel de paquetes"
     }
   },
   "InfoPlist": {

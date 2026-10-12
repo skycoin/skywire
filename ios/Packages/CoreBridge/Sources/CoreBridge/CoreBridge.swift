@@ -188,6 +188,16 @@ public actor CoreBridge {
         }
     }
 
+    /// The tunnel vpn-client last asked for, as the JSON skywire_tun_settings
+    /// returns (CoreClient's TunSettings decodes it).
+    public nonisolated func tunSettingsJSON() throws -> String {
+        guard let cString = skywire_tun_settings() else {
+            throw CoreError(message: Self.takeLastError() ?? "skywire_tun_settings failed")
+        }
+        defer { skywire_free(UnsafeMutableRawPointer(cString)) }
+        return String(cString: cString)
+    }
+
     /// Installs `sink` as the receiver of the core's log, replacing the
     /// previous one; nil removes it. Can be called before `start`.
     public nonisolated func setLogSink(_ sink: CoreLogSink?) {

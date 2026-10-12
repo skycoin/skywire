@@ -1,10 +1,10 @@
 import CoreBridge
 
 /// Where the core runs. On the Simulator it runs in the app process
-/// (`InAppCoreHost`); on a device it will run in the packet-tunnel extension
-/// (`TunnelCoreHost`, milestone M7), the only process iOS keeps alive in the
-/// background. The rest of the app sees only this protocol and the visor's
-/// local API, so it does not care which.
+/// (`InAppCoreHost`); on a device it runs in the packet-tunnel extension
+/// (`TunnelCoreHost`), the only process iOS keeps alive in the background
+/// (`CoreHostChoice`). The rest of the app sees only this protocol and the
+/// visor's local API, so it does not care which.
 protocol CoreHost: Sendable {
     /// Starts the core (generating its config on first run) and returns once
     /// the visor's local API is up.
