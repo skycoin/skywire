@@ -49,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -571,6 +572,9 @@ func resolveConfigTarget(root reflect.Value, path string) (*configTarget, error)
 		}
 		switch container.Kind() {
 		case reflect.Slice, reflect.Array:
+			if container.Type().Elem() == reflect.TypeOf(services.Block{}) {
+				return blockConfigTarget(container, seg.idx, segs[i+1:], path, strings.Join(tmpl, "."))
+			}
 			j := indexByNameField(container, seg.idx)
 			if j < 0 {
 				return nil, fmt.Errorf("%s: no entry named %q in %s", path, seg.idx, seg.name)
@@ -861,4 +865,89 @@ func (v *Visor) setEmbeddedProxyRulesPersist(kind string, rules []proxyroute.Rul
 		return fmt.Errorf("unknown proxy kind %q", kind)
 	}
 	return v.conf.Flush()
+}
+
+// blockConfigTarget addresses one key of an embedded service. A block keeps
+// its own JSON in Raw, which is what the config writes, so the key is edited
+// there. Services read their block at start, so it is never live.
+func blockConfigTarget(list reflect.Value, label string, rest []configSeg, path, tmpl string) (*configTarget, error) {
+	if len(rest) != 1 || rest[0].hasIdx {
+		return nil, fmt.Errorf("%s: name one key of the service block, as embedded_services[<name>].<key>", path)
+	}
+	key := rest[0].name
+	if secretConfigSeg(key) {
+		return nil, fmt.Errorf("%s is not editable: visor identity and secret keys are refused", path)
+	}
+	if key == "type" || key == "name" {
+		return nil, fmt.Errorf("%s: a service's %s cannot be set by path", path, key)
+	}
+	j := -1
+	for i := 0; i < list.Len(); i++ {
+		if b, ok := list.Index(i).Interface().(services.Block); ok && b.Label() == label {
+			j = i
+			break
+		}
+	}
+	if j < 0 {
+		return nil, fmt.Errorf("%s: no embedded service named %q", path, label)
+	}
+	blk := list.Index(j).Addr().Interface().(*services.Block)
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(blk.Raw, &fields); err != nil {
+		return nil, fmt.Errorf("%s: read service block: %w", path, err)
+	}
+	// A string field takes a bare word, as log_level=info does elsewhere. A
+	// key the block lacks takes JSON, except log_level, which is a string.
+	typ := jsonKindType(fields[key])
+	if _, ok := fields[key]; !ok && key == "log_level" {
+		typ = reflect.TypeOf("")
+	}
+	return &configTarget{
+		typ: typ,
+		get: func() reflect.Value {
+			cur, ok := fields[key]
+			if !ok {
+				return reflect.Value{}
+			}
+			v := reflect.New(typ)
+			if json.Unmarshal(cur, v.Interface()) != nil {
+				return reflect.ValueOf(cur)
+			}
+			return v.Elem()
+		},
+		set: func(nv reflect.Value) {
+			b, err := json.Marshal(nv.Interface())
+			if err != nil {
+				return
+			}
+			fields[key] = b
+			raw, err := json.Marshal(fields)
+			if err != nil {
+				return
+			}
+			blk.Raw = raw
+			if key == "log_level" {
+				blk.LogLevel = nv.String()
+			}
+		},
+		tmpl: tmpl + "." + key,
+		idx:  label,
+	}, nil
+}
+
+// jsonKindType is the Go type that keeps a set key the JSON kind it has now.
+// Objects, arrays and an unset key take any JSON.
+func jsonKindType(cur json.RawMessage) reflect.Type {
+	s := strings.TrimSpace(string(cur))
+	switch {
+	case s == "":
+		return reflect.TypeOf(json.RawMessage{})
+	case s[0] == '"':
+		return reflect.TypeOf("")
+	case s == "true" || s == "false":
+		return reflect.TypeOf(false)
+	case s[0] == '-' || (s[0] >= '0' && s[0] <= '9'):
+		return reflect.TypeOf(float64(0))
+	}
+	return reflect.TypeOf(json.RawMessage{})
 }

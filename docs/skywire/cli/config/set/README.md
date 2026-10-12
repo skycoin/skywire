@@ -9,10 +9,12 @@ overwriting it — which is what happens to a hand-edit of skywire-config.json
 while a visor is running.
 
 Paths are the config's JSON field names joined by dots. A launcher app is
-addressed by NAME rather than array position:
+addressed by NAME rather than array position, and so is an embedded service
+(by its name, or its type when it has none):
 
   skywire cli config set is_public=true
   skywire cli config set 'launcher.apps[skysocks].auto_start=false'
+  skywire cli config set 'embedded_services[setup-node].log_level=info' --restart
   skywire cli config set transport.transport_port=7777 routing.min_hops=1
   skywire cli config set log_level=debug --json
   skywire cli config set --via dmsg://<pk> is_public=true
