@@ -457,6 +457,26 @@ func TestLogUIRootDoesNotTakeEnableMu(t *testing.T) {
 	}
 }
 
+// A quick restart can run stopUI before startUI's serving goroutine is
+// scheduled. That goroutine read hv.httpSrv, found nil, and panicked in Serve.
+func TestStopUIRightAfterStartUI(t *testing.T) {
+	hv, _ := deskTestHypervisor(t)
+	hv.logger = logging.MustGetLogger("test")
+	hv.visor.conf.SetLogger(logging.NewMasterLogger())
+	hv.c.HTTPAddr = "127.0.0.1:0"
+	for i := 0; i < 50; i++ {
+		hv.enableMu.Lock()
+		if err := hv.startUI(); err != nil {
+			hv.enableMu.Unlock()
+			t.Fatalf("startUI: %v", err)
+		}
+		hv.stopUI()
+		hv.enableMu.Unlock()
+	}
+	// The serving goroutines run after the loop; give them time to.
+	time.Sleep(500 * time.Millisecond)
+}
+
 // TestUIAutoReloaderIsSubpathSafe pins the two properties that stop the
 // injected reloader from looping under a subpath mount: it asks for the
 // fingerprint RELATIVE to the page, and it ignores a non-OK answer.
