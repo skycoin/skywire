@@ -49,30 +49,48 @@ type AppLauncher struct {
 
 // AppLauncherConfig configures the launcher.
 type AppLauncherConfig struct {
-	VisorPK       cipher.PubKey
-	Apps          []appserver.AppConfig
+	VisorPK cipher.PubKey
+	Apps    []appserver.AppConfig
+	// Own are the apps the visor adds beside the configured ones (pty, the
+	// embedded proxies and resolvers, the mailbox). They are not in the
+	// config, so they outlive every ResetConfig unless Apps names one.
+	Own           []appserver.AppConfig
 	ServerAddr    string
 	BinPath       string
 	LocalPath     string
 	DisplayNodeIP bool
 }
 
-// ResetConfig resets the launcher config.
+// withOwn is apps followed by each of own that apps does not name, as a list and by name.
+func withOwn(apps, own []appserver.AppConfig) ([]appserver.AppConfig, map[string]appserver.AppConfig) {
+	list := append([]appserver.AppConfig(nil), apps...)
+	byName := make(map[string]appserver.AppConfig, len(apps)+len(own))
+	for _, ac := range apps {
+		byName[ac.Name] = ac
+	}
+	for _, ac := range own {
+		if _, named := byName[ac.Name]; !named {
+			byName[ac.Name] = ac
+			list = append(list, ac)
+		}
+	}
+	return list, byName
+}
+
+// ResetConfig resets the launcher config. The visor's own apps, given to
+// NewLauncher, stay.
 func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
-	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
-	for _, ac := range conf.Apps {
-		apps[ac.Name] = ac
-	}
+	list, apps := withOwn(conf.Apps, l.conf.Own)
 	l.apps = apps
 
 	// we shouldn't change directories of apps, it causes
 	// all kinds of troubles and also doesn't make sense.
 	// So, just changing individual fields
 	l.conf.VisorPK = conf.VisorPK
-	l.conf.Apps = conf.Apps
+	l.conf.Apps = list
 	l.conf.ServerAddr = conf.ServerAddr
 }
 
@@ -110,11 +128,7 @@ func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Cli
 	}
 
 	// Prepare apps (autostart if necessary).
-	apps := make(map[string]appserver.AppConfig, len(conf.Apps))
-	for _, ac := range conf.Apps {
-		apps[ac.Name] = ac
-	}
-	launcher.apps = apps
+	launcher.conf.Apps, launcher.apps = withOwn(conf.Apps, conf.Own)
 
 	return launcher, nil
 }

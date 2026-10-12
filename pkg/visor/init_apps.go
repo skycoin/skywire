@@ -201,10 +201,12 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		}
 	}
 
-	// Prepare launcher.
+	// Prepare launcher. apps is the config's list followed by the entries
+	// synthesized above, which a config update must not drop.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
-		Apps:          apps,
+		Apps:          apps[:len(conf.Apps)],
+		Own:           apps[len(conf.Apps):],
 		ServerAddr:    conf.ServerAddr,
 		BinPath:       conf.BinPath,
 		LocalPath:     v.conf.LocalPath,
