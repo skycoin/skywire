@@ -119,23 +119,30 @@ func (c *stcprClient) serve() {
 		return
 	}
 	c.log.Debug("Binding")
+	ctx, cancel := c.closeContext()
 	delay := stcprBindRetryDelay
 	for attempt := 1; ; attempt++ {
-		if err := c.ar.BindSTCPR(context.Background(), port); err == nil {
+		err := c.ar.BindSTCPR(ctx, port)
+		if err == nil {
 			c.log.Debugf("Successfully bound stcpr to port %s", port)
 			break
-		} else {
-			c.log.WithError(err).Warnf("Failed to bind STCPR (attempt %d), retrying in %v", attempt, delay)
 		}
 		if c.isClosed() {
+			cancel()
 			return
 		}
-		time.Sleep(delay)
+		c.log.WithError(err).Warnf("Failed to bind STCPR (attempt %d), retrying in %v", attempt, delay)
+		if !c.sleepUnlessClosed(delay) {
+			cancel()
+			return
+		}
 		delay *= 2
 		if delay > stcprBindMaxRetryDelay {
 			delay = stcprBindMaxRetryDelay
 		}
 	}
+
+	cancel()
 
 	// Start re-registration loop to keep entry alive in address resolver
 	go c.reRegisterLoop(port)
@@ -148,6 +155,8 @@ func (c *stcprClient) serve() {
 // re-registration makes the visor invisible. On failure, retry with backoff rather
 // than waiting the full interval.
 func (c *stcprClient) reRegisterLoop(port string) {
+	ctx, cancel := c.closeContext()
+	defer cancel()
 	ticker := time.NewTicker(stcprReRegisterInterval)
 	defer ticker.Stop()
 
@@ -158,16 +167,18 @@ func (c *stcprClient) reRegisterLoop(port string) {
 			return
 		case <-ticker.C:
 			c.log.Debug("Re-registering STCPR with address resolver")
-			if err := c.ar.BindSTCPR(context.Background(), port); err != nil {
+			if err := c.ar.BindSTCPR(ctx, port); err != nil {
+				if c.isClosed() {
+					return
+				}
 				c.log.WithError(err).Warn("Failed to re-register STCPR, retrying...")
 				// Retry with backoff — a missed re-registration means a 2min blackout
 				delay := stcprBindRetryDelay
 				for attempt := 1; attempt <= 3; attempt++ {
-					if c.isClosed() {
+					if !c.sleepUnlessClosed(delay) {
 						return
 					}
-					time.Sleep(delay)
-					if err := c.ar.BindSTCPR(context.Background(), port); err == nil {
+					if err := c.ar.BindSTCPR(ctx, port); err == nil {
 						c.log.Debugf("Successfully re-registered STCPR after %d retries", attempt)
 						break
 					}
