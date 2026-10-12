@@ -79,6 +79,10 @@ func TestIOSTunDeviceRefusesWhatIsNotIP(t *testing.T) {
 	require.Error(t, err)
 	_, err = dev.Write(nil)
 	require.Error(t, err)
+	tooBig := make([]byte, utunMaxPacket+1)
+	tooBig[0] = 0x45
+	_, err = dev.Write(tooBig)
+	require.Error(t, err)
 
 	_, err = kernel.Write([]byte{0, 0})
 	require.NoError(t, err)

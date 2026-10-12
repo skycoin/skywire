@@ -21,6 +21,8 @@ const (
 	utunHeaderLen = 4
 	utunAFInet    = 2
 	utunAFInet6   = 30
+	// utunMaxPacket is the largest IP packet, IPv4's 16-bit total length.
+	utunMaxPacket = 65535
 )
 
 var errUtunShortPacket = errors.New("utun: packet shorter than its header")
@@ -32,9 +34,9 @@ type utunDevice struct {
 	name string
 
 	rmu  sync.Mutex
-	rbuf []byte
+	rbuf [utunHeaderLen + utunMaxPacket]byte
 	wmu  sync.Mutex
-	wbuf []byte
+	wbuf [utunHeaderLen + utunMaxPacket]byte
 }
 
 func newUtunDevice(file *os.File, name string) *utunDevice {
@@ -48,10 +50,7 @@ func (d *utunDevice) Name() string { return d.name }
 func (d *utunDevice) Read(p []byte) (int, error) {
 	d.rmu.Lock()
 	defer d.rmu.Unlock()
-	if need := len(p) + utunHeaderLen; cap(d.rbuf) < need {
-		d.rbuf = make([]byte, need)
-	}
-	buf := d.rbuf[:len(p)+utunHeaderLen]
+	buf := d.rbuf[:utunHeaderLen+min(len(p), utunMaxPacket)]
 	n, err := d.file.Read(buf)
 	if n < utunHeaderLen {
 		if err == nil {
@@ -76,12 +75,12 @@ func (d *utunDevice) Write(p []byte) (int, error) {
 	default:
 		return 0, fmt.Errorf("utun: not an IP packet (version %d)", p[0]>>4)
 	}
+	if len(p) > utunMaxPacket {
+		return 0, fmt.Errorf("utun: packet of %d bytes is larger than IP allows", len(p))
+	}
 	d.wmu.Lock()
 	defer d.wmu.Unlock()
-	if need := len(p) + utunHeaderLen; cap(d.wbuf) < need {
-		d.wbuf = make([]byte, need)
-	}
-	buf := d.wbuf[:len(p)+utunHeaderLen]
+	buf := d.wbuf[:utunHeaderLen+len(p)]
 	buf[0], buf[1], buf[2], buf[3] = 0, 0, 0, family
 	copy(buf[utunHeaderLen:], p)
 	n, err := d.file.Write(buf)
