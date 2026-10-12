@@ -11,4 +11,4 @@
 === RUN   TestIOSTunDeviceCloseUnblocksRead
 --- PASS: TestIOSTunDeviceCloseUnblocksRead (0.05s)
 PASS
-ok  	github.com/skycoin/skywire/pkg/vpn	0.458s
+ok  	github.com/skycoin/skywire/pkg/vpn	1.027s
