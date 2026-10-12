@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -160,6 +161,7 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 	if lsAPI == nil {
 		return // logserver not yet constructed
 	}
+	lsAPI.SetVhosts(v.vhostSites(log))
 
 	// Rewards UI wins when configured — it's a global on/off switch.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
@@ -736,3 +738,30 @@ var localTransport = func() *http.Transport {
 	t.DialContext = dialLocal
 	return t
 }()
+
+// vhostSites are the port 80 entry's vhosts as sites the logserver serves by
+// Host, each reverse-proxied to its local service as a port 80 forward is.
+func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
+	fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort))
+	if fp == nil {
+		return nil
+	}
+	var sites []logserver.Vhost
+	for _, vh := range fp.Vhosts {
+		target, err := url.Parse("http://" + vh.ProxyAddr)
+		if err != nil || vh.Name == "" || target.Host == "" {
+			log.WithField("vhost", vh.Name).WithField("proxy_addr", vh.ProxyAddr).Warn("Skipping an invalid vhost")
+			continue
+		}
+		sites = append(sites, logserver.Vhost{
+			Name:      vh.Name,
+			Names:     vh.Names(),
+			Handler:   buildReverseProxy(log, target, vh.PreserveHost),
+			Whitelist: vh.Whitelist,
+		})
+	}
+	if len(sites) > 0 {
+		log.WithField("vhosts", len(sites)).Info("Serving vhosts on port 80")
+	}
+	return sites
+}
