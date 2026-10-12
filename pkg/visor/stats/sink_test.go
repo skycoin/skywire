@@ -595,7 +595,8 @@ func TestSinkPublishesCheckpoints(t *testing.T) {
 	day := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	path := telemetrywire.CheckpointLeafPath(telemetrywire.ShardOf(id))
 
-	ck := telemetrywire.DirCheckpoints{Epoch: 5, Latest: [telemetrywire.CheckpointLevels]telemetrywire.Checkpoint{{Offset: 16 << 20, Digest: 5}}}
+	ck := telemetrywire.DirCheckpoints{Epoch: 5}
+	ck.Recent[telemetrywire.CheckpointRecent-1] = telemetrywire.Checkpoint{Offset: 16 << 20, Digest: 5}
 	probes := []TransportProbe{{ID: id, Type: "stcpr", Sent: ck}, {ID: idle, Type: "stcpr"}}
 	tr.probes.Transports = func() []TransportProbe { return probes }
 	tr.sample(day)

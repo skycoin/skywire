@@ -4,10 +4,10 @@
 // pkg/transport/stream_digest.go) beside the telemetry shards, at
 // transports/checkpoints/<sh>, so a TPD that does not read them ignores them.
 //
-// Wire layout (little-endian): version (1) = 0x01, shard (1), count (2), then
-// count entries of 16 + 2*72 bytes: the transport uuid, then for sent and then
-// received the epoch (8) and CheckpointLevels checkpoints of offset (8) and
-// digest (8).
+// Wire layout (little-endian): version (1) = 0x02, shard (1), count (2), then
+// count entries of 16 + 2*184 bytes: the transport uuid, then for sent and then
+// received the epoch (8), then CheckpointRecent finest and CheckpointLevels-1
+// coarse checkpoints, each an offset (8) and a digest (8).
 package telemetrywire
 
 import (
@@ -18,13 +18,16 @@ import (
 )
 
 // CheckpointVersion is the checkpoint shard format version.
-const CheckpointVersion = 0x01
+const CheckpointVersion = 0x02
 
 // CheckpointLevels is how many checkpoint levels each direction carries.
 const CheckpointLevels = 4
 
+// CheckpointRecent is how many finest checkpoints each direction carries.
+const CheckpointRecent = 8
+
 const (
-	checkpointDirLen   = 8 + CheckpointLevels*16
+	checkpointDirLen   = 8 + (CheckpointRecent+CheckpointLevels-1)*16
 	checkpointEntryLen = 16 + 2*checkpointDirLen
 )
 
@@ -35,10 +38,22 @@ type Checkpoint struct {
 }
 
 // DirCheckpoints is one direction of a transport's current conn: the conn's
-// epoch and the latest checkpoint of each level.
+// epoch, its latest finest checkpoints, oldest first, and the latest coarse ones.
 type DirCheckpoints struct {
 	Epoch  uint64
-	Latest [CheckpointLevels]Checkpoint
+	Recent [CheckpointRecent]Checkpoint
+	Coarse [CheckpointLevels - 1]Checkpoint
+}
+
+// Points returns the checkpoints the direction holds, finest first.
+func (d DirCheckpoints) Points() []Checkpoint {
+	out := make([]Checkpoint, 0, len(d.Recent)+len(d.Coarse))
+	for _, cp := range append(d.Recent[:], d.Coarse[:]...) {
+		if cp.Offset != 0 {
+			out = append(out, cp)
+		}
+	}
+	return out
 }
 
 // CheckpointEntry is one transport's checkpoints.
@@ -81,7 +96,7 @@ func EncodeCheckpointShard(shard uint8, entries []CheckpointEntry) []byte {
 func putDir(b []byte, off int, d DirCheckpoints) int {
 	binary.LittleEndian.PutUint64(b[off:], d.Epoch)
 	off += 8
-	for _, cp := range d.Latest {
+	for _, cp := range append(d.Recent[:], d.Coarse[:]...) {
 		binary.LittleEndian.PutUint64(b[off:], cp.Offset)
 		binary.LittleEndian.PutUint64(b[off+8:], cp.Digest)
 		off += 16
@@ -119,9 +134,15 @@ func getDir(b []byte, off int) (DirCheckpoints, int) {
 	var d DirCheckpoints
 	d.Epoch = binary.LittleEndian.Uint64(b[off:])
 	off += 8
-	for m := range d.Latest {
-		d.Latest[m] = Checkpoint{Offset: binary.LittleEndian.Uint64(b[off:]), Digest: binary.LittleEndian.Uint64(b[off+8:])}
-		off += 16
+	for i := range d.Recent {
+		d.Recent[i], off = getCheckpoint(b, off)
+	}
+	for i := range d.Coarse {
+		d.Coarse[i], off = getCheckpoint(b, off)
 	}
 	return d, off
+}
+
+func getCheckpoint(b []byte, off int) (Checkpoint, int) {
+	return Checkpoint{Offset: binary.LittleEndian.Uint64(b[off:]), Digest: binary.LittleEndian.Uint64(b[off+8:])}, off + 16
 }

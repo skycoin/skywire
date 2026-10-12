@@ -9,8 +9,8 @@ import (
 
 func TestCheckpointShardRoundTrip(t *testing.T) {
 	e := CheckpointEntry{ID: uuid.New()}
-	e.Sent.Epoch, e.Sent.Latest[0] = 7, Checkpoint{Offset: 16 << 20, Digest: 99}
-	e.Recv.Epoch, e.Recv.Latest[3] = 8, Checkpoint{Offset: 64 << 30, Digest: 1}
+	e.Sent.Epoch, e.Sent.Recent[CheckpointRecent-1] = 7, Checkpoint{Offset: 16 << 20, Digest: 99}
+	e.Recv.Epoch, e.Recv.Coarse[2] = 8, Checkpoint{Offset: 64 << 30, Digest: 1}
 	sh := ShardOf(e.ID)
 	b := EncodeCheckpointShard(sh, []CheckpointEntry{e, {ID: uuid.New()}})
 	gotSh, got, err := DecodeCheckpointShard(b)
@@ -21,9 +21,9 @@ func TestCheckpointShardRoundTrip(t *testing.T) {
 
 	_, _, err = DecodeCheckpointShard(b[:len(b)-1])
 	require.ErrorIs(t, err, ErrLengthMismatch)
-	b[0] = Version
+	b[0] = 0x01
 	_, _, err = DecodeCheckpointShard(b)
-	require.ErrorIs(t, err, ErrVersion, "a telemetry shard is not a checkpoint shard")
+	require.ErrorIs(t, err, ErrVersion, "the first checkpoint format is not read")
 }
 
 func TestCheckpointLeafPath(t *testing.T) {
@@ -36,4 +36,13 @@ func TestCheckpointLeafPath(t *testing.T) {
 		_, ok := ParseCheckpointLeafPath(p)
 		require.False(t, ok, p)
 	}
+}
+
+func TestDirCheckpointsPoints(t *testing.T) {
+	var d DirCheckpoints
+	require.Empty(t, d.Points())
+	d.Recent[CheckpointRecent-1] = Checkpoint{Offset: 32 << 20, Digest: 2}
+	d.Recent[CheckpointRecent-2] = Checkpoint{Offset: 16 << 20, Digest: 1}
+	d.Coarse[0] = Checkpoint{Offset: 256 << 20, Digest: 3}
+	require.Equal(t, []Checkpoint{{16 << 20, 1}, {32 << 20, 2}, {256 << 20, 3}}, d.Points())
 }
