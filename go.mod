@@ -10,8 +10,8 @@ require (
 	github.com/0magnet/bbolt v1.5.1-0.20261004201233-f6a048c19b9a
 	github.com/0magnet/bitree v0.0.0
 	github.com/0magnet/bottle v0.0.1-0.20261012170135-a605c941016f
-	github.com/0magnet/calvin v0.0.0
-	github.com/0magnet/coloredcobra v1.0.4-0.20260908180055-b9d8b508df51
+	github.com/0magnet/calvin v0.0.1-0.20261012011430-3b61384c1b9e
+	github.com/0magnet/coloredcobra v1.0.4-0.20261011230509-d5385cf44398
 	github.com/0magnet/cosmos-go v0.0.0
 	github.com/0magnet/desk v0.0.2
 	github.com/0magnet/desk/panes v0.0.0
@@ -34,10 +34,10 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.0
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261010162512-55aa0b32e017
+	github.com/0magnet/websh v0.0.1-0.20261012174010-78d87aa27d5c
 	github.com/0magnet/wfdrive v0.3.2
-	github.com/0magnet/winbox-go v0.0.1-0.20261008155453-e5e3ca2e9451
-	github.com/0magnet/wisp v0.0.0-20261010111717-5602c41d7a1c
+	github.com/0magnet/winbox-go v0.0.1-0.20261012131923-a829715e530f
+	github.com/0magnet/wisp v0.0.0-20261012011309-160ee017648c
 	github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/DiSiqueira/GoTree v1.0.0
@@ -57,7 +57,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gdamore/tcell/v3 v3.5.0
+	github.com/gdamore/tcell/v3 v3.6.0
 	github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 	github.com/gen2brain/malgo v0.11.26
 	github.com/gizak/termui/v3 v3.1.0
@@ -129,7 +129,7 @@ require (
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.0 // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
-	github.com/0magnet/xterm-go v0.0.1-0.20261010151358-9a8ac37a85ad // indirect
+	github.com/0magnet/xterm-go v0.0.1-0.20261011000522-9adb4a350db6 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261008234032-65faa4be4f89 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect

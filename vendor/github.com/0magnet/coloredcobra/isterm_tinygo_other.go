@@ -1,4 +1,4 @@
-//go:build tinygo && !linux
+//go:build tinygo && !linux && !js
 
 package coloredcobra
 
