@@ -61,6 +61,7 @@ struct TopRounded: Shape {
 }
 
 /// OutlinedTextField: 56 pt, 8 pt corners, a label that floats into the border when focused or filled.
+/// With `minLines` it grows downwards from that many lines; `supporting` is the line under it.
 struct SkyOutlinedTextField: View {
     var label: LocalizedStringKey? = nil
     var placeholder: LocalizedStringKey? = nil
@@ -73,52 +74,87 @@ struct SkyOutlinedTextField: View {
     var identifier: String? = nil
     var leadingIcon: String? = nil
     var radius: CGFloat = SkyRadius.extraSmall
+    var minLines: Int? = nil
+    var supporting: Text? = nil
+    /// Words rather than a key: the keyboard corrects and capitalises.
+    var prose = false
     @FocusState private var focused: Bool
 
     var body: some View {
-        let floating = focused || !text.isEmpty
+        VStack(alignment: .leading, spacing: 4) {
+            box
+            if let supporting {
+                supporting.skyText(.bodySmall)
+                    .foregroundStyle(isError ? Color.skyError : Color.skyOnSurfaceVariant)
+                    .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var box: some View {
         let inset: CGFloat = leadingIcon == nil ? 16 : 40
-        ZStack(alignment: .leading) {
+        // A growing field keeps its first line where a one-line field has it, 16 pt down.
+        let top: CGFloat = minLines == nil ? 0 : 16
+        let alignment: Alignment = minLines == nil ? .leading : .topLeading
+        return ZStack(alignment: alignment) {
             if let leadingIcon {
                 MaterialIcon(leadingIcon, size: 16).foregroundStyle(Color.skyOnSurfaceVariant).padding(.leading, 14)
-            }
-            if let label {
-                Text(label)
-                    .skyText(floating ? .bodySmall : .bodyLarge)
-                    .foregroundStyle(isError ? Color.skyError : (focused ? Color.skyPrimary : Color.skyOnSurfaceVariant))
-                    .padding(.horizontal, floating ? 4 : 0)
-                    .background(floating ? notch : .clear)
-                    .offset(y: floating ? -28 : 0)
-                    .padding(.leading, floating ? 12 : inset)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
             }
             if let placeholder, text.isEmpty, label == nil || focused {
                 // The tint keeps a URL-shaped hint from drawing as a link.
                 Text(placeholder).skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant).tint(.skyOnSurfaceVariant)
-                    .padding(.leading, inset).allowsHitTesting(false)
+                    .padding(.leading, inset).padding(.top, top).allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            // An empty prompt: the label and placeholder above are the field's own drawing.
-            TextField(text: $text, prompt: Text(verbatim: "")) { label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: "") }
+            field
                 .focused($focused)
                 .font(Font(SkyTextStyle.bodyLarge.uiFont(mono: mono)))
                 .foregroundStyle(Color.skyOnSurface)
                 .tint(.skyPrimary)
                 .keyboardType(keyboard)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(!prose)
+                .textInputAutocapitalization(prose ? .sentences : .never)
                 .padding(.leading, inset)
                 .padding(.trailing, 16)
+                .padding(.vertical, top)
                 // The drawn label and hint are decoration; the field itself carries them.
                 .accessibilityLabel(label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: ""))
                 .accessibilityIdentifier(identifier ?? "")
         }
         // The border is an overlay so the field keeps its 56 pt in a dialog that offers more.
-        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: alignment)
         .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(borderColor, lineWidth: focused || isError ? 2 : 1))
+        // Over the border, so a floating label's notch cuts the line as Android's outline does.
+        .overlay(alignment: alignment) { floatingLabel(inset: inset, top: top) }
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
+    }
+
+    @ViewBuilder private func floatingLabel(inset: CGFloat, top: CGFloat) -> some View {
+        if let label {
+            let floating = focused || !text.isEmpty
+            Text(label)
+                .skyText(floating ? .bodySmall : .bodyLarge)
+                .foregroundStyle(isError ? Color.skyError : (focused ? Color.skyPrimary : Color.skyOnSurfaceVariant))
+                .padding(.horizontal, floating ? 4 : 0)
+                .background(floating ? notch : .clear)
+                .padding(.top, top)
+                .offset(y: floating ? (minLines == nil ? -28 : -24) : 0)
+                .padding(.leading, floating ? 12 : inset)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    // An empty prompt: the label and placeholder above are the field's own drawing.
+    @ViewBuilder private var field: some View {
+        let title = label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: "")
+        if let minLines {
+            TextField(text: $text, prompt: Text(verbatim: ""), axis: .vertical) { title }
+                .lineLimit(minLines...)
+        } else {
+            TextField(text: $text, prompt: Text(verbatim: "")) { title }
+        }
     }
 
     private var borderColor: Color {

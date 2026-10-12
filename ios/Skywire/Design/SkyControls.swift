@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Android's shared controls: Material 3 1.4.0 defaults with the Skywire theme applied.
 
@@ -112,6 +113,28 @@ struct SkyTextButtonStyle: ButtonStyle {
     }
 }
 
+/// OutlinedButton (Material 3 1.4.0: an outlineVariant border, onSurfaceVariant ink).
+struct OutlinedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        OutlinedPill(label: configuration.label, pressed: configuration.isPressed)
+    }
+}
+
+private struct OutlinedPill<Label: View>: View {
+    let label: Label
+    let pressed: Bool
+
+    var body: some View {
+        // The border on the 40 pt pill, inside the 48 pt the label reserves.
+        PillLabel(label: label, pressed: pressed, fill: .clear, ink: .skyOnSurfaceVariant, horizontal: 24)
+            .overlay(Capsule().strokeBorder(Color.skyOutlineVariant, lineWidth: 1).padding(.vertical, 4))
+    }
+}
+
+extension ButtonStyle where Self == OutlinedButtonStyle {
+    static var outlined: OutlinedButtonStyle { OutlinedButtonStyle() }
+}
+
 extension ButtonStyle where Self == TonalButtonStyle {
     static var tonal: TonalButtonStyle { TonalButtonStyle() }
 }
@@ -160,6 +183,81 @@ struct SkyFilterChip: View {
         }
         .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: SkyRadius.small))))
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// SingleChoiceSegmentedButtonRow of SegmentedButtons (Material 3 1.4.0): 40 pt, an outline
+/// border, the selected segment secondaryContainer with an 18 pt check before its label.
+struct SkySegmentedRow<Item: Hashable>: View {
+    let items: [Item]
+    let selected: Item
+    let label: (Item) -> Text
+    let onSelect: (Item) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element) { index, item in
+                let on = item == selected
+                let shape = SegmentShape(first: index == 0, last: index == items.count - 1)
+                Button { onSelect(item) } label: {
+                    HStack(spacing: 8) {
+                        if on { MaterialIcon(MI.filledCheck, size: 18) }
+                        label(item).skyText(.labelLarge).lineLimit(1)
+                    }
+                    .foregroundStyle(on ? Color.skyOnSecondaryContainer : Color.skyOnSurface)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(on ? Color.skySecondaryContainer : .clear, in: shape)
+                    .overlay(shape.stroke(Color.skyOutline, lineWidth: 1))
+                    .contentShape(shape)
+                }
+                .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(shape)))
+                .accessibilityAddTraits(on ? .isSelected : [])
+                // Neighbours share one border line, as Material overlaps them by its width.
+                .padding(.leading, index == 0 ? 0 : -1)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// A segment: the row's outer corners fully round, the inner ones square.
+private struct SegmentShape: Shape {
+    let first: Bool
+    let last: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var corners: UIRectCorner = []
+        if first { corners.formUnion([.topLeft, .bottomLeft]) }
+        if last { corners.formUnion([.topRight, .bottomRight]) }
+        let radius = rect.height / 2
+        return Path(UIBezierPath(roundedRect: rect, byRoundingCorners: corners,
+                                 cornerRadii: CGSize(width: radius, height: radius)).cgPath)
+    }
+}
+
+/// ExtendedFloatingActionButton (Material 3 1.4.0): 56 pt, the theme's large corners,
+/// primaryContainer, a 24 pt icon 12 pt before the label.
+struct ExtendedFab: View {
+    let icon: String
+    let label: Text
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                MaterialIcon(icon, size: 24)
+                label.skyText(.labelLarge).lineLimit(1)
+            }
+            .foregroundStyle(Color.skyOnPrimaryContainer)
+            .padding(.leading, 16)
+            .padding(.trailing, 20)
+            .frame(minWidth: 80, minHeight: 56)
+            .background(Color.skyPrimaryContainer, in: .sky(SkyRadius.large))
+            .skyElevation(6)
+            .contentShape(RoundedRectangle(cornerRadius: SkyRadius.large))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnPrimaryContainer, shape: AnyShape(RoundedRectangle(cornerRadius: SkyRadius.large))))
     }
 }
 

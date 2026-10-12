@@ -130,7 +130,7 @@ bind 127.0.0.1:8000 as well, so the app must not be connected while they run.
 | `Packages/CoreClient` (`swift test`) | every M2 API route against answers recorded from a real core, the session rules (first-run account, one re-login on 401, CSRF), the transport (streams, timeouts), the phone profile against the Android app's own output, the log parser | Mac, CI |
 | `SkywireTests` | the core started and stopped through CoreBridge (it dials the real network); the string catalogues | Simulator, CI |
 | `SkywireAppTests` | SecretStore in the real Keychain, with the app's access group | Simulator (hosted by the app), CI |
-| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, restart from Home, the Fleet switch | Simulator, by hand |
+| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, restart from Home, the Fleet switch, Skymail (to itself, and both ways with a desktop peer) | Simulator, by hand |
 
 The screen tour and its screenshots:
 
@@ -139,6 +139,15 @@ xcodebuild -project ios/Skywire.xcodeproj -scheme SkywireTour \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
   -resultBundlePath ios/build/Tour.xcresult test -only-testing:SkywireUITests/ScreenTour
 xcrun xcresulttool export attachments --path ios/build/Tour.xcresult --output-path <dir>
+```
+
+`MailChecks/testExchangeWithAPeer` needs a second visor on the Mac whose API
+answers on another port without a login (the desktop peer: `make build-mobile`,
+`hypervisor.http_addr` 127.0.0.1:18000, `enable_auth` false). Name it to the runner:
+
+```sh
+TEST_RUNNER_SKYWIRE_MAIL_PEER=http://127.0.0.1:18000 TEST_RUNNER_SKYWIRE_MAIL_PEER_PK=<its pk> \
+  xcodebuild … -scheme SkywireTour test -only-testing:SkywireUITests/MailChecks
 ```
 
 ### Strings

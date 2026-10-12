@@ -3,8 +3,9 @@ import XCTest
 /// What the flow checks share: a connected app, the tabs, the core's state.
 @MainActor
 extension XCTestCase {
-    func connectedApp() -> XCUIApplication {
+    func connectedApp(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments = arguments
         app.launch()
         XCTAssertTrue(state(app).waitForExistence(timeout: 15))
         if state(app).value as? String == "stopped" {

@@ -79,6 +79,17 @@ final class ScreenTour: XCTestCase {
         XCTAssertTrue(app.switches["fleet-screen-toggle"].waitForExistence(timeout: 10))
         snap("\(language)-3d-fleet")
         goBack(app)
+        let mail = app.buttons["hub-mail"]
+        scroll(to: mail, in: app)
+        mail.tap()
+        XCTAssertTrue(app.buttons["mail-settings"].waitForExistence(timeout: 20), "the mailbox screen never came up")
+        _ = app.staticTexts["mail-address"].waitForExistence(timeout: 20)
+        snap("\(language)-3e-mail")
+        app.buttons["mail-settings"].tap()
+        XCTAssertTrue(app.switches["mail-enabled"].waitForExistence(timeout: 10))
+        snap("\(language)-3e2-mail-settings")
+        goBack(app)
+        goBack(app)
 
         openTab(.settings, in: app)
         snap("\(language)-4-settings")

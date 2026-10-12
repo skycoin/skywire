@@ -174,6 +174,7 @@ final class NotificationBridge: NSObject, ObservableObject {
         // A message from a person interrupts: that is what a chat is.
         case SkychatProfile.app: (L10n.text("app_skychat"), true, .active)
         case SkydexProfile.app: ("SkyDEX", true, .active)
+        case MailProfile.app: (L10n.text("app_skymail"), true, .active)
         // The visor's own events (transports, reachability, updates):
         // informational, and quieter than a message.
         case "visor", "":
@@ -195,7 +196,7 @@ extension NotificationBridge: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .list, .sound])
     }
 
-    /// A tapped skychat notification opens its conversation.
+    /// A tapped skychat notification opens its conversation, a mail one its message.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -207,6 +208,9 @@ extension NotificationBridge: UNUserNotificationCenterDelegate {
         Task { @MainActor in
             if app == SkychatProfile.app {
                 ChatRouter.shared.openConversation(tag: tag)
+            } else if app == MailProfile.app {
+                // The visor tags a mail notification with the message's id.
+                MailRouter.shared.open(id: tag)
             }
         }
         completionHandler()

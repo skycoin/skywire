@@ -8,6 +8,7 @@ struct RootView: View {
     @EnvironmentObject private var notifications: NotificationBridge
     @ObservedObject private var settings: AppSettings
     @ObservedObject private var calls = VoiceCalls.shared
+    @ObservedObject private var mailRouter = MailRouter.shared
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var navigator = Navigator()
     @StateObject private var dialogs = SkyDialogs()
@@ -58,6 +59,7 @@ struct RootView: View {
             app.launch()
             // A link or a tap that launched the app.
             if router.pending != nil { navigator.select(.chat) }
+            if mailRouter.pending != nil { navigator.push(.mail) }
         }
         // Whichever screen is up: the hub is read while the core is connected.
         .task(id: app.connected) { await notifications.run(app) }
@@ -65,6 +67,10 @@ struct RootView: View {
         .task(id: app.connected) { await CallCenter.shared.run(app) }
         .onChange(of: router.pending) { request in
             if request != nil { navigator.select(.chat) }
+        }
+        // A tapped mail notification opens Skymail over whatever is up; the screen opens the message.
+        .onChange(of: mailRouter.pending) { link in
+            if link != nil { navigator.push(.mail) }
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -97,7 +103,7 @@ enum AppTab: CaseIterable, Hashable {
 
 /// Screens pushed over a tab (Android's non-tab routes).
 enum Route: Hashable {
-    case socks, dex, fleet, vpn, diagnostics
+    case socks, dex, fleet, vpn, mail, diagnostics
     case logs(LogSource)
 }
 
@@ -209,6 +215,7 @@ private struct TabStack: View {
         case .dex: DexView()
         case .fleet: FleetView(settings: app.settings)
         case .vpn: VpnView(settings: app.settings)
+        case .mail: MailView()
         case .diagnostics: DiagnosticsView()
         case .logs(let source): LogsView(source: source)
         }
