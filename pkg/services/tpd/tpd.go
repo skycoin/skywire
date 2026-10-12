@@ -41,6 +41,7 @@ import (
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/svcmode"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -486,6 +487,14 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 func (s *service) ChartsPage() *charts.Page {
 	if a := s.chartsAPI.Load(); a != nil {
 		return a.Charts()
+	}
+	return nil
+}
+
+// ApplyCheckpoints passes stream checkpoints to a store that matches them.
+func (s *aggregatorSink) ApplyCheckpoints(ctx context.Context, id uuid.UUID, reporter cipher.PubKey, sent, recv telemetrywire.DirCheckpoints) error {
+	if c, ok := s.Store.(cxoaggregator.CheckpointSink); ok {
+		return c.ApplyCheckpoints(ctx, id, reporter, sent, recv)
 	}
 	return nil
 }
