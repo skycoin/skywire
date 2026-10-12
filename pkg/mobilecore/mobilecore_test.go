@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
@@ -46,6 +47,10 @@ import (
 
 // testStopTimeout bounds every Stop in these tests.
 const testStopTimeout = 30 * time.Second
+
+// restartWait bounds a restart: a Stop and a Start. On a slow network a start
+// waits up to 30 s for dmsg and 30 s more for transport discovery.
+const restartWait = 3 * time.Minute
 
 // goroutineMargin is how many goroutines above the pre-start count a stopped
 // core may leave behind: net/http idle-connection readers and timers that
@@ -368,8 +373,84 @@ func TestRestartRoute(t *testing.T) {
 		core.mu.Lock()
 		defer core.mu.Unlock()
 		return core.state == StateRunning && core.visor != nil && core.visor != v
-	}, 60*time.Second, 100*time.Millisecond, "the core did not come back after the restart route")
+	}, restartWait, 100*time.Millisecond, "the core did not come back after the restart route")
 	pc.requirePing(t)
+}
+
+// TestStartStopWithoutNetwork runs the core with every dmsg server
+// unreachable, as on a phone without signal. The start must finish, and once
+// Stop returns nothing of the core may still listen, log or write: the
+// address resolver retried forever and skychat outlived Stop.
+func TestStartStopWithoutNetwork(t *testing.T) {
+	pc := newPhoneCore(t)
+	cutNetwork(t, pc)
+	var lines sync.Map
+	SetLogSink(func(_ int32, line string) { lines.Store(line, time.Now()) })
+	t.Cleanup(func() { SetLogSink(nil) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), restartWait)
+	defer cancel()
+	start := time.Now()
+	require.NoError(t, Start(ctx, pc.options()), "the start did not finish without a network: %s", LastError())
+	t.Logf("started in %s", time.Since(start).Round(time.Millisecond))
+	pc.requirePing(t)
+	time.Sleep(5 * time.Second) // the binds and the resolver are retrying now
+
+	require.NoError(t, Stop(testStopTimeout))
+	requireRefused(t, pc.apiAddr)
+	requireRefused(t, pc.chatAddr)
+	pc.requireBoltUnlocked(t)
+
+	time.Sleep(time.Second) // the log sink drains on its own goroutine
+	stoppedAt := time.Now()
+	files := fileStates(t, pc.dataDir)
+	time.Sleep(5 * time.Second)
+	lines.Range(func(k, v any) bool {
+		if v.(time.Time).After(stoppedAt) {
+			t.Errorf("the stopped core still logs: %s", k)
+		}
+		return true
+	})
+	require.Equal(t, files, fileStates(t, pc.dataDir), "the stopped core still writes its files")
+}
+
+// cutNetwork points every dmsg server at a port nothing listens on and
+// drops the STUN servers and the geoip lookup, the core's other ways out.
+func cutNetwork(t *testing.T, pc *phoneCore) {
+	t.Helper()
+	raw, err := os.ReadFile(pc.config)
+	require.NoError(t, err)
+	var c map[string]any
+	require.NoError(t, json.Unmarshal(raw, &c))
+	dead := freeLoopbackAddr(t)
+	for _, s := range c["dmsg"].(map[string]any)["servers"].([]any) {
+		srv := s.(map[string]any)["server"].(map[string]any)
+		srv["address"] = dead
+		delete(srv, "address_ws")
+	}
+	c["stun_servers"] = []any{}
+	c["geoip"] = ""
+	out, err := json.MarshalIndent(c, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(pc.config, out, 0o600))
+}
+
+// fileStates maps every file under dir to its size and modification time.
+func fileStates(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	m := map[string]string{}
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		m[p] = fmt.Sprintf("%d %s", info.Size(), info.ModTime().Format(time.RFC3339Nano))
+		return nil
+	}))
+	return m
 }
 
 // TestStartErrors covers the refusals that need no visor.
