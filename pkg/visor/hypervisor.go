@@ -897,6 +897,10 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
 				r.Get("/about", hv.getAbout())
+				// The host bridge of the local visor, used by the /hostbridge/ page.
+				r.Get("/hostbridge/status", hv.hostBridgeStatusHandler())
+				r.Get("/hostbridge/builds", hv.hostBridgeBuilds())
+				r.Post("/hostbridge/{action}", hv.hostBridgeAction())
 				r.Get("/dmsg", hv.getDmsg())
 				r.Get("/service-health", hv.getServiceHealth())
 				// Generic deployment-service proxy: fetches /<path> on the
@@ -1252,6 +1256,15 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Use(hv.users.Authorize)
 			}
 			r.Handle("/wallet/{rest...}", hv.walletHandler())
+		})
+		// The host bridge page: the bridge builds embedded in a browser visor, and
+		// the form that connects the visor to one. See hypervisor_hostbridge.go.
+		r.Group(func(r *httputil.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Get("/hostbridge/", hv.hostBridgePage())
+			r.Get("/hostbridge/download/{file}", hv.hostBridgeDownload())
 		})
 		// The dashboard wallet's cipher, at the paths its route loads relative to
 		// the page.

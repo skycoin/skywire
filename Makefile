@@ -3,7 +3,7 @@
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
-.PHONY : generate services vet check-cg check-help check-inner check-ci
+.PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 # --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
@@ -364,6 +364,13 @@ install-generate: ## Installs required execs for go generate.
 
 generate: ## Generate mocks and config README's
 	go generate ./...
+
+hostbridge-dist: ## Rebuild the TinyGo host bridges the wasm visor embeds (needs the 0magnet/tinygo fork as tinygo)
+	for t in linux/amd64 linux/arm64 linux/arm linux/386 darwin/amd64 darwin/arm64 windows/amd64; do \
+		os=$${t%/*}; arch=$${t#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		f=pkg/hostbridge/dist/skywire-hostbridge-$$os-$$arch$$ext; \
+		GOOS=$$os GOARCH=$$arch tinygo build -no-debug -o $$f ./cmd/hostbridge && gzip -9 -n -f $$f || exit 1; \
+	done
 
 doc-gen: ## Regenerate docs/skywire/ from the live cobra command tree
 	go run ./cmd/skywire doc --out docs/skywire

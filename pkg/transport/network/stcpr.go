@@ -103,7 +103,7 @@ func (c *stcprClient) serve() {
 			lis, err = c.socks().Listen("tcp", confPort)
 			if err != nil {
 				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
-				c.port++
+				c.port = nextListenPort(err, c.port)
 				confPort = fmt.Sprintf(":%d", c.port)
 				c.log.Warnf("Trying port %d", c.port)
 				continue

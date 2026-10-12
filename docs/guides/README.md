@@ -23,6 +23,7 @@ cobra subcommand tree.
 - [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
 - [public-visor.md](public-visor.md) — make a visor reachable from the internet: `is_public`, a stable `transport_port`, router port-forwarding and host firewall (TCP **and** UDP), transport-type → protocol map, and reachability troubleshooting
+- [host-bridge.md](host-bridge.md) — give a browser visor the sockets of its computer: transports at an address of its own, and ports of the computer forwarded to it, such as its SOCKS proxy
 
 ## Application usage
 
