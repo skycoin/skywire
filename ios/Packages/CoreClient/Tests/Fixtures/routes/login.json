@@ -2,7 +2,7 @@
   "body": "true\n",
   "headers": {
     "content-type": "application/json",
-    "set-cookie": "swm-session=MTc5MDcxOTY1MnxVUlFKak9vSGt1ekFXZmU5Um10SVhwY0VsWnRJU0Q0YkZ5dC1BZG1qX25vNmhxek1tTDNPLUg1NzdCM3doQVRWSk1fMk9Fd1h8p2nhy8ZDuNMdT6QeTIWtmFlZ4Vd2HIgwU56nh5HG85M=; Path=/; Expires=Wed, 30 Sep 2026 10:07:32 GMT; HttpOnly"
+    "set-cookie": "swm-session=MTc5MTc3NDY4N3wxRmxqT2w1VnlsdkVVYnBsUjZpYjZGcEFkODRLcEcyV2d4TTBBZ2c4bjBnUk5YVFVaX29QeFZIU2xCTG5PSHVFNDRacFNGRTB8Z4ZxqTvu3ErLOZWvfLl872wC2emk3cknjcgHAgkAK8o=; Path=/; Expires=Mon, 12 Oct 2026 15:11:27 GMT; HttpOnly"
   },
   "method": "POST",
   "path": "/api/login",

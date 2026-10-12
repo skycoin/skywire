@@ -56,6 +56,8 @@ final class FakeVisor: Sendable {
         var served: [String] = []
         /// Replies queued for a request line, served before its fixture.
         var queued: [String: [StubServer.Reply]] = [:]
+        /// A variant recording to serve next for its request line.
+        var variants: [String: String] = [:]
     }
 
     private let state: OSAllocatedUnfairLock<State>
@@ -78,9 +80,13 @@ final class FakeVisor: Sendable {
         "login", "login-already", "login-wrong-password", "about-unauthorized", "put-app-without-csrf",
     ]
 
+    /// Recordings of a request line another recording answers too (the same
+    /// route in another state), served only when a test asks (`serveVariant`).
+    private static let variantFixtures: Set<String> = ["mail-status-off", "mail-send-refused"]
+
     private static let byRequestLine: [String: String] = {
         var table: [String: String] = [:]
-        for (name, fixture) in Fixture.all where !sessionFixtures.contains(name) {
+        for (name, fixture) in Fixture.all where !sessionFixtures.contains(name) && !variantFixtures.contains(name) {
             let line = "\(fixture.method) \(fixture.path)"
             precondition(table[line] == nil, "two fixtures for \(line)")
             table[line] = name
@@ -105,6 +111,13 @@ final class FakeVisor: Sendable {
     /// session rules, before the recording takes over again.
     func queue(_ method: String, _ target: String, _ replies: StubServer.Reply...) {
         state.withLock { $0.queued["\(method) \(target)", default: []].append(contentsOf: replies) }
+    }
+
+    /// Answers the next request for `name`'s request line with that variant recording.
+    func serveVariant(_ name: String) {
+        precondition(Self.variantFixtures.contains(name), "\(name) is not a variant")
+        let fixture = Fixture.named(name)
+        state.withLock { $0.variants["\(fixture.method) \(fixture.path)"] = name }
     }
 
     func start() async throws -> StubServer {
@@ -142,6 +155,9 @@ final class FakeVisor: Sendable {
                 if request.method != "GET", request.header("X-CSRF-Token") != Self.csrfToken {
                     return serve("put-app-without-csrf")
                 }
+            }
+            if let name = state.variants.removeValue(forKey: line) {
+                return serve(name)
             }
             // Queued replies stand in for the recording, behind the same
             // session rules.

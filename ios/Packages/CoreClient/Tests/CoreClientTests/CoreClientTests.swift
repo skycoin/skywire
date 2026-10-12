@@ -141,7 +141,7 @@ final class CoreClientTests: XCTestCase {
     func testSummary() async throws {
         let summary = try await client.summary()
         XCTAssertEqual(summary.overview.localPK, recordedPK)
-        XCTAssertEqual(summary.overview.apps.map(\.name).sorted(), ["skychat", "skydex-client", "skysocks-client", "vpn-client"])
+        XCTAssertEqual(summary.overview.apps.map(\.name).sorted(), ["skychat", "skydex-client", "skydns", "skymail", "skysocks-client", "vpn-client"])
         XCTAssertEqual(summary.overview.publicIPOrNil, "203.0.113.10")
         XCTAssertFalse(summary.dmsgServers.isEmpty)
         XCTAssertEqual(summary.health?.servicesHealth, "healthy")
@@ -379,6 +379,19 @@ final class CoreClientTests: XCTestCase {
         _ = try await client.setMinHops(2)                                // router-settings, put-router-settings
         _ = try await client.services(type: "proxy")
         _ = try await client.dmsgReconnect()
+        let mail = try await client.mailStatus()
+        _ = try await client.mailSend(MailOutgoing(to: [mail.addressDmsg]))
+        visor.serveVariant("mail-send-refused")
+        _ = try await client.mailSend(MailOutgoing(to: ["bob@example.com"]))
+        let inbox = try await client.mailList(MailFolder.inbox)
+        _ = try await client.mailList(MailFolder.sent)
+        _ = try await client.mailRead(MailFolder.inbox, id: inbox[0].id)
+        _ = try await client.mailAttachment(MailFolder.inbox, id: inbox[0].id, n: 0)
+        try await client.mailSetWhitelist([pk])
+        try await client.mailSetEnabled(false)
+        visor.serveVariant("mail-status-off")
+        _ = try await client.mailStatus()
+        try await client.mailDelete(MailFolder.inbox, id: inbox[0].id)
         try await client.restartVisor(pk: pk)
 
         // The recordings only the rules produce: a second login on a live
