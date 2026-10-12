@@ -130,12 +130,14 @@ final class ChatPage: NSObject, ObservableObject {
     /// notification's conversation opened. Driving the page rather than
     /// loading a URL for it keeps the open conversation, the scroll position
     /// and the event stream. Retried while the page's own object is not built
-    /// yet (the load finished a moment ago) or its groups have not arrived
-    /// (a group key is only known once they have). False if the page never
-    /// took it.
+    /// yet (the load finished a moment ago) or, for a conversation, while the
+    /// page has not loaded it: openThreadFromHost (Android's ChatWebView.openThread)
+    /// opens only a peer or group the page already has, and the groups wait on
+    /// the visor's RPC. False if the page never took it.
     func perform(_ target: ChatRouter.Target) async -> Bool {
         let script: String
         let argument: String
+        let attempts: Int
         switch target {
         case let .address(address):
             script = """
@@ -144,19 +146,18 @@ final class ChatPage: NSObject, ObservableObject {
             return chat.openAddressFromLink(value) ? 'ok' : 'ignored';
             """
             argument = address
+            attempts = Self.driveAttempts
         case let .conversation(key):
             script = """
             var chat = window.app;
-            if (!chat || typeof chat.selectRecipient !== 'function') return 'wait';
+            if (!chat || typeof chat.openThreadFromHost !== 'function') return 'wait';
             if (!value) return 'ok';
-            var groups = Array.isArray(chat.groups) ? chat.groups : [];
-            if (groups.some(function (g) { return g && g.id === value; })) { chat.selectGroup(value); return 'ok'; }
-            if (/^0[23][0-9a-f]{64}$/.test(value)) { chat.selectRecipient(value); return 'ok'; }
-            return groups.length ? 'ignored' : 'wait';
+            return chat.openThreadFromHost(value) ? 'ok' : 'wait';
             """
             argument = key
+            attempts = Self.threadAttempts
         }
-        for _ in 0..<Self.driveAttempts {
+        for _ in 0..<attempts {
             guard let webView, ready else { return false }
             let answer = try? await webView.callAsyncJavaScript(script, arguments: ["value": argument], contentWorld: .page)
             switch answer as? String {
@@ -174,9 +175,10 @@ final class ChatPage: NSObject, ObservableObject {
         return false
     }
 
-    /// ~3 s: the page builds its object with the document, and its groups
-    /// arrive with its first sync.
+    /// ~3 s: the page builds its object with the document.
     private static let driveAttempts = 20
+    /// ~10 s, as Android: a conversation is known once the contacts and groups have loaded.
+    private static let threadAttempts = 67
     private static let driveRetry: Duration = .milliseconds(150)
 
     /// `?theme=dark|light`, which the page reads on its first line.
