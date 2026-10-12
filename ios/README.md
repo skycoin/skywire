@@ -73,7 +73,7 @@ an iOS Simulator runtime; Go as in `go.mod`.
 
 ```sh
 make ios-core        # Go core → ios/Frameworks/SkywireCore.xcframework (device + Simulator arm64 slices)
-make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set
+make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set (5 to 10 minutes: it dials the live network)
 (cd ios/Packages/CoreClient && swift test)   # API client, phone profile, provider messages: on the Mac, no core
 (cd ios/Packages/WalletCore && swift test)   # the wallet against the Kotlin vectors
 go test ./pkg/vpn/ -run 'IOSTunDevice|TunSettings' -count=1   # vpn-client's iOS TUN framing, on the Mac
@@ -83,21 +83,30 @@ xcodebuild -project ios/Skywire.xcodeproj -scheme PacketTunnel \
   -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData \
   CODE_SIGNING_ALLOWED=NO build
 
-# app + tests on the Simulator
+# app + tests on the Simulator. The call tests hold the microphone, so grant
+# it first: a new or erased device has not, and simctl grants only while booted.
+xcrun simctl bootstatus "iPhone 18 Pro" -b
+xcrun simctl privacy "iPhone 18 Pro" grant microphone com.skycoin.skywire
 xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
   -derivedDataPath ios/DerivedData test
 
 # run it
-xcrun simctl boot "iPhone 18 Pro"
+xcrun simctl bootstatus "iPhone 18 Pro" -b
 xcodebuild -project ios/Skywire.xcodeproj -scheme Skywire \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
   -derivedDataPath ios/DerivedData build
-xcrun simctl install booted ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app
-xcrun simctl launch booted com.skycoin.skywire
-curl -s http://127.0.0.1:8000/api/ping     # "PONG!" once Connect has finished
-xcrun simctl spawn booted log stream --level info --predicate 'subsystem == "com.skycoin.skywire"'
+xcrun simctl install "iPhone 18 Pro" ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app
+xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire -core.wantsConnected YES   # connects as if Connect were tapped
+curl -s http://127.0.0.1:8000/api/ping     # "PONG!" once the core has started, 30 to 60 s
+xcrun simctl spawn "iPhone 18 Pro" log stream --level info --predicate 'subsystem == "com.skycoin.skywire"'
 ```
+
+The commands name the device rather than `booted`, which is ambiguous once
+two Simulators are booted. `xcrun simctl bootstatus -b` boots the device if
+it is not booted and waits until it is. Xcode 27 has no Simulator.app; to see
+the device and tap the app, open
+`/Applications/Xcode.app/Contents/Applications/DeviceHub.app`.
 
 **Simulator builds are signed to run locally**, not unsigned: the project
 signs them with the ad-hoc identity `-` (no Apple account, no certificate,
@@ -220,10 +229,10 @@ Notes:
   if the core was left connected, like Android's sticky core service.
 - **Memory limit.** The profile writes `memory_limit: "40MiB"`, the value
   the packet-tunnel extension will need. To measure without it, launch with
-  `xcrun simctl launch booted com.skycoin.skywire -SkywireMemoryLimit none`
+  `xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire -SkywireMemoryLimit none`
   (a launch argument, so it lasts one launch).
 - **Language.** The app follows iOS's per-app language (Settings > Skywire >
-  Language). To launch in one: `xcrun simctl launch booted com.skycoin.skywire
+  Language). To launch in one: `xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire
   -AppleLanguages '(zh-Hans)'`.
 - **Debugging from Xcode.** The Go runtime uses signals (`SIGURG` for
   preemption, `SIGPIPE`). If LLDB stops on them, run `process handle SIGURG
@@ -294,6 +303,10 @@ The identifiers are provisional until then, all in `Config/Shared.xcconfig`.
 - **errSecMissingEntitlement (-34018) from every Keychain call**: the
   Simulator build was unsigned. Drop `CODE_SIGNING_ALLOWED=NO`; the project
   signs Simulator builds to run locally.
+- **VoiceAudioReleaseTests fails with "the microphone is not granted"**: the
+  device is new or was erased. Boot it and grant the microphone as in Building
+  and running; `simctl privacy` refuses a device that is shut down ("Unable to
+  lookup in current state: Shutdown").
 - **The core refuses its config ("version")**: a config written by an untagged
   build is refused by a tagged core. The first launch of each new build
   regenerates the config with the same key (`ConfigProfile`); an install from

@@ -29,10 +29,10 @@ final class VoiceAudioReleaseTests: XCTestCase {
     private var engine: VoiceAudioEngine?
 
     override func setUp() async throws {
-        // The microphone must be granted before the engine can hold it:
-        // xcrun simctl privacy booted grant microphone com.skycoin.skywire
+        // The microphone must be granted before the engine can hold it, and simctl
+        // grants it only on a booted device (ios/README.md, Building and running).
         guard AVAudioSession.sharedInstance().recordPermission == .granted else {
-            XCTFail("the microphone is not granted — run: xcrun simctl privacy booted grant microphone com.skycoin.skywire")
+            XCTFail("the microphone is not granted: boot the Simulator, then run xcrun simctl privacy <device> grant microphone com.skycoin.skywire (ios/README.md)")
             return
         }
     }

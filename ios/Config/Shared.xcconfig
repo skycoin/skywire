@@ -1,7 +1,8 @@
 // ios/Config/Shared.xcconfig: the identifiers an Apple developer account
 // will own, and the versions, in one place (playbook rule 8, §6 D-1). All
 // provisional: nothing here is registered anywhere until the account exists
-// (Lane D1), and Simulator builds run unsigned (CODE_SIGNING_ALLOWED=NO).
+// (Lane D1). Simulator builds are signed to run locally with the ad-hoc
+// identity, which needs no account (ios/README.md).
 // The project's Debug and Release configurations are based on this file.
 
 // Bundle ID: Android's application id. The test bundle appends ".tests".
