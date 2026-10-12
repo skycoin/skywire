@@ -1,3 +1,5 @@
+//go:build unix
+
 // Package vpn pkg/vpn/tun_utun_fd.go c4-app-vpn
 package vpn
 
@@ -13,8 +15,8 @@ import (
 // starts with the address family as a big-endian uint32, the layout
 // wireguard-go's tun_darwin.go writes. AF_INET6 is Darwin's 30, not Linux's
 // 10. iOS hands the packet-tunnel extension such a descriptor
-// (tun_device_ios.go); this file has no build tag so the framing is tested on
-// any host (TestIOSTunDevice).
+// (tun_device_ios.go); this file builds on every unix so the framing is
+// tested on any of them (TestIOSTunDevice).
 const (
 	utunHeaderLen = 4
 	utunAFInet    = 2

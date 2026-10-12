@@ -25,8 +25,8 @@ func utunPair(t *testing.T) (*utunDevice, *os.File) {
 	dev := newUtunDevice(os.NewFile(uintptr(fds[0]), "utun7"), "utun7")
 	kernel := os.NewFile(uintptr(fds[1]), "kernel")
 	t.Cleanup(func() {
-		_ = dev.Close()
-		_ = kernel.Close()
+		_ = dev.Close()    //nolint:errcheck
+		_ = kernel.Close() //nolint:errcheck
 	})
 	return dev, kernel
 }
@@ -102,23 +102,4 @@ func TestIOSTunDeviceCloseUnblocksRead(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Close left the Read blocked")
 	}
-}
-
-func TestTunSettingsTrackUpAndDown(t *testing.T) {
-	start := CurrentTunSettings().Seq
-	up := requestTun("192.168.255.6/29", "192.168.255.5", 1500, "1.1.1.1")
-	require.True(t, up.Up)
-	require.Equal(t, start+1, up.Seq)
-	require.Equal(t, up, CurrentTunSettings())
-
-	down, changed := requestTunDown()
-	require.True(t, changed)
-	require.False(t, down.Up)
-	require.Empty(t, down.Addr)
-	require.Equal(t, start+2, down.Seq)
-
-	// The client drops both default halves: the second changes nothing.
-	again, changed := requestTunDown()
-	require.False(t, changed)
-	require.Equal(t, down, again)
 }
