@@ -90,6 +90,22 @@ curl --socks5-hostname 127.0.0.1:1080 https://ip.skycoin.com
 Forwards are kept in the config with the URL and reopened on each
 reconnect. `unforward <host addr>` stops one. The page has the same form.
 
+## Host addresses
+
+An app address that starts with `host:` names a port of the computer. In a
+browser visor the app listens or dials through the bridge, and in a native
+visor it is the address without the prefix. So the same config means the
+same port in both:
+
+```
+skywire cli proxy start --addr host:127.0.0.1:1080 --pk <exit pk>
+```
+
+An app can bind a host address before the bridge connects. The visor keeps
+the listener and binds it whenever a bridge session is up, retrying each
+second while the port is still taken. A `vnet:` prefix names the visor's own
+loopback, which a plain loopback address already means.
+
 ## Transports
 
 On its first session the browser visor starts stcpr and sudph on the

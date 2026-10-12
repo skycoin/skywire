@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/0magnet/bottle/vnet"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/proxyroute"
 	"github.com/skycoin/skywire/pkg/proxystatus"
@@ -241,6 +243,7 @@ func argsListenOn(args []string, port string) bool {
 			}
 			v = args[i+1]
 		}
+		v, _ = vnet.Split(v)
 		if _, p, err := net.SplitHostPort(v); err == nil && p == port {
 			return true
 		}
