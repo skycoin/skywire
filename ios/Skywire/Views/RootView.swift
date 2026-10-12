@@ -73,6 +73,7 @@ struct RootView: View {
             if link != nil { navigator.push(.mail) }
         }
         .onChange(of: scenePhase) { phase in
+            AppExits.entered(phase == .active ? "active" : phase == .inactive ? "inactive" : "background")
             switch phase {
             case .background:
                 lock.didEnterBackground()
@@ -83,6 +84,9 @@ struct RootView: View {
             default:
                 break
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            AppExits.entered("terminated")
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             lock.willEnterForeground()
@@ -252,7 +256,8 @@ private struct StackLayer: ViewModifier {
 }
 
 extension EnvironmentValues {
-    fileprivate var layerVisible: Bool {
+    /// Whether this screen is the one in front, in the tab in front.
+    var layerVisible: Bool {
         get { self[LayerVisibleKey.self] }
         set { self[LayerVisibleKey.self] = newValue }
     }
