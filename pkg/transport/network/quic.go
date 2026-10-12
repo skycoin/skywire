@@ -381,18 +381,22 @@ func (c *quicClient) listen() (net.Listener, error) {
 }
 
 func (c *quicClient) bindAndReRegister(port string) {
+	ctx, cancel := c.closeContext()
+	defer cancel()
 	delay := quicBindRetryDelay
 	for attempt := 1; ; attempt++ {
-		if err := c.ar.BindQUIC(context.Background(), port); err == nil {
+		err := c.ar.BindQUIC(ctx, port)
+		if err == nil {
 			c.log.Debugf("Successfully bound QUIC to port %s on address resolver", port)
 			break
-		} else {
-			c.log.WithError(err).Warnf("Failed to bind QUIC (attempt %d), retrying in %v", attempt, delay)
 		}
 		if c.isClosed() {
 			return
 		}
-		time.Sleep(delay)
+		c.log.WithError(err).Warnf("Failed to bind QUIC (attempt %d), retrying in %v", attempt, delay)
+		if !c.sleepUnlessClosed(delay) {
+			return
+		}
 		delay *= 2
 		if delay > quicBindMaxRetryDelay {
 			delay = quicBindMaxRetryDelay
@@ -407,7 +411,7 @@ func (c *quicClient) bindAndReRegister(port string) {
 			c.log.Debug("Stopping QUIC re-registration loop")
 			return
 		case <-ticker.C:
-			if err := c.ar.BindQUIC(context.Background(), port); err != nil {
+			if err := c.ar.BindQUIC(ctx, port); err != nil && !c.isClosed() {
 				c.log.WithError(err).Warn("Failed to re-register QUIC with address resolver")
 			}
 		}

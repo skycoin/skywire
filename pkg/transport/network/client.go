@@ -502,6 +502,32 @@ func (c *genericClient) isClosed() bool {
 	}
 }
 
+// closeContext returns a context that ends when the client closes, so a
+// background request to a slow address resolver cannot outlive Close.
+func (c *genericClient) closeContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-c.done:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
+}
+
+// sleepUnlessClosed waits d and reports false if the client closed first.
+func (c *genericClient) sleepUnlessClosed(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-c.done:
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
 // PK implements interface
 func (c *genericClient) PK() cipher.PubKey {
 	return c.lPK
