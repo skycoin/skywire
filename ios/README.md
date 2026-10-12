@@ -73,7 +73,7 @@ an iOS Simulator runtime; Go as in `go.mod`.
 
 ```sh
 make ios-core        # Go core → ios/Frameworks/SkywireCore.xcframework (device + Simulator arm64 slices)
-make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set (5 to 10 minutes: it dials the live network)
+make mobile-test     # pkg/mobilecore: start/stop/start in one process, on the lite module set (about 10 minutes: it dials the live network)
 (cd ios/Packages/CoreClient && swift test)   # API client, phone profile, provider messages: on the Mac, no core
 (cd ios/Packages/WalletCore && swift test)   # the wallet against the Kotlin vectors
 go test ./pkg/vpn/ -run 'IOSTunDevice|TunSettings' -count=1   # vpn-client's iOS TUN framing, on the Mac
