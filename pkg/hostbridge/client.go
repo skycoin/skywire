@@ -5,8 +5,10 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 	"time"
 
@@ -111,7 +113,7 @@ func (c *Client) ListenPacket(network, addr string) (net.PacketConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	ap, err := netip.ParseAddrPort(bound)
+	ap, err := parseAddrPort(bound)
 	if err != nil {
 		_ = st.Close() //nolint:errcheck
 		return nil, err
@@ -152,7 +154,7 @@ func (c *Client) route(st net.Conn) {
 }
 
 func tcpAddr(s string) net.Addr {
-	ap, err := netip.ParseAddrPort(s)
+	ap, err := parseAddrPort(s)
 	if err != nil {
 		return &net.TCPAddr{}
 	}
@@ -242,3 +244,20 @@ func (p *packetConn) LocalAddr() net.Addr                { return p.local }
 func (p *packetConn) SetDeadline(t time.Time) error      { return p.st.SetDeadline(t) }
 func (p *packetConn) SetReadDeadline(t time.Time) error  { return p.st.SetReadDeadline(t) }
 func (p *packetConn) SetWriteDeadline(t time.Time) error { return p.st.SetWriteDeadline(t) }
+
+// parseAddrPort also takes the ":port" form a TinyGo bridge reports for a
+// wildcard bind, where Go reports "[::]:port".
+func parseAddrPort(s string) (netip.AddrPort, error) {
+	if ap, err := netip.ParseAddrPort(s); err == nil {
+		return ap, nil
+	}
+	host, port, err := net.SplitHostPort(s)
+	if err != nil || host != "" {
+		return netip.AddrPort{}, fmt.Errorf("hostbridge: bad address %q", s)
+	}
+	p, err := strconv.ParseUint(port, 10, 16)
+	if err != nil {
+		return netip.AddrPort{}, fmt.Errorf("hostbridge: bad port in %q", s)
+	}
+	return netip.AddrPortFrom(netip.IPv4Unspecified(), uint16(p)), nil
+}

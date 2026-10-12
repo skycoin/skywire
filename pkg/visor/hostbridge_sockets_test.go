@@ -24,6 +24,13 @@ func bridgeClient(t *testing.T, addr, token string) *hostbridge.Client {
 	return c
 }
 
+func TestRebindAddr(t *testing.T) {
+	bound := &net.TCPAddr{IP: net.IPv6unspecified, Port: 4242}
+	require.Equal(t, ":4242", rebindAddr("", bound))
+	require.Equal(t, ":4242", rebindAddr(":0", bound))
+	require.Equal(t, "127.0.0.1:4242", rebindAddr("127.0.0.1:0", bound))
+}
+
 func TestHostBridgeSocketsSurviveReconnect(t *testing.T) {
 	const token = "0123456789abcdef"
 	srv, err := hostbridge.NewServer(hostbridge.Config{Token: token})
