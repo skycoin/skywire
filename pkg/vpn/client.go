@@ -78,6 +78,39 @@ type Client struct {
 
 // NewClient creates VPN client instance.
 func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
+	var directIPs []net.IP
+	// A browser visor's netstack has no routes for anything to go around.
+	if runtime.GOOS != "js" || cfg.Host {
+		var err error
+		if directIPs, err = directIPsFromEnv(); err != nil {
+			return nil, err
+		}
+	}
+
+	defaultGateway, err := DefaultNetworkGateway()
+	if cfg.Host {
+		defaultGateway, err = hostGateway()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error getting default network gateway: %w", err)
+	}
+
+	fmt.Printf("Got default network gateway IP: %s\n", defaultGateway)
+
+	c := &Client{
+		cfg:            cfg,
+		appCl:          appCl,
+		directIPs:      filterOutEqualIPs(directIPs),
+		defaultGateway: defaultGateway,
+		closeC:         make(chan struct{}),
+	}
+	c.initDirectRoutes()
+	return c, nil
+}
+
+// directIPsFromEnv is every IP the visor named for the tunnel to route
+// around: its services, dmsg servers and transports.
+func directIPsFromEnv() ([]net.IP, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
@@ -123,23 +156,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 	if arIP != nil {
 		directIPs = append(directIPs, arIP)
 	}
-
-	defaultGateway, err := DefaultNetworkGateway()
-	if err != nil {
-		return nil, fmt.Errorf("error getting default network gateway: %w", err)
-	}
-
-	fmt.Printf("Got default network gateway IP: %s\n", defaultGateway)
-
-	c := &Client{
-		cfg:            cfg,
-		appCl:          appCl,
-		directIPs:      filterOutEqualIPs(directIPs),
-		defaultGateway: defaultGateway,
-		closeC:         make(chan struct{}),
-	}
-	c.initDirectRoutes()
-	return c, nil
+	return directIPs, nil
 }
 
 // Serve dials VPN server, sets up TUN and establishes VPN session.
@@ -346,11 +363,15 @@ func (c *Client) createTUN() (TUNDevice, error) {
 	c.tunMu.Lock()
 	defer c.tunMu.Unlock()
 
-	if c.tunCreated {
+	if c.tunCreated && !deadTUN(c.tun) {
 		return c.tun, nil
 	}
 
-	tun, err := newTUNDevice()
+	newTUN := newTUNDevice
+	if c.cfg.Host {
+		newTUN = hostTUN
+	}
+	tun, err := newTUN()
 	if err != nil {
 		return nil, err
 	}

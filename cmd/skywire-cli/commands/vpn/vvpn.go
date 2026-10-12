@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func init() {
@@ -45,6 +46,7 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
+	startCmd.Flags().BoolVar(&hostTunnel, "host", false, "browser visor: put the tunnel on the computer through the host bridge, which needs the rights a native vpn-client has")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm (\"\" or \"none\" clears any previously-installed override)")
@@ -83,6 +85,11 @@ var startCmd = &cobra.Command{
 		}
 		if err := clirpc.ApplyRoutingSession(rpcClient, routeOpts); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if cmd.Flags().Changed("host") {
+			if err := setVPNHostArg(rpcClient, hostTunnel); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
 		}
 
 		launcherMode := ""
@@ -643,4 +650,29 @@ func fetchGeoIPAddr(url string) (string, error) {
 		return "", err
 	}
 	return r.IP, nil
+}
+
+// setVPNHostArg adds or removes --host in the vpn-client's args, leaving
+// the others as they are.
+func setVPNHostArg(rpcClient visorapi.API, on bool) error {
+	apps, err := rpcClient.Apps()
+	if err != nil {
+		return err
+	}
+	for _, a := range apps {
+		if a.Name != stateName {
+			continue
+		}
+		args := make([]string, 0, len(a.Args)+1)
+		for _, arg := range a.Args {
+			if arg != "--host" && arg != "--host=true" && arg != "--host=false" {
+				args = append(args, arg)
+			}
+		}
+		if on {
+			args = append(args, "--host")
+		}
+		return rpcClient.SetAppArgs(stateName, args)
+	}
+	return fmt.Errorf("no %s app in the visor config", stateName)
 }

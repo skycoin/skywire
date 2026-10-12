@@ -159,7 +159,7 @@ func ParseIP(addr string) (net.IP, bool, error) {
 	}
 
 	// got domain instead of IP, need to resolve
-	ips, err := net.LookupIP(addr)
+	ips, err := lookupIP(addr)
 	if err != nil {
 		return nil, false, err
 	}
