@@ -64,9 +64,17 @@ func loopbackPort(address string) (int, bool) {
 	return p, true
 }
 
-// Listen binds a virtual loopback port when the page provides vnet and the
+// Listen binds a host address through the host network, and a virtual
+// loopback port when the page provides vnet and the
 // address is loopback; otherwise net.Listen.
 func Listen(network, address string) (net.Listener, error) {
+	address, onHost := Split(address)
+	if onHost {
+		if h := currentHost(); h != nil {
+			return h.Listen(network, address)
+		}
+		return nil, ErrNoHost
+	}
 	v := vnetJS()
 	port, ok := loopbackPort(address)
 	if !v.Truthy() || !ok || !strings.HasPrefix(network, "tcp") {
@@ -88,9 +96,17 @@ func Listen(network, address string) (net.Listener, error) {
 	return l, nil
 }
 
-// DialTimeout connects to a virtual loopback port when the page provides
+// DialTimeout dials a host address through the host network, and a virtual
+// loopback port when the page provides
 // vnet and the address is loopback; otherwise net.DialTimeout.
 func DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	address, onHost := Split(address)
+	if onHost {
+		if h := currentHost(); h != nil {
+			return h.DialTimeout(network, address, timeout)
+		}
+		return nil, ErrNoHost
+	}
 	v := vnetJS()
 	port, ok := loopbackPort(address)
 	if !v.Truthy() || !ok || !strings.HasPrefix(network, "tcp") {
