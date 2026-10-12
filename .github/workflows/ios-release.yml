@@ -177,14 +177,20 @@ jobs:
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
             "${auth[@]}" archive
 
-          # What is about to leave: the identifiers, the versions, the
-          # Keychain group the extension shares, and the Go core inside.
+          # What is about to leave: the identifiers, the versions (the
+          # extension's must match the app's), the Keychain group and the
+          # packet-tunnel entitlement, and the Go core in both binaries.
           app="$archive/Products/Applications/Skywire.app"
-          plutil -extract CFBundleIdentifier raw "$app/Info.plist"
-          test "$(plutil -extract CFBundleShortVersionString raw "$app/Info.plist")" = "$VERSION"
-          test "$(plutil -extract CFBundleVersion raw "$app/Info.plist")" = "$BUILD"
+          appex="$app/PlugIns/PacketTunnel.appex"
+          for bundle in "$app" "$appex"; do
+            plutil -extract CFBundleIdentifier raw "$bundle/Info.plist"
+            test "$(plutil -extract CFBundleShortVersionString raw "$bundle/Info.plist")" = "$VERSION"
+            test "$(plutil -extract CFBundleVersion raw "$bundle/Info.plist")" = "$BUILD"
+            codesign -d --entitlements - "$bundle" | grep -q packet-tunnel-provider
+          done
           codesign -d --entitlements - "$app" | grep -q keychain-access-groups
-          grep -a -q -E 'go1\.[0-9]+' "$app/Skywire" || { echo "::error::no Go runtime in the binary"; exit 1; }
+          grep -a -q -E 'go1\.[0-9]+' "$app/Skywire" || { echo "::error::no Go runtime in the app"; exit 1; }
+          grep -a -q -E 'go1\.[0-9]+' "$appex/PacketTunnel" || { echo "::error::no Go runtime in the extension"; exit 1; }
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
