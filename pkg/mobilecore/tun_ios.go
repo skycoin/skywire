@@ -4,23 +4,26 @@
 package mobilecore
 
 import (
+	"encoding/json"
 	"errors"
-	"sync/atomic"
+
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
-// tunFD is the utun descriptor the packet-tunnel extension handed over, or
-// -1. vpn-client's iOS TUN device (pkg/vpn/tun_device_ios.go, playbook item
-// 7.4) is what reads it; until that lands the descriptor is only kept.
-var tunFD atomic.Int64
-
-func init() { tunFD.Store(-1) }
-
-// SetTunFD hands the core the extension's utun descriptor. The extension
-// keeps ownership: the core never closes it.
+// SetTunFD hands the core the extension's utun descriptor, for vpn-client's
+// next TUN device (pkg/vpn/tun_device_ios.go). The extension keeps ownership:
+// the core works on a duplicate.
 func SetTunFD(fd int) error {
 	if fd < 0 {
 		return errors.New("mobilecore: invalid TUN descriptor")
 	}
-	tunFD.Store(int64(fd))
+	vpn.SetIOSTunFD(fd)
 	return nil
+}
+
+// TunSettings is the tunnel vpn-client last asked for, as JSON, for the
+// extension to apply as its NEPacketTunnelNetworkSettings.
+func TunSettings() (string, error) {
+	b, err := json.Marshal(vpn.CurrentTunSettings())
+	return string(b), err
 }

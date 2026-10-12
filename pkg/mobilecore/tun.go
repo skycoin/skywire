@@ -11,3 +11,8 @@ import "errors"
 func SetTunFD(_ int) error {
 	return errors.New("mobilecore: SetTunFD is unsupported on this platform")
 }
+
+// TunSettings is iOS-only, as SetTunFD.
+func TunSettings() (string, error) {
+	return "", errors.New("mobilecore: TunSettings is unsupported on this platform")
+}
