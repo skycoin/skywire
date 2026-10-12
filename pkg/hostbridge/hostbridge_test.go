@@ -276,3 +276,20 @@ func TestDialContextCanceled(t *testing.T) {
 	require.NoError(t, err)
 	_ = cn.Close() //nolint:errcheck
 }
+
+func TestParseAddrPort(t *testing.T) {
+	for in, want := range map[string]string{
+		"[::]:4242":    "[::]:4242",
+		"0.0.0.0:4242": "0.0.0.0:4242",
+		"127.0.0.1:80": "127.0.0.1:80",
+		":4242":        "0.0.0.0:4242",
+	} {
+		ap, err := parseAddrPort(in)
+		require.NoError(t, err, in)
+		require.Equal(t, want, ap.String())
+	}
+	for _, bad := range []string{"", "host:80", ":x", "nope"} {
+		_, err := parseAddrPort(bad)
+		require.Error(t, err, bad)
+	}
+}

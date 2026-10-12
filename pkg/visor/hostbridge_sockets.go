@@ -96,8 +96,8 @@ func (s *hostBridgeSockets) Listen(network, addr string) (net.Listener, error) {
 	if err := l.rebind(c); err != nil {
 		return nil, err
 	}
-	// Later sessions rebind the port this one got.
-	l.addr = l.bound.String()
+	// Later sessions rebind the port this one got, at the host asked for.
+	l.addr = rebindAddr(addr, l.bound)
 	s.mu.Lock()
 	s.lis[l] = struct{}{}
 	s.mu.Unlock()
@@ -114,7 +114,7 @@ func (s *hostBridgeSockets) ListenPacket(network, addr string) (net.PacketConn, 
 	if err := p.rebind(c); err != nil {
 		return nil, err
 	}
-	p.addr = p.bound.String()
+	p.addr = rebindAddr(addr, p.bound)
 	s.mu.Lock()
 	s.pcs[p] = struct{}{}
 	s.mu.Unlock()
@@ -351,4 +351,19 @@ func (p *durablePacketConn) SetWriteDeadline(t time.Time) error {
 		return p.inner.SetWriteDeadline(t)
 	}
 	return nil
+}
+
+// rebindAddr keeps the host of the address asked for, usually empty for
+// every interface, with the port the first bind got. The bridge reports a
+// wildcard bind as [::], which a bridge without IPv6 sockets cannot bind.
+func rebindAddr(asked string, bound net.Addr) string {
+	host, _, err := net.SplitHostPort(asked)
+	if err != nil {
+		host = ""
+	}
+	_, port, err := net.SplitHostPort(bound.String())
+	if err != nil {
+		return bound.String()
+	}
+	return net.JoinHostPort(host, port)
 }
