@@ -85,6 +85,36 @@ func AppletNames() []string {
 // expose environment-specific commands.
 func RegisterApplet(name, help string, run func(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int) {
 	applets[name] = applet{help, run}
+	ownApplets[name] = true
+}
+
+// ownApplets are websh's own commands rather than stand-ins for a system's:
+// on the OS (NewOS) they run even where a program of the same name is on the
+// PATH. Every other applet stands in for a tool a page has no other way to
+// have, and on the OS the machine's own tool wins, with the applet kept for
+// where the machine has none. An embedder's applets (RegisterApplet) are its
+// own by definition.
+var ownApplets = map[string]bool{
+	"edit": true, "imgcat": true, "help": true, "websh-help": true, "which": true,
+}
+
+// runsApplet reports whether the command named name0 is the applet of that
+// name, and returns it. In a page every applet name is; on the OS a path is a
+// program, and a stand-in applet gives way to the program of its name on the
+// PATH.
+func (s *Shell) runsApplet(hc interp.HandlerContext, name0 string) (applet, bool) {
+	a, ok := applets[filepath.Base(name0)]
+	if !ok || !s.native {
+		return a, ok
+	}
+	if strings.Contains(name0, "/") {
+		return a, false
+	}
+	if ownApplets[name0] {
+		return a, true
+	}
+	_, err := interp.LookPathDir(hc.Dir, hc.Env, name0)
+	return a, err != nil
 }
 
 func fail(hc *interp.HandlerContext, name string, err error) int {
@@ -711,9 +741,20 @@ func runEnv(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 func runWhich(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	code := 0
 	for _, arg := range args {
-		if _, ok := applets[arg]; ok {
+		_, isApplet := s.runsApplet(*hc, arg)
+		switch {
+		case isApplet && s.native:
+			// What runs is the applet, which has no file on this machine.
+			fprintf(hc.Stdout, "%s: websh applet\n", arg)
+		case isApplet:
 			fprintf(hc.Stdout, "/bin/%s\n", arg)
-		} else {
+		default:
+			if s.native {
+				if path, err := interp.LookPathDir(hc.Dir, hc.Env, arg); err == nil {
+					fprintln(hc.Stdout, path)
+					continue
+				}
+			}
 			fprintf(hc.Stderr, "which: %s not found\n", arg)
 			code = 1
 		}

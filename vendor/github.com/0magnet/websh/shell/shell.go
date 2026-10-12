@@ -68,6 +68,14 @@ type Shell struct {
 	reportJobs *syntax.File
 	// exited records what Run found before it reset the runner. See Exited.
 	exited bool
+	// native is a shell on the OS (NewOS): its files are the machine's, and a
+	// command that is not an applet runs as a program.
+	native bool
+
+	// TTY, on the OS, is the terminal when the shell's stdin is one: the file
+	// it was given, non-blocking so that a read of it can be ended. A program
+	// whose input is TTY is handed the terminal itself, blocking (exec_other.go).
+	TTY *os.File
 }
 
 // New creates a shell over the given filesystem (nil = fresh in-memory
@@ -95,30 +103,43 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...st
 		"TERM=xterm-256color",
 		"PS1=$ ",
 	}, extraEnv...)
-	runner, err := interp.New(
-		interp.StdIO(stdin, stdout, stderr),
-		interp.Env(expand.ListEnviron(env...)),
-		interp.CallHandler(s.callHandler),
-		interp.ExecHandlers(s.execHandler),
+	err := s.start(env, stdin, stdout, stderr,
 		interp.OpenHandler(s.openHandler),
 		interp.StatHandler(s.statHandler),
 		interp.ReadDirHandler2(s.readDirHandler),
 		interp.AccessHandler(s.accessHandler),
-		// Interactive keeps a job started with & alive after its line's
-		// context is canceled, as the web session does after every line.
-		interp.Interactive(true),
 	)
 	if err != nil {
 		return nil, err
 	}
 	// interp.Dir validates against the OS filesystem, so set the
 	// virtual cwd directly instead
-	runner.Dir = "/home/user"
-	s.Runner = runner
+	s.Runner.Dir = "/home/user"
 	if err := s.PopulateBin(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// start builds the interpreter with what every shell has — the applets and the
+// embedder's commands in front of the exec, the interactive job rules — and
+// whatever the caller adds. The file handlers are the caller's: a virtual
+// filesystem needs its own, and the OS needs the interpreter's.
+func (s *Shell) start(env []string, stdin io.Reader, stdout, stderr io.Writer, opts ...interp.RunnerOption) error {
+	runner, err := interp.New(append([]interp.RunnerOption{
+		interp.StdIO(stdin, stdout, stderr),
+		interp.Env(expand.ListEnviron(env...)),
+		interp.CallHandler(s.callHandler),
+		interp.ExecHandlers(s.execHandler),
+		// Interactive keeps a job started with & alive after its line's
+		// context is canceled, as the web session does after every line.
+		interp.Interactive(true),
+	}, opts...)...)
+	if err != nil {
+		return err
+	}
+	s.Runner = runner
+	return nil
 }
 
 // UseHistory gives the interpreter's history builtin a history list. The
@@ -133,6 +154,9 @@ func (s *Shell) UseHistory(list func() []string, clear func()) error {
 // so the command set is discoverable with ls. Call again after
 // registering extra applets.
 func (s *Shell) PopulateBin() error {
+	if s.native {
+		return nil // the machine's /bin is not ours to write in
+	}
 	if err := s.FS.MkdirAll("/bin", 0o755); err != nil {
 		return err
 	}
@@ -217,7 +241,12 @@ func (s *Shell) Run(ctx context.Context, line string) (needMore bool, err error)
 	// about the exit — clears it at once. A caller that asked the runner
 	// afterwards was always told no, which is why `exit` could not be
 	// acted on from outside.
-	s.exited = s.Runner.Exited()
+	//
+	// A line ended by its context (Ctrl+C) looks to the runner like an exit
+	// too. It is not one, and resetting for it threw away the directory,
+	// every variable, the options and the background jobs on each Ctrl+C.
+	// The runner clears its exit state at the start of every Run anyway.
+	s.exited = s.Runner.Exited() && ctx.Err() == nil
 	if s.exited {
 		// plain `exit` in the top level shell: reset so the terminal
 		// session keeps working
@@ -320,8 +349,7 @@ func (s *Shell) callHandler(ctx context.Context, args []string) ([]string, error
 // execHandler dispatches commands to applets instead of the OS.
 func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(ctx context.Context, args []string) error {
-		name := filepath.Base(args[0])
-		if applet, ok := applets[name]; ok {
+		if applet, ok := s.runsApplet(interp.HandlerCtx(ctx), args[0]); ok {
 			hc := interp.HandlerCtx(ctx)
 			code := applet.run(ctx, s, &hc, args[1:])
 			if code != 0 {
@@ -348,6 +376,11 @@ func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc 
 				}
 				return nil
 			}
+		}
+		// On the OS, a program, with the terminal itself when that is where
+		// its input comes from (exec_other.go).
+		if s.native {
+			return s.execProgram(ctx, args, next)
 		}
 		// Not a built-in applet: try to exec it as a program on the
 		// filesystem. On js/wasm this spawns a wasm binary as a child process
