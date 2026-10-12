@@ -567,20 +567,20 @@
 			}
 
 			const real = await WebAssembly.instantiate(mod, go.importObject);
-			memory = real.exports.memory || real.exports.mem || null;
 			if (cancelled) return 130;
+			memory = real.exports.memory || real.exports.mem || null;
 			// TinyGo's loader runs a timer wakeup by calling the instance's
 			// go_scheduler export straight from setTimeout, past every wrapper on
 			// go. Hand run an instance whose export is wrapped too: one whose
 			// prototype is the real one, so it is still a WebAssembly.Instance.
 			let inst = real;
-			if (typeof real.exports.go_scheduler === "function") {
+			let sched = real.exports.go_scheduler;
+			if (typeof sched === "function") {
 				const ex = Object.assign({}, real.exports);
-				const raw = real.exports.go_scheduler;
 				ex.go_scheduler = function () {
-					if (go.exited) return;
+					if (go.exited || !sched) return;
 					const t = enter();
-					try { return raw(); } finally { leave(t); }
+					try { return sched(); } finally { leave(t); }
 				};
 				inst = Object.create(real, { exports: { value: ex } });
 			}
@@ -628,6 +628,9 @@
 				// reachable, and go.mem alone pins the whole wasm memory.
 				go.mem = null;
 				delete go._inst;
+				// The wrappers above share this frame, so a surviving callback pins these too.
+				memory = null;
+				sched = null;
 			}
 			return exitCode;
 		})().catch((e) => {
