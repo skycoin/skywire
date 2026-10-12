@@ -216,18 +216,20 @@ func (t *Tracker) Close() error {
 
 func (t *Tracker) loop(ctx context.Context) {
 	defer close(t.done)
-	tick := time.NewTicker(t.interval)
-	defer tick.Stop()
 
 	// Take an immediate sample so the first observations don't have
 	// to wait an interval — keeps `current` populated at startup.
 	t.safeSample(time.Now())
 
+	// Later samples fall on wall-clock interval boundaries, so the two edges
+	// of a transport snapshot its stream checkpoints at nearly the same moment.
 	for {
+		wait := time.NewTimer(time.Until(time.Now().Truncate(t.interval).Add(t.interval)))
 		select {
 		case <-ctx.Done():
+			wait.Stop()
 			return
-		case now := <-tick.C:
+		case now := <-wait.C:
 			t.safeSample(now)
 		}
 	}

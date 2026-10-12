@@ -16,6 +16,10 @@ const CheckpointBase = 16 << 20
 // CheckpointLevels is how many checkpoint levels a digest keeps.
 const CheckpointLevels = 4
 
+// CheckpointRecent is how many of the finest checkpoints a digest keeps, so two
+// edges that sample a little apart on a busy link still share one.
+const CheckpointRecent = 8
+
 // Checkpoint is the digest of a connection's byte stream from its start up to
 // Offset. Both ends of a reliable connection see the same stream, so equal
 // checkpoints from the two edges prove those bytes passed between them.
@@ -29,9 +33,10 @@ type DigestState struct {
 	// Epoch names the connection: its digest at the first checkpoint, the
 	// same on both edges. Zero until the stream reaches CheckpointBase.
 	Epoch uint64
-	// Latest holds the most recent checkpoint of each level, zero where the
-	// stream has not reached that level yet.
-	Latest [CheckpointLevels]Checkpoint
+	// Recent holds the latest finest checkpoints, oldest first, and Coarse the
+	// latest of each coarser level. Zero where the stream has not reached one.
+	Recent [CheckpointRecent]Checkpoint
+	Coarse [CheckpointLevels - 1]Checkpoint
 }
 
 // streamDigest hashes the bytes of one direction of one connection, in the
@@ -91,9 +96,11 @@ func (d *streamDigest) checkpoint() {
 	if d.state.Epoch == 0 {
 		d.state.Epoch = cp.Digest
 	}
-	for m := 0; m < CheckpointLevels; m++ {
+	copy(d.state.Recent[:], d.state.Recent[1:])
+	d.state.Recent[CheckpointRecent-1] = cp
+	for m := 1; m < CheckpointLevels; m++ {
 		if d.n%(CheckpointBase<<(4*m)) == 0 {
-			d.state.Latest[m] = cp
+			d.state.Coarse[m-1] = cp
 		}
 	}
 }

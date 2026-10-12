@@ -737,8 +737,11 @@ func serviceStatesProbe(v *Visor) func() map[string]bool {
 // wireCheckpoints converts a transport's digest state to its telemetry form.
 func wireCheckpoints(s transport.DigestState) telemetrywire.DirCheckpoints {
 	d := telemetrywire.DirCheckpoints{Epoch: s.Epoch}
-	for m, cp := range s.Latest {
-		d.Latest[m] = telemetrywire.Checkpoint{Offset: cp.Offset, Digest: cp.Digest}
+	for i, cp := range s.Recent {
+		d.Recent[i] = telemetrywire.Checkpoint{Offset: cp.Offset, Digest: cp.Digest}
+	}
+	for i, cp := range s.Coarse {
+		d.Coarse[i] = telemetrywire.Checkpoint{Offset: cp.Offset, Digest: cp.Digest}
 	}
 	return d
 }
