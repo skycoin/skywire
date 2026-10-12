@@ -259,21 +259,11 @@ type BandwidthData struct {
 
 // tpdTransport represents a transport from TPD /metrics endpoint with edge info
 type tpdTransport struct {
-	ID    string   `json:"id"`
-	Type  string   `json:"type"`
-	Live  bool     `json:"live"`
-	Edges []string `json:"edges"`
-	Daily []struct {
-		Date string `json:"date"`
-		A    *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"a,omitempty"`
-		B *struct {
-			Sent uint64 `json:"sent"`
-			Recv uint64 `json:"recv"`
-		} `json:"b,omitempty"`
-	} `json:"daily"`
+	ID    string                        `json:"id"`
+	Type  string                        `json:"type"`
+	Live  bool                          `json:"live"`
+	Edges []string                      `json:"edges"`
+	Daily []tpdstore.DailyEdgeBandwidth `json:"daily"`
 }
 
 var bwCollectCmd = &cobra.Command{
@@ -482,14 +472,7 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			if dateFilter != "" && d.Date != dateFilter {
 				continue
 			}
-			var day tpdstore.DailyEdgeBandwidth
-			if d.A != nil {
-				day.A = &tpdstore.EdgeBandwidth{Sent: d.A.Sent, Recv: d.A.Recv}
-			}
-			if d.B != nil {
-				day.B = &tpdstore.EdgeBandwidth{Sent: d.B.Sent, Recv: d.B.Recv}
-			}
-			a, b := tpdstore.SenderBytes(day)
+			a, b := tpdstore.SenderBytes(d)
 			sentA += a
 			sentB += b
 		}

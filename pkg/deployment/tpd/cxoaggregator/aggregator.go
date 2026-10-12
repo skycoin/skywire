@@ -984,6 +984,10 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 		a.dispatchTelemetryShard(path, leaf, reporter)
 		return
 	}
+	if _, ok := telemetrywire.ParseCheckpointLeafPath(path); ok {
+		a.dispatchCheckpoints(path, leaf, reporter)
+		return
+	}
 	// Publishers may gzip leaf bodies (bandwidth/storage parity with the
 	// HTTP path). Gunzip is self-describing — it magic-byte-detects gzip and
 	// passes raw bodies through unchanged — so this reads both compressed and
