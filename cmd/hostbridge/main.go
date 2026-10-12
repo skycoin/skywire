@@ -18,6 +18,7 @@ func main() {
 	origin := flag.String("origin", hostbridge.DefaultOrigin, "comma separated pages allowed to connect, * for any")
 	token := flag.String("token", "", "secret the tab must present, read from -token-file when empty")
 	tokenFile := flag.String("token-file", "", "file that keeps the token across restarts, default <user config dir>/skywire/hostbridge-token, none for a new token each run")
+	unpair := flag.Bool("unpair", false, "forget the paired visor, so the next one to connect with the token pairs")
 	quiet := flag.Bool("q", false, "log only the connect URL")
 	flag.Parse()
 
@@ -26,7 +27,18 @@ func main() {
 		_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
 		os.Exit(1)
 	}
-	cfg := hostbridge.Config{Token: t, Origins: hostbridge.SplitOrigins(*origin)}
+	// An explicit token keeps no files, so the pairing stays in memory too.
+	pairFile := ""
+	if *token == "" {
+		pairFile = hostbridge.PairFile(*tokenFile)
+	}
+	if *unpair {
+		if err := hostbridge.Unpair(pairFile); err != nil {
+			_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
+			os.Exit(1)
+		}
+	}
+	cfg := hostbridge.Config{Token: t, Origins: hostbridge.SplitOrigins(*origin), PairFile: pairFile}
 	if !*quiet {
 		cfg.Logf = log.Printf
 	}

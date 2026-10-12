@@ -1444,6 +1444,10 @@ func marshalSkymailNative(w *strings.Builder, s *visorconfig.SkymailConfig, inde
 
 func marshalHostBridgeNative(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
 	o := newObjNative(w, indent)
+	if s.Secret != "" {
+		o.field("secret")
+		writeQuotedNative(w, s.Secret)
+	}
 	o.field("url")
 	writeQuotedNative(w, s.URL)
 	o.field("forwards")

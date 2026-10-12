@@ -1429,6 +1429,10 @@ func marshalSkymail(w *strings.Builder, s *visorconfig.SkymailConfig, indent int
 
 func marshalHostBridge(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
 	o := newObj(w, indent)
+	if s.Secret != "" {
+		o.field("secret")
+		writeQuoted(w, s.Secret)
+	}
 	o.field("url")
 	writeQuoted(w, s.URL)
 	o.field("forwards")

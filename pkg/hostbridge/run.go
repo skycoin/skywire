@@ -97,3 +97,27 @@ func ResolveToken(token, tokenFile string) (string, error) {
 	}
 	return LoadToken(tokenFile)
 }
+
+// PairFile is where the bridge keeps its paired visor: beside tokenFile,
+// resolved as ResolveToken does, or in memory only when that is "none".
+func PairFile(tokenFile string) string {
+	if tokenFile == "" {
+		tokenFile = DefaultTokenFile()
+	}
+	if tokenFile == "" || tokenFile == "none" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(tokenFile), "hostbridge-visor")
+}
+
+// Unpair forgets the paired visor, so the next one to connect with the
+// token pairs instead.
+func Unpair(pairFile string) error {
+	if pairFile == "" {
+		return nil
+	}
+	if err := os.Remove(pairFile); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
