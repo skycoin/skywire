@@ -259,3 +259,20 @@ func TestResolveToken(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, a, b)
 }
+
+func TestDialContextCanceled(t *testing.T) {
+	c := connect(t, startBridge(t))
+	// 192.0.2.1 is TEST-NET-1 (RFC 5737), so the bridge's dial hangs.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := c.DialContext(ctx, "tcp", "192.0.2.1:9")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 5*time.Second)
+
+	// The session still works afterwards.
+	echo := echoServer(t)
+	cn, err := c.DialContext(context.Background(), "tcp", echo.Addr().String())
+	require.NoError(t, err)
+	_ = cn.Close() //nolint:errcheck
+}
