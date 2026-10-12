@@ -1099,19 +1099,25 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	// Wait for dmsg client to be ready
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-dmsgC.Ready():
-	}
-
-	lis, err := dmsgC.Listen(skyenv.DmsgPingPort)
-	if err != nil {
-		return err
-	}
-
-	v.pushCloseStack("dmsg_ping", lis.Close)
+	// The listener waits for dmsg in the background. Waiting here held the
+	// whole start (the hypervisor depends on this module) until dmsg connected.
+	var (
+		mu     sync.Mutex
+		lis    net.Listener
+		closed bool
+	)
+	stop := make(chan struct{})
+	v.pushCloseStack("dmsg_ping", func() error {
+		mu.Lock()
+		closed = true
+		l := lis
+		mu.Unlock()
+		close(stop)
+		if l == nil {
+			return nil
+		}
+		return l.Close()
+	})
 
 	acceptPings := func(lis net.Listener, transport string) {
 		var wg sync.WaitGroup
@@ -1133,17 +1139,39 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}()
 		}
 	}
-	go acceptPings(lis, "dmsg")
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-dmsgC.Ready():
+		}
+		l, err := dmsgC.Listen(skyenv.DmsgPingPort)
+		if err != nil {
+			log.WithError(err).Error("Failed to listen for dmsg pings")
+			return
+		}
+		mu.Lock()
+		if closed {
+			mu.Unlock()
+			l.Close() //nolint:errcheck,gosec
+			return
+		}
+		lis = l
+		mu.Unlock()
+		go acceptPings(l, "dmsg")
 
-	// Skynet mirror of the ping responder at the same port. Same
-	// handler, same response wire — clients can ping the visor over
-	// any transport the router can negotiate.
-	goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgPingPort, "dmsg_ping", log,
-		func(skyLis net.Listener) {
-			acceptPings(skyLis, "skynet")
-		})
+		// Skynet mirror of the ping responder at the same port. Same
+		// handler, same response wire — clients can ping the visor over
+		// any transport the router can negotiate.
+		goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgPingPort, "dmsg_ping", log,
+			func(skyLis net.Listener) {
+				acceptPings(skyLis, "skynet")
+			})
 
-	log.WithField("port", skyenv.DmsgPingPort).Info("Dmsg ping listener started")
+		log.WithField("port", skyenv.DmsgPingPort).Info("Dmsg ping listener started")
+	}()
 	return nil
 }
 
