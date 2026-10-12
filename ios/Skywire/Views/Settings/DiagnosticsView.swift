@@ -20,6 +20,9 @@ struct DiagnosticsView: View {
                     sources
                     export
                     level
+                    #if DEBUG
+                    CoreHostCard()
+                    #endif
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -136,6 +139,32 @@ struct DiagnosticsView: View {
                                          }]))
     }
 }
+
+#if DEBUG
+/// Where the core runs, for debugging (CoreHostChoice): the app builds its host at launch, so a
+/// change applies at the next one. Debug builds only; a release build runs where it must.
+private struct CoreHostCard: View {
+    @State private var choice = CoreHostChoice.current()
+
+    var body: some View {
+        SectionCard {
+            Text("diag_core_host").skyText(.titleMedium)
+            Text("diag_core_host_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
+            HStack(spacing: 6) {
+                ForEach(CoreHostChoice.allCases, id: \.self) { option in
+                    SkyFilterChip(label: Text(option == .app ? L10n.key("diag_core_host_app") : L10n.key("diag_core_host_tunnel")),
+                                  selected: choice == option) {
+                        choice = option
+                        UserDefaults.standard.set(option.rawValue, forKey: CoreHostChoice.defaultsKey)
+                    }
+                    .accessibilityIdentifier("core-host-\(option.rawValue)")
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+}
+#endif
 
 /// Collects every source into one zip (Android: DiagnosticsViewModel.exportAll).
 @MainActor

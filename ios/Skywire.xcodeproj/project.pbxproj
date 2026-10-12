@@ -13,7 +13,24 @@
 		5E1A0000000000000000003B /* CoreClient in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A0000000000000000003E /* CoreClient */; };
 		5E1A00000000000000000060 /* WalletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000062 /* WalletCore */; };
 		5E1A00000000000000000063 /* WalletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000064 /* WalletCore */; };
+		5E1A0000000000000000007A /* CoreBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000078 /* CoreBridge */; };
+		5E1A0000000000000000007B /* CoreClient in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00000000000000000079 /* CoreClient */; };
+		5E1A0000000000000000007C /* PacketTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5E1A00000000000000000070 /* PacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5E1A0000000000000000007D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5E1A0000000000000000007C /* PacketTunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		5E1A00000000000000000005 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
@@ -21,6 +38,7 @@
 		5E1A00000000000000000007 /* SkywireTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkywireTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E1A00000000000000000050 /* SkywireUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkywireUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E1A00000000000000000040 /* SkywireAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkywireAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E1A00000000000000000070 /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -31,6 +49,14 @@
 				Skywire.entitlements,
 			);
 			target = 5E1A00000000000000000010 /* Skywire */;
+		};
+		5E1A00000000000000000071 /* Exceptions for "PacketTunnel" folder in "PacketTunnel" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				PacketTunnel.entitlements,
+			);
+			target = 5E1A00000000000000000073 /* PacketTunnel */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -56,6 +82,14 @@
 		5E1A00000000000000000051 /* SkywireUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SkywireUITests;
+			sourceTree = "<group>";
+		};
+		5E1A00000000000000000072 /* PacketTunnel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5E1A00000000000000000071 /* Exceptions for "PacketTunnel" folder in "PacketTunnel" target */,
+			);
+			path = PacketTunnel;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -95,6 +129,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E1A00000000000000000076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E1A0000000000000000007A /* CoreBridge in Frameworks */,
+				5E1A0000000000000000007B /* CoreClient in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -106,6 +149,7 @@
 				5E1A00000000000000000009 /* SkywireTests */,
 				5E1A00000000000000000041 /* SkywireAppTests */,
 				5E1A00000000000000000051 /* SkywireUITests */,
+				5E1A00000000000000000072 /* PacketTunnel */,
 				5E1A00000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -117,6 +161,7 @@
 				5E1A00000000000000000007 /* SkywireTests.xctest */,
 				5E1A00000000000000000040 /* SkywireAppTests.xctest */,
 				5E1A00000000000000000050 /* SkywireUITests.xctest */,
+				5E1A00000000000000000070 /* PacketTunnel.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -139,10 +184,12 @@
 				5E1A00000000000000000012 /* Sources */,
 				5E1A00000000000000000013 /* Frameworks */,
 				5E1A00000000000000000014 /* Resources */,
+				5E1A0000000000000000007D /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5E1A0000000000000000007F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5E1A00000000000000000008 /* Skywire */,
@@ -226,6 +273,30 @@
 			productReference = 5E1A00000000000000000050 /* SkywireUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		5E1A00000000000000000073 /* PacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E1A00000000000000000074 /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
+			buildPhases = (
+				5E1A00000000000000000075 /* Sources */,
+				5E1A00000000000000000076 /* Frameworks */,
+				5E1A00000000000000000077 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5E1A00000000000000000072 /* PacketTunnel */,
+			);
+			name = PacketTunnel;
+			packageProductDependencies = (
+				5E1A00000000000000000078 /* CoreBridge */,
+				5E1A00000000000000000079 /* CoreClient */,
+			);
+			productName = PacketTunnel;
+			productReference = 5E1A00000000000000000070 /* PacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -249,6 +320,9 @@
 					5E1A00000000000000000052 = {
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = 5E1A00000000000000000010;
+					};
+					5E1A00000000000000000073 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -277,6 +351,7 @@
 				5E1A00000000000000000011 /* SkywireTests */,
 				5E1A00000000000000000042 /* SkywireAppTests */,
 				5E1A00000000000000000052 /* SkywireUITests */,
+				5E1A00000000000000000073 /* PacketTunnel */,
 			);
 		};
 /* End PBXProject section */
@@ -304,6 +379,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5E1A00000000000000000055 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1A00000000000000000077 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -341,6 +423,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E1A00000000000000000075 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXContainerItemProxy section */
@@ -358,6 +447,13 @@
 			remoteGlobalIDString = 5E1A00000000000000000010;
 			remoteInfo = Skywire;
 		};
+		5E1A0000000000000000007E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E1A00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E1A00000000000000000073;
+			remoteInfo = PacketTunnel;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -370,6 +466,11 @@
 			isa = PBXTargetDependency;
 			target = 5E1A00000000000000000010 /* Skywire */;
 			targetProxy = 5E1A00000000000000000058 /* PBXContainerItemProxy */;
+		};
+		5E1A0000000000000000007F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E1A00000000000000000073 /* PacketTunnel */;
+			targetProxy = 5E1A0000000000000000007E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -642,6 +743,58 @@
 			};
 			name = Release;
 		};
+		5E1A00000000000000000080 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
+				"CODE_SIGN_STYLE[sdk=iphonesimulator*]" = Manual;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Skywire;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SKYWIRE_BUNDLE_ID).tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5E1A00000000000000000081 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
+				"CODE_SIGN_STYLE[sdk=iphonesimulator*]" = Manual;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Skywire;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SKYWIRE_BUNDLE_ID).tunnel";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -686,6 +839,15 @@
 			buildConfigurations = (
 				5E1A0000000000000000005B /* Debug */,
 				5E1A0000000000000000005C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E1A00000000000000000074 /* Build configuration list for PBXNativeTarget "PacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E1A00000000000000000080 /* Debug */,
+				5E1A00000000000000000081 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -737,6 +899,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5E1A00000000000000000061 /* XCLocalSwiftPackageReference "Packages/WalletCore" */;
 			productName = WalletCore;
+		};
+		5E1A00000000000000000078 /* CoreBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E1A0000000000000000001A /* XCLocalSwiftPackageReference "Packages/CoreBridge" */;
+			productName = CoreBridge;
+		};
+		5E1A00000000000000000079 /* CoreClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E1A0000000000000000003C /* XCLocalSwiftPackageReference "Packages/CoreClient" */;
+			productName = CoreClient;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1381,6 +1381,98 @@
         }
       }
     },
+    "diag_core_host" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Where the core runs"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dónde se ejecuta el núcleo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核心运行位置"
+          }
+        }
+      }
+    },
+    "diag_core_host_app" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In the app"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En la app"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用内"
+          }
+        }
+      }
+    },
+    "diag_core_host_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Debug builds only. In the app, the core stops when iOS suspends Skywire; in the packet tunnel, iOS keeps it running. Applies the next time Skywire opens. The Simulator cannot run the packet tunnel."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo en compilaciones de depuración. En la app, el núcleo se detiene cuando iOS suspende Skywire; en el túnel de paquetes, iOS lo mantiene en marcha. Se aplica la próxima vez que abras Skywire. El simulador no puede ejecutar el túnel de paquetes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅限调试版本。在应用内运行时，iOS 挂起 Skywire 后核心会停止；在数据包隧道中运行时，iOS 会让它保持运行。下次打开 Skywire 时生效。模拟器无法运行数据包隧道。"
+          }
+        }
+      }
+    },
+    "diag_core_host_tunnel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Packet tunnel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Túnel de paquetes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数据包隧道"
+          }
+        }
+      }
+    },
     "diag_export" : {
       "extractionState" : "manual",
       "localizations" : {

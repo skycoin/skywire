@@ -3,9 +3,10 @@
 # android-app.yml.
 #
 # Gated on the paths that can break it: the iOS tree, the Go packages that are
-# only iOS's (pkg/mobilecore, cmd/skywire-mobile-core) and the Makefile that
-# builds them. A Go change elsewhere is caught first by test.yml's `android`
-# job, whose ios-deps-check guards the iOS import graph on every PR.
+# only iOS's (pkg/mobilecore, cmd/skywire-mobile-core), vpn-client's iOS TUN
+# (pkg/vpn) and the Makefile that builds them. A Go change elsewhere is caught
+# first by test.yml's `android` job, whose ios-deps-check guards the iOS
+# import graph on every PR.
 #
 # Nothing here is signed with an Apple identity: the Simulator build is signed
 # to run locally (identity "-"), which needs no account and no secret, and is
@@ -18,6 +19,7 @@ on:
       - 'ios/**'
       - 'pkg/mobilecore/**'
       - 'cmd/skywire-mobile-core/**'
+      - 'pkg/vpn/**'
       - 'Makefile'
       - '.github/workflows/ios-app.yml'
 
@@ -89,6 +91,16 @@ jobs:
             -derivedDataPath ios/DerivedData \
             -resultBundlePath ios/build/SkywireTests.xcresult \
             test
+
+      # The packet-tunnel extension runs only on a device (the Simulator has no
+      # VPN session service), so it is built for one, unsigned: no Apple account
+      # is needed to prove it compiles and links against the device slice.
+      - name: Packet-tunnel extension for a device (unsigned)
+        run: |
+          xcodebuild -project ios/Skywire.xcodeproj -scheme PacketTunnel \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/DerivedData \
+            CODE_SIGNING_ALLOWED=NO build
 
       # Kept for triage: the result bundle has every test's log and the
       # Simulator's diagnostics.

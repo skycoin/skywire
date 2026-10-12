@@ -35,6 +35,14 @@ public struct CorePaths: Sendable, Equatable {
         return CorePaths(dataDir: base.appendingPathComponent("skywire", isDirectory: true))
     }
 
+    /// `skywire/` in the App Group container the app and the packet-tunnel
+    /// extension share, where the core runs on a device; nil when this process
+    /// has no such group (the entitlement is missing).
+    public static func appGroup(_ identifier: String) -> CorePaths? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+            .map { CorePaths(dataDir: $0.appendingPathComponent("skywire", isDirectory: true)) }
+    }
+
     /// Creates the directories the core expects to find. `local/` has to
     /// exist before the visor starts: its uptime recorder opens a database in
     /// it at startup and gives up (a warning, and no uptime) if it cannot.

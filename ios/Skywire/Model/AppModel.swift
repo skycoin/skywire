@@ -55,21 +55,35 @@ final class AppModel: ObservableObject {
         self.vault = vault
     }
 
-    /// The app's model: the core in this process, under Application Support,
-    /// its API password in the Keychain.
+    /// The app's model, with the core where `CoreHostChoice` says: in the
+    /// packet-tunnel extension, its data in the App Group container, or in this
+    /// process under Application Support. Its API password is in the Keychain.
     static func inApp() -> AppModel {
         let log = CoreLog()
         // Before any start, so the core's first lines reach the log.
         CoreBridge.shared.setLogSink(log.sink)
         let settings = AppSettings()
-        let paths = CorePaths.appSupport()
         let secrets = SecretStore.app()
         let client = CoreClient(transport: LoopbackTransport(origin: ConfigProfile.apiOrigin)) {
             try secrets.password(.apiPassword)
         }
-        let host = InAppCoreHost(paths: paths, secrets: secrets) { settings.profileSettings }
+        let group = Bundle.main.object(forInfoDictionaryKey: "SkywireAppGroup") as? String
+        let host: any CoreHost
+        let paths: CorePaths
+        if CoreHostChoice.current() == .tunnel, let group, let shared = CorePaths.appGroup(group) {
+            paths = shared
+            host = TunnelCoreHost(paths: paths, secrets: secrets, providerBundleID: tunnelBundleID) { settings.profileSettings }
+        } else {
+            paths = CorePaths.appSupport()
+            host = InAppCoreHost(paths: paths, secrets: secrets) { settings.profileSettings }
+        }
         return AppModel(host: host, client: client, settings: settings, log: log, paths: paths,
                         vault: ConfigVault(paths: paths, secrets: secrets))
+    }
+
+    /// The packet-tunnel extension's bundle ID (the project's PacketTunnel target).
+    nonisolated static var tunnelBundleID: String {
+        (Bundle.main.bundleIdentifier ?? "com.skycoin.skywire") + ".tunnel"
     }
 
     /// Starts the model's loops once, and connects if the user left the core
