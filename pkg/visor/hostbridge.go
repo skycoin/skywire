@@ -5,12 +5,14 @@ import (
 	"context"
 	"errors"
 	"net"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/hostbridge"
 	"github.com/skycoin/skywire/pkg/logging"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -34,6 +36,10 @@ type hostBridgeState struct {
 	// session stops.
 	gen      int
 	forwards map[string]*hostBridgeFwd
+	// sockets lend the bridge's host sockets to the transports of a browser
+	// visor, which starts stcpr and sudph on its first session.
+	sockets           hostBridgeSockets
+	transportsStarted bool
 }
 
 type hostBridgeFwd struct {
@@ -74,6 +80,7 @@ func (v *Visor) HostBridgeConnect(url string) error {
 		_ = c.Close() //nolint:errcheck
 		return errors.New("replaced by a newer connect")
 	}
+	v.hostBridgeAttached(c)
 	v.hostBridgeLog().WithField("url", url).Info("Connected to the host bridge")
 	v.hostBridgeSave()
 	go v.hostBridgeSupervise(gen, url, c)
@@ -146,6 +153,7 @@ func (v *Visor) hostBridgeSupervise(gen int, url string, c *hostbridge.Client) {
 			if c = v.hostBridgeRedial(gen, url); c == nil {
 				return
 			}
+			v.hostBridgeAttached(c)
 			log.Info("Connected to the host bridge")
 		}
 		select {
@@ -164,6 +172,7 @@ func (v *Visor) hostBridgeSupervise(gen int, url string, c *hostbridge.Client) {
 			f.l, f.bound = nil, ""
 		}
 		hb.mu.Unlock()
+		hb.sockets.attach(nil)
 		log.Warn("Session to the host bridge ended, redialing")
 		c = nil
 	}
@@ -320,6 +329,7 @@ func (f *hostBridgeFwd) status() visorapi.HostBridgeForward {
 // from the config.
 func (v *Visor) HostBridgeDisconnect() error {
 	err := v.hostBridgeDisconnect()
+	v.hostBridge.sockets.attach(nil)
 	v.hostBridgeSave()
 	return err
 }
@@ -342,4 +352,25 @@ func (v *Visor) HostBridgeUnforward(host string) error {
 		v.hostBridgeSave()
 	}
 	return err
+}
+
+// hostBridgeAttached lends the new session's sockets to the transports. On
+// the first session of a browser visor it starts stcpr and sudph, which a
+// browser cannot run on its own.
+func (v *Visor) hostBridgeAttached(c *hostbridge.Client) {
+	hb := &v.hostBridge
+	hb.sockets.attach(c)
+	if runtime.GOOS != "js" || v.tpM == nil || v.conf == nil || v.conf.Transport == nil {
+		return
+	}
+	hb.mu.Lock()
+	start := !hb.transportsStarted
+	hb.transportsStarted = true
+	hb.mu.Unlock()
+	if !start {
+		return
+	}
+	v.hostBridgeLog().Info("Starting stcpr and sudph on the bridge's host")
+	v.tpM.InitClient(v.ctx, types.STCPR, v.conf.Transport.StcprPort)
+	v.tpM.InitClient(v.ctx, types.SUDPH, v.conf.Transport.SudphPort)
 }

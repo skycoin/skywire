@@ -649,7 +649,12 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// dmsg.server.local_address says otherwise. Decided before the bind — the
 	// cmux branch cannot be added afterwards.
 	factory.ShareTCPWithDmsgServer = dmsgServerSharesTransportPort(v.conf)
-	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
+	if runtime.GOOS == "js" {
+		// A browser has no sockets of its own. stcpr and sudph get them from a host
+		// bridge once one is connected (hostbridge.go), and no cmux is bound.
+		v.hostBridge.sockets.log = v.hostBridgeLog()
+		factory.Sockets = &v.hostBridge.sockets
+	} else if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {
 			return fmt.Errorf("unified transport port (udp): %w", err)
