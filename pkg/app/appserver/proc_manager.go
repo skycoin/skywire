@@ -23,6 +23,10 @@ import (
 const (
 	// ProcStartTimeout represents the duration in which a proc should have started and connected with the app server.
 	ProcStartTimeout = time.Second * 5
+
+	// inProcessStopWait bounds how long stopping an in-process app waits for
+	// its RunFunc to return. It stays under the visor's 4 s per-module close.
+	inProcessStopWait = 3 * time.Second
 )
 
 var (
