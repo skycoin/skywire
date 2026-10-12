@@ -12,6 +12,10 @@ public struct CorePaths: Sendable, Equatable {
     }
 
     public var configFile: URL { dataDir.appendingPathComponent("skywire-config.json") }
+    /// The app build the config was last generated for (Android's name for the same file).
+    public var configStampFile: URL { dataDir.appendingPathComponent("skywire-config.installed-at") }
+    /// The config as it was before an update regenerated it, until that finishes.
+    public var configBackupFile: URL { dataDir.appendingPathComponent("skywire-config.json.pre-update") }
     /// The config's `local_path`: app work dirs, log stores, the uptime DB.
     public var localDir: URL { dataDir.appendingPathComponent("local", isDirectory: true) }
     /// The launcher's `bin_path`. The apps run in-process, so nothing is ever
