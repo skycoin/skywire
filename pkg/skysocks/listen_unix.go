@@ -9,6 +9,8 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/0magnet/bottle/vnet"
 )
 
 // ReuseListen binds a TCP listener with SO_REUSEADDR + SO_REUSEPORT so the
@@ -26,6 +28,8 @@ import (
 // SO_REUSEPORT covers the brief within-cycle window where the disconnected and
 // live listeners momentarily both hold the addr during handoff.
 func ReuseListen(addr string) (net.Listener, error) {
+	// A host: or vnet: address is the OS loopback here. See bottle vnet.
+	addr, _ = vnet.Split(addr)
 	lc := net.ListenConfig{
 		Control: func(_, _ string, c syscall.RawConn) error {
 			var cerr error
