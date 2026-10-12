@@ -98,7 +98,7 @@ Example:
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
 		logger := logging.MustGetLogger(flags.LogTag("route_finder"))

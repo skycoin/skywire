@@ -29,6 +29,9 @@ type exitCode int
 // command started, which cannot be unwound to Run.
 type inproc struct {
 	exited chan int
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
 }
 
 var (
@@ -49,6 +52,7 @@ func init() {
 	})
 	logrus.StandardLogger().ExitFunc = Exit
 	logging.ExitFunc = Exit
+	logging.Stderr = Stderr
 }
 
 // Run executes root with args in this process, on the given stdio, and returns
@@ -57,7 +61,7 @@ func init() {
 // Runs may overlap, as a visor and a cli command do in one shell: each sets its
 // stdio on the command it runs, not the root, and resets only that path's flags.
 func Run(ctx context.Context, root *cobra.Command, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	r := &inproc{exited: make(chan int, 1)}
+	r := &inproc{exited: make(chan int, 1), stdin: stdin, stdout: stdout, stderr: stderr}
 	startMu.Lock()
 	holder.Store(r)
 	defer func() {
@@ -70,9 +74,13 @@ func Run(ctx context.Context, root *cobra.Command, args []string, stdin io.Reade
 	if err != nil || leaf == nil {
 		leaf = root
 	}
-	for c := leaf; c != nil; c = c.Parent() {
-		c.Flags().VisitAll(resetFlag)
-		c.PersistentFlags().VisitAll(resetFlag)
+	// A parent's persistent flags are shared by every run under it, so they are
+	// reset only when no other run could be reading them.
+	leaf.LocalFlags().VisitAll(resetFlag)
+	if active.Load() == 0 {
+		for c := leaf.Parent(); c != nil; c = c.Parent() {
+			c.PersistentFlags().VisitAll(resetFlag)
+		}
 	}
 	leaf.SetIn(stdin)
 	leaf.SetOut(stdout)
@@ -89,10 +97,13 @@ func Run(ctx context.Context, root *cobra.Command, args []string, stdin io.Reade
 		id := goid()
 		runsMu.Lock()
 		runs[id] = r
+		active.Add(1)
 		runsMu.Unlock()
 		defer func() {
 			runsMu.Lock()
 			delete(runs, id)
+			active.Add(-1)
+			forget(r)
 			runsMu.Unlock()
 		}()
 		done <- execute(ctx, root, stderr)

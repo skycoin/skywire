@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/progkit"
 	"github.com/fatih/color"
 	"github.com/gdamore/tcell/v3"
@@ -268,7 +270,7 @@ func (m *model) interactive(args []string) string {
 		return fmt.Sprintf("could not give up the terminal: %v", err)
 	}
 	c := exec.Command(m.self, args...) //nolint:gosec // self is our own os.Executable()
-	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	c.Stdin, c.Stdout, c.Stderr = cmdutil.Stdin(), cmdutil.Stdout(), cmdutil.Stderr()
 	err := c.Run()
 	if rerr := m.app.Screen.Resume(); rerr != nil && err == nil {
 		err = rerr

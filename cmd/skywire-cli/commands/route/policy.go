@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cliout"
@@ -40,7 +42,7 @@ type policyTestEngine interface {
 // decide_route function" (the wasm bytes don't parse as Starlark).
 func loadPolicyEngine(path string, src []byte, clock fixedClock) (policyTestEngine, error) {
 	logger := func(format string, args ...interface{}) {
-		fmt.Fprintf(os.Stderr, "[policy log] "+format+"\n", args...)
+		cmdutil.Eprintf("[policy log] "+format+"\n", args...)
 	}
 	if strings.EqualFold(filepath.Ext(path), ".wasm") {
 		opts := []policywasm.Option{
@@ -136,17 +138,17 @@ source with ` + "`route policy show <name>`" + `.`,
 	RunE: func(_ *cobra.Command, _ []string) error {
 		for _, name := range presets.Names() {
 			if s := presetSummary(name); s != "" {
-				fmt.Printf("%-20s %s\n", name, s)
+				cmdutil.Printf("%-20s %s\n", name, s)
 			} else {
-				fmt.Println(name)
+				cmdutil.Println(name)
 			}
 		}
 		for _, name := range wasmpresets.Names() {
 			label := name + "  [wasm]"
 			if s, ok := wasmpresets.Describe(name); ok && s != "" {
-				fmt.Printf("%-20s %s\n", label, s)
+				cmdutil.Printf("%-20s %s\n", label, s)
 			} else {
-				fmt.Println(label)
+				cmdutil.Println(label)
 			}
 		}
 		return nil
@@ -160,14 +162,14 @@ var policyShowCmd = &cobra.Command{
 	RunE: func(_ *cobra.Command, args []string) error {
 		name := args[0]
 		if src, ok := presets.Source(name); ok {
-			fmt.Print(src)
+			cmdutil.Print(src)
 			return nil
 		}
 		if wasmpresets.Has(name) {
 			if desc, ok := wasmpresets.Describe(name); ok && desc != "" {
-				fmt.Println(desc)
+				cmdutil.Println(desc)
 			}
-			fmt.Printf("compiled WASM module — no source; see docs/examples/routing-policies/wasm/%s/main.go\n", name)
+			cmdutil.Printf("compiled WASM module — no source; see docs/examples/routing-policies/wasm/%s/main.go\n", name)
 			return nil
 		}
 		return fmt.Errorf("unknown preset %q; available: %s", name, strings.Join(allPresetNames(), ", "))
@@ -270,8 +272,8 @@ values.`,
 			return fmt.Errorf("decide_route returned error: %w", err)
 		}
 		out, _ := json.MarshalIndent(specToJSON(spec), "", "  ") //nolint:errcheck
-		fmt.Println(string(out))
-		fmt.Fprintf(os.Stderr, "\nelapsed: %s\n", elapsed)
+		cmdutil.Println(string(out))
+		cmdutil.Eprintf("\nelapsed: %s\n", elapsed)
 		return nil
 	},
 }
@@ -318,9 +320,9 @@ deploying a complex policy to confirm it stays inside the
 		}
 		budget := 50 * time.Millisecond
 		if p99 > budget {
-			fmt.Fprintf(os.Stderr, "\nWARNING: p99 (%s) exceeds the 50ms per-dial budget.\n", p99)
+			cmdutil.Eprintf("\nWARNING: p99 (%s) exceeds the 50ms per-dial budget.\n", p99)
 		} else if p99 > budget/10 {
-			fmt.Fprintf(os.Stderr, "\nnote: p99 (%s) is within budget but >10%% of it; complex policies may push over.\n", p99)
+			cmdutil.Eprintf("\nnote: p99 (%s) is within budget but >10%% of it; complex policies may push over.\n", p99)
 		}
 		return nil
 	},

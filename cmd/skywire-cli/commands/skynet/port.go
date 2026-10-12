@@ -7,6 +7,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -149,14 +151,14 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		localP := fp.EffectiveLocalPort()
-		fmt.Printf("Port %d forwarded", port)
+		cmdutil.Printf("Port %d forwarded", port)
 		if localP != port {
-			fmt.Printf(" (local TCP %d)", localP)
+			cmdutil.Printf(" (local TCP %d)", localP)
 		}
 		if portLabel != "" {
-			fmt.Printf(" (%s)", portLabel)
+			cmdutil.Printf(" (%s)", portLabel)
 		}
-		fmt.Println()
+		cmdutil.Println()
 	},
 }
 
@@ -176,7 +178,7 @@ var portRmCmd = &cobra.Command{
 		if err := rpcClient.DeregisterTCPPort(port); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Port %d removed\n", port)
+		cmdutil.Printf("Port %d removed\n", port)
 	},
 }
 
@@ -219,7 +221,7 @@ and unordered, like real UDP.`,
 		if err := rpcClient.DialUDPForward(pk, rPort, lPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("UDP forward up: 127.0.0.1:%d -> %s:%d\n", lPort, pk, rPort)
+		cmdutil.Printf("UDP forward up: 127.0.0.1:%d -> %s:%d\n", lPort, pk, rPort)
 	},
 }
 
@@ -240,7 +242,7 @@ var udpStopCmd = &cobra.Command{
 		if err := rpcClient.StopUDPForward(lPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("UDP forward on local port %d stopped\n", lPort)
+		cmdutil.Printf("UDP forward on local port %d stopped\n", lPort)
 	},
 }
 
@@ -258,11 +260,11 @@ var udpLsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		if len(ports) == 0 {
-			fmt.Println("No active UDP forwards.")
+			cmdutil.Println("No active UDP forwards.")
 			return
 		}
 		for _, p := range ports {
-			fmt.Printf("127.0.0.1:%d\n", p)
+			cmdutil.Printf("127.0.0.1:%d\n", p)
 		}
 	},
 }

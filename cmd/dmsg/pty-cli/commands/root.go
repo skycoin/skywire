@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -166,19 +165,19 @@ var execCmd = &cobra.Command{
 			return err
 		}
 		if len(resp.Stdout) > 0 {
-			_, _ = os.Stdout.Write(resp.Stdout) //nolint:errcheck
+			_, _ = cmdutil.Stdout().Write(resp.Stdout) //nolint:errcheck
 		}
 		if len(resp.Stderr) > 0 {
-			_, _ = os.Stderr.Write(resp.Stderr) //nolint:errcheck
+			_, _ = cmdutil.Stderr().Write(resp.Stderr) //nolint:errcheck
 		}
 		if resp.StdoutTruncated {
-			fmt.Fprintf(os.Stderr, "[stdout truncated at 16MiB]\n") //nolint:errcheck
+			cmdutil.Eprintf("[stdout truncated at 16MiB]\n") //nolint:errcheck
 		}
 		if resp.StderrTruncated {
-			fmt.Fprintf(os.Stderr, "[stderr truncated at 16MiB]\n") //nolint:errcheck
+			cmdutil.Eprintf("[stderr truncated at 16MiB]\n") //nolint:errcheck
 		}
 		if resp.TimedOut {
-			fmt.Fprintf(os.Stderr, "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
+			cmdutil.Eprintf("[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
 			cmdutil.Exit(124)
 		}
 		if resp.ExitCode != 0 {

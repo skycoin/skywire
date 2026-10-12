@@ -299,7 +299,7 @@ var autoconfigCmd *cobra.Command
 // init body stays small.
 func autoconfigRun(cmd *cobra.Command, args []string) {
 	if os.Getenv("NOAUTOCONFIG") == "true" {
-		fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
+		cmdutil.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
 		cmdutil.Exit(0)
 	}
 
@@ -346,7 +346,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	edits := collectSkyenvEdits(cmd)
 	if len(edits) > 0 {
 		if err := updateSkyenvFile(target, edits); err != nil {
-			fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
+			cmdutil.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
 			cmdutil.Exit(1)
 		}
 		editedKeys := make([]string, 0, len(edits))
@@ -376,17 +376,17 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 	// config built entirely from flag defaults — no SK, no hypervisors,
 	// is_public false — over whatever the operator already had. Stop.
 	if resolved.skyenvMissing {
-		fmt.Printf("%s>>> FATAL:%s SKYENV=%s does not exist\n", colorRed, colorReset, os.Getenv("SKYENV"))
-		fmt.Printf("            a missing skyenv file reads as empty, so every value would fall back to its default\n")
+		cmdutil.Printf("%s>>> FATAL:%s SKYENV=%s does not exist\n", colorRed, colorReset, os.Getenv("SKYENV"))
+		cmdutil.Printf("            a missing skyenv file reads as empty, so every value would fall back to its default\n")
 		cmdutil.Exit(1)
 	}
 
 	if err := generateConfig(resolved, hvArg, edits); err != nil {
-		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
+		cmdutil.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
 		cmdutil.Exit(1)
 	}
 	if err := exportDeployment(&resolved); err != nil {
-		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
+		cmdutil.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
 		cmdutil.Exit(1)
 	}
 
@@ -398,14 +398,14 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		if resolved.outputSet {
 			mode = "OUTPUT"
 		}
-		fmt.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
-		fmt.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
+		cmdutil.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
+		cmdutil.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
 			if resolved.skyenvPath != "" {
 				return resolved.skyenvPath
 			}
 			return "implicit fallback (no " + defaultSkyenvPath() + ")"
 		}())
-		fmt.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
+		cmdutil.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
 			mode, func() string {
 				if resolved.skyenvPath != "" {
 					return resolved.skyenvPath
@@ -436,13 +436,13 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		switch {
 		case resolved.skywireUser != "":
 			if err := writeSystemdDropIn(resolved.skywireUser); err != nil {
-				fmt.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+				cmdutil.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
 			} else {
 				msg3(fmt.Sprintf("Wrote %s (User=%s)", systemdDropIn, resolved.skywireUser))
 				daemonReload = true
 			}
 			if err := chownInstall(resolved.skywireUser); err != nil {
-				fmt.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
+				cmdutil.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
 			}
 		default:
 			// SKYWIRE_USER unset → ensure no stale drop-in is
@@ -451,7 +451,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 			// nothing to remove.
 			if _, statErr := os.Stat(systemdDropIn); statErr == nil {
 				if err := os.Remove(systemdDropIn); err != nil {
-					fmt.Printf("%sWarning:%s could not remove stale drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+					cmdutil.Printf("%sWarning:%s could not remove stale drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
 				} else {
 					msg3(fmt.Sprintf("Removed stale %s (SKYWIRE_USER unset)", systemdDropIn))
 					// Also drop the parent dir if it's now empty.
@@ -461,7 +461,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 			}
 		}
 		if changed, err := syncDeploymentDropIn(resolved.skydeploy); err != nil {
-			fmt.Printf("%sWarning:%s could not update %s: %v\n", colorYellow, colorReset, deploymentDropIn, err)
+			cmdutil.Printf("%sWarning:%s could not update %s: %v\n", colorYellow, colorReset, deploymentDropIn, err)
 		} else if changed {
 			msg3(fmt.Sprintf("Updated %s (SKYDEPLOY=%s)", deploymentDropIn, resolved.skydeploy))
 			daemonReload = true
@@ -830,7 +830,7 @@ func printWelcome(pubkey string, isHypervisor bool) {
 
 	if isHypervisor && pubkey != "" {
 		msg2("run the following command on OTHER NODES to set this one as the hypervisor:")
-		fmt.Printf("%sskywire autoconfig %s%s%s\n", colorCyan, colorYellow, pubkey, colorReset)
+		cmdutil.Printf("%sskywire autoconfig %s%s%s\n", colorCyan, colorYellow, pubkey, colorReset)
 		msg2(fmt.Sprintf("to see this text again run: %sskywire autoconfig%s", colorCyan, colorReset))
 	}
 }
@@ -852,9 +852,9 @@ func getLANIPs() []string {
 }
 
 func msg2(msg string) {
-	fmt.Printf("%s ->%s%s %s%s\n", colorCyan, colorReset, colorBold, msg, colorReset)
+	cmdutil.Printf("%s ->%s%s %s%s\n", colorCyan, colorReset, colorBold, msg, colorReset)
 }
 
 func msg3(msg string) {
-	fmt.Printf("%s -->%s%s %s%s\n", colorBlue, colorReset, colorBold, msg, colorReset)
+	cmdutil.Printf("%s -->%s%s %s%s\n", colorBlue, colorReset, colorBold, msg, colorReset)
 }

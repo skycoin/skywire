@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -101,7 +103,7 @@ Examples:
 		if parseErr != nil {
 			// Parser is best-effort; surface and continue with what
 			// we got so --full still produces useful output.
-			fmt.Fprintln(os.Stderr, "WARN parse:", parseErr)
+			cmdutil.Eprintln("WARN parse:", parseErr)
 		}
 
 		var filterRe *regexp.Regexp
@@ -123,7 +125,7 @@ Examples:
 			if werr := os.WriteFile(grOut, []byte(payload), 0o644); werr != nil { //nolint:gosec
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("write --out: %w", werr))
 			}
-			fmt.Fprintf(os.Stderr, "wrote %d bytes to %s\n", len(payload), grOut)
+			cmdutil.Eprintf("wrote %d bytes to %s\n", len(payload), grOut)
 		}
 
 		if grFull {

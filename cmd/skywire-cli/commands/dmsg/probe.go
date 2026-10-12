@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -187,7 +188,7 @@ func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachabl
 			LatencyMS int64  `json:"latency_ms"`
 			Reason    string `json:"reason,omitempty"`
 		}{pk.String(), port, scheme, probeServer, reachable, latency.Milliseconds(), reason}, "", "  ")
-		fmt.Println(string(b))
+		cmdutil.Println(string(b))
 		return
 	}
 	state := "unreachable"
@@ -195,10 +196,10 @@ func emitProbeResult(cmd *cobra.Command, pk cipher.PubKey, port uint16, reachabl
 		state = "reachable"
 	}
 	if !reachable && reason != "" {
-		fmt.Printf("%s://%s:%d%s — %s (%s): %s\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond), reason)
+		cmdutil.Printf("%s://%s:%d%s — %s (%s): %s\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond), reason)
 		return
 	}
-	fmt.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
+	cmdutil.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
 }
 
 // rpcProbeOne dispatches a single RPC-mode probe by the selected transport.
@@ -303,14 +304,14 @@ func runTCPProbe(cmd *cobra.Command) {
 			LatencyMS int64  `json:"latency_ms"`
 			Reason    string `json:"reason,omitempty"`
 		}{rPK.String(), "tcp", hostPort, reachable, latency.Milliseconds(), reason}, "", "  ")
-		fmt.Println(string(b))
+		cmdutil.Println(string(b))
 		return
 	}
 	state := "unreachable"
 	if reachable {
 		state = "reachable"
 	}
-	fmt.Printf("tcp://%s@%s — %s (%s)\n", rPK, hostPort, state, latency.Round(time.Millisecond))
+	cmdutil.Printf("tcp://%s@%s — %s (%s)\n", rPK, hostPort, state, latency.Round(time.Millisecond))
 }
 
 // parseViaTCP turns "tcp://<66-hex-pk>@host:port" into (pk, "host:port").
@@ -408,11 +409,11 @@ func runMultiPortProbe(cmd *cobra.Command, pk cipher.PubKey, ports []uint16) {
 			PK      string            `json:"pk"`
 			Results []portProbeResult `json:"results"`
 		}{PK: pk.String(), Results: results}, "", "  ")
-		fmt.Println(string(b))
+		cmdutil.Println(string(b))
 		return
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "PORT\tREACHABLE\tLATENCY\tERROR") //nolint:errcheck
 	for _, r := range results {
 		state := "no"

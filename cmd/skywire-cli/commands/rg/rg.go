@@ -6,10 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -98,11 +99,11 @@ var listCmd = &cobra.Command{
 		}
 
 		if len(routes) == 0 {
-			fmt.Println("No active route groups")
+			cmdutil.Println("No active route groups")
 			return
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 		writeRouteGroupTable(w, routes)
 		w.Flush() //nolint:errcheck,gosec
 	},

@@ -160,8 +160,7 @@ dmsg path; the VisorCat RPC uses the visor's own PK.`,
 
 		myPK, mySK := resolveChatIdentity(sk)
 		if !cmd.Flags().Changed("sk") && os.Getenv("DMSG_SK") == "" {
-			fmt.Fprintf(os.Stderr,
-				"WARN: ephemeral identity. Your PK is %s — the remote's whitelist must accept this PK or the stream will be rejected. Use --sk for a stable identity.\n",
+			cmdutil.Eprintf("WARN: ephemeral identity. Your PK is %s — the remote's whitelist must accept this PK or the stream will be rejected. Use --sk for a stable identity.\n",
 				myPK)
 		}
 
@@ -178,7 +177,7 @@ dmsg path; the VisorCat RPC uses the visor's own PK.`,
 		defer stream.Close() //nolint:errcheck
 
 		if catVerbose {
-			fmt.Fprintf(os.Stderr, "connected to %s:%d (standalone dmsg)\n", peerPK, port)
+			cmdutil.Eprintf("connected to %s:%d (standalone dmsg)\n", peerPK, port)
 		}
 		return spliceStdio(stream)
 	},
@@ -256,7 +255,7 @@ func runVisorCatDial(transport string, peerPK cipher.PubKey, port uint16, cmd *c
 	}
 	defer conn.Close() //nolint:errcheck
 	if catVerbose {
-		fmt.Fprintf(os.Stderr, "connected to %s:%d (via visor %s)\n", peerPK, port, transport)
+		cmdutil.Eprintf("connected to %s:%d (via visor %s)\n", peerPK, port, transport)
 	}
 	return spliceStdio(conn)
 }
@@ -282,7 +281,7 @@ func runVisorCatListen(port uint16, cmd *cobra.Command) error {
 		Timeout: catTimeout,
 	}
 	if catVerbose {
-		fmt.Fprintf(os.Stderr, "listening on dmsg+skynet :%d (via visor)\n", port)
+		cmdutil.Eprintf("listening on dmsg+skynet :%d (via visor)\n", port)
 	}
 	resp, err := rc.VisorCat(req)
 	if err != nil {
@@ -294,7 +293,7 @@ func runVisorCatListen(port uint16, cmd *cobra.Command) error {
 	}
 	defer conn.Close() //nolint:errcheck
 	if catVerbose {
-		fmt.Fprintf(os.Stderr, "stream accepted; splicing stdio\n")
+		cmdutil.Eprintf("stream accepted; splicing stdio\n")
 	}
 	return spliceStdioHalfClose(conn)
 }
@@ -335,7 +334,7 @@ func spliceStdio(conn net.Conn) error {
 	)
 	done := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(conn, os.Stdin)
+		_, err := io.Copy(conn, cmdutil.Stdin())
 		// Half-close the conn write side so the remote sees EOF on
 		// its read half. Plain Close is the portable approximation —
 		// dmsg.Stream and TCP both surface it as EOF on the peer's
@@ -344,7 +343,7 @@ func spliceStdio(conn net.Conn) error {
 		done <- err
 	}()
 	go func() {
-		_, err := io.Copy(os.Stdout, conn)
+		_, err := io.Copy(cmdutil.Stdout(), conn)
 		once.Do(closeFn)
 		done <- err
 	}()
@@ -377,14 +376,14 @@ type closeWriter interface {
 func spliceStdioHalfClose(conn net.Conn) error {
 	done := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(conn, os.Stdin)
+		_, err := io.Copy(conn, cmdutil.Stdin())
 		if cw, ok := conn.(closeWriter); ok {
 			_ = cw.CloseWrite() //nolint:errcheck
 		}
 		done <- err
 	}()
 	go func() {
-		_, err := io.Copy(os.Stdout, conn)
+		_, err := io.Copy(cmdutil.Stdout(), conn)
 		done <- err
 	}()
 	e1 := <-done

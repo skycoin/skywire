@@ -200,11 +200,11 @@ var RootCmd = &cobra.Command{
 			return
 		}
 		if di {
-			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+			cmdutil.Printf("%v\n", buildinfo.DebugBuildInfo())
 			return
 		}
 		if bv {
-			fmt.Printf("%v\n", buildinfo.DBIVersion())
+			cmdutil.Printf("%v\n", buildinfo.DBIVersion())
 			return
 		}
 		if err := cmd.Help(); err != nil {

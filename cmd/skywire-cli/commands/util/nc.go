@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -145,7 +144,7 @@ func ncDialTCP(host, port string) error {
 	}
 	defer conn.Close() //nolint:errcheck
 	if ncVerbose {
-		fmt.Fprintf(os.Stderr, "Connection to %s %s tcp succeeded!\n", host, port)
+		cmdutil.Eprintf("Connection to %s %s tcp succeeded!\n", host, port)
 	}
 	return ncSpliceStdio(conn)
 }
@@ -162,7 +161,7 @@ func ncDialUDP(host, port string) error {
 	}
 	defer conn.Close() //nolint:errcheck
 	if ncVerbose {
-		fmt.Fprintf(os.Stderr, "Connection to %s %s udp succeeded!\n", host, port)
+		cmdutil.Eprintf("Connection to %s %s udp succeeded!\n", host, port)
 	}
 	return ncSpliceStdio(conn)
 }
@@ -177,7 +176,7 @@ func ncListenTCP(host, port string) error {
 	}
 	defer lis.Close() //nolint:errcheck
 	if ncVerbose {
-		fmt.Fprintf(os.Stderr, "Listening on %s\n", lis.Addr())
+		cmdutil.Eprintf("Listening on %s\n", lis.Addr())
 	}
 	for {
 		conn, err := lis.Accept()
@@ -185,7 +184,7 @@ func ncListenTCP(host, port string) error {
 			return fmt.Errorf("nc: accept: %w", err)
 		}
 		if ncVerbose {
-			fmt.Fprintf(os.Stderr, "Connection received from %s\n", conn.RemoteAddr())
+			cmdutil.Eprintf("Connection received from %s\n", conn.RemoteAddr())
 		}
 		if err := ncSpliceStdio(conn); err != nil {
 			_ = conn.Close() //nolint:errcheck
@@ -193,7 +192,7 @@ func ncListenTCP(host, port string) error {
 				return err
 			}
 			if ncVerbose {
-				fmt.Fprintf(os.Stderr, "nc: conn error (continuing): %v\n", err)
+				cmdutil.Eprintf("nc: conn error (continuing): %v\n", err)
 			}
 			continue
 		}
@@ -215,7 +214,7 @@ func ncListenUDP(host, port string) error {
 	}
 	defer pc.Close() //nolint:errcheck
 	if ncVerbose {
-		fmt.Fprintf(os.Stderr, "Listening on %s (udp)\n", pc.LocalAddr())
+		cmdutil.Eprintf("Listening on %s (udp)\n", pc.LocalAddr())
 	}
 
 	var (
@@ -230,7 +229,7 @@ func ncListenUDP(host, port string) error {
 	go func() {
 		buf := make([]byte, 64*1024)
 		for {
-			n, rErr := os.Stdin.Read(buf)
+			n, rErr := cmdutil.Stdin().Read(buf)
 			if n > 0 {
 				mu.Lock()
 				dst := peerAddr
@@ -272,7 +271,7 @@ func ncListenUDP(host, port string) error {
 		mu.Lock()
 		peerAddr = raddr
 		mu.Unlock()
-		if _, err := os.Stdout.Write(buf[:n]); err != nil {
+		if _, err := cmdutil.Stdout().Write(buf[:n]); err != nil {
 			return err
 		}
 		if !ncKeepListening {
@@ -293,7 +292,7 @@ func ncProbeTCP(host, port string) error {
 	conn, err := d.Dial("tcp", addr)
 	if err != nil {
 		if ncVerbose {
-			fmt.Fprintf(os.Stderr, "nc: connect to %s port %s (tcp) failed: %v\n", host, port, err)
+			cmdutil.Eprintf("nc: connect to %s port %s (tcp) failed: %v\n", host, port, err)
 		}
 		// Match nc's exit-1 convention without surfacing a Go error
 		// trace to stderr.
@@ -301,7 +300,7 @@ func ncProbeTCP(host, port string) error {
 	}
 	_ = conn.Close() //nolint:errcheck
 	if ncVerbose {
-		fmt.Fprintf(os.Stderr, "Connection to %s %s port [tcp] succeeded!\n", host, port)
+		cmdutil.Eprintf("Connection to %s %s port [tcp] succeeded!\n", host, port)
 	}
 	return nil
 }
@@ -316,12 +315,12 @@ func ncSpliceStdio(conn net.Conn) error {
 	)
 	done := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(conn, os.Stdin)
+		_, err := io.Copy(conn, cmdutil.Stdin())
 		once.Do(closeFn)
 		done <- err
 	}()
 	go func() {
-		_, err := io.Copy(os.Stdout, conn)
+		_, err := io.Copy(cmdutil.Stdout(), conn)
 		once.Do(closeFn)
 		done <- err
 	}()

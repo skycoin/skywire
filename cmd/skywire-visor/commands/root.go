@@ -195,9 +195,9 @@ var RootCmd = &cobra.Command{
 			//cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
 			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
 			if err := cmd.Help(); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
+				cmdutil.Eprintf("Failed to print help: %v\n", err)
 			}
-			fmt.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
+			cmdutil.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
 			cmdutil.Exit(0)
 		}
 		// -z --completion
@@ -384,7 +384,7 @@ func loadConfig() (*visorconfig.V1, error) {
 	switch confPath {
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
-		r = os.Stdin
+		r = cmdutil.Stdin()
 	case "arg":
 		log.Info("Reading config from supplied argument.")
 		confPath = visorconfig.Stdin

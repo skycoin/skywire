@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/blang/semver/v4"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
@@ -114,15 +116,15 @@ var treeCmd = &cobra.Command{
 		if rawData {
 			// The discovery's own document, passed through verbatim: it is
 			// already JSON, and re-encoding it would only risk changing it.
-			fmt.Print(tpsRaw)
+			cmdutil.Print(tpsRaw)
 			return
 		}
 		if cliout.JSONMode(cmd) {
-			fmt.Println(tpsRaw)
+			cmdutil.Println(tpsRaw)
 			return
 		}
 		if refinedData {
-			fmt.Println(string(pretty.Color(pretty.Pretty([]byte(tpsRaw)), nil)))
+			cmdutil.Println(string(pretty.Color(pretty.Pretty([]byte(tpsRaw)), nil)))
 			return
 		}
 
@@ -234,28 +236,28 @@ var treeCmd = &cobra.Command{
 
 		// Stats mode
 		if isStats {
-			fmt.Printf("Unique keys in Transport Discovery: %d\n", len(edgeCount))
-			fmt.Printf("Count of transports: %d\n", len(transports))
+			cmdutil.Printf("Unique keys in Transport Discovery: %d\n", len(edgeCount))
+			cmdutil.Printf("Count of transports: %d\n", len(transports))
 
 			// Count by type
 			typeCounts := make(map[string]int)
 			for _, tp := range transports {
 				typeCounts[tp.Type]++
 			}
-			fmt.Println("Types of transports:")
+			cmdutil.Println("Types of transports:")
 			for t, c := range typeCounts {
-				fmt.Printf("  %s: %d\n", t, c)
+				cmdutil.Printf("  %s: %d\n", t, c)
 			}
 
 			if filterByVersion {
-				fmt.Printf("Visors matching version >= %s: %d\n", minVersion, len(versionFilteredSet))
+				cmdutil.Printf("Visors matching version >= %s: %d\n", minVersion, len(versionFilteredSet))
 			}
 			if onlyOnline {
-				fmt.Printf("Online visors with transports: %d\n", len(sortedEdges))
+				cmdutil.Printf("Online visors with transports: %d\n", len(sortedEdges))
 			}
 
 			// Show top visors by transport count
-			fmt.Println("Top visors by transport count:")
+			cmdutil.Println("Top visors by transport count:")
 			for i, e := range sortedEdges {
 				if i >= 20 {
 					break
@@ -264,7 +266,7 @@ var treeCmd = &cobra.Command{
 				if ver == "" {
 					ver = "unknown"
 				}
-				fmt.Printf("  %d: %s (count=%d, version=%s)\n", i+1, e.pk, e.count, ver)
+				cmdutil.Printf("  %d: %s (count=%d, version=%s)\n", i+1, e.pk, e.count, ver)
 			}
 			return
 		}
@@ -327,13 +329,13 @@ var treeCmd = &cobra.Command{
 				if excludeSelf && pk == rootPK {
 					continue
 				}
-				fmt.Println(pk)
+				cmdutil.Println(pk)
 			}
 			return
 		}
 
 		if len(sortedEdges) == 0 {
-			fmt.Println("No visors found matching the specified filters")
+			cmdutil.Println("No visors found matching the specified filters")
 			return
 		}
 
@@ -392,14 +394,14 @@ var treeCmd = &cobra.Command{
 		}
 
 		// Print header
-		fmt.Printf("Tree        *Online        %s        %s      %s      %s    TPID                                 Type\n",
+		cmdutil.Printf("Tree        *Online        %s        %s      %s      %s    TPID                                 Type\n",
 			pterm.Black(pterm.BgRed.Sprint("*Offline")),
 			pterm.Red("*Not in UT"),
 			pterm.Blue(pterm.BgMagenta.Sprint("*source")),
 			pterm.Magenta(pterm.BgBlue.Sprint("*dest")))
 
 		if filterByVersion {
-			fmt.Printf("Version filter: >= %s\n", minVersion)
+			cmdutil.Printf("Version filter: >= %s\n", minVersion)
 		}
 
 		// Build and render trees
@@ -484,7 +486,7 @@ var treeCmd = &cobra.Command{
 							(tp.Edges[0] == lastPK && tp.Edges[1] == rootPK) {
 							b, err := json.MarshalIndent(tp, "", "  ")
 							if err == nil {
-								fmt.Println(string(pretty.Color(b, nil)))
+								cmdutil.Println(string(pretty.Color(b, nil)))
 							}
 						}
 					}
@@ -535,7 +537,7 @@ var treeCmd = &cobra.Command{
 				for _, hop := range foundPath {
 					for _, tp := range transports {
 						if tp.ID == hop.tpID {
-							fmt.Printf("%s -> %s via %s (%s)\n", prevPK, hop.pk, tp.ID, tp.Type)
+							cmdutil.Printf("%s -> %s via %s (%s)\n", prevPK, hop.pk, tp.ID, tp.Type)
 							prevPK = hop.pk
 							break
 						}
@@ -549,7 +551,7 @@ var treeCmd = &cobra.Command{
 					if i > 0 {
 						nextPK = foundPath[i-1].pk
 					}
-					fmt.Printf("%s -> %s via %s (%s)\n", hop.pk, nextPK, hop.tpID, hop.tpType)
+					cmdutil.Printf("%s -> %s via %s (%s)\n", hop.pk, nextPK, hop.tpID, hop.tpType)
 				}
 			}
 		}
@@ -568,7 +570,7 @@ var treeCmd = &cobra.Command{
 			if len(selfTransports) > 0 {
 				pterm.Println(pterm.Red("Self-transports"))
 				for _, tp := range selfTransports {
-					fmt.Printf("%s %s%s %s\n", formatNode(tp.Edges[0]), strings.Repeat(" ", padSpaces), tp.ID, tp.Type)
+					cmdutil.Printf("%s %s%s %s\n", formatNode(tp.Edges[0]), strings.Repeat(" ", padSpaces), tp.ID, tp.Type)
 				}
 			}
 		}
