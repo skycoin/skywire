@@ -11,6 +11,8 @@ struct ChatView: View {
     @StateObject private var page = ChatPage()
     @EnvironmentObject private var navigator: Navigator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.layerVisible) private var onScreen
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +28,10 @@ struct ChatView: View {
         }
         // A link or a tapped notification waits until the page can take it, and is dropped
         // once it has: retrying one the page refused would only loop.
+        // Only while it is in front: a page behind another tab or the home screen is not asked.
+        .task(id: onScreen && scenePhase == .active && page.ready) {
+            if onScreen && scenePhase == .active && page.ready { await page.watchResponsiveness() }
+        }
         .task(id: DriveKey(request: router.pending, ready: page.ready)) {
             guard let request = router.pending, page.ready else { return }
             _ = await page.perform(request.target)

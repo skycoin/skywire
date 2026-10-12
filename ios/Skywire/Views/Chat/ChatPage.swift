@@ -31,6 +31,9 @@ final class ChatPage: NSObject, ObservableObject {
     private var loadedURL: URL?
     private var dark = false
     private var password: String?
+    /// The responsiveness ping in flight, and whether it has been reported late.
+    private var pingSent: Date?
+    private var pingLate = false
 
     static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "skywire", category: "chat")
     private static let consoleHandler = "skywireConsole"
@@ -104,6 +107,7 @@ final class ChatPage: NSObject, ObservableObject {
     /// screen that replaced it.
     func release() {
         guard let webView else { return }
+        ChatPageLog.add("webview: page closed")
         webView.stopLoading()
         webView.configuration.userContentController.removeAllScriptMessageHandlers()
         webView.navigationDelegate = nil
@@ -174,6 +178,40 @@ final class ChatPage: NSObject, ObservableObject {
         Self.log.notice("the chat page never took \(String(describing: target), privacy: .public)")
         return false
     }
+
+    /// The page's JavaScript, checked from outside while it is on screen: a page
+    /// stuck in a loop or a wait looks like one ignoring taps. Logged when it
+    /// goes `pageStall` without answering, and again when it answers (Android:
+    /// ChatScreen's page ping; WebKit has no unresponsive callback either).
+    func watchResponsiveness() async {
+        pingSent = nil
+        pingLate = false
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: Self.pagePing) } catch { return }
+            guard let webView, ready else { continue }
+            if let sent = pingSent {
+                let waited = Date().timeIntervalSince(sent)
+                if !pingLate, waited >= Self.pageStall {
+                    pingLate = true
+                    ChatPageLog.add("webview: page has not answered for \(Int(waited)) s")
+                }
+                continue
+            }
+            let sent = Date()
+            pingSent = sent
+            webView.evaluateJavaScript("0") { [weak self] _, _ in
+                guard let self, self.pingSent == sent else { return }
+                if self.pingLate {
+                    ChatPageLog.add("webview: page answering again after \(Int(Date().timeIntervalSince(sent))) s")
+                }
+                self.pingSent = nil
+                self.pingLate = false
+            }
+        }
+    }
+
+    private static let pagePing: Duration = .seconds(2)
+    private static let pageStall: TimeInterval = 5
 
     /// ~3 s: the page builds its object with the document.
     private static let driveAttempts = 20
@@ -355,6 +393,7 @@ extension ChatPage: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         ready = webView.url.map(isOwn) ?? false
+        if ready { ChatPageLog.add("webview: page loaded") }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
@@ -369,6 +408,7 @@ extension ChatPage: WKNavigationDelegate {
     /// the background); the view would stay blank until something reloads it.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Self.log.notice("chat page's web process ended; reloading")
+        ChatPageLog.add("webview: the page's web process ended, reloading")
         ready = false
         webView.reload()
     }
@@ -426,7 +466,14 @@ extension ChatPage: WKUIDelegate {
         type: WKMediaCaptureType,
         decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(isOwn(origin) ? .grant : .deny)
+        let grant = isOwn(origin)
+        let device = switch type {
+        case .camera: "camera"
+        case .microphone: "microphone"
+        default: "camera and microphone"
+        }
+        ChatPageLog.add("webview: page asked for the \(device), \(grant ? "granted" : "refused, not the chat's origin")")
+        decisionHandler(grant ? .grant : .deny)
     }
 }
 
@@ -436,6 +483,7 @@ extension ChatPage: WKScriptMessageHandler {
         let level = body["level"] as? String ?? "log"
         let text = body["text"] as? String ?? ""
         Self.log.debug("page \(level, privacy: .public): \(text, privacy: .public)")
+        ChatPageLog.add("console \(level) \(text)")
     }
 }
 

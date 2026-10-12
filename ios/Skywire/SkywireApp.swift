@@ -9,6 +9,9 @@ struct SkywireApp: App {
     @StateObject private var callModel: CallModel
 
     init() {
+        // How the last run ended is read before this one writes over it.
+        AppExits.launched()
+        AppExits.installCrashHandler()
         // Made now rather than with the first view: the notification centre's
         // delegate has to be set before the app finishes launching for a tap
         // that launched it to arrive.

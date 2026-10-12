@@ -156,6 +156,7 @@ final class DiagnosticsModel: ObservableObject {
             defer { try? FileManager.default.removeItem(at: dir) }
             var files: [String: String] = [:]
             files["device.txt"] = await device(app)
+            files["app-exits.txt"] = AppExits.report()
             files["process.log"] = app.log.lines(after: 0).lines.joined(separator: "\n")
             if let config = try? app.vault.readText() { files["config.json"] = Self.redacted(config) }
             // What the API holds needs a running core; a log it cannot give says why instead.
@@ -165,6 +166,12 @@ final class DiagnosticsModel: ObservableObject {
             }
             for (name, text) in files {
                 try Data(text.utf8).write(to: dir.appendingPathComponent(name))
+            }
+            // The SkyChat page's console and its web view's events: loads, closes, camera and
+            // microphone requests, and any time the page stopped answering.
+            ChatPageLog.flush()
+            for file in [ChatPageLog.file, ChatPageLog.previous(), AppExits.crashFile()] where FileManager.default.fileExists(atPath: file.path) {
+                try FileManager.default.copyItem(at: file, to: dir.appendingPathComponent(file.lastPathComponent))
             }
             bundleName = "skywire-diagnostics-\(stamp).zip"
             bundle = ZipFile(data: try Self.zip(dir))
