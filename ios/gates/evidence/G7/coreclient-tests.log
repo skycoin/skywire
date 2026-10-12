@@ -1,0 +1,16 @@
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.040 (0.041) seconds
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.040 (0.042) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.039 (0.040) seconds
+Test Case '-[CoreClientTests.ProviderMessageTests testAConnectionFailureKeepsItsCode]' passed.
+Test Case '-[CoreClientTests.ProviderMessageTests testAnUnreadableReplyIsAnError]' passed.
+Test Case '-[CoreClientTests.ProviderMessageTests testBinaryBodiesSurvive]' passed.
+Test Case '-[CoreClientTests.ProviderMessageTests testStreamsAreRefusedNotHung]' passed.
+Test Case '-[CoreClientTests.ProviderMessageTests testTheAPIWorksOverProviderMessages]' passed.
+Test Case '-[CoreClientTests.ProviderMessageTests testTheExtensionRefusesAnotherVersion]' passed.
+Test Case '-[CoreClientTests.TunnelSettingsTests testADownTunnelHasNoVPNSettings]' passed.
+Test Case '-[CoreClientTests.TunnelSettingsTests testDecodesWhatGoWrites]' passed.
+Test Case '-[CoreClientTests.TunnelSettingsTests testIdleRoutesNothing]' passed.
+Test Case '-[CoreClientTests.TunnelSettingsTests testSkyVPNRoutesEverythingThroughTheTunnel]' passed.
+Test Case '-[CoreClientTests.TunnelSettingsTests testTheMaskComesFromThePrefix]' passed.
+full suite: 	 Executed 127 tests, with 0 failures (0 unexpected) in 5.026 (5.045) seconds
