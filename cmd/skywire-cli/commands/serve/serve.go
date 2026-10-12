@@ -380,8 +380,14 @@ func listForwardedPorts(cmd *cobra.Command) {
 	fmt.Fprintln(tw, "PORT\tTO\tLABEL\tSKYNET\tDMSG\tLANDING\tWHITELIST\tDESCRIPTION") //nolint:errcheck,gosec
 	for _, p := range ports {
 		to := p.ProxyAddr
-		if to == "" {
+		switch {
+		case to == "" && p.Port == 80 && p.LocalPort == 0:
+			to = "landing page"
+		case to == "":
 			to = fmt.Sprintf("localhost:%d", p.EffectiveLocalPort())
+		}
+		if n := len(p.Vhosts); n > 0 {
+			to += fmt.Sprintf(" + %d vhost(s)", n)
 		}
 		wl := "open"
 		if n := len(p.Whitelist); n > 0 {
