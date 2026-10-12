@@ -45,11 +45,27 @@ const VisorBWVersion = 3
 // SenderBytes is what each edge of a transport verifiably sent on one day: the
 // lesser of what it reports sending and what the other edge reports receiving.
 // A transport only one edge reported pays neither, since nothing confirms it.
+// Where both edges reported checkpoints of the same conn, it is also capped by
+// the bytes those checkpoints verify.
 func SenderBytes(d DailyEdgeBandwidth) (sentA, sentB uint64) {
 	if !bothReported(d) {
 		return 0, 0
 	}
-	return min(d.A.Sent, d.B.Recv), min(d.B.Sent, d.A.Recv)
+	return checkpointCap(min(d.A.Sent, d.B.Recv), d.A), checkpointCap(min(d.B.Sent, d.A.Recv), d.B)
+}
+
+// checkpointSlack is what a sender may be paid past what its checkpoints verify:
+// the bytes since the last checkpoint both edges shared, and those that
+// crossed the day boundary before their checkpoint was matched.
+func checkpointSlack(n uint64) uint64 { return max(256<<20, n/20) }
+
+// checkpointCap caps n, the bytes an edge sent by the counters, by what its
+// stream checkpoints verify, once the two edges reported the same conn.
+func checkpointCap(n uint64, sender *EdgeBandwidth) uint64 {
+	if !sender.Checked {
+		return n
+	}
+	return min(n, sender.Verified+checkpointSlack(n))
 }
 
 func bothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(d.B) }

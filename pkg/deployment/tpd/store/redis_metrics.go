@@ -698,6 +698,8 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 				B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
 				SameNetwork: sameNet,
 			}
+			verifiedFields(result, kASent, dailyMetric.A)
+			verifiedFields(result, kBSent, dailyMetric.B)
 			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
 		} else {
 			// Fallback for old data: split combined total equally
