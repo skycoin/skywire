@@ -147,7 +147,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ trace | debug | info | warn | error | fatal | panic | none ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	hiddenflags = append(hiddenflags, "pprofmode")

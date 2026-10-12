@@ -31,7 +31,7 @@ skywire visor
   -x, --nohvui                         disable hypervisor *
   -j, --hv string                      add remote hypervisor *
   -k, --xhv                            disable remote hypervisors *
-  -l, --loglvl string                  [ debug | warn | error | fatal | panic | trace ] *
+  -l, --loglvl string                  [ trace | debug | info | warn | error | fatal | panic | none ] *
   -q, --pprofmode string               [ cpu | mem | mutex | block | trace | http ]
   -r, --pprofaddr string               pprof http port (default "localhost:6060")
   -t, --logtag string                  logging tag (default "skywire")

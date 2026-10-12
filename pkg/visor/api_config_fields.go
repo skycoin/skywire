@@ -90,7 +90,7 @@ var liveConfigFieldTable = []liveConfigField{
 		},
 	}, {
 		Path: "log_level",
-		Desc: "visor log level (error|warn|info|debug|trace)",
+		Desc: "visor log level (trace|debug|info|warn|error|fatal|panic|none)",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
 			lvl, err := logging.LevelFromString(nv.String())
 			if err != nil {

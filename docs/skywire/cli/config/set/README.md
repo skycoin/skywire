@@ -50,7 +50,7 @@ Fields applied LIVE today — everything else is restart-required:
   launcher.apps[*].args              replace the named app's argument list
   launcher.apps[*].auto_start        start the named app when the visor starts
   launcher.apps[*].env               replace the named app's environment (KEY=VALUE entries)
-  log_level                          visor log level (error|warn|info|debug|trace)
+  log_level                          visor log level (trace|debug|info|warn|error|fatal|panic|none)
   persistent_transports              transports the visor re-dials until they exist
   pty.whitelist                      PKs allowed to use this visor's pty, sftp and RPC besides its hypervisors
   reward_address                     skycoin address rewards are paid to (durable store is <local_path>/reward.txt, not this json)
