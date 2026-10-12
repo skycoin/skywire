@@ -49,6 +49,13 @@ The token is kept in `<user config dir>/skywire/hostbridge-token`, so the
 URL stays the same when the bridge restarts. `-token` sets one, and
 `-token-file none` makes a new one each run.
 
+The first visor to connect with the token pairs with the bridge. The bridge
+records the visor's key and a new pairing secret in `hostbridge-visor` beside
+the token, and the visor keeps the secret in its config. Later sessions prove
+the secret with an HMAC of a random challenge, so it is never sent again.
+After pairing the bridge serves only that visor. Run it with `-unpair` to
+pair another.
+
 ## Connect the visor
 
 Paste the URL into the page and press Connect, or run in the desk:
@@ -72,8 +79,9 @@ skywire cli visor hostbridge forward 127.0.0.1:1080 127.0.0.1:1080
 ```
 
 listens on `127.0.0.1:1080` of the computer and passes each connection to
-`127.0.0.1:1080` inside the visor, its SOCKS proxy. Programs on the computer
-can then use it:
+`127.0.0.1:1080` inside the visor, its SOCKS proxy. An address without a
+host, such as `1080`, is on 127.0.0.1. Give `0.0.0.0:1080` to reach the
+port from other computers. Programs on the computer can then use it:
 
 ```
 curl --socks5-hostname 127.0.0.1:1080 https://ip.skycoin.com
@@ -93,7 +101,9 @@ native visor behind NAT. sudph needs none.
 ## Security
 
 - The bridge accepts only a loopback Host, which stops DNS rebinding, and
-  only the origins in `-origin`. The token in the URL must match.
-- Anyone with the token and an allowed origin can use the computer's
-  network through the bridge, so treat the URL like a password.
+  only the origins in `-origin`. The token in the URL must match, and after
+  pairing only the paired visor's key is served.
+- The browser's local network permission covers the whole local network
+  for that origin, not just the bridge: once granted, any script on that
+  origin can reach the router and other devices on the LAN.
 - The bridge runs with the user's privileges. It needs no root.

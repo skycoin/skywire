@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,10 @@ type hostBridgeState struct {
 	// visor, which starts stcpr and sudph on its first session.
 	sockets           hostBridgeSockets
 	transportsStarted bool
+	// secret is the pairing secret the bridge gave this visor, kept across
+	// disconnects so the visor can reconnect to the bridge it paired with.
+	secret       string
+	secretLoaded bool
 }
 
 type hostBridgeFwd struct {
@@ -113,16 +118,35 @@ func initHostBridge(_ context.Context, v *Visor, _ *logging.Logger) error {
 }
 
 func (v *Visor) dialHostBridge(url string) (*hostbridge.Client, error) {
+	probeLocalAccess(v.ctx, url)
 	ctx, cancel := context.WithTimeout(v.ctx, hostBridgeDialTimeout)
 	defer cancel()
 	conn, err := dialHostBridgeConn(ctx, url)
 	if err != nil {
 		return nil, err
 	}
-	c, err := hostbridge.NewClient(conn)
+	hb := &v.hostBridge
+	hb.mu.Lock()
+	if !hb.secretLoaded {
+		if v.conf.HostBridge != nil {
+			hb.secret = v.conf.HostBridge.Secret
+		}
+		hb.secretLoaded = true
+	}
+	p := &hostbridge.Pairing{PK: v.conf.PK.Hex(), Secret: hb.secret}
+	hb.mu.Unlock()
+	c, err := hostbridge.NewClient(conn, p)
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
 		return nil, err
+	}
+	hb.mu.Lock()
+	paired := p.Secret != hb.secret
+	hb.secret = p.Secret
+	hb.mu.Unlock()
+	if paired {
+		v.hostBridgeLog().Info("Paired with the host bridge")
+		v.hostBridgeSave()
 	}
 	return c, nil
 }
@@ -219,8 +243,8 @@ func (v *Visor) hostBridgeSave() {
 	hb := &v.hostBridge
 	hb.mu.Lock()
 	var cfg *visorconfig.HostBridgeConfig
-	if hb.url != "" {
-		cfg = &visorconfig.HostBridgeConfig{URL: hb.url, Forwards: []visorconfig.HostBridgeForwardConfig{}}
+	if hb.url != "" || hb.secret != "" {
+		cfg = &visorconfig.HostBridgeConfig{Secret: hb.secret, URL: hb.url, Forwards: []visorconfig.HostBridgeForwardConfig{}}
 		for _, f := range hb.forwards {
 			cfg.Forwards = append(cfg.Forwards, visorconfig.HostBridgeForwardConfig{Host: f.host, Local: f.local})
 		}
@@ -338,6 +362,7 @@ func (v *Visor) HostBridgeDisconnect() error {
 // connection to local, an address the visor can dial. The forward is kept
 // across reconnects and saved in the config.
 func (v *Visor) HostBridgeForward(host, local string) (visorapi.HostBridgeForward, error) {
+	host, local = loopbackDefault(host), loopbackDefault(local)
 	f, err := v.hostBridgeForward(host, local)
 	if err == nil {
 		v.hostBridgeSave()
@@ -347,6 +372,7 @@ func (v *Visor) HostBridgeForward(host, local string) (visorapi.HostBridgeForwar
 
 // HostBridgeUnforward stops the forward from host.
 func (v *Visor) HostBridgeUnforward(host string) error {
+	host = loopbackDefault(host)
 	err := v.hostBridgeUnforward(host)
 	if err == nil {
 		v.hostBridgeSave()
@@ -373,4 +399,18 @@ func (v *Visor) hostBridgeAttached(c *hostbridge.Client) {
 	v.hostBridgeLog().Info("Starting stcpr and sudph on the bridge's host")
 	v.tpM.InitClient(v.ctx, types.STCPR, v.conf.Transport.StcprPort)
 	v.tpM.InitClient(v.ctx, types.SUDPH, v.conf.Transport.SudphPort)
+}
+
+// loopbackDefault puts an address with no host, ":1080" or "1080", on the
+// loopback. A forward reaches every interface only when asked to, unlike
+// docker -p, whose default publishes past the host's firewall.
+func loopbackDefault(addr string) string {
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || host != "" {
+		return addr
+	}
+	return net.JoinHostPort("127.0.0.1", port)
 }

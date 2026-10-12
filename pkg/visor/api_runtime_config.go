@@ -43,8 +43,15 @@ var topLevelSKRe = regexp.MustCompile(`(?m)^  "sk": "[0-9a-fA-F]*",?\n`)
 
 // redactTopLevelSK removes the visor's secret key from a marshaled config so it
 // never leaves the process via the runtime-config view. The PK is kept.
-func redactTopLevelSK(b []byte) []byte {
-	return topLevelSKRe.ReplaceAll(b, nil)
+// hostBridgeSecretRe matches the pairing secret line of host_bridge, its first
+// field, so dropping the line leaves valid JSON.
+var hostBridgeSecretRe = regexp.MustCompile(`(?m)^    "secret": "[0-9a-fA-F]*",\n`)
+
+// redactSecrets removes the visor's secret key and its host bridge pairing
+// secret from a marshaled config, so neither leaves the process via the
+// runtime-config view.
+func redactSecrets(b []byte) []byte {
+	return hostBridgeSecretRe.ReplaceAll(topLevelSKRe.ReplaceAll(b, nil), nil)
 }
 
 // SetRuntimeConfig validates and writes the visor's on-disk config.
@@ -82,6 +89,11 @@ func (v *Visor) SetRuntimeConfig(rawJSON []byte) error {
 	// redacted blank — lands on disk. A deliberately-typed SK is honored but must
 	// still derive the current PK (checked next).
 	preservedSK := false
+	// The pairing secret is redacted the same way, so keep the running one.
+	if newConf.HostBridge != nil && newConf.HostBridge.Secret == "" && v.conf.HostBridge != nil && v.conf.HostBridge.Secret != "" {
+		newConf.HostBridge.Secret = v.conf.HostBridge.Secret
+		preservedSK = true
+	}
 	if newConf.SK.Null() && !v.conf.SK.Null() {
 		newConf.SK = v.conf.SK
 		if newConf.PK.Null() {

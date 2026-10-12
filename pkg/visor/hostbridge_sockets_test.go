@@ -10,8 +10,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/hostbridge"
 )
+
+// testBridgeID is the visor the tests connect as, so the bridge stays paired
+// with it across their reconnects.
+var testBridgeID = func() *hostbridge.Pairing {
+	pk, _ := cipher.GenerateKeyPair()
+	return &hostbridge.Pairing{PK: pk.Hex()}
+}()
 
 func bridgeClient(t *testing.T, addr, token string) *hostbridge.Client {
 	t.Helper()
@@ -19,7 +27,7 @@ func bridgeClient(t *testing.T, addr, token string) *hostbridge.Client {
 	defer cancel()
 	conn, err := dialHostBridgeConn(ctx, "ws://"+addr+"/"+token)
 	require.NoError(t, err)
-	c, err := hostbridge.NewClient(conn)
+	c, err := hostbridge.NewClient(conn, testBridgeID)
 	require.NoError(t, err)
 	return c
 }

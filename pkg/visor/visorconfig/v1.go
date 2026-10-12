@@ -1172,6 +1172,9 @@ func (v1 *V1) UpdatePtyWhitelist(pks []cipher.PubKey) error {
 // of its host, kept so the visor reconnects to it at boot. See
 // pkg/hostbridge and `skywire cli visor hostbridge`.
 type HostBridgeConfig struct {
+	// Secret is the pairing secret the bridge gave this visor. It comes first
+	// so the runtime-config view can drop its line. See redactSecrets.
+	Secret string `json:"secret,omitempty"`
 	// URL is the one the bridge prints, token included.
 	URL      string                    `json:"url"`
 	Forwards []HostBridgeForwardConfig `json:"forwards"`

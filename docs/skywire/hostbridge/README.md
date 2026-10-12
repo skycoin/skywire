@@ -10,7 +10,9 @@ WebSocket on loopback, then asks it to dial, listen on TCP or bind UDP.
 
 Only pages in --origin may connect, and only with the token in the printed
 URL. The token is kept in --token-file, so the URL stays the same when the
-bridge restarts. The bridge holds no keys.
+bridge restarts. The first visor to connect pairs with the bridge, which
+then serves only that visor until it is run with --unpair. The bridge
+holds no keys of its own.
 
 ## Usage
 
@@ -25,6 +27,7 @@ skywire hostbridge
       --origin string       comma separated pages allowed to connect, * for any (default "https://skywire.dev")
       --token string        secret the tab must present, read from --token-file when empty
       --token-file string   file that keeps the token across restarts, default <user config dir>/skywire/hostbridge-token, none for a new token each run
+      --unpair              forget the paired visor, so the next one to connect with the token pairs
 ```
 
 ## Global Flags
