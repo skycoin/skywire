@@ -12,6 +12,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
@@ -388,7 +390,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		}
 
 		// Print legend
-		fmt.Printf("Legend: %s %s %s\n\n",
+		cmdutil.Printf("Legend: %s %s %s\n\n",
 			pterm.Red("*offline"),
 			pterm.BgRed.Sprint(pterm.White("*not in UT")),
 			pterm.BgRed.Sprint(pterm.Black("*online <2 transports")))
@@ -416,14 +418,14 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 			// First line is header - print without color
 			if i == 0 {
-				fmt.Println(line)
+				cmdutil.Println(line)
 				continue
 			}
 
 			// Get the corresponding entry (i-1 because of header)
 			entryIdx := i - 1
 			if entryIdx >= len(entries) {
-				fmt.Println(line)
+				cmdutil.Println(line)
 				continue
 			}
 
@@ -437,16 +439,16 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			switch {
 			case e.UTStatus == "":
 				// Not in UT: white text on red background
-				fmt.Println(pterm.BgRed.Sprint(pterm.White(line)))
+				cmdutil.Println(pterm.BgRed.Sprint(pterm.White(line)))
 			case e.UTStatus == "offline":
 				// Offline: red text
-				fmt.Println(pterm.Red(line))
+				cmdutil.Println(pterm.Red(line))
 			case e.UTStatus == "online" && realTransports < 2:
 				// Online but fewer than 2 real transports: black text on red background
-				fmt.Println(pterm.BgRed.Sprint(pterm.Black(line)))
+				cmdutil.Println(pterm.BgRed.Sprint(pterm.Black(line)))
 			default:
 				// Normal: no color
-				fmt.Println(line)
+				cmdutil.Println(line)
 			}
 		}
 	},

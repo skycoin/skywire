@@ -124,7 +124,7 @@ gate on doctor without parsing the output.`,
 		if cliout.JSONMode(cmd) {
 			internal.Catch(cmd.Flags(), cliout.Print(cmd, report))
 		} else {
-			fmt.Println(formatDoctorHuman(report))
+			cmdutil.Println(formatDoctorHuman(report))
 		}
 		switch report.Verdict {
 		case verdictRed:

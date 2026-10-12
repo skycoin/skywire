@@ -87,7 +87,7 @@ func getJSON(u string, v interface{}) error {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: hvinspect <url> [waitSeconds] [outPrefix]")
+		cmdutil.Eprintln("usage: hvinspect <url> [waitSeconds] [outPrefix]")
 		cmdutil.Exit(2)
 	}
 	url := os.Args[1]
@@ -116,7 +116,7 @@ func main() {
 	if attach {
 		ws, tid, err := resolveCDP(cdpBase, url)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "CDP attach:", err)
+			cmdutil.Eprintln("CDP attach:", err)
 			cmdutil.Exit(1)
 		}
 		attachID = tid
@@ -262,7 +262,7 @@ func main() {
 		chromedp.FullScreenshot(&shot, 80),
 	)
 	if err := chromedp.Run(ctx, actions...); err != nil {
-		fmt.Fprintln(os.Stderr, "inspect error:", err)
+		cmdutil.Eprintln("inspect error:", err)
 		// still write whatever we captured
 	}
 
@@ -273,15 +273,15 @@ func main() {
 		_ = os.WriteFile(outPrefix+".png", shot, 0o644)
 	}
 	if evalExpr != "" {
-		fmt.Printf("---- eval ----\n%s\n", evalResult)
+		cmdutil.Printf("---- eval ----\n%s\n", evalResult)
 	}
-	fmt.Printf("---- network (%d) ----\n%s\n", len(netlog), strings.Join(netlog, "\n"))
+	cmdutil.Printf("---- network (%d) ----\n%s\n", len(netlog), strings.Join(netlog, "\n"))
 
-	fmt.Printf("=== %s ===\n", url)
-	fmt.Printf("DOM: %s.html (%d bytes)  screenshot: %s.png  console: %d lines\n",
+	cmdutil.Printf("=== %s ===\n", url)
+	cmdutil.Printf("DOM: %s.html (%d bytes)  screenshot: %s.png  console: %d lines\n",
 		outPrefix, len(html), outPrefix, len(console))
-	fmt.Println("---- console ----")
+	cmdutil.Println("---- console ----")
 	for _, l := range console {
-		fmt.Println(l)
+		cmdutil.Println(l)
 	}
 }

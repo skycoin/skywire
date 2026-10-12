@@ -141,8 +141,8 @@ var RootCmd = &cobra.Command{
 			dlog.WithError(err).Error("failed to lookup IP")
 		}
 
-		fmt.Printf("%v\n", ip)
-		fmt.Print("\n")
+		cmdutil.Printf("%v\n", ip)
+		cmdutil.Print("\n")
 		return nil
 	},
 }

@@ -563,11 +563,11 @@ func resolveTCPIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		confPath := visorconfig.SkywireConfig()
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "pty --visor-key: read %s: %v\n", confPath, err) //nolint:errcheck
+			cmdutil.Eprintf("pty --visor-key: read %s: %v\n", confPath, err) //nolint:errcheck
 			cmdutil.Exit(1)
 		}
 		if conf.SK == zero {
-			fmt.Fprintf(os.Stderr, "pty --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			cmdutil.Eprintf("pty --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
 			cmdutil.Exit(1)
 		}
 		sk = conf.SK
@@ -581,7 +581,7 @@ func resolveTCPIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		// SecKey.Set already validated the SK shape; PubKey derivation
 		// is deterministic. Treat unexpected failure as fatal — the
 		// caller can't proceed without a valid identity.
-		fmt.Fprintf(os.Stderr, "pty --via: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
+		cmdutil.Eprintf("pty --via: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
 		cmdutil.Exit(1)
 	}
 	return pk, sk

@@ -332,7 +332,7 @@ func closeAndCleanFile(file *os.File, err error) {
 	if fErr := file.Close(); fErr != nil {
 		dlog.WithError(fErr).Warn("Failed to close output file.\n")
 	}
-	if err != nil && file != os.Stdout {
+	if err != nil && file != cmdutil.Stdout() {
 		if rErr := os.RemoveAll(file.Name()); rErr != nil {
 			dlog.WithError(rErr).Warn("Failed to remove output file.\n")
 		}
@@ -398,11 +398,11 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 		pc = "unknown"
 	}
 	if dmsgcurlOutput != "" {
-		fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
+		cmdutil.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 		if current != total {
-			fmt.Print("\r")
+			cmdutil.Print("\r")
 		} else {
-			fmt.Print("\n")
+			cmdutil.Print("\n")
 		}
 	}
 	return n, nil

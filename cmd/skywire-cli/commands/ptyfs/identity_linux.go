@@ -77,11 +77,11 @@ func resolvePTYFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey
 		confPath := visorconfig.SkywireConfig()
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ptyfs: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
+			cmdutil.Eprintf("ptyfs: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
 			cmdutil.Exit(1)
 		}
 		if conf.SK == zero {
-			fmt.Fprintf(os.Stderr, "ptyfs: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			cmdutil.Eprintf("ptyfs: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
 			cmdutil.Exit(1)
 		}
 		sk = conf.SK
@@ -92,7 +92,7 @@ func resolvePTYFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey
 	}
 	pk, err := sk.PubKey()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ptyfs: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
+		cmdutil.Eprintf("ptyfs: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
 		cmdutil.Exit(1)
 	}
 	return pk, sk

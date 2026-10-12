@@ -79,7 +79,7 @@ var rmTpCmd = &cobra.Command{
 				var errors []string
 
 				if len(targetPKs) > 1 {
-					fmt.Printf("=== Remote visor: %s ===\n", targetPK.String())
+					cmdutil.Printf("=== Remote visor: %s ===\n", targetPK.String())
 				}
 
 				for _, tpIDStr := range rmRemoteTransports {

@@ -3,9 +3,10 @@ package clidmsg
 
 import (
 	"fmt"
-	"os"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -43,10 +44,10 @@ even when nothing is listening to accept them.`,
 			return
 		}
 		if len(hits) == 0 {
-			fmt.Println("No no-listener port hits recorded.")
+			cmdutil.Println("No no-listener port hits recorded.")
 			return
 		}
-		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		tw := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 		fmt.Fprintln(tw, "DST_PORT\tSRC_PK\tCOUNT\tFIRST_SEEN\tLAST_SEEN") //nolint:errcheck
 		for _, h := range hits {
 			fmt.Fprintf(tw, "%d\t%s\t%d\t%s\t%s\n", //nolint:errcheck

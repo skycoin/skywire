@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -361,7 +363,7 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 			uniqueEdges[tp.A] = struct{}{}
 			uniqueEdges[tp.B] = struct{}{}
 		}
-		fmt.Printf("Bandwidth collection complete: %d transports across %d unique visors, total sender-side bandwidth: %s, written to %s\n",
+		cmdutil.Printf("Bandwidth collection complete: %d transports across %d unique visors, total sender-side bandwidth: %s, written to %s\n",
 			len(transports), len(uniqueEdges), formatBytes(totalSent), dailyFile)
 	},
 }

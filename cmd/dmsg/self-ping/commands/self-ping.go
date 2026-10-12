@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -107,10 +109,10 @@ The --server flag is required and must be in the format pk@ip:port, e.g.:
 			return fmt.Errorf("accept side of self-dial failed: %w", aerr)
 		}
 
-		fmt.Printf("DMSG self-ping OK\n")
-		fmt.Printf("  server:  %s @ %s\n", srvEntry.Static.String(), srvEntry.Server.Address)
-		fmt.Printf("  own pk:  %s\n", pk.String())
-		fmt.Printf("  latency: %v\n", latency.Round(time.Millisecond))
+		cmdutil.Printf("DMSG self-ping OK\n")
+		cmdutil.Printf("  server:  %s @ %s\n", srvEntry.Static.String(), srvEntry.Server.Address)
+		cmdutil.Printf("  own pk:  %s\n", pk.String())
+		cmdutil.Printf("  latency: %v\n", latency.Round(time.Millisecond))
 		return nil
 	},
 }

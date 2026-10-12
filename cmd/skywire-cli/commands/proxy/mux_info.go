@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -89,17 +90,17 @@ Examples:
 		defer ticker.Stop()
 		tracker := newMuxRateTracker()
 		for {
-			fmt.Print("\033[H\033[2J") // clear screen
+			cmdutil.Print("\033[H\033[2J") // clear screen
 			infos, err := rpcClient.RouteGroupMuxInfo(muxInfoApp)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "RouteGroupMuxInfo: %v\n", err)
+				cmdutil.Eprintf("RouteGroupMuxInfo: %v\n", err)
 			} else {
 				tracker.render(cmd, infos)
 				if snap, serr := rpcClient.StateSnapshotProjected([]string{"mux"}); serr == nil {
 					printMuxCounters(cmd, muxCountersFrom(snap))
 				}
 			}
-			fmt.Printf("\n[refresh %s — ctrl+c to stop]\n", muxInfoWatch)
+			cmdutil.Printf("\n[refresh %s — ctrl+c to stop]\n", muxInfoWatch)
 			<-ticker.C
 		}
 	},
@@ -156,7 +157,7 @@ func printMuxCounters(cmd *cobra.Command, mc *muxCountersInfo) {
 	if mc == nil || cliout.JSONMode(cmd) {
 		return
 	}
-	fmt.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  split sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
+	cmdutil.Printf("counters: promotions=%d  rehome sent/recv/acked/failed=%d/%d/%d/%d  split sent/recv/acked/failed=%d/%d/%d/%d  fanout engage/release=%d/%d  integrity aead/delivery-crc=%d/%d\n",
 		mc.TunnelPromotions, mc.LegRehomesSent, mc.LegRehomesReceived, mc.LegRehomesAcked, mc.LegRehomesFailed,
 		mc.LegSplitsSent, mc.LegSplitsReceived, mc.LegSplitsAcked, mc.LegSplitsFailed,
 		mc.ForwardFanoutEngaged, mc.ForwardFanoutReleased, mc.AEADFailures, mc.DeliveryCRCFailures)
@@ -389,7 +390,7 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	_ = json.Unmarshal(raw, &rgs) //nolint:errcheck
 
 	if len(rgs) == 0 {
-		fmt.Printf("no active route groups for app=%s\n", muxInfoApp)
+		cmdutil.Printf("no active route groups for app=%s\n", muxInfoApp)
 		return
 	}
 
@@ -438,7 +439,7 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			}
 			role += "  moves[" + strings.Join(parts, " ") + "]"
 		}
-		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d%s\n",
+		cmdutil.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v perframe=%v  legs=%d%s\n",
 			ri,
 			shortPK(rg.Desc.SrcPK), rg.Desc.SrcPort,
 			shortPK(rg.Desc.DstPK), rg.Desc.DstPort,
@@ -450,12 +451,12 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			if rg.ReorderGapAgeMS > 0 {
 				gap = fmt.Sprintf("%.0fms", rg.ReorderGapAgeMS)
 			}
-			fmt.Printf("       dist=%s  reorder_pending=%d  gap_age=%s  write_seq=%d\n",
+			cmdutil.Printf("       dist=%s  reorder_pending=%d  gap_age=%s  write_seq=%d\n",
 				rg.Distribution, rg.ReorderPending, gap, rg.WriteSeq)
 			// Directional groups: which class carries which direction, and whether
 			// an operator pin ('proxy mux direction') holds the mapping.
 			if rg.Directional {
-				fmt.Printf("       directional=true  flipped=%v  flip_pinned=%s\n",
+				cmdutil.Printf("       directional=true  flipped=%v  flip_pinned=%s\n",
 					rg.Flipped, rg.FlipPinned)
 			}
 			// Loss recovery, one line: the sender's retransmit window and the
@@ -463,7 +464,7 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			// A stalled group witherr=%d window_waits=%d/%d tlp=%d | sack_recv going stale is a dead feedback path;
 			// one with retx_skip climbing is a retx window that aged out.
 			if r := rg.Recovery; r != nil {
-				fmt.Printf("       recovery: retx_held=%d[%d..%d] sent=%d skip_missing=%d req[sack=%d hol=%d flush=%d] err=%d window_waits=%d/%d tlp=%d | sack_recv| sack_recv=%d %s contig=%d | sack_sent=%d %s | reorder_drops=%d wedge_ticks=%d wedges=%d longest=%dms\n",
+				cmdutil.Printf("       recovery: retx_held=%d[%d..%d] sent=%d skip_missing=%d req[sack=%d hol=%d flush=%d] err=%d window_waits=%d/%d tlp=%d | sack_recv| sack_recv=%d %s contig=%d | sack_sent=%d %s | reorder_drops=%d wedge_ticks=%d wedges=%d longest=%dms\n",
 					r.RetxHeld, r.RetxMinSeq, r.RetxMaxSeq, r.RetxSent, r.RetxSkippedMissing, r.RetxReqSACK, r.RetxReqHOL, r.RetxReqFlush, r.RetxSendErrors, r.SendWindowWaits, r.SendWindowTimeouts, r.TLPProbes,
 					r.SACKsRecv, msAgo(r.LastSACKRecvMsAgo), r.LastSACKRecvContig,
 					r.SACKsSent, msAgo(r.LastSACKSentMsAgo),
@@ -533,13 +534,13 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			)
 		}
 		w.Flush() //nolint:errcheck,gosec
-		fmt.Print(b.String())
+		cmdutil.Print(b.String())
 		if haveRates {
-			fmt.Printf("  total  recv/s=%s  sent/s=%s  (%d/%d legs active)\n",
+			cmdutil.Printf("  total  recv/s=%s  sent/s=%s  (%d/%d legs active)\n",
 				humanRate(totRecv), humanRate(totSent), active, len(rg.Legs))
 		}
 		if ri < len(rgs)-1 {
-			fmt.Println()
+			cmdutil.Println()
 		}
 	}
 

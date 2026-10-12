@@ -46,7 +46,7 @@ var shCmd = &cobra.Command{
 		case term.IsTerminal(int(os.Stdin.Fd())):
 			code, err = console.Run(opt)
 		default:
-			code, err = console.Script(os.Stdin, "skywire sh", nil, opt)
+			code, err = console.Script(cmdutil.Stdin(), "skywire sh", nil, opt)
 		}
 		if err != nil {
 			return err

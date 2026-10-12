@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -367,7 +369,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			}
 			if listVersions {
 				for _, k := range keys {
-					fmt.Printf("%s %s\n", k, versionFilter)
+					cmdutil.Printf("%s %s\n", k, versionFilter)
 				}
 				return
 			}

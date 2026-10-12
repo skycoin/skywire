@@ -4,7 +4,6 @@ package clitp
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -86,30 +85,30 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 		if vizVisor || vizStop || vizStatus {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to connect to visor RPC: %v\n", err)
+				cmdutil.Eprintf("Failed to connect to visor RPC: %v\n", err)
 				cmdutil.Exit(1)
 			}
 
 			if vizStatus {
 				status, err := rpcClient.UIServerStatus()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to get UI server status: %v\n", err)
+					cmdutil.Eprintf("Failed to get UI server status: %v\n", err)
 					cmdutil.Exit(1)
 				}
 				if status.Running {
-					fmt.Printf("UI server is running at http://%s\n", status.LocalAddr)
+					cmdutil.Printf("UI server is running at http://%s\n", status.LocalAddr)
 				} else {
-					fmt.Println("UI server is not running")
+					cmdutil.Println("UI server is not running")
 				}
 				return
 			}
 
 			if vizStop {
 				if err := rpcClient.StopUIServer(); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to stop UI server: %v\n", err)
+					cmdutil.Eprintf("Failed to stop UI server: %v\n", err)
 					cmdutil.Exit(1)
 				}
-				fmt.Println("UI server stopped")
+				cmdutil.Println("UI server stopped")
 				return
 			}
 
@@ -117,11 +116,11 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 				// Request visor to start its embedded UI server
 				addr := fmt.Sprintf("%s:%d", vizAddr, vizPort)
 				if err := rpcClient.StartUIServer(addr); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to start UI server: %v\n", err)
+					cmdutil.Eprintf("Failed to start UI server: %v\n", err)
 					cmdutil.Exit(1)
 				}
-				fmt.Printf("Visor UI server started at http://%s\n", addr)
-				fmt.Println("The visor's embedded UI server has direct access to local transport/route data.")
+				cmdutil.Printf("Visor UI server started at http://%s\n", addr)
+				cmdutil.Println("The visor's embedded UI server has direct access to local transport/route data.")
 				return
 			}
 		}
@@ -191,7 +190,7 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 		}()
 
 		if err := server.ListenAndServe(); err != nil {
-			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			cmdutil.Eprintf("Server error: %v\n", err)
 			cmdutil.Exit(1)
 		}
 	},

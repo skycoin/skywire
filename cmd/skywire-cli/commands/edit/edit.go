@@ -27,13 +27,13 @@ var RootCmd = &cobra.Command{
 			filename = args[0]
 			data, err := os.ReadFile(filename) //nolint:gosec
 			if err != nil && !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "edit: %v\n", err)
+				cmdutil.Eprintf("edit: %v\n", err)
 				cmdutil.Exit(1)
 			}
 			content = string(data)
 		}
 		if err := run(filename, content); err != nil {
-			fmt.Fprintf(os.Stderr, "edit: %v\n", err)
+			cmdutil.Eprintf("edit: %v\n", err)
 			cmdutil.Exit(1)
 		}
 	},

@@ -26,7 +26,7 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("%s\n", buildinfo.Version())
+		cmdutil.Printf("%s\n", buildinfo.Version())
 	},
 }
 

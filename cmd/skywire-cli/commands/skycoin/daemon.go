@@ -4,7 +4,6 @@ package cliskycoin
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -155,11 +154,11 @@ a working multi-instance daemon entry in one command.`,
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "Added %s on --port %d", appName, port)
+		cmdutil.Eprintf("Added %s on --port %d", appName, port)
 		if daemonAddFiberToml != "" {
-			fmt.Fprintf(os.Stderr, " (FIBER_TOML=%s)", daemonAddFiberToml)
+			cmdutil.Eprintf(" (FIBER_TOML=%s)", daemonAddFiberToml)
 		}
-		fmt.Fprintln(os.Stderr)
+		cmdutil.Eprintln()
 	},
 }
 

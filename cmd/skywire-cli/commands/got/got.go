@@ -140,7 +140,7 @@ SkynetHTTP / DmsgHTTP RPC and complete in a single GET (no chunking).`,
 				fatal(err)
 			}
 
-			fmt.Fprintf(os.Stderr, "\n%s\n", url)
+			cmdutil.Eprintf("\n%s\n", url)
 		}
 	},
 }
@@ -194,7 +194,7 @@ Examples:
 			defer body.Close() //nolint:errcheck
 		}
 
-		var out io.Writer = os.Stdout
+		out := cmdutil.Stdout()
 		if output != "" {
 			f, err := os.Create(output) //nolint:gosec
 			if err != nil {
@@ -210,13 +210,13 @@ Examples:
 		}
 
 		if verbose {
-			fmt.Fprintf(os.Stderr, "%s %s\n", resp.Proto, resp.Status)
+			cmdutil.Eprintf("%s %s\n", resp.Proto, resp.Status)
 			for k, vals := range resp.Header {
 				for _, v := range vals {
-					fmt.Fprintf(os.Stderr, "%s: %s\n", k, v)
+					cmdutil.Eprintf("%s: %s\n", k, v)
 				}
 			}
-			fmt.Fprintln(os.Stderr)
+			cmdutil.Eprintln()
 		}
 
 		if resp.StatusCode >= 400 {
@@ -258,10 +258,10 @@ var headCmd = &cobra.Command{
 			fatal(err)
 		}
 
-		fmt.Printf("%s %s\n", resp.Proto, resp.Status)
+		cmdutil.Printf("%s %s\n", resp.Proto, resp.Status)
 		for k, vals := range resp.Header {
 			for _, v := range vals {
-				fmt.Printf("%s: %s\n", k, v)
+				cmdutil.Printf("%s: %s\n", k, v)
 			}
 		}
 	},
@@ -310,14 +310,14 @@ func progressFunc() got.ProgressFunc {
 
 		if total > 0 {
 			pct := float64(current) / float64(total) * 100
-			fmt.Fprintf(os.Stderr, "\r %6.2f%% %s / %s @ %s/s",
+			cmdutil.Eprintf("\r %6.2f%% %s / %s @ %s/s",
 				pct,
 				humanBytes(current),
 				humanBytes(total),
 				humanBytes(speed),
 			)
 		} else {
-			fmt.Fprintf(os.Stderr, "\r %s @ %s/s",
+			cmdutil.Eprintf("\r %s @ %s/s",
 				humanBytes(current),
 				humanBytes(speed),
 			)
@@ -339,6 +339,6 @@ func humanBytes(b uint64) string {
 }
 
 func fatal(err error) {
-	fmt.Fprintf(os.Stderr, "got: %v\n", err)
+	cmdutil.Eprintf("got: %v\n", err)
 	cmdutil.Exit(1)
 }

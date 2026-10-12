@@ -215,7 +215,7 @@ var addPvCmd = &cobra.Command{
 			totalFail := 0
 
 			if !isJSON {
-				fmt.Printf("Requesting transports to %d public visors on %d remote visor(s) via TPS...\n\n", len(candidates), len(remotePKs))
+				cmdutil.Printf("Requesting transports to %d public visors on %d remote visor(s) via TPS...\n\n", len(candidates), len(remotePKs))
 			}
 
 			for i, remotePK := range remotePKs {
@@ -280,22 +280,22 @@ var addPvCmd = &cobra.Command{
 				// Stream output immediately
 				if !isJSON {
 					if skipped {
-						fmt.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String())
+						cmdutil.Printf("[%d/%d] %s: unreachable (skipped)\n", i+1, len(remotePKs), remotePK.String())
 					} else {
-						fmt.Printf("[%d/%d] %s: %d/%d transports\n", i+1, len(remotePKs), remotePK.String(), successCount, len(candidates))
+						cmdutil.Printf("[%d/%d] %s: %d/%d transports\n", i+1, len(remotePKs), remotePK.String(), successCount, len(candidates))
 					}
 				}
 			}
 
 			// Print final results
 			if !isJSON {
-				fmt.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
+				cmdutil.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
 			}
 
 			if isJSON {
 				internal.PrintOutput(cmd.Flags(), tpsResults, "")
 			} else if len(tpsResults) > 0 {
-				fmt.Printf("\nEstablished %d transports total\n", len(tpsResults))
+				cmdutil.Printf("\nEstablished %d transports total\n", len(tpsResults))
 			}
 
 			if totalFail > 0 && totalSuccess == 0 {
@@ -326,7 +326,7 @@ var addPvCmd = &cobra.Command{
 		failCount := 0
 
 		if !isJSON {
-			fmt.Printf("Adding transports to %d public visors (sorted by transport count)...\n\n", len(candidates))
+			cmdutil.Printf("Adding transports to %d public visors (sorted by transport count)...\n\n", len(candidates))
 		}
 
 		for i, candidate := range candidates {
@@ -341,7 +341,7 @@ var addPvCmd = &cobra.Command{
 			}
 
 			if !isJSON {
-				fmt.Printf("[%d/%d] %s (%d transports)...\n", i+1, len(candidates), pk, candidate.count)
+				cmdutil.Printf("[%d/%d] %s (%d transports)...\n", i+1, len(candidates), pk, candidate.count)
 			}
 
 			// Check dmsg availability if dmsg is explicitly requested
@@ -422,13 +422,13 @@ var addPvCmd = &cobra.Command{
 
 		// Print results
 		if !isJSON {
-			fmt.Printf("\nSummary: %d/%d transports established\n", successCount, len(candidates))
+			cmdutil.Printf("\nSummary: %d/%d transports established\n", successCount, len(candidates))
 		}
 
 		if isJSON {
 			internal.PrintOutput(cmd.Flags(), results, "")
 		} else if len(results) > 0 {
-			fmt.Println("\nEstablished transports:")
+			cmdutil.Println("\nEstablished transports:")
 			for _, tp := range results {
 				PrintTransports(cmd.Flags(), tp)
 			}

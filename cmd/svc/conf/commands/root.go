@@ -3,7 +3,6 @@ package commands
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
@@ -42,7 +41,7 @@ var ServicesConfCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Run: func(_ *cobra.Command, _ []string) {
-		fmt.Printf("%s\n", string(deployment.ServicesJSON))
+		cmdutil.Printf("%s\n", string(deployment.ServicesJSON))
 	},
 }
 
@@ -101,7 +100,7 @@ func printFilteredJSON(keepHTTP, keepDmsg bool) {
 	if err != nil {
 		cmdutil.Fatal(err)
 	}
-	fmt.Printf("%s\n", string(out))
+	cmdutil.Printf("%s\n", string(out))
 }
 
 // filterServices returns a copy of svc with either the http-scheme

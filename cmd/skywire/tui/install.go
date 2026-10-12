@@ -2,8 +2,9 @@
 package tui
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -59,7 +60,7 @@ func Install(root *cobra.Command) {
 			if err := Run(root, c); err != nil {
 				// A browser that could not start is not a reason to withhold
 				// the help that was asked for.
-				fmt.Fprintln(os.Stderr, "tui:", err) //nolint:errcheck
+				cmdutil.Eprintln("tui:", err) //nolint:errcheck
 				def(c, args)
 			}
 		})

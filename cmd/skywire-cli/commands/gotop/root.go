@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/gotop/v4"
 	"github.com/0magnet/gotop/v4/colorschemes"
 	"github.com/0magnet/gotop/v4/devices"
@@ -65,7 +67,7 @@ var (
 	help         *w.HelpMenu
 	bar          *w.StatusBar
 	versionLabel *w.VersionLabel
-	stderrLogger = log.New(os.Stderr, "", 0)
+	stderrLogger = log.New(cmdutil.Stderr(), "", 0)
 	tr           lingo.Translations
 )
 
@@ -223,8 +225,8 @@ func runDirectGotop() error {
 	defer func() {
 		log.SetOutput(prevLogOut)
 		if captured := logBuf.String(); captured != "" {
-			fmt.Fprintln(os.Stderr, "--- gotop runtime messages ---")
-			fmt.Fprint(os.Stderr, captured)
+			cmdutil.Eprintln("--- gotop runtime messages ---")
+			cmdutil.Eprint(captured)
 		}
 	}()
 
@@ -425,8 +427,8 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	defer func() {
 		log.SetOutput(prevLogOut)
 		if captured := logBuf.String(); captured != "" {
-			fmt.Fprintln(os.Stderr, "--- gotop runtime messages ---")
-			fmt.Fprint(os.Stderr, captured)
+			cmdutil.Eprintln("--- gotop runtime messages ---")
+			cmdutil.Eprint(captured)
 		}
 	}()
 
@@ -734,75 +736,75 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 // displayStatsText shows a single snapshot in text mode (for --once flag)
 func displayStatsText(stats *rpcgrpc.SystemStats) {
 	if stats.Error != "" {
-		fmt.Printf("Error: %s\n", stats.Error)
+		cmdutil.Printf("Error: %s\n", stats.Error)
 		return
 	}
 
 	// Host info
 	if stats.Host != nil {
-		fmt.Printf("Host: %s (%s %s)\n", stats.Host.Hostname, stats.Host.Platform, stats.Host.PlatformVersion)
-		fmt.Printf("Kernel: %s (%s)\n", stats.Host.KernelVersion, stats.Host.KernelArch)
-		fmt.Printf("Uptime: %s | CPUs: %d\n\n", formatDuration(time.Duration(stats.Host.UptimeSec)*time.Second), stats.Host.NumCpus)
+		cmdutil.Printf("Host: %s (%s %s)\n", stats.Host.Hostname, stats.Host.Platform, stats.Host.PlatformVersion)
+		cmdutil.Printf("Kernel: %s (%s)\n", stats.Host.KernelVersion, stats.Host.KernelArch)
+		cmdutil.Printf("Uptime: %s | CPUs: %d\n\n", formatDuration(time.Duration(stats.Host.UptimeSec)*time.Second), stats.Host.NumCpus)
 	}
 
 	// CPU
-	fmt.Printf("CPU Average: %.1f%%\n", stats.CpuAverage)
+	cmdutil.Printf("CPU Average: %.1f%%\n", stats.CpuAverage)
 	for _, cpu := range stats.Cpu {
-		fmt.Printf("  %s: %.1f%%\n", cpu.Cpu, cpu.UsagePercent)
+		cmdutil.Printf("  %s: %.1f%%\n", cpu.Cpu, cpu.UsagePercent)
 	}
-	fmt.Println()
+	cmdutil.Println()
 
 	// Memory
 	if stats.Memory != nil {
-		fmt.Printf("Memory: %s / %s (%.1f%%)\n",
+		cmdutil.Printf("Memory: %s / %s (%.1f%%)\n",
 			formatBytes(stats.Memory.Used), formatBytes(stats.Memory.Total), stats.Memory.UsedPercent)
 	}
 	if stats.Swap != nil && stats.Swap.Total > 0 {
-		fmt.Printf("Swap:   %s / %s (%.1f%%)\n",
+		cmdutil.Printf("Swap:   %s / %s (%.1f%%)\n",
 			formatBytes(stats.Swap.Used), formatBytes(stats.Swap.Total), stats.Swap.UsedPercent)
 	}
-	fmt.Println()
+	cmdutil.Println()
 
 	// Network
 	if stats.Network != nil {
-		fmt.Printf("Network: TX %s (%s/s) | RX %s (%s/s)\n",
+		cmdutil.Printf("Network: TX %s (%s/s) | RX %s (%s/s)\n",
 			formatBytes(stats.Network.BytesSent), formatBytes(uint64(stats.Network.BytesSentRate)),
 			formatBytes(stats.Network.BytesRecv), formatBytes(uint64(stats.Network.BytesRecvRate)))
-		fmt.Println()
+		cmdutil.Println()
 	}
 
 	// Disks
 	if len(stats.Disks) > 0 {
-		fmt.Println("Disks:")
+		cmdutil.Println("Disks:")
 		for _, d := range stats.Disks {
 			if d.Total > 0 {
-				fmt.Printf("  %-25s %s / %s (%.1f%%)\n",
+				cmdutil.Printf("  %-25s %s / %s (%.1f%%)\n",
 					d.Mountpoint, formatBytes(d.Used), formatBytes(d.Total), d.UsedPercent)
 			}
 		}
-		fmt.Println()
+		cmdutil.Println()
 	}
 
 	// Temperatures
 	if len(stats.Temps) > 0 {
-		fmt.Println("Temperatures:")
+		cmdutil.Println("Temperatures:")
 		for _, t := range stats.Temps {
-			fmt.Printf("  %-25s %.1f°C\n", t.SensorKey, t.Temperature)
+			cmdutil.Printf("  %-25s %.1f°C\n", t.SensorKey, t.Temperature)
 		}
-		fmt.Println()
+		cmdutil.Println()
 	}
 
 	// Processes
 	if len(stats.Processes) > 0 {
-		fmt.Println("Top Processes:")
-		fmt.Printf("  %-7s %-20s %7s %7s %10s %-10s\n", "PID", "NAME", "CPU%", "MEM%", "RSS", "USER")
+		cmdutil.Println("Top Processes:")
+		cmdutil.Printf("  %-7s %-20s %7s %7s %10s %-10s\n", "PID", "NAME", "CPU%", "MEM%", "RSS", "USER")
 		// Sort by CPU
 		procs := stats.Processes
 		sort.Slice(procs, func(i, j int) bool {
 			return procs[i].CpuPercent > procs[j].CpuPercent
 		})
 		for _, p := range procs {
-			fmt.Printf("  %-7d %-20s %7.1f %7.1f %10s %-10s\n",
+			cmdutil.Printf("  %-7d %-20s %7.1f %7.1f %10s %-10s\n",
 				p.Pid, truncate(p.Name, 20), p.CpuPercent, p.MemoryPercent,
 				formatBytes(p.MemoryRss), truncate(p.Username, 10))
 		}

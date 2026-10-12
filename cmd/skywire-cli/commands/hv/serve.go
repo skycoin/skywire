@@ -76,7 +76,7 @@ page never asks anyone to type a secret key.`,
 		if serveExecTinyGoJS != "" {
 			js, err := os.ReadFile(filepath.Clean(serveExecTinyGoJS))
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "read --exec-js-tinygo:", err)
+				cmdutil.Eprintln("read --exec-js-tinygo:", err)
 				cmdutil.Exit(1)
 			}
 			wasmhv.WasmExecTinyGoJS = js

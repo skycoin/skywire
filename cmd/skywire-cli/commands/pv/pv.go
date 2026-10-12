@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
@@ -342,17 +344,17 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 				for _, t := range order {
 					line += fmt.Sprintf(" %s=%d", t, tpByType[r.pk][t])
 				}
-				fmt.Println(line)
+				cmdutil.Println(line)
 			}
 			return
 		}
 
 		for _, r := range results {
 			if showVersion {
-				fmt.Printf("%s %d %s\n", r.pk, r.count, versionOrDash(verByPK[r.pk]))
+				cmdutil.Printf("%s %d %s\n", r.pk, r.count, versionOrDash(verByPK[r.pk]))
 				continue
 			}
-			fmt.Printf("%s %d\n", r.pk, r.count)
+			cmdutil.Printf("%s %d\n", r.pk, r.count)
 		}
 	},
 }
