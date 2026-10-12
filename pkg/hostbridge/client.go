@@ -3,6 +3,7 @@ package hostbridge
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"net"
 	"net/netip"
@@ -37,7 +38,7 @@ func (c *Client) Done() <-chan struct{} { return c.sess.CloseChan() }
 // Close ends the session and every socket opened through it.
 func (c *Client) Close() error { return c.sess.Close() }
 
-func (c *Client) request(op byte, network, addr string) (net.Conn, *bufio.Reader, string, string, error) {
+func (c *Client) request(ctx context.Context, op byte, network, addr string) (net.Conn, *bufio.Reader, string, string, error) {
 	if !validNetwork(op, network) {
 		return nil, nil, "", "", errors.New("hostbridge: unsupported network " + network)
 	}
@@ -45,12 +46,23 @@ func (c *Client) request(op byte, network, addr string) (net.Conn, *bufio.Reader
 	if err != nil {
 		return nil, nil, "", "", err
 	}
+	// The reply waits for the bridge's dial, so ctx bounds the whole request.
+	// Closing a yamux stream only half-closes it, so expire the read instead.
+	stop := context.AfterFunc(ctx, func() { _ = st.SetDeadline(time.Now()) }) //nolint:errcheck
 	if err := writeMsg(st, op, network, addr); err != nil {
+		stop()
 		_ = st.Close() //nolint:errcheck
 		return nil, nil, "", "", err
 	}
 	br := bufio.NewReader(st)
 	a, b, err := readReply(br)
+	// A cancel that already ran may have expired the stream, so it fails.
+	if !stop() || ctx.Err() != nil {
+		err = context.Cause(ctx)
+		if err == nil {
+			err = context.Canceled
+		}
+	}
 	if err != nil {
 		_ = st.Close() //nolint:errcheck
 		return nil, nil, "", "", err
@@ -60,7 +72,12 @@ func (c *Client) request(op byte, network, addr string) (net.Conn, *bufio.Reader
 
 // Dial opens a TCP connection from the bridge's host.
 func (c *Client) Dial(network, addr string) (net.Conn, error) {
-	st, br, local, remote, err := c.request(opDial, network, addr)
+	return c.DialContext(context.Background(), network, addr)
+}
+
+// DialContext is Dial bounded by ctx.
+func (c *Client) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	st, br, local, remote, err := c.request(ctx, opDial, network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +87,7 @@ func (c *Client) Dial(network, addr string) (net.Conn, error) {
 // Listen listens on TCP on the bridge's host. Closing the listener closes
 // the host socket.
 func (c *Client) Listen(network, addr string) (net.Listener, error) {
-	st, _, bound, id, err := c.request(opListen, network, addr)
+	st, _, bound, id, err := c.request(context.Background(), opListen, network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +107,7 @@ func (c *Client) Listen(network, addr string) (net.Listener, error) {
 
 // ListenPacket binds UDP on the bridge's host.
 func (c *Client) ListenPacket(network, addr string) (net.PacketConn, error) {
-	st, br, bound, _, err := c.request(opUDP, network, addr)
+	st, br, bound, _, err := c.request(context.Background(), opUDP, network, addr)
 	if err != nil {
 		return nil, err
 	}
