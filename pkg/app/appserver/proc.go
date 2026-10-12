@@ -648,15 +648,32 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 	return summaries
 }
 
+// appLogHooks keeps one hook per log file for the life of the process. Each
+// lumberjack.Logger starts a goroutine that its Close does not stop (v2.2.1).
+var appLogHooks sync.Map // path -> logrus.Hook
+
 // storeLog attaches the app's file log hook at <local_path>/log/skywire.log.
 func storeLog(log *logging.MasterLogger, localPath string) {
 	path := localPath + "/log/skywire.log"
-	hook, err := newAppLogHook(path)
+	hook, err := sharedAppLogHook(path)
 	if err != nil {
 		log.WithError(err).Warn("Failed to open the app log file; logging to stdout only")
 		return
 	}
 	log.Hooks.Add(hook)
+}
+
+// sharedAppLogHook returns the process's hook for path, building it once.
+func sharedAppLogHook(path string) (logrus.Hook, error) {
+	if h, ok := appLogHooks.Load(path); ok {
+		return h.(logrus.Hook), nil
+	}
+	h, err := newAppLogHook(path)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := appLogHooks.LoadOrStore(path, h)
+	return actual.(logrus.Hook), nil
 }
 
 // newAppLogHook builds the file hook for the app log at path.
