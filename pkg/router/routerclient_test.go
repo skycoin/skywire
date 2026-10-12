@@ -1,11 +1,14 @@
+//go:build !tinygo
+
 // Package routerclient pkg/router/routerclient_test.go
 package router
 
 import (
 	"context"
 	"net"
-	"net/rpc"
 	"testing"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_dial.go c2-net-routing
 // router_dial.go contains route dialing and route finding logic.
 package router
@@ -369,7 +367,7 @@ func (r *router) DialRoutes(
 					role = opts.TunnelRole
 				}
 				dial := func(dctx context.Context, c routing.BidirectionalRoute) (routing.EdgeRules, cipher.PubKey, error) {
-					return r.conf.RouteGroupDialer.Dial(dctx, log, r.dmsgC, r.conf.SetupNodes, c)
+					return r.dialRouteGroup(dctx, log, c)
 				}
 				handshake := func(hctx context.Context, _ routing.BidirectionalRoute, rules routing.EdgeRules) (*NoiseRouteGroup, error) {
 					if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
@@ -616,7 +614,7 @@ func (r *router) DialRoutes(
 			setupCtx = WithForceLegacyRouteSetup(ctx)
 		}
 		dialCtx, cancelDial := context.WithTimeout(setupCtx, setupAttemptTimeout(ctx))
-		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(dialCtx, log, r.dmsgC, r.conf.SetupNodes, req)
+		rules, connectedNode, err := r.dialRouteGroup(dialCtx, log, req)
 		cancelDial()
 		if err != nil {
 			// If the PARENT context (the overall dial deadline) is done, stop
@@ -1015,7 +1013,7 @@ func (r *router) setupPingRoute(
 		log.Debugf("setupPingRoute: Reverse[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
 	}
 
-	rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
+	rules, connectedNode, err := r.dialRouteGroup(ctx, log, req)
 	if err != nil {
 		log.WithError(err).Error("Error dialing ping route group")
 		return nil, err

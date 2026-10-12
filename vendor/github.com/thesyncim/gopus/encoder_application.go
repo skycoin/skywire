@@ -1,8 +1,11 @@
 package gopus
 
-// SetApplication updates the encoder application hint.
-//
-// Valid values are ApplicationVoIP, ApplicationAudio, and ApplicationLowDelay.
+// SetApplication changes the encoder application profile. Valid values are
+// ApplicationVoIP, ApplicationAudio, and ApplicationLowDelay; restricted
+// profiles can only be selected with NewEncoder. A different profile can be
+// selected only before the encoder commits its first frame. Reapplying the
+// current standard profile remains valid after encoding starts. SetApplication
+// returns ErrInvalidApplication for an unsupported profile or a late change.
 func (e *Encoder) SetApplication(application Application) error {
 	// libopus OPUS_SET_APPLICATION rejects an application change once a frame
 	// has been committed (!st->first). st->first stays 1 through the SILK
@@ -27,7 +30,7 @@ func (e *Encoder) SetApplication(application Application) error {
 	return nil
 }
 
-// Application returns the current encoder application hint.
+// Application returns the configured encoder application profile.
 func (e *Encoder) Application() Application {
 	return e.application
 }

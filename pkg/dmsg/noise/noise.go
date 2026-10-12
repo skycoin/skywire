@@ -32,6 +32,9 @@ var ErrInvalidCipherText = errors.New("noise decrypt unsafe: ciphertext cannot b
 // nonceSize is the noise cipher state's nonce size in bytes.
 const nonceSize = 8
 
+// tagSize is the AEAD tag length of both noise ciphers, ChaChaPoly and AESGCM.
+const tagSize = 16
+
 // Config hold noise parameters.
 type Config struct {
 	LocalPK   cipher.PubKey // Local instance static public key.
@@ -54,8 +57,6 @@ type Noise struct {
 
 	encNonce uint64 // increment after encryption
 	decNonce uint64 // expect increment with each subsequent packet
-
-	encBuf [nonceSize]byte // reusable nonce buffer for encryption
 
 	// Post-quantum hybrid (ML-KEM-768). PQ is offered UNCONDITIONALLY and
 	// composes with the classical handshake; if the peer doesn't reciprocate
@@ -343,18 +344,26 @@ func (ns *Noise) RemoteStatic() cipher.PubKey {
 // EncryptUnsafe encrypts plaintext without interlocking, should only
 // be used with external lock.
 func (ns *Noise) EncryptUnsafe(plaintext []byte) []byte {
+	return ns.encryptAppend(make([]byte, 0, nonceSize+len(plaintext)+tagSize), plaintext)
+}
+
+// encryptAppend appends the nonce and ciphertext of plaintext to dst. It must
+// be used with an external lock, like EncryptUnsafe.
+func (ns *Noise) encryptAppend(dst, plaintext []byte) []byte {
 	ns.encNonce++
-	binary.BigEndian.PutUint64(ns.encBuf[:], ns.encNonce)
-	ciphertext := ns.enc.Cipher().Encrypt(nil, ns.encNonce, nil, plaintext)
-	out := make([]byte, nonceSize+len(ciphertext))
-	copy(out, ns.encBuf[:])
-	copy(out[nonceSize:], ciphertext)
-	return out
+	dst = binary.BigEndian.AppendUint64(dst, ns.encNonce)
+	return ns.enc.Cipher().Encrypt(dst, ns.encNonce, nil, plaintext)
 }
 
 // DecryptUnsafe decrypts ciphertext without interlocking, should only
 // be used with external lock.
 func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
+	return ns.decryptAppend(nil, ciphertext)
+}
+
+// decryptAppend appends the plaintext of ciphertext to dst. It must be used
+// with an external lock, like DecryptUnsafe.
+func (ns *Noise) decryptAppend(dst, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) < nonceSize {
 		return nil, ErrInvalidCipherText
 	}
@@ -363,7 +372,7 @@ func (ns *Noise) DecryptUnsafe(ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("received decryption nonce (%d) is not larger than previous (%d)", recvSeq, ns.decNonce)
 	}
 	ns.decNonce = recvSeq
-	return ns.dec.Cipher().Decrypt(nil, recvSeq, nil, ciphertext[nonceSize:])
+	return ns.dec.Cipher().Decrypt(dst, recvSeq, nil, ciphertext[nonceSize:])
 }
 
 // SealWithNonce encrypts plaintext under the transport-phase cipher using an

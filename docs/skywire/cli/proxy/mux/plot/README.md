@@ -58,7 +58,7 @@ skywire cli proxy mux plot
       --routes int             [--pk] number of parallel routes to set up (default 4)
       --size int               [--pk] per-write block size in KB (default 32)
       --smooth int             shorthand for appending |sma:N to the pipeline (0 = none)
-      --tui                    render in a bubbletea alt-screen (flicker-free, resize-aware) instead of ANSI redraw; poll mode only
+      --tui                    render in an alt-screen (flicker-free, resize-aware) instead of ANSI redraw; poll mode only
   -w, --window int             samples of history to keep on screen (default 60)
 ```
 

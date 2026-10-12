@@ -39,17 +39,15 @@ type cxoAwareTPD struct {
 }
 
 // GetAllTransports returns the network-wide transport list. Reads the
-// CXO snapshot of tpd-all-transports/without-self when the manager
-// has a non-empty cache; otherwise delegates to the wrapped HTTP
-// client. "without-self" matches the historical HTTP path's omission
-// of self-transports from the bulk listing.
+// CXO snapshot of TPD's routing feed, and reports
+// ErrTPDAllTransportsNotReady until that feed has synced.
 //
 // AcquireFor + ReleaseFor on every call so a burst of route-calc
 // dials inside the close-grace window reuses one live cycle instead
 // of re-tearing-down between dials. JSON unmarshal of the snapshot
 // is the same code the HTTP path runs; cost is negligible compared
 // to a DMSG-HTTP round-trip.
-func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.Entry, error) {
+func (c *cxoAwareTPD) getAllTransportsBase(_ context.Context) ([]*transport.Entry, error) {
 	if c.v != nil {
 		if mgr := c.v.CXOSubMgr(); mgr != nil {
 			// Keep the routing subscription up from the first route calculation
@@ -67,7 +65,8 @@ func (c *cxoAwareTPD) getAllTransportsBase(ctx context.Context) ([]*transport.En
 			}
 		}
 	}
-	return c.DiscoveryClient.GetAllTransports(ctx)
+	// TPD no longer serves the full list over HTTP, so a miss is a miss.
+	return nil, ErrTPDAllTransportsNotReady
 }
 
 // routingTransports assembles TPD's routing feed (one gzipped leaf per
@@ -128,10 +127,14 @@ func wrapDiscoveryClientWithCXO(dc transport.DiscoveryClient, v *Visor) transpor
 // router's local BFS see a hypervisor's attached visors without a TPD query.
 func (c *cxoAwareTPD) GetAllTransports(ctx context.Context) ([]*transport.Entry, error) {
 	entries, err := c.getAllTransportsBase(ctx)
-	if err != nil {
-		return entries, err
-	}
 	local, _ := c.v.localGraphEntries()
+	if err != nil {
+		// Without the routing feed the attached visors are still a graph.
+		if len(local) > 0 {
+			return local, nil
+		}
+		return nil, err
+	}
 	return mergeTransportEntries(entries, local), nil
 }
 

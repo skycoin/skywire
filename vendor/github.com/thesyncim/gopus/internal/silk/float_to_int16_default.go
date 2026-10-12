@@ -1,11 +1,9 @@
-//go:build !arm64 || purego
+//go:build !(amd64 || arm64) || nosimd || purego || !goexperiment.simd
 
 package silk
 
-// floatToInt16Scaled is the scalar saturate-then-round-even conversion used off
-// the arm64 NEON build.
+// floatToInt16Scaled is the scalar saturate-then-round-even conversion used
+// off the amd64 and arm64 SIMD builds.
 func floatToInt16Scaled(out []int16, in []float32, scale float32, n int) {
-	for i := 0; i < n; i++ {
-		out[i] = floatToInt16Round(in[i] * scale)
-	}
+	floatToInt16ScaledScalar(out[:n], in[:n], scale)
 }

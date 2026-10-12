@@ -8,16 +8,16 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 func TestResolveFastPath(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 	var httpCalls atomic.Int64
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	for _, typ := range []string{"stcpr", "sudph", "squicr"} {
 		mux.Get("/resolve/"+typ+"/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 			httpCalls.Add(1)
@@ -58,6 +58,39 @@ func TestResolveFastPath(t *testing.T) {
 	require.Equal(t, int64(3), httpCalls.Load())
 }
 
+func TestAskResolverSkipsFastPathAndNotFound(t *testing.T) {
+	target, _ := cipher.GenerateKeyPair()
+	var calls atomic.Int64
+	var bound atomic.Bool
+	mux := httputil.NewRouter()
+	mux.Get("/resolve/stcpr/{pk}", func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		if !bound.Load() {
+			http.Error(w, "nope", http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(VisorData{RemoteAddr: "9.9.9.9:2"}) //nolint:errcheck
+	})
+	srv := httptest.NewServer(arRouter(mux))
+	defer srv.Close()
+	c := newReadyClient(t, srv)
+
+	_, err := c.Resolve(context.Background(), "stcpr", target)
+	require.ErrorIs(t, err, ErrNoEntry, "the peer has not bound yet")
+	bound.Store(true)
+	_, err = c.Resolve(context.Background(), "stcpr", target)
+	require.ErrorIs(t, err, ErrNoEntry, "the not-found is remembered")
+	require.Equal(t, int64(1), calls.Load())
+
+	c.SetResolveFastPath(func(context.Context, string, cipher.PubKey) (VisorData, bool) {
+		return VisorData{RemoteAddr: "1.2.3.4:1"}, true
+	})
+	vd, err := c.Resolve(AskResolver(context.Background()), "stcpr", target)
+	require.NoError(t, err)
+	require.Equal(t, "9.9.9.9:2", vd.RemoteAddr, "the resolver answers, not the fast path")
+	require.Equal(t, int64(2), calls.Load())
+}
+
 func TestSameHostMirrorsTheResolver(t *testing.T) {
 	require.True(t, sameHost("1.2.3.4:1", "1.2.3.4:2"))
 	require.False(t, sameHost("1.2.3.4:1", "1.2.3.4"), "a bare IP never matches, as on the resolver")
@@ -67,7 +100,7 @@ func TestSameHostMirrorsTheResolver(t *testing.T) {
 func TestResolveRemembersNotFound(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 	var calls atomic.Int64
-	mux := chi.NewRouter()
+	mux := httputil.NewRouter()
 	mux.Get("/resolve/sudph/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		http.Error(w, "nope", http.StatusNotFound)

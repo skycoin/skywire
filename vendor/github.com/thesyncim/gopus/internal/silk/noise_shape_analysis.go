@@ -19,7 +19,7 @@ func (e *Encoder) noiseShapeAnalysis(
 		e.noiseShapeState = NewNoiseShapeState()
 	}
 
-	fsKHz := max(int(e.sampleRate/1000), 8)
+	fsKHz := max(int(e.fsKHz), 8)
 
 	quantOffsetType := quantOffset
 	if signalType == typeVoiced {
@@ -31,18 +31,10 @@ func (e *Encoder) noiseShapeAnalysis(
 		}
 	}
 
-	inputQualityBandsQ15 := [4]int32{-1, -1, -1, -1}
-	if e.speechActivitySet {
-		inputQualityBandsQ15 = e.inputQualityBandsQ15
-	}
-
-	// Compute average input quality from first two bands (matches libopus psEncCtrl->input_quality)
-	var inputQuality float32
-	if inputQualityBandsQ15[0] >= 0 {
-		inputQuality = 0.5 * (float32(inputQualityBandsQ15[0]) + float32(inputQualityBandsQ15[1])) / 32768.0
-	} else {
-		inputQuality = float32(speechActivityQ8) / 256.0
-	}
+	// Input quality is the average of the quality in the lowest two VAD bands
+	// (psEncCtrl->input_quality).
+	inputQualityBandsQ15 := e.inputQualityBandsQ15
+	inputQuality := 0.5 * (float32(inputQualityBandsQ15[0]) + float32(inputQualityBandsQ15[1])) / 32768.0
 
 	// SNR adjustment for gain tweaking and coding quality.
 	// Match libopus: SNR_adj_dB and all intermediates are silk_float (float32).
@@ -57,7 +49,13 @@ func (e *Encoder) noiseShapeAnalysis(
 	if signalType == typeVoiced {
 		SNRAdjDB += float32(harmSNRIncrDB) * e.ltpCorr
 	} else {
-		SNRAdjDB += (-0.4*snrDB + 6.0) * (1.0 - inputQuality)
+		// Match noise_shape_analysis_FLP.c's expression order: first round
+		// -0.4f*SNR_dB_Q7, then compute fma(product, 1/128, 6), then
+		// fma(term, 1-input_quality, SNR_adj_dB). The selected arm64 object
+		// emits this multiply followed by two FMADD instructions.
+		unvoicedTerm := noFMA32(float32(-0.4), float32(e.snrDBQ7))
+		unvoicedTerm = unvoicedTerm*(1.0/128.0) + 6.0
+		SNRAdjDB += unvoicedTerm * (1.0 - inputQuality)
 	}
 
 	params := e.noiseShapeState.ComputeNoiseShapeParams(
@@ -184,7 +182,7 @@ func (e *Encoder) computeShapingARAndGains(
 		shapeOrder--
 	}
 
-	fsKHz := max(int(e.sampleRate/1000), 1)
+	fsKHz := max(int(e.fsKHz), 1)
 
 	laShape := max(int(e.laShape), 0)
 
@@ -212,7 +210,7 @@ func (e *Encoder) computeShapingARAndGains(
 	// Populate xBuf from the SILK analysis buffer (x_buf in libopus).
 	// libopus noise shaping uses x_ptr = x - la_shape, where x points to x_frame
 	// (x_buf + ltp_mem). Align our window to that same origin.
-	src := e.inputBuffer
+	src := e.xBuf
 	start := max((ltpMemLengthMs*fsKHz - laShape), 0)
 	if start < len(src) {
 		copyLen := xLen
@@ -251,13 +249,32 @@ func (e *Encoder) computeShapingARAndGains(
 			copy(win, segment)
 		}
 
+		traceNoise := false
+		if silkNoiseAnalysisTraceEnabled {
+			traceNoise = wantsSILKNoiseAnalysisTrace(e, int32(k))
+			if traceNoise {
+				effectiveWarping := float32(0)
+				if e.warpingQ16 > 0 {
+					effectiveWarping = warping
+				}
+				beginSILKNoiseAnalysisTrace(e, int32(k), int32(numSubframes), int32(shapeOrder),
+					int32(shapeWinLength), e.warpingQ16, effectiveWarping, win)
+			}
+		}
+
 		if e.warpingQ16 > 0 {
 			warpedAutocorrelationFLP32(autoCorr, nil, win, warping, shapeWinLength, shapeOrder)
 		} else {
 			autocorrelationF32(autoCorr, win, shapeWinLength, shapeOrder+1)
 		}
+		if traceNoise {
+			captureSILKNoiseAutoCorrTrace(e, autoCorr, false)
+		}
 
 		autoCorr[0] += autoCorr[0]*float32(shapeWhiteNoiseFraction) + 1.0
+		if traceNoise {
+			captureSILKNoiseAutoCorrTrace(e, autoCorr, true)
+		}
 
 		nrg := schurF32(rc, autoCorr, shapeOrder)
 		for i := range ar {
@@ -269,9 +286,12 @@ func (e *Encoder) computeShapingARAndGains(
 		if nrg > 0 {
 			g = sqrt32(nrg)
 		}
-
+		sqrtGain := g
 		if e.warpingQ16 > 0 {
 			g *= warpedGainF32(ar, warping, shapeOrder)
+		}
+		if silkNoiseAnalysisTraceEnabled {
+			finishSILKNoiseAnalysisTrace(e, rc, nrg, sqrtGain, g)
 		}
 
 		bwexpanderF32(ar, shapeOrder, BWExp)
@@ -297,14 +317,26 @@ func (e *Encoder) computeShapingARAndGains(
 	gainAdd := exp2F32(0.16 * float32(minQGainDb))
 
 	for k := range numSubframes {
-		// Match libopus two-step operation:
-		//   psEncCtrl->Gains[k] *= gain_mult;   // step 1: multiply with intermediate rounding
-		//   psEncCtrl->Gains[k] += gain_add;     // step 2: add
-		// Go's compiler can fuse sequential *= then += into a single FMADDS
-		// instruction (one rounding), but clang compiles these as separate
-		// FMUL + FADD (two roundings). Use noFMA32 to force intermediate
-		// rounding and match the C behavior exactly.
-		gains[k] = noFMA32(gains[k], gainMult) + gainAdd
+		// Match the float contraction emitted for these two statements in
+		// silk/float/noise_shape_analysis_FLP.c on AMD64 v3.
+		if silkGainTweakTraceEnabled {
+			preGain := gains[k]
+			postGain := silkGainTweak32(preGain, gainMult, gainAdd)
+			gains[k] = postGain
+			recordSILKGainTweakTrace(e, SILKGainTweakSnapshot{
+				Subframe:         int32(k),
+				NumSubframes:     int32(numSubframes),
+				ShapingLPCOrder:  int32(shapeOrder),
+				WarpingQ16:       e.warpingQ16,
+				GainMultExponent: float32(-0.16 * SNRAdjDB),
+				GainMult:         gainMult,
+				GainAdd:          gainAdd,
+				PreGain:          preGain,
+				PostGain:         postGain,
+			})
+		} else {
+			gains[k] = silkGainTweak32(gains[k], gainMult, gainAdd)
+		}
 	}
 
 	return gains, arShpQ13
@@ -323,18 +355,37 @@ func warpedAutocorrelationFLP32(out, state, in []float32, warping float32, lengt
 		order = maxShapeLpcOrder
 	}
 
-	var st [maxShapeLpcOrder + 1]silkCReal
-	var corr [maxShapeLpcOrder + 1]silkCReal
+	var st, corr warpedAutocorrState
 	w := silkCReal(warping)
 
 	// Clamp input slice so the compiler proves all in[n] accesses are in bounds.
 	if length > len(in) {
 		length = len(in)
 	}
-	in = in[:length]
-	_ = st[order]   // BCE hint for inner loop array access
-	_ = corr[order] // BCE hint for inner loop array access
+	warpedAutocorrelationSections(&st, &corr, in[:length], w, order)
 
+	maxOut := min(order+1, len(out))
+	for i := range maxOut {
+		out[i] = float32(corr[1+i])
+	}
+	maxState := min(order+1, len(state))
+	for i := range maxState {
+		state[i] = float32(st[1+i])
+	}
+}
+
+// warpedAutocorrState holds the allpass state or the correlations of
+// silk_warped_autocorrelation_FLP: C double i of the order+1 lives at index
+// i+1. The vector wavefront loads the element before the first one and,
+// for up to seven steps past the last pair, entries past order in lanes
+// whose results it discards, so the array is padded on both sides.
+type warpedAutocorrState [1 + maxShapeLpcOrder + 1 + 18]silkCReal
+
+// warpedAutocorrelationSamples runs the allpass sections of
+// silk_warped_autocorrelation_FLP for each input sample in turn.
+func warpedAutocorrelationSamples(state, corrAcc *warpedAutocorrState, in []float32, w silkCReal, order int) {
+	st := state[1 : order+2]
+	corr := corrAcc[1 : order+2]
 	for _, sample := range in {
 		tmp1 := silkCReal(sample)
 		// First iteration (i=0): sets st[0] then uses it for all remaining.
@@ -356,15 +407,6 @@ func warpedAutocorrelationFLP32(out, state, in []float32, warping float32, lengt
 		st[order] = tmp1
 		corr[order] += st0 * tmp1
 	}
-
-	maxOut := min(order+1, len(out))
-	for i := range maxOut {
-		out[i] = float32(corr[i])
-	}
-	maxState := min(order+1, len(state))
-	for i := range maxState {
-		state[i] = float32(st[i])
-	}
 }
 
 // warpedGainF32 matches libopus warped_gain() which operates in silk_float (float32).
@@ -375,9 +417,9 @@ func warpedGainF32(coefs []float32, lambda float32, order int) float32 {
 	}
 	gain := coefs[order-1]
 	for i := order - 2; i >= 0; i-- {
-		gain = lambda*gain + coefs[i]
+		gain = warpedGainStep32(lambda, gain, coefs[i])
 	}
-	return 1.0 / (1.0 - lambda*gain)
+	return 1.0 / warpedGainDenominator32(lambda, gain)
 }
 
 // warpedTrue2MonicCoefsF32 matches libopus warped_true2monic_coefs() in silk_float (float32).

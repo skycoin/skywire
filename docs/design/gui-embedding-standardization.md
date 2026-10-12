@@ -29,7 +29,7 @@ Grouped by stack:
   three.js), **skychat standalone** (`cmd/apps/skychat/.../static/index.html`,
   fetch+SSE), **browse.js + WinBox** (`pkg/wasmhv/browseui`, the in-SPA virtual
   browser / mini-desktop), **pty terminal** (`pkg/pty/term.html.gz`, xterm.js).
-- **Go server-rendered HTML** (`html/template`+gin): the **reward system UI**
+- **Go server-rendered HTML** (`html/template` on `net/http`): the **reward system UI**
   (`cmd/skywire-cli/commands/rewards/server`), proxied into the SPA at
   `/api/rewards/*`.
 - **WASM**: **`skywire web`** (`cmd/skywire/commands/web`, TinyGo `b.wasm` CLI-

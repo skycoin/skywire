@@ -108,13 +108,17 @@ var PWAIcon512 []byte
 var FaviconICO []byte
 
 // WasmExecJS is Go's lib/wasm/wasm_exec.js — the loader every page serves
-// beside the one skywire command module (/wasm_exec.js, and the role-pinned
-// copies execwasm.LoaderJS derives from it). It MUST match the Go toolchain
-// that built the module — refresh it from $(go env GOROOT)/lib/wasm/wasm_exec.js
+// beside the skywire command module and the netview module
+// (pkg/tpviz/netview). It MUST match the Go toolchain that built both, the
+// go.mod version. Refresh it from $(go env GOROOT)/lib/wasm/wasm_exec.js
 // when the toolchain moves.
 //
 //go:embed wasm_exec.js
 var WasmExecJS []byte
+
+// WasmExecTinyGoJS is the loader for a module TinyGo built, served at
+// /wasm_exec_tinygo.js where bottle looks for it. Empty means none is served.
+var WasmExecTinyGoJS []byte
 
 // ServiceWorkerFor renders sw.js for one serving context: build is the
 // fingerprint that names the cache (a new build ships a byte-different worker,

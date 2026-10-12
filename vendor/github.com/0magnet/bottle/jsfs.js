@@ -19,11 +19,15 @@
 //   link symlink fsync; process.cwd chdir getuid getgid geteuid getegid
 //   getgroups umask pid ppid.
 // Errors are objects with a .code string ("ENOENT", ...) as Go expects.
+// jsfs.sync has the same methods returning results or throwing, for loaders
+// that cannot wait for a callback, such as a WASI one.
 //
 // Stdout/stderr: fds 1 and 2 route through jsfs.stdio, a swappable sink so
 // the terminal can capture the CURRENT command's output; instances run
 // sequentially in the shell, so a single active sink suffices. fd 0 reads
-// return EOF by default.
+// return EOF by default. A process with a stdin pipe names it through
+// jsfs.stdio.stdinPipe (a function returning its read fd, or -1), and a read
+// with a callback — Go's — then waits on that pipe as on any other.
 //
 // In-memory only: page lifetime, no quota, no persistence (an IndexedDB
 // snapshot can layer on later without changing this contract).
@@ -156,11 +160,7 @@
 	// readData serves a read from a file's resident bytes (the non-lazy path,
 	// and what a lazy read runs once its bytes have landed).
 	function readData(e, buf, offset, length, position, cb) {
-		const pos = (position === null || position === undefined) ? e.pos : position;
-		const avail = e.node.data.length - pos;
-		const n = Math.max(0, Math.min(length, avail));
-		if (n > 0) buf.set(e.node.data.subarray(pos, pos + n), offset);
-		if (position === null || position === undefined) e.pos += n;
+		const n = readNow(e, buf, offset, length, position);
 		queueMicrotask(() => cb(null, n));
 	}
 
@@ -179,6 +179,7 @@
 		stdout: (buf) => console.log(td.decode(buf)),
 		stderr: (buf) => console.error(td.decode(buf)),
 		stdin: () => null, // return Uint8Array or null for EOF
+		stdinPipe: () => -1, // a pipe read fd that fd 0 reads wait on, or -1
 	};
 
 	// ---- fd table ----------------------------------------------------------
@@ -276,6 +277,20 @@
 		return true;
 	}
 	function isPipe(fd) { return pipeEnds.has(fd); }
+	// pipeDrop closes both ends of fd's pipe outright, whatever references are
+	// held, and forgets its waiting readers without calling them: they belong
+	// to a program that is gone, and a callback into it would fail.
+	function pipeDrop(fd) {
+		const e = pipeEnds.get(fd);
+		if (!e) return false;
+		const p = e.pipe;
+		p.readers.length = 0;
+		p.chunks.length = 0;
+		p.wRefs = 0;
+		p.rRefs = 0;
+		for (const [k, v] of pipeEnds) if (v.pipe === p) pipeEnds.delete(k);
+		return true;
+	}
 
 	// ---- constants (node names; values mirror Linux) -----------------------
 	const constants = {
@@ -283,6 +298,204 @@
 		O_CREAT: 0o100, O_EXCL: 0o200, O_TRUNC: 0o1000,
 		O_APPEND: 0o2000, O_DIRECTORY: 0o200000, O_NONBLOCK: 0o4000, O_SYNC: 0o4010000,
 	};
+
+	// ---- synchronous implementations ---------------------------------------
+	// Each returns its result or throws an error carrying .code. The node-style
+	// fs object below wraps them, and jsfs.sync exposes them to loaders.
+	const S = {
+		open(path, flags, mode) {
+			const acc = flags & 3;
+			const r = resolve(path, true);
+			let node = r.node;
+			if (!node) {
+				if (!(flags & constants.O_CREAT)) throw mkerr('ENOENT', path);
+				if (!r.parent) throw mkerr('ENOENT', path);
+				node = mknode(S_IFREG, mode);
+				r.parent.entries.set(r.name, node);
+				r.parent.mtimeMs = now();
+			} else {
+				if ((flags & constants.O_CREAT) && (flags & constants.O_EXCL)) throw mkerr('EEXIST', path);
+				if ((flags & constants.O_DIRECTORY) && node.entries === null) throw mkerr('ENOTDIR', path);
+				if (node.entries !== null && acc !== constants.O_RDONLY) throw mkerr('EISDIR', path);
+				if ((flags & constants.O_TRUNC) && node.data !== null) { node.data = new Uint8Array(0); node.mtimeMs = now(); }
+			}
+			const fd = nextFd++;
+			// path is kept so persistence can tell whether a WRITE to this fd could
+			// change what a snapshot contains; see hookMutators.
+			fds.set(fd, { node, pos: (flags & constants.O_APPEND) && node.data ? node.data.length : 0, flags, path: normalize(path) });
+			return fd;
+		},
+
+		close(fd) { if (pipeClose(fd)) return undefined; fdEntry(fd); fds.delete(fd); return undefined; },
+
+		stat(path) { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); },
+		lstat(path) { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); },
+		fstat(fd) { return statOf(fdEntry(fd).node); },
+
+		mkdir(path, perm) {
+			const r = resolve(path, true);
+			if (r.node) throw mkerr('EEXIST', path);
+			if (!r.parent) throw mkerr('ENOENT', path);
+			r.parent.entries.set(r.name, mknode(S_IFDIR, perm));
+			r.parent.mtimeMs = now();
+			return undefined;
+		},
+
+		rmdir(path) {
+			const r = resolve(path, false);
+			if (!r.node) throw mkerr('ENOENT', path);
+			if (r.node.entries === null) throw mkerr('ENOTDIR', path);
+			if (r.node.entries.size > 0) throw mkerr('ENOTEMPTY', path);
+			r.parent.entries.delete(r.name);
+			return undefined;
+		},
+
+		readdir(path) {
+			const r = resolve(path, true);
+			if (!r.node) throw mkerr('ENOENT', path);
+			if (r.node.entries === null) throw mkerr('ENOTDIR', path);
+			return Array.from(r.node.entries.keys());
+		},
+
+		rename(from, to) {
+			const rf = resolve(from, false);
+			if (!rf.node) throw mkerr('ENOENT', from);
+			const rt = resolve(to, false);
+			if (!rt.parent) throw mkerr('ENOENT', to);
+			rf.parent.entries.delete(rf.name);
+			rt.parent.entries.set(rt.name, rf.node);
+			rf.node.ctimeMs = now();
+			return undefined;
+		},
+
+		unlink(path) {
+			const r = resolve(path, false);
+			if (!r.node) throw mkerr('ENOENT', path);
+			if (r.node.entries !== null) throw mkerr('EISDIR', path);
+			r.parent.entries.delete(r.name);
+			return undefined;
+		},
+
+		truncate(path, length) {
+			const r = resolve(path, true);
+			if (!r.node || r.node.data === null) throw mkerr('ENOENT', path);
+			r.node.data = resized(r.node.data, length);
+			r.node.mtimeMs = now();
+			return undefined;
+		},
+		ftruncate(fd, length) {
+			const e = fdEntry(fd);
+			if (e.node.data === null) throw mkerr('EINVAL', 'not a file');
+			e.node.data = resized(e.node.data, length);
+			e.node.mtimeMs = now();
+			return undefined;
+		},
+
+		chmod(path, mode) { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.mode = ((r.node.mode & 0o170000) | (mode & 0o7777)) >>> 0; return undefined; },
+		fchmod(fd, mode) { const e = fdEntry(fd); e.node.mode = ((e.node.mode & 0o170000) | (mode & 0o7777)) >>> 0; return undefined; },
+		chown(path, uid, gid) { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.uid = uid; r.node.gid = gid; return undefined; },
+		fchown(fd, uid, gid) { const e = fdEntry(fd); e.node.uid = uid; e.node.gid = gid; return undefined; },
+		lchown(path, uid, gid) { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); r.node.uid = uid; r.node.gid = gid; return undefined; },
+		utimes(path, atime, mtime) { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.atimeMs = atime * 1000; r.node.mtimeMs = mtime * 1000; return undefined; },
+
+		readlink(path) { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); if (r.node.target === null) throw mkerr('EINVAL', path); return r.node.target; },
+		link(from, to) {
+			const rf = resolve(from, true);
+			if (!rf.node) throw mkerr('ENOENT', from);
+			const rt = resolve(to, false);
+			if (rt.node) throw mkerr('EEXIST', to);
+			rt.parent.entries.set(rt.name, rf.node);
+			rf.node.nlink++;
+			return undefined;
+		},
+		symlink(target, path) {
+			const r = resolve(path, false);
+			if (r.node) throw mkerr('EEXIST', path);
+			const ln = mknode(S_IFLNK, 0o777);
+			ln.target = target;
+			r.parent.entries.set(r.name, ln);
+			return undefined;
+		},
+		fsync(fd) { fdEntry(fd); return undefined; },
+
+		// read never waits. An empty pipe with a live writer and a lazy file whose
+		// bytes have not landed answer EAGAIN, and the lazy fetch is started.
+		read(fd, buf, offset, length, position) {
+			if (fd === 0) {
+				const pfd = stdio.stdinPipe ? stdio.stdinPipe() : -1;
+				if (pfd >= 0 && isPipe(pfd)) return pipeReadNow(pfd, buf, offset, length);
+				const chunk = stdio.stdin();
+				if (!chunk || chunk.length === 0) return 0;
+				const n = Math.min(length, chunk.length);
+				buf.set(chunk.subarray(0, n), offset);
+				return n;
+			}
+			if (isPipe(fd)) return pipeReadNow(fd, buf, offset, length);
+			const e = fdEntry(fd);
+			if (e.node.dev) return 0;
+			if (e.node.data === null) throw mkerr('EISDIR', 'read dir');
+			if (e.node.lazy) { lazyFetch(e.node); throw mkerr('EAGAIN', 'lazy file still loading: ' + e.path); }
+			return readNow(e, buf, offset, length, position);
+		},
+
+		write(fd, buf, offset, length, position) {
+			const sub = buf.subarray(offset, offset + length);
+			if (fd === 1 || fd === 2) {
+				if (position !== null && position !== undefined) throw mkerr('ESPIPE', 'seek on tty');
+				return fsImpl.writeSync(fd, sub);
+			}
+			if (isPipe(fd)) return pipeWriteFrom(fd, sub);
+			return writeAt(fdEntry(fd), sub, position === undefined ? null : position);
+		},
+	};
+
+	function readNow(e, buf, offset, length, position) {
+		const pos = (position === null || position === undefined) ? e.pos : position;
+		const avail = e.node.data.length - pos;
+		const n = Math.max(0, Math.min(length, avail));
+		if (n > 0) buf.set(e.node.data.subarray(pos, pos + n), offset);
+		if (position === null || position === undefined) e.pos += n;
+		return n;
+	}
+
+	// lazyFetch starts populating a lazy file once, for a reader that cannot
+	// wait. A failed fetch is forgotten so a later read tries again.
+	function lazyFetch(node) {
+		const lz = node.lazy;
+		if (lz.pending) return;
+		lz.pending = fetch(lz.url).then((r) => {
+			if (!r.ok) throw new Error('lazy fetch ' + lz.url + ': ' + r.status);
+			return r.arrayBuffer();
+		}).then((ab) => {
+			if (node.lazy !== lz) return;
+			node.data = new Uint8Array(ab);
+			node.lazy = null;
+			if (lazyDirtyHook) { try { lazyDirtyHook(); } catch (e2) { /* best-effort */ } }
+		}).catch(() => { lz.pending = null; });
+	}
+
+	// pipeReadNow takes what a pipe already holds. Readers queued by the
+	// callback API go first, so a sync read never jumps ahead of them.
+	function pipeReadNow(fd, buf, offset, length) {
+		const e = pipeEnds.get(fd);
+		if (!e || e.write) throw mkerr('EBADF', 'pipe read fd ' + fd);
+		const p = e.pipe;
+		const total = p.chunks.reduce((n, c) => n + c.length, 0);
+		if (p.readers.length || total === 0) {
+			if (!p.readers.length && p.wRefs <= 0) return 0;
+			throw mkerr('EAGAIN', 'pipe empty');
+		}
+		let got = 0;
+		while (got < length && p.chunks.length) {
+			const c = p.chunks[0];
+			const take = Math.min(length - got, c.length);
+			buf.set(c.subarray(0, take), offset + got);
+			got += take;
+			if (take === c.length) p.chunks.shift();
+			else p.chunks[0] = c.subarray(take);
+		}
+		return got;
+	}
 
 	// ---- the fs object -----------------------------------------------------
 	function wrap(fn) {
@@ -337,6 +550,8 @@
 		read(fd, buf, offset, length, position, cb) {
 			try {
 				if (fd === 0) {
+					const pfd = stdio.stdinPipe ? stdio.stdinPipe() : -1;
+					if (pfd >= 0 && isPipe(pfd)) { pipeReadInto(pfd, buf, offset, length, cb); return; }
 					const chunk = stdio.stdin();
 					if (!chunk || chunk.length === 0) { queueMicrotask(() => cb(null, 0)); return; }
 					const n = Math.min(length, chunk.length);
@@ -366,125 +581,12 @@
 				readData(e, buf, offset, length, position, cb);
 			} catch (err) { queueMicrotask(() => cb(err)); }
 		},
-
-		open: wrap((path, flags, mode) => {
-			const acc = flags & 3;
-			let r;
-			try {
-				r = resolve(path, true);
-			} catch (e) { throw e; }
-			let node = r.node;
-			if (!node) {
-				if (!(flags & constants.O_CREAT)) throw mkerr('ENOENT', path);
-				if (!r.parent) throw mkerr('ENOENT', path);
-				node = mknode(S_IFREG, mode);
-				r.parent.entries.set(r.name, node);
-				r.parent.mtimeMs = now();
-			} else {
-				if ((flags & constants.O_CREAT) && (flags & constants.O_EXCL)) throw mkerr('EEXIST', path);
-				if ((flags & constants.O_DIRECTORY) && node.entries === null) throw mkerr('ENOTDIR', path);
-				if (node.entries !== null && acc !== constants.O_RDONLY) throw mkerr('EISDIR', path);
-				if ((flags & constants.O_TRUNC) && node.data !== null) { node.data = new Uint8Array(0); node.mtimeMs = now(); }
-			}
-			const fd = nextFd++;
-			// path is kept so persistence can tell whether a WRITE to this fd could
-			// change what a snapshot contains; see hookMutators.
-			fds.set(fd, { node, pos: (flags & constants.O_APPEND) && node.data ? node.data.length : 0, flags, path: normalize(path) });
-			return fd;
-		}),
-
-		close: wrap((fd) => { if (pipeClose(fd)) return undefined; fdEntry(fd); fds.delete(fd); return undefined; }),
-
-		stat: wrap((path) => { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); }),
-		lstat: wrap((path) => { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); return statOf(r.node); }),
-		fstat: wrap((fd) => statOf(fdEntry(fd).node)),
-
-		mkdir: wrap((path, perm) => {
-			const r = resolve(path, true);
-			if (r.node) throw mkerr('EEXIST', path);
-			if (!r.parent) throw mkerr('ENOENT', path);
-			r.parent.entries.set(r.name, mknode(S_IFDIR, perm));
-			r.parent.mtimeMs = now();
-			return undefined;
-		}),
-
-		rmdir: wrap((path) => {
-			const r = resolve(path, false);
-			if (!r.node) throw mkerr('ENOENT', path);
-			if (r.node.entries === null) throw mkerr('ENOTDIR', path);
-			if (r.node.entries.size > 0) throw mkerr('ENOTEMPTY', path);
-			r.parent.entries.delete(r.name);
-			return undefined;
-		}),
-
-		readdir: wrap((path) => {
-			const r = resolve(path, true);
-			if (!r.node) throw mkerr('ENOENT', path);
-			if (r.node.entries === null) throw mkerr('ENOTDIR', path);
-			return Array.from(r.node.entries.keys());
-		}),
-
-		rename: wrap((from, to) => {
-			const rf = resolve(from, false);
-			if (!rf.node) throw mkerr('ENOENT', from);
-			const rt = resolve(to, false);
-			if (!rt.parent) throw mkerr('ENOENT', to);
-			rf.parent.entries.delete(rf.name);
-			rt.parent.entries.set(rt.name, rf.node);
-			rf.node.ctimeMs = now();
-			return undefined;
-		}),
-
-		unlink: wrap((path) => {
-			const r = resolve(path, false);
-			if (!r.node) throw mkerr('ENOENT', path);
-			if (r.node.entries !== null) throw mkerr('EISDIR', path);
-			r.parent.entries.delete(r.name);
-			return undefined;
-		}),
-
-		truncate: wrap((path, length) => {
-			const r = resolve(path, true);
-			if (!r.node || r.node.data === null) throw mkerr('ENOENT', path);
-			r.node.data = resized(r.node.data, length);
-			r.node.mtimeMs = now();
-			return undefined;
-		}),
-		ftruncate: wrap((fd, length) => {
-			const e = fdEntry(fd);
-			if (e.node.data === null) throw mkerr('EINVAL', 'not a file');
-			e.node.data = resized(e.node.data, length);
-			e.node.mtimeMs = now();
-			return undefined;
-		}),
-
-		chmod: wrap((path, mode) => { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.mode = ((r.node.mode & 0o170000) | (mode & 0o7777)) >>> 0; return undefined; }),
-		fchmod: wrap((fd, mode) => { const e = fdEntry(fd); e.node.mode = ((e.node.mode & 0o170000) | (mode & 0o7777)) >>> 0; return undefined; }),
-		chown: wrap((path, uid, gid) => { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.uid = uid; r.node.gid = gid; return undefined; }),
-		fchown: wrap((fd, uid, gid) => { const e = fdEntry(fd); e.node.uid = uid; e.node.gid = gid; return undefined; }),
-		lchown: wrap((path, uid, gid) => { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); r.node.uid = uid; r.node.gid = gid; return undefined; }),
-		utimes: wrap((path, atime, mtime) => { const r = resolve(path, true); if (!r.node) throw mkerr('ENOENT', path); r.node.atimeMs = atime * 1000; r.node.mtimeMs = mtime * 1000; return undefined; }),
-
-		readlink: wrap((path) => { const r = resolve(path, false); if (!r.node) throw mkerr('ENOENT', path); if (r.node.target === null) throw mkerr('EINVAL', path); return r.node.target; }),
-		link: wrap((from, to) => {
-			const rf = resolve(from, true);
-			if (!rf.node) throw mkerr('ENOENT', from);
-			const rt = resolve(to, false);
-			if (rt.node) throw mkerr('EEXIST', to);
-			rt.parent.entries.set(rt.name, rf.node);
-			rf.node.nlink++;
-			return undefined;
-		}),
-		symlink: wrap((target, path) => {
-			const r = resolve(path, false);
-			if (r.node) throw mkerr('EEXIST', path);
-			const ln = mknode(S_IFLNK, 0o777);
-			ln.target = target;
-			r.parent.entries.set(r.name, ln);
-			return undefined;
-		}),
-		fsync: wrap((fd) => { fdEntry(fd); return undefined; }),
 	};
+	for (const name of ['open', 'close', 'stat', 'lstat', 'fstat', 'mkdir', 'rmdir',
+		'readdir', 'rename', 'unlink', 'truncate', 'ftruncate', 'chmod', 'fchmod',
+		'chown', 'fchown', 'lchown', 'utimes', 'readlink', 'link', 'symlink', 'fsync']) {
+		fsImpl[name] = wrap(S[name]);
+	}
 
 
 	// ---- mounts -----------------------------------------------------------
@@ -509,6 +611,7 @@
 		const p = normalize(path);
 		if (p === null) return null;
 		for (const m of mounts) {
+			if (m.prefix === '/') return { m, rel: p };
 			if (p === m.prefix) return { m, rel: '/' };
 			if (p.startsWith(m.prefix + '/')) return { m, rel: p.slice(m.prefix.length) };
 		}
@@ -624,15 +727,68 @@
 		};
 	}
 
+	// ---- the synchronous API -----------------------------------------------
+	// jsfs.sync has the fs methods without callbacks, for a caller that cannot
+	// park, such as a WASI loader. Mount providers answer later, so their paths
+	// and fds answer ENOTSUP here.
+	const SYNC_PATH_ARGS = {
+		open: [0], stat: [0], lstat: [0], mkdir: [0], rmdir: [0], readdir: [0],
+		rename: [0, 1], unlink: [0], truncate: [0], chmod: [0], chown: [0],
+		lchown: [0], utimes: [0], readlink: [0], link: [0, 1], symlink: [1],
+	};
+	const SYNC_FD_ARGS = {
+		close: [0], fstat: [0], ftruncate: [0], fchmod: [0], fchown: [0],
+		fsync: [0], read: [0], write: [0],
+	};
+	const syncImpl = { constants };
+	for (const name of Object.keys(S)) {
+		const pa = SYNC_PATH_ARGS[name] || [], fa = SYNC_FD_ARGS[name] || [];
+		syncImpl[name] = function (...args) {
+			for (const i of pa) if (mountOf(args[i])) throw mkerr('ENOTSUP', name + ' ' + args[i] + ': mounted, async only');
+			for (const i of fa) if (mountFds.has(args[i])) throw mkerr('ENOTSUP', name + ' fd ' + args[i] + ': mounted, async only');
+			return S[name](...args);
+		};
+	}
+
+	// readFileAsync reads a whole file through the fs calls, so a path under a
+	// mount works too. It resolves null for anything that is not a file.
+	function readFileAsync(path) {
+		const call = (name, ...a) => new Promise((res, rej) => fsImpl[name](...a, (err, v) => err ? rej(err) : res(v)));
+		return (async () => {
+			let st;
+			try { st = await call('stat', path); } catch (e) { return null; }
+			if (!st.isFile()) return null;
+			const fd = await call('open', path, 0, 0);
+			try {
+				const parts = [];
+				let n = 0;
+				for (;;) {
+					const buf = new Uint8Array(1 << 16);
+					const got = await call('read', fd, buf, 0, buf.length, n);
+					if (!got) break;
+					parts.push(buf.subarray(0, got));
+					n += got;
+				}
+				const out = new Uint8Array(n);
+				let at = 0;
+				for (const p of parts) { out.set(p, at); at += p.length; }
+				return out;
+			} finally {
+				await call('close', fd).catch(() => {});
+			}
+		})();
+	}
+
 	// mount attaches provider at prefix, which becomes a directory in the tree
-	// so its parent lists it. unmount detaches it; fds still open there answer
+	// so its parent lists it; a mount at / takes the whole tree, and readFile
+	// answers null there. unmount detaches it; fds still open there answer
 	// EIO from then on.
 	function mount(prefix, provider) {
 		const p = normalize(prefix);
-		if (p === null || p === '/') throw mkerr('EINVAL', 'mount at ' + prefix);
+		if (p === null) throw mkerr('EINVAL', 'mount at ' + prefix);
 		if (!provider || typeof provider !== 'object') throw mkerr('EINVAL', 'no provider');
 		if (mounts.some((m) => m.prefix === p)) throw mkerr('EBUSY', p);
-		mkdirp(p, 0o755);
+		if (p !== '/') mkdirp(p, 0o755);
 		mounts.push({ prefix: p, provider });
 		mounts.sort((a, b) => b.prefix.length - a.prefix.length);
 	}
@@ -676,6 +832,9 @@
 		umask() { return 0o22; },
 		cwd() { return cwd; },
 		chdir(dir) {
+			// A mount answers later, so a directory inside one is taken on trust;
+			// the first call made there reports it if it is not one.
+			if (mountOf(dir)) { cwd = normalize(dir); return; }
 			const r = resolve(dir, true);
 			if (!r.node) throw mkerr('ENOENT', dir);
 			if (r.node.entries === null) throw mkerr('ENOTDIR', dir);
@@ -730,14 +889,40 @@
 			return out;
 		}
 
+		// applySnapshot replaces what the snapshot covers. What it does not
+		// cover — excluded paths, mounts — is left as THIS load made it: a
+		// fresh, empty /tmp, new /dev devices, the page's own seeded files.
+		// Nothing of the last session comes back outside the snapshot. Clearing
+		// the whole root instead left a page that persisted only part of the
+		// tree with no /tmp and no /dev at all. (A page that excludes nothing
+		// snapshots /tmp and /dev too, and gets the old ones back: exclude
+		// them unless that is what it wants.)
 		function applySnapshot(entries) {
-			root.entries.clear();
+			(function prune(node, path) {
+				for (const [name, child] of [...node.entries]) {
+					const p = path + '/' + name;
+					if (isExcluded(p)) continue;
+					if ((child.mode & 0o170000) === S_IFDIR) {
+						prune(child, p);
+						if (child.entries.size === 0) node.entries.delete(name);
+					} else {
+						node.entries.delete(name);
+					}
+				}
+			})(root, '');
 			for (const e of entries) {
 				// serialize() emits parents before children, so the parent dir
 				// always exists by the time its entries arrive.
 				const slash = e.p.lastIndexOf('/');
 				const parent = slash === 0 ? root : resolve(e.p.slice(0, slash), true).node;
 				const name = e.p.slice(slash + 1);
+				const have = parent.entries.get(name);
+				if (e.t === 'd' && have && (have.mode & 0o170000) === S_IFDIR) {
+					// kept by prune for what is excluded inside it
+					have.mode = S_IFDIR | (e.m & 0o7777);
+					have.mtimeMs = e.mt || now();
+					continue;
+				}
 				let node;
 				switch (e.t) {
 				case 'd': node = mknode(S_IFDIR, e.m); break;
@@ -843,23 +1028,26 @@
 			const names = ['open', 'mkdir', 'rmdir', 'rename', 'unlink', 'truncate',
 				'ftruncate', 'chmod', 'fchmod', 'chown', 'fchown', 'lchown', 'utimes',
 				'link', 'symlink'];
-			for (const n of names) {
-				const orig = fsImpl[n];
-				if (typeof orig !== 'function') continue;
-				const pa = PATH_ARGS[n], fa = FD_ARGS[n];
-				fsImpl[n] = function (...args) {
-					let paths = null;
-					if (pa) paths = pa.map((i) => normalize(args[i]));
-					else if (fa) paths = fa.map((i) => pathOfFd(args[i]));
-					if (!snapshotUnaffected(paths)) markDirty();
-					return orig.apply(this, args);
+			// jsfs.sync mutates the same tree, so it schedules snapshots the same way.
+			for (const obj of [fsImpl, syncImpl]) {
+				for (const n of names) {
+					const orig = obj[n];
+					if (typeof orig !== 'function') continue;
+					const pa = PATH_ARGS[n], fa = FD_ARGS[n];
+					obj[n] = function (...args) {
+						let paths = null;
+						if (pa) paths = pa.map((i) => normalize(args[i]));
+						else if (fa) paths = fa.map((i) => pathOfFd(args[i]));
+						if (!snapshotUnaffected(paths)) markDirty();
+						return orig.apply(this, args);
+					};
+				}
+				const w = obj.write;
+				obj.write = function (fd, ...rest) {
+					if (fd > 2 && !isExcluded(pathOfFd(fd))) markDirty();
+					return w.call(this, fd, ...rest);
 				};
 			}
-			const w = fsImpl.write;
-			fsImpl.write = function (fd, ...rest) {
-				if (fd > 2 && !isExcluded(pathOfFd(fd))) markDirty();
-				return w.call(this, fd, ...rest);
-			};
 			const ws = fsImpl.writeSync;
 			fsImpl.writeSync = function (fd, ...rest) {
 				if (fd > 2 && !isExcluded(pathOfFd(fd))) markDirty();
@@ -912,17 +1100,21 @@
 	globalThis.jsfs = {
 		installed: true,
 		stdio,           // swap .stdout/.stderr/.stdin to capture a command
+		sync: syncImpl,  // the fs methods without callbacks; mounts answer ENOTSUP
 		mkdirp,          // host-side seeding helpers
 		writeFile: writeFileSeed,
 		writeLazy,       // seed a file fetched from a url on first read
-		readFile(path) { const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
+		readFile(path) { if (mountOf(path)) return null; const r = resolve(path, true); if (!r.node || r.node.data === null) return null; return r.node.data; },
 		setCwd(d) { processImpl.chdir(d); },
 		pipe() { return makePipe(); },        // [readFd, writeFd]
 		isPipe(fd) { return isPipe(fd); },
+		pipeDrop(fd) { return pipeDrop(fd); }, // close a pipe for good, silently
 		getCwd() { return cwd; },
 		persist,         // IndexedDB snapshots: enable(db) → Promise<{restored}>
 		mount,           // mount(prefix, provider): hand a subtree to a provider
 		unmount,         // unmount(prefix)
 		mounts() { return mounts.map((m) => m.prefix); },
+		mounted(path) { return !!mountOf(path); },
+		readFileAsync, // the whole file through the fs calls, mounts included
 	};
 })();

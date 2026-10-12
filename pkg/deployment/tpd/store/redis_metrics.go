@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // transportDailyBandwidth returns a transport's true daily throughput in
@@ -63,11 +64,23 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 	return bw
 }
 
-// getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
-// (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
-// indicating genuine peer-to-peer network participation (not just dmsg
-// infrastructure connectivity).
+// getP2PTransportCounts returns a map of visor PK hex → count of its
+// transports of every type but dmsg. A visor is considered online when it has
+// 2+ of them, peer-to-peer participation rather than dmsg infrastructure
+// connectivity alone. Counted from the live set when this store keeps one,
+// which is what every other transport read answers from.
 func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int, error) {
+	if entries, ok := s.live.snapshot(false, false, time.Now()); ok {
+		counts := make(map[string]int)
+		for _, e := range entries {
+			if e.Type == tptypes.DMSG {
+				continue
+			}
+			counts[e.Edges[0].Hex()]++
+			counts[e.Edges[1].Hex()]++
+		}
+		return counts, nil
+	}
 	keys, ids, err := s.allTransportKeysFromIndex(ctx)
 	if err != nil {
 		return nil, err
@@ -102,8 +115,7 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int,
 			if err := json.Unmarshal([]byte(raw), &data); err != nil {
 				continue
 			}
-			// Only count p2p transport types (stcpr, sudph), not dmsg.
-			if data.Type == "stcpr" || data.Type == "sudph" {
+			if data.Type != string(tptypes.DMSG) {
 				counts[data.EdgeA]++
 				if data.EdgeA != data.EdgeB {
 					counts[data.EdgeB]++
@@ -185,7 +197,7 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 	var bwResults []*redis.StringStringMapCmd
 
 	ix := s.bwIndex.peek()
-	pipe := s.client.Pipeline()
+	pipe := s.batchedPipe(ctx)
 	for d := 0; d < days; d++ {
 		t := now.AddDate(0, 0, -d)
 		dateStr := t.Format("2006-01-02")
@@ -203,10 +215,12 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 				tpType:   string(entry.Type),
 				dateStr:  dateStr,
 			})
-			bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+			bwResults = append(bwResults, pipe.next().HGetAll(ctx, key))
 		}
 	}
-	_, _ = pipe.Exec(ctx) //nolint:errcheck
+	if err := pipe.exec(); err != nil {
+		return nil, err
+	}
 
 	// Process results: aggregate by day
 	type dayData struct {
@@ -442,27 +456,39 @@ func (s *redisStore) GetAllTransportMetrics(ctx context.Context, query MetricsQu
 	for _, e := range entries {
 		registered[e.ID] = true
 	}
-	expiredEntries, expiredIDs := s.expiredTransportEntries(ctx, registered, query.Days)
+	expiredEntries, expiredIDs, err := s.expiredTransportEntries(ctx, registered, query.Days)
+	if err != nil {
+		return nil, err
+	}
 	entries = append(entries, expiredEntries...)
 
 	return s.buildTransportMetrics(ctx, entries, expiredIDs, query)
 }
 
-// parseBandwidthEdgePair parses the "<edge0hex>,<edge1hex>" value written by
-// bandwidthEdgesKey at registration back into an edge pair (kept in entry
-// order, which the transport.Entry contract already sorts ascending).
-func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, bool) {
+// bandwidthEdgesValue is the bw:edges value for a transport: its edge pair,
+// in entry order, and its type.
+func bandwidthEdgesValue(e *transport.Entry) string {
+	return e.Edges[0].Hex() + "," + e.Edges[1].Hex() + "," + string(e.Type)
+}
+
+// parseBandwidthEdgePair parses a bw:edges value back into the edge pair and
+// type. A value written before the type was kept has no type.
+func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, string, bool) {
 	parts := strings.Split(v, ",")
-	if len(parts) != 2 {
-		return [2]cipher.PubKey{}, false
+	if len(parts) != 2 && len(parts) != 3 {
+		return [2]cipher.PubKey{}, "", false
 	}
 	var edges [2]cipher.PubKey
-	for i, p := range parts {
+	for i, p := range parts[:2] {
 		if err := edges[i].UnmarshalText([]byte(p)); err != nil {
-			return [2]cipher.PubKey{}, false
+			return [2]cipher.PubKey{}, "", false
 		}
 	}
-	return edges, true
+	typ := ""
+	if len(parts) == 3 {
+		typ = parts[2]
+	}
+	return edges, typ, true
 }
 
 // GetTransportMetricsByIDs returns metrics for specific transports.
@@ -568,12 +594,14 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 	// it lives for latencyTTL after the transport's last report.
 	var latencyResults []*redis.StringCmd
 	if query.Latency {
-		pipe := s.client.Pipeline()
+		pipe := s.batchedPipe(ctx)
 		latencyResults = make([]*redis.StringCmd, len(filtered))
 		for i, f := range filtered {
-			latencyResults[i] = pipe.Get(ctx, s.latencyKey(f.entry.ID))
+			latencyResults[i] = pipe.next().Get(ctx, s.latencyKey(f.entry.ID))
 		}
-		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+		if err := pipe.exec(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch bandwidth data via pipeline
@@ -599,19 +627,24 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 		bwKeys = make([]bwKey, 0, n)
 		bwResults = make([]*redis.StringStringMapCmd, 0, n)
-		pipe := s.client.Pipeline()
+		pipe := s.batchedPipe(ctx)
 		for i := range filtered {
 			idStr := idStrs[i]
 			for _, d := range ix.fetchDays(filtered[i].entry.ID, now, days) {
+				if !s.liveBandwidthDay(d) {
+					continue // from the archive below
+				}
 				// Same key as bandwidthDailyKey ("<svc>:bw:daily:<id>:<date>")
 				// but built by concat (single alloc, no fmt reflection) with the
 				// id + date precomputed above rather than re-formatting per day.
 				key := serviceName + ":bw:daily:" + idStr + ":" + dateStrs[d]
 				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d})
-				bwResults = append(bwResults, pipe.HGetAll(ctx, key))
+				bwResults = append(bwResults, pipe.next().HGetAll(ctx, key))
 			}
 		}
-		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
+		if err := pipe.exec(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
@@ -665,6 +698,8 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 				B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
 				SameNetwork: sameNet,
 			}
+			verifiedFields(result, kASent, dailyMetric.A)
+			verifiedFields(result, kBSent, dailyMetric.B)
 			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
 		} else {
 			// Fallback for old data: split combined total equally
@@ -680,6 +715,19 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 					B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
 				}
 				bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
+			}
+		}
+	}
+
+	// Days past the live window come from the archived leaves, newest first
+	// after the live ones, as the redis rows were.
+	if query.Bandwidth && s.leafArchive != "" {
+		for d := bandwidthDailyLiveDays; d < days; d++ {
+			day := s.archivedDay(ctx, dateStrs[d])
+			for i := range filtered {
+				if row, ok := day[idStrs[i]]; ok {
+					bwByEntry[i] = append(bwByEntry[i], row)
+				}
 			}
 		}
 	}

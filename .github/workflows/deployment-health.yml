@@ -6,8 +6,10 @@
 # client-side carrier fixes surfaced them). This job turns that class of
 # breakage into a red scheduled run instead of a support mystery.
 #
-# Uses the clearnet discovery mirror (a CI runner has no dmsg visor); operators
-# run the same probe locally with plain `skywire cli mdisc check` (dmsg-native).
+# Checks the dmsg servers built into the binary: a CI runner has no dmsg visor,
+# and the public discovery hostnames serve only the status page since #5430.
+# Operators run the same probe against the live discovery with plain
+# `skywire cli mdisc check` (dmsg-native).
 name: Deployment health
 
 on:
@@ -28,4 +30,4 @@ jobs:
         with:
           go-version: 'stable'
       - name: Probe dmsg-server wss fronts
-        run: go run ./cmd/skywire cli mdisc check --url https://dmsgd.skywire.dev
+        run: go run ./cmd/skywire cli mdisc check --embedded

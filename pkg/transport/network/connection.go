@@ -2,7 +2,6 @@
 package network
 
 import (
-	"bufio"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -145,19 +144,17 @@ func (c *transport) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool)
 // debugConn wraps a net.Conn to capture initial bytes for debugging noise handshake failures
 type debugConn struct {
 	net.Conn
-	reader      *bufio.Reader
 	capturedBuf []byte
 }
 
 func newDebugConn(conn net.Conn) *debugConn {
-	return &debugConn{
-		Conn:   conn,
-		reader: bufio.NewReader(conn),
-	}
+	return &debugConn{Conn: conn}
 }
 
 func (d *debugConn) Read(p []byte) (int, error) {
-	n, err := d.reader.Read(p)
+	// No extra buffer: the noise reader above has its own, and this conn stays
+	// under it for the life of the transport.
+	n, err := d.Conn.Read(p)
 	// Capture first 64 bytes for debugging
 	if len(d.capturedBuf) < 64 && n > 0 {
 		remaining := 64 - len(d.capturedBuf)

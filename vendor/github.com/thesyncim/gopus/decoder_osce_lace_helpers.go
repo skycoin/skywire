@@ -25,11 +25,10 @@ func (d *Decoder) bindOSCELACEModel(blob *dnnblob.Blob, supported bool) error {
 	if blob == nil || !supported {
 		if d.osceLACE != nil {
 			for ch := range d.osceLACE.osceLACERuntime {
-				_ = d.osceLACE.osceLACERuntime[ch].SetModel(nil)
-				_ = d.osceLACE.osceNoLACERuntime[ch].SetModel(nil)
+				_ = d.osceLACE.osceLACERuntime[ch].SetModelPreservingState(nil)
+				_ = d.osceLACE.osceNoLACERuntime[ch].SetModelPreservingState(nil)
 			}
 			d.osceLACE.osceLACEModel = nil
-			d.osceLACE = nil
 		}
 		return nil
 	}
@@ -56,7 +55,7 @@ func (d *Decoder) bindOSCELACEModel(blob *dnnblob.Blob, supported bool) error {
 	// per-channel slot without extra plumbing. libopus does the same with a
 	// shared `OSCEModel` and one `LACEState`/`NoLACEState` per channel.
 	for ch := range d.osceLACE.osceLACERuntime {
-		if err := d.osceLACE.osceLACERuntime[ch].SetModel(model); err != nil {
+		if err := d.osceLACE.osceLACERuntime[ch].SetModelPreservingState(model); err != nil {
 			for j := range d.osceLACE.osceLACERuntime {
 				_ = d.osceLACE.osceLACERuntime[j].SetModel(nil)
 				_ = d.osceLACE.osceNoLACERuntime[j].SetModel(nil)
@@ -65,7 +64,7 @@ func (d *Decoder) bindOSCELACEModel(blob *dnnblob.Blob, supported bool) error {
 			d.osceLACE = nil
 			return err
 		}
-		if err := d.osceLACE.osceNoLACERuntime[ch].SetModel(model); err != nil {
+		if err := d.osceLACE.osceNoLACERuntime[ch].SetModelPreservingState(model); err != nil {
 			for j := range d.osceLACE.osceLACERuntime {
 				_ = d.osceLACE.osceLACERuntime[j].SetModel(nil)
 				_ = d.osceLACE.osceNoLACERuntime[j].SetModel(nil)
@@ -75,11 +74,6 @@ func (d *Decoder) bindOSCELACEModel(blob *dnnblob.Blob, supported bool) error {
 			return err
 		}
 	}
-	// Feature extractor state is independent of the model weights but its
-	// signal-history / numbits-smooth / pitch-hangover buffers must start
-	// from zero on (re)bind to match `osce_init` in libopus.
-	d.osceLACE.osceLACEFeatures[0].Reset()
-	d.osceLACE.osceLACEFeatures[1].Reset()
 	return nil
 }
 

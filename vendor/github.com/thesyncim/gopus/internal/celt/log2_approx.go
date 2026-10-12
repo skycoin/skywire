@@ -1,27 +1,5 @@
 package celt
 
-import "math"
-
-// celtLog2 approximates log2(x) using libopus's FLOAT_APPROX polynomial.
-// This matches tmp_check/opus-1.6.1/celt/mathops.h (float path).
-func celtLog2(x float32) float32 {
-	// Libopus assumes x > 0 and does not handle denormals/NaN/inf.
-	// Our callers ensure a small epsilon, so keep the same behavior.
-	bits := math.Float32bits(x)
-	integer := int32(bits>>23) - 127
-	// Normalize mantissa to [1, 2) by removing exponent bits.
-	bitsInt := int32(bits)
-	bitsInt -= int32(uint32(integer) << 23)
-	bits = uint32(bitsInt)
-
-	rangeIdx := (bits >> 20) & 0x7
-	f := math.Float32frombits(bits)
-	f = f*log2XNormCoeff[rangeIdx] - 1.0625
-
-	f = log2CoeffA0 + f*(log2CoeffA1+f*(log2CoeffA2+f*(log2CoeffA3+f*log2CoeffA4)))
-	return float32(integer) + f + log2YNormCoeff[rangeIdx]
-}
-
 var log2XNormCoeff = [8]float32{
 	1.0000000000000000000000000000,
 	8.88888895511627197265625e-01,

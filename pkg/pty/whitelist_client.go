@@ -3,7 +3,8 @@ package pty
 
 import (
 	"io"
-	"net/rpc"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )

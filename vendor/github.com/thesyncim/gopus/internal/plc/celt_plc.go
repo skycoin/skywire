@@ -32,10 +32,12 @@ func sqrtF32(x float32) float32 {
 
 // CELTDecoderState is the minimal view of a CELT decoder that concealment
 // reads and writes: channel count, per-band energies (oldBandE in libopus
-// celt/celt_decoder.c), the noise-fill RNG seed (st->rng), the de-emphasis
-// filter memory, and the IMDCT overlap buffer. Exposing it as an interface lets
-// the plc package conceal without importing the celt package (avoiding an
-// import cycle), while still mutating the live decoder state across losses.
+// celt/celt_decoder.c), the noise-fill RNG seed (st->rng) and the de-emphasis
+// filter memory. Exposing it as an interface lets the plc package conceal
+// without importing the celt package (avoiding an import cycle), while still
+// mutating the live decoder state across losses.
+// Preemphasis writes are required to avoid a runtime capability assertion in
+// the loss hot path.
 type CELTDecoderState interface {
 	// Channels returns the number of channels (1 or 2).
 	Channels() int
@@ -49,16 +51,7 @@ type CELTDecoderState interface {
 	SetRNG(seed uint32)
 	// PreemphState returns the de-emphasis filter state.
 	PreemphState() []float32
-	// OverlapBuffer returns the overlap buffer for synthesis.
-	OverlapBuffer() []float32
-	// SetOverlapBuffer sets the overlap buffer.
-	SetOverlapBuffer(samples []float32)
-}
-
-// celtPreemphSetter is an optional capability of a CELTDecoderState that lets
-// the concealer persist the de-emphasis filter memory it advanced, so the
-// filter stays continuous into the next decoded frame.
-type celtPreemphSetter interface {
+	// SetPreemphState stores the advanced de-emphasis filter state.
 	SetPreemphState(samples []float32)
 }
 
@@ -438,9 +431,7 @@ func applyDeemphasisPLCToDecoderFloat32(samples []float32, dec CELTDecoderState,
 		state[0] = stateL
 		state[1] = stateR
 	}
-	if setter, ok := dec.(celtPreemphSetter); ok {
-		setter.SetPreemphState(state)
-	}
+	dec.SetPreemphState(state)
 }
 
 // ConcealCELTHybrid generates the CELT-layer concealment for a lost Hybrid

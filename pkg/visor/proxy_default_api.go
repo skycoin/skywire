@@ -1373,3 +1373,21 @@ func (proxyDefaultAPI) Skyenv() (visorapi.SkyenvState, error) {
 func (proxyDefaultAPI) SetSkyenv(_ visorapi.SkyenvEdits) (visorapi.SkyenvState, error) {
 	return visorapi.SkyenvState{}, ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) EmbeddedServiceControl(_, _ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HostBridgeConnect(string) error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) HostBridgeDisconnect() error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) HostBridgeStatus() (visorapi.HostBridgeStatus, error) {
+	return visorapi.HostBridgeStatus{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HostBridgeForward(_, _ string) (visorapi.HostBridgeForward, error) {
+	return visorapi.HostBridgeForward{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HostBridgeUnforward(string) error { return ErrProxyNotSupported }

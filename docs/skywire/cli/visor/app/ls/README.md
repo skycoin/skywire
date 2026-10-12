@@ -13,7 +13,7 @@ skywire cli visor app ls
 ## Flags
 
 ```
-  -L, --live   live-refresh mode (bubbletea TUI, 1s tick); shows app status transitions in place
+  -L, --live   live-refresh mode (TUI, 1s tick); shows app status transitions in place
 ```
 
 ## Global Flags

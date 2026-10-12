@@ -210,22 +210,8 @@ func silkLPCInversePredGainQA(aQA []int32, order int) int32 {
 		mult2Q := int(32 - silkCLZ32(silkAbs32(rcMult1Q30)))
 		rcMult2 := silkInverse32VarQ(rcMult1Q30, mult2Q+30)
 
-		for n := 0; n < (k+1)>>1; n++ {
-			tmp1 := aQA[n]
-			tmp2 := aQA[k-n-1]
-			tmp64 := silkRSHIFT_ROUND64(silkSMULL(silkSubSat32(tmp1,
-				silkMul32FracQ(tmp2, rcQ31, 31)), rcMult2), mult2Q)
-			if tmp64 > int64(silkInt32Max) || tmp64 < int64(silkInt32Min) {
-				return 0
-			}
-			aQA[n] = int32(tmp64)
-
-			tmp64 = silkRSHIFT_ROUND64(silkSMULL(silkSubSat32(tmp2,
-				silkMul32FracQ(tmp1, rcQ31, 31)), rcMult2), mult2Q)
-			if tmp64 > int64(silkInt32Max) || tmp64 < int64(silkInt32Min) {
-				return 0
-			}
-			aQA[k-n-1] = int32(tmp64)
+		if !lpcInvPredGainStepDown(aQA[:k], rcQ31, rcMult2, mult2Q) {
+			return 0
 		}
 	}
 
@@ -242,4 +228,27 @@ func silkLPCInversePredGainQA(aQA []int32, order int) int32 {
 	}
 
 	return invGainQ30
+}
+
+// lpcInvPredGainStepDown is the inner loop of LPC_inverse_pred_gain_QA for
+// one reflection coefficient: it updates the k = len(a) coefficients in pairs
+// from both ends and reports false when a result overflows 32 bits. mult2Q is
+// in [1, 31], so silk_RSHIFT_ROUND64 by mult2Q is ((x >> (mult2Q-1)) + 1) >> 1
+// (its shift-by-one form (x>>1)+(x&1) equals (x+1)>>1 for these products).
+func lpcInvPredGainStepDown(a []int32, rcQ31, rcMult2 int32, mult2Q int) bool {
+	k := len(a)
+	sh := uint(mult2Q-1) & 63
+	mult := int64(rcMult2)
+	for n := 0; n < (k+1)>>1; n++ {
+		m := k - n - 1
+		tmp1, tmp2 := a[n], a[m]
+		v1 := (int64(silkSubSat32(tmp1, silkMul32FracQ(tmp2, rcQ31, 31)))*mult>>sh + 1) >> 1
+		v2 := (int64(silkSubSat32(tmp2, silkMul32FracQ(tmp1, rcQ31, 31)))*mult>>sh + 1) >> 1
+		if int64(int32(v1)) != v1 || int64(int32(v2)) != v2 {
+			return false
+		}
+		a[n] = int32(v1)
+		a[m] = int32(v2)
+	}
+	return true
 }

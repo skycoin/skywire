@@ -41,10 +41,6 @@ func (e *Encoder) computeDREDEmissionPlan(_ int) (dredEmissionPlan, bool) {
 	return dredEmissionPlan{}, false
 }
 
-func (e *Encoder) hybridDREDPrimaryBudget(_ int, _ int, _ dredEmissionPlan) int {
-	return 0
-}
-
 func (e *Encoder) maybeBuildSingleFrameDREDPacket(_ []byte, _ Mode, _ types.Bandwidth, _ int, _ bool, _ []packetExtension) ([]byte, bool, error) {
 	return nil, false, nil
 }

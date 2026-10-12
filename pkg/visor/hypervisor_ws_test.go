@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5"
 
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -226,19 +226,12 @@ func TestWSMalformedEnvelope(t *testing.T) {
 	}
 }
 
-// TestWSReplayEscapesParentRouteContext is a regression test for a bug the unit
-// tests could not see and a live visor found immediately: chi's Mux.ServeHTTP
-// REUSES an existing *chi.Context when the request context carries one, and
-// does not reset it. A sub-request built from the /ws handler's own context
-// therefore inherited RoutePath "/ws", and every replayed path — /api/about,
-// /api/ping, anything — resolved straight back to the websocket handler, which
-// answered 426 "Connection header does not contain Upgrade".
-//
-// Uses a real chi router, because http.ServeMux has no such behavior and would
-// pass regardless.
+// TestWSReplayEscapesParentRouteContext checks that a replayed path resolves
+// through the router on its own and not back to /ws, which a live visor once
+// showed when the router kept the /ws request's routing state.
 func TestWSReplayEscapesParentRouteContext(t *testing.T) {
 	hv := &Hypervisor{logger: logging.MustGetLogger("ws-test")}
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/api/about", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"ok":true}`)) //nolint:errcheck,gosec
@@ -249,14 +242,9 @@ func TestWSReplayEscapesParentRouteContext(t *testing.T) {
 	})
 	hv.wsMux.Store(muxRef{h: r})
 
-	// Simulate what the live handler had: a context already carrying chi's
-	// routing state for the /ws request.
-	rctx := chi.NewRouteContext()
-	rctx.RoutePath = "/ws"
-	ctx := context.WithValue(context.Background(), chi.RouteCtxKey, rctx)
-
 	up := httptest.NewRequest(http.MethodGet, "/ws", nil)
-	res := hv.serveWSRequest(ctx, up, wsRequest{Method: "GET", Path: "/api/about"})
+	r.ServeHTTP(httptest.NewRecorder(), up)
+	res := hv.serveWSRequest(up.Context(), up, wsRequest{Method: "GET", Path: "/api/about"})
 
 	if res.Status == http.StatusUpgradeRequired || strings.Contains(res.Body, "REACHED /ws") {
 		t.Fatalf("replay resolved back to /ws (status=%d body=%q); the parent route context leaked", res.Status, res.Body)

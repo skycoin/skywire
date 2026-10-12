@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/parallel_route_setup.go c2-net-routing
 //
 // parallel_route_setup.go implements PARALLEL candidate route-group setup:

@@ -28,9 +28,6 @@ func (d *streamState) applyOSCEPLCSilk(out []float32, frameSize int, silkBW silk
 		return
 	}
 	if d.sampleRate == 48000 && silkBW == silk.BandwidthWideband {
-		if d.osceLACEEnabled {
-			d.resetOSCELACEState(packetStereo)
-		}
 		if d.osceBWEEnabled {
 			d.applyOSCEBWE(out, frameSize, silkBW, packetStereo)
 		}
@@ -43,30 +40,17 @@ func (d *streamState) applyOSCEPLCSilk(out []float32, frameSize int, silkBW silk
 	}, nil, frameSize)
 }
 
-func (d *streamState) installOSCELACESilkPostfilterHook(silkBW silk.Bandwidth, packetStereo bool) func() {
+func (d *streamState) installOSCELACESilkPostfilterHook(_ silk.Bandwidth, packetStereo bool) {
 	if d == nil || d.silkDec == nil {
-		return func() {}
+		return
 	}
-	restore := func() {
-		d.silkDec.SetNativePostfilterHook(nil)
+	d.silkDec.SetNativePostfilterHook(nil)
+	if d.osceState == nil {
+		d.osceState = &streamOSCEState{}
 	}
-	if !d.osceLACEEnabled {
-		d.resetOSCELACEState(packetStereo)
-		return restore
-	}
-	state := d.osceState
-	if state == nil || state.laceModel == nil || !state.laceModel.Loaded() {
-		d.resetOSCELACEState(packetStereo)
-		return restore
-	}
-	if silkBW != silk.BandwidthWideband {
-		d.resetOSCELACEState(packetStereo)
-		return restore
-	}
-	mode := pickStreamOSCELACEMode(int(d.complexity))
-	if mode == streamOSCELACEModeNone {
-		d.resetOSCELACEState(packetStereo)
-		return restore
+	mode := streamOSCELACEModeNone
+	if d.osceLACEEnabledForComplexity() {
+		mode = pickStreamOSCELACEMode(int(d.complexity))
 	}
 
 	channels := 1
@@ -74,21 +58,34 @@ func (d *streamState) installOSCELACESilkPostfilterHook(silkBW silk.Bandwidth, p
 		channels = 2
 	}
 	d.prepareOSCELACEState(mode, channels)
-	d.silkDec.SetNativePostfilterHook(func(channel int, samples []int16, ctrl silk.LatestDecoderControl) bool {
-		if channel < 0 || channel >= channels {
-			return false
-		}
-		if ctrl.FsKHz != 16 || ctrl.NbSubfr != streamOSCELACESubframesPerFrame || len(samples) < streamOSCELACEFrameSamples {
-			d.resetOSCELACEState(packetStereo)
-			return false
-		}
-		if !d.runOSCELACEChannel(samples, mode, channel, ctrl, true) {
-			d.resetOSCELACEState(packetStereo)
-			return false
-		}
-		return true
-	})
-	return restore
+	d.osceLACEHookChannels = channels
+	d.osceLACEHookStereo = packetStereo
+	d.osceLACEHookMode = mode
+	if d.osceLACEHook == nil {
+		d.osceLACEHook = d.processOSCELACESilkPostfilter
+	}
+	d.silkDec.SetNativePostfilterHook(d.osceLACEHook)
+}
+
+func (d *streamState) clearOSCELACESilkPostfilterHook() {
+	if d != nil && d.silkDec != nil {
+		d.silkDec.SetNativePostfilterHook(nil)
+	}
+}
+
+func (d *streamState) processOSCELACESilkPostfilter(channel int, samples []int16, ctrl silk.LatestDecoderControl) bool {
+	if channel < 0 || channel >= d.osceLACEHookChannels {
+		return false
+	}
+	if ctrl.FsKHz != 16 || ctrl.NbSubfr != streamOSCELACESubframesPerFrame || len(samples) < streamOSCELACEFrameSamples {
+		d.resetOSCELACEChannel(channel, d.osceLACEHookMode)
+		return false
+	}
+	if !d.runOSCELACEChannel(samples, d.osceLACEHookMode, channel, ctrl, true) {
+		d.resetOSCELACEChannel(channel, d.osceLACEHookMode)
+		return false
+	}
+	return true
 }
 
 type streamOSCELACEMode int
@@ -154,7 +151,13 @@ func (d *streamState) runOSCELACEChannel(native []int16, mode streamOSCELACEMode
 			numBits,
 		)
 	}
+	modelLoaded := state.laceModel != nil && state.laceModel.Loaded()
+	if !modelLoaded {
+		mode = streamOSCELACEModeNone
+	}
 	switch mode {
+	case streamOSCELACEModeNone:
+		copy(state.laceApplyOutF[:streamOSCELACEFrameSamples], state.laceApplyInF[:streamOSCELACEFrameSamples])
 	case streamOSCELACEModeNoLACE:
 		if err := state.noLACERuntime[channelIdx].Process(
 			state.laceApplyInF[:streamOSCELACEFrameSamples],
@@ -420,14 +423,17 @@ func (d *streamState) applyOSCEBWE(out []float32, frameSize int, silkBW silk.Ban
 	return true
 }
 
-func (d *streamState) markOSCEInactiveIfModeIneligible(toc streamTOC, out []float32, frameSize int) {
+func (d *streamState) markOSCEInactiveIfModeIneligible(toc streamTOC, _ []float32, _ int) {
 	if d == nil || d.osceState == nil {
 		return
 	}
-	if toc.mode == streamModeSILK && toc.bandwidth == 2 {
+	if toc.mode == streamModeSILK && toc.bandwidth == 2 || toc.mode == streamModeHybrid {
 		return
 	}
-	d.resetOSCEInactiveState(toc.stereo)
+	if toc.mode != streamModeCELT && d.osceState.prevLACEActive {
+		d.resetOSCELACEState(toc.stereo)
+	}
+	d.osceState.prevBWEActive = false
 	// Record the libopus osce_extended_mode so the next BWE frame reproduces
 	// the fade-in gating: a Hybrid or SILK-only predecessor arms the fade-in,
 	// a CELT-only predecessor suppresses it.
@@ -439,6 +445,23 @@ func (d *streamState) markOSCEInactiveIfModeIneligible(toc streamTOC, out []floa
 	default:
 		d.osceState.prevExtendedMode = bweModeSilkOnly
 	}
+}
+
+func (d *streamState) resetOSCELACEChannel(channel int, mode streamOSCELACEMode) {
+	state := d.osceState
+	if state == nil || channel < 0 || channel >= len(state.laceResetFrames) {
+		return
+	}
+	state.laceFeatureState[channel].Reset()
+	switch mode {
+	case streamOSCELACEModeLACE:
+		state.laceRuntime[channel].Reset()
+	case streamOSCELACEModeNoLACE:
+		state.noLACERuntime[channel].Reset()
+	}
+	state.laceMethod = mode
+	state.prevLACEActive = true
+	state.laceResetFrames[channel] = 2
 }
 
 func (d *streamState) resetOSCEInactiveState(packetStereo bool) {
@@ -577,16 +600,16 @@ func streamOSCEFloatToInt16(x float32) int16 {
 	return opusmath.Float32ToInt16OSCEOutputScale(x)
 }
 
-// streamOSCELACECrossFade10msInt16 mirrors `osceLACECrossFade10msInt16` in
-// package gopus: 10 ms (160 sample) cross-fade between the postfilter output
-// (`xEnhanced`) and the raw pre-enhancement input (`xIn`), written back into
-// `xEnhanced`. Re-uses the libopus `osce_window[]` half-window weights.
+// streamOSCELACECrossFade10msFloat follows osce_cross_fade_10ms in
+// dnn/osce_features.c. Rounding the raw product first preserves the selected
+// C compiler's enhanced-product FMA on arm64 and separate operations on amd64.
 func streamOSCELACECrossFade10msFloat(xEnhanced, xIn []float32) {
 	if len(xEnhanced) < 160 || len(xIn) < 160 {
 		return
 	}
 	for i := 0; i < 160; i++ {
 		w := streamOSCEWindow[i]
-		xEnhanced[i] = w*xEnhanced[i] + (1.0-w)*xIn[i]
+		raw := float32((1.0 - w) * xIn[i])
+		xEnhanced[i] = w*xEnhanced[i] + raw
 	}
 }

@@ -3,8 +3,50 @@ package visor
 
 import (
 	"errors"
+	"math"
+	"runtime/debug"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
+
+func TestApplyMemoryLimitEnvWins(t *testing.T) {
+	prev := debug.SetMemoryLimit(math.MaxInt64)
+	t.Cleanup(func() { debug.SetMemoryLimit(prev) })
+	log := logging.MustGetLogger("memlimit_test")
+
+	t.Setenv("GOMEMLIMIT", "6400MiB")
+	applyMemoryLimit(log, "256MiB")
+	if got := debug.SetMemoryLimit(-1); got != math.MaxInt64 {
+		t.Fatalf("config overrode the environment: limit %d", got)
+	}
+
+	t.Setenv("GOMEMLIMIT", "")
+	applyMemoryLimit(log, "256MiB")
+	if got := debug.SetMemoryLimit(-1); got != 256<<20 {
+		t.Fatalf("config limit not applied: %d", got)
+	}
+}
+
+func TestAutoMemoryLimit(t *testing.T) {
+	const mib = 1024 * 1024
+	if got := autoMemoryLimit(1000 * mib); got != 900*mib {
+		t.Fatalf("autoMemoryLimit(1000MiB) = %d, want %d", got, 900*mib)
+	}
+	if got := autoMemoryLimit(0); got != 0 {
+		t.Fatalf("autoMemoryLimit(0) = %d, want 0", got)
+	}
+}
+
+func TestApplyMemoryLimitNone(t *testing.T) {
+	before := debug.SetMemoryLimit(-1)
+	for _, v := range []string{"none", ""} {
+		applyMemoryLimit(logging.MustGetLogger("test"), v)
+		if got := debug.SetMemoryLimit(-1); got != before {
+			t.Fatalf("memory_limit %q changed the limit to %d", v, got)
+		}
+	}
+}
 
 func TestParseMemorySize(t *testing.T) {
 	const (
@@ -53,26 +95,26 @@ func TestResolveMemoryLimit(t *testing.T) {
 	cases := []struct {
 		name      string
 		limit     string
-		avail     func() int64
+		total     func() int64
 		want      int64
 		noMemInfo bool // want errNoMemInfo
 		wantErr   bool // want any other error
 	}{
 		// The iOS profile's value, above the floor: kept as is.
-		{name: "ios profile", limit: "40MiB", avail: unknown, want: 40 * mib},
-		{name: "at the floor", limit: "32MiB", avail: unknown, want: 32 * mib},
-		{name: "below the floor", limit: "16MiB", avail: unknown, want: minMemoryLimit},
-		{name: "zero", limit: "0MiB", avail: unknown, want: minMemoryLimit},
-		{name: "desktop value", limit: "512MiB", avail: unknown, want: 512 * mib},
-		{name: "auto with meminfo", limit: "auto", avail: thousandMiB, want: 600 * mib},
-		{name: "auto on a small machine", limit: "auto", avail: func() int64 { return 40 * mib }, want: minMemoryLimit},
-		// macOS and iOS: no /proc/meminfo, so "auto" has nothing to go on.
-		{name: "auto without meminfo", limit: "auto", avail: unknown, noMemInfo: true},
-		{name: "garbage", limit: "lots", avail: thousandMiB, wantErr: true},
+		{name: "ios profile", limit: "40MiB", total: unknown, want: 40 * mib},
+		{name: "at the floor", limit: "32MiB", total: unknown, want: 32 * mib},
+		{name: "below the floor", limit: "16MiB", total: unknown, want: minMemoryLimit},
+		{name: "zero", limit: "0MiB", total: unknown, want: minMemoryLimit},
+		{name: "desktop value", limit: "512MiB", total: unknown, want: 512 * mib},
+		{name: "auto with meminfo", limit: "auto", total: thousandMiB, want: 900 * mib},
+		{name: "auto on a small machine", limit: "auto", total: func() int64 { return 30 * mib }, want: minMemoryLimit},
+		// macOS and iOS: no /proc/meminfo or cgroup, so "auto" has nothing to go on.
+		{name: "auto without meminfo", limit: "auto", total: unknown, noMemInfo: true},
+		{name: "garbage", limit: "lots", total: thousandMiB, wantErr: true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := resolveMemoryLimit(c.limit, c.avail)
+			got, err := resolveMemoryLimit(c.limit, c.total)
 			switch {
 			case c.noMemInfo:
 				if !errors.Is(err, errNoMemInfo) {

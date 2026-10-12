@@ -102,11 +102,8 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		Protocol:             primary.Protocol,
 		// Ordered carrier preference (tcp/quic/ws/wt) from the visor config —
 		// how this client reaches dmsg servers. Empty = native default.
-		Carriers: primary.Carriers,
-		// When this visor runs a dmsg server in-process under the same PK,
-		// the client must skip its own server entry in the serve loop rather
-		// than dial a transit session to itself.
-		SkipSelfServer: conf.Server != nil && conf.Server.Enabled,
+		Carriers:       primary.Carriers,
+		SkipSelfServer: SkipSelfServer(pk, conf),
 		// A browser visor rides its host's relay when attached and publishes an
 		// entry only while it holds server sessions (browserRelayOnly).
 		RelayOnly: browserRelayOnly,
@@ -238,4 +235,10 @@ func relayMaxStreams(conf *spec.DmsgConfig) int {
 		return conf.RelayMaxStreams
 	}
 	return dmsg.DefaultClientMaxRelayedStreams
+}
+
+// SkipSelfServer reports whether the client of a visor with key pk skips its
+// own co-resident dmsg server. It does only while it knows another server to connect through.
+func SkipSelfServer(pk cipher.PubKey, conf *DmsgConfig) bool {
+	return conf.Server != nil && conf.Server.Enabled && !conf.OnlySelfServer(pk)
 }

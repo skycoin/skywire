@@ -45,48 +45,6 @@ func stereoLPFilterInto(signal, lp, hp []int16, frameLength int) {
 	}
 }
 
-// stereoLPFilterFloat applies the [1,2,1]/4 lowpass filter to float32 signal.
-// This is used for encoder-side analysis with float input.
-// Input signal must have length frameLength+2 (includes 2 history samples at start).
-func stereoLPFilterFloat(signal []float32, frameLength int) (lp, hp []float32) {
-	lp = make([]float32, frameLength)
-	hp = make([]float32, frameLength)
-
-	for n := range frameLength {
-		// LP[n] = (signal[n] + 2*signal[n+1] + signal[n+2]) / 4
-		lpVal := (signal[n] + 2*signal[n+1] + signal[n+2]) / 4.0
-		lp[n] = lpVal
-		hp[n] = signal[n+1] - lpVal
-	}
-
-	return lp, hp
-}
-
-// stereoLPFilterFloatInto applies the [1,2,1]/4 lowpass filter writing into pre-allocated lp/hp.
-// lp and hp must each have length >= frameLength.
-func stereoLPFilterFloatInto(signal, lp, hp []float32, frameLength int) {
-	for n := range frameLength {
-		lpVal := (signal[n] + 2*signal[n+1] + signal[n+2]) / 4.0
-		lp[n] = lpVal
-		hp[n] = signal[n+1] - lpVal
-	}
-}
-
-// stereoConvertLRToMSFloatInto converts left/right float signals to mid/side,
-// writing into pre-allocated mid and side slices (length >= frameLength+2).
-func stereoConvertLRToMSFloatInto(left, right, mid, side []float32, frameLength int) {
-	for n := 0; n < frameLength+2; n++ {
-		src := n - 2
-		if src >= 0 && src < len(left) && src < len(right) {
-			mid[n] = (left[src] + right[src]) / 2
-			side[n] = (left[src] - right[src]) / 2
-		} else {
-			mid[n] = 0
-			side[n] = 0
-		}
-	}
-}
-
 // stereoConvertLRToMS converts left/right signals to mid/side.
 // Output mid and side arrays must have length frameLength+2 to hold history samples.
 // This matches libopus stereo_LR_to_MS.c lines 62-68.
@@ -97,77 +55,6 @@ func stereoConvertLRToMS(left, right []int16, mid, side []int16, frameLength int
 		mid[n] = int16(silkRSHIFT_ROUND(sum, 1))
 		side[n] = silkSAT16(silkRSHIFT_ROUND(diff, 1))
 	}
-}
-
-// stereoConvertLRToMSFloat converts left/right float signals to mid/side using
-// the same indexing as libopus silk_stereo_LR_to_MS:
-// mid/side[n] is computed from input[n-2], with n=0..1 supplied by history.
-//
-// Callers provide current-frame samples in left/right (at least frameLength),
-// then overwrite mid/side[0..1] with the stored history state.
-// This avoids a 2-sample shift versus the libopus pointer arithmetic path.
-func stereoConvertLRToMSFloat(left, right []float32, frameLength int) (mid, side []float32) {
-	mid = make([]float32, frameLength+2)
-	side = make([]float32, frameLength+2)
-
-	for n := 0; n < frameLength+2; n++ {
-		src := n - 2
-		if src >= 0 && src < len(left) && src < len(right) {
-			mid[n] = (left[src] + right[src]) / 2
-			side[n] = (left[src] - right[src]) / 2
-		}
-	}
-
-	return mid, side
-}
-
-// stereoFindPredictor computes the least-squares predictor from basis (mid) to target (side).
-// This matches libopus silk_stereo_find_predictor.
-// Returns predictor in Q13 format and updates smoothed amplitude norms.
-//
-// Parameters:
-//   - x: basis signal (LP or HP filtered mid)
-//   - y: target signal (LP or HP filtered side)
-//   - midResAmpQ0: [2]int32 holding smoothed [mid_norm, residual_norm]
-//   - smoothCoefQ16: smoothing coefficient in Q16
-//
-// Returns:
-//   - predQ13: predictor coefficient in Q13
-//   - ratioQ14: ratio of residual to mid energies in Q14
-//
-// stereoFindPredictorFloat is the float version for encoder analysis.
-func stereoFindPredictorFloat(x, y []float32, length int) (predQ13 int32) {
-	if length <= 0 {
-		return 0
-	}
-
-	// Compute energies and correlation
-	var nrgx, corr float32
-
-	for i := range length {
-		xi := x[i]
-		yi := y[i]
-		nrgx += xi * xi
-		corr += xi * yi
-	}
-
-	if nrgx < 1e-10 {
-		return 0
-	}
-
-	// Compute predictor
-	pred := corr / nrgx
-
-	// Convert to Q13 and clamp
-	predQ13 = int32(pred * 8192)
-	if predQ13 > (1 << 14) {
-		predQ13 = 1 << 14
-	}
-	if predQ13 < -(1 << 14) {
-		predQ13 = -(1 << 14)
-	}
-
-	return predQ13
 }
 
 func stereoInnerProdAlignedScale(x, y []int16, scale, length int) int32 {

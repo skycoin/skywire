@@ -120,15 +120,18 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 	// this bounds a relayed stream to a single relay hop.
 	if flags&VStreamFlagRelayed != 0 {
 		m.log.Warn("vstream relay: refusing to re-forward already-relayed SYN (1-hop)")
+		m.refuseRelaySyn(mt, wireID)
 		return
 	}
 	if m.relayCount.Load() >= int64(m.maxRelays) {
 		m.log.Warn("vstream relay: at relay-stream capacity; dropping")
+		m.refuseRelaySyn(mt, wireID)
 		return
 	}
 	outTp := m.findDirectTransport(dstPK)
 	if outTp == nil {
 		m.log.WithField("dst", dstPK.String()).Debug("vstream relay: no direct transport to dst; dropping")
+		m.refuseRelaySyn(mt, wireID)
 		return
 	}
 
@@ -143,6 +146,7 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 	if err := m.sendRelaySyn(outTp, outID, senderPK, dstPK, originID, sig, true); err != nil {
 		m.log.WithError(err).Warn("vstream relay: forward SYN failed")
 		m.teardownRelayLeg(inKey, outKey)
+		m.refuseRelaySyn(mt, wireID)
 		return
 	}
 	m.log.WithField("origin", senderPK.String()).
@@ -242,4 +246,10 @@ func relaySigPayload(originID uint64, sender, dst cipher.PubKey) []byte {
 	copy(buf[8:41], sender[:])
 	copy(buf[41:74], dst[:])
 	return buf
+}
+
+// refuseRelaySyn answers a relay SYN this node will not carry with a FIN, so
+// the origin fails at once and falls back instead of waiting out its handshake.
+func (m *VStreamMux) refuseRelaySyn(mt *ManagedTransport, wireID uint64) {
+	m.forwardRelayFrame(relayKey{tp: mt.Entry.ID, streamID: wireID}, VStreamFlagFin, nil)
 }

@@ -1,6 +1,10 @@
 package celt
 
-import "github.com/thesyncim/gopus/internal/rangecoding"
+import (
+	"math"
+
+	"github.com/thesyncim/gopus/internal/rangecoding"
+)
 
 // EPSILON is the minimum value used to prevent division by zero and similar issues.
 // This matches libopus celt/mathops.h EPSILON definition.
@@ -136,8 +140,16 @@ func opPVQSearchScratchNormWithInputMutation(x []celtNorm, k int, iyBuf *[]int32
 			// Reference: libopus vq.c line 274
 			iy[j] = int32(rcp * absX[j]) // rcp >= 0, absX >= 0: truncation == floor
 			y[j] = float32(iy[j])
-			yy += y[j] * y[j]
-			xy += absX[j] * y[j]
+			// The selected NEON vq.c projection rounds products in 16- and
+			// 4-term vector blocks, then adds them in element order. Only
+			// the final n%4 terms use scalar fused multiply-adds.
+			if celtFusedFloat && j < n&^3 {
+				yy += round32(y[j] * y[j])
+				xy += round32(absX[j] * y[j])
+			} else {
+				yy += y[j] * y[j]
+				xy += absX[j] * y[j]
+			}
 			// We multiply y[j] by 2 so we don't have to do it in the main loop
 			// Reference: libopus vq.c line 279
 			y[j] *= 2
@@ -166,9 +178,8 @@ func opPVQSearchScratchNormWithInputMutation(x []celtNorm, k int, iyBuf *[]int32
 	// For each pulse, find the position that maximizes Rxy/sqrt(Ryy).
 	// Reference: libopus vq.c lines 299-362
 	//
-	// The entire outer pulse loop + inner position search is merged into
-	// pvqSearchPulseLoop (assembly on arm64/amd64) to eliminate per-pulse
-	// Go→asm transition overhead.
+	// pvqSearchPulseLoop combines the outer pulse loop and inner position
+	// search in one Go call.
 	if pulsesLeft > 0 && n > 0 {
 		xy, yy = pvqSearchPulseLoop(absX[:n], y[:n], iy[:n], xy, yy, n, pulsesLeft)
 	}
@@ -231,8 +242,22 @@ func opPVQSearchN2(x []celtNorm, k, up int) (iy []int32, upIy []int32, refine in
 }
 
 func opPVQSearchN2Norm(x []celtNorm, k, up int) (iy []int32, upIy []int32, refine int32, yy opusVal32) {
-	iy = make([]int32, 2)
-	upIy = make([]int32, 2)
+	return opPVQSearchN2NormScratch(x, k, up, nil, nil)
+}
+
+func opPVQSearchN2NormScratch(x []celtNorm, k, up int, iyBuf, upIyBuf *[]int32) (iy []int32, upIy []int32, refine int32, yy opusVal32) {
+	if iyBuf != nil {
+		iy = ensureInt32Slice(iyBuf, 2)
+	} else {
+		iy = make([]int32, 2)
+	}
+	if upIyBuf != nil {
+		upIy = ensureInt32Slice(upIyBuf, 2)
+	} else {
+		upIy = make([]int32, 2)
+	}
+	clear(iy)
+	clear(upIy)
 	if len(x) < 2 || k <= 0 || up <= 0 {
 		if k > 0 {
 			iy[0] = int32(k)
@@ -281,18 +306,26 @@ func opPVQSearchN2Norm(x []celtNorm, k, up int) (iy []int32, upIy []int32, refin
 	return iy, upIy, refine, yy
 }
 
-func opPVQRefineNorm(xn []opusVal32, iy []int32, iy0 []int32, k, up, margin int, same bool) bool {
+func opPVQRefineNorm(xn []opusVal32, iy []int32, iy0 []int32, k, up, margin int, same bool, roundingBuf *[]opusVal32) bool {
 	n := len(xn)
 	if n == 0 {
 		return true
 	}
-	rounding := make([]opusVal32, n)
+	var rounding []opusVal32
+	if roundingBuf != nil {
+		rounding = ensureFloat32Slice(roundingBuf, n)
+	} else {
+		rounding = make([]opusVal32, n)
+	}
 	iysum := int32(0)
 	k32 := int32(k)
 	up32 := int32(up)
 	for i := range n {
-		tmp := float32(k) * float32(xn[i])
-		iy[i] = int32(floor32ToInt(float32(0.5) + tmp))
+		// vq.c op_pvq_refine stores this product as opus_val32 before it
+		// subtracts iy[i] to form rounding[i]. Materialize that float32
+		// rounding point so the compiler does not fuse the later subtraction.
+		tmp := float32(float32(k) * float32(xn[i]))
+		iy[i] = floorPVQRefineTmp(tmp)
 		rounding[i] = opusVal32(tmp - float32(iy[i]))
 	}
 	if !same {
@@ -322,7 +355,7 @@ func opPVQRefineNorm(xn []opusVal32, iy []int32, iy0 []int32, k, up, margin int,
 		for i := range n {
 			if float32(rounding[i]-roundVal)*float32(dir) > 0 &&
 				absInt32(iy[i]-up32*iy0[i]) < int32(margin-1) &&
-				!(dir == -1 && iy[i] == 0) {
+				(dir != -1 || iy[i] != 0) {
 				roundVal = rounding[i]
 				roundPos = i
 			}
@@ -334,16 +367,42 @@ func opPVQRefineNorm(xn []opusVal32, iy []int32, iy0 []int32, k, up, margin int,
 	return false
 }
 
+// floorPVQRefineTmp matches vq.c op_pvq_refine(): the unsuffixed C literal
+// .5 promotes opus_val32 tmp to double before floor() converts it to int.
+func floorPVQRefineTmp(tmp float32) int32 {
+	argument := 0.5 + float64(tmp)
+	return int32(math.Floor(argument))
+}
+
 func opPVQSearchExtra(x []celtNorm, k, up int) (iy []int32, upIy []int32, refine []int32) {
 	iy, upIy, refine, _ = opPVQSearchExtraNorm(x, k, up)
 	return iy, upIy, refine
 }
 
 func opPVQSearchExtraNorm(x []celtNorm, k, up int) (iy []int32, upIy []int32, refine []int32, yy opusVal32) {
+	return opPVQSearchExtraNormScratch(x, k, up, nil, nil, nil, nil, nil)
+}
+
+func opPVQSearchExtraNormScratch(x []celtNorm, k, up int, iyBuf, upIyBuf, refineBuf *[]int32, xnBuf, roundingBuf *[]opusVal32) (iy []int32, upIy []int32, refine []int32, yy opusVal32) {
 	n := len(x)
-	iy = make([]int32, n)
-	upIy = make([]int32, n)
-	refine = make([]int32, n)
+	if iyBuf != nil {
+		iy = ensureInt32Slice(iyBuf, n)
+	} else {
+		iy = make([]int32, n)
+	}
+	if upIyBuf != nil {
+		upIy = ensureInt32Slice(upIyBuf, n)
+	} else {
+		upIy = make([]int32, n)
+	}
+	if refineBuf != nil {
+		refine = ensureInt32Slice(refineBuf, n)
+	} else {
+		refine = make([]int32, n)
+	}
+	clear(iy)
+	clear(upIy)
+	clear(refine)
 	if n == 0 || k <= 0 || up <= 0 {
 		return iy, upIy, refine, 0
 	}
@@ -357,13 +416,18 @@ func opPVQSearchExtraNorm(x []celtNorm, k, up int) (iy []int32, upIy []int32, re
 		iy[0] = int32(k)
 		upIy[0] = int32(up * k)
 	} else {
-		xn := make([]opusVal32, n)
+		var xn []opusVal32
+		if xnBuf != nil {
+			xn = ensureFloat32Slice(xnBuf, n)
+		} else {
+			xn = make([]opusVal32, n)
+		}
 		rcp := opusVal32(float32(1) / float32(sum))
 		for i := range n {
 			xn[i] = opusVal32(absCeltNorm(x[i]) * float32(rcp))
 		}
-		failed = opPVQRefineNorm(xn, iy, iy, k, 1, k+1, true)
-		failed = failed || opPVQRefineNorm(xn, upIy, iy, up*k, up, up, false)
+		failed = opPVQRefineNorm(xn, iy, iy, k, 1, k+1, true, roundingBuf)
+		failed = failed || opPVQRefineNorm(xn, upIy, iy, up*k, up, up, false, roundingBuf)
 	}
 
 	if failed {

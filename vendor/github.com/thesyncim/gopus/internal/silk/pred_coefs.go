@@ -37,8 +37,9 @@ func (e *Encoder) buildLTPResidual(pitchBuf []float32, frameStart int, gains []f
 	}
 
 	// Match libopus silk_LTP_analysis_filter_FLP: operate entirely in float.
-	// The input buffer is already int16-quantized (from quantizePCMToInt16),
-	// scaled to [-1,1]. We scale to int16 range without redundant quantization.
+	// The input buffer holds the int16-quantized input (RES2INT16 in
+	// silk_Encode) scaled to [-1,1]. We scale to int16 range without redundant
+	// quantization.
 	scale := float32(silkSampleScale)
 	pitchBufLen := len(pitchBuf)
 
@@ -90,11 +91,11 @@ func (e *Encoder) buildLTPResidual(pitchBuf []float32, frameStart int, gains []f
 					//   for j: LTP_res[i] -= B[j] * x_lag[...];
 					//   LTP_res[i] *= inv_gain;
 					res := x
-					res -= b0 * pitchBuf[lagBase+ltpOrderConst/2] * scale
-					res -= b1 * pitchBuf[lagBase+ltpOrderConst/2-1] * scale
-					res -= b2 * pitchBuf[lagBase+ltpOrderConst/2-2] * scale
-					res -= b3 * pitchBuf[lagBase+ltpOrderConst/2-3] * scale
-					res -= b4 * pitchBuf[lagBase+ltpOrderConst/2-4] * scale
+					res = silkLTPFNMADD32(b0, pitchBuf[lagBase+ltpOrderConst/2], scale, res)
+					res = silkLTPFNMADD32(b1, pitchBuf[lagBase+ltpOrderConst/2-1], scale, res)
+					res = silkLTPFNMADD32(b2, pitchBuf[lagBase+ltpOrderConst/2-2], scale, res)
+					res = silkLTPFNMADD32(b3, pitchBuf[lagBase+ltpOrderConst/2-3], scale, res)
+					res = silkLTPFNMADD32(b4, pitchBuf[lagBase+ltpOrderConst/2-4], scale, res)
 					ltpRes[outBase+i] = res * invGain
 				}
 			} else {
@@ -111,7 +112,7 @@ func (e *Encoder) buildLTPResidual(pitchBuf []float32, frameStart int, gains []f
 						lagIdx := lagBase + (ltpOrderConst/2 - j)
 						bj := float32(ltpCoeffs[k][j]) / 128.0
 						if lagIdx >= 0 && lagIdx < pitchBufLen {
-							res -= bj * pitchBuf[lagIdx] * scale
+							res = silkLTPFNMADD32(bj, pitchBuf[lagIdx], scale, res)
 						}
 					}
 					ltpRes[outBase+i] = res * invGain
@@ -136,6 +137,34 @@ func (e *Encoder) buildLTPResidual(pitchBuf []float32, frameStart int, gains []f
 				}
 			}
 		}
+	}
+	if ltpAnalysisTraceEnabled && ltpAnalysisTraceActive() {
+		var trace SILKLTPAnalysisTraceSnapshot
+		trace.FrameInPacket = e.nFramesEncoded
+		trace.FrameStart = frameStart
+		trace.SignalType = int32(signalType)
+		trace.Order = int32(preLen)
+		trace.SubframeSamples = int32(subframeSamples)
+		trace.NumSubframes = int32(numSubframes)
+		trace.Scale = scale
+		trace.PitchBuffer = pitchBuf
+		trace.Residual = ltpRes
+		for k := 0; k < numSubframes && k < maxNbSubfr; k++ {
+			if k < len(gains) {
+				trace.Gains[k] = gains[k]
+			}
+			trace.InvGains[k] = 1.0
+			if k < len(gains) && gains[k] > 0 {
+				trace.InvGains[k] = 1.0 / gains[k]
+			}
+			if k < len(pitchLags) {
+				trace.PitchLags[k] = pitchLags[k]
+			}
+			for j := 0; j < ltpOrderConst; j++ {
+				trace.Taps[k][j] = float32(ltpCoeffs[k][j]) / 128.0
+			}
+		}
+		recordSILKLTPAnalysisTrace(e, trace)
 	}
 
 	return ltpRes
@@ -179,17 +208,37 @@ func (e *Encoder) computeLPCAndNLSFWithInterp(ltpRes []float32, numSubframes, su
 	silkA2NLSFInto(lsfQ15, lpcQ16, order, e.scratchA2nlsfP[:], e.scratchA2nlsfQ[:])
 
 	interpIdx := 4
-	useInterp := e.complexity >= 4 && !e.firstFrameAfterResetActive() && numSubframes == maxNbSubfr
+	useInterp := e.complexity >= 4 && !e.firstFrameAfterReset && numSubframes == maxNbSubfr
+	traceInterpolation := silkNLSFInterpolationTraceEnabled && silkNLSFInterpolationTraceActive()
+	var interpolationTrace SILKNLSFInterpolationSnapshot
+	if traceInterpolation {
+		interpolationTrace.FrameInPacket = e.nFramesEncoded
+		interpolationTrace.Order = order
+		interpolationTrace.SubframeLen = subfrLen
+		interpolationTrace.NumSubframes = numSubframes
+		interpolationTrace.MinInvGain = minInvGainVal
+		interpolationTrace.Input = ltpRes[:totalLen]
+		copy(interpolationTrace.PrevNLSFQ15[:], e.prevLSFQ15[:order])
+		copy(interpolationTrace.FullBurgCoefficients[:], aFull[:order])
+		interpolationTrace.FullResidualEnergy = resNrg32
+	}
 	if useInterp {
 		halfOffset := (maxNbSubfr / 2) * subfrLen
 		if halfOffset+subfrLen*(maxNbSubfr/2) <= totalLen {
 			aLast, resNrgLast := e.burgModifiedFLPZeroAllocF32(ltpRes[halfOffset:], minInvGainVal, subfrLen, maxNbSubfr/2, order)
+			if traceInterpolation {
+				copy(interpolationTrace.LastBurgCoefficients[:], aLast[:order])
+				interpolationTrace.LastResidualEnergy = resNrgLast
+			}
 			lsfLast := ensureInt16Slice(&e.scratchNLSFTempQ15, order)
 			for i := range order {
 				a32 := float32(aLast[i])
 				lpcQ16[i] = float32ToInt32RoundEven(a32 * 65536.0)
 			}
 			silkA2NLSFInto(lsfLast, lpcQ16, order, e.scratchA2nlsfP[:], e.scratchA2nlsfQ[:])
+			if traceInterpolation {
+				copy(interpolationTrace.LastNLSFQ15[:], lsfLast[:order])
+			}
 
 			// Restore full-frame energy stats for gain processing.
 			e.lastTotalEnergy = fullTotalEnergy
@@ -206,7 +255,7 @@ func (e *Encoder) computeLPCAndNLSFWithInterp(ltpRes []float32, numSubframes, su
 				lpcRes := ensureFloat32Slice(&e.scratchLpcResF32, analyzeLen)
 
 				for k := 3; k >= 0; k-- {
-					interpolateNLSF(interpNLSF[:order], e.prevLSFQ15, lsfLast, k, order)
+					interpolateNLSF(interpNLSF[:order], e.prevLSFQ15[:], lsfLast, k, order)
 					// silk_NLSF2A_FLP calls silk_NLSF2A fixed-point
 					if !silkNLSF2A(lpcTmpQ12[:order], interpNLSF[:order], order) {
 						fallback := lsfToLPCDirect(interpNLSF[:order])
@@ -220,10 +269,19 @@ func (e *Encoder) computeLPCAndNLSFWithInterp(ltpRes []float32, numSubframes, su
 					// Match libopus find_LPC_FLP.c exactly:
 					// res_nrg_interp = (silk_float)( energy(seg0) + energy(seg1) );
 					// Sum in double precision, cast once to float32.
-					resNrgInterp := float32(
-						energyF32Libopus(lpcRes[order:], subframeSamples) +
-							energyF32Libopus(lpcRes[order+subfrLen:], subframeSamples),
-					)
+					energyFirst := energyF32Libopus(lpcRes[order:], subframeSamples)
+					energySecond := energyF32Libopus(lpcRes[order+subfrLen:], subframeSamples)
+					resNrgInterp := float32(energyFirst + energySecond)
+					if traceInterpolation && interpolationTrace.CandidateCount < len(interpolationTrace.Candidates) {
+						candidate := &interpolationTrace.Candidates[interpolationTrace.CandidateCount]
+						candidate.InterpIndex = int32(k)
+						candidate.EnergyFirst = energyFirst
+						candidate.EnergySecond = energySecond
+						candidate.ResidualEnergy = resNrgInterp
+						copy(candidate.NLSFQ15[:], interpNLSF[:order])
+						copy(candidate.LPCQ12[:], lpcTmpQ12[:order])
+						interpolationTrace.CandidateCount++
+					}
 
 					if resNrgInterp < resNrg32 {
 						resNrg32 = resNrgInterp
@@ -234,11 +292,14 @@ func (e *Encoder) computeLPCAndNLSFWithInterp(ltpRes []float32, numSubframes, su
 					resNrg2nd = resNrgInterp
 				}
 			}
-
 			if interpIdx < 4 {
 				copy(lsfQ15, lsfLast)
 			}
 		}
+	}
+	if traceInterpolation {
+		interpolationTrace.SelectedIndex = int32(interpIdx)
+		recordSILKNLSFInterpolationTrace(e, interpolationTrace)
 	}
 
 	return lpcQ12, lsfQ15, interpIdx
@@ -337,15 +398,9 @@ func applyGainProcessing(gains []float32, resNrg []float32, predGainQ7 int32, sn
 			quantOffsetType = 1
 		}
 
-		// Match libopus process_gains_FLP.c sigmoid path for voiced gain reduction.
-		// libopus: s = 1.0f - 0.5f * silk_sigmoid( 0.25f * ( LTPredCodGain - 12.0f ) )
-		// silk_sigmoid(x) = (silk_float)(1.0 / (1.0 + exp(-x)))
-		// Step 1: arg = 0.25f * (LTPredCodGain - 12.0f) — float32 arithmetic
-		// Step 2: sigmoid = (float)(1.0 / (1.0 + exp((double)(-arg)))) — double internally, cast to float
-		// Step 3: s = 1.0f - 0.5f * sigmoid — float32 arithmetic
+		// Match silk_sigmoid's double exp and reciprocal, rounded once to float32.
 		arg := float32(0.25) * (predGainDB - float32(12.0))
-		sigmoid := 1.0 / (1.0 + expF32(-arg))
-		s := float32(1.0) - float32(0.5)*sigmoid
+		s := float32(1.0) - float32(0.5)*Sigmoid(arg)
 		for k := range gains {
 			gains[k] *= s
 		}
@@ -360,7 +415,7 @@ func applyGainProcessing(gains []float32, resNrg []float32, predGainQ7 int32, sn
 	for k := range gains {
 		energy := gains[k] * gains[k]
 		if k < len(resNrg) {
-			energy += resNrg[k] * invMaxSqrVal
+			energy = silkSoftLimitEnergy(gains[k], resNrg[k], invMaxSqrVal)
 		}
 		g := sqrt32(energy)
 		if g > 32767.0 {

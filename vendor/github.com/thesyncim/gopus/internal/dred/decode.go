@@ -12,8 +12,8 @@ const (
 	LatentStride = LatentDim + 1
 )
 
-// Decoded retains the request-bounded DRED decoder state and latent vectors
-// libopus produces during dred_ec_decode().
+// Decoded retains the request-bounded entropy-decoded DRED state and latent
+// vectors from dred_ec_decode(), plus space for RDOVAE-decoded feature frames.
 type Decoded struct {
 	State     [StateDim]float32
 	Latents   [MaxLatents * LatentStride]float32
@@ -71,8 +71,9 @@ func (d *Decoded) FillFeatures(dst []float32) int {
 	return n
 }
 
-// Decode parses and retains the request-bounded DRED decoder state and latent
-// vectors libopus produces during dred_ec_decode().
+// Decode parses the payload and retains the request-bounded state and latent
+// vectors from dred_ec_decode(). RDOVAE feature decoding is a separate step that
+// writes the resulting frames into Features.
 func (d *Decoded) Decode(payload []byte, dredFrameOffset, minFeatureFrames int) (Header, error) {
 	if d == nil {
 		return Header{}, errInvalidHeader

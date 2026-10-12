@@ -3,9 +3,9 @@
 skywire-mobile is the lite multicall core for the mobile app: the visor, the
 CLI's `config` subtree and the client apps in ONE binary, shipped to
 Android as libskywire-mobile.so. It is a build VARIANT of this repo — build it
-with `-tags mobile,withoutsystray,nomsgpack` (make build-mobile /
-android-mobile), which strips the embedded desktop assets (geoip db, manager
-UI, browser wallet, tpviz) and selects the lite module set
+with `-tags mobile,withoutsystray` (make build-mobile / android-mobile),
+which strips the embedded desktop assets (geoip db, manager UI, browser
+wallet, tpviz) and selects the lite module set
 (pkg/visor/init_modules_mobile.go) while keeping the visor's authenticated
 local API intact. iOS links the same core as a C library instead
 (cmd/skywire-mobile-core, pkg/mobilecore).

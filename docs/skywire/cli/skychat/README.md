@@ -13,7 +13,7 @@ skywire cli skychat
 ## Subcommands
 
 - [alias](alias/README.md) — Manage local PK aliases
-- [chat](chat/README.md) — Interactive chat TUI (bubbletea split-pane)
+- [chat](chat/README.md) — Interactive chat TUI (split pane)
 - [events](events/README.md) — Stream structured chat events (NDJSON) from the chat app
 - [group](group/README.md) — D1 owner-centric group chat over CXO feeds
 - [history](history/README.md) — Print persisted message history

@@ -10,33 +10,25 @@ import (
 )
 
 func mdctMul(a, b float32) float32 {
-	return noFMA32Mul(a, b)
+	return float32(a * b)
 }
 
 func mdctMulAddMix(a, b, c, d float32) float32 {
-	// Mirror the clang -ffp-contract=on float path of libopus celt/mdct.c
-	// clt_mdct_backward_c() TDAC mix (S_MUL(x2,*wp1)+S_MUL(x1,*wp2)): the second
-	// product is rounded on its own and the first multiply is fused into the
-	// add. The fully non-fused form drifts by ~1 ULP once the overlap-add region
-	// carries non-zero history (transient short-block boundaries), which seeds
-	// the host-only parity cluster.
+	// libopus celt/mdct.c clt_mdct_backward_c() contracts the first source
+	// product and rounds the second before adding on arm64 and AMD64 v3.
 	if mdctUseFMALikeMixEnabled {
-		return mdctFMA32(a, c, mdctMul(b, d))
+		return mdctMixFMA32(a, c, mdctMul(b, d))
 	}
 	return mdctMul(a, c) + mdctMul(b, d)
 }
 
 func mdctMulSubMix(a, b, c, d float32) float32 {
-	// Mirror libopus celt/mdct.c clt_mdct_backward_c() TDAC mix
-	// (S_MUL(x2,*wp2)-S_MUL(x1,*wp1)) under clang -ffp-contract=on: round the
-	// subtracted product, fuse the first multiply into the subtract.
+	// libopus celt/mdct.c clt_mdct_backward_c() contracts the first source
+	// product and rounds the subtracted product before subtracting on arm64
+	// and AMD64 v3.
 	if mdctUseFMALikeMixEnabled {
-		return mdctFMA32(a, c, -mdctMul(b, d))
+		return mdctMixFMA32(a, c, -mdctMul(b, d))
 	}
-	return mdctMul(a, c) - mdctMul(b, d)
-}
-
-func mdctMulSubMixAlt(a, b, c, d float32) float32 {
 	return mdctMul(a, c) - mdctMul(b, d)
 }
 
@@ -48,19 +40,32 @@ func mdctStoreDirectStage(dst []kissCpx, idx int, scale, re, im, t0, t1 float32)
 }
 
 func mdctStoreDirectStageFMALike(dst []kissCpx, idx int, scale, re, im, t0, t1 float32) {
-	yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
-	yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+	yr := mdctForwardPreRotateReal(re, im, t0, t1)
+	yi := mdctForwardPreRotateImag(re, im, t0, t1)
 	dst[idx].r = yr * scale
 	dst[idx].i = yi * scale
 }
 
-// mdctMulAddMixEncode and mdctMulSubMixEncode are the encoder-only variants
-// of the TDAC windowed-fold mix. They mirror mdctMulAddMix / mdctMulSubMix
-// exactly on every build (same mdctUseFMALikeMixEnabled gating, same
-// non-FMA path on amd64), so the amd64 bit-exact libopus oracle stays
-// byte-parity. The win on arm64 purego is just that mdctEncodeFMA32 uses the
-// Go backend's FMADDS contraction instead of mdctFMA32's wider helper, which
-// the encoder pitch-search is free to use because that path is quality-gated.
+// mdctForwardPreRotateReal and mdctForwardPreRotateImag follow the selected
+// libopus forward-rotation path. Scalar AMD64 v3 contracts the first source
+// product; the AMD64 SIMD kernel keeps both products separate.
+func mdctForwardPreRotateReal(re, im, t0, t1 float32) float32 {
+	if mdctUseFusedForwardPreRotate {
+		return mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
+	}
+	return mdctMul(re, t0) - mdctMul(im, t1)
+}
+
+func mdctForwardPreRotateImag(re, im, t0, t1 float32) float32 {
+	if mdctUseFusedForwardPreRotate {
+		return mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+	}
+	return mdctMul(im, t0) + mdctMul(re, t1)
+}
+
+// mdctMulAddMixEncode and mdctMulSubMixEncode apply the forward MDCT window
+// fold with the same first-product contraction used by the matching libopus
+// scalar build. The AMD64 SIMD build uses the corresponding vector FMA.
 func mdctMulAddMixEncode(a, b, c, d float32) float32 {
 	if mdctUseFMALikeMixEnabled {
 		return mdctEncodeFMA32(a, c, mdctMul(b, d))
@@ -72,6 +77,20 @@ func mdctMulSubMixEncode(a, b, c, d float32) float32 {
 		return mdctEncodeFMA32(a, c, -mdctMul(b, d))
 	}
 	return mdctMul(a, c) - mdctMul(b, d)
+}
+
+// mdctNegMulAddMixEncode computes the trailing windowed fold in libopus
+// celt/mdct.c clt_mdct_forward_c(), -S_MUL(a,c)+S_MUL(b,d). AMD64 v3 fuses
+// the second source product with a rounded negated first product; arm64
+// fuses the negated first product with the rounded second product.
+func mdctNegMulAddMixEncode(a, b, c, d float32) float32 {
+	if mdctUseFMALikeMixEnabled {
+		if mdctUseNegFoldSecondProduct {
+			return mdctEncodeFMA32(b, d, -mdctMul(a, c))
+		}
+		return mdctEncodeFMA32(-a, c, mdctMul(b, d))
+	}
+	return mdctMul(b, d) - mdctMul(a, c)
 }
 
 // MDCT computes the forward Modified Discrete Cosine Transform.
@@ -210,7 +229,7 @@ func MDCTForwardWithOverlapFloat32(samples []float32, overlap int) []float32 {
 		return nil
 	}
 	coeffs := make([]float32, len(samples)-overlap)
-	mdctForwardOverlapF32Scratch(samples, overlap, coeffs, nil, nil, nil, nil)
+	mdctForwardOverlapF32Scratch(samples, overlap, coeffs, nil, nil, nil, nil, nil)
 	return coeffs
 }
 
@@ -224,12 +243,12 @@ func mdctForwardOverlap(samples []float32, overlap int) []float32 {
 // mdctForwardOverlapF32 is a float32-precision MDCT matching libopus float path.
 func mdctForwardOverlapF32(samples []float32, overlap int) []float32 {
 	coeffs := make([]float32, len(samples)-overlap)
-	mdctForwardOverlapF32Scratch(samples, overlap, coeffs, nil, nil, nil, nil)
+	mdctForwardOverlapF32Scratch(samples, overlap, coeffs, nil, nil, nil, nil, nil)
 	return coeffs
 }
 
 // mdctForwardOverlapF32Scratch is the scratch-aware version that avoids allocations.
-func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float32, f []float32, fftIn []complex64, fftOut []complex64, fftTmp []kissCpx) {
+func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float32, f []float32, fftIn []complex64, fftOut []complex64, fftTmp []kissCpx, tables *mdctTransformLookup) {
 	if len(samples) == 0 {
 		return
 	}
@@ -252,13 +271,18 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		return
 	}
 
-	trig := getMDCTTrigF32(n)
-	var window []float32
-	if overlap > 0 {
-		window = GetWindowBufferF32(overlap)
+	var trig, window []float32
+	var st *kissFFTState
+	if tables != nil {
+		trig, window, st = tables.trig, tables.window, tables.fft
+	} else {
+		trig = getMDCTTrigF32(n)
+		st = getKissFFTState(n4)
+		if overlap > 0 {
+			window = GetWindowBufferF32(overlap)
+		}
 	}
 
-	st := getKissFFTState(n4)
 	useDirectKissCpx := st != nil && len(st.bitrev) >= n4
 	fuseDirectStage := useDirectKissCpx
 
@@ -315,7 +339,19 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			// the remainder. The kernel's paired loads touch one extra odd
 			// lane above each stream start and run the descending streams
 			// down to start-2*done+2, so gate on those exact bounds.
-			if lead := limit1 - i; mdctUseNeonMidFold && lead >= 4 {
+			if lead := limit1 - i; mdctUseSSEForward && lead >= 4 {
+				blocks := lead >> 2
+				done := blocks * 4
+				if xp1+n2+2*done-1 < len(samples) && xp2 < len(samples) && xp2-n2-2*done+1 >= 0 &&
+					wp1+2*done-1 < len(window) && wp2 < len(window) && wp2-2*done+1 >= 0 {
+					mdctLeadFoldSSE(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			} else if lead := limit1 - i; mdctUseNeonMidFold && lead >= 4 {
 				blocks := lead >> 2
 				done := blocks * 4
 				if xp2-n2-2*done+2 >= 0 && wp2-2*done+2 >= 0 &&
@@ -335,10 +371,10 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				re1 := mdctMulAddMixEncode(float32(samples[xp1+n2+2]), float32(samples[xp2-2]), window[wp2-2], window[wp1+2])
 				im1 := mdctMulSubMixEncode(float32(samples[xp1+2]), float32(samples[xp2-n2-2]), window[wp1+2], window[wp2-2])
 				t00, t10, t01, t11 := trig[i], trig[n4+i], trig[i+1], trig[n4+i+1]
-				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
-				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
-				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
-				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				yr0 := mdctForwardPreRotateReal(re0, im0, t00, t10)
+				yi0 := mdctForwardPreRotateImag(re0, im0, t00, t10)
+				yr1 := mdctForwardPreRotateReal(re1, im1, t01, t11)
+				yi1 := mdctForwardPreRotateImag(re1, im1, t01, t11)
 				b0, b1 := bitrev[i], bitrev[i+1]
 				fftStage[b0].r = yr0 * preScale
 				fftStage[b0].i = yi0 * preScale
@@ -353,8 +389,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				re := mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
 				im := mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
 				t0, t1 := trig[i], trig[n4+i]
-				yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
-				yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+				yr := mdctForwardPreRotateReal(re, im, t0, t1)
+				yi := mdctForwardPreRotateImag(re, im, t0, t1)
 				b := bitrev[i]
 				fftStage[b].r = yr * preScale
 				fftStage[b].i = yi * preScale
@@ -371,7 +407,16 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			// the scalar loop finish the remainder. The kernel's paired loads
 			// touch samples[xp2-2*done+2 : xp2+2] and samples[xp1 : xp1+2*done],
 			// so gate on those exact bounds.
-			if mid := n4 - limit1 - i; mdctUseNeonMidFold && mid >= 4 {
+			if mid := n4 - limit1 - i; mdctUseSSEForward && mid >= 4 {
+				blocks := mid >> 2
+				done := blocks * 4
+				if xp1+2*done-1 < len(samples) && xp2-2*done+1 >= 0 && xp2 < len(samples) {
+					mdctMidRotateSSE(fftStage, bitrev, samples, trig, i, n4, xp1, xp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+				}
+			} else if mid := n4 - limit1 - i; mdctUseNeonMidFold && mid >= 4 {
 				blocks := mid >> 2
 				done := blocks * 4
 				if xp2-2*done+2 >= 0 && xp2+1 < len(samples) && xp1+2*done-1 < len(samples) {
@@ -394,10 +439,10 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t10 := trig[n4+i]
 				t01 := trig[i+1]
 				t11 := trig[n4+i+1]
-				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
-				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
-				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
-				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				yr0 := mdctForwardPreRotateReal(re0, im0, t00, t10)
+				yi0 := mdctForwardPreRotateImag(re0, im0, t00, t10)
+				yr1 := mdctForwardPreRotateReal(re1, im1, t01, t11)
+				yi1 := mdctForwardPreRotateImag(re1, im1, t01, t11)
 				b0, b1 := bitrev[i], bitrev[i+1]
 				fftStage[b0].r = yr0 * preScale
 				fftStage[b0].i = yi0 * preScale
@@ -417,7 +462,19 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			}
 
 			// Trailing windowed fold, same blocked NEON treatment.
-			if tail := n4 - i; mdctUseNeonMidFold && tail >= 4 {
+			if tail := n4 - i; mdctUseSSEForward && tail >= 4 {
+				blocks := tail >> 2
+				done := blocks * 4
+				if xp1-n2 >= 0 && xp1+2*done-1 < len(samples) && xp2+n2 < len(samples) && xp2-2*done+1 >= 0 &&
+					wp1+2*done-1 < len(window) && wp2 < len(window) && wp2-2*done+1 >= 0 {
+					mdctTailFoldSSE(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			} else if tail := n4 - i; mdctUseNeonMidFold && tail >= 4 {
 				blocks := tail >> 2
 				done := blocks * 4
 				if xp2-2*done+2 >= 0 && wp2-2*done+2 >= 0 && xp1-n2 >= 0 &&
@@ -432,15 +489,15 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				}
 			}
 			for ; i+1 < n4; i += 2 {
-				re0 := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				re0 := mdctNegMulAddMixEncode(float32(samples[xp1-n2]), float32(samples[xp2]), window[wp1], window[wp2])
 				im0 := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
-				re1 := mdctMulSubMixAlt(float32(samples[xp2-2]), float32(samples[xp1-n2+2]), window[wp2-2], window[wp1+2])
+				re1 := mdctNegMulAddMixEncode(float32(samples[xp1-n2+2]), float32(samples[xp2-2]), window[wp1+2], window[wp2-2])
 				im1 := mdctMulAddMixEncode(float32(samples[xp1+2]), float32(samples[xp2+n2-2]), window[wp2-2], window[wp1+2])
 				t00, t10, t01, t11 := trig[i], trig[n4+i], trig[i+1], trig[n4+i+1]
-				yr0 := mdctEncodeFMA32(re0, t00, -mdctMul(im0, t10))
-				yi0 := mdctEncodeFMA32(im0, t00, mdctMul(re0, t10))
-				yr1 := mdctEncodeFMA32(re1, t01, -mdctMul(im1, t11))
-				yi1 := mdctEncodeFMA32(im1, t01, mdctMul(re1, t11))
+				yr0 := mdctForwardPreRotateReal(re0, im0, t00, t10)
+				yi0 := mdctForwardPreRotateImag(re0, im0, t00, t10)
+				yr1 := mdctForwardPreRotateReal(re1, im1, t01, t11)
+				yi1 := mdctForwardPreRotateImag(re1, im1, t01, t11)
 				b0, b1 := bitrev[i], bitrev[i+1]
 				fftStage[b0].r = yr0 * preScale
 				fftStage[b0].i = yi0 * preScale
@@ -452,11 +509,11 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				wp2 -= 4
 			}
 			for ; i < n4; i++ {
-				re := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				re := mdctNegMulAddMixEncode(float32(samples[xp1-n2]), float32(samples[xp2]), window[wp1], window[wp2])
 				im := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
 				t0, t1 := trig[i], trig[n4+i]
-				yr := mdctEncodeFMA32(re, t0, -mdctMul(im, t1))
-				yi := mdctEncodeFMA32(im, t0, mdctMul(re, t1))
+				yr := mdctForwardPreRotateReal(re, im, t0, t1)
+				yi := mdctForwardPreRotateImag(re, im, t0, t1)
 				b := bitrev[i]
 				fftStage[b].r = yr * preScale
 				fftStage[b].i = yi * preScale
@@ -466,6 +523,22 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				wp2 -= 2
 			}
 		} else {
+			// The windowed folds run four outputs per step on the SSE build;
+			// the descending loads reach one sample below each stream's last
+			// read, so gate on the exact bounds.
+			if lead := limit1 - i; mdctUseSSEForward && lead >= 4 {
+				blocks := lead >> 2
+				done := 4 * blocks
+				if xp1+n2+2*done-1 < len(samples) && xp2 < len(samples) && xp2-n2-2*done+1 >= 0 &&
+					wp1+2*done-1 < len(window) && wp2 < len(window) && wp2-2*done+1 >= 0 {
+					mdctLeadFoldSSE(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			}
 			for ; i < limit1; i++ {
 				re := mdctMulAddMixEncode(float32(samples[xp1+n2]), float32(samples[xp2]), window[wp2], window[wp1])
 				im := mdctMulSubMixEncode(float32(samples[xp1]), float32(samples[xp2-n2]), window[wp1], window[wp2])
@@ -480,6 +553,18 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 
 			wp1 = 0
 			wp2 = overlap - 1
+			// The unwindowed middle runs four outputs per step on the SSE
+			// build; its loads reach one sample past each stream's last read.
+			if mid := n4 - limit1 - i; mdctUseSSEForward && mid >= 4 {
+				blocks := mid >> 2
+				done := 4 * blocks
+				if xp1+2*done-1 < len(samples) && xp2-2*done+1 >= 0 && xp2 < len(samples) {
+					mdctMidRotateSSE(fftStage, bitrev, samples, trig, i, n4, xp1, xp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+				}
+			}
 			for ; i < n4-limit1; i++ {
 				re := float32(samples[xp2])
 				im := float32(samples[xp1])
@@ -490,8 +575,21 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				xp2 -= 2
 			}
 
+			if tail := n4 - i; mdctUseSSEForward && tail >= 4 {
+				blocks := tail >> 2
+				done := 4 * blocks
+				if xp1-n2 >= 0 && xp1+2*done-1 < len(samples) && xp2+n2 < len(samples) && xp2-2*done+1 >= 0 &&
+					wp1+2*done-1 < len(window) && wp2 < len(window) && wp2-2*done+1 >= 0 {
+					mdctTailFoldSSE(fftStage, bitrev, samples, window, trig, i, n4, n2, xp1, xp2, wp1, wp2, blocks, preScale)
+					i += done
+					xp1 += 2 * done
+					xp2 -= 2 * done
+					wp1 += 2 * done
+					wp2 -= 2 * done
+				}
+			}
 			for ; i < n4; i++ {
-				re := mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+				re := mdctNegMulAddMixEncode(float32(samples[xp1-n2]), float32(samples[xp2]), window[wp1], window[wp2])
 				im := mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
 				t0 := trig[i]
 				t1 := trig[n4+i]
@@ -525,7 +623,7 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		}
 
 		for ; i < n4; i++ {
-			f[2*i] = mdctMulSubMixAlt(float32(samples[xp2]), float32(samples[xp1-n2]), window[wp2], window[wp1])
+			f[2*i] = mdctNegMulAddMixEncode(float32(samples[xp1-n2]), float32(samples[xp2]), window[wp1], window[wp2])
 			f[2*i+1] = mdctMulAddMixEncode(float32(samples[xp1]), float32(samples[xp2+n2]), window[wp2], window[wp1])
 			xp1 += 2
 			xp2 -= 2
@@ -571,8 +669,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 			im := f[2*i+1]
 			t0 := trig[i]
 			t1 := trig[n4+i]
-			yr := mdctMul(re, t0) - mdctMul(im, t1)
-			yi := mdctMul(im, t0) + mdctMul(re, t1)
+			yr := mdctForwardPreRotateReal(re, im, t0, t1)
+			yi := mdctForwardPreRotateImag(re, im, t0, t1)
 			fftIn[i] = complex(yr*preScale, yi*preScale)
 		}
 		kissFFT32To(fftOut, fftIn[:n4], fftTmp)
@@ -591,9 +689,13 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		// (bit-identical per element), and the scalar loop finishes the
 		// n4%8 middle. QEXT moves the scale here, so that build keeps the
 		// scalar loop.
-		if mdctUsePostTwiddleNeon && !mdctQEXTScalePlacement {
+		if (mdctUsePostTwiddleNeon || mdctUseSSEForward) && !mdctQEXTScalePlacement {
 			if pairBlocks := n4 >> 3; pairBlocks > 0 {
-				mdctPostTwiddleNeon(coeffs, fftStage, trig, n2, n4, pairBlocks)
+				if mdctUseSSEForward {
+					mdctPostTwiddleSSE(coeffs, fftStage, trig, n2, n4, pairBlocks)
+				} else {
+					mdctPostTwiddleNeon(coeffs, fftStage, trig, n2, n4, pairBlocks)
+				}
 				i = 4 * pairBlocks
 				lo += 2 * i
 				hi -= 2 * i
@@ -612,10 +714,10 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t10 := trigHi[i]
 				t01 := trig[i+1]
 				t11 := trigHi[i+1]
-				yr0 := mdctMul(im0, t10) - mdctMul(re0, t00)
-				yi0 := mdctMul(re0, t10) + mdctMul(im0, t00)
-				yr1 := mdctMul(im1, t11) - mdctMul(re1, t01)
-				yi1 := mdctMul(re1, t11) + mdctMul(im1, t01)
+				yr0 := mdctMulSubMixEncode(im0, re0, t10, t00)
+				yi0 := mdctMulAddMixEncode(re0, im0, t10, t00)
+				yr1 := mdctMulSubMixEncode(im1, re1, t11, t01)
+				yi1 := mdctMulAddMixEncode(re1, im1, t11, t01)
 				coeffs[lo] = yr0
 				coeffs[hi] = yi0
 				coeffs[lo+2] = yr1
@@ -633,8 +735,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t0 *= postScale
 				t1 *= postScale
 			}
-			yr := mdctMul(im, t1) - mdctMul(re, t0)
-			yi := mdctMul(re, t1) + mdctMul(im, t0)
+			yr := mdctMulSubMixEncode(im, re, t1, t0)
+			yi := mdctMulAddMixEncode(re, im, t1, t0)
 			coeffs[lo] = yr
 			coeffs[hi] = yi
 			lo += 2
@@ -654,8 +756,8 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 				t0 *= postScale
 				t1 *= postScale
 			}
-			yr := mdctMul(im, t1) - mdctMul(re, t0)
-			yi := mdctMul(re, t1) + mdctMul(im, t0)
+			yr := mdctMulSubMixEncode(im, re, t1, t0)
+			yi := mdctMulAddMixEncode(re, im, t1, t0)
 			coeffs[lo] = yr
 			coeffs[hi] = yi
 			lo += 2
@@ -663,113 +765,6 @@ func mdctForwardOverlapF32Scratch(samples []float32, overlap int, coeffs []float
 		}
 	}
 
-}
-
-// mdctScratch computes the MDCT using scratch buffers to avoid allocations.
-func mdctScratch(samples []float32, scratch *encoderScratch) []float32 {
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) {
-			return mdctForwardOverlapScratch(samples, Overlap, scratch)
-		}
-	}
-
-	return mdctStandard(samples)
-}
-
-func mdctScratchF32(samples []float32, scratch *encoderScratch) []float32 {
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) {
-			coeffs := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-			mdctForwardOverlapF32Scratch(samples, Overlap, coeffs,
-				scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-			return coeffs
-		}
-	}
-
-	return nil
-}
-
-func mdctScratchF32Coeffs(samples []float32, scratch *encoderScratch) []float32 {
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) {
-			coeffs := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-			mdctForwardOverlapF32Scratch(samples, Overlap, coeffs,
-				scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-			return coeffs
-		}
-	}
-
-	return nil
-}
-
-// mdctShortScratch computes the short-block MDCT using scratch buffers.
-func mdctShortScratch(samples []float32, shortBlocks int, scratch *encoderScratch) []float32 {
-	if shortBlocks <= 1 {
-		return mdctScratch(samples, scratch)
-	}
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) && frameSize%shortBlocks == 0 {
-			return mdctForwardShortOverlapScratch(samples, Overlap, shortBlocks, scratch)
-		}
-	}
-
-	return mdctShortStandard(samples, shortBlocks)
-}
-
-func mdctShortScratchF32(samples []float32, shortBlocks int, scratch *encoderScratch) []float32 {
-	if shortBlocks <= 1 {
-		return mdctScratchF32(samples, scratch)
-	}
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) && frameSize%shortBlocks == 0 {
-			return mdctForwardShortOverlapScratchF32(samples, Overlap, shortBlocks, scratch)
-		}
-	}
-
-	return nil
-}
-
-func mdctShortScratchF32Coeffs(samples []float32, shortBlocks int, scratch *encoderScratch) []float32 {
-	if shortBlocks <= 1 {
-		return mdctScratchF32Coeffs(samples, scratch)
-	}
-	if len(samples) == 0 {
-		return nil
-	}
-
-	if len(samples) > Overlap {
-		frameSize := len(samples) - Overlap
-		if ValidFrameSize(frameSize) && frameSize%shortBlocks == 0 {
-			return mdctForwardShortOverlapScratchF32Coeffs(samples, Overlap, shortBlocks, scratch)
-		}
-	}
-
-	return nil
 }
 
 // mdctShortBlocksCore is a helper that processes multiple short MDCT blocks.
@@ -809,7 +804,7 @@ func mdctForwardShortOverlapScratchIntoF32Coeffs(samples []float32, overlap, sho
 	if shortBlocks <= 1 {
 		if len(output) >= len(samples)-overlap {
 			mdctForwardOverlapF32Scratch(samples, overlap, output,
-				scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
+				scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp, scratch.mdctLookup(2*(len(samples)-overlap)))
 			return output[:len(samples)-overlap]
 		}
 		return mdctForwardOverlapScratchF32Coeffs(samples, overlap, scratch)
@@ -831,7 +826,7 @@ func mdctForwardShortOverlapScratchIntoF32Coeffs(samples []float32, overlap, sho
 			break
 		}
 		mdctForwardOverlapF32Scratch(samples[start:end], overlap, blockCoeffs,
-			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
+			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp, scratch.mdctLookup(2*(len(samples[start:end])-overlap)))
 		for i := range blockCoeffs {
 			outIdx := b + i*shortBlocks
 			if outIdx < len(output) {
@@ -842,34 +837,6 @@ func mdctForwardShortOverlapScratchIntoF32Coeffs(samples []float32, overlap, sho
 	return output[:frameSize]
 }
 
-// mdctForwardOverlapScratch computes the MDCT forward transform using scratch buffers.
-func mdctForwardOverlapScratch(samples []float32, overlap int, scratch *encoderScratch) []float32 {
-	frameSize := len(samples) - overlap
-	if frameSize <= 0 {
-		return nil
-	}
-
-	// Use scratch buffer for coeffs output
-	coeffs := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-
-	// Call the scratch-aware version with all buffers
-	mdctForwardOverlapF32Scratch(samples, overlap, coeffs,
-		scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-
-	return coeffs
-}
-
-func mdctForwardOverlapScratchF32(samples []float32, overlap int, scratch *encoderScratch) []float32 {
-	frameSize := len(samples) - overlap
-	if frameSize <= 0 {
-		return nil
-	}
-	coeffs := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-	mdctForwardOverlapF32Scratch(samples, overlap, coeffs,
-		scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-	return coeffs
-}
-
 func mdctForwardOverlapScratchF32Coeffs(samples []float32, overlap int, scratch *encoderScratch) []float32 {
 	frameSize := len(samples) - overlap
 	if frameSize <= 0 {
@@ -877,83 +844,8 @@ func mdctForwardOverlapScratchF32Coeffs(samples []float32, overlap int, scratch 
 	}
 	coeffs := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
 	mdctForwardOverlapF32Scratch(samples, overlap, coeffs,
-		scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
+		scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp, scratch.mdctLookup(2*(len(samples)-overlap)))
 	return coeffs
-}
-
-// mdctForwardShortOverlapScratch computes short-block MDCT using scratch buffers.
-func mdctForwardShortOverlapScratch(samples []float32, overlap, shortBlocks int, scratch *encoderScratch) []float32 {
-	if shortBlocks <= 1 {
-		return mdctForwardOverlapScratch(samples, overlap, scratch)
-	}
-	if len(samples) <= overlap || overlap < 0 {
-		return nil
-	}
-
-	frameSize := len(samples) - overlap
-	if frameSize <= 0 || frameSize%shortBlocks != 0 {
-		return nil
-	}
-
-	shortSize := frameSize / shortBlocks
-	output := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-
-	// Use scratch buffer for per-block coefficients
-	blockCoeffs := ensureFloat32Slice(&scratch.mdctBlockCoeffs, shortSize)
-
-	for b := range shortBlocks {
-		start := b * shortSize
-		end := start + shortSize + overlap
-		if end > len(samples) {
-			break
-		}
-
-		// Compute short block MDCT using scratch buffers
-		mdctForwardOverlapF32Scratch(samples[start:end], overlap, blockCoeffs,
-			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-
-		for i := range blockCoeffs {
-			outIdx := b + i*shortBlocks
-			if outIdx < len(output) {
-				output[outIdx] = blockCoeffs[i]
-			}
-		}
-	}
-
-	return output
-}
-
-func mdctForwardShortOverlapScratchF32(samples []float32, overlap, shortBlocks int, scratch *encoderScratch) []float32 {
-	if shortBlocks <= 1 {
-		return mdctForwardOverlapScratchF32(samples, overlap, scratch)
-	}
-	if len(samples) <= overlap || overlap < 0 {
-		return nil
-	}
-
-	frameSize := len(samples) - overlap
-	if frameSize <= 0 || frameSize%shortBlocks != 0 {
-		return nil
-	}
-	shortSize := frameSize / shortBlocks
-	output := ensureFloat32Slice(&scratch.mdctCoeffsF32, frameSize)
-	blockCoeffs := ensureFloat32Slice(&scratch.mdctBlockCoeffs, shortSize)
-	for b := range shortBlocks {
-		start := b * shortSize
-		end := start + shortSize + overlap
-		if end > len(samples) {
-			break
-		}
-		mdctForwardOverlapF32Scratch(samples[start:end], overlap, blockCoeffs,
-			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
-		for i := range blockCoeffs {
-			outIdx := b + i*shortBlocks
-			if outIdx < len(output) {
-				output[outIdx] = blockCoeffs[i]
-			}
-		}
-	}
-	return output
 }
 
 func mdctForwardShortOverlapScratchF32Coeffs(samples []float32, overlap, shortBlocks int, scratch *encoderScratch) []float32 {
@@ -978,7 +870,7 @@ func mdctForwardShortOverlapScratchF32Coeffs(samples []float32, overlap, shortBl
 			break
 		}
 		mdctForwardOverlapF32Scratch(samples[start:end], overlap, blockCoeffs,
-			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp)
+			scratch.mdctF, scratch.mdctFFTIn, scratch.mdctFFTOut, scratch.mdctFFTTmp, scratch.mdctLookup(2*(len(samples[start:end])-overlap)))
 		for i := range blockCoeffs {
 			outIdx := b + i*shortBlocks
 			if outIdx < len(output) {

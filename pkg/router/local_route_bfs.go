@@ -240,10 +240,15 @@ func localRouteBFS(
 	throughputFor := func(id uuid.UUID) float64 { return g.throughputByID[id] }
 
 	queue := seed
+	// queuedNext holds the PKs already queued for the next level. Only the first
+	// copy of a PK at a depth is ever expanded, so later copies are dropped
+	// before they reach the arena. Copies of dst stay, to rank the paths.
+	queuedNext := make(map[cipher.PubKey]struct{})
 	var nextQueue, children []bfsNode
 	var dstHits []bfsNode
 	for level = 1; level <= maxHops && len(queue) > 0; level++ {
 		nextQueue = nextQueue[:0]
+		clear(queuedNext)
 		// Collect ALL dst-hits at this level, then pick the lowest-latency
 		// among them. Returning on the first hit left the BFS's
 		// deterministic-by-PK ordering as the only tiebreaker — which
@@ -294,6 +299,12 @@ func localRouteBFS(
 				// other depths.
 				if arena.pkInChain(nextPK, node) {
 					continue
+				}
+				if nextPK != dst {
+					if _, dup := queuedNext[nextPK]; dup {
+						continue
+					}
+					queuedNext[nextPK] = struct{}{}
 				}
 				children = append(children, arena.add(bfsNode{
 					pk:     nextPK,

@@ -1,9 +1,7 @@
-//go:build (!arm64 && !amd64) || purego
-
 package celt
 
-// kfBfly5Inner is the Go fallback for the radix-5 butterfly inner loop.
-func kfBfly5Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
+// kfBfly5InnerScalar is the scalar radix-5 butterfly inner loop.
+func kfBfly5InnerScalar(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 	ya := w[fstride*m]
 	yb := w[fstride*2*m]
 	yar, yai := ya.r, ya.i
@@ -30,14 +28,38 @@ func kfBfly5Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 			w3 := w[tw3]
 			w4 := w[tw4]
 
-			s1r := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
-			s1i := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
-			s2r := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
-			s2i := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
-			s3r := kissMulSubSource(b3.r, w3.r, b3.i, w3.i)
-			s3i := kissMulAddSource(b3.r, w3.i, b3.i, w3.r)
-			s4r := kissMulSubSource(b4.r, w4.r, b4.i, w4.i)
-			s4i := kissMulAddSource(b4.r, w4.i, b4.i, w4.r)
+			s1r, exceptional := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
+			if exceptional {
+				s1r = kissMulSubSourceNonFinite(b1.r, w1.r, b1.i, w1.i)
+			}
+			s1i, exceptional := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
+			if exceptional {
+				s1i = kissMulAddSourceNonFinite(b1.r, w1.i, b1.i, w1.r)
+			}
+			s2r, exceptional := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
+			if exceptional {
+				s2r = kissMulSubSourceNonFinite(b2.r, w2.r, b2.i, w2.i)
+			}
+			s2i, exceptional := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
+			if exceptional {
+				s2i = kissMulAddSourceNonFinite(b2.r, w2.i, b2.i, w2.r)
+			}
+			s3r, exceptional := kissMulSubSource(b3.r, w3.r, b3.i, w3.i)
+			if exceptional {
+				s3r = kissMulSubSourceNonFinite(b3.r, w3.r, b3.i, w3.i)
+			}
+			s3i, exceptional := kissMulAddSource(b3.r, w3.i, b3.i, w3.r)
+			if exceptional {
+				s3i = kissMulAddSourceNonFinite(b3.r, w3.i, b3.i, w3.r)
+			}
+			s4r, exceptional := kissMulSubSource(b4.r, w4.r, b4.i, w4.i)
+			if exceptional {
+				s4r = kissMulSubSourceNonFinite(b4.r, w4.r, b4.i, w4.i)
+			}
+			s4i, exceptional := kissMulAddSource(b4.r, w4.i, b4.i, w4.r)
+			if exceptional {
+				s4i = kissMulAddSourceNonFinite(b4.r, w4.i, b4.i, w4.r)
+			}
 
 			s7r, s7i := s1r+s4r, s1i+s4i
 			s10r, s10i := s1r-s4r, s1i-s4i
@@ -47,17 +69,46 @@ func kfBfly5Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 			fout[idx0].r = kissAdd(s0.r, kissAdd(s7r, s8r))
 			fout[idx0].i = kissAdd(s0.i, kissAdd(s7i, s8i))
 
-			s5r := kissAdd(s0.r, kissMulAddSource(s7r, yar, s8r, ybr))
-			s5i := kissAdd(s0.i, kissMulAddSource(s7i, yar, s8i, ybr))
-			s6r := kissMulAddSource(s10i, yai, s9i, ybi)
-			s6i := -kissMulAddSource(s10r, yai, s9r, ybi)
+			s5rAdd, exceptional := kissMulAddSource(s7r, yar, s8r, ybr)
+			if exceptional {
+				s5rAdd = kissMulAddSourceNonFinite(s7r, yar, s8r, ybr)
+			}
+			s5r := kissAdd(s0.r, s5rAdd)
+			s5iAdd, exceptional := kissMulAddSource(s7i, yar, s8i, ybr)
+			if exceptional {
+				s5iAdd = kissMulAddSourceNonFinite(s7i, yar, s8i, ybr)
+			}
+			s5i := kissAdd(s0.i, s5iAdd)
+			s6r, exceptional := kissMulAddSource(s10i, yai, s9i, ybi)
+			if exceptional {
+				s6r = kissMulAddSourceNonFinite(s10i, yai, s9i, ybi)
+			}
+			s6iMul, exceptional := kissMulAddSource(s10r, yai, s9r, ybi)
+			if exceptional {
+				s6iMul = kissMulAddSourceNonFinite(s10r, yai, s9r, ybi)
+			}
+			s6i := -s6iMul
 			fout[idx1].r, fout[idx1].i = kissSub(s5r, s6r), kissSub(s5i, s6i)
 			fout[idx4].r, fout[idx4].i = kissAdd(s5r, s6r), kissAdd(s5i, s6i)
 
-			s11r := kissAdd(s0.r, kissMulAddSource(s7r, ybr, s8r, yar))
-			s11i := kissAdd(s0.i, kissMulAddSource(s7i, ybr, s8i, yar))
-			s12r := kissMulSubSource(s9i, yai, s10i, ybi)
-			s12i := kissMulSubSource(s10r, ybi, s9r, yai)
+			s11rAdd, exceptional := kissMulAddSource(s7r, ybr, s8r, yar)
+			if exceptional {
+				s11rAdd = kissMulAddSourceNonFinite(s7r, ybr, s8r, yar)
+			}
+			s11r := kissAdd(s0.r, s11rAdd)
+			s11iAdd, exceptional := kissMulAddSource(s7i, ybr, s8i, yar)
+			if exceptional {
+				s11iAdd = kissMulAddSourceNonFinite(s7i, ybr, s8i, yar)
+			}
+			s11i := kissAdd(s0.i, s11iAdd)
+			s12r, exceptional := kissMulSubSource(s9i, yai, s10i, ybi)
+			if exceptional {
+				s12r = kissMulSubSourceNonFinite(s9i, yai, s10i, ybi)
+			}
+			s12i, exceptional := kissMulSubSource(s10r, ybi, s9r, yai)
+			if exceptional {
+				s12i = kissMulSubSourceNonFinite(s10r, ybi, s9r, yai)
+			}
 			fout[idx2].r, fout[idx2].i = kissAdd(s11r, s12r), kissAdd(s11i, s12i)
 			fout[idx3].r, fout[idx3].i = kissSub(s11r, s12r), kissSub(s11i, s12i)
 
@@ -74,8 +125,8 @@ func kfBfly5Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 	}
 }
 
-// kfBfly3Inner is the Go fallback for the radix-3 butterfly inner loop.
-func kfBfly3Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
+// kfBfly3InnerScalar is the scalar radix-3 butterfly inner loop.
+func kfBfly3InnerScalar(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 	m2 := 2 * m
 	epi3i := w[fstride*m].i
 	_ = fout[N*mm-1]
@@ -97,10 +148,22 @@ func kfBfly3Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 			w1 := w[tw1]
 			w2 := w[tw2]
 
-			s1r := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
-			s1i := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
-			s2r := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
-			s2i := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
+			s1r, exceptional := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
+			if exceptional {
+				s1r = kissMulSubSourceNonFinite(b1.r, w1.r, b1.i, w1.i)
+			}
+			s1i, exceptional := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
+			if exceptional {
+				s1i = kissMulAddSourceNonFinite(b1.r, w1.i, b1.i, w1.r)
+			}
+			s2r, exceptional := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
+			if exceptional {
+				s2r = kissMulSubSourceNonFinite(b2.r, w2.r, b2.i, w2.i)
+			}
+			s2i, exceptional := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
+			if exceptional {
+				s2i = kissMulAddSourceNonFinite(b2.r, w2.i, b2.i, w2.r)
+			}
 
 			s3r := s1r + s2r
 			s3i := s1i + s2i
@@ -110,25 +173,17 @@ func kfBfly3Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 			tw1 += fstride
 			tw2 += fstride2
 
-			fout[idx1].r = kissHalfSub(a0r, s3r)
-			fout[idx1].i = kissHalfSub(a0i, s3i)
-
-			s0r = kissScaleMul(s0r, epi3i)
-			s0i = kissScaleMul(s0i, epi3i)
-
+			f1r := kissHalfSub(a0r, s3r)
+			f1i := kissHalfSub(a0i, s3i)
 			fout[idx0].r = a0r + s3r
 			fout[idx0].i = a0i + s3i
-
-			fout[idx2].r = fout[idx1].r + s0i
-			fout[idx2].i = fout[idx1].i - s0r
-			fout[idx1].r = fout[idx1].r - s0i
-			fout[idx1].i = fout[idx1].i + s0r
+			fout[idx1].r, fout[idx1].i, fout[idx2].r, fout[idx2].i = kissRadix3ScaledOutputs(f1r, f1i, s0r, s0i, epi3i)
 		}
 	}
 }
 
-// kfBfly4Inner is the Go fallback for the radix-4 butterfly inner loop.
-func kfBfly4Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
+// kfBfly4InnerScalar is the scalar radix-4 butterfly inner loop.
+func kfBfly4InnerScalar(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 	m2 := 2 * m
 	m3 := 3 * m
 	_ = fout[N*mm-1]
@@ -154,12 +209,30 @@ func kfBfly4Inner(fout []kissCpx, w []kissCpx, m, N, mm, fstride int) {
 			w2 := w[tw2]
 			w3 := w[tw3]
 
-			s0r := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
-			s0i := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
-			s1r := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
-			s1i := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
-			s2r := kissMulSubSource(b3.r, w3.r, b3.i, w3.i)
-			s2i := kissMulAddSource(b3.r, w3.i, b3.i, w3.r)
+			s0r, exceptional := kissMulSubSource(b1.r, w1.r, b1.i, w1.i)
+			if exceptional {
+				s0r = kissMulSubSourceNonFinite(b1.r, w1.r, b1.i, w1.i)
+			}
+			s0i, exceptional := kissMulAddSource(b1.r, w1.i, b1.i, w1.r)
+			if exceptional {
+				s0i = kissMulAddSourceNonFinite(b1.r, w1.i, b1.i, w1.r)
+			}
+			s1r, exceptional := kissMulSubSource(b2.r, w2.r, b2.i, w2.i)
+			if exceptional {
+				s1r = kissMulSubSourceNonFinite(b2.r, w2.r, b2.i, w2.i)
+			}
+			s1i, exceptional := kissMulAddSource(b2.r, w2.i, b2.i, w2.r)
+			if exceptional {
+				s1i = kissMulAddSourceNonFinite(b2.r, w2.i, b2.i, w2.r)
+			}
+			s2r, exceptional := kissMulSubSource(b3.r, w3.r, b3.i, w3.i)
+			if exceptional {
+				s2r = kissMulSubSourceNonFinite(b3.r, w3.r, b3.i, w3.i)
+			}
+			s2i, exceptional := kissMulAddSource(b3.r, w3.i, b3.i, w3.r)
+			if exceptional {
+				s2i = kissMulAddSourceNonFinite(b3.r, w3.i, b3.i, w3.r)
+			}
 
 			s5r := f0r - s1r
 			s5i := f0i - s1i

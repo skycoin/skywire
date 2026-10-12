@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
+	"github.com/skycoin/skywire/pkg/skychat/privacy"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -240,6 +241,10 @@ type chatEvent struct {
 	FileSize   int64  `json:"file_size,omitempty"`
 	FilePath   string `json:"file_path,omitempty"`
 	FileStatus string `json:"file_status,omitempty"`
+
+	// Request marks an inbound message from a peer not yet let in, while
+	// approval is on (see privacy.go). The UI lists it under Requests.
+	Request bool `json:"request,omitempty"`
 }
 
 // eventSub is a /events subscriber: a buffered channel plus the set of
@@ -582,6 +587,9 @@ func renderLegacySSE(ev chatEvent) string {
 		// one threads by message id, those carry the quoted text itself.
 		m["reply_to_id"] = ev.ReplyToID
 	}
+	if ev.Request {
+		m["request"] = true
+	}
 	if ev.FileID != "" {
 		m["file_id"] = ev.FileID
 		m["file_name"] = ev.FileName
@@ -839,6 +847,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	// nickname is not a message, and a user who has turned history off still
 	// expects to see names rather than keys.
 	openContactStore(contactStorePath())
+	openPrivacyStore(privacyStorePath())
 
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
@@ -900,6 +909,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 		OnEvent:   onChatEvent,
 		DialRetry: func(dctx context.Context, fn func() error) error { return r.Do(dctx, fn) },
 		PreHandleFrame: func(peer cipher.PubKey, payload []byte) bool {
+			// A blocked peer's frames are dropped before anything else sees
+			// them: nothing is stored, shown or acknowledged.
+			if inboundVerdict(peer.Hex()) == privacy.Reject {
+				return true
+			}
 			// Pair-control (pair-invite / pair-ack) and file-backfill
 			// (file-request) envelopes are consumed here: both are control
 			// traffic that must never surface as a chat line.
@@ -998,6 +1012,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	mux.HandleFunc("/history/forget", requireAuthFunc(forgetHandler))
+	mux.HandleFunc("/search", requireAuthFunc(searchHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/unread", requireAuthFunc(unreadHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
@@ -1014,6 +1029,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerVoiceHTTPHandlers(mux)
 	registerCallLogHandler(mux)
 	registerContactHandlers(mux)
+	registerPrivacyHandlers(mux)
 	registerTransferHandlers(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
@@ -1825,12 +1841,21 @@ func onChatEvent(ev dm.Event) {
 		id = newEventID()
 	}
 	from, to := ev.Peer, ""
+	request := false
 	if ev.Dir == "out" {
 		from = ""
 		if appCl != nil {
 			from = appCl.Config().VisorPK.Hex()
 		}
 		to = ev.Peer
+		// Writing to someone first is letting them in.
+		if privacyStore.Approval() && !privacyStore.Accepted(ev.Peer) {
+			if err := privacyStore.Accept(ev.Peer); err != nil {
+				appLog("privacy: accept %s: %v", ev.Peer, err)
+			}
+		}
+	} else {
+		request = inboundVerdict(ev.Peer) == privacy.Request
 	}
 	hub.publishEvent(chatEvent{
 		ID:        id,
@@ -1842,10 +1867,16 @@ func onChatEvent(ev dm.Event) {
 		Text:      ev.Text,
 		ReplyToID: ev.ReplyTo,
 		Len:       len(ev.Text),
+		Request:   request,
 	})
 	// Host-OS notification when no capable browser UI is showing it. Inbound
 	// only — our own outbound mirror is not news to this host.
-	if ev.Dir == "in" {
+	switch {
+	case ev.Dir != "in":
+	case request:
+		notifyOSInboundThread(ev.Peer, ev.Peer, "Message request",
+			displayName(ev.Peer)+": "+notifPreview(ev.Text))
+	default:
 		notifyOSInboundThread(ev.Peer, ev.Peer, displayName(ev.Peer), notifPreview(ev.Text))
 	}
 }

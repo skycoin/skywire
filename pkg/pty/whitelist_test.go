@@ -4,10 +4,11 @@ package pty_test
 import (
 	"bytes"
 	"net"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"testing"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -243,6 +243,9 @@ type DmsgServerConfig struct {
 	// server kept it, so the server reuses the certificate it already has
 	// instead of asking Let's Encrypt for a fresh one.
 	WSTLSCacheDir string `json:"ws_tls_cache_dir,omitempty"`
+	// WSSDomainSuffix names this server's wss front, wss://<DNSLabel(pk)>.<suffix>/dmsg.
+	// It wins over the deployment's suffix, as wss_domain_suffix does for a standalone server.
+	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under
@@ -310,6 +313,26 @@ func (c *DmsgConfig) AllDeployments() []Deployment {
 		return nil
 	}
 	return []Deployment{c.toDeployment()}
+}
+
+// OnlySelfServer reports whether pk names every dmsg server this config lists,
+// LAN servers included, and at least one is listed.
+func (c *DmsgConfig) OnlySelfServer(pk cipher.PubKey) bool {
+	self := false
+	for _, d := range c.AllDeployments() {
+		for _, list := range [][]*disc.Entry{d.Servers, d.LANServers} {
+			for _, e := range list {
+				if e == nil {
+					continue
+				}
+				if e.Static != pk {
+					return false
+				}
+				self = true
+			}
+		}
+	}
+	return self
 }
 
 // ResolvedServers unions servers from all deployments, deduping by PK.

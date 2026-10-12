@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/privacy"
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -100,12 +101,19 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	// somebody opens one. See sendFileToVisorGroup, which already publishes
 	// only the reference; this is the receiving half of the same rule, and it
 	// holds even against an admin that pushes anyway.
+	// Nothing from a blocked peer, in a group or not. A 1:1 file from a peer
+	// still waiting as a request is declined until they are accepted.
+	verdict := inboundVerdict(from.Hex())
+	if verdict == privacy.Reject {
+		appLog("skychat: declining file %q from blocked %s", offer.Name, from)
+		return nil, false
+	}
 	accept := false
 	switch {
 	case offer.Group != "":
 		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
-		accept = isEstablishedPeer(from)
+		accept = isEstablishedPeer(from) && verdict == privacy.Allow
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
 	// haven't otherwise established a chat with — we asked for it. This is also

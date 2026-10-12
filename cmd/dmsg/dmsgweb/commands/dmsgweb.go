@@ -13,9 +13,11 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 const dwenv = "DMSGWEB"
@@ -26,6 +28,8 @@ func init() {
 	webPort = cmdutil.SkyenvUintSlice("${WEBPORT[@]:-8080}", dwcfg)
 	proxyPort = cmdutil.SkyenvUint("${PROXYPORT:-4445}", dwcfg)
 	addProxy = cmdutil.SkyenvString("${ADDPROXY}", dwcfg)
+	skynetVia = cmdutil.SkyenvString("${SKYNETVIA}", dwcfg)
+	skynetType = cmdutil.SkyenvString("${SKYNETTYPE:-stcpr}", dwcfg)
 	resolveDmsgAddr = cmdutil.SkyenvStringSlice("${RESOLVEPK[@]}", dwcfg)
 	if os.Getenv("DMSGWEBSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSK")) //nolint
@@ -46,6 +50,8 @@ func init() {
 	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application")
 	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy")
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
+	RootCmd.Flags().StringVar(&skynetVia, "skynet", skynetVia, "reach visors over skynet and dmsg through one transport to a local visor, as `pk@host:port` (its transport_port, or its stcpr port)")
+	RootCmd.Flags().StringVar(&skynetType, "skynet-type", skynetType, "transport type for --skynet: stcpr, swsr, squicr or stcp")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
@@ -168,7 +174,28 @@ dmsgweb conf file detected: ` + dwcfg
 			outerHTTP = &http.Client{}
 		}
 
-		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, outerHTTP, "")
+		var via *dmsgweb.SkynetVia
+		if skynetVia != "" {
+			visorPK, addr, err := dmsgweb.ParseSkynetVia(skynetVia)
+			if err != nil {
+				dlog.WithError(err).Fatal("invalid --skynet")
+			}
+			via, err = dmsgweb.StartSkynetVia(ctx, dlog, logging.NewMasterLogger(), pk, sk, visorPK, addr, types.Type(skynetType))
+			if err != nil {
+				dlog.WithError(err).Fatal("skynet via the local visor")
+			}
+		}
+
+		var (
+			dmsgC     *dmsg.Client
+			closeDmsg func()
+			err       error
+		)
+		if via != nil && dmsgclient.DmsgAttach == "" {
+			dmsgC, closeDmsg, err = via.DmsgClient(ctx, dlog, pk, sk)
+		} else {
+			dmsgC, closeDmsg, err = dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, outerHTTP, "")
+		}
 		if err != nil {
 			dlog.WithError(err).Error("Error connecting to dmsg network")
 			return
@@ -181,6 +208,9 @@ dmsgweb conf file detected: ` + dwcfg
 			ProxyPort:     proxyPort,
 			ResolveAddr:   targets,
 			UpstreamSOCKS: addProxy,
+		}
+		if via != nil {
+			cfg.SkynetDial = via.Dial
 		}
 		if err := dmsgweb.Run(ctx, dlog, dmsgC, cfg); err != nil && err != context.Canceled {
 			dlog.WithError(err).Error("dmsgweb runtime stopped")

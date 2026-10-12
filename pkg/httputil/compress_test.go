@@ -5,10 +5,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func serve(t *testing.T, h http.Handler, gzipOK bool) *httptest.ResponseRecorder {
@@ -99,4 +103,32 @@ func mustWrite(t *testing.T, w io.Writer, b []byte) {
 	if _, err := w.Write(b); err != nil {
 		t.Errorf("write: %v", err)
 	}
+}
+
+// A WebSocket upgrade writes 101 and then hijacks; the 101 must not wait in the buffer.
+func TestCompressMin_UpgradeSends101(t *testing.T) {
+	h := CompressMin(CompressMinBytes, 5)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Upgrade", "websocket")
+		w.Header().Set("Connection", "Upgrade")
+		w.WriteHeader(http.StatusSwitchingProtocols)
+		conn, brw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		brw.WriteString("hi") //nolint:errcheck,gosec
+		brw.Flush()           //nolint:errcheck,gosec
+		conn.Close()          //nolint:errcheck,gosec
+	}))
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+	_, err = conn.Write([]byte("GET / HTTP/1.1\r\nHost: x\r\nAccept-Encoding: gzip\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"))
+	require.NoError(t, err)
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	got, _ := io.ReadAll(conn) //nolint:errcheck
+	require.Contains(t, string(got), "HTTP/1.1 101 Switching Protocols")
+	require.True(t, strings.HasSuffix(string(got), "hi"), "%q", got)
 }

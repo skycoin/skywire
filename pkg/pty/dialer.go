@@ -101,3 +101,22 @@ func (m MultiDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint
 	}
 	return nil, errors.Join(errs...)
 }
+
+// tcpDialer reaches a pty host's direct-TCP listener at a fixed address,
+// handshaking as the given identity, so a visor can reach a standalone
+// pty host under its own key.
+type tcpDialer struct {
+	addr string
+	pk   cipher.PubKey
+	sk   cipher.SecKey
+}
+
+// NewTCPDialer dials the direct-TCP pty listener at addr as localPK.
+func NewTCPDialer(addr string, localPK cipher.PubKey, localSK cipher.SecKey) StreamDialer {
+	return tcpDialer{addr: addr, pk: localPK, sk: localSK}
+}
+
+// DialStream pins pk as the listener's key; the port is part of addr.
+func (d tcpDialer) DialStream(ctx context.Context, pk cipher.PubKey, _ uint16) (net.Conn, error) {
+	return dialNoiseTCP(ctx, d.addr, d.pk, d.sk, pk)
+}

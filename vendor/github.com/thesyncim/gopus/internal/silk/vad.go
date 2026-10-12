@@ -1,254 +1,361 @@
 package silk
 
-// classifyFrame determines the signal type for a PCM frame.
-// Returns signalType (0=inactive, 1=unvoiced, 2=voiced) and quantOffset (0=low, 1=high).
-//
-// This follows the libopus two-phase approach:
-// Phase 1: Energy-based activity detection (inactive vs active)
-// Phase 2: Pitch analysis to distinguish voiced from unvoiced
-//
-// Per RFC 6716 Section 4.2.7.3, draft-vos-silk-01 Section 2.1.2.2.
-// Reference: libopus silk/float/encode_frame_FLP.c
-func (e *Encoder) classifyFrame(pcm []float32) (signalType, quantOffset int) {
-	if len(pcm) == 0 {
-		return 0, 0 // Inactive for empty input
+// This file ports the SILK voice-activity / speech-activity estimator from
+// silk/VAD.c: silk_VAD_GetSA_Q8_c, its helper silk_VAD_GetNoiseLevels, and the
+// analysis filterbank silk_ana_filt_bank_1 (silk/ana_filt_bank_1.c). libopus
+// runs this integer estimator in both the float and the FIXED_POINT build, on
+// the int16 input buffer each channel encodes. It computes the 4-band analysis
+// filterbank, the per-band energy, the noise-level estimation/smoothing, the SNR,
+// and the SA_Q8 / input_tilt_Q15 / input_quality_bands_Q15 / NrgRatioSmth_Q8
+// outputs.
+
+const (
+	vadNBands                = 4
+	vadInternalSubframesLog2 = 2
+	vadInternalSubframes     = 1 << vadInternalSubframesLog2
+
+	vadNoiseLevelSmoothCoefQ16 = 1024 // Must be < 4096
+	vadNoiseLevelsBias         = 50
+
+	// vadMinFrameLength is the smallest frame the band decimation can analyse.
+	// The lowest band decimates by 8 (>>3) and is then split into
+	// vadInternalSubframes (>>vadInternalSubframesLog2); the per-subframe length
+	// frame_length >> (3 + vadInternalSubframesLog2) must be >= 1, which requires
+	// frame_length >= 1 << (3 + vadInternalSubframesLog2). libopus only ever calls
+	// the VAD with a full SILK frame, which always satisfies this.
+	vadMinFrameLength = 1 << (3 + vadInternalSubframesLog2)
+
+	vadNegativeOffsetQ5 = 128 // sigmoid is 0 at -128
+	vadSNRFactorQ16     = 45000
+
+	vadSNRSmoothCoefQ18 = 4096
+
+	silkInt16MAX = int32(0x7fff)
+	silkUint8MAX = int32(0xff)
+)
+
+// vadTiltWeights are the weighting factors for the tilt measure
+// (silk/VAD.c tiltWeights).
+var vadTiltWeights = [vadNBands]int32{30000, 6000, -12000, -12000}
+
+// silkVADState mirrors the libopus silk_VAD_state struct (silk/structs.h).
+type silkVADState struct {
+	AnaState       [2]int32         // Analysis filterbank state: 0-8 kHz
+	AnaState1      [2]int32         // Analysis filterbank state: 0-4 kHz
+	AnaState2      [2]int32         // Analysis filterbank state: 0-2 kHz
+	XnrgSubfr      [vadNBands]int32 // Subframe energies
+	NrgRatioSmthQ8 [vadNBands]int32 // Smoothed energy level in each band
+	HPstate        int16            // State of differentiator in the lowest band
+	NL             [vadNBands]int32 // Noise energy level in each band
+	invNL          [vadNBands]int32 // Inverse noise energy level in each band
+	NoiseLevelBias [vadNBands]int32 // Noise level estimator bias/offset
+	counter        int32            // Frame counter used in the initial phase
+}
+
+// silkVADInit ports silk_VAD_Init (silk/VAD.c): initializes the VAD state with
+// approximate pink-noise levels and the initial smoothing counter.
+func silkVADInit(s *silkVADState) {
+	*s = silkVADState{}
+
+	for b := 0; b < vadNBands; b++ {
+		s.NoiseLevelBias[b] = silkMax32(silkDiv32_16(vadNoiseLevelsBias, int32(b)+1), 1)
 	}
-
-	// ============================================
-	// Phase 1: Energy-based activity detection
-	// ============================================
-
-	// Compute frame energy and variance
-	var sum, sumSq float32
-	for _, s := range pcm {
-		sum += s
-		sumSq += s * s
+	for b := 0; b < vadNBands; b++ {
+		s.NL[b] = silkMUL(100, s.NoiseLevelBias[b])
+		s.invNL[b] = silkDiv32(silk_int32_MAX, s.NL[b])
 	}
-	n := float32(len(pcm))
-	mean := sum / n
-	energy := sumSq / n
-	rmsEnergy := sqrt32(energy)
-
-	// Compute variance to detect DC signals
-	// DC signal has zero variance (all samples are the same)
-	variance := energy - mean*mean
-	if variance < 0 {
-		variance = 0 // Numerical stability
+	s.counter = 15
+	for b := 0; b < vadNBands; b++ {
+		s.NrgRatioSmthQ8[b] = 100 * 256 // 100 * 256 --> 20 dB SNR
 	}
-	stdDev := sqrt32(variance)
+}
 
-	// Activity detection thresholds
-	const inactiveEnergyThreshold = 1e-4   // Very low energy = inactive
-	const inactiveVarianceThreshold = 1e-6 // Very low variance = DC-like = inactive
+// silkAnaFiltBank1 ports silk_ana_filt_bank_1 (silk/ana_filt_bank_1.c):
+// splits the signal into two decimated bands using first-order allpass filters.
+// State vector S has length 2; outL/outH each have length N/2.
+func silkAnaFiltBank1(in []int16, s []int32, outL, outH []int16, n int) {
+	const aFb120 = int16(5394 << 1)
+	const aFb121 = int16(-24290) // (opus_int16)(20623 << 1)
 
-	// Check for inactive signal (silence or DC)
-	if rmsEnergy < inactiveEnergyThreshold {
-		return 0, 0 // Inactive: too quiet
+	n2 := silkRSHIFT(int32(n), 1)
+	for k := int32(0); k < n2; k++ {
+		// Convert to Q10.
+		in32 := silkLSHIFT(int32(in[2*k]), 10)
+
+		// All-pass section for even input sample.
+		Y := in32 - s[0]
+		X := silkSMLAWB(Y, Y, int32(aFb121))
+		out1 := s[0] + X
+		s[0] = in32 + X
+
+		// Convert to Q10.
+		in32 = silkLSHIFT(int32(in[2*k+1]), 10)
+
+		// All-pass section for odd input sample, and add to output of previous section.
+		Y = in32 - s[1]
+		X = silkSMULWB(Y, int32(aFb120))
+		out2 := s[1] + X
+		s[1] = in32 + X
+
+		// Add/subtract, convert back to int16 and store to output.
+		outL[k] = silkSAT16(silkRSHIFT_ROUND(out2+out1, 11))
+		outH[k] = silkSAT16(silkRSHIFT_ROUND(out2-out1, 11))
 	}
-	if stdDev < inactiveVarianceThreshold {
-		return 0, 0 // Inactive: DC signal (zero variance)
-	}
+}
 
-	// DC detection: A true DC signal has all its energy in the mean (variance near zero).
-	// For a proper DC signal: variance / energy -> 0
-	// For a sine wave: variance / energy = 0.5 (half the energy is AC component)
-	// For noise: variance / energy = 1.0 (mean is zero, all energy in variance)
-	//
-	// We consider a signal "DC-like" if less than 1% of energy is in the AC component.
-	// This correctly handles:
-	// - Pure DC: variance/energy = 0 -> detected as DC
-	// - DC + small noise: variance/energy is small -> detected as DC
-	// - Sine wave: variance/energy = 0.5 -> NOT detected as DC
-	// - Noise: variance/energy = 1.0 -> NOT detected as DC
-	if rmsEnergy > inactiveEnergyThreshold && energy > 1e-10 {
-		varianceToEnergyRatio := variance / energy
-		if varianceToEnergyRatio < 0.01 {
-			// Less than 1% of energy is in AC component = DC signal
-			return 0, 0 // Inactive: DC signal
-		}
-	}
-
-	// ============================================
-	// Phase 2: Voiced/Unvoiced classification
-	// Default to UNVOICED for active frames (like libopus)
-	// ============================================
-	signalType = 1 // Default: UNVOICED
-
-	// Compute periodicity using pitch analysis
-	config := GetBandwidthConfig(e.bandwidth)
-	periodicity := e.computePeriodicity(pcm, config.PitchLagMin, config.PitchLagMax)
-
-	// Compute adaptive threshold for voiced detection (like libopus find_pitch_lags_FLP.c)
-	// Base threshold
-	voicedThreshold := float32(0.6)
-
-	// Adjust based on LPC order (higher order = more confident, lower threshold)
-	voicedThreshold -= float32(0.004) * float32(e.LPCOrder())
-
-	// Adjust based on previous frame type (hysteresis: easier to stay voiced)
-	if e.isPreviousFrameVoiced {
-		voicedThreshold -= 0.15 // ~0.15 reduction for continuity
-	}
-
-	// Spectral tilt adjustment: signals with more high-frequency content are less likely voiced
-	spectralTilt := e.computeSpectralTilt(pcm)
-	voicedThreshold -= 0.1 * spectralTilt // tilt in [-1, 1]
-
-	// Clamp threshold to reasonable range
-	if voicedThreshold < 0.25 {
-		voicedThreshold = 0.25
-	}
-	if voicedThreshold > 0.8 {
-		voicedThreshold = 0.8
-	}
-
-	// Only classify as VOICED if periodicity exceeds adaptive threshold
-	// AND the signal shows genuine periodic structure (not just high autocorrelation)
-	if periodicity > voicedThreshold {
-		// Additional check: verify it's not just high autocorrelation due to smoothness
-		// True voiced signals should have periodicity at pitch lags, not everywhere
-		shortTermCorr := e.computeShortTermCorr(pcm)
-
-		// If short-term correlation is very high (>0.99), it might be a smooth signal
-		// like a slowly varying DC or very low frequency, not true voiced
-		if shortTermCorr < 0.995 || periodicity > 0.8 {
-			signalType = 2 // VOICED
-		}
-	}
-
-	// ============================================
-	// Quantization offset selection
-	// ============================================
-	// Higher offset for cleaner, more tonal signals
-	if signalType == 2 && periodicity > 0.7 {
-		quantOffset = 1 // High offset for strongly voiced
+// silkVADGetNoiseLevels ports silk_VAD_GetNoiseLevels (silk/VAD.c): updates the
+// per-band noise level estimates from the subband energies pX.
+func silkVADGetNoiseLevels(pX *[vadNBands]int32, s *silkVADState) {
+	var minCoef int32
+	if s.counter < 1000 { // 1000 = 20 sec
+		minCoef = silkDiv32_16(silkInt16MAX, silkRSHIFT(s.counter, 4)+1)
+		s.counter++
 	} else {
-		quantOffset = 0 // Low offset otherwise
+		minCoef = 0
 	}
 
-	return signalType, quantOffset
+	for k := 0; k < vadNBands; k++ {
+		nl := s.NL[k]
+
+		// Add bias.
+		nrg := silkAddPosSat32(pX[k], s.NoiseLevelBias[k])
+
+		// Invert energies.
+		invNrg := silkDiv32(silk_int32_MAX, nrg)
+
+		// Less update when subband energy is high.
+		var coef int32
+		switch {
+		case nrg > silkLSHIFT(nl, 3):
+			coef = vadNoiseLevelSmoothCoefQ16 >> 3
+		case nrg < nl:
+			coef = vadNoiseLevelSmoothCoefQ16
+		default:
+			coef = silkSMULWB(silkSMULWW(invNrg, nl), vadNoiseLevelSmoothCoefQ16<<1)
+		}
+
+		// Initially faster smoothing.
+		if coef < minCoef {
+			coef = minCoef
+		}
+
+		// Smooth inverse energies.
+		s.invNL[k] = silkSMLAWB(s.invNL[k], invNrg-s.invNL[k], coef)
+
+		// Compute noise level by inverting again.
+		nl = silkDiv32(silk_int32_MAX, s.invNL[k])
+
+		// Limit noise levels (guarantee 7 bits of head room).
+		if nl > 0x00FFFFFF {
+			nl = 0x00FFFFFF
+		}
+
+		s.NL[k] = nl
+	}
 }
 
-// computeShortTermCorr computes normalized autocorrelation at lag 1.
-// High values (close to 1) indicate smooth, slowly varying signals.
-func (e *Encoder) computeShortTermCorr(pcm []float32) float32 {
-	if len(pcm) < 2 {
-		return 0
-	}
-
-	var corr, norm float32
-	for i := 1; i < len(pcm); i++ {
-		corr += pcm[i] * pcm[i-1]
-		norm += pcm[i-1] * pcm[i-1]
-	}
-
-	if norm < 1e-10 {
-		return 0
-	}
-	return corr / norm
+// silkVADResult holds the per-frame outputs of silk_VAD_GetSA_Q8.
+type silkVADResult struct {
+	speechActivityQ8     int32
+	inputTiltQ15         int32
+	inputQualityBandsQ15 [vadNBands]int32
 }
 
-// computeSpectralTilt estimates the spectral tilt of the signal.
-// Returns a value in [-1, 1] where:
-// - Positive values indicate high-frequency emphasis (noise-like)
-// - Negative values indicate low-frequency emphasis (voiced-like)
-func (e *Encoder) computeSpectralTilt(pcm []float32) float32 {
-	if len(pcm) < 2 {
-		return 0
+// silkVADGetSAQ8 ports silk_VAD_GetSA_Q8_c (silk/VAD.c): the speech-activity
+// estimator. frameLength must be a multiple of 8 and <= 512; fsKHz is the
+// internal sampling rate in kHz. The VAD state s is updated in place and
+// scratch holds the decimated bands.
+func silkVADGetSAQ8(scratch *[]int16, s *silkVADState, pIn []int16, frameLength, fsKHz int) silkVADResult {
+	var res silkVADResult
+
+	// The band decimation collapses a sub-vadMinFrameLength frame to a
+	// zero-length lowest band, which indexes X[-1] below. libopus never feeds
+	// the VAD such a frame; report no speech activity instead of reading past
+	// the start of the band.
+	if frameLength < vadMinFrameLength || len(pIn) < frameLength {
+		return res
 	}
 
-	// Compute first-order prediction coefficient
-	// This approximates spectral tilt: a1 > 0 means low-freq emphasis
-	var r0, r1 float32
-	for i := range pcm {
-		r0 += pcm[i] * pcm[i]
-		if i > 0 {
-			r1 += pcm[i] * pcm[i-1]
+	// Filter and decimate.
+	decimatedFramelength1 := int(silkRSHIFT(int32(frameLength), 1))
+	decimatedFramelength2 := int(silkRSHIFT(int32(frameLength), 2))
+	decimatedFramelength := int(silkRSHIFT(int32(frameLength), 3))
+
+	// Decimate into 4 bands. The layout is arranged to allow the minimal
+	// (frame_length / 4) extra scratch space during downsampling.
+	var xOffset [vadNBands]int
+	xOffset[0] = 0
+	xOffset[1] = decimatedFramelength + decimatedFramelength2
+	xOffset[2] = xOffset[1] + decimatedFramelength
+	xOffset[3] = xOffset[2] + decimatedFramelength2
+	X := ensureInt16Slice(scratch, xOffset[3]+decimatedFramelength1)
+
+	// 0-8 kHz to 0-4 kHz and 4-8 kHz.
+	silkAnaFiltBank1(pIn, s.AnaState[:], X, X[xOffset[3]:], frameLength)
+
+	// 0-4 kHz to 0-2 kHz and 2-4 kHz.
+	silkAnaFiltBank1(X, s.AnaState1[:], X, X[xOffset[2]:], decimatedFramelength1)
+
+	// 0-2 kHz to 0-1 kHz and 1-2 kHz.
+	silkAnaFiltBank1(X, s.AnaState2[:], X, X[xOffset[1]:], decimatedFramelength2)
+
+	// HP filter on lowest band (differentiator).
+	X[decimatedFramelength-1] = int16(silkRSHIFT(int32(X[decimatedFramelength-1]), 1))
+	HPstateTmp := X[decimatedFramelength-1]
+	for i := decimatedFramelength - 1; i > 0; i-- {
+		X[i-1] = int16(silkRSHIFT(int32(X[i-1]), 1))
+		X[i] -= X[i-1]
+	}
+	X[0] -= s.HPstate
+	s.HPstate = HPstateTmp
+
+	// Calculate the energy in each band.
+	var Xnrg [vadNBands]int32
+	var sumSquared int32
+	for b := 0; b < vadNBands; b++ {
+		// Find the decimated framelength in the non-uniformly divided bands.
+		decFramelen := int(silkRSHIFT(int32(frameLength), silkMinInt(vadNBands-b, vadNBands-1)))
+
+		// Split length into subframe lengths.
+		decSubframeLength := int(silkRSHIFT(int32(decFramelen), vadInternalSubframesLog2))
+		decSubframeOffset := 0
+
+		// Compute energy per sub-frame, initialized with the summed energy of
+		// the last subframe of the previous call.
+		Xnrg[b] = s.XnrgSubfr[b]
+		for sf := 0; sf < vadInternalSubframes; sf++ {
+			sumSquared = 0
+			for i := 0; i < decSubframeLength; i++ {
+				xTmp := silkRSHIFT(int32(X[xOffset[b]+i+decSubframeOffset]), 3)
+				sumSquared = silkSMLABB(sumSquared, xTmp, xTmp)
+			}
+
+			// Add/saturate summed energy of current subframe.
+			if sf < vadInternalSubframes-1 {
+				Xnrg[b] = silkAddPosSat32(Xnrg[b], sumSquared)
+			} else {
+				// Look-ahead subframe.
+				Xnrg[b] = silkAddPosSat32(Xnrg[b], silkRSHIFT(sumSquared, 1))
+			}
+
+			decSubframeOffset += decSubframeLength
+		}
+		s.XnrgSubfr[b] = sumSquared
+	}
+
+	// Noise estimation.
+	silkVADGetNoiseLevels(&Xnrg, s)
+
+	// Signal-plus-noise to noise ratio estimation.
+	sumSquared = 0
+	inputTilt := int32(0)
+	var nrgToNoiseRatioQ8 [vadNBands]int32
+	for b := 0; b < vadNBands; b++ {
+		speechNrg := Xnrg[b] - s.NL[b]
+		if speechNrg > 0 {
+			// Divide, with sufficient resolution.
+			if (Xnrg[b] & int32(-0x00800000)) == 0 {
+				nrgToNoiseRatioQ8[b] = silkDiv32(silkLSHIFT(Xnrg[b], 8), s.NL[b]+1)
+			} else {
+				nrgToNoiseRatioQ8[b] = silkDiv32(Xnrg[b], silkRSHIFT(s.NL[b], 8)+1)
+			}
+
+			// Convert to log domain.
+			snrQ7 := silkLin2Log(nrgToNoiseRatioQ8[b]) - 8*128
+
+			// Sum-of-squares (Q14).
+			sumSquared = silkSMLABB(sumSquared, snrQ7, snrQ7)
+
+			// Tilt measure.
+			if speechNrg < (int32(1) << 20) {
+				// Scale down SNR value for small subband speech energies.
+				snrQ7 = silkSMULWB(silkLSHIFT(silkSqrtApproxPLC(speechNrg), 6), snrQ7)
+			}
+			inputTilt = silkSMLAWB(inputTilt, vadTiltWeights[b], snrQ7)
+		} else {
+			nrgToNoiseRatioQ8[b] = 256
 		}
 	}
 
-	if r0 < 1e-10 {
-		return 0
+	// Mean-of-squares (Q14).
+	sumSquared = silkDiv32_16(sumSquared, vadNBands)
+
+	// Root-mean-square approximation, scale to dBs (Q7).
+	pSNRdBQ7 := int32(int16(3 * silkSqrtApproxPLC(sumSquared)))
+
+	// Speech Probability Estimation.
+	saQ15 := silkSigmQ15(silkSMULWB(vadSNRFactorQ16, pSNRdBQ7) - vadNegativeOffsetQ5)
+
+	// Frequency Tilt Measure.
+	res.inputTiltQ15 = silkLSHIFT(silkSigmQ15(inputTilt)-16384, 1)
+
+	// Scale the sigmoid output based on power levels.
+	speechNrg := int32(0)
+	for b := 0; b < vadNBands; b++ {
+		// Accumulate signal-without-noise energies; higher frequency bands
+		// have more weight.
+		speechNrg += int32(b+1) * silkRSHIFT(Xnrg[b]-s.NL[b], 4)
 	}
 
-	// First-order prediction coefficient: a1 = r1/r0
-	a1 := r1 / r0
-
-	// Clamp to [-1, 1]
-	if a1 > 1 {
-		a1 = 1
-	} else if a1 < -1 {
-		a1 = -1
+	if frameLength == 20*fsKHz {
+		speechNrg = silkRSHIFT(speechNrg, 1)
+	}
+	// Power scaling.
+	if speechNrg <= 0 {
+		saQ15 = silkRSHIFT(saQ15, 1)
+	} else if speechNrg < 16384 {
+		speechNrg = silkLSHIFT(speechNrg, 16)
+		// Square-root.
+		speechNrg = silkSqrtApproxPLC(speechNrg)
+		saQ15 = silkSMULWB(32768+speechNrg, saQ15)
 	}
 
-	// Return negative of a1 so positive = high-freq, negative = low-freq
-	return -a1
+	// Copy the resulting speech activity in Q8.
+	res.speechActivityQ8 = silkRSHIFT(saQ15, 7)
+	if res.speechActivityQ8 > silkUint8MAX {
+		res.speechActivityQ8 = silkUint8MAX
+	}
+
+	// Energy Level and SNR estimation.
+	// Smoothing coefficient.
+	smoothCoefQ16 := silkSMULWB(vadSNRSmoothCoefQ18, silkSMULWB(saQ15, saQ15))
+
+	if frameLength == 10*fsKHz {
+		smoothCoefQ16 >>= 1
+	}
+
+	for b := 0; b < vadNBands; b++ {
+		// Compute smoothed energy-to-noise ratio per band.
+		s.NrgRatioSmthQ8[b] = silkSMLAWB(s.NrgRatioSmthQ8[b],
+			nrgToNoiseRatioQ8[b]-s.NrgRatioSmthQ8[b], smoothCoefQ16)
+
+		// Signal-to-noise ratio in dB per band.
+		snrQ7 := 3 * (silkLin2Log(s.NrgRatioSmthQ8[b]) - 8*128)
+		// quality = sigmoid( 0.25 * ( SNR_dB - 16 ) ).
+		res.inputQualityBandsQ15[b] = silkSigmQ15(silkRSHIFT(snrQ7-16*128, 4))
+	}
+
+	return res
 }
 
-// computePeriodicity computes normalized autocorrelation in pitch range.
-// Returns max normalized correlation (0 to 1, higher = more periodic/voiced).
-// This is used to detect true pitch periodicity at specific pitch lags.
-func (e *Encoder) computePeriodicity(pcm []float32, minLag, maxLag int) float32 {
-	n := len(pcm)
-	if maxLag >= n {
-		maxLag = n - 1
-	}
-	if minLag < 1 {
-		minLag = 1
-	}
-	if minLag > maxLag {
-		return 0
-	}
+// silkSigmQ15 is the bit-exact Go port of silk_sigm_Q15 (silk/sigm_Q15.c):
+// a piecewise-linear sigmoid lookup with Q15 output and Q5 input.
+func silkSigmQ15(inQ5 int32) int32 {
+	sigmLUTslopeQ10 := [6]int32{237, 153, 73, 30, 12, 7}
+	sigmLUTposQ15 := [6]int32{16384, 23955, 28861, 31213, 32178, 32548}
+	sigmLUTnegQ15 := [6]int32{16384, 8812, 3906, 1554, 589, 219}
 
-	// Only search for periodicity at reasonable pitch lags
-	// Avoid very short lags which could pick up sample-to-sample correlation
-	if minLag < 16 {
-		minLag = 16 // Minimum reasonable pitch lag
-	}
-
-	var maxCorr float32 = 0
-	var maxCorrLag int = 0
-
-	for lag := minLag; lag <= maxLag; lag++ {
-		var corr, energy1, energy2 float32
-		for i := lag; i < n; i++ {
-			corr += pcm[i] * pcm[i-lag]
-			energy1 += pcm[i] * pcm[i]
-			energy2 += pcm[i-lag] * pcm[i-lag]
+	if inQ5 < 0 {
+		inQ5 = -inQ5
+		if inQ5 >= 6*32 {
+			return 0
 		}
-
-		if energy1 > 1e-10 && energy2 > 1e-10 {
-			normCorr := corr / sqrt32(energy1*energy2)
-			if normCorr > maxCorr {
-				maxCorr = normCorr
-				maxCorrLag = lag
-			}
-		}
+		ind := silkRSHIFT(inQ5, 5)
+		return sigmLUTnegQ15[ind] - silkSMULBB(sigmLUTslopeQ10[ind], inQ5&0x1F)
 	}
-
-	// Verify this is a true pitch peak, not just overall high correlation
-	// Check that correlation drops at non-harmonic lags
-	if maxCorr > 0.3 && maxCorrLag > 0 {
-		// Check correlation at half the lag (should be lower if true pitch)
-		halfLag := maxCorrLag / 2
-		if halfLag >= minLag {
-			var corrHalf, energy1, energy2 float32
-			for i := halfLag; i < n; i++ {
-				corrHalf += pcm[i] * pcm[i-halfLag]
-				energy1 += pcm[i] * pcm[i]
-				energy2 += pcm[i-halfLag] * pcm[i-halfLag]
-			}
-			if energy1 > 1e-10 && energy2 > 1e-10 {
-				normCorrHalf := corrHalf / sqrt32(energy1*energy2)
-				// If correlation at half lag is almost as high as at full lag,
-				// it might not be true pitch (could be DC-like or very smooth signal)
-				if normCorrHalf > 0.98*maxCorr && maxCorr < 0.9 {
-					// Penalize: correlation doesn't drop at half lag
-					maxCorr *= 0.7
-				}
-			}
-		}
+	if inQ5 >= 6*32 {
+		return 32767
 	}
-
-	return maxCorr
+	ind := silkRSHIFT(inQ5, 5)
+	return sigmLUTposQ15[ind] + silkSMULBB(sigmLUTslopeQ10[ind], inQ5&0x1F)
 }

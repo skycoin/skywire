@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/client_pool.go c2-net-routing
 //
 // ClientPool keeps reusable RPC connections to remote visors so the

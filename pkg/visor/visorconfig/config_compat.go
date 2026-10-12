@@ -42,6 +42,7 @@ type v1JSON struct {
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
 	Wisp          *WispConfig          `json:"wisp,omitempty"`
+	HostBridge    *HostBridgeConfig    `json:"host_bridge,omitempty"`
 	Resolvers     []ResolverConfig     `json:"resolvers,omitempty"`
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
@@ -50,10 +51,10 @@ type v1JSON struct {
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
 	Routing       *Routing             `json:"routing"`
-	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
 
-	EmbeddedServices []services.Block `json:"embedded_services,omitempty"`
+	EmbeddedServices     []services.Block `json:"embedded_services,omitempty"`
+	DeploymentStatusAddr string           `json:"deployment_status_addr,omitempty"`
 
 	Stats   *Stats        `json:"stats,omitempty"`
 	Skychat *Skychat      `json:"skychat,omitempty"`
@@ -114,6 +115,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.DmsgWeb = mirror.DmsgWeb
 	v.SkynetWeb = mirror.SkynetWeb
 	v.Wisp = mirror.Wisp
+	v.HostBridge = mirror.HostBridge
 	v.Resolvers = mirror.Resolvers
 	v.BrowseOrigin = mirror.BrowseOrigin
 	v.SkymailBridge = mirror.SkymailBridge
@@ -122,9 +124,9 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.STCP = mirror.STCP
 	v.Transport = mirror.Transport
 	v.Routing = mirror.Routing
-	v.UptimeTracker = mirror.UptimeTracker
 	v.Launcher = mirror.Launcher
 	v.EmbeddedServices = mirror.EmbeddedServices
+	v.DeploymentStatusAddr = mirror.DeploymentStatusAddr
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
 	v.Wallet = mirror.Wallet

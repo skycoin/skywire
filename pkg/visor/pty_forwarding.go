@@ -19,6 +19,9 @@ import (
 func servePtyOverForwarding(ctx context.Context, v *Visor, host *pty.Host, port uint16) {
 	lis := newConnListener()
 	v.services.RegisterHidden(port, "pty", func(conn net.Conn) {
+		if oc, ok := conn.(overTransportConn); ok {
+			conn = oc.Conn
+		}
 		if vc, ok := conn.(*vstreamConn); !ok || !vc.Direct() {
 			_ = conn.Close() //nolint:errcheck
 			return

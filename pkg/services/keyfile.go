@@ -4,6 +4,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -45,4 +46,48 @@ func withKeyFile(raw json.RawMessage) (json.RawMessage, error) {
 		fields[k] = b
 	}
 	return json.Marshal(fields)
+}
+
+// OwnKey resolves a block's "keyfile" the way the services runner does and
+// returns the block with its key filled in, plus the public key it names.
+// ok is false for a block that names no key.
+func OwnKey(raw json.RawMessage) (resolved json.RawMessage, pk cipher.PubKey, ok bool, err error) {
+	resolved, err = withKeyFile(raw)
+	if err != nil {
+		return nil, pk, false, err
+	}
+	var probe struct {
+		SecKey cipher.SecKey `json:"secret_key"`
+	}
+	if err := json.Unmarshal(resolved, &probe); err != nil {
+		return nil, pk, false, err
+	}
+	if probe.SecKey.Null() {
+		return resolved, pk, false, nil
+	}
+	if pk, err = probe.SecKey.PubKey(); err != nil {
+		return nil, pk, false, err
+	}
+	return resolved, pk, true, nil
+}
+
+// ConfigPubKey returns the public key a block names inline or in the file its
+// "config_path" points at, or a null key.
+func ConfigPubKey(raw json.RawMessage) cipher.PubKey {
+	var probe struct {
+		PK         cipher.PubKey `json:"public_key"`
+		ConfigPath string        `json:"config_path"`
+	}
+	if json.Unmarshal(raw, &probe) != nil || !probe.PK.Null() || probe.ConfigPath == "" {
+		return probe.PK
+	}
+	data, err := os.ReadFile(probe.ConfigPath) //nolint:gosec
+	if err != nil {
+		return cipher.PubKey{}
+	}
+	var file struct {
+		PK cipher.PubKey `json:"public_key"`
+	}
+	_ = json.Unmarshal(data, &file) //nolint:errcheck
+	return file.PK
 }

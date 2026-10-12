@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !(tinygo && js)
 
 // Package cmdutil pkg/dmsg/cmdutil/pprof_handlers.go c1-net-dmsg
 package cmdutil

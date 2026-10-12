@@ -269,7 +269,7 @@ func writeFrame(c net.Conn, payload []byte) error {
 
 // ============================== TUI ==============================
 //
-// Bubbletea split-pane: viewport history on top, textinput compose
+// Split pane: scrolling history on top, an input to compose
 // at the bottom. Parallel to cmd/skywire-cli/commands/skychat/chat.go
 // but talks dmsg.Client.DialStream directly instead of POSTing to a
 // local skychat HTTP server.

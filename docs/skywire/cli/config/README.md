@@ -13,11 +13,13 @@ skywire cli config
 ## Subcommands
 
 - [check-pk](check-pk/README.md) — check a skywire public key
+- [deployment](deployment/README.md) — Print the services-config that joins another visor to this visor's deployment
 - [gen](gen/README.md) — Generate a config file
 - [gen-keys](gen-keys/README.md) — generate public / secret keypair
 - [identity](identity/README.md) — Export or import the keypair a config file holds
 - [parse](parse/README.md) — check for errors in parsing skywire config
 - [pk](pk/README.md) — derive public key from a secret key
+- [set](set/README.md) — Set config fields on the running visor
 - [show](show/README.md) — Show the running visor's config
 - [update](update/README.md) — Update a config file
 

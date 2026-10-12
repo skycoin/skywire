@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/router_leg_controls.go c2-net-routing
 //
 // Per-LEG operator controls on a live route group, and the negotiated view of

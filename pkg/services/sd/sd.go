@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -54,12 +55,16 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
 	cxo               services.CXOSet
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // State implements services.Stater.
@@ -137,6 +142,7 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 		}
 	}
 	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
+	s.chartsAPI.Store(sdAPI)
 
 	for _, k := range cfg.Whitelist {
 		k = strings.TrimSpace(k)
@@ -146,6 +152,7 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	}
 
 	go sdAPI.RunBackgroundTasks(ctx, log)
+	sdAPI.Stats = s.stats
 	sdAPI.StartCharts(ctx, s.chartStore(storeType, redisURL, log), log)
 	return sdAPI, nil
 }
@@ -184,6 +191,8 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 	log := services.NewLogger(cfg.LogTag("service_discovery"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("service discovery")
+	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(log)()
 
 	pk := cfg.PubKey
@@ -231,6 +240,7 @@ func (s *service) Run(ctx context.Context) error {
 		addr = ":9098"
 	}
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             sdAPI,
@@ -340,4 +350,13 @@ func (s *service) chartStore(t storeconfig.Type, redisURL string, log *logging.L
 		return charts.NewMemoryStore()
 	}
 	return st
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
 }

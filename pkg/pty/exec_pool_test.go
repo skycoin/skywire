@@ -2,9 +2,15 @@
 package pty
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"net"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -176,4 +182,56 @@ func TestExecPool_CloseNotUnderLock(t *testing.T) {
 		t.Fatal("acquireExec(kB) blocked behind another peer's Close — execMu held across Close")
 	}
 	close(release) // let A.Close() finish
+}
+
+// hungSession answers no Exec until it is closed, like a pooled stream
+// whose remote restarted without the close reaching this side.
+type hungSession struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (s *hungSession) Exec(*CommandExecReq) (*CommandExecResult, error) {
+	<-s.closed
+	return nil, errors.New("closed")
+}
+
+func (s *hungSession) Close() error {
+	s.once.Do(func() { close(s.closed) })
+	return nil
+}
+
+type noDialer struct{}
+
+func (noDialer) DialStream(context.Context, cipher.PubKey, uint16) (net.Conn, error) {
+	return nil, errors.New("no dial in this test")
+}
+
+// A pooled session that never answers is dropped after the command's
+// timeout, so the next exec dials afresh instead of hanging on it too.
+func TestExecRemoteViaDropsHungPooledSession(t *testing.T) {
+	old := execGrace
+	execGrace = 50 * time.Millisecond
+	defer func() { execGrace = old }()
+
+	h := &Host{}
+	pk, _ := cipher.GenerateKeyPair()
+	hung := &hungSession{closed: make(chan struct{})}
+	key := execKey{pk: pk, port: DefaultPort, dialer: fmt.Sprintf("%T", noDialer{})}
+	h.cacheExec(key, hung)
+
+	start := time.Now()
+	_, err := h.ExecRemoteVia(context.Background(), noDialer{}, pk, DefaultPort, &CommandExecReq{Name: "true", TimeoutMS: 100})
+	require.ErrorIs(t, err, errExecStalled)
+	require.Less(t, time.Since(start), 5*time.Second)
+
+	select {
+	case <-hung.closed:
+	case <-time.After(time.Second):
+		t.Fatal("the hung session was not closed")
+	}
+	require.Nil(t, h.acquireExec(key), "the hung session is still pooled")
+
+	_, err = h.ExecRemoteVia(context.Background(), noDialer{}, pk, DefaultPort, &CommandExecReq{Name: "true", TimeoutMS: 100})
+	require.ErrorContains(t, err, "no dial in this test")
 }

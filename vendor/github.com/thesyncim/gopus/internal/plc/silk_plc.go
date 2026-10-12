@@ -104,41 +104,8 @@ type SILKDecoderState interface {
 	OutputHistory() []float32
 	// HistoryIndex returns the current position in the history buffer.
 	HistoryIndex() int
-}
-
-// SILKPitchLagProvider optionally exposes the decoder's most recent pitch lag
-// (libopus lagPrev), letting the float fallback concealer use the tracked lag
-// instead of re-estimating it by autocorrelation.
-type SILKPitchLagProvider interface {
+	// GetLagPrev returns the most recently tracked pitch lag (libopus lagPrev).
 	GetLagPrev() int
-}
-
-// SILKSignalTypeProvider optionally exposes the libopus prevSignalType tracking:
-// 0=inactive, 1=unvoiced, 2=voiced.
-type SILKSignalTypeProvider interface {
-	GetLastSignalType() int
-}
-
-// SILKSLPCQ14Provider optionally exposes the decoder's LPC synthesis history in
-// Q14 (libopus sLPC_Q14_buf, the most recent lpcOrder samples) so concealment
-// can seed LPC synthesis from real decoder state rather than the float envelope.
-type SILKSLPCQ14Provider interface {
-	GetSLPCQ14HistoryQ14() []int32
-}
-
-// SILKSLPCQ14Setter optionally lets concealment write the advanced LPC
-// synthesis history (Q14) back to the decoder's sLPC_Q14_buf, matching the
-// state cadence libopus silk_PLC_conceal applies after each concealed frame.
-type SILKSLPCQ14Setter interface {
-	SetSLPCQ14HistoryQ14(history []int32)
-}
-
-// SILKOutBufProvider optionally exposes the decoder's output history in Q0
-// (libopus outBuf, the last ltp_mem_length samples) used for the LPC-analysis
-// rewhitening step of silk_PLC_conceal. Preferred over the float OutputHistory
-// because it is the exact integer input libopus rewhitens.
-type SILKOutBufProvider interface {
-	GetOutBufHistoryQ0() []int16
 }
 
 // SILKDecoderStateExtended is the full SILK decoder view consumed by the
@@ -147,8 +114,25 @@ type SILKOutBufProvider interface {
 // libopus: LTP coefficients and scale, pitch lag, subframe gains, LPC
 // coefficients, the excitation history (exc_Q14), and the frame geometry
 // (sample rate, subframe length, subframe count, LTP memory length).
+// Its PLC history methods are required so the concealment hot path avoids
+// lazy runtime interface-assertion cache allocations.
 type SILKDecoderStateExtended interface {
 	SILKDecoderState
+
+	// GetOutBufHistoryQ0 returns libopus outBuf, the last ltp_mem_length
+	// samples used by the PLC LPC-analysis rewhitening step.
+	GetOutBufHistoryQ0() []int16
+
+	// GetSLPCQ14HistoryQ14 returns the most recent lpcOrder samples from the
+	// synthesis history used to seed the PLC LPC filter.
+	GetSLPCQ14HistoryQ14() []int32
+
+	// SetSLPCQ14HistoryQ14 stores the advanced PLC LPC synthesis history back
+	// into the decoder state after a concealed frame.
+	SetSLPCQ14HistoryQ14(history []int32)
+
+	// IsFirstFrameAfterReset reports whether synthesis history is reset.
+	IsFirstFrameAfterReset() bool
 
 	// GetLastSignalType returns 0=inactive, 1=unvoiced, 2=voiced.
 	GetLastSignalType() int
@@ -233,9 +217,35 @@ type SILKPLCState struct {
 	LastFrameLost bool
 }
 
-// NewSILKPLCState returns a SILKPLCState initialized to the libopus
-// silk_PLC_Reset defaults (unit gains, 16 kHz WB geometry, unit random scale,
-// zero seed), with the pitch lag pre-seeded to half a 16 kHz 20 ms frame.
+// resetForRateChange is silk_PLC_Reset in libopus silk/PLC.c. The decoder
+// calls it from silk_PLC before both good-frame updates and concealment when
+// decoder_set_fs changes the internal sampling rate.
+func (s *SILKPLCState) resetForRateChange(fsKHz, frameLength int) {
+	if s.FsKHz == int32(fsKHz) {
+		return
+	}
+	s.PitchLQ8 = int32(frameLength) << 7
+	s.PrevGainQ16 = [2]int32{1 << 16, 1 << 16}
+	s.SubfrLength = 20
+	s.NbSubfr = 2
+	s.FsKHz = int32(fsKHz)
+}
+
+// SILKPLCScratch holds the working buffers for one channel's concealment.
+// Each decoder channel keeps its own scratch; none of these slices is codec
+// history and every used element is initialized on each concealment call.
+type SILKPLCScratch struct {
+	lpcQ12  [maxLPCOrder]int16
+	randBuf [randBufSize]int32
+	sLTPQ15 []int32
+	sLTP    []int16
+	sLPCQ14 []int32
+}
+
+// NewSILKPLCState returns a SILKPLCState initialized to the zero-initialized
+// decoder state followed by libopus silk_PLC_Reset (unit gains, 16 kHz WB
+// geometry, zero random scale and seed), with the pitch lag pre-seeded to half
+// a 16 kHz 20 ms frame.
 func NewSILKPLCState() *SILKPLCState {
 	return &SILKPLCState{
 		// Default pitch lag: half frame length in Q8
@@ -251,17 +261,17 @@ func NewSILKPLCState() *SILKPLCState {
 		FsKHz:       16,
 		LPCOrder:    16,
 
-		// Initial random scale (1.0 in Q14)
-		RandScaleQ14: 1 << 14,
+		// silk_PLC_Reset leaves randScale_Q14 at the zero-initialized decoder value.
+		RandScaleQ14: 0,
 
 		// Match libopus zero-initialized PLC rand_seed cadence.
 		RandSeed: 0,
 	}
 }
 
-// Reset clears the PLC state for a new stream, mirroring libopus silk_PLC_Reset:
-// the pitch lag is set to half the frame length in Q8, gains and random scale
-// to unity, and the cached LTP/LPC coefficients and loss flag are zeroed.
+// Reset clears the PLC state for a new stream, matching the zero-initialized
+// decoder state followed by libopus silk_PLC_Reset. That C reset sets pitch,
+// gains, and geometry; randScale_Q14 remains zero until concealment updates it.
 func (s *SILKPLCState) Reset(frameLength int) {
 	s.PitchLQ8 = int32(frameLength) << 7 // Half frame length in Q8
 
@@ -280,7 +290,7 @@ func (s *SILKPLCState) Reset(frameLength int) {
 	}
 
 	s.PrevLTPScaleQ14 = 0
-	s.RandScaleQ14 = 1 << 14
+	s.RandScaleQ14 = 0
 	s.RandSeed = 0
 	s.LastFrameLost = false
 }
@@ -304,6 +314,10 @@ func (s *SILKPLCState) UpdateFromGoodFrame(
 	nbSubfr int,
 	subfrLength int,
 ) {
+	// silk_PLC checks the sample rate and resets rate-dependent concealment
+	// history before silk_PLC_update, including when this frame is a good LBRR
+	// frame that changes the rate.
+	s.resetForRateChange(fsKHz, nbSubfr*subfrLength)
 	s.FsKHz = int32(fsKHz)
 	s.SubfrLength = int32(subfrLength)
 	s.NbSubfr = int32(nbSubfr)
@@ -366,7 +380,9 @@ func (s *SILKPLCState) UpdateFromGoodFrame(
 			if ltpGainQ14 > 0 {
 				scaleQ10 := (vPitchGainStartMinQ14 << 10) / ltpGainQ14
 				for i := range s.LTPCoefQ14 {
-					s.LTPCoefQ14[i] = int16((int32(s.LTPCoefQ14[i]) * scaleQ10) >> 10)
+					// silk/PLC.c uses silk_SMULBB: both operands are signed
+					// 16-bit, including a scale that exceeds int16's range.
+					s.LTPCoefQ14[i] = int16((int32(s.LTPCoefQ14[i]) * int32(int16(scaleQ10))) >> 10)
 				}
 			}
 		} else if ltpGainQ14 > vPitchGainStartMaxQ14 {
@@ -465,10 +481,9 @@ func ConcealSILK(dec SILKDecoderState, frameSize int, fadeFactor float32) []floa
 //     attenuating gains and drifting the pitch lag each subframe.
 //  6. Run LPC synthesis, scale by the previous gain, and saturate to int16.
 //
-// When the decoder implements the optional SILKOutBufProvider /
-// SILKSLPCQ14Provider / SILKSLPCQ14Setter interfaces, the integer outBuf and
-// LPC synthesis history are used and written back, which is what makes the
-// output byte-exact with libopus rather than approximate.
+// The decoder exposes integer outBuf and LPC synthesis history directly,
+// which keeps the loss path byte-exact with libopus without runtime capability
+// checks.
 //
 // Parameters:
 //   - dec: extended SILK decoder state from the last good frame
@@ -482,15 +497,36 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 		// Nothing to generate; a negative size would also panic make().
 		return []int16{}
 	}
+	output := make([]int16, frameSize)
+	ConcealSILKWithLTPInto(dec, plcState, lossCnt, output, nil)
+	return output
+}
+
+// ConcealSILKWithLTPInto writes one native-rate concealed channel into output.
+// A decoder-owned scratch value makes consecutive packet losses allocation-free.
+func ConcealSILKWithLTPInto(dec SILKDecoderStateExtended, plcState *SILKPLCState, lossCnt int, output []int16, scratch *SILKPLCScratch) {
+	frameSize := len(output)
+	if frameSize == 0 {
+		return
+	}
 	if dec == nil || plcState == nil {
-		return make([]int16, frameSize)
+		clear(output)
+		return
+	}
+	if scratch == nil {
+		scratch = &SILKPLCScratch{}
+	}
+
+	// silk/PLC.c:silk_PLC_conceal clears the complete cached LPC vector
+	// after a decoder reset, including a stereo side-channel reset.
+	if dec.IsFirstFrameAfterReset() {
+		clear(plcState.PrevLPCQ12[:])
 	}
 
 	fsKHz := dec.GetSampleRateKHz()
 	if fsKHz <= 0 {
 		fsKHz = 16
 	}
-
 	nbSubfr := dec.GetNumSubframes()
 	if nbSubfr <= 0 {
 		nbSubfr = 4
@@ -500,6 +536,10 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 	if subfrLength <= 0 {
 		subfrLength = 80
 	}
+	// silk_PLC() resets rate-dependent state on the first good or lost frame at
+	// a new rate. UpdateFromGoodFrame performs the same check for decoded frames;
+	// the loss path reaches it here.
+	plcState.resetForRateChange(fsKHz, nbSubfr*subfrLength)
 
 	// libopus LPC_order is always in [10, MAX_LPC_ORDER]. Clamp degenerate
 	// decoder reports so the fixed-size PrevLPCQ12 / sLPC_Q14 buffers and the
@@ -553,7 +593,7 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 	// Apply bandwidth expansion to previous LPC in-state, matching libopus
 	// silk_PLC_conceal() cadence across consecutive losses.
 	bwExpandQ12(plcState.PrevLPCQ12[:lpcOrder], bweCoef)
-	lpcQ12 := make([]int16, lpcOrder)
+	lpcQ12 := scratch.lpcQ12[:lpcOrder]
 	copy(lpcQ12, plcState.PrevLPCQ12[:lpcOrder])
 
 	// Initialize random scale on first lost frame
@@ -586,11 +626,10 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 	lag := int(plcState.PitchLQ8+128) >> 8
 
 	// Prepare output buffers
-	output := make([]int16, frameSize)
-
 	// Generate excitation history buffer for random noise source
 	excHistory := dec.GetExcitationHistory()
-	randBuf := make([]int32, randBufSize)
+	randBuf := scratch.randBuf[:]
+	clear(randBuf)
 	if len(excHistory) > 0 {
 		// Use excitation from subframe with lower energy
 		energy1, shift1 := computeEnergy(excHistory, prevGainQ10[0], subfrLength, (nbSubfr-2)*subfrLength)
@@ -598,9 +637,9 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 
 		var randStart int
 		if (energy1 >> uint(shift2)) < (energy2 >> uint(shift1)) {
-			randStart = max(0, (nbSubfr-1)*subfrLength-randBufSize)
+			randStart = max(0, (int(plcState.NbSubfr)-1)*int(plcState.SubfrLength)-randBufSize)
 		} else {
-			randStart = max(0, nbSubfr*subfrLength-randBufSize)
+			randStart = max(0, int(plcState.NbSubfr)*int(plcState.SubfrLength)-randBufSize)
 		}
 
 		for i := 0; i < randBufSize && randStart+i < len(excHistory); i++ {
@@ -609,65 +648,70 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 	}
 
 	// LTP synthesis filtering
-	sLTPQ15 := make([]int32, ltpMemLength+frameSize)
+	if cap(scratch.sLTPQ15) < ltpMemLength+frameSize {
+		scratch.sLTPQ15 = make([]int32, ltpMemLength+frameSize)
+	}
+	sLTPQ15 := scratch.sLTPQ15[:ltpMemLength+frameSize]
+	clear(sLTPQ15)
 	sLTPBufIdx := ltpMemLength
 
-	// Rewhiten LTP state using LPC analysis
-	if signalType == 2 {
-		startIdx := ltpMemLength - lag - lpcOrder - ltpOrder/2
-		if startIdx <= 0 {
-			startIdx = 1
-		}
+	// Rewhiten LTP state on each loss, matching silk/PLC.c:silk_PLC_conceal.
+	startIdx := ltpMemLength - lag - lpcOrder - ltpOrder/2
+	if startIdx <= 0 {
+		startIdx = 1
+	}
 
-		// Perform LPC analysis to get sLTP.
-		// Prefer decoder outBuf history (Q0), which matches libopus PLC inputs.
-		sLTP := make([]int16, ltpMemLength)
-		haveOutBufQ0 := false
-		if provider, ok := dec.(SILKOutBufProvider); ok {
-			outBufQ0 := provider.GetOutBufHistoryQ0()
-			if len(outBufQ0) >= ltpMemLength && startIdx < ltpMemLength {
-				lpcAnalysisFilterInt16(
-					sLTP[startIdx:],
-					outBufQ0[startIdx:ltpMemLength],
-					lpcQ12,
-					ltpMemLength-startIdx,
-					lpcOrder,
-				)
-				haveOutBufQ0 = true
-			}
-		}
-		if !haveOutBufQ0 {
-			// Fallback for decoders that don't expose outBuf history.
-			outHistory := dec.OutputHistory()
-			if len(outHistory) > 0 {
-				lpcAnalysisFilter(sLTP[startIdx:], outHistory, lpcQ12, ltpMemLength-startIdx, lpcOrder, startIdx)
-			}
-		}
-
-		// Scale LTP state
-		invGainQ30 := inverse32VarQ(plcState.PrevGainQ16[1], 46)
-		if invGainQ30 > (1<<30 - 1) {
-			invGainQ30 = 1<<30 - 1
-		}
-
-		for i := startIdx + lpcOrder; i < ltpMemLength; i++ {
-			sLTPQ15[i] = smulwb(invGainQ30, int32(sLTP[i]))
+	// Perform LPC analysis to get sLTP.
+	// Prefer decoder outBuf history (Q0), which matches libopus PLC inputs.
+	if cap(scratch.sLTP) < ltpMemLength {
+		scratch.sLTP = make([]int16, ltpMemLength)
+	}
+	sLTP := scratch.sLTP[:ltpMemLength]
+	clear(sLTP)
+	haveOutBufQ0 := false
+	outBufQ0 := dec.GetOutBufHistoryQ0()
+	if len(outBufQ0) >= ltpMemLength && startIdx < ltpMemLength {
+		lpcAnalysisFilterInt16(
+			sLTP[startIdx:],
+			outBufQ0[startIdx:ltpMemLength],
+			lpcQ12,
+			ltpMemLength-startIdx,
+			lpcOrder,
+		)
+		haveOutBufQ0 = true
+	}
+	if !haveOutBufQ0 {
+		// Fallback for decoders that don't expose outBuf history.
+		outHistory := dec.OutputHistory()
+		if len(outHistory) > 0 {
+			lpcAnalysisFilter(sLTP[startIdx:], outHistory, lpcQ12, ltpMemLength-startIdx, lpcOrder, startIdx)
 		}
 	}
 
+	// Scale LTP state
+	invGainQ30 := inverse32VarQ(plcState.PrevGainQ16[1], 46)
+	if invGainQ30 > (1<<30 - 1) {
+		invGainQ30 = 1<<30 - 1
+	}
+
+	for i := startIdx + lpcOrder; i < ltpMemLength; i++ {
+		sLTPQ15[i] = smulwb(invGainQ30, int32(sLTP[i]))
+	}
 	randSeed := plcState.RandSeed
 	B_Q14 := plcState.LTPCoefQ14
 
 	// Process each subframe
-	sLPCQ14 := make([]int32, frameSize+maxLPCOrder)
+	if cap(scratch.sLPCQ14) < frameSize+maxLPCOrder {
+		scratch.sLPCQ14 = make([]int32, frameSize+maxLPCOrder)
+	}
+	sLPCQ14 := scratch.sLPCQ14[:frameSize+maxLPCOrder]
+	clear(sLPCQ14)
 	haveSLPCHistory := false
-	if provider, ok := dec.(SILKSLPCQ14Provider); ok {
-		historyQ14 := provider.GetSLPCQ14HistoryQ14()
-		if len(historyQ14) >= lpcOrder {
-			start := maxLPCOrder - lpcOrder
-			copy(sLPCQ14[start:maxLPCOrder], historyQ14[:lpcOrder])
-			haveSLPCHistory = true
-		}
+	historyQ14 := dec.GetSLPCQ14HistoryQ14()
+	if len(historyQ14) >= lpcOrder {
+		start := maxLPCOrder - lpcOrder
+		copy(sLPCQ14[start:maxLPCOrder], historyQ14[:lpcOrder])
+		haveSLPCHistory = true
 	}
 	if !haveSLPCHistory {
 		prev := dec.PrevLPCValues()
@@ -750,15 +794,14 @@ func ConcealSILKWithLTP(dec SILKDecoderStateExtended, plcState *SILKPLCState, lo
 	plcState.LastFrameLost = true
 
 	// Match libopus PLC.c cadence: persist LPC synthesis history after conceal.
-	if setter, ok := dec.(SILKSLPCQ14Setter); ok && lpcOrder > 0 {
+	if lpcOrder > 0 {
 		end := min(maxLPCOrder+frameSize, len(sLPCQ14))
 		start := max(end-lpcOrder, 0)
 		if start < end {
-			setter.SetSLPCQ14HistoryQ14(sLPCQ14[start:end])
+			dec.SetSLPCQ14HistoryQ14(sLPCQ14[start:end])
 		}
 	}
 
-	return output
 }
 
 // silkPLCBufferAt reads sLTP_Q14 at idx, returning 0 for out-of-range indices.
@@ -789,11 +832,8 @@ func concealVoicedSILK(dec SILKDecoderState, output []float32, prevLPC []float32
 		return
 	}
 
-	// Prefer decoder-tracked pitch lag (lagPrev) when available.
-	pitchLag := 0
-	if p, ok := dec.(SILKPitchLagProvider); ok {
-		pitchLag = p.GetLagPrev()
-	}
+	// Prefer decoder-tracked pitch lag (lagPrev) over re-estimating it.
+	pitchLag := dec.GetLagPrev()
 	if pitchLag <= 0 {
 		// Fallback to autocorrelation estimate.
 		pitchLag = estimatePitchFromHistory(history, histIdx, histLen)

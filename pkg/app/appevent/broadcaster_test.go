@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package appevent pkg/app/appevent/broadcaster_test.go
 package appevent
 

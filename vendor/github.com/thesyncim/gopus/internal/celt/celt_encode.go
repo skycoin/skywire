@@ -27,7 +27,8 @@ func Encode(pcm []float32, frameSize int) ([]byte, error) {
 // The input should be interleaved: [L0, R0, L1, R1, ...]
 // Total length should be frameSize * 2.
 //
-// This uses mid-side stereo encoding (dual_stereo=0, intensity disabled).
+// Stereo mode and intensity-band decisions follow the encoder's per-frame
+// analysis and bit allocation.
 //
 // Reference: RFC 6716 Section 4.3
 func EncodeStereo(pcm []float32, frameSize int) ([]byte, error) {

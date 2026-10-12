@@ -4,7 +4,7 @@ import "github.com/thesyncim/gopus/internal/rangecoding"
 
 // Per-mode bit-allocation core for a non-standard Opus Custom mode whose band
 // layout differs from the static 21-band 48 kHz tables. These functions mirror
-// cltComputeAllocationWithScratch / interpBits2Pulses / initCapsInto exactly,
+// cltComputeAllocation / interpBits2Pulses / initCapsInto exactly,
 // substituting the per-mode tables (band count, band widths, allocation matrix,
 // caps, logN, edges) for the package globals. They are reached only when a
 // per-mode custom layout is installed; the standard, family, hybrid and QEXT

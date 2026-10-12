@@ -1,4 +1,4 @@
-//go:build tinygo || js
+//go:build js
 
 // Package launcher pkg/app/launcher/proc_env_tinygo.go c2-app-launcher
 package launcher

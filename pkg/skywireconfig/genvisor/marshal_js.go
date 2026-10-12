@@ -280,6 +280,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("wisp")
 		marshalWisp(w, v.Wisp, o.indent+1)
 	}
+	if v.HostBridge != nil {
+		o.field("host_bridge")
+		marshalHostBridge(w, v.HostBridge, o.indent+1)
+	}
 	if v.Resolvers != nil {
 		o.field("resolvers")
 		marshalResolvers(w, v.Resolvers, o.indent+1)
@@ -315,11 +319,6 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		w.WriteString("null")
 	} else {
 		marshalRouting(w, v.Routing, o.indent+1)
-	}
-
-	if v.UptimeTracker != nil {
-		o.field("uptime_tracker")
-		marshalUptimeTracker(w, v.UptimeTracker, o.indent+1)
 	}
 
 	// launcher (no omitempty)
@@ -1112,17 +1111,6 @@ func marshalRouting(w *strings.Builder, r *visorconfig.Routing, indent int) {
 	o.close()
 }
 
-func marshalUptimeTracker(w *strings.Builder, u *visorconfig.UptimeTracker, indent int) {
-	o := newObj(w, indent)
-	o.field("addr")
-	writeQuoted(w, u.Addr)
-	if u.AddrDmsg != "" {
-		o.field("addr_dmsg")
-		writeQuoted(w, u.AddrDmsg)
-	}
-	o.close()
-}
-
 func marshalPublicVisor(w *strings.Builder, p *visorconfig.PublicVisorConfig, indent int) {
 	o := newObj(w, indent)
 	if p.RegistrationTimeout != 0 {
@@ -1435,6 +1423,38 @@ func marshalSkymail(w *strings.Builder, s *visorconfig.SkymailConfig, indent int
 	if s.MaxAge != 0 {
 		o.field("max_age")
 		writeDuration(w, s.MaxAge)
+	}
+	o.close()
+}
+
+func marshalHostBridge(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
+	o := newObj(w, indent)
+	o.field("url")
+	writeQuoted(w, s.URL)
+	o.field("forwards")
+	switch {
+	case s.Forwards == nil:
+		w.WriteString("null")
+	case len(s.Forwards) == 0:
+		w.WriteString("[]")
+	default:
+		w.WriteByte('[')
+		for i, f := range s.Forwards {
+			if i > 0 {
+				w.WriteByte(',')
+			}
+			w.WriteByte('\n')
+			writeIndent(w, o.indent+1)
+			fo := newObj(w, o.indent+1)
+			fo.field("host")
+			writeQuoted(w, f.Host)
+			fo.field("local")
+			writeQuoted(w, f.Local)
+			fo.close()
+		}
+		w.WriteByte('\n')
+		writeIndent(w, o.indent)
+		w.WriteByte(']')
 	}
 	o.close()
 }

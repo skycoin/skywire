@@ -126,7 +126,7 @@ func quantCoarseEnergyImpl(
 			}
 
 			// Compute prediction residual: f = x - coef*oldE - prev[c]
-			f := x - coef*oldE - prev[c]
+			f, oldProduct := quantCoarseEnergyResidual32(x, coef, oldE, prev[c])
 
 			// Quantize residual: round to nearest integer
 			// qi = floor(f + 0.5)
@@ -217,13 +217,13 @@ func quantCoarseEnergyImpl(
 
 			// Compute quantized energy
 			q := float32(qi)
-			tmp := coef*oldE + prev[c] + q
+			tmp := quantCoarseEnergyReconstruct32(oldProduct, coef, oldE, prev[c], q)
 
 			// Store quantized energy
 			oldEBands[idx] = celtGLog(tmp)
 
 			// Update inter-band predictor
-			prev[c] = prev[c] + q - beta*q
+			prev[c] = quantCoarseEnergyUpdate32(prev[c], q, beta)
 		}
 	}
 
@@ -605,7 +605,7 @@ func QuantEnergyFinalise(
 // Returns: bandLogE values suitable for quantization
 //
 // Reference: libopus celt/quant_bands.c amp2Log2()
-func Amp2Log2(bandE []celtEner, effEnd, end, channels int) []celtGLog {
+func Amp2Log2(bandE []celtEner, effEnd, end, channels int) []CeltGLog {
 	nbEBands := MaxBands
 	bandLogE := make([]celtGLog, channels*nbEBands)
 

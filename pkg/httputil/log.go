@@ -2,11 +2,12 @@
 package httputil
 
 import (
+	"bufio"
 	"context"
+	"net"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,12 +27,9 @@ func NewLogMiddleware(logger logrus.FieldLogger) func(http.Handler) http.Handler
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			sl := &structuredLogger{logger}
 			start := time.Now()
-			var requestID string
-			if reqID := r.Context().Value(middleware.RequestIDKey); reqID != nil {
-				requestID = reqID.(string)
-			}
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			newContext := context.WithValue(r.Context(), middleware.LogEntryCtxKey, sl)
+			requestID := GetReqID(r.Context())
+			ww := &StatusWriter{ResponseWriter: w}
+			newContext := context.WithValue(r.Context(), logEntryKey{}, sl)
 			next.ServeHTTP(ww, r.WithContext(newContext))
 			latency := time.Since(start)
 			fields := logrus.Fields{
@@ -70,7 +68,57 @@ func NewLogMiddleware(logger logrus.FieldLogger) func(http.Handler) http.Handler
 // printed along with all other pairs when the request is served.
 // This requires log middleware from this package to be installed in the chain
 func LogEntrySetField(r *http.Request, key string, value interface{}) {
-	if sl, ok := r.Context().Value(middleware.LogEntryCtxKey).(*structuredLogger); ok {
+	if sl, ok := r.Context().Value(logEntryKey{}).(*structuredLogger); ok {
 		sl.logger = sl.logger.WithField(key, value)
 	}
 }
+
+type logEntryKey struct{}
+
+// StatusWriter records the status code and body size a handler wrote. It
+// passes Flush and Hijack through to the writer it wraps.
+type StatusWriter struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+// WriteHeader records code and sends it.
+func (s *StatusWriter) WriteHeader(code int) {
+	if s.status == 0 {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// Write records that a body was sent, with an implicit 200.
+func (s *StatusWriter) Write(p []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	n, err := s.ResponseWriter.Write(p)
+	s.bytes += n
+	return n, err
+}
+
+// Status is the code sent, 200 when the handler wrote nothing.
+func (s *StatusWriter) Status() int {
+	if s.status == 0 {
+		return http.StatusOK
+	}
+	return s.status
+}
+
+// BytesWritten is the body size sent.
+func (s *StatusWriter) BytesWritten() int { return s.bytes }
+
+// Flush sends buffered data to the client.
+func (s *StatusWriter) Flush() { http.NewResponseController(s.ResponseWriter).Flush() } //nolint:errcheck,gosec
+
+// Hijack lets the handler take over the connection.
+func (s *StatusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(s.ResponseWriter).Hijack()
+}
+
+// Unwrap returns the wrapped writer, for http.ResponseController.
+func (s *StatusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }

@@ -2,18 +2,36 @@
 
 [← skywire cli proxy mux](../README.md)
 
-Set the MAXIMUM number of ACTIVE mux legs the adaptive engine may grow to
-under sustained load — the aggregation ceiling. Applies LIVE to this visor's
-adaptive route groups on their next tick (no restart). Send-side is a per-visor
-decision, so set it independently on each end (e.g. over the pty to the exit).
+Set the MAXIMUM number of ACTIVE mux legs the named app's dials may ask for —
+the aggregation ceiling. With no argument the app's current value is printed
+("inherit" when it has none).
 
-Example:
-  skywire cli proxy mux cap 60     # allow aggregation up to 60 active legs
+The value is PER APP (-n, default skysocks-client) and is read by the visor's
+dial path for the app that owns the dial, so pinning the legs of the proxy
+under test no longer pins them on every other app's route groups. It reaches
+route groups dialed from now on; an app already running re-dials its tunnels on
+'proxy restart'.
+
+--visor-wide sets the process-global adaptive ceiling instead — what every app
+with no override of its own inherits — live, on the next tick of every adaptive
+route group. That is what this command did before it took an app name.
+
+Examples:
+  skywire cli proxy mux cap 4                 # skysocks-client's ceiling
+  skywire cli proxy mux cap                   # read it back
+  skywire cli proxy mux cap 60 --visor-wide   # the adaptive engine's ceiling
 
 ## Usage
 
 ```
-skywire cli proxy mux cap <n>
+skywire cli proxy mux cap [n]
+```
+
+## Flags
+
+```
+  -n, --name string   app whose mux width to read or set (default "skysocks-client")
+      --visor-wide    set the process-global adaptive value every app without an override inherits, instead of this app's
 ```
 
 ## Global Flags

@@ -11,11 +11,12 @@ import (
 	mathrand "math/rand"
 	"mime"
 	"net"
-	nrpc "net/rpc"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	nrpc "github.com/0magnet/gobrpc"
 
 	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
@@ -625,10 +626,6 @@ func vpnEnvMaker(conf *visorconfig.V1, dmsgC, dmsgDC *dmsg.Client, tpRemoteAddrs
 
 		if conf.Routing != nil {
 			envCfg.RF = conf.Routing.RouteFinder
-		}
-
-		if conf.UptimeTracker != nil {
-			envCfg.UptimeTracker = conf.UptimeTracker.Addr
 		}
 
 		if conf.STCP != nil && len(conf.STCP.PKTable) != 0 {

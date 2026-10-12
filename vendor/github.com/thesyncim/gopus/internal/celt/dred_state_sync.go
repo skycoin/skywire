@@ -17,11 +17,17 @@ func (d *Decoder) CommitDRED48kMonoConcealment(frame, overlap []float32) {
 		return
 	}
 
-	d.updatePostfilterHistoryMonoFromFloat32(frame, frameSize, combFilterHistory)
-	d.updatePLCDecodeHistoryMonoFromFloat32(frame, frameSize, plcDecodeBufferSize)
+	d.shiftDecodeMem(frameSize)
+	mem := d.decodeMemChannel(0)
+	tail := mem[plcDecodeBufferSize:]
 	if len(overlap) >= Overlap {
-		copy(d.overlapBuffer[:Overlap], overlap[:Overlap])
+		copy(tail, overlap[:Overlap])
+	} else {
+		// Keep the previous MDCT overlap, which the move left at the start of
+		// this frame's region.
+		copy(tail, mem[plcDecodeBufferSize-frameSize:])
 	}
+	copy(mem[plcDecodeBufferSize-frameSize:plcDecodeBufferSize], frame)
 
 	last := float32(frame[frameSize-1])
 	d.preemphState[0] = celtSig(float32(PreemphCoef) * (last * 32768))

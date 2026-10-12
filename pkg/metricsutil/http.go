@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/0magnet/metrics"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -19,7 +17,7 @@ import (
 )
 
 // AddMetricsHandler adds a prometheus-format Handle at '/metrics' to the provided serve mux.
-func AddMetricsHandler(mux *chi.Mux) {
+func AddMetricsHandler(mux *httputil.Router) {
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		metrics.WritePrometheus(w, true)
 	})
@@ -87,12 +85,12 @@ func ServeHTTPMetrics(log logrus.FieldLogger, addr string) {
 		return
 	}
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP) //nolint:staticcheck
+	r.Use(httputil.RequestID)
+	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
-	r.Use(middleware.Recoverer)
+	r.Use(httputil.Recoverer)
 
 	AddMetricsHandler(r)
 

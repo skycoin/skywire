@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -109,7 +108,7 @@ func (api *API) getNetworkMetric(w http.ResponseWriter, r *http.Request) {
 // GET /metric/visor/{pks}
 // Returns aggregate metrics for one or more visors (comma-separated PKs).
 func (api *API) getVisorAggregateMetric(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 
 	pks, err := parsePKs(pksParam)
 	if err != nil {
@@ -151,7 +150,7 @@ func (api *API) getAllTransportMetrics(w http.ResponseWriter, r *http.Request) {
 // GET /metrics/{ids}
 // Returns metrics for specific transport(s) (comma-separated IDs).
 func (api *API) getTransportMetricsByIDs(w http.ResponseWriter, r *http.Request) {
-	idsParam := chi.URLParam(r, "ids")
+	idsParam := r.PathValue("ids")
 
 	ids, err := parseIDs(idsParam)
 	if err != nil {
@@ -179,7 +178,7 @@ func (api *API) getTransportMetricsByIDs(w http.ResponseWriter, r *http.Request)
 // GET /metrics/visor/{pks}
 // Returns per-transport metrics for transports of specified visor(s) (comma-separated PKs).
 func (api *API) getTransportMetricsByVisors(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 
 	pks, err := parsePKs(pksParam)
 	if err != nil {

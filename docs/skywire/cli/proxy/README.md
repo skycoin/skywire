@@ -29,12 +29,14 @@ skywire cli proxy
 - [log](log/README.md) — Stream a running proxy client's route/transport events + log
 - [mux](mux/README.md) — Mux'd route-group operations for an active proxy session
 - [server](server/README.md) — Skysocks server (SOCKS5 proxy server)
+- [settings](settings/README.md) — Show or set a running proxy app's live tuning knobs
 - [start](start/README.md) — Start the proxy client
 - [status](status/README.md) — Proxy client status
 - [stop](stop/README.md) — Stop the proxy client
 - [switch](switch/README.md) — Switch a proxy session onto a different route in flight, without dropping the app
 - [test](test/README.md) — Test proxy servers from service discovery
 - [tree](tree/README.md) — Render a running proxy's route group as a bilateral route tree
+- [tunnel](tunnel/README.md) — Operate on a proxy app's individual tunnels
 
 ## Flags
 

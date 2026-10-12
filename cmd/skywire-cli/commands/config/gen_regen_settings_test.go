@@ -2,12 +2,14 @@
 package cliconfig
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/logging"
+	svcs "github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -33,7 +35,11 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		Launcher: &visorconfig.Launcher{
 			Apps: []appserver.AppConfig{{Name: "skysocks-client", AutoStart: true}},
 		},
-		AppSettings: map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
+		AppSettings:          map[string]visorconfig.AppSettingsEntry{"skysocks-client": {}},
+		EmbeddedServices:     []svcs.Block{{Type: "service-discovery", Raw: json.RawMessage(`{"type":"service-discovery"}`)}},
+		MemoryLimit:          "5600MiB",
+		DeploymentStatusAddr: "127.0.0.1:8092",
+		HostBridge:           &visorconfig.HostBridgeConfig{URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{{Host: "127.0.0.1:1080", Local: "127.0.0.1:1080"}}},
 	}
 	conf = new(visorconfig.V1)
 
@@ -51,6 +57,10 @@ func TestRegenPreservesVisorPersistedSettings(t *testing.T) {
 		"app_settings must survive a regen")
 	require.True(t, conf.Launcher.Apps[0].AutoStart,
 		"an operator's autostart toggle must survive a regen (pre-existing contract)")
+	require.Len(t, conf.EmbeddedServices, 1, "embedded_services must survive a regen")
+	require.Equal(t, "5600MiB", conf.MemoryLimit, "memory_limit must survive a regen")
+	require.Equal(t, "127.0.0.1:8092", conf.DeploymentStatusAddr, "deployment_status_addr must survive a regen")
+	require.Equal(t, oldConfCache.HostBridge, conf.HostBridge, "host_bridge must survive a regen")
 }
 
 // The same call must be a no-op on a fresh (non-regen) generate, so a
@@ -72,4 +82,21 @@ func TestFreshGenCarriesNoPersistedSettings(t *testing.T) {
 
 	require.Empty(t, conf.Routing.RouterSettings)
 	require.Empty(t, conf.AppSettings)
+}
+
+// "auto" was the generated default, not an operator's choice, so a regen
+// replaces it with "none" while an explicit choice survives.
+func TestRegenDropsAutoMemoryLimit(t *testing.T) {
+	restoreRegen, restoreOld, restoreConf := isRegen, oldConfCache, conf
+	t.Cleanup(func() { isRegen, oldConfCache, conf = restoreRegen, restoreOld, restoreConf })
+
+	isRegen = true
+	for old, want := range map[string]string{"auto": "none", "": "none", "none": "none", "1GiB": "1GiB"} {
+		oldConfCache = &visorconfig.V1{MemoryLimit: old}
+		conf = new(visorconfig.V1)
+		conf.MemoryLimit = "none"
+		conf.Launcher = &visorconfig.Launcher{}
+		mergeExistingApps(logging.MustGetLogger("test"))
+		require.Equal(t, want, conf.MemoryLimit, "old memory_limit %q", old)
+	}
 }

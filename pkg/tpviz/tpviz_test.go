@@ -731,13 +731,13 @@ func TestHandleDMSGHealth(t *testing.T) {
 }
 
 func TestHandleUptimes(t *testing.T) {
-	ut := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	tpd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"uptimes":[]}`)) //nolint
 	}))
-	defer ut.Close()
+	defer tpd.Close()
 
 	s := testServer(t)
-	s.config.UTURL = ut.URL
+	s.config.TPDURL = tpd.URL
 
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/uptimes", nil))
@@ -854,10 +854,6 @@ func TestRefreshCache(t *testing.T) {
 		w.Write([]byte(`[]`)) //nolint
 	}))
 	defer tpd.Close()
-	ut := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{}`)) //nolint
-	}))
-	defer ut.Close()
 
 	s := testServer(t)
 	s.config.NoCache = false
@@ -868,9 +864,8 @@ func TestRefreshCache(t *testing.T) {
 	s.config.CacheDirTPD = filepath.Join(dir, "tpd")
 	s.config.CacheDirUT = filepath.Join(dir, "ut")
 	s.config.TPDURL = tpd.URL
-	s.config.UTURL = ut.URL
 	// Disable the SD/DMSG sub-refreshes that refreshCache also triggers so
-	// the test exercises only the TPD/UT path and never touches the network.
+	// the test exercises only the TPD path and never touches the network.
 	s.config.CacheDirSD = ""
 	s.config.DMSGURL = ""
 
@@ -878,7 +873,7 @@ func TestRefreshCache(t *testing.T) {
 
 	// Both cache files written.
 	require.FileExists(t, CacheFilePath(s.config.CacheDirTPD, s.config.TPDURL+"/all-transports"))
-	require.FileExists(t, CacheFilePath(s.config.CacheDirUT, s.config.UTURL+"/uptimes?v=v2"))
+	require.FileExists(t, CacheFilePath(s.config.CacheDirUT, s.config.TPDURL+"/uptimes?v=v2"))
 }
 
 func TestRefreshSDCache(t *testing.T) {

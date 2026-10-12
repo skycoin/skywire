@@ -20,7 +20,7 @@ const (
 type LPState struct {
 	InLPState         [2]int32 // Biquad filter state
 	TransitionFrameNo int32    // Counter mapped to cutoff frequency
-	Mode              int      // Operating mode: <0=switch down, >0=switch up, 0=do nothing
+	Mode              int32    // Operating mode: <0=switch down, >0=switch up, 0=do nothing
 	SavedFsKHz        int32    // Last sampling rate before bandwidth switching reset
 }
 
@@ -138,7 +138,7 @@ func (lp *LPState) LPVariableCutoff(frame []int16, frameLength int) {
 	lpInterpolateFilterTaps(&bQ28, &aQ28, int(ind), facQ16)
 
 	// Update transition frame number for next frame
-	next := min(max(lp.TransitionFrameNo+int32(lp.Mode), 0), int32(transitionFrames))
+	next := min(max(lp.TransitionFrameNo+lp.Mode, 0), int32(transitionFrames))
 	lp.TransitionFrameNo = next
 
 	// ARMA low-pass filtering

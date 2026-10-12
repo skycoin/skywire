@@ -8,7 +8,31 @@ package multistream
 // build byte-identical and the feature truly zero-cost.
 type streamFixedFields struct{}
 
-// setFixedHybridRedundancy is a no-op in the default build: the integer Hybrid
-// highband hook does not exist, so the float Hybrid decode has no redundancy
-// decision to hand off.
-func (*streamState) setFixedHybridRedundancy(bool) {}
+type decoderFixedFields struct{}
+
+// setFixedRedundancy is a no-op in the default build because the float
+// decoder handles redundancy directly.
+func (*streamState) setFixedRedundancy(bool, bool, []byte, int) {}
+
+func (*streamState) captureFixedSILKMain([]float32) {}
+
+func fixedCELTCodedChannels(packetStereo bool) int {
+	if packetStereo {
+		return 2
+	}
+	return 1
+}
+
+func (*streamState) resetFixedDecoderState() {}
+
+func (*streamState) beginFixedHybridPLCCapture(int) {}
+
+func (*streamState) endFixedHybridPLCCapture() {}
+
+func (d *streamState) decodeHybridPLCChunkToFloat32(frameSize int, out []float32) error {
+	return d.hybridDec.DecodePLCToFloat32WithPacketStereoInto(frameSize, d.lastPacketStereo, out)
+}
+
+func (d *streamState) decodeHybridTransitionPLCToFloat32(frameSize int, out []float32) error {
+	return d.hybridDec.DecodePLCToFloat32WithPacketStereoInto(frameSize, d.lastPacketStereo, out)
+}

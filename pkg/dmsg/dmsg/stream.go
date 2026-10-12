@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -37,6 +38,11 @@ type Stream struct {
 	closeMu sync.Mutex
 	close   func() // to be called when closing
 	log     logrus.FieldLogger
+
+	// traffic, when set, counts this accepted stream's bytes for its port.
+	traffic *portTraffic
+	// census records this stream for StreamCensus.
+	census atomic.Pointer[censusEntry]
 }
 
 // muxStreamConn is the minimal interface the dmsg stream protocol needs from
@@ -116,6 +122,7 @@ func (s *Stream) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.census.Load().set(0, "closed")
 	s.closeMu.Lock()
 	closeFn := s.close
 	s.closeMu.Unlock()
@@ -265,6 +272,7 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 		return err
 	}
 
+	s.census.Load().set(0, "queued")
 	// Push stream to listener.
 	return lis.introduceStream(s)
 }
@@ -323,6 +331,12 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
 	// this dmsg stream (yamux/smux/QUIC) — identical across transports, so the
 	// relay never sees client↔client plaintext regardless of dmsg-over-QUIC.
 	s.nsConn = noise.NewReadWriter(s.muxStream(), s.ns)
+	censusTrack(s, init)
+	if init {
+		s.census.Load().set(rAddr.Port, "handshake")
+	} else {
+		s.census.Load().set(lAddr.Port, "handshake")
+	}
 	s.log = s.ses.log.WithField("stream", s.lAddr.String()+"->"+s.rAddr.String())
 	return nil
 }
@@ -393,6 +407,9 @@ func (s *Stream) StreamID() uint32 {
 // to handle.
 func (s *Stream) Read(b []byte) (int, error) {
 	n, err := s.nsConn.Read(b)
+	if n > 0 && s.traffic != nil {
+		s.traffic.in.Add(uint64(n))
+	}
 	if n > 0 {
 		// Reset the read deadline on successful read to keep the stream alive.
 		s.SetReadDeadline(time.Now().Add(StreamIdleTimeout)) //nolint:errcheck,gosec
@@ -423,6 +440,9 @@ func (s *Stream) Read(b []byte) (int, error) {
 // the caller doesn't follow up with Close().
 func (s *Stream) Write(b []byte) (int, error) {
 	n, err := s.nsConn.Write(b)
+	if n > 0 && s.traffic != nil {
+		s.traffic.out.Add(uint64(n))
+	}
 	if err != nil && s != nil {
 		s.closeMu.Lock()
 		closeFn := s.close

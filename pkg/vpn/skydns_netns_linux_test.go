@@ -69,7 +69,7 @@ func TestSkyDNSNetns(t *testing.T) {
 	resp, err := cl.Get("http://" + host + "/health")
 	require.NoError(t, err)
 	body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-	resp.Body.Close()               //nolint:errcheck,gosec
+	resp.Body.Close()                //nolint:errcheck,gosec
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	t.Logf("%s → %s: %s", host, addrs[0], body)
 

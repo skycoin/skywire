@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -85,7 +86,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	if fp, ok := arClient.(interface {
 		SetResolveFastPath(addrresolver.FastResolve)
 	}); ok {
-		fp.SetResolveFastPath(v.arResolveFast)
+		fp.SetResolveFastPath(v.resolveFast)
 	}
 
 	v.initLock.Lock()
@@ -648,7 +649,12 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// dmsg.server.local_address says otherwise. Decided before the bind — the
 	// cmux branch cannot be added afterwards.
 	factory.ShareTCPWithDmsgServer = dmsgServerSharesTransportPort(v.conf)
-	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
+	if runtime.GOOS == "js" {
+		// A browser has no sockets of its own. stcpr and sudph get them from a host
+		// bridge once one is connected (hostbridge.go), and no cmux is bound.
+		v.hostBridge.sockets.log = v.hostBridgeLog()
+		factory.Sockets = &v.hostBridge.sockets
+	} else if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {
 			return fmt.Errorf("unified transport port (udp): %w", err)
@@ -1420,6 +1426,12 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 
 	connect := func(context.Context) (transport.DiscoveryClient, error) {
 		return tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	}
+
+	// A TPD this visor hosts under its own key mounts after the transport
+	// module, so waiting for it here only delays the boot.
+	if cmdutil.PKFromDmsgURL(tpdURL) == v.conf.PK {
+		return transport.NewDeferredDiscoveryClient(v.ctx, log, tpdDeferredRetry, connect), nil
 	}
 
 	// One bounded attempt on the boot path, so the common case (TPD reachable)

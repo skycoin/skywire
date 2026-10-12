@@ -17,7 +17,7 @@ skywire cli route groups
 ```
       --filter string   role filter: all | initiator | responder (default "all")
       --hops            also print the full hop path for each route group
-  -L, --live            live-refresh mode (bubbletea TUI, 1s tick); shows route groups created/torn down in place
+  -L, --live            live-refresh mode (TUI, 1s tick); shows route groups created/torn down in place
 ```
 
 ## Global Flags

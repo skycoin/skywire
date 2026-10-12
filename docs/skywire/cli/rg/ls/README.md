@@ -15,7 +15,7 @@ skywire cli rg ls
 ```
       --filter string   role filter: all | initiator | responder (default "all")
       --hops            also print the full forward hop path for each route group
-  -L, --live            live-refresh mode (bubbletea TUI, 1s tick); shows route groups + bandwidth updating in place
+  -L, --live            live-refresh mode (TUI, 1s tick); shows route groups + bandwidth updating in place
 ```
 
 ## Global Flags

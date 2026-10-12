@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -132,7 +132,7 @@ func TestMakeHTTPTransport_FullRoundTrip(t *testing.T) {
 	dmsgLis, err := dmsgHost.Listen(dmsgHTTPPort)
 	require.NoError(t, err)
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/hello", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("world")) //nolint:errcheck,gosec
@@ -209,7 +209,7 @@ func TestMakeHTTPTransport_DefaultPort(t *testing.T) {
 	dmsgLis, err := dmsgHost.Listen(80)
 	require.NoError(t, err)
 
-	r := chi.NewRouter()
+	r := httputil.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("default-port")) //nolint:errcheck,gosec
 	})

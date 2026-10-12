@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/deployment"
@@ -87,8 +88,12 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // build creates the transport store and the API and warms the route
@@ -114,6 +119,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	enableMetrics := cfg.MetricsAddr != ""
 	rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
+	s.chartsAPI.Store(rfAPI)
 	// A TPD run in the same process (svc run) holds the transport set in
 	// memory; the graph is built from it rather than reread from redis.
 	rfAPI.ShareTransportsFrom(storeConfig.URL)
@@ -135,6 +141,13 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 	if err != nil {
 		return nil, err
 	}
+	// Charts as Run has them, so the host's status page shows the route finder.
+	var sn *api.SetupNodes
+	if host.DmsgClient != nil {
+		sn = &api.SetupNodes{PKs: s.cfg.setupNodes(), Port: dmsg.DefaultDmsgHTTPPort,
+			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, host.DmsgClient)}}
+	}
+	rfAPI.StartCharts(ctx, chartStore(s.cfg, logger), sn, logger)
 	go func() {
 		<-ctx.Done()
 		closeStore()
@@ -146,6 +159,7 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("route_finder"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("route finder")
 	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
@@ -199,6 +213,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             rfAPI,
@@ -224,6 +239,7 @@ func (s *service) Run(ctx context.Context) error {
 		sn = &api.SetupNodes{PKs: cfg.setupNodes(), Port: dmsg.DefaultDmsgHTTPPort,
 			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}}
 	}
+	rfAPI.Stats = s.stats
 	rfAPI.StartCharts(runCtx, chartStore(cfg, logger), sn, logger)
 	if cfg.ChartsAddr != "" {
 		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
@@ -276,4 +292,13 @@ func chartStore(cfg *Config, log *logging.Logger) charts.Store {
 		return charts.NewMemoryStore()
 	}
 	return st
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
 }

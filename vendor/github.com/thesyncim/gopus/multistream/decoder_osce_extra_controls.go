@@ -8,17 +8,16 @@ func (d *Decoder) OSCEModelsLoaded() bool {
 	return d.osceModelsLoaded
 }
 
-// OSCEBWEModelLoaded reports whether the retained blob contains the OSCE_BWE model family.
+// OSCEBWEModelLoaded reports whether the retained blob contains the OSCE_BWE
+// model family. OSCE methods in this file are available in builds tagged
+// gopus_osce.
 func (d *Decoder) OSCEBWEModelLoaded() bool {
 	return d.osceBWEModelLoaded
 }
 
-// SetOSCEBWE stores tag-gated OSCE_BWE enable state and fans it out to every
-// child stream decoder. libopus exposes the matching control via
-// `OPUS_SET_DNN_BLOB` + `OPUS_SET_OSCE_METHOD` semantics by toggling
-// `DecControl.enable_osce_bwe` on each per-stream decoder; the gopus
-// multistream wiring mirrors that so an enabled control applies to every
-// SILK-WB stream in the multistream packet.
+// SetOSCEBWE stores the OSCE_BWE enable setting and propagates it to every
+// child stream decoder, matching libopus OPUS_SET_OSCE_BWE. It does not load
+// the OSCE_BWE model; SetDNNBlob handles model loading separately.
 func (d *Decoder) SetOSCEBWE(enabled bool) {
 	d.osceBWEEnabled = enabled
 	for _, dec := range d.decoders {
@@ -33,13 +32,13 @@ func (d *Decoder) OSCEBWE() bool {
 	return d.osceBWEEnabled
 }
 
-// SetOSCELACE stores tag-gated OSCE LACE/NoLACE enable state and fans it out
-// to every child stream decoder. libopus selects between
-// OSCE_METHOD_NONE / LACE / NoLACE via encoder complexity; this control gates
-// whether each stream decoder runs the LACE / NoLACE postfilter on its SILK
-// lowband output (before the optional OSCE BWE pass when both are active).
+// SetOSCELACE explicitly overrides the complexity-based OSCE LACE/NoLACE
+// selection and fans the setting out to every child stream decoder. Without an
+// explicit override, each child follows libopus and selects no method below
+// complexity 6, LACE at 6, and NoLACE at 7 or above.
 func (d *Decoder) SetOSCELACE(enabled bool) {
 	d.osceLACEEnabled = enabled
+	d.osceLACEOverrideSet = true
 	for _, dec := range d.decoders {
 		if s, ok := dec.(*streamState); ok {
 			s.setOSCELACEEnabled(enabled)
@@ -47,7 +46,14 @@ func (d *Decoder) SetOSCELACE(enabled bool) {
 	}
 }
 
-// OSCELACE reports the stored tag-gated OSCE LACE/NoLACE enable state.
+// OSCELACE reports whether the OSCE LACE/NoLACE gate is enabled by the
+// explicit override or by decoder complexity.
 func (d *Decoder) OSCELACE() bool {
-	return d.osceLACEEnabled
+	if d == nil {
+		return false
+	}
+	if st := d.firstStreamState(); st != nil {
+		return st.osceLACEEnabledForComplexity()
+	}
+	return false
 }

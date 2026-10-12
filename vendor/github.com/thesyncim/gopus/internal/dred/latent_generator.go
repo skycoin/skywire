@@ -79,9 +79,9 @@ func (g *LatentGenerator) LatentOffset() int32 {
 }
 
 // Process16k mirrors the libopus encoder-side dred_compute_latents() inner
-// 16 kHz mono d-frame path. The callback, when non-nil, is invoked once per
-// emitted latent/state pair with slices that alias internal storage and remain
-// valid only until the callback returns.
+// 16 kHz mono d-frame path. For each successfully encoded latent/state pair,
+// the callback receives slices that alias internal storage and are valid only
+// until it returns. The result counts d-frames emitted from the staging buffer.
 func (g *LatentGenerator) Process16k(model *rdovae.EncoderModel, pcm []float32, extraDelay int32, emit func(latents, initialState []float32)) int {
 	if g == nil || model == nil || !g.Loaded() {
 		return 0

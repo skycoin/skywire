@@ -1,0 +1,84 @@
+// Package charts pkg/deployment/charts/service_stats_test.go c4-net-discovery
+package charts
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
+)
+
+// Requests are counted under the route that matched, not the path asked for,
+// with their status class and the bytes sent, and a sample carries the
+// process figures and response time percentiles.
+func TestServiceStatsCountsByRoute(t *testing.T) {
+	s := NewServiceStats("test")
+	r := httputil.NewRouter()
+	r.Get("/entries/{pk}", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("hello")) }) //nolint:errcheck
+	r.Get("/missing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	h := s.Handler(r)
+	for i, p := range []string{"/entries/a", "/entries/b", "/missing", "/nowhere/x"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		if i < 3 {
+			req.Header.Set(buildinfo.VersionHeader, "v1.3.100")
+		}
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	v := map[string]float64{}
+	s.Collect(v)
+	require.Equal(t, 2.0, v[prefixReq+"GET /entries/{pk}"])
+	require.Equal(t, 1.0, v[prefixReq+"GET /missing"])
+	require.Equal(t, 1.0, v[prefixReq+"GET /nowhere"], "an unrouted path counts by its first segment")
+	require.Equal(t, 2.0, v[prefixCode+"2xx"])
+	require.Equal(t, 2.0, v[prefixCode+"4xx"])
+	require.Equal(t, 10.0, v[prefixHTTPOut+"GET /entries/{pk}"])
+	require.Equal(t, 3.0, v[prefixVer+"v1.3.100"])
+	require.Equal(t, 1.0, v[prefixVer+"none"], "a caller that sends no version")
+	require.Contains(t, v, keyHTTPP50)
+	require.Contains(t, v, keyGoroutines)
+	require.Contains(t, v, keyHeap)
+
+	// The next interval starts from zero. CPU is a rate, and a coarse clock
+	// (Windows) reads back to back samples as no time apart.
+	time.Sleep(50 * time.Millisecond)
+	v = map[string]float64{}
+	s.Collect(v)
+	require.NotContains(t, v, prefixReq+"GET /missing")
+	require.Contains(t, v, keyCPU, "CPU is a rate, known from the second sample on")
+}
+
+// A caller that sends no version is looked up by its key: the one it signs
+// with, or its dmsg address.
+func TestCallerVersionLookup(t *testing.T) {
+	signer, _ := cipher.GenerateKeyPair()
+	overDmsg, _ := cipher.GenerateKeyPair()
+	unknown, _ := cipher.GenerateKeyPair()
+	SetVersionLookup(func(pk cipher.PubKey) string {
+		return map[cipher.PubKey]string{signer: "v1.3.99", overDmsg: "v1.3.98"}[pk]
+	})
+	t.Cleanup(func() { versionOf.Store(nil) })
+
+	req := func(remote, public, version string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = remote
+		if public != "" {
+			r.Header.Set("SW-Public", public)
+		}
+		if version != "" {
+			r.Header.Set(buildinfo.VersionHeader, version)
+		}
+		return r
+	}
+	require.Equal(t, "v1.3.100", callerVersion(req(overDmsg.Hex()+":80", "", "v1.3.100")), "a sent version wins")
+	require.Equal(t, "v1.3.99", callerVersion(req("1.2.3.4:5", signer.Hex(), "")))
+	require.Equal(t, "v1.3.98", callerVersion(req(overDmsg.Hex()+":80", "", "")))
+	require.Equal(t, "none", callerVersion(req(unknown.Hex()+":80", "", "")))
+	require.Equal(t, "none", callerVersion(req("1.2.3.4:5", "", "")))
+}

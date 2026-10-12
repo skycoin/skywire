@@ -2,9 +2,9 @@
 
 package fixedpoint
 
-// This file ports the still-missing FIXED_POINT encode-side glue kernels from
-// libopus celt/celt_encoder.c and celt/bands.c that celt_encode_with_ec needs
-// between the energy quantisers and the bit allocator:
+// This file ports the FIXED_POINT encode-side glue kernels from libopus
+// celt/celt_encoder.c and celt/bands.c that celt_encode_with_ec uses between the
+// energy quantisers and the bit allocator:
 //
 //   - tone_detect / tone_lpc / normalize_tone_input / acos_approx: the pure-tone
 //     detector that produces tone_freq (Q13) and toneishness (Q29), feeding
@@ -70,9 +70,9 @@ func medianOf3(x []int32) int32 {
 	return t0
 }
 
-// DynallocAnalysis ports celt/celt_encoder.c dynalloc_analysis (FIXED_POINT,
-// surround masking and float analysis disabled: surroundDynalloc is all zero and
-// analysis is invalid, matching a plain CELT encoder). It fills offsets[start,end)
+// DynallocAnalysis ports celt/celt_encoder.c dynalloc_analysis (FIXED_POINT).
+// Surround masking and optional float AnalysisInfo contribute before follower
+// clipping. It fills offsets[start,end)
 // with the per-band dynalloc boosts, importance[start,end) and spread_weight[0,end),
 // returns maxDepth (celt_glog) and writes the total boost into totBoost.
 //
@@ -83,7 +83,7 @@ func DynallocAnalysis(bandLogE, bandLogE2, oldBandE []int32, nbEBands, start, en
 	offsets []int, lsbDepth int, logN []int16, isTransient, vbr, constrainedVBR bool,
 	eBands []int16, lm, effectiveBytes int, lfe bool, surroundDynalloc []int32,
 	importance, spreadWeight []int, toneFreq int16, toneishness int32, totBoost *int,
-	scratch *celtEncodeScratch) int32 {
+	analysis CELTAnalysisInfo, scratch *celtEncodeScratch) int32 {
 
 	var follower, noiseFloor, bandLogE3 []int32
 	if scratch != nil {
@@ -216,7 +216,7 @@ func DynallocAnalysis(bandLogE, bandLogE2, oldBandE []int32, nbEBands, start, en
 			}
 		}
 		// Compensate for under-allocation on tones.
-		if toneishness > gconstQ(0.98, 29) {
+		if toneishness > celtToneishnessQ29 {
 			// freq_bin = PSHR32(tone_freq*QCONST16(120/M_PI,9), 13+9)
 			freqBin := int(pshr32(int32(toneFreq)*int32(19557), 13+9))
 			for i := start; i < end; i++ {
@@ -238,7 +238,12 @@ func DynallocAnalysis(bandLogE, bandLogE2, oldBandE []int32, nbEBands, start, en
 				follower[end-2] += gconstF(1)
 			}
 		}
-		// analysis is invalid: leak_boost branch skipped.
+		if analysis.Valid {
+			for i := start; i < imin(19, end); i++ {
+				// GCONST(1.f/64.f) is Q24, and leak_boost is uint8.
+				follower[i] += gconstF(1.0/64.0) * int32(analysis.LeakBoost[i])
+			}
+		}
 		for i := start; i < end; i++ {
 			follower[i] = min32(follower[i], gconstF(4))
 			follower[i] = shr32(follower[i], 8)

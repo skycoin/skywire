@@ -330,7 +330,7 @@ func encodeServicesBatch(svcs map[cipher.PubKey][]byte) []byte {
 	for pk := range svcs {
 		pks = append(pks, pk)
 	}
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	sort.Slice(pks, func(i, j int) bool { return bytes.Compare(pks[i][:], pks[j][:]) < 0 })
 	payload := make([]byte, 0, 2+len(pks)*256)
 	payload = append(payload, '[')
 	for i, pk := range pks {

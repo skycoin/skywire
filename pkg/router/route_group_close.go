@@ -72,7 +72,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 
 	rg.broadcastClosePackets(code, tps, fwd)
 
-	if closeInitiator && anyLiveTransport(tps) {
+	if closeInitiator && anyLiveTransport(tps) && rg.lastRecv.Load() != 0 {
 		// if this visor initiated closing, we need to wait for close packets
 		// to come back, or to exit with a timeout if anything goes wrong in
 		// the network.
@@ -82,9 +82,15 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		// closeRoutineTimeout for it keeps the app's reader and writer parked
 		// on a group that is already gone — the whole cost of the wait with
 		// none of its benefit.
+		// Likewise when the peer never sent anything on the group, as after a
+		// failed handshake: no answer is coming, and the dial is waiting to retry.
 		if err := rg.waitForCloseRouteGroup(closeRoutineTimeout); err != nil {
 			rg.logger.Errorf("Error during close route group: %v", err)
 		}
+	} else if closeInitiator {
+		// Not waiting, so nothing else will mark the close done.
+		atomic.StoreInt32(&rg.closeDonePending, 0)
+		rg.signalCloseDone()
 	}
 
 	// Re-read the rule set under rg.mu (rather than reusing the snapshot above):

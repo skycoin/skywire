@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
@@ -116,7 +114,7 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 // same store.GetTransportsByEdge that v2 uses; it's already the bare
 // Entry list (SignedEntry is not persisted).
 func (api *API) getTransportsByEdgeV3(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 	var edge cipher.PubKey
 	if err := edge.UnmarshalText([]byte(edgeParam)); err != nil {
 		api.writeError(w, r, ErrInvalidPubKey)
@@ -194,7 +192,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportByID(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -248,7 +246,7 @@ func (api *API) getTransportsByEdges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
@@ -288,7 +286,7 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
-	edgeParam := chi.URLParam(r, "edge")
+	edgeParam := r.PathValue("edge")
 
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(edgeParam)); err != nil {
@@ -320,68 +318,12 @@ func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, r, http.StatusOK, stats)
 }
 
+// getAllTransports answers 410. Sending the whole transport list to every
+// caller was most of TPD's egress; routers read the routing feed instead.
 func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
-	selfTransports := true
-	query := r.URL.Query()
-	selfTransportsParam := query.Get("selfTransports")
-	if selfTransportsParam == "hide" {
-		selfTransports = false
-	}
-
-	// /all-transports is the dominant TPD egress + CPU driver. Serve a
-	// memoized, gzipped response body so identical multi-MB requests don't
-	// re-marshal and re-send the full list per call. The rare ?pretty=true
-	// caller bypasses the cache (indented form).
-	pretty, _ := httputil.BoolFromQuery(r, "pretty", false) //nolint:errcheck
-	if pretty {
-		entries, err := api.allTransportsEntries(r.Context(), selfTransports)
-		if err != nil {
-			api.writeError(w, r, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusOK, entries)
-		return
-	}
-
-	raw, gz, err := api.allTpsRespCache.body(selfTransports, func() ([]byte, error) {
-		entries, e := api.allTransportsEntries(r.Context(), selfTransports)
-		if e != nil {
-			return nil, e
-		}
-		return json.Marshal(entries)
+	httputil.WriteJSON(w, r, http.StatusGone, map[string]string{
+		"error": "the full transport list is no longer served; read the tpd-routing CXO feed",
 	})
-	if err != nil {
-		api.writeError(w, r, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(gz) //nolint:errcheck
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(raw) //nolint:errcheck
-}
-
-// allTransportsEntries returns the all-transports list (data cache then store),
-// preserving the empty-list -> ErrTransportNotFound behavior callers expect.
-func (api *API) allTransportsEntries(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
-	entries := api.getTransportsFromCache(selfTransports)
-	if entries == nil {
-		var err error
-		entries, err = api.store.GetAllTransports(ctx, selfTransports)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(entries) == 0 {
-		return nil, store.ErrTransportNotFound
-	}
-	return entries, nil
 }
 
 func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {
@@ -483,7 +425,7 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -664,7 +606,7 @@ func (api *API) health(w http.ResponseWriter, r *http.Request) {
 
 // GET /bandwidth/transport/{id}?period=daily&limit=7
 func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
-	idParam := chi.URLParam(r, "id")
+	idParam := r.PathValue("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
 		api.writeError(w, r, ErrInvalidTransportID)
@@ -695,7 +637,7 @@ func (api *API) getTransportBandwidth(w http.ResponseWriter, r *http.Request) {
 // GET /bandwidth/visor/{pk}?period=daily&limit=7
 // Aggregates bandwidth from all transports belonging to a visor
 func (api *API) getVisorBandwidth(w http.ResponseWriter, r *http.Request) {
-	pkParam := chi.URLParam(r, "pk")
+	pkParam := r.PathValue("pk")
 	pk := cipher.PubKey{}
 	if err := pk.UnmarshalText([]byte(pkParam)); err != nil {
 		api.log(r).WithError(err).Error("Error parsing PK")
@@ -1051,7 +993,7 @@ func (api *API) getVersions(w http.ResponseWriter, r *http.Request) {
 //   - on=true|false|all|none (filter by online status)
 //   - status=true (include online status in response)
 func (api *API) getVersionsByPKs(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 	if pksParam == "" {
 		api.writeError(w, r, ErrEmptyPubKey)
 		return
@@ -1269,7 +1211,7 @@ func (api *API) getNetworkTransportUptime(w http.ResponseWriter, r *http.Request
 // GET /metrics/uptime/{ids}
 // Transport uptime for specific transport IDs (comma-separated).
 func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) {
-	idsParam := chi.URLParam(r, "ids")
+	idsParam := r.PathValue("ids")
 	ids, err := parseIDs(idsParam)
 	if err != nil || len(ids) == 0 {
 		api.writeError(w, r, ErrInvalidTransportID)
@@ -1301,7 +1243,7 @@ func (api *API) getTransportUptimeByIDs(w http.ResponseWriter, r *http.Request) 
 // GET /metrics/uptime/visor/{pks}
 // Transport uptime for transports of specific visors (comma-separated PKs).
 func (api *API) getTransportUptimeByVisors(w http.ResponseWriter, r *http.Request) {
-	pksParam := chi.URLParam(r, "pks")
+	pksParam := r.PathValue("pks")
 	pks, err := parsePKs(pksParam)
 	if err != nil || len(pks) == 0 {
 		api.writeError(w, r, ErrInvalidPubKey)

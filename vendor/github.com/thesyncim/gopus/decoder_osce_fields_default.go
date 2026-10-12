@@ -11,7 +11,3 @@ func (d *Decoder) setOSCEModelState(_ dnnblob.DecoderModelState) {}
 func (d *Decoder) osceBWEActive() bool {
 	return false
 }
-
-func (d *Decoder) osceLACEActive() bool {
-	return false
-}

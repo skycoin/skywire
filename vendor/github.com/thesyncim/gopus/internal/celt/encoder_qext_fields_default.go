@@ -16,6 +16,10 @@ func (e *Encoder) qextActive() bool {
 
 func (e *Encoder) clearLastQEXTPayload() {}
 
+func (e *Encoder) resetQEXTEnergyHistory() {}
+
+func (e *Encoder) ensureQEXTOldBandE(int) []celtGLog { return nil }
+
 func (e *Encoder) setLastQEXTPayload(_ []byte) {}
 
 func (e *Encoder) lastQEXTPayloadNonEmpty() bool {

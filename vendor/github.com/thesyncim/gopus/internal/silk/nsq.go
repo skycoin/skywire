@@ -2,6 +2,8 @@
 // Reference: libopus silk/NSQ.c and silk/NSQ_del_dec.c
 package silk
 
+import "math/bits"
+
 // NSQ constants from libopus define.h
 const (
 	nsqLpcBufLength   = 16  // NSQ_LPC_BUF_LENGTH = MAX_LPC_ORDER
@@ -21,6 +23,10 @@ const (
 // NSQState holds the noise shaping quantizer state.
 // Mirrors libopus silk_nsq_state structure.
 type NSQState struct {
+	// delDecExactXqRound selects the libopus silk_NSQ_del_dec_avx2 rounding
+	// of the delayed-decision xq outputs for the current call.
+	delDecExactXqRound bool
+
 	// Buffer for quantized output signal
 	xq [2 * maxFrameLengthNSQ]int16
 
@@ -66,6 +72,10 @@ type NSQState struct {
 
 	// Delayed decision states (NSQ_del_dec)
 	delDecStates [maxDelDecStates]nsqDelDecState
+
+	// Structure-of-arrays delayed decision states (NSQ_del_dec_avx2). Like
+	// delDecStates, they are per-call scratch that every call reinitializes.
+	delDecAVX2 nsqDelDecAVX2State
 }
 
 // NewNSQState creates a new NSQ state with proper initialization.
@@ -142,6 +152,7 @@ func (s *NSQState) Reset() {
 		s.sAR2Q14[i] = 0
 	}
 	s.delDecStates = [maxDelDecStates]nsqDelDecState{}
+	s.delDecAVX2 = nsqDelDecAVX2State{}
 	s.sLFARShpQ14 = 0
 	s.sDiffShpQ14 = 0
 	s.lagPrev = 0
@@ -565,9 +576,8 @@ func shortTermPrediction(sLPCQ14 []int32, idx int, aQ12 []int16, order int) int3
 	}
 }
 
-// shortTermPrediction16 and shortTermPrediction10 are implemented in:
-//   - nsq_pred_arm64.s / nsq_pred_amd64.s (assembly, arm64 || amd64)
-//   - nsq_pred_default.go (pure Go fallback, !arm64 && !amd64)
+// shortTermPrediction16 and shortTermPrediction10 use the Go kernels in
+// nsq_pred.go on every architecture.
 
 // noiseShapeFeedback computes AR noise shaping feedback.
 // Matches libopus silk_NSQ_noise_shape_feedback_loop_c.
@@ -722,17 +732,13 @@ func scaleNSQStates(
 // Matches libopus silk_LPC_analysis_filter behavior:
 // - First 'order' outputs are set to zero
 // - Remaining outputs computed as: out[ix] = in[ix] - sum(a[k] * in[ix-1-k])
-func rewhitenLTP(sLTP []int16, xq []int16, startIdx, offset int, aQ12 []int16, length, order int) {
-	// Set first 'order' outputs to zero (per libopus silk_LPC_analysis_filter)
-	for i := startIdx; i < startIdx+order && i < len(sLTP); i++ {
-		sLTP[i] = 0
-	}
-
-	// Compute LPC analysis filter for remaining samples
+// rewhitenLTPScalar computes the silk_LPC_analysis_filter outputs
+// sLTP[startIdx+ix] for ix in [from, length) one sample at a time.
+func rewhitenLTPScalar(sLTP []int16, xq []int16, startIdx, offset int, aQ12 []int16, from, length, order int) {
 	// libopus iterates ix from d to len-1 and writes to out[ix]
 	// Input pointer is in[ix-1], so it reads in[ix-1], in[ix-2], ..., in[ix-d]
 	// Output is: in[ix] - prediction
-	for ix := order; ix < length && startIdx+ix < len(sLTP); ix++ {
+	for ix := from; ix < length && startIdx+ix < len(sLTP); ix++ {
 		inIdx := startIdx + offset + ix
 		if inIdx < 0 || inIdx >= len(xq) {
 			continue
@@ -755,6 +761,66 @@ func rewhitenLTP(sLTP []int16, xq []int16, startIdx, offset int, aQ12 []int16, l
 
 		// Saturate and store
 		sLTP[startIdx+ix] = int16(silk_SAT16(out))
+	}
+}
+
+// rewhitenLTPInRange is rewhitenLTPScalar for the outputs ix in [from, to)
+// whose taps xq[startIdx+offset+ix-order .. startIdx+offset+ix] and output
+// sLTP[startIdx+ix] are all in range; the caller checks that. The prediction
+// is a wrapping int32 sum of silk_SMULBB terms, so its order is free.
+func rewhitenLTPInRange(sLTP []int16, xq []int16, startIdx, offset int, aQ12 []int16, from, to, order int) {
+	if to <= from {
+		return
+	}
+	base := startIdx + offset
+	out := sLTP[startIdx+from : startIdx+to]
+	in := xq[base+from-order : base+to]
+	switch order {
+	case maxLPCOrder:
+		rewhitenLTPOrder16(out, in, (*[maxLPCOrder]int16)(aQ12))
+	case minLPCOrder:
+		rewhitenLTPOrder10(out, in, (*[minLPCOrder]int16)(aQ12))
+	default:
+		a := aQ12[:order]
+		for n := range out {
+			w := in[n : n+order+1]
+			var predQ12 int32
+			for k, c := range a {
+				predQ12 += int32(c) * int32(w[order-1-k])
+			}
+			out[n] = int16(silk_SAT16(silk_RSHIFT_ROUND((int32(w[order])<<12)-predQ12, 12)))
+		}
+	}
+}
+
+// rewhitenLTPOrder16 writes out[n] from the window in[n : n+17]: in[n+16]
+// minus the order-16 prediction from in[n+15] down to in[n].
+func rewhitenLTPOrder16(out []int16, in []int16, a *[maxLPCOrder]int16) {
+	for n := range out {
+		w := (*[maxLPCOrder + 1]int16)(in[n : n+maxLPCOrder+1])
+		predQ12 := int32(a[0])*int32(w[15]) + int32(a[1])*int32(w[14]) +
+			int32(a[2])*int32(w[13]) + int32(a[3])*int32(w[12]) +
+			int32(a[4])*int32(w[11]) + int32(a[5])*int32(w[10]) +
+			int32(a[6])*int32(w[9]) + int32(a[7])*int32(w[8]) +
+			int32(a[8])*int32(w[7]) + int32(a[9])*int32(w[6]) +
+			int32(a[10])*int32(w[5]) + int32(a[11])*int32(w[4]) +
+			int32(a[12])*int32(w[3]) + int32(a[13])*int32(w[2]) +
+			int32(a[14])*int32(w[1]) + int32(a[15])*int32(w[0])
+		out[n] = int16(silk_SAT16(silk_RSHIFT_ROUND((int32(w[16])<<12)-predQ12, 12)))
+	}
+}
+
+// rewhitenLTPOrder10 is rewhitenLTPOrder16 for order 10: out[n] comes from
+// the window in[n : n+11].
+func rewhitenLTPOrder10(out []int16, in []int16, a *[minLPCOrder]int16) {
+	for n := range out {
+		w := (*[minLPCOrder + 1]int16)(in[n : n+minLPCOrder+1])
+		predQ12 := int32(a[0])*int32(w[9]) + int32(a[1])*int32(w[8]) +
+			int32(a[2])*int32(w[7]) + int32(a[3])*int32(w[6]) +
+			int32(a[4])*int32(w[5]) + int32(a[5])*int32(w[4]) +
+			int32(a[6])*int32(w[3]) + int32(a[7])*int32(w[2]) +
+			int32(a[8])*int32(w[1]) + int32(a[9])*int32(w[0])
+		out[n] = int16(silk_SAT16(silk_RSHIFT_ROUND((int32(w[10])<<12)-predQ12, 12)))
 	}
 }
 
@@ -951,36 +1017,10 @@ func silk_INVERSE32_varQ(b32 int32, qres int) int32 {
 	return 0
 }
 
-// silk_CLZ32 counts leading zeros in a 32-bit value.
+// silk_CLZ32 counts leading zeros in a 32-bit value (32 for zero, 0 for a
+// negative value), as libopus silk/macros.h silk_CLZ32.
 func silk_CLZ32(x int32) int {
-	if x == 0 {
-		return 32
-	}
-	n := 0
-	if x < 0 {
-		return 0 // Negative number has no leading zeros in 2's complement
-	}
-	ux := uint32(x)
-	if ux <= 0x0000FFFF {
-		n += 16
-		ux <<= 16
-	}
-	if ux <= 0x00FFFFFF {
-		n += 8
-		ux <<= 8
-	}
-	if ux <= 0x0FFFFFFF {
-		n += 4
-		ux <<= 4
-	}
-	if ux <= 0x3FFFFFFF {
-		n += 2
-		ux <<= 2
-	}
-	if ux <= 0x7FFFFFFF {
-		n += 1
-	}
-	return n
+	return bits.LeadingZeros32(uint32(x))
 }
 
 // silk_LSHIFT_SAT32 shifts left with saturation.

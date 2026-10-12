@@ -220,7 +220,10 @@ func (iter *packetExtensionIterator) next(ext *packetExtensionData) (bool, error
 			iter.repeatLen = currData0 - iter.repeatPos
 			iter.srcPos = iter.repeatPos
 			iter.srcLen = iter.repeatLen
-			return iter.nextRepeat(ext)
+			ok, err := iter.nextRepeat(ext)
+			if ok || err != nil {
+				return ok, err
+			}
 		case id > 2:
 			if id >= 32 {
 				iter.lastLongPos = iter.currPos

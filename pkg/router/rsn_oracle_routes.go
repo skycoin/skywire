@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/rsn_oracle_routes.go c2-net-routing
 //
 // RSN-oracle 2-hop route computation (phase-1).
@@ -111,91 +109,8 @@ func computeDisjoint2HopRoutes(
 		return nil, errors.New("rsn-oracle 2-hop: src == dst")
 	}
 
-	excludeIntermediates := map[cipher.PubKey]struct{}{}
-	excludeTpIDs := map[uuid.UUID]struct{}{}
-	// A sibling tunnel's first-hop PEER (and host) is unavailable to this dial
-	// whichever transport would reach it — see DialOptions.ExcludeFirstHopPeers.
-	excludeFirstHopPeers := map[cipher.PubKey]struct{}{}
-	excludeFirstHopIPs := map[string]struct{}{}
-	if opts != nil {
-		for _, pk := range opts.ExcludeIntermediatePKs {
-			excludeIntermediates[pk] = struct{}{}
-		}
-		for _, id := range opts.ExcludeTransportIDs {
-			excludeTpIDs[id] = struct{}{}
-		}
-		for _, pk := range opts.ExcludeFirstHopPeers {
-			excludeFirstHopPeers[pk] = struct{}{}
-		}
-		for _, ip := range opts.ExcludeFirstHopIPs {
-			excludeFirstHopIPs[ip] = struct{}{}
-		}
-	}
-
-	// Source side: best src-I transport per intermediate peer I (lowest
-	// TypePreference wins). DMSG and excluded transport IDs are dropped.
-	type srcLeg struct {
-		id        uuid.UUID
-		tpType    tptypes.Type
-		latencyMs float64
-	}
-	srcByPeer := map[cipher.PubKey]srcLeg{}
-	for _, tp := range localTps {
-		if tp.tpType == tptypes.DMSG {
-			continue
-		}
-		if _, hit := excludeTpIDs[tp.id]; hit {
-			continue
-		}
-		peer := tp.remotePK
-		if peer == src || peer == dst {
-			continue
-		}
-		if _, hit := excludeIntermediates[peer]; hit {
-			continue
-		}
-		if _, hit := excludeFirstHopPeers[peer]; hit {
-			continue
-		}
-		if tp.remoteIP != "" {
-			if _, hit := excludeFirstHopIPs[tp.remoteIP]; hit {
-				continue
-			}
-		}
-		if cur, ok := srcByPeer[peer]; !ok ||
-			tptypes.TypePreference(tp.tpType) < tptypes.TypePreference(cur.tpType) {
-			srcByPeer[peer] = srcLeg{id: tp.id, tpType: tp.tpType, latencyMs: tp.latencyMs}
-		}
-	}
-
-	// Destination side: best I-dst transport per intermediate peer I. The
-	// reconstructed Entry carries the canonical (deterministic) transport ID the
-	// intermediate would use to reach dst.
-	type dstLeg struct {
-		id        uuid.UUID
-		tpType    tptypes.Type
-		latencyMs float64
-	}
-	dstByPeer := map[cipher.PubKey]dstLeg{}
-	for _, e := range dstEntries {
-		if e == nil {
-			continue
-		}
-		if e.Type == tptypes.DMSG {
-			continue
-		}
-		if e.Label == transport.LabelSetup {
-			continue
-		}
-		peer := e.RemoteEdge(dst)
-		if peer == src || peer == dst {
-			continue
-		}
-		if cur, ok := dstByPeer[peer]; !ok ||
-			tptypes.TypePreference(e.Type) < tptypes.TypePreference(cur.tpType) {
-			dstByPeer[peer] = dstLeg{id: e.ID, tpType: e.Type, latencyMs: e.Latency}
-		}
-	}
+	srcByPeer := firstHopsByPeer(src, dst, localTps, opts)
+	dstByPeer := lastHopsByPeer(src, dst, dstEntries)
 
 	// Intersection: intermediates reachable from BOTH ends.
 	intermediates := make([]cipher.PubKey, 0, len(srcByPeer))
@@ -437,9 +352,11 @@ func (r *router) oracle2HopRoutes(ctx context.Context, log *logging.Logger, src,
 		return !(opts != nil && opts.DiversifyTransports && r.firstHopExcluded(l.Forward, opts))
 	})
 	if !claimed {
-		leg = legs[0]
+		if len(leg.Forward) == 0 {
+			leg = legs[0]
+		}
 		if opts != nil {
-			opts.note("oracle: every candidate claimed by a sibling dial; taking the best")
+			opts.note("oracle: every candidate claimed by a sibling dial; reusing the oldest claim, %s", leg.Intermediate.String())
 		}
 	} else if opts != nil {
 		opts.note("oracle: claimed intermediate %s of %d candidates", leg.Intermediate.String(), len(legs))

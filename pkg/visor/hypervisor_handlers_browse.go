@@ -119,12 +119,12 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			serveJS(w, wasmhv.WasmExecJS)
 			return
 		case "/skywire.wasm":
-			// The ONE skywire command module — the desk host, the visor the
-			// served desk runs in its terminal, every command — embedded by
-			// the two-stage build, from the package location on disk, or the
-			// operator's hypervisor.wasm_serve.exec_wasm. Absent all three
-			// there is no desk: the root serves the dashboard (see "/").
+			// The ONE skywire command module: the desk host, the visor the
+			// served desk runs in its terminal, every command. Installed
+			// beside the binary, or the operator's
+			// hypervisor.wasm_serve.exec_wasm. Without one there is no desk.
 			if p, ok := hv.execModule(); ok {
+				hv.wasmModule().await(r.Context())
 				serveExecWasm(w, r, p)
 				return
 			}
@@ -168,10 +168,10 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// each on its own port, the same API and login behind each.
 			//
 			// The desk is `skywire desk-host` out of the command module. A
-			// build without one (a plain source build without `make
-			// build-embedded` and nothing on disk) starts no desk listener,
+			// visor with none installed beside its binary starts no desk listener,
 			// and its dashboard is the whole web UI (logUIRoot says so once).
 			if _, haveExec := hv.execModule(); haveExec && isDeskRoot(r) {
+				hv.wasmModule().refresh(r.Context())
 				hv.serveNativeDesk(w)
 				return
 			}
@@ -311,7 +311,7 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 
 // nativeDeskBootOpts is the skywireDeskBoot options object for the desk the
 // native hypervisor serves. The desk host is `skywire desk-host` out of the
-// ONE command module (embedded by the two-stage build, on disk, or
+// ONE command module (installed beside the binary, or
 // hypervisor.wasm_serve.exec_wasm); serveNativeDesk is only reached when
 // there is one. No help terminal and no docs server — each is a whole extra
 // Go/wasm runtime the tab never gets back. The dashboard tab is
@@ -368,7 +368,7 @@ func (hv *Hypervisor) logUIRoot() {
 	if _, ok := hv.execModule(); ok {
 		return
 	}
-	hv.logger.Info("no skywire command module in this build (make build-embedded, or " +
+	hv.logger.Info("no skywire command module beside this binary (make wasm-module, or " +
 		"hypervisor.wasm_serve.exec_wasm for a developer override): " +
 		"no desk is served; the web UI is the dashboard on " + hv.c.HTTPAddr)
 }
@@ -430,15 +430,19 @@ const uiAutoReloadJS = `(function(){
   }, 30000);
 })();`
 
-// execWasmPath is the path of the full skywire command module for js/wasm, when
-// the operator configured one for the wasm-serve port; the desk on this port
-// shares it. Empty when there is none.
+// execModule is the skywire command module for js/wasm this hypervisor serves
+// for the desk. A visor that can refresh the module serves the desk before it
+// has one, since opening the desk is what fetches it.
 func (hv *Hypervisor) execModule() (path string, ok bool) {
 	explicit := ""
 	if hv.c.WasmServe != nil {
 		explicit = hv.c.WasmServe.ExecWasm
 	}
-	return execModuleSource(explicit)
+	path, ok = execModuleSource(explicit)
+	if !ok && explicit == "" && path != "" && hv.wasmModule() != nil {
+		return path, true
+	}
+	return path, ok
 }
 
 // deskRootKey marks a request that arrived on the desk listener.
@@ -470,4 +474,12 @@ func nativeDeskBrowseScripts(browseJS string) string {
 	}
 	return `<script src="/browse-responder.js"></script>` + "\n" +
 		`<script src="/browse-transport.js"></script>` + "\n"
+}
+
+// wasmModule is the refresher for the module this hypervisor's visor serves.
+func (hv *Hypervisor) wasmModule() *wasmModuleRefresher {
+	if hv.visor == nil {
+		return nil
+	}
+	return hv.visor.wasmModule()
 }

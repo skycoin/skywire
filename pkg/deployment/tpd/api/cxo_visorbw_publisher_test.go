@@ -27,8 +27,8 @@ func TestVisorBWPublisher(t *testing.T) {
 	eb := func(s, r uint64) *store.EdgeBandwidth { return &store.EdgeBandwidth{Sent: s, Recv: r} }
 	fake := &leafFake{saved: map[string][][]byte{
 		day: savedDay(t, []store.TransportMetric{
-			{Type: "stcpr", Edges: []string{"a", "b"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(100, 40)}}},
-			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9), SameNetwork: true}}},
+			{Type: "stcpr", Edges: []string{"a", "b"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(100, 40), B: eb(40, 100)}}},
+			{Type: "stcpr", Edges: []string{"a", "c"}, Daily: []store.DailyEdgeBandwidth{{Date: day, A: eb(7, 9), B: eb(9, 7), SameNetwork: true}}},
 		}),
 	}}
 	var batches [][]treestore.PutOp
@@ -52,4 +52,26 @@ func TestVisorBWPublisher(t *testing.T) {
 	p.publishOnce(t.Context(), now.AddDate(0, 0, visorBWWindowDays))
 	require.Len(t, batches, 2)
 	require.Equal(t, []treestore.PutOp{{Path: store.VisorBWDayPath(day)}}, batches[1], "a day leaving the window is removed")
+}
+
+// A day whose leaf holds no transports is not published, and is published
+// once its leaf is rebuilt.
+func TestVisorBWPublisherWaitsForAnEmptyDay(t *testing.T) {
+	now := time.Date(2026, 10, 2, 0, 30, 0, 0, time.UTC)
+	const day = "2026-10-01"
+	fake := &leafFake{saved: map[string][][]byte{day: savedDay(t, []store.TransportMetric{})}}
+	var batches [][]treestore.PutOp
+	p := &VisorBWCXOPublisher{
+		api: &API{store: fake}, log: logging.MustGetLogger("t"), published: map[string]bool{},
+		putBatch: func(ops []treestore.PutOp) error { batches = append(batches, ops); return nil },
+	}
+
+	p.publishOnce(t.Context(), now)
+	require.Empty(t, batches)
+
+	fake.saved[day] = savedDay(t, []store.TransportMetric{{Type: "stcpr", Edges: []string{"a", "b"},
+		Daily: []store.DailyEdgeBandwidth{{Date: day, A: &store.EdgeBandwidth{Sent: 5}, B: &store.EdgeBandwidth{Recv: 5}}}}})
+	p.publishOnce(t.Context(), now)
+	require.Len(t, batches, 1)
+	require.Equal(t, store.VisorBWDayPath(day), batches[0][0].Path)
 }

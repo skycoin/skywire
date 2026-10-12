@@ -3,8 +3,8 @@
 package transport
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"math/big"
 
 	"github.com/google/uuid"
 
@@ -19,18 +19,28 @@ import (
 func MakeTransportID(keyA, keyB cipher.PubKey, netType types.Type) uuid.UUID {
 	tpType := string(netType)
 	keys := SortEdges(keyA, keyB)
-	b := make([]byte, 33*2+len(tpType))
-	i := 0
-	i += copy(b[i:], keys[0][:])
-	i += copy(b[i:], keys[1][:])
-	copy(b[i:], tpType)
-	return uuid.NewHash(sha256.New(), uuid.UUID{}, b, 0)
+	// uuid.NewHash(sha256.New(), uuid.UUID{}, keys ‖ type, 0), on the stack.
+	var buf [16 + 33*2 + 32]byte
+	if len(tpType) > 32 {
+		data := make([]byte, 0, 33*2+len(tpType))
+		data = append(append(append(data, keys[0][:]...), keys[1][:]...), tpType...)
+		return uuid.NewHash(sha256.New(), uuid.UUID{}, data, 0)
+	}
+	i := 16
+	i += copy(buf[i:], keys[0][:])
+	i += copy(buf[i:], keys[1][:])
+	i += copy(buf[i:], tpType)
+	sum := sha256.Sum256(buf[:i])
+	var id uuid.UUID
+	copy(id[:], sum[:])
+	id[6] &= 0x0f
+	id[8] = (id[8] & 0x3f) | 0x80
+	return id
 }
 
 // SortEdges sorts keys so that least-significant comes first
 func SortEdges(keyA, keyB cipher.PubKey) [2]cipher.PubKey {
-	var a, b big.Int
-	if a.SetBytes(keyA[:]).Cmp(b.SetBytes(keyB[:])) < 0 {
+	if bytes.Compare(keyA[:], keyB[:]) < 0 {
 		return [2]cipher.PubKey{keyA, keyB}
 	}
 	return [2]cipher.PubKey{keyB, keyA}

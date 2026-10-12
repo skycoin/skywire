@@ -3,20 +3,20 @@
 package silk
 
 // This file ports the LPC-whitening front-end of silk_find_pitch_lags_FIX from
-// silk/fixed/find_pitch_lags_FIX.c. It wires the already-ported sine window
+// silk/fixed/find_pitch_lags_FIX.c. It wires the fixed-point sine window
 // (silkApplySineWindowFIX), autocorrelation (silkAutocorrFixed), Schur
 // recursion (silkSchur), reflection-to-prediction conversion (silkK2a),
 // bandwidth expander (silkBwExpander), and the LPC analysis filter
-// (silkLPCAnalysisFilterFixed) into the windowed Burg-free whitening that
-// produces the residual fed to the pitch estimator, plus the prediction gain.
+// (silkLPCAnalysisFilterFixed) into the windowed autocorrelation/Schur
+// whitening that produces the residual fed to the pitch estimator, plus the
+// prediction gain.
 //
-// The trailing call into silk_pitch_analysis_core (the stage-1/2/3 contour
-// search) is NOT performed here: the full FIXED_POINT silk_pitch_analysis_core
-// is not yet ported (only the stage-3 energy/correlation kernels exist:
-// silkPAnaCalcEnergySt3Fixed / silkPAnaCalcCorrSt3Fixed). The front-end is
-// bit-exact and fully determines the whitened residual the core consumes; the
-// core search and the threshold/signalType decision that depend on it remain
-// to be ported once silk_pitch_analysis_core lands.
+// This front-end produces the whitened residual and prediction gain consumed
+// by silkPitchAnalysisCoreFixed in pitch_analysis_search_fixedpoint.go. That
+// core implements the stage-1/2/3 contour search; the frame driver supplies its
+// thresholds and applies the resulting pitch and voicing decision. The matching
+// C implementation is silk_pitch_analysis_core_FIX in
+// silk/fixed/pitch_analysis_core_FIX.c.
 
 // maxFindPitchLPCOrder is MAX_FIND_PITCH_LPC_ORDER from silk/define.h, the
 // maximum LPC order used by the pitch-lag whitening analysis.

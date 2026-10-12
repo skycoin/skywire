@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/thesyncim/gopus/internal/celt"
-	"github.com/thesyncim/gopus/internal/rangecoding"
 	"github.com/thesyncim/gopus/internal/silk"
 )
 
@@ -24,6 +23,7 @@ type transitionState struct {
 	prevMode   int
 	prevBW     int
 	prevStereo bool
+	targetMode int
 	// pendingTransSize is the 5 ms transition span for a non-CELT target whose
 	// transition PLC frame is decoded later (after the redundancy flags are read).
 	pendingTransSize int
@@ -48,6 +48,7 @@ func (d *streamState) beginModeTransition(toc streamTOC, transSize int) (transit
 		return ts, nil
 	}
 	ts.active = true
+	ts.targetMode = mode
 	ts.prevMode = prevMode
 	ts.prevBW = int(d.lastBandwidth)
 	ts.prevStereo = d.lastPacketStereo
@@ -68,6 +69,12 @@ func (d *streamState) beginModeTransition(toc streamTOC, transSize int) (transit
 func (d *streamState) applyModeTransition(ts *transitionState, out []float32, frameSize int) {
 	if !ts.active || len(ts.pcm) == 0 {
 		return
+	}
+	transSize := len(ts.pcm) / int(d.channels)
+	if ts.targetMode == streamModeSILK && ts.prevMode == streamModeCELT {
+		d.captureFixedCELTTransition(out, frameSize, transSize, true)
+	} else if ts.targetMode == streamModeCELT && ts.prevMode == streamModeSILK {
+		d.captureFixedSILKTransition(ts.pcm, transSize, true)
 	}
 	channels := int(d.channels)
 	fs := int(d.sampleRate)
@@ -118,9 +125,9 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 	// so this only matters if a caller ever requests less than F10.
 	silkDecodeSize := max(frameSize, f10)
 
-	var rd rangecoding.Decoder
+	rd := &d.rangeDecoder
 	rd.Init(frame)
-	out, err := d.decodeSILKWithDecoder(&rd, silkDecodeSize, toc.stereo, bw)
+	out, err := d.decodeSILKWithDecoder(rd, silkDecodeSize, toc.stereo, bw)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +144,7 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 	redundancyBytes := 0
 	mainLen := len(frame)
 	var redundantAudio []float32
+	var redundantRange uint32
 	if rd.Tell()+17 <= 8*len(frame) {
 		redundancy = true
 		celtToSilk = rd.DecodeBit(1) == 1
@@ -153,6 +161,14 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 	}
 
 	redundancyValid := redundancy && redundancyBytes > 0 && mainLen >= 0 && mainLen+redundancyBytes <= len(frame)
+	var fixedRedundantData []byte
+	if redundancyValid {
+		fixedRedundantData = frame[mainLen : mainLen+redundancyBytes]
+	}
+	d.setFixedRedundancy(redundancyValid, celtToSilk, fixedRedundantData, fixedCELTCodedChannels(toc.stereo))
+	// The FIXED_POINT opus_res path needs the integer SILK body before the
+	// float redundancy and transition fades modify this output buffer.
+	d.captureFixedSILKMain(out)
 
 	// A CELT->SILK redundant frame is decoded BEFORE the Hybrid->SILK fade-out so
 	// the fade-out gate sees the redundancy decision (opus_decode_frame ordering).
@@ -163,16 +179,17 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 	if redundancyValid && celtToSilk {
 		d.celtDec.SetBandwidth(celtBW)
 		redundantData := frame[mainLen : mainLen+redundancyBytes]
-		redundantAudio = make([]float32, f5*channels)
+		redundantAudio = d.redundantPCMFor(f5 * channels)
 		if err := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(redundantData, f5, toc.stereo, redundantAudio); err != nil {
 			return nil, err
 		}
+		redundantRange = d.celtDec.FinalRange()
 	}
 
 	// Hybrid->SILK fade-out: decode a 2.5 ms CELT silence frame and add it so the
 	// CELT MDCT history rings down cleanly (opus_decode_frame MODE_SILK_ONLY else
 	// branch), skipped when a CELT->SILK redundant frame continues a redundancy run.
-	if !(redundancy && celtToSilk && d.prevRedundancy) {
+	if !redundancy || !celtToSilk || !d.prevRedundancy {
 		if err := d.addHybridToSilkFadeOut(out); err != nil {
 			return nil, err
 		}
@@ -184,10 +201,11 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 		d.celtDec.Reset()
 		d.celtDec.SetBandwidth(celtBW)
 		redundantData := frame[mainLen : mainLen+redundancyBytes]
-		redundantAudio = make([]float32, f5*channels)
+		redundantAudio = d.redundantPCMFor(f5 * channels)
 		if err := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(redundantData, f5, toc.stereo, redundantAudio); err != nil {
 			return nil, err
 		}
+		redundantRange = d.celtDec.FinalRange()
 		start := (frameSize - f2_5) * channels
 		if start >= 0 && start < len(out) && len(redundantAudio) >= f5*channels {
 			streamSmoothFade(out[start:], redundantAudio[f2_5*channels:], out[start:], f2_5, channels, fs)
@@ -216,9 +234,11 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 		}
 		ts.pcm = pcm
 	}
-
 	d.applyModeTransition(&ts, out, frameSize)
 	d.prevRedundancy = redundancy && !celtToSilk
+	// opus_decode_frame reports the main range decoder after its redundancy
+	// flag, XORed with the range of the separately decoded CELT side frame.
+	d.lastSILKRange = rd.Range() ^ redundantRange
 	return out, nil
 }
 
@@ -229,6 +249,8 @@ func (d *streamState) decodeSILKModeWithTransition(frame []byte, frameSize, tran
 // previous mode before the main frame is decoded.
 func (d *streamState) transitionPLCToFloat32(transSize, prevMode, prevBW int, prevStereo bool) ([]float32, error) {
 	channels := int(d.channels)
+	var out []float32
+	var err error
 	switch prevMode {
 	case streamModeSILK:
 		// SILK concealment cannot produce less than 10 ms; libopus decodes the
@@ -237,26 +259,41 @@ func (d *streamState) transitionPLCToFloat32(transSize, prevMode, prevBW int, pr
 		// silk_frame_size = IMAX(F10, ...)).
 		f10 := int(d.sampleRate) / 100
 		silkPLCSize := max(transSize, f10)
-		pcm, err := d.decodeSILKToFloat32(nil, silkPLCSize, prevStereo, prevBW)
+		out, err = d.decodeSILKToFloat32(nil, silkPLCSize, prevStereo, prevBW)
 		if err != nil {
 			return nil, err
 		}
 		if silkPLCSize > transSize {
-			pcm = pcm[:transSize*channels]
+			out = out[:transSize*channels]
 		}
-		return pcm, nil
 	case streamModeHybrid:
-		return d.hybridDec.DecodeToFloat32WithPacketStereo(nil, transSize, prevStereo)
+		out = d.transitionPCMFor(transSize * channels)
+		err = d.decodeHybridTransitionPLCToFloat32(transSize, out)
 	case streamModeCELT:
 		d.celtDec.SetBandwidth(celt.BandwidthFromOpusConfig(prevBW))
-		out := make([]float32, transSize*int(d.channels))
+		out = d.transitionPCMFor(transSize * channels)
 		if err := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(nil, transSize, prevStereo, out); err != nil {
 			return nil, err
 		}
-		return out, nil
 	default:
-		return make([]float32, transSize*int(d.channels)), nil
+		out = d.transitionPCMFor(transSize * channels)
+		clear(out)
+		return out, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	// opus_decode_frame(NULL) runs its output-gain loop before the outer frame
+	// crossfades this transition PCM and applies gain to the completed frame.
+	d.applyOutputGain32(out)
+	if prevMode == streamModeSILK {
+		// SILK PLC writes through framePCM, which the following CELT or Hybrid
+		// decode also uses. Keep the crossfade source in separate decoder scratch.
+		transition := d.transitionPCMFor(len(out))
+		copy(transition, out)
+		return transition, nil
+	}
+	return out, nil
 }
 
 // addHybridToSilkFadeOut handles the libopus Hybrid->SILK fade-out: when the
@@ -266,20 +303,12 @@ func (d *streamState) transitionPLCToFloat32(transSize, prevMode, prevBW int, pr
 // CELT decoder matches the single decoder libopus uses, so decoding here advances
 // the same state.
 func (d *streamState) addHybridToSilkFadeOut(out []float32) error {
-	if int(d.lastMode) != streamModeHybrid {
+	// src/opus_decoder.c gates this on prev_mode; the Go mode sentinel is Hybrid
+	// even before a fresh or reset stream has decoded a frame.
+	if !d.haveDecoded || int(d.lastMode) != streamModeHybrid {
 		return nil
 	}
-	channels := int(d.channels)
-	f2_5 := d.sampleRateF2_5()
-	scratch := make([]float32, f2_5*channels)
-	if err := d.celtDec.DecodeFrameWithPacketStereoToFloat32AtAPIRate(celtSilenceFrame2B[:], f2_5, d.lastPacketStereo, scratch); err != nil {
-		return err
-	}
-	n := min(len(scratch), len(out))
-	for i := range n {
-		out[i] += scratch[i]
-	}
-	return nil
+	return d.celtDec.AccumulateFrameWithPacketStereoAtAPIRate(celtSilenceFrame2B[:], d.sampleRateF2_5(), d.lastPacketStereo, out)
 }
 
 func (d *streamState) sampleRateF2_5() int {

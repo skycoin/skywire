@@ -15,7 +15,7 @@ skywire cli got head <URL>
 ```
   -A, --agent string     user agent string
   -H, --header strings   HTTP header "Key: Value"
-  -x, --proxy string     SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)
+  -x, --proxy string     SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg); unset: ALL_PROXY / https_proxy / http_proxy, minus NO_PROXY; '': none
 ```
 
 ## Global Flags

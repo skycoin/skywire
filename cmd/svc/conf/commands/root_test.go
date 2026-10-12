@@ -39,7 +39,6 @@ func sampleServices() deployment.Services {
 		TransportDiscovery:     "http://tpd",
 		AddressResolver:        "http://ar",
 		RouteFinder:            "http://rf",
-		UptimeTracker:          "http://ut",
 		ServiceDiscovery:       "http://sd",
 		GeoIP:                  "http://geo",
 		RewardSystem:           "http://reward",
@@ -50,7 +49,6 @@ func sampleServices() deployment.Services {
 		TransportDiscoveryDmsg: "dmsg://tpd",
 		AddressResolverDmsg:    "dmsg://ar",
 		RouteFinderDmsg:        "dmsg://rf",
-		UptimeTrackerDmsg:      "dmsg://ut",
 		ServiceDiscoveryDmsg:   "dmsg://sd",
 		RewardSystemDmsg:       "dmsg://reward",
 	}

@@ -10,7 +10,7 @@ type Parsed struct {
 }
 
 // ParsePayload decodes the lightweight DRED metadata from a payload body with
-// the temporary experimental prefix already stripped.
+// the experimental prefix already stripped.
 func ParsePayload(payload []byte, dredFrameOffset int) (Parsed, error) {
 	var rd rangecoding.Decoder
 	header, err := parseHeaderWithDecoder(payload, dredFrameOffset, &rd)

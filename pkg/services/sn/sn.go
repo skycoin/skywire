@@ -135,13 +135,20 @@ func (s *service) Run(ctx context.Context) error {
 		return errors.New("setup-node: public_key and secret_key required (inline or via config_path)")
 	}
 
+	// A scoped logger: inside a visor, this block's log_level must not set the
+	// level for every other service and library sharing the process.
+	log = services.NewLogger(tag, conf.LogLevel)
+
 	// Never log the whole SetupConfig: it embeds this node's SECRET KEY, and
 	// cipher.SecKey.String() returns the raw hex rather than a mask, so no
 	// verb is safe here. Log the fields that are useful for diagnosis instead.
 	log.Infof("Config: public_key=%s transport_discovery=%s log_level=%s cascade=%t transport=%t",
 		conf.PK, conf.TransportDiscovery, conf.LogLevel, conf.Cascade != nil, conf.Transport != nil)
-	sn, err := router.NewNode(conf)
+	sn, err := router.NewNode(ctx, conf)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("setup-node: create node: %w", err)
 	}
 

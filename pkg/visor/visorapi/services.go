@@ -14,6 +14,19 @@ type EmbeddedServiceState struct {
 	// PlainHTTP is the block's plain-HTTP address, if it serves one.
 	PlainHTTP string `json:"plain_http,omitempty"`
 	Running   bool   `json:"running"`
-	Error     string `json:"error,omitempty"`
+	// OwnKey is set when the service runs under its own key rather than the
+	// visor's, with its own dmsg client; Restarts counts its restarts.
+	OwnKey   bool `json:"own_key,omitempty"`
+	Restarts int  `json:"restarts,omitempty"`
+	// Stopped is set while an operator has stopped it.
+	Stopped bool   `json:"stopped,omitempty"`
+	Error   string `json:"error,omitempty"`
 	services.State
+}
+
+// EmbeddedServiceControlArgs names an embedded service and what to do with
+// it: stop, start or restart.
+type EmbeddedServiceControlArgs struct {
+	Name   string `json:"name"`
+	Action string `json:"action"`
 }

@@ -1,10 +1,8 @@
-//go:build !(js && wasm)
-
 // Package clidmsg cmd/skywire-cli/commands/dmsg/chat_tui.go c5-cli-dmsg
 //
-// The bubbletea machinery of `cli dmsg chat`, split behind !(js && wasm) so
-// the command — spec and dmsg plumbing in chat.go — compiles in the wasm
-// build (a js twin stubs runChatTUI; there is no interactive terminal there).
+// The screen of `cli dmsg chat`, drawn with progkit: the conversation, a line
+// to type into, and the recipient to pick first when none was given. In websh
+// the line is a real text field and the conversation selectable text.
 package clidmsg
 
 import (
@@ -13,17 +11,23 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/0magnet/progkit"
+	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/color"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+)
+
+var (
+	chatTitle = tcell.StyleDefault.Bold(true).Foreground(color.PaletteColor(205))
+	chatDim   = tcell.StyleDefault.Foreground(color.PaletteColor(241))
+	chatErr   = tcell.StyleDefault.Foreground(color.PaletteColor(196))
 )
 
 type chatModel struct {
@@ -36,48 +40,29 @@ type chatModel struct {
 	awaitingRecipient bool
 	recipientErr      string
 
-	history []chatRow
-	vp      viewport.Model
-	input   textinput.Model
-
-	width  int
-	height int
-	ready  bool
-
+	mu        sync.Mutex
+	history   []chatRow
 	listenErr string
 
-	incoming <-chan incomingChatMsg
-	errs     <-chan error
+	view  *progkit.Text
+	input *progkit.Input
 
-	// peerConnMu guards reuse of an open outbound stream to the
-	// pinned recipient. Re-dialing per message is correct but
-	// burns dmsg session capacity unnecessarily for a conversation
-	// of any length.
+	// peerConnMu guards reuse of an open outbound stream to the pinned
+	// recipient. Re-dialing per message is correct but burns dmsg session
+	// capacity for a conversation of any length.
 	peerConnMu sync.Mutex
 	peerConn   net.Conn
-}
-
-type incomingTeaMsg struct{ msg incomingChatMsg }
-type listenErrTeaMsg struct{ err error }
-type sentTeaMsg struct {
-	body string
-	err  error
 }
 
 func runChatTUI(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 	myPK cipher.PubKey, recipient string, incoming <-chan incomingChatMsg, errs <-chan error) error {
 
-	in := textinput.New()
-	in.Focus()
-	in.CharLimit = 4096
-	if recipient == "" {
-		in.Placeholder = "paste recipient PK (66 hex chars); Enter to confirm, Esc to quit"
-		in.Prompt = "to: "
-		in.CharLimit = 128
-	} else {
-		in.Placeholder = "type message; Enter to send, Esc to quit"
-		in.Prompt = "» "
+	app, err := progkit.Open()
+	if err != nil {
+		log.WithError(err).Debug("tui open")
+		return err
 	}
+	defer app.Close()
 
 	m := &chatModel{
 		ctx:               ctx,
@@ -86,155 +71,166 @@ func runChatTUI(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 		recipient:         recipient,
 		port:              chatPort,
 		awaitingRecipient: recipient == "",
-		input:             in,
-		incoming:          incoming,
-		errs:              errs,
+		view:              &progkit.Text{ID: "history", Follow: true, Selectable: true},
+		input:             &progkit.Input{ID: "line"},
 	}
-	prog := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := prog.Run(); err != nil {
-		log.WithError(err).Debug("tui run")
-		return err
-	}
+	m.setPlaceholder()
+	m.input.OnSubmit = func(text string) { m.submit(app, text) }
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-incoming:
+				if !ok {
+					m.setListenErr(errors.New("inbound channel closed"))
+					app.Redraw()
+					return
+				}
+				m.append(chatRow{When: nonZeroTS(msg.TS), Sender: msg.SenderPK, Body: msg.Message})
+				app.Redraw()
+			case err, ok := <-errs:
+				if ok && err != nil {
+					m.setListenErr(err)
+					app.Redraw()
+				}
+			}
+		}
+	}()
+
+	app.Run(m.draw, func(ev tcell.Event) bool {
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch {
+			case ev.Key() == tcell.KeyEscape, progkit.IsCtrl(ev, 'c'):
+				return false
+			case ev.Key() == tcell.KeyPgUp, ev.Key() == tcell.KeyPgDn, ev.Key() == tcell.KeyUp, ev.Key() == tcell.KeyDown:
+				m.view.Key(ev)
+			default:
+				m.input.Key(ev)
+			}
+		case *tcell.EventMouse:
+			m.view.Mouse(ev)
+		}
+		return true
+	})
 	m.closePeerConn()
 	return nil
 }
 
-func (m *chatModel) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, m.waitIncoming(), m.waitListenErr())
-}
-
-func (m *chatModel) waitIncoming() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case <-m.ctx.Done():
-			return nil
-		case msg, ok := <-m.incoming:
-			if !ok {
-				return listenErrTeaMsg{err: errors.New("inbound channel closed")}
-			}
-			return incomingTeaMsg{msg: msg}
-		}
+func (m *chatModel) setPlaceholder() {
+	if m.awaitingRecipient {
+		m.input.Placeholder = "paste recipient PK (66 hex chars); Enter to confirm, Esc to quit"
+	} else {
+		m.input.Placeholder = "type message; Enter to send, Esc to quit"
 	}
 }
 
-func (m *chatModel) waitListenErr() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case <-m.ctx.Done():
-			return nil
-		case err, ok := <-m.errs:
-			if !ok {
-				return nil
-			}
-			return listenErrTeaMsg{err: err}
-		}
-	}
+func (m *chatModel) setListenErr(err error) {
+	m.mu.Lock()
+	m.listenErr = err.Error()
+	m.mu.Unlock()
 }
 
-func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		headerH := 2 // header + my-pk line
-		footerH := 2
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-headerH-footerH)
-			m.vp.SetContent(m.renderHistory())
-			m.ready = true
-		} else {
-			m.vp.Width = msg.Width
-			m.vp.Height = msg.Height - headerH - footerH
+// submit confirms the recipient, or sends a message to it.
+func (m *chatModel) submit(app *progkit.App, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	m.input.SetValue("")
+	if m.awaitingRecipient {
+		var pk cipher.PubKey
+		if err := pk.Set(text); err != nil {
+			m.recipientErr = fmt.Sprintf("invalid PK: %v", err)
+			return
 		}
-		m.input.Width = msg.Width - len(m.input.Prompt) - 1
-		m.width = msg.Width
-		m.height = msg.Height
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
-		case "enter":
-			text := m.input.Value()
-			if text == "" {
-				return m, nil
-			}
-			if m.awaitingRecipient {
-				var pk cipher.PubKey
-				if err := pk.Set(text); err != nil {
-					m.recipientErr = fmt.Sprintf("invalid PK: %v", err)
-					m.input.Reset()
-					return m, nil
-				}
-				m.recipient = pk.String()
-				m.awaitingRecipient = false
-				m.recipientErr = ""
-				m.input.Reset()
-				m.input.Placeholder = "type message; Enter to send, Esc to quit"
-				m.input.Prompt = "» "
-				m.input.CharLimit = 4096
-				if m.ready {
-					m.input.Width = m.width - len(m.input.Prompt) - 1
-				}
-				return m, nil
-			}
-			m.input.Reset()
-			body := text
-			cmds = append(cmds, func() tea.Msg {
-				err := m.sendOne(body)
-				return sentTeaMsg{body: body, err: err}
-			})
-		case "pgup":
-			m.vp.HalfPageUp()
-		case "pgdown":
-			m.vp.HalfPageDown()
-		}
-
-	case incomingTeaMsg:
-		m.append(chatRow{
-			When:   nonZeroTS(msg.msg.TS),
-			Sender: msg.msg.SenderPK,
-			Body:   msg.msg.Message,
-		})
-		cmds = append(cmds, m.waitIncoming())
-
-	case sentTeaMsg:
-		row := chatRow{
-			When:   time.Now().UTC(),
-			Sender: m.myPK,
-			Body:   msg.body,
-			Self:   true,
-		}
-		if msg.err != nil {
-			row.Err = msg.err.Error()
+		m.recipient = pk.String()
+		m.awaitingRecipient = false
+		m.recipientErr = ""
+		m.setPlaceholder()
+		return
+	}
+	go func() {
+		row := chatRow{When: time.Now().UTC(), Sender: m.myPK, Body: text, Self: true}
+		if err := m.sendOne(text); err != nil {
+			row.Err = err.Error()
 		}
 		m.append(row)
-
-	case listenErrTeaMsg:
-		if msg.err != nil {
-			m.listenErr = msg.err.Error()
-		}
-	}
-
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
-	if m.ready {
-		m.vp, cmd = m.vp.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-	return m, tea.Batch(cmds...)
+		app.Redraw()
+	}()
 }
 
 func (m *chatModel) append(row chatRow) {
+	m.mu.Lock()
 	m.history = append(m.history, row)
-	if !m.ready {
-		return
+	m.mu.Unlock()
+}
+
+func (m *chatModel) draw(f *progkit.Frame) {
+	m.mu.Lock()
+	history := append([]chatRow(nil), m.history...)
+	listenErr := m.listenErr
+	m.mu.Unlock()
+	m.view.SetLines(renderHistory(history))
+
+	header, rest := f.Size().SplitTop(2)
+	body, foot := rest.SplitBottom(2)
+	x := progkit.DrawText(f.Screen, 0, header.Y, header.W, "dmsg chat  ", chatTitle)
+	switch {
+	case m.awaitingRecipient && m.recipientErr != "":
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, m.recipientErr, chatErr)
+	case m.awaitingRecipient:
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, "pick a recipient PK below", chatDim)
+	default:
+		x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, "to "+m.recipient, chatDim)
 	}
-	wasAtBottom := m.vp.AtBottom()
-	m.vp.SetContent(m.renderHistory())
-	if wasAtBottom {
-		m.vp.GotoBottom()
+	x += progkit.DrawText(f.Screen, x, header.Y, header.W-x, fmt.Sprintf("  port=:%d", m.port), tcell.StyleDefault)
+	if listenErr != "" {
+		progkit.DrawText(f.Screen, x+2, header.Y, header.W-x-2, "[listen err: "+listenErr+"]", chatErr)
 	}
+	progkit.DrawText(f.Screen, 0, header.Y+1, header.W, "you = "+m.myPK, chatDim)
+
+	m.view.Draw(f, body)
+
+	prompt := "» "
+	if m.awaitingRecipient {
+		prompt = "to: "
+	}
+	n := progkit.DrawText(f.Screen, 0, foot.Y, foot.W, prompt, tcell.StyleDefault)
+	m.input.Draw(f, progkit.Rect{X: n, Y: foot.Y, W: foot.W - n, H: 1}, true)
+	hint := "Enter send | ↑/↓ PgUp/PgDn scroll | Esc/Ctrl+C quit"
+	if m.awaitingRecipient {
+		hint = "Enter confirm recipient | Esc/Ctrl+C quit"
+	}
+	progkit.DrawText(f.Screen, 0, foot.Y+1, foot.W, hint, chatDim)
+}
+
+func renderHistory(history []chatRow) []progkit.Line {
+	if len(history) == 0 {
+		return []progkit.Line{{{Text: "(no messages yet — type below and hit Enter)", Style: chatDim}}}
+	}
+	you := tcell.StyleDefault.Foreground(color.PaletteColor(39)).Bold(true)
+	peer := tcell.StyleDefault.Foreground(color.PaletteColor(213)).Bold(true)
+	out := make([]progkit.Line, 0, len(history))
+	for _, row := range history {
+		sender := progkit.Span{Text: "you", Style: you}
+		if !row.Self {
+			sender = progkit.Span{Text: row.Sender, Style: peer}
+		}
+		body := progkit.Span{Text: row.Body, Style: tcell.StyleDefault}
+		if row.Err != "" {
+			body = progkit.Span{Text: fmt.Sprintf("✗ send failed: %s — %q", row.Err, row.Body), Style: chatErr}
+		}
+		out = append(out, progkit.Line{
+			{Text: row.When.Format("15:04:05") + " ", Style: chatDim},
+			sender,
+			{Text: "  ", Style: tcell.StyleDefault},
+			body,
+		})
+	}
+	return out
 }
 
 func (m *chatModel) sendOne(body string) error {
@@ -303,77 +299,4 @@ func nonZeroTS(t time.Time) time.Time {
 		return time.Now().UTC()
 	}
 	return t
-}
-
-func (m *chatModel) renderHistory() string {
-	if len(m.history) == 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).
-			Render("(no messages yet — type below and hit Enter)")
-	}
-	youStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-	peerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-
-	var b lipgloss.Style
-	_ = b
-	out := ""
-	for _, row := range m.history {
-		ts := row.When.Format("15:04:05")
-		var sender string
-		if row.Self {
-			sender = youStyle.Render("you")
-		} else {
-			sender = peerStyle.Render(shortPK(row.Sender))
-		}
-		body := row.Body
-		if row.Err != "" {
-			body = errStyle.Render(fmt.Sprintf("✗ send failed: %s — %q", row.Err, row.Body))
-		}
-		out += fmt.Sprintf("%s %s  %s\n", dimStyle.Render(ts), sender, body)
-	}
-	return out
-}
-
-func shortPK(pk string) string {
-	if len(pk) <= 12 {
-		return pk
-	}
-	return pk[:12] + "…"
-}
-
-func (m *chatModel) View() string {
-	if !m.ready {
-		return "Initializing…\n"
-	}
-	hdrStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-
-	var header string
-	if m.awaitingRecipient {
-		hint := dimStyle.Render("pick a recipient PK below")
-		if m.recipientErr != "" {
-			hint = errStyle.Render(m.recipientErr)
-		}
-		header = fmt.Sprintf("%s  %s  port=:%d",
-			hdrStyle.Render("dmsg chat"), hint, m.port)
-	} else {
-		header = fmt.Sprintf("%s  %s  port=:%d",
-			hdrStyle.Render("dmsg chat"),
-			dimStyle.Render("to "+shortPK(m.recipient)), m.port)
-	}
-	if m.listenErr != "" {
-		header += "  " + errStyle.Render("[listen err: "+m.listenErr+"]")
-	}
-	myLine := dimStyle.Render("you = " + shortPK(m.myPK))
-
-	var footer string
-	if m.awaitingRecipient {
-		footer = dimStyle.Render("Enter confirm recipient | Esc/Ctrl+C quit")
-	} else {
-		footer = dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Esc/Ctrl+C quit")
-	}
-
-	return header + "\n" + myLine + "\n" + m.vp.View() + "\n" + m.input.View() + "\n" + footer
 }

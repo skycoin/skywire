@@ -18,7 +18,6 @@ func TestAppEnvArgs_Full(t *testing.T) {
 		DmsgDiscovery:   "http://dmsgd",
 		TPDiscovery:     "http://tpd",
 		RF:              "http://rf",
-		UptimeTracker:   "http://ut",
 		AddressResolver: "http://ar",
 		DmsgServers:     []string{"srv0", "srv1"},
 		TPRemoteIPs:     []string{"1.1.1.1"},
@@ -29,7 +28,6 @@ func TestAppEnvArgs_Full(t *testing.T) {
 	require.Equal(t, "http://dmsgd", envs[DmsgDiscAddrEnvKey])
 	require.Equal(t, "http://tpd", envs[TPDiscAddrEnvKey])
 	require.Equal(t, "http://rf", envs[RFAddrEnvKey])
-	require.Equal(t, "http://ut", envs[UptimeTrackerAddrEnvKey])
 	require.Equal(t, "http://ar", envs[AddressResolverAddrEnvKey])
 
 	// DmsgServers: count + indexed entries.

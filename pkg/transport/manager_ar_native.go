@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package transport pkg/transport/manager_ar_native.go c2-net-transport
 package transport
 

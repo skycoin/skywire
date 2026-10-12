@@ -378,9 +378,7 @@ func (e *Encoder) detectPitch(pcm []float32, numSubframes int, searchThres1, sea
 		}
 		d := (int(dSrch[i]) + minLag4kHz) * 2
 		dSrch[i] = int32(d)
-		if d >= minLag8kHz && d <= maxLag8kHz {
-			dComp[d] = 1
-		}
+		dComp[d] = 1
 	}
 
 	// Convolution to expand search range (stage 2 d_srch list)
@@ -457,9 +455,10 @@ func (e *Encoder) detectPitch(pcm []float32, numSubframes int, searchThres1, sea
 	var prevLagLog2 float32
 	if prevLag > 0 {
 		prevLag8k := prevLag
-		if fsKHz == 12 {
+		switch fsKHz {
+		case 12:
 			prevLag8k = prevLag * 2 / 3
-		} else if fsKHz == 16 {
+		case 16:
 			prevLag8k = prevLag / 2
 		}
 		prevLagLog2 = silkLog2Float(float32(prevLag8k))
@@ -551,9 +550,10 @@ func (e *Encoder) detectPitch(pcm []float32, numSubframes int, searchThres1, sea
 	pitchLags := ensureInt32Slice(&e.scratchPitchLags, numSubframes)
 
 	if fsKHz > 8 {
-		if fsKHz == 12 {
+		switch fsKHz {
+		case 12:
 			lag = (lag*3 + 1) / 2
-		} else if fsKHz == 16 {
+		case 16:
 			lag *= 2
 		}
 
@@ -826,12 +826,16 @@ func pitchAnalysisCalcCorrSt3(out []float32, frame []float32, startLag, sfLength
 		for i := range lagCount {
 			scratchMem[i] = 0
 		}
-		for j := lagLow; j <= lagHigh && (j-lagLow) < lagCount; j++ {
-			basisIdx := targetIdx - startLag - j
-			if basisIdx < 0 || basisIdx+sfLength > len(frame) || targetIdx+sfLength > len(frame) {
-				continue
+		// libopus silk_P_Ana_calc_corr_st3 correlates with celt_pitch_xcorr
+		// (float accumulation, arch-dispatched), not silk_inner_product_FLP,
+		// then reverses the lag order into scratch_mem.
+		basisIdx := targetIdx - startLag - lagHigh
+		if basisIdx >= 0 && targetIdx+sfLength <= len(frame) {
+			var xcorr [len(scratchMem)]float32
+			celtPitchXcorrFloat(frame[targetIdx:], frame[basisIdx:], xcorr[:lagCount], sfLength, lagCount)
+			for j := lagLow; j <= lagHigh && (j-lagLow) < lagCount; j++ {
+				scratchMem[j-lagLow] = xcorr[lagHigh-j]
 			}
-			scratchMem[j-lagLow] = float32(innerProductFLP(frame[basisIdx:], frame[targetIdx:], sfLength))
 		}
 		delta := lagLow
 		for i := 0; i < nbCbkSearch; i++ {

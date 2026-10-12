@@ -11,8 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/0magnet/progkit"
+	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/color"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -27,6 +28,15 @@ func init() {
 	hvCmd.AddCommand(hvTUICmd)
 }
 
+const hvKeys = "q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S/A/l:app(toggle/stop/autostart/logs)  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  P:proxies f:ports  R:reload D:shutdown"
+
+var (
+	hvHeadStyle   = tcell.StyleDefault.Foreground(color.Yellow)
+	hvDimStyle    = tcell.StyleDefault.Foreground(color.Gray)
+	hvBorderStyle = tcell.StyleDefault.Foreground(color.Gray)
+	hvFocusStyle  = tcell.StyleDefault.Foreground(color.Aqua)
+)
+
 var hvTUICmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Hypervisor terminal UI",
@@ -40,183 +50,257 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		app := tview.NewApplication()
+		app, err := progkit.Open()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		defer app.Close()
 
-		// --- Main visor list table ---
-		table := tview.NewTable().
-			SetBorders(false).
-			SetSelectable(true, false).
-			SetFixed(1, 0)
-		table.SetBorder(true).
-			SetTitle(" Hypervisor — Connected Visors ").
-			SetTitleAlign(tview.AlignLeft)
-
-		// --- Detail panel ---
-		detail := tview.NewTextView().
-			SetDynamicColors(true).
-			SetScrollable(true)
-		detail.SetBorder(true).
-			SetTitle(" Visor Detail ").
-			SetTitleAlign(tview.AlignLeft)
-		detail.SetText("[gray]Select a visor to view details")
-
-		// --- Status bar ---
-		statusBar := tview.NewTextView().
-			SetDynamicColors(true).
-			SetTextAlign(tview.AlignLeft).
-			SetText(" [yellow]Loading...[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S/A/l:app(toggle/stop/autostart/logs)  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  P:proxies f:ports  R:reload D:shutdown")
-
-		// --- Layout ---
-		split := tview.NewFlex().
-			AddItem(table, 0, 3, true).
-			AddItem(detail, 0, 2, false)
-		layout := tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(split, 0, 1, true).
-			AddItem(statusBar, 1, 0, false)
-
-		// --- State ---
+		// --- State, touched only on the draw goroutine ---
 		var (
-			visors []visorapi.HVVisorEntry
-			mu     sync.RWMutex
+			visors      []visorapi.HVVisorEntry
+			sel, top    int
+			detailFocus bool
+			status      = "Loading..."
+			quit        bool
+			cur         *hvModal
+			detail      = &progkit.Text{ID: "detail", Selectable: true}
 		)
+		detail.SetANSI(markup("[gray]Select a visor to view details"))
 
+		// queue runs fn on the draw goroutine, from any goroutine.
+		var (
+			queueMu sync.Mutex
+			queued  []func()
+		)
+		queue := func(fn func()) {
+			queueMu.Lock()
+			queued = append(queued, fn)
+			queueMu.Unlock()
+			app.Redraw()
+		}
+		drain := func() {
+			queueMu.Lock()
+			fns := queued
+			queued = nil
+			queueMu.Unlock()
+			for _, fn := range fns {
+				fn()
+			}
+		}
 		setStatus := func(msg string) {
-			app.QueueUpdateDraw(func() {
-				statusBar.SetText(fmt.Sprintf(" [yellow]%s[white] | q:quit r:refresh enter:detail esc:back  m/M:hops/mux c:calc-rt w:reward p:autoconn  s/S/A/l:app(toggle/stop/autostart/logs)  T/t:tp+/-  x:rm-rule  h:health G:dmsg-conn N:dmsg-count  P:proxies f:ports  R:reload D:shutdown", msg))
-			})
+			queue(func() { status = msg })
 		}
 
 		// refresh is defined further down but referenced by helpers above; predeclare.
 		var refresh func()
 
 		// --- Modal helpers ---
-		showModal := func(p tview.Primitive, width, height int) {
-			wrap := tview.NewFlex().
-				AddItem(nil, 0, 1, false).
-				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-					AddItem(nil, 0, 1, false).
-					AddItem(p, height, 1, true).
-					AddItem(nil, 0, 1, false), width, 1, true).
-				AddItem(nil, 0, 1, false)
-			app.SetRoot(wrap, true).SetFocus(p)
-		}
-		closeModal := func() {
-			app.SetRoot(layout, true).SetFocus(table)
-		}
+		showModal := func(m *hvModal) { cur = m }
+		closeModal := func() { cur = nil }
 		showInputModal := func(title, label, defaultValue string, onSubmit func(value string)) {
-			form := tview.NewForm().
-				AddInputField(label, defaultValue, 64, nil, nil)
-			form.AddButton("OK", func() {
-				v := form.GetFormItem(0).(*tview.InputField).GetText()
+			in := &progkit.Input{ID: "modal-input"}
+			in.SetValue(defaultValue)
+			in.OnSubmit = func(v string) {
 				closeModal()
 				onSubmit(strings.TrimSpace(v))
+			}
+			showModal(&hvModal{title: title, w: 80, h: 6,
+				draw: func(f *progkit.Frame, r progkit.Rect) {
+					progkit.DrawText(f.Screen, r.X, r.Y, r.W, label, hvHeadStyle)
+					in.Draw(f, progkit.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: 1}, true)
+					progkit.DrawText(f.Screen, r.X, r.Y+3, r.W, "enter ok  esc cancel", hvDimStyle)
+				},
+				key: func(ev *tcell.EventKey) { in.Key(ev) },
 			})
-			form.AddButton("Cancel", closeModal)
-			form.SetBorder(true).SetTitle(" " + title + " ").SetTitleAlign(tview.AlignLeft)
-			showModal(form, 80, 7)
+		}
+		showChoiceModal := func(title, message string, choices []string, onDone func(label string)) {
+			lines := wrapText(message, 76)
+			// The last choice is No or Cancel, so a stray Enter does nothing.
+			focus := len(choices) - 1
+			buttons := make([]*progkit.Button, len(choices))
+			for i, c := range choices {
+				label := c
+				buttons[i] = &progkit.Button{ID: fmt.Sprintf("choice-%d", i), Label: label, OnPress: func() {
+					closeModal()
+					onDone(label)
+				}}
+			}
+			showModal(&hvModal{title: title, w: 80, h: len(lines) + 4,
+				draw: func(f *progkit.Frame, r progkit.Rect) {
+					for i, l := range lines {
+						progkit.DrawText(f.Screen, r.X, r.Y+i, r.W, l, tcell.StyleDefault)
+					}
+					x := r.X
+					for i, b := range buttons {
+						b.Draw(f, progkit.Rect{X: x, Y: r.Y + len(lines) + 1, W: r.X + r.W - x, H: 1}, i == focus)
+						x += len(b.Label) + 6
+					}
+				},
+				key: func(ev *tcell.EventKey) {
+					switch ev.Key() {
+					case tcell.KeyLeft, tcell.KeyBacktab:
+						focus = (focus + len(buttons) - 1) % len(buttons)
+					case tcell.KeyRight, tcell.KeyTab:
+						focus = (focus + 1) % len(buttons)
+					default:
+						buttons[focus].Key(ev)
+					}
+				},
+			})
 		}
 		showConfirmModal := func(title, message string, onConfirm func()) {
-			m := tview.NewModal().
-				SetText(message).
-				AddButtons([]string{"Yes", "No"}).
-				SetDoneFunc(func(_ int, label string) {
-					closeModal()
-					if label == "Yes" {
-						onConfirm()
-					}
-				})
-			m.SetBorder(true).SetTitle(" " + title + " ")
-			app.SetRoot(m, true).SetFocus(m)
+			showChoiceModal(title, message, []string{"Yes", "No"}, func(label string) {
+				if label == "Yes" {
+					onConfirm()
+				}
+			})
 		}
 		showListModal := func(title string, items []string, onSelect func(idx int)) {
 			if len(items) == 0 {
 				showConfirmModal(title, "No items available.", func() {})
 				return
 			}
-			list := tview.NewList().ShowSecondaryText(false)
-			for i, label := range items {
-				idx := i
-				list.AddItem(label, "", 0, func() {
-					closeModal()
-					onSelect(idx)
-				})
+			list := &progkit.List{ID: "modal-list", Items: items}
+			list.OnActivate = func(idx int) {
+				closeModal()
+				onSelect(idx)
 			}
-			list.SetBorder(true).SetTitle(" " + title + " ").SetTitleAlign(tview.AlignLeft)
-			list.SetDoneFunc(closeModal)
-			height := len(items) + 4
-			if height > 24 {
-				height = 24
+			showModal(&hvModal{title: title, w: 110, h: min(len(items)+2, 24),
+				draw: func(f *progkit.Frame, r progkit.Rect) { list.Draw(f, r, true) },
+				key:  func(ev *tcell.EventKey) { list.Key(ev) },
+			})
+		}
+		showTextModal := func(title, text string, w, h int) {
+			view := &progkit.Text{ID: "modal-text", Selectable: true}
+			view.SetANSI(markup(text))
+			showModal(&hvModal{title: title, w: w, h: h,
+				draw: func(f *progkit.Frame, r progkit.Rect) { view.Draw(f, r) },
+				key:  func(ev *tcell.EventKey) { view.Key(ev) },
+			})
+		}
+		showFormModal := func(title string, fields []*hvField, onOK func()) {
+			focus := 0
+			for i, fl := range fields {
+				if fl.input != nil {
+					fl.input.ID = fmt.Sprintf("field-%d", i)
+				}
 			}
-			showModal(list, 80, height)
+			ok := &progkit.Button{ID: "form-ok", Label: "OK", OnPress: func() {
+				closeModal()
+				onOK()
+			}}
+			cancel := &progkit.Button{ID: "form-cancel", Label: "Cancel", OnPress: closeModal}
+			n := len(fields) + 2
+			showModal(&hvModal{title: title, w: 80, h: len(fields) + 4,
+				draw: func(f *progkit.Frame, r progkit.Rect) {
+					for i, fl := range fields {
+						y := r.Y + i
+						st := tcell.StyleDefault
+						if i == focus {
+							st = hvFocusStyle
+						}
+						x := r.X + progkit.DrawText(f.Screen, r.X, y, r.W, fmt.Sprintf("%-34s ", fl.label), st)
+						rest := progkit.Rect{X: x, Y: y, W: r.X + r.W - x, H: 1}
+						switch {
+						case fl.input != nil:
+							fl.input.Draw(f, rest, i == focus)
+						case fl.choices != nil:
+							progkit.DrawText(f.Screen, x, y, rest.W, "< "+fl.choices[fl.choice]+" >", st)
+						default:
+							mark := "[ ]"
+							if fl.on {
+								mark = "[x]"
+							}
+							progkit.DrawText(f.Screen, x, y, rest.W, mark, st)
+						}
+					}
+					y := r.Y + len(fields) + 1
+					ok.Draw(f, progkit.Rect{X: r.X, Y: y, W: 8, H: 1}, focus == n-2)
+					cancel.Draw(f, progkit.Rect{X: r.X + 10, Y: y, W: 12, H: 1}, focus == n-1)
+				},
+				key: func(ev *tcell.EventKey) {
+					switch ev.Key() {
+					case tcell.KeyTab, tcell.KeyDown:
+						focus = (focus + 1) % n
+						return
+					case tcell.KeyBacktab, tcell.KeyUp:
+						focus = (focus + n - 1) % n
+						return
+					}
+					if focus >= len(fields) {
+						[]*progkit.Button{ok, cancel}[focus-len(fields)].Key(ev)
+						return
+					}
+					fl := fields[focus]
+					switch {
+					case fl.input != nil:
+						if ev.Key() == tcell.KeyEnter {
+							focus++
+							return
+						}
+						fl.input.Key(ev)
+					case fl.choices != nil:
+						switch {
+						case ev.Key() == tcell.KeyLeft:
+							fl.choice = (fl.choice + len(fl.choices) - 1) % len(fl.choices)
+						case ev.Key() == tcell.KeyRight, ev.Key() == tcell.KeyEnter, progkit.Typed(ev) == " ":
+							fl.choice = (fl.choice + 1) % len(fl.choices)
+						}
+					default:
+						if ev.Key() == tcell.KeyEnter || progkit.Typed(ev) == " " {
+							fl.on = !fl.on
+						}
+					}
+				},
+			})
 		}
 		fetchSummary := func(pk cipher.PubKey) (*visorapi.Summary, error) {
 			return rpcClient.HVVisorSummary(pk)
 		}
 		showRegisterForwardedPortModal := func(targetPK cipher.PubKey) {
-			form := tview.NewForm()
-			form.AddInputField("port (remote)", "", 8, nil, nil).
-				AddInputField("local port", "", 8, nil, nil).
-				AddInputField("label", "", 32, nil, nil).
-				AddInputField("description", "", 64, nil, nil).
-				AddCheckbox("skynet", true, nil).
-				AddCheckbox("dmsg", false, nil).
-				AddCheckbox("show on landing", true, nil).
-				AddInputField("proxy_addr (host:port, optional)", "", 32, nil, nil)
-			form.AddButton("OK", func() {
-				port, perr := strconv.Atoi(strings.TrimSpace(form.GetFormItem(0).(*tview.InputField).GetText()))
-				if perr != nil {
-					port = 0
-				}
-				local, lerr := strconv.Atoi(strings.TrimSpace(form.GetFormItem(1).(*tview.InputField).GetText()))
-				if lerr != nil {
-					local = 0
-				}
-				label := strings.TrimSpace(form.GetFormItem(2).(*tview.InputField).GetText())
-				desc := strings.TrimSpace(form.GetFormItem(3).(*tview.InputField).GetText())
-				skynetEn := form.GetFormItem(4).(*tview.Checkbox).IsChecked()
-				dmsgEn := form.GetFormItem(5).(*tview.Checkbox).IsChecked()
-				landing := form.GetFormItem(6).(*tview.Checkbox).IsChecked()
-				proxyAddr := strings.TrimSpace(form.GetFormItem(7).(*tview.InputField).GetText())
-				closeModal()
-				if port <= 0 {
-					setStatus("forwarded port: port required")
-					return
-				}
-				fp := visorapi.ForwardedPort{
-					Port:          port,
-					LocalPort:     local,
-					Label:         label,
-					Description:   desc,
-					ShowOnLanding: landing,
-					Skynet:        skynetEn,
-					DMSG:          dmsgEn,
-					ProxyAddr:     proxyAddr,
-				}
-				go func() {
-					if err := rpcClient.HVRegisterForwardedPort(targetPK, fp); err != nil {
-						setStatus("register fwd port failed: " + err.Error())
+			port, local, label, desc, proxy := textField("port (remote)", ""), textField("local port", ""), textField("label", ""), textField("description", ""), textField("proxy_addr (host:port, optional)", "")
+			skynetEn, dmsgEn, landing := &hvField{label: "skynet", on: true}, &hvField{label: "dmsg"}, &hvField{label: "show on landing", on: true}
+			showFormModal("Register forwarded port on "+targetPK.String(),
+				[]*hvField{port, local, label, desc, skynetEn, dmsgEn, landing, proxy},
+				func() {
+					p, perr := strconv.Atoi(strings.TrimSpace(port.input.Value()))
+					if perr != nil {
+						p = 0
+					}
+					l, lerr := strconv.Atoi(strings.TrimSpace(local.input.Value()))
+					if lerr != nil {
+						l = 0
+					}
+					if p <= 0 {
+						setStatus("forwarded port: port required")
 						return
 					}
-					setStatus(fmt.Sprintf("forwarded port %d registered on %s", port, targetPK.String()))
-					refresh()
-				}()
-			})
-			form.AddButton("Cancel", closeModal)
-			form.SetBorder(true).
-				SetTitle(" Register forwarded port on " + targetPK.String() + " ").
-				SetTitleAlign(tview.AlignLeft)
-			showModal(form, 80, 24)
+					fp := visorapi.ForwardedPort{
+						Port:          p,
+						LocalPort:     l,
+						Label:         strings.TrimSpace(label.input.Value()),
+						Description:   strings.TrimSpace(desc.input.Value()),
+						ShowOnLanding: landing.on,
+						Skynet:        skynetEn.on,
+						DMSG:          dmsgEn.on,
+						ProxyAddr:     strings.TrimSpace(proxy.input.Value()),
+					}
+					go func() {
+						if err := rpcClient.HVRegisterForwardedPort(targetPK, fp); err != nil {
+							setStatus("register fwd port failed: " + err.Error())
+							return
+						}
+						setStatus(fmt.Sprintf("forwarded port %d registered on %s", p, targetPK.String()))
+						refresh()
+					}()
+				})
 		}
 		showAddTransportModal := func(targetPK cipher.PubKey, onSubmit func(remote cipher.PubKey, tpType, label string)) {
-			form := tview.NewForm()
-			form.AddInputField("remote PK", "", 64, nil, nil).
-				AddDropDown("type", []string{"stcpr", "sudph", "stcp", "dmsg"}, 0, nil).
-				AddInputField("label", "user", 32, nil, nil)
-			form.AddButton("OK", func() {
-				pkStr := strings.TrimSpace(form.GetFormItem(0).(*tview.InputField).GetText())
-				_, tpType := form.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
-				label := strings.TrimSpace(form.GetFormItem(2).(*tview.InputField).GetText())
-				closeModal()
+			remote, label := textField("remote PK", ""), textField("label", "user")
+			tpType := &hvField{label: "type", choices: []string{"stcpr", "sudph", "stcp", "dmsg"}}
+			showFormModal("Add transport on "+targetPK.String(), []*hvField{remote, tpType, label}, func() {
+				pkStr := strings.TrimSpace(remote.input.Value())
 				if pkStr == "" {
 					setStatus("add transport: remote PK required")
 					return
@@ -226,72 +310,94 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					setStatus("add transport: invalid PK: " + err.Error())
 					return
 				}
-				onSubmit(rpk, tpType, label)
+				onSubmit(rpk, tpType.choices[tpType.choice], strings.TrimSpace(label.input.Value()))
 			})
-			form.AddButton("Cancel", closeModal)
-			form.SetBorder(true).
-				SetTitle(" Add transport on " + targetPK.String() + " ").
-				SetTitleAlign(tview.AlignLeft)
-			showModal(form, 80, 11)
 		}
 
-		// --- Populate table ---
-		updateTable := func(entries []visorapi.HVVisorEntry) {
-			table.Clear()
-			headers := []string{"#", "PK", "VERSION", "UPTIME", "TP", "APPS", "IP", "CC", "STATUS"}
-			for i, h := range headers {
-				cell := tview.NewTableCell(h).
-					SetTextColor(tcell.ColorYellow).
-					SetSelectable(false).
-					SetExpansion(1)
-				if i == 1 {
-					cell.SetExpansion(3)
-				}
-				table.SetCell(0, i, cell)
+		// --- Visor table ---
+		tableHeader := []string{"#", "PK", "VERSION", "UPTIME", "TP", "APPS", "IP", "CC", "STATUS"}
+		tableRow := func(i int, e visorapi.HVVisorEntry) ([]string, tcell.Style) {
+			st, stStyle := "ok", tcell.StyleDefault.Foreground(color.Green)
+			if e.IsLocal {
+				st, stStyle = "local", tcell.StyleDefault.Foreground(color.Aqua)
 			}
-			for i, e := range entries {
-				row := i + 1
-				pk := e.PK.String()
-				st := "ok"
-				stColor := tcell.ColorGreen
-				if e.IsLocal {
-					st = "local"
-					stColor = tcell.ColorAqua
-				}
-				if e.ProxiedVia != nil {
-					st = "via " + e.ProxiedVia.String()
-					stColor = tcell.ColorYellow
-				}
-				if e.Error != "" {
-					st = truncStr(e.Error, 20)
-					stColor = tcell.ColorRed
-				}
-				ver := e.Version
-				if ver == "" {
-					ver = "-"
-				}
-				up := "-"
-				if e.Uptime > 0 {
-					up = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
-				}
-				ip := e.PublicIP
-				if ip == "" {
-					ip = "-"
-				}
-				cc := e.CountryCode
-				if cc == "" {
-					cc = "-"
-				}
-				table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("%d", row)).SetTextColor(tcell.ColorDarkGray))
-				table.SetCell(row, 1, tview.NewTableCell(pk))
-				table.SetCell(row, 2, tview.NewTableCell(ver))
-				table.SetCell(row, 3, tview.NewTableCell(up))
-				table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%d", e.Transports)))
-				table.SetCell(row, 5, tview.NewTableCell(fmt.Sprintf("%d", e.Apps)))
-				table.SetCell(row, 6, tview.NewTableCell(ip))
-				table.SetCell(row, 7, tview.NewTableCell(cc))
-				table.SetCell(row, 8, tview.NewTableCell(st).SetTextColor(stColor))
+			if e.ProxiedVia != nil {
+				st, stStyle = "via "+e.ProxiedVia.String(), tcell.StyleDefault.Foreground(color.Yellow)
 			}
+			if e.Error != "" {
+				st, stStyle = truncStr(e.Error, 20), tcell.StyleDefault.Foreground(color.Red)
+			}
+			up := "-"
+			if e.Uptime > 0 {
+				up = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+			}
+			return []string{strconv.Itoa(i + 1), e.PK.String(), dash(e.Version), up, strconv.Itoa(e.Transports),
+				strconv.Itoa(e.Apps), dash(e.PublicIP), dash(e.CountryCode), st}, stStyle
+		}
+		// columns pads every cell but the last to its column's widest.
+		columns := func(rows [][]string) []string {
+			widths := make([]int, len(tableHeader))
+			for _, r := range rows {
+				for c, s := range r {
+					widths[c] = max(widths[c], len(s))
+				}
+			}
+			out := make([]string, len(rows))
+			for i, r := range rows {
+				var b strings.Builder
+				for c, s := range r[:len(r)-1] {
+					fmt.Fprintf(&b, "%-*s ", widths[c], s)
+				}
+				out[i] = b.String()
+			}
+			return out
+		}
+		var openDetail func()
+		drawTable := func(f *progkit.Frame, r progkit.Rect, place bool) {
+			if r.Empty() {
+				return
+			}
+			rows := [][]string{tableHeader}
+			styles := make([]tcell.Style, len(visors))
+			for i, e := range visors {
+				var cells []string
+				cells, styles[i] = tableRow(i, e)
+				rows = append(rows, cells)
+			}
+			lines := columns(rows)
+			progkit.DrawText(f.Screen, r.X, r.Y, r.W, lines[0]+tableHeader[len(tableHeader)-1], hvHeadStyle)
+			body := progkit.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
+			sel = min(max(sel, 0), max(len(visors)-1, 0))
+			top = min(top, sel)
+			top = max(top, sel-body.H+1)
+			items := make([]string, len(visors))
+			for i := range visors {
+				row, st, stStyle := lines[i+1], rows[i+1][len(tableHeader)-1], styles[i]
+				items[i] = row + st
+				if i < top || i >= top+body.H {
+					continue
+				}
+				y := body.Y + i - top
+				base := tcell.StyleDefault
+				if i == sel {
+					base, stStyle = base.Reverse(!detailFocus).Bold(true), stStyle.Reverse(!detailFocus).Bold(true)
+				}
+				progkit.Fill(f.Screen, progkit.Rect{X: body.X, Y: y, W: body.W, H: 1}, base)
+				x := body.X + progkit.DrawText(f.Screen, body.X, y, body.W, row, base)
+				progkit.DrawText(f.Screen, x, y, body.X+body.W-x, st, stStyle)
+			}
+			if !place {
+				return
+			}
+			f.Place("visors", body, progkit.Element{Kind: "list", Items: items, Selected: sel, Focus: !detailFocus}, func(m progkit.Msg) {
+				switch m.Type {
+				case "select":
+					sel = m.Index
+				case "activate":
+					sel = m.Index
+					openDetail()
+				}
+			})
 		}
 
 		// --- Show detail for selected visor ---
@@ -378,8 +484,9 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					}
 				}
 			}
-			app.QueueUpdateDraw(func() {
-				detail.SetText(sb.String())
+			queue(func() {
+				detail.SetANSI(markup(sb.String()))
+				detail.ScrollTo(0)
 			})
 		}
 
@@ -392,62 +499,48 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					setStatus(fmt.Sprintf("Error: %s", err))
 					return
 				}
-				mu.Lock()
-				visors = entries
-				mu.Unlock()
-				app.QueueUpdateDraw(func() {
-					updateTable(entries)
-				})
+				queue(func() { visors = entries })
 				setStatus(fmt.Sprintf("%d visors | refreshed %s", len(entries), time.Now().Format("15:04:05")))
 			}()
 		}
 
 		// --- Selection handler ---
-		table.SetSelectedFunc(func(row, _ int) {
-			mu.RLock()
-			defer mu.RUnlock()
-			idx := row - 1
-			if idx < 0 || idx >= len(visors) {
+		openDetail = func() {
+			if sel >= len(visors) {
 				return
 			}
-			v := visors[idx]
+			v, n := visors[sel], len(visors)
+			detailFocus = true
 			go func() {
 				setStatus("Loading detail...")
 				showDetail(v)
-				setStatus(fmt.Sprintf("%d visors | detail view", len(visors)))
-				app.QueueUpdateDraw(func() {
-					app.SetFocus(detail)
-				})
+				setStatus(fmt.Sprintf("%d visors | detail view", n))
 			}()
-		})
+		}
 
 		// --- Action helpers ---
 		selectedVisor := func() (visorapi.HVVisorEntry, bool) {
-			row, _ := table.GetSelection()
-			idx := row - 1
-			mu.RLock()
-			defer mu.RUnlock()
-			if idx < 0 || idx >= len(visors) {
+			if sel < 0 || sel >= len(visors) {
 				return visorapi.HVVisorEntry{}, false
 			}
-			return visors[idx], true
+			return visors[sel], true
 		}
 
 		// --- Key handlers ---
-		app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		onKey := func(event *tcell.EventKey) *tcell.EventKey {
 			switch event.Key() {
 			case tcell.KeyEscape:
-				app.SetFocus(table)
+				detailFocus = false
 				return nil
 			case tcell.KeyRune:
-				switch event.Rune() {
-				case 'q', 'Q':
-					app.Stop()
+				switch progkit.Typed(event) {
+				case "q", "Q":
+					quit = true
 					return nil
-				case 'r':
+				case "r":
 					refresh()
 					return nil
-				case 'm':
+				case "m":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -468,7 +561,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}()
 					})
 					return nil
-				case 'w':
+				case "w":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -484,7 +577,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}()
 					})
 					return nil
-				case 's':
+				case "s":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -505,7 +598,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}
 							labels[i] = fmt.Sprintf("[%-7s] %-22s port:%d", state, a.Name, a.Port)
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Toggle app on "+v.PK.String(), labels, func(idx int) {
 								a := apps[idx]
 								go func() {
@@ -526,7 +619,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'S':
+				case "S":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -548,7 +641,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						for i, a := range running {
 							labels[i] = fmt.Sprintf("%-22s port:%d", a.Name, a.Port)
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Stop app on "+v.PK.String(), labels, func(idx int) {
 								name := running[idx].Name
 								go func() {
@@ -563,7 +656,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 't':
+				case "t":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -581,7 +674,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							short := tp.ID.String() + ".."
 							labels[i] = fmt.Sprintf("%s  %-6s  %s..  %s", short, strings.ToUpper(string(tp.Type)), tp.Remote.String(), tp.Label)
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Delete transport on "+v.PK.String(), labels, func(idx int) {
 								tp := tps[idx]
 								short := tp.ID.String() + ".."
@@ -601,7 +694,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'x':
+				case "x":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -615,7 +708,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}
 						rgs := sum.RouteGroups
 						if len(rgs) == 0 {
-							app.QueueUpdateDraw(func() {
+							queue(func() {
 								showInputModal("Delete rule by ID on "+v.PK.String(),
 									"route ID", "", func(s string) {
 										n, err := strconv.ParseUint(s, 10, 32)
@@ -642,7 +735,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								rg.Desc.SrcPK.String(), rg.Desc.SrcPort,
 								rg.Desc.DstPK.String(), rg.Desc.DstPort)
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Delete route group on "+v.PK.String(), labels, func(idx int) {
 								rg := rgs[idx]
 								showConfirmModal("Confirm",
@@ -663,7 +756,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'T':
+				case "T":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -682,7 +775,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}()
 					})
 					return nil
-				case 'p':
+				case "p":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -696,7 +789,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}
 						current := sum.PublicAutoconnect
 						newVal := !current
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showConfirmModal("Toggle public_autoconnect",
 								fmt.Sprintf("Currently %v on %s. Set to %v?", current, v.PK.String(), newVal),
 								func() {
@@ -712,16 +805,15 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'c':
+				case "c":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
 					}
-					m := tview.NewModal().
-						SetText(fmt.Sprintf("Local route calculation on %s\n(vs route-finder service)", v.PK.String())).
-						AddButtons([]string{"Enable", "Disable", "Cancel"}).
-						SetDoneFunc(func(_ int, label string) {
-							closeModal()
+					showChoiceModal("calculate_routes",
+						fmt.Sprintf("Local route calculation on %s\n(vs route-finder service)", v.PK.String()),
+						[]string{"Enable", "Disable", "Cancel"},
+						func(label string) {
 							if label == "Cancel" {
 								return
 							}
@@ -735,10 +827,8 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								refresh()
 							}()
 						})
-					m.SetBorder(true).SetTitle(" calculate_routes ")
-					app.SetRoot(m, true).SetFocus(m)
 					return nil
-				case 'R':
+				case "R":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -756,7 +846,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}()
 						})
 					return nil
-				case 'D':
+				case "D":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -774,7 +864,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}()
 						})
 					return nil
-				case 'h':
+				case "h":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -806,27 +896,12 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}
 						}
 						sb.WriteString("\n[gray]Press Esc to close.[white]")
-						app.QueueUpdateDraw(func() {
-							view := tview.NewTextView().
-								SetDynamicColors(true).
-								SetScrollable(true).
-								SetText(sb.String())
-							view.SetBorder(true).
-								SetTitle(" Services Health ").
-								SetTitleAlign(tview.AlignLeft)
-							view.SetDoneFunc(func(_ tcell.Key) { closeModal() })
-							view.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-								if ev.Key() == tcell.KeyEscape {
-									closeModal()
-									return nil
-								}
-								return ev
-							})
-							showModal(view, 100, len(entries)*2+8)
+						queue(func() {
+							showTextModal("Services Health", sb.String(), 100, len(entries)*2+8)
 						})
 					}()
 					return nil
-				case 'G':
+				case "G":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -846,7 +921,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}()
 						})
 					return nil
-				case 'N':
+				case "N":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -869,7 +944,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}()
 					})
 					return nil
-				case 'l':
+				case "l":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -886,7 +961,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						for i, a := range apps {
 							labels[i] = a.Name
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("App logs on "+v.PK.String(), labels, func(idx int) {
 								name := apps[idx].Name
 								go func() {
@@ -901,30 +976,15 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 									if text == "" {
 										text = "(no log entries in the last hour)"
 									}
-									app.QueueUpdateDraw(func() {
-										view := tview.NewTextView().
-											SetDynamicColors(false).
-											SetScrollable(true).
-											SetText(text)
-										view.SetBorder(true).
-											SetTitle(fmt.Sprintf(" %s logs (last 1h) ", name)).
-											SetTitleAlign(tview.AlignLeft)
-										view.SetDoneFunc(func(_ tcell.Key) { closeModal() })
-										view.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-											if ev.Key() == tcell.KeyEscape {
-												closeModal()
-												return nil
-											}
-											return ev
-										})
-										showModal(view, 110, 30)
+									queue(func() {
+										showTextModal(fmt.Sprintf("%s logs (last 1h)", name), text, 110, 30)
 									})
 								}()
 							})
 						})
 					}()
 					return nil
-				case 'A':
+				case "A":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -945,7 +1005,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							}
 							labels[i] = fmt.Sprintf("[autostart=%-3s] %s", as, a.Name)
 						}
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Toggle autostart on "+v.PK.String(), labels, func(idx int) {
 								a := apps[idx]
 								newVal := !a.AutoStart
@@ -961,7 +1021,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'P':
+				case "P":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -996,14 +1056,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								}
 							}
 							labels = append(labels, fmt.Sprintf("%-7s  %-9s  socks=%-22s  upstream=%s",
-								it.kind, state, defaultStr(it.info.SocksAddr, "-"), defaultStr(it.info.UpstreamSOCKS, "-")))
+								it.kind, state, dash(it.info.SocksAddr), dash(it.info.UpstreamSOCKS)))
 						}
 						labels = append(labels, "[set upstream]", "[close]")
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Resolving proxies on "+v.PK.String(), labels, func(idx int) {
 								if idx >= len(active) {
 									if labels[idx] == "[set upstream]" {
-										app.QueueUpdateDraw(func() {
+										queue(func() {
 											showInputModal("Set upstream for proxy", "kind=dmsg|skynet  addr=host:port  (e.g. 'dmsg 127.0.0.1:9090')", "", func(s string) {
 												parts := strings.Fields(s)
 												if len(parts) != 2 {
@@ -1037,7 +1097,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						})
 					}()
 					return nil
-				case 'f':
+				case "f":
 					v, ok := selectedVisor()
 					if !ok {
 						return nil
@@ -1077,7 +1137,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							"[register forwarded port]",
 							"[close]",
 						)
-						app.QueueUpdateDraw(func() {
+						queue(func() {
 							showListModal("Ports on "+v.PK.String(), labels, func(idx int) {
 								n := len(tcpPorts) + len(fwdPorts)
 								if idx < n {
@@ -1126,31 +1186,162 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 				}
 			}
 			return event
-		})
+		}
 
-		// Handle Ctrl+C
+		// Handle Ctrl+C and SIGTERM
 		sigC := make(chan os.Signal, 1)
 		signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(sigC)
+		done := make(chan struct{})
+		defer close(done)
 		go func() {
-			<-sigC
-			app.Stop()
-		}()
-
-		// Initial load + auto-refresh after app starts
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			refresh()
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
-			for range ticker.C {
-				refresh()
+			select {
+			case <-sigC:
+				queue(func() { quit = true })
+			case <-done:
 			}
 		}()
 
-		if err := app.SetRoot(layout, true).EnableMouse(true).Run(); err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
-		}
+		// Initial load + auto-refresh
+		refresh()
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					refresh()
+				}
+			}
+		}()
+
+		app.Run(func(f *progkit.Frame) {
+			drain()
+			tableR, rest := f.Size().SplitTop(max(f.H/2, 3))
+			detailR, foot := rest.SplitBottom(1)
+			tableStyle, detailStyle := hvFocusStyle, hvBorderStyle
+			if detailFocus {
+				tableStyle, detailStyle = hvBorderStyle, hvFocusStyle
+			}
+			drawTable(f, progkit.Box(f.Screen, tableR, "Hypervisor — Connected Visors", tableStyle), cur == nil)
+			inner := progkit.Box(f.Screen, detailR, "Visor Detail", detailStyle)
+			if cur == nil {
+				detail.Draw(f, inner)
+			} else {
+				// Without placements, so nothing in the page covers the modal.
+				for i, l := range detail.Lines()[min(detail.Top(), len(detail.Lines())):] {
+					if i >= inner.H {
+						break
+					}
+					progkit.DrawLine(f.Screen, inner.X, inner.Y+i, inner.W, l)
+				}
+			}
+			x := progkit.DrawText(f.Screen, 0, foot.Y, foot.W, " "+status, hvHeadStyle)
+			progkit.DrawText(f.Screen, x, foot.Y, foot.W-x, " | "+hvKeys, tcell.StyleDefault)
+			if cur != nil {
+				cur.render(f)
+			}
+		}, func(ev tcell.Event) bool {
+			drain()
+			k, ok := ev.(*tcell.EventKey)
+			if !ok || quit {
+				return !quit
+			}
+			switch {
+			case progkit.IsCtrl(k, 'c'):
+				quit = true
+			case cur != nil:
+				if k.Key() == tcell.KeyEscape {
+					closeModal()
+				} else {
+					cur.key(k)
+				}
+			case detailFocus && k.Key() != tcell.KeyEscape && detail.Key(k):
+			case !detailFocus && k.Key() == tcell.KeyEnter:
+				openDetail()
+			case !detailFocus && k.Key() == tcell.KeyUp:
+				sel--
+			case !detailFocus && k.Key() == tcell.KeyDown:
+				sel++
+			case !detailFocus && k.Key() == tcell.KeyPgUp:
+				sel -= 10
+			case !detailFocus && k.Key() == tcell.KeyPgDn:
+				sel += 10
+			case !detailFocus && k.Key() == tcell.KeyHome:
+				sel = 0
+			case !detailFocus && k.Key() == tcell.KeyEnd:
+				sel = len(visors) - 1
+			default:
+				onKey(k)
+			}
+			return !quit
+		})
 	},
+}
+
+// hvModal is the one dialog shown over the screen, centered.
+type hvModal struct {
+	title string
+	w, h  int
+	draw  func(f *progkit.Frame, r progkit.Rect)
+	key   func(ev *tcell.EventKey)
+}
+
+func (m *hvModal) render(f *progkit.Frame) {
+	w, h := min(m.w+2, f.W), min(m.h+2, f.H)
+	r := progkit.Rect{X: (f.W - w) / 2, Y: (f.H - h) / 2, W: w, H: h}
+	progkit.Fill(f.Screen, r, tcell.StyleDefault)
+	m.draw(f, progkit.Box(f.Screen, r, m.title, tcell.StyleDefault))
+}
+
+// hvField is one row of a form: text when input is set, a choice when
+// choices is, and a checkbox otherwise.
+type hvField struct {
+	label   string
+	input   *progkit.Input
+	on      bool
+	choices []string
+	choice  int
+}
+
+func textField(label, value string) *hvField {
+	in := &progkit.Input{}
+	in.SetValue(value)
+	return &hvField{label: label, input: in}
+}
+
+// hvColors maps the [color] tags the detail texts are written with to SGR.
+var hvColors = map[string]string{
+	"yellow": "\x1b[33m", "red": "\x1b[31m", "green": "\x1b[32m",
+	"cyan": "\x1b[36m", "gray": "\x1b[90m", "white": "\x1b[39m",
+}
+
+func markup(s string) string {
+	for name, sgr := range hvColors {
+		s = strings.ReplaceAll(s, "["+name+"]", sgr)
+	}
+	return s
+}
+
+func wrapText(s string, w int) []string {
+	var out []string
+	for _, para := range strings.Split(s, "\n") {
+		line := ""
+		for _, word := range strings.Fields(para) {
+			if line != "" && len(line)+1+len(word) > w {
+				out = append(out, line)
+				line = ""
+			}
+			if line != "" {
+				line += " "
+			}
+			line += word
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 func truncStr(s string, max int) string {
@@ -1160,9 +1351,10 @@ func truncStr(s string, max int) string {
 	return s
 }
 
-func defaultStr(s, def string) string {
+// dash stands in for an empty value.
+func dash(s string) string {
 	if s == "" {
-		return def
+		return "-"
 	}
 	return s
 }

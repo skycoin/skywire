@@ -31,8 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
-	"github.com/skycoin/skywire/pkg/wasmhv"
-	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
+	"github.com/skycoin/skywire/pkg/tpviz/netview"
 )
 
 // muxStreamWindowBytes is the per-stream yamux flow-control window skysocks
@@ -3549,12 +3548,9 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 		_, _ = conn.Write(statusHTTPResponse(proxystatus.RenderFragment(c.statusSnapshot()))) //nolint:errcheck
 		return
 	case "/main.wasm":
-		// The GPU route-graph view's engine: the one skywire command module run
-		// in its "netview" role (it publishes the generic cosmos-go graph API the
-		// page drives), served same-origin so the page's strict self-contained
-		// context can instantiate it. Same module pkg/tpviz serves at
-		// /tpviz-gl.wasm; served here straight from the copy the native binary
-		// embeds (pkg/wasmhv/execwasm). In-process, no exit round-trip.
+		// The GPU route-graph view's engine, the netview module, served
+		// same-origin so the page's strict self-contained context can
+		// instantiate it. In-process, no exit round-trip.
 		closeStream()
 		writeStatusWasmResponse(conn)
 		return
@@ -3569,58 +3565,32 @@ func (c *Client) serveStatusPage(conn, stream net.Conn) {
 }
 
 // writeStatusWasmResponse writes the raw HTTP/1.1 response carrying the
-// skywire command module for /main.wasm, out of the copy embedded in the
-// native binary (pkg/wasmhv/execwasm). It serves the gzipped bytes verbatim
-// with Content-Encoding: gzip (the browser inflates;
-// WebAssembly.instantiateStreaming is happy with the result), avoiding
-// inflating megabytes per request. A 503 is returned when no module is
-// embedded — a source build without `make embed-exec-wasm`, or the js build,
-// which embeds nothing (it IS the module) — in which case the page silently
-// keeps the ASCII tree view.
-//
-// The module streams from the binary's read-only mapping straight to the
-// connection: asking execwasm for the bytes would copy ~37 MB onto the heap
-// per request.
+// netview module for /main.wasm, gzipped as embedded. The browser inflates it.
 func writeStatusWasmResponse(w io.Writer) {
-	n := execwasm.Size()
-	if n == 0 {
-		_, _ = w.Write(statusServiceUnavailable("no skywire.wasm module embedded in this build")) //nolint:errcheck
+	if len(netview.WasmGz) == 0 {
+		_, _ = w.Write(statusServiceUnavailable("no netview module in this build")) //nolint:errcheck
 		return
 	}
-	f, err := execwasm.Open()
-	if err != nil {
-		_, _ = w.Write(statusServiceUnavailable("no skywire.wasm module embedded in this build")) //nolint:errcheck
-		return
-	}
-	defer f.Close() //nolint:errcheck
 	var b bytes.Buffer
 	b.WriteString("HTTP/1.1 200 OK\r\n")
 	b.WriteString("Content-Type: application/wasm\r\n")
 	b.WriteString("Content-Encoding: gzip\r\n")
-	fmt.Fprintf(&b, "ETag: %q\r\n", execwasm.Stamp())
-	fmt.Fprintf(&b, "Content-Length: %d\r\n", n)
+	fmt.Fprintf(&b, "ETag: %s\r\n", netview.ETag)
+	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(netview.WasmGz))
 	b.WriteString("Cache-Control: no-store\r\nConnection: close\r\n\r\n")
-	if _, err := w.Write(b.Bytes()); err != nil {
-		return
-	}
-	_, _ = io.Copy(w, f) //nolint:errcheck
+	b.Write(netview.WasmGz)
+	_, _ = w.Write(b.Bytes()) //nolint:errcheck
 }
 
-// statusWasmExecResponse returns the raw HTTP/1.1 response for /wasm_exec.js —
-// Go's loader (pkg/wasmhv) pinned to the module's netview role (argv + env,
-// execwasm.LoaderJS); the page sets the same argv itself
-// (pkg/proxystatus/render.go). Small, so served uncompressed.
+// statusWasmExecResponse returns the raw HTTP/1.1 response for /wasm_exec.js,
+// the netview module's loader. Small, so served uncompressed.
 func statusWasmExecResponse() []byte {
-	js := execwasm.LoaderJS(wasmhv.WasmExecJS, "netview")
-	if len(js) == 0 {
-		return statusServiceUnavailable("wasm loader unavailable")
-	}
 	var b bytes.Buffer
 	b.WriteString("HTTP/1.1 200 OK\r\n")
 	b.WriteString("Content-Type: application/javascript; charset=utf-8\r\n")
-	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(js))
+	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(netview.ExecJS))
 	b.WriteString("Cache-Control: no-store\r\nConnection: close\r\n\r\n")
-	b.Write(js)
+	b.Write(netview.ExecJS)
 	return b.Bytes()
 }
 

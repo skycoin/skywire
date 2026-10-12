@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -54,14 +53,11 @@ func authReq(t *testing.T, method, target string, body []byte, pk *cipher.PubKey
 	if pk != nil {
 		ctx = context.WithValue(ctx, httpauth.ContextAuthKey, *pk) //nolint
 	}
-	if params != nil {
-		rctx := chi.NewRouteContext()
-		for k, v := range params {
-			rctx.URLParams.Add(k, v)
-		}
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	r = r.WithContext(ctx)
+	for k, v := range params {
+		r.SetPathValue(k, v)
 	}
-	return r.WithContext(ctx)
+	return r
 }
 
 // ---- pure helpers ----------------------------------------------------------

@@ -80,10 +80,11 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 	stream := dStr
 
 	// Close stream on failure — this frees the reserved ephemeral port.
+	// It closes `stream`, because `return nil, err` has set dStr to nil by now.
 	defer func() {
 		if err != nil {
 			log.WithError(err).
-				WithField("close_error", dStr.Close()).
+				WithField("close_error", stream.Close()).
 				WithField("ports_reserved", cs.porter.Count()).
 				Debug("Stream closed on failure.")
 		}
@@ -193,6 +194,7 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 		return nil, err
 	}
 
+	dStr.census.Load().set(0, "dialed")
 	return dStr, err
 }
 

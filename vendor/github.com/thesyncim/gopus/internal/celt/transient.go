@@ -15,7 +15,11 @@
 
 package celt
 
-import "github.com/thesyncim/gopus/internal/opusmath"
+import (
+	"math"
+
+	"github.com/thesyncim/gopus/internal/opusmath"
+)
 
 // TransientAnalysisResult holds the results of transient analysis.
 // This provides both the transient decision and the tf_estimate metric.
@@ -55,120 +59,6 @@ func toneLPC(x []float32, delay int, lane4Corr bool) (float32, float32, bool) {
 		r00, r01, r02 = toneLPCCorr(x, cnt, delay, delay2)
 	}
 	return toneLPCSolveFromCorr(x, delay, r00, r01, r02)
-}
-
-func toneLPCSolveFromCorr(x []float32, delay int, r00, r01, r02 float32) (float32, float32, bool) {
-	n := len(x)
-	delay2 := 2 * delay
-	base1 := n - delay2 // n-2*delay
-	base2 := n - delay
-
-	var edges float32
-	for i := range delay {
-		a := x[base1+i]
-		b := x[i]
-		edges += a*a - b*b
-	}
-	r11 := r00 + edges
-
-	edges = 0
-	for i := range delay {
-		a := x[base2+i]
-		b := x[i+delay]
-		edges += a*a - b*b
-	}
-	r22 := r11 + edges
-
-	edges = 0
-	for i := range delay {
-		edges += x[base1+i]*x[base2+i] - x[i]*x[i+delay]
-	}
-	r12 := r01 + edges
-
-	R00 := r00 + r22
-	R01 := r01 + r12
-	R11 := 2 * r11
-	R02 := 2 * r02
-	R12 := r12 + r01
-
-	den := R00*R11 - R01*R01
-	if den < float32(0.001)*R00*R11 {
-		return 0, 0, false
-	}
-
-	num1 := R02*R11 - R01*R12
-	var lpc1 float32
-	if num1 >= den {
-		lpc1 = 1.0
-	} else if num1 <= -den {
-		lpc1 = -1.0
-	} else {
-		lpc1 = num1 / den
-	}
-
-	num0 := R00*R12 - R02*R01
-	var lpc0 float32
-	if float32(0.5)*num0 >= den {
-		lpc0 = 1.999999
-	} else if float32(0.5)*num0 <= -den {
-		lpc0 = -1.999999
-	} else {
-		lpc0 = num0 / den
-	}
-
-	return lpc0, lpc1, true
-}
-
-func toneLPCDelay1(x []float32, lane4Corr bool) (float32, float32, bool) {
-	n := len(x)
-
-	// BCE hint: the maximum index accessed in the correlation loop is n-1.
-	_ = x[n-1]
-
-	cnt := n - 2
-	var r00, r01, r02 float32
-	if lane4Corr {
-		r00, r01, r02 = toneLPCCorrLane4(x, cnt, 1, 2)
-	} else {
-		r00, r01, r02 = toneLPCCorrDelay1(x, cnt)
-	}
-
-	r11 := r00 + x[n-2]*x[n-2] - x[0]*x[0]
-	r22 := r11 + x[n-1]*x[n-1] - x[1]*x[1]
-	r12 := r01 + x[n-2]*x[n-1] - x[0]*x[1]
-
-	R00 := r00 + r22
-	R01 := r01 + r12
-	R11 := 2 * r11
-	R02 := 2 * r02
-	R12 := r12 + r01
-
-	den := R00*R11 - R01*R01
-	if den < float32(0.001)*R00*R11 {
-		return 0, 0, false
-	}
-
-	num1 := R02*R11 - R01*R12
-	var lpc1 float32
-	if num1 >= den {
-		lpc1 = 1.0
-	} else if num1 <= -den {
-		lpc1 = -1.0
-	} else {
-		lpc1 = num1 / den
-	}
-
-	num0 := R00*R12 - R02*R01
-	var lpc0 float32
-	if float32(0.5)*num0 >= den {
-		lpc0 = 1.999999
-	} else if float32(0.5)*num0 <= -den {
-		lpc0 = -1.999999
-	} else {
-		lpc0 = num0 / den
-	}
-
-	return lpc0, lpc1, true
 }
 
 func toneLPCRetryNeeded(lpc0, lpc1 float32, success bool) bool {
@@ -374,6 +264,9 @@ func toneDetectScratch(in []float32, channels int, sampleRate int, xBuf []float3
 	return toneDetectFloat32Mono(x, sampleRate, lane4Corr)
 }
 
+// toneDetectScratchF32 is tone_detect over celt_encode_with_ec's planar in
+// buffer: channel c occupies in[c*n:(c+1)*n] with n = len(in)/channels, and
+// stereo sums the two channels before the LPC fit.
 func toneDetectScratchF32(in []float32, channels int, sampleRate int, xBuf []float32) (float32, float32) {
 	n := len(in) / channels
 	if n < 4 {
@@ -388,8 +281,9 @@ func toneDetectScratchF32(in []float32, channels int, sampleRate int, xBuf []flo
 	}
 
 	if channels == 2 {
-		for i := range n {
-			x[i] = in[i*2] + in[i*2+1]
+		right := in[n : 2*n]
+		for i, v := range in[:n] {
+			x[i] = v + right[i]
 		}
 	} else {
 		copy(x, in[:n])
@@ -447,7 +341,8 @@ func toneDetectFloat32Mono(x []float32, sampleRate int, lane4Corr bool) (float32
 // the signal energy varies over time relative to a masked threshold.
 //
 // Parameters:
-//   - pcm: input PCM samples (mono or interleaved stereo)
+//   - pcm: pre-emphasized samples, planar like celt_encode_with_ec's in
+//     buffer: channel c occupies pcm[c*len(pcm)/channels:]
 //   - frameSize: frame size in samples (120, 240, 480, or 960)
 //   - allowWeakTransients: for hybrid mode at low bitrate
 //
@@ -490,7 +385,7 @@ func (e *Encoder) toneDetectOnlyF32(pcm []float32, frameSize int) TransientAnaly
 	if channels == 1 {
 		result.ToneFreq, result.Toneishness = toneDetectFloat32Mono(pcm[:samplesPerChannel], e.toneDetectFs(), false)
 	} else {
-		result.ToneFreq, result.Toneishness = toneDetectScratchF32(pcm, channels, e.toneDetectFs(), nil)
+		result.ToneFreq, result.Toneishness = toneDetectScratchF32(pcm, channels, e.toneDetectFs(), e.scratch.transientX)
 	}
 	return result
 }
@@ -541,73 +436,36 @@ func (e *Encoder) transientAnalysisMonoFloat32(pcm []float32, frameSize int, all
 	src := pcm[:samplesPerChannel]
 	_ = src[2*len2-1]
 
-	if celtFusedFloat {
-		// Numerically-equivalent reform of the libopus high-pass filter. The
-		// reference form per sample is
-		//     y = a + x ; a' = a - x + hpFeedback*b ; b' = x - a
-		// which serializes as FSUB->FMADD on the (a,b) state. Substituting
-		// b_n = x_{n-1} - a_{n-1} collapses it to a single second-order
-		// recurrence whose input term is state-independent:
-		//     a_{n+1} = a_n + ((hpFeedback*x_{n-1} - x_n) - hpFeedback*a_{n-1})
-		// leaving one add on the critical path instead of two ops, ~2x shorter.
-		// The (hp0,hp1) state is frame-local (reset each call), so only the y
-		// sequence must match; it does within ~1 ULP, which the quality-gated
-		// fused build allows (same posture as the decode de-emphasis reform).
-		var a, aPrev, xPrev float32
-		for i := range len2 {
-			j := i << 1
+	// Keep the high-pass recurrence in the same two-state form as
+	// celt/celt_encoder.c transient_analysis(). On arm64 the selected libopus
+	// scalar and SIMD objects both compile this update as FSUB followed by FMADD;
+	// the Go compiler lowers this source order to the same sequence. The
+	// algebraically reduced second-order recurrence changes float32 rounding.
+	var hp0, hp1 float32
+	for i := range len2 {
+		j := i << 1
 
-			x0 := src[j]
-			term0 := (hpFeedback*xPrev - x0) - hpFeedback*aPrev
-			y0 := a + x0
-			aPrev = a
-			a = a + term0
-			xPrev = x0
+		x0 := src[j]
+		y0 := hp0 + x0
+		hp00 := hp0
+		hp0 = hp0 - x0 + hpFeedback*hp1
+		hp1 = x0 - hp00
 
-			x1 := src[j+1]
-			term1 := (hpFeedback*xPrev - x1) - hpFeedback*aPrev
-			y1 := a + x1
-			aPrev = a
-			a = a + term1
-			xPrev = x1
+		x1 := src[j+1]
+		y1 := hp0 + x1
+		hp00 = hp0
+		hp0 = hp0 - x1 + hpFeedback*hp1
+		hp1 = x1 - hp00
 
-			if i < warmupPairs {
-				y0 = 0
-				y1 = 0
-			}
-
-			pair := y0*y0 + y1*y1
-			mean += pair
-			mask = pair + forwardRetain*mask
-			energy[i] = forwardDecay * mask
+		if i < warmupPairs {
+			y0 = 0
+			y1 = 0
 		}
-	} else {
-		var hp0, hp1 float32
-		for i := range len2 {
-			j := i << 1
 
-			x0 := src[j]
-			y0 := hp0 + x0
-			hp00 := hp0
-			hp0 = hp0 - x0 + hpFeedback*hp1
-			hp1 = x0 - hp00
-
-			x1 := src[j+1]
-			y1 := hp0 + x1
-			hp00 = hp0
-			hp0 = hp0 - x1 + hpFeedback*hp1
-			hp1 = x1 - hp00
-
-			if i < warmupPairs {
-				y0 = 0
-				y1 = 0
-			}
-
-			pair := y0*y0 + y1*y1
-			mean += pair
-			mask = pair + forwardRetain*mask
-			energy[i] = forwardDecay * mask
-		}
+		pair := y0*y0 + y1*y1
+		mean += pair
+		mask = pair + forwardRetain*mask
+		energy[i] = forwardDecay * mask
 	}
 
 	var maxE float32
@@ -617,10 +475,10 @@ func (e *Encoder) transientAnalysisMonoFloat32(pcm []float32, frameSize int, all
 		mask = energy[i] + backwardRetain*mask
 		ei := backwardScale * mask
 		energy[i] = ei
-		maxE = max(maxE, ei)
+		maxE = opusmath.MaxF32(maxE, ei)
 	}
 
-	meanGeom := opusmath.SqrtF32(mean * maxE * float32(0.5*float32(len2)))
+	meanGeom := transientFrameEnergy(mean, maxE, len2)
 	const epsilon = 1e-15
 	normE := float32(64*len2) / (meanGeom + epsilon)
 
@@ -760,32 +618,51 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 		var maskL, maskR float32
 		meanL := float32(0)
 		meanR := float32(0)
-		idx := 0
-		_ = pcm[4*len2-1]
-		for i := range len2 {
-			xL0 := float32(pcm[idx])
-			xR0 := float32(pcm[idx+1])
-			xL1 := float32(pcm[idx+2])
-			xR1 := float32(pcm[idx+3])
-			if deferStereoToneDetect {
-				toneBuf[i<<1] = xL0 + xR0
-				toneBuf[(i<<1)+1] = xL1 + xR1
+		energyR = energyR[:len(energy)]
+		// pcm is planar with channel stride samplesPerChannel, as C indexes
+		// in[i+c*len].
+		srcL := pcm[:2*len(energy)]
+		srcR := pcm[samplesPerChannel : samplesPerChannel+2*len(energy)]
+		var tone []float32
+		if deferStereoToneDetect {
+			tone = toneBuf[:2*len(energy)]
+		}
+		for i := range energy {
+			// srcL, srcR and tone advance by one sample pair per step, so each
+			// iteration checks its bounds once.
+			_ = srcL[1]
+			_ = srcR[1]
+			xL0 := float32(srcL[0])
+			xR0 := float32(srcR[0])
+			xL1 := float32(srcL[1])
+			xR1 := float32(srcR[1])
+			srcL = srcL[2:]
+			srcR = srcR[2:]
+			if tone != nil {
+				_ = tone[1]
+				tone[0] = xL0 + xR0
+				tone[1] = xL1 + xR1
+				tone = tone[2:]
 			}
-			idx += 4
-
 			// L and R high-pass filter computations interleaved so the CPU
 			// can overlap their independent chains to hide IIR multiply latency.
-			yL0 := hp0L + xL0; yR0 := hp0R + xR0
-			hp00L := hp0L; hp00R := hp0R
+			yL0 := hp0L + xL0
+			yR0 := hp0R + xR0
+			hp00L := hp0L
+			hp00R := hp0R
 			hp0L = hp0L - xL0 + hpFeedback*hp1L
 			hp0R = hp0R - xR0 + hpFeedback*hp1R
-			hp1L = xL0 - hp00L; hp1R = xR0 - hp00R
+			hp1L = xL0 - hp00L
+			hp1R = xR0 - hp00R
 
-			yL1 := hp0L + xL1; yR1 := hp0R + xR1
-			hp00L = hp0L; hp00R = hp0R
+			yL1 := hp0L + xL1
+			yR1 := hp0R + xR1
+			hp00L = hp0L
+			hp00R = hp0R
 			hp0L = hp0L - xL1 + hpFeedback*hp1L
 			hp0R = hp0R - xR1 + hpFeedback*hp1R
-			hp1L = xL1 - hp00L; hp1R = xR1 - hp00R
+			hp1L = xL1 - hp00L
+			hp1R = xR1 - hp00R
 
 			if i < warmupPairs {
 				yL0, yL1, yR0, yR1 = 0, 0, 0, 0
@@ -794,7 +671,8 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 			// Energy and masking for both channels interleaved.
 			pairL := yL0*yL0 + yL1*yL1
 			pairR := yR0*yR0 + yR1*yR1
-			meanL += pairL; meanR += pairR
+			meanL += pairL
+			meanR += pairR
 			maskL = pairL + forwardRetain*maskL
 			maskR = pairR + forwardRetain*maskR
 			energy[i] = forwardDecay * maskL
@@ -804,22 +682,21 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 		var maxEL, maxER float32
 		maskL = 0
 		maskR = 0
-		for i := len2 - 1; i >= 0; i-- {
+		for i := len(energy) - 1; i >= 0; i-- {
 			maskL = energy[i] + backwardRetain*maskL
 			maskR = energyR[i] + backwardRetain*maskR
 			eiL := backwardScale * maskL
 			eiR := backwardScale * maskR
 			energy[i] = eiL
 			energyR[i] = eiR
-			// Branchless running max (FMAXS): bit-identical for these non-negative
-			// finite energies, avoids a per-sample data-dependent branch.
-			maxEL = max(maxEL, eiL)
-			maxER = max(maxER, eiR)
+			// MAX16(maxE, 0.125f*mem0) as a conditional move.
+			maxEL = opusmath.MaxF32(maxEL, eiL)
+			maxER = opusmath.MaxF32(maxER, eiR)
 		}
 
 		const epsilon = 1e-15
-		normEL := float32(64*len2) / (opusmath.SqrtF32(meanL*maxEL*float32(0.5*float32(len2))) + epsilon)
-		normER := float32(64*len2) / (opusmath.SqrtF32(meanR*maxER*float32(0.5*float32(len2))) + epsilon)
+		normEL := float32(64*len2) / (transientFrameEnergy(meanL, maxEL, len2) + epsilon)
+		normER := float32(64*len2) / (transientFrameEnergy(meanR, maxER, len2) + epsilon)
 
 		const epsF32 = float32(1e-15)
 		var unmaskL, unmaskR int
@@ -869,72 +746,41 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 		var hp0, hp1 float32
 		var mask float32
 		mean := float32(0)
-		if channels == 1 {
-			src := pcm[:samplesPerChannel]
-			_ = src[2*len2-1]
-			for i := range len2 {
-				j := i << 1
+		src := pcm[c*samplesPerChannel : (c+1)*samplesPerChannel]
+		_ = src[2*len2-1]
+		for i := range len2 {
+			j := i << 1
 
-				x0 := float32(src[j])
-				if deferMonoToneDetect {
-					monoToneX[j] = x0
-				}
-				y0 := hp0 + x0
-				hp00 := hp0
-				hp0 = hp0 - x0 + hpFeedback*hp1
-				hp1 = x0 - hp00
-
-				x1 := float32(src[j+1])
-				if deferMonoToneDetect {
-					monoToneX[j+1] = x1
-				}
-				y1 := hp0 + x1
-				hp00 = hp0
-				hp0 = hp0 - x1 + hpFeedback*hp1
-				hp1 = x1 - hp00
-
-				if i < warmupPairs {
-					y0 = 0
-					y1 = 0
-				}
-
-				pair := y0*y0 + y1*y1
-				mean += pair
-				mask = pair + forwardRetain*mask
-				energy[i] = forwardDecay * mask
+			x0 := float32(src[j])
+			if deferMonoToneDetect {
+				monoToneX[j] = x0
 			}
-			if deferMonoToneDetect && samplesPerChannel > 2*len2 {
-				monoToneX[samplesPerChannel-1] = float32(src[samplesPerChannel-1])
+			y0 := hp0 + x0
+			hp00 := hp0
+			hp0 = hp0 - x0 + hpFeedback*hp1
+			hp1 = x0 - hp00
+
+			x1 := float32(src[j+1])
+			if deferMonoToneDetect {
+				monoToneX[j+1] = x1
 			}
-		} else {
-			stride := channels
-			idx := c
-			_ = pcm[(2*len2-1)*stride+c]
-			for i := range len2 {
-				x0 := float32(pcm[idx])
-				idx += stride
-				y0 := hp0 + x0
-				hp00 := hp0
-				hp0 = hp0 - x0 + hpFeedback*hp1
-				hp1 = x0 - hp00
+			y1 := hp0 + x1
+			hp00 = hp0
+			hp0 = hp0 - x1 + hpFeedback*hp1
+			hp1 = x1 - hp00
 
-				x1 := float32(pcm[idx])
-				idx += stride
-				y1 := hp0 + x1
-				hp00 = hp0
-				hp0 = hp0 - x1 + hpFeedback*hp1
-				hp1 = x1 - hp00
-
-				if i < warmupPairs {
-					y0 = 0
-					y1 = 0
-				}
-
-				pair := y0*y0 + y1*y1
-				mean += pair
-				mask = pair + forwardRetain*mask
-				energy[i] = forwardDecay * mask
+			if i < warmupPairs {
+				y0 = 0
+				y1 = 0
 			}
+
+			pair := y0*y0 + y1*y1
+			mean += pair
+			mask = pair + forwardRetain*mask
+			energy[i] = forwardDecay * mask
+		}
+		if deferMonoToneDetect && samplesPerChannel > 2*len2 {
+			monoToneX[samplesPerChannel-1] = float32(src[samplesPerChannel-1])
 		}
 
 		// Backward pass: compute pre-echo threshold
@@ -945,12 +791,12 @@ func (e *Encoder) transientAnalysisScratchF32(pcm []float32, frameSize int, allo
 			mask = energy[i] + backwardRetain*mask
 			ei := backwardScale * mask
 			energy[i] = ei
-			maxE = max(maxE, ei)
+			maxE = opusmath.MaxF32(maxE, ei)
 		}
 
 		// Compute frame energy as geometric mean of mean and max
 		// This is a compromise between old and new transient detectors
-		meanGeom := opusmath.SqrtF32(mean * maxE * float32(0.5*float32(len2)))
+		meanGeom := transientFrameEnergy(mean, maxE, len2)
 
 		// Inverse of mean energy (with epsilon to avoid division by zero)
 		const epsilon = 1e-15
@@ -1049,7 +895,8 @@ transientMetricsDone:
 // of one long MDCT for better time resolution at the cost of frequency resolution.
 //
 // Parameters:
-//   - pcm: input PCM samples (mono or interleaved stereo)
+//   - pcm: pre-emphasized samples, planar like celt_encode_with_ec's in
+//     buffer: channel c occupies pcm[c*len(pcm)/channels:]
 //   - frameSize: frame size in samples (120, 240, 480, or 960)
 //
 // Returns: true if transient detected and short blocks should be used
@@ -1062,9 +909,11 @@ func (e *Encoder) DetectTransient(pcm []float32, frameSize int) bool {
 // PatchTransientDecisionWithScratch looks for sudden energy increases to decide
 // whether to force short blocks, taking the spread-old-energy workspace from
 // caller-owned scratch. It mirrors libopus celt/celt_encoder.c
-// patch_transient_decision().
-func PatchTransientDecisionWithScratch(newE []celtGLog, oldE []celtGLog, nbEBands, start, end, channels int, spreadOld []celtGLog) bool {
-	if len(newE) < end || len(oldE) < end {
+// patch_transient_decision(). newE has nbEBands values per channel; oldE
+// retains the mode's historyStride even when fewer bands are coded.
+func PatchTransientDecisionWithScratch(newE []celtGLog, oldE []celtGLog, nbEBands, historyStride, start, end, channels int, spreadOld []celtGLog) bool {
+	if channels < 1 || start < 0 || end <= start || nbEBands < end || historyStride < end ||
+		len(newE) < (channels-1)*nbEBands+end || len(oldE) < (channels-1)*historyStride+end {
 		return false
 	}
 
@@ -1089,14 +938,14 @@ func PatchTransientDecisionWithScratch(newE []celtGLog, oldE []celtGLog, nbEBand
 	} else {
 		// Stereo: use max of left and right channel
 		v := oldE[start]
-		if oldE[start+nbEBands] > v {
-			v = oldE[start+nbEBands]
+		if oldE[start+historyStride] > v {
+			v = oldE[start+historyStride]
 		}
 		spreadOld[start] = v
 		for i := start + 1; i < end; i++ {
 			v = oldE[i]
-			if oldE[i+nbEBands] > v {
-				v = oldE[i+nbEBands]
+			if oldE[i+historyStride] > v {
+				v = oldE[i+historyStride]
 			}
 			if prev := spreadOld[i-1] - 1.0; prev > v {
 				v = prev
@@ -1137,4 +986,12 @@ func PatchTransientDecisionWithScratch(newE []celtGLog, oldE []celtGLog, nbEBand
 
 	// Return true if mean increase > 1.0 (in log domain, this is ~6 dB)
 	return meanDiff > 1.0
+}
+
+// transientFrameEnergy is transient_analysis's celt_sqrt(mean*maxE*.5*len2)
+// (celt/celt_encoder.c): the float product mean*maxE widens to C double for
+// the .5 and len2 factors, which it holds exactly, and for the square root
+// before rounding to float.
+func transientFrameEnergy(mean, maxE float32, len2 int) float32 {
+	return float32(math.Sqrt(opusmath.CReal(mean*maxE) * 0.5 * opusmath.CReal(len2)))
 }

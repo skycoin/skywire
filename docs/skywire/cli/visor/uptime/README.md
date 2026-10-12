@@ -27,7 +27,7 @@ skywire cli visor uptime
       --date string                       render the bitmap for a specific UTC date (YYYY-MM-DD); implies --timeline
       --gap-threshold duration            render a (down: ...) row between sessions whose gap exceeds this (default 30s)
   -n, --limit int                         show only the most-recent N session rows (0 = all)
-  -L, --live                              live-refresh mode (bubbletea TUI, 1s tick); current session 'running:' line ticks up in place
+  -L, --live                              live-refresh mode (TUI, 1s tick); current session 'running:' line ticks up in place
       --restart-loop-threshold duration   sessions shorter than this get a (restart loop?) tag (default 30s)
       --since string                      show sessions starting at or after this time (RFC3339 or unix seconds)
   -t, --timeline                          also render today's 5-min slot bitmap

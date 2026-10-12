@@ -94,14 +94,15 @@ func TestDailyLatencyChartGapsMissingDays(t *testing.T) {
 func TestVisorBWTable(t *testing.T) {
 	day := &store.VisorBWDay{Date: "2026-10-05", Transports: 3, SameNetworkExcluded: 1, Visors: map[string]map[string]uint64{
 		"aa": {"stcpr": 1 << 20},
-		"bb": {"stcpr": 1 << 30, "sudph": 1 << 20},
+		"bb": {"stcpr": 1 << 30, "sudph": 1 << 20, "": 1 << 10},
 	}}
-	tb := visorBWTable(day, map[string]string{"bb": roleRegistered})
+	tb := visorBWTable(day, map[string]string{"bb": roleRegistered}, map[string]string{"bb": "v1.3.100"})
 	require.Contains(t, tb.Title, "2026-10-05")
-	require.Contains(t, tb.Note, "1 transports between visors on the same network")
-	require.Equal(t, []string{"bb", "registered dmsg server", "1 GiB", "stcpr 1 GiB, sudph 1 MiB"}, tb.Rows[0])
+	require.Contains(t, tb.Note, "1 between visors on the same network")
+	require.Equal(t, []string{"Public key", "Version", "Role", "Sent", "stcpr", "sudph", "unknown"}, tb.Head)
+	require.Equal(t, []string{"bb", "v1.3.100", "registered dmsg server", "1 GiB", "1 GiB", "1 MiB", "1 KiB"}, tb.Rows[0])
 	require.Equal(t, "#4e79a7", tb.Marks[0])
-	require.Equal(t, []string{"aa", ""}, tb.Rows[1][:2])
+	require.Equal(t, []string{"aa", "", "", "1 MiB", "1 MiB", "", ""}, tb.Rows[1])
 	require.Empty(t, tb.Marks[1])
 }
 
@@ -139,7 +140,7 @@ func TestGraphEngineRoutes(t *testing.T) {
 	w := httptest.NewRecorder()
 	api.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/graph/engine.js", nil))
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "'netview'", "the loader runs the module as the netview role")
+	require.Contains(t, w.Body.String(), "globalThis.Go", "the loader is the wasm_exec.js that runs the netview module")
 
 	w = httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/graph/engine.wasm", nil)

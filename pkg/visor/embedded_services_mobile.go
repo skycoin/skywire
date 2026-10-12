@@ -12,7 +12,10 @@
 package visor
 
 import (
+	"fmt"
+
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -31,4 +34,12 @@ func (*Visor) trackCXOPublisher(uint16, *treestore.Publisher) {}
 // embeddedServiceStates reports no services for `visor state`.
 func (*Visor) embeddedServiceStates() []visorapi.EmbeddedServiceState {
 	return nil
+}
+
+// statusBoard is nil: there is no deployment service to show a status page for.
+func (*Visor) statusBoard() *charts.Board { return nil }
+
+// EmbeddedServiceControl finds no service to control.
+func (*Visor) EmbeddedServiceControl(name, _ string) error {
+	return fmt.Errorf("no embedded service named %q", name)
 }

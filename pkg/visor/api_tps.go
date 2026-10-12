@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/rpc"
 	"time"
+
+	rpc "github.com/0magnet/gobrpc"
 
 	"github.com/google/uuid"
 

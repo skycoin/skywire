@@ -60,6 +60,16 @@ port-space exhaustion; 'dmsg diag porter-reset' recovers it.`,
 		if s.RSNPorts > 0 {
 			fmt.Fprintf(&buf, "  RSN client ports:   %d / 16384\n", s.RSNPorts)
 		}
+		if len(s.StreamCensus) > 0 {
+			buf.WriteString("  Streams in memory (dir port state count oldest):\n")
+			for _, r := range s.StreamCensus {
+				dir := "in "
+				if r.Initiator {
+					dir = "out"
+				}
+				fmt.Fprintf(&buf, "    %s %5d %-9s %6d %8.0fs\n", dir, r.Port, r.State, r.Count, r.OldestS)
+			}
+		}
 		internal.PrintOutput(cmd.Flags(), s, buf.String())
 	},
 }

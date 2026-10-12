@@ -73,7 +73,6 @@ Available Commands:
   stun      STUN server for skywire
   tpd       Transport Discovery Server for skywire
   tps       Transport setup server for skywire
-  ut        Uptime Tracker Server for skywire
 ```
 
 ```
@@ -114,8 +113,6 @@ Flags:
    * [Runtime Dependencies by Service](#runtime-dependencies-by-service)
       * [Redis](#redis)
          * [Redis setup](#redis-setup)
-      * [Postgres](#postgres)
-         * [Postgres DB Setup](#postgres-db-setup)
    * [Required Services](#required-services)
    * [Key generation for services](#key-generation-for-services)
       * [Visor Config Bootstrap Endpoint](#visor-config-bootstrap-endpoint)
@@ -226,7 +223,6 @@ Redis setup simply entails installing redis and starting the service (which may 
 
 The same Redis instance can back every service above. The dmsg-server needs no Redis.
 
-### Postgres
 * ~[transport-discovery](#transport-discovery)~
 * ~[route-finder](#route-finder)~
 * ~[service-discovery](#service-discovery)~
@@ -263,6 +259,8 @@ https://conf.skywire.skycoin.com/
 
 This endpoint provides json which will become part of the visor's config.
 
+To run a whole custom deployment in one visor, with the services-config generated for you, see [custom-deployment.md](../guides/custom-deployment.md). The rest of this section describes the separate-unit layout.
+
 When setting up a custom deployment, the following file is created (manually) to reflect your deployment:
 ```
 {
@@ -287,7 +285,6 @@ When setting up a custom deployment, the following file is created (manually) to
     "03aa0b1c4e23616872058c11c6efba777c130a85eaf909945d697399a1eb08426d",
     "03adb2c924987d8deef04d02bd95236c5ae172fe5dfe7273e0461d96bf4bc220be"
   ],
-  "uptime_tracker": "http://ut.skywire.skycoin.com",
   "service_discovery": "http://sd.skycoin.com",
   "stun_servers": [
     "192.53.117.238:3478",
@@ -556,9 +553,6 @@ example output
 		"route_finder_timeout": "10s",
 		"min_hops": 0
 	},
-	"uptime_tracker": {
-		"addr": "http://ut.skywire.skycoin.com"
-	},
 	"launcher": {
 		"service_discovery": "http://sd.haltingstate.net",
 		"apps": [
@@ -717,7 +711,6 @@ the following file is created manually to reflect the deployment
     "transport_discovery": "dmsg://02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
     "address_resolver": "dmsg://030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
     "route_finder": "dmsg://02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
-    "uptime_tracker": "dmsg://022c788cca11f208cdfd83ed0c2a8c7b661221736c461adc7c6738a2c1b041c7f8:80",
     "service_discovery": "dmsg://038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
   },
   "prod": {
@@ -763,7 +756,6 @@ the following file is created manually to reflect the deployment
     "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
     "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
     "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
-    "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
     "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80"
   }
 }
@@ -801,7 +793,7 @@ import common
 }
 conf.haltingstate.net {
 header Content-Type	application/json
-respond {"dmsg_discovery":"http://dmsgd.haltingstate.net","transport_discovery":"http://tpd.haltingstate.net","address_resolver":"http://ar.haltingstate.net","route_finder":"http://rf.haltingstate.net","setup_nodes":["024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"],"uptime_tracker":"http://ut.skywire.skycoin.com","service_discovery":"http://sd.haltingstate.net","stun_servers":["139.162.12.30:3478","170.187.228.181:3478","172.104.161.184:3478","170.187.231.137:3478","143.42.74.91:3478","170.187.225.78:3478","143.42.78.123:3478","139.162.12.244:3478"],"dns_server":"1.1.1.1"}
+respond {"dmsg_discovery":"http://dmsgd.haltingstate.net","transport_discovery":"http://tpd.haltingstate.net","address_resolver":"http://ar.haltingstate.net","route_finder":"http://rf.haltingstate.net","setup_nodes":["024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"],"service_discovery":"http://sd.haltingstate.net","stun_servers":["139.162.12.30:3478","170.187.228.181:3478","172.104.161.184:3478","170.187.231.137:3478","143.42.74.91:3478","170.187.225.78:3478","143.42.78.123:3478","139.162.12.244:3478"],"dns_server":"1.1.1.1"}
 import common
 }
 ```

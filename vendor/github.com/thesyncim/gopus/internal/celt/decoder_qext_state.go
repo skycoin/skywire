@@ -6,10 +6,8 @@ type decoderQEXTState struct {
 	pendingPayload []byte
 	oldBandE       []celtGLog
 
-	// Native 96 kHz comb-filter postfilter state.
-	hd96kPostMem      []float32 // per-channel 2*COMBFILTER_MAXPERIOD post-postfilter history
-	hd96kPostTimeline []float32 // scratch: [history | frame]
-	hd96kPostPhase    hd96kCombPhase
+	// Native 96 kHz comb-filter phase scratch.
+	hd96kPostPhase hd96kCombPhase
 
 	scratchEnergies  []celtGLog
 	scratchDecode    preparedQEXTDecode

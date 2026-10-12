@@ -279,7 +279,7 @@ func init() {
 	fwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
 	routeCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
 	routeCmd.Flags().StringVarP(&rID, "rid", "i", "", "show routing rule matching route ID")
-	routeCmd.Flags().BoolVarP(&routeLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick) for the routing-rules listing")
+	routeCmd.Flags().BoolVarP(&routeLive, "live", "L", false, "live-refresh mode (TUI, 1s tick) for the routing-rules listing")
 	rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
 }
 
@@ -308,7 +308,7 @@ computes paths but installs nothing).
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		// --live: bubbletea watch view of the rules table. Each tick
+		// --live: watch view of the rules table. Each tick
 		// re-runs RoutingRules() and re-renders. Single-rule lookup
 		// (--rid) and --nrid stay one-shot; nothing to watch there.
 		if routeLive {
@@ -665,7 +665,7 @@ func init() {
 	groupsCmd.Flags().BoolVar(&groupsHops, "hops", false,
 		"also print the full hop path for each route group")
 	groupsCmd.Flags().BoolVarP(&groupsLive, "live", "L", false,
-		"live-refresh mode (bubbletea TUI, 1s tick); shows route groups created/torn down in place")
+		"live-refresh mode (TUI, 1s tick); shows route groups created/torn down in place")
 }
 
 var groupsCmd = &cobra.Command{
@@ -680,7 +680,7 @@ we accepted). Use --hops to also print the full forward path.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		// --live: bubbletea watch view of the route-groups table.
+		// --live: watch view of the route-groups table.
 		// Honors --filter and --hops; re-fetches on every tick.
 		if groupsLive {
 			err := livetui.Run(func(ctx context.Context) (string, error) {
@@ -774,7 +774,7 @@ we accepted). Use --hops to also print the full forward path.`,
 }
 
 // renderRoutingRulesLive builds a snapshot of the local routing-rules
-// table for the --live bubbletea viewport. Mirrors printRoutingRules'
+// table for the --live view. Mirrors printRoutingRules'
 // columns but writes to a string (no PrintOutput / no JSON branch);
 // the watcher re-invokes this every tick so the operator sees rules
 // being installed and expiring without re-running the command.

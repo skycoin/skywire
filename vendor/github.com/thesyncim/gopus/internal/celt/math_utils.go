@@ -10,6 +10,8 @@ const bitexactThetaMax = 16384
 
 //go:generate go run ../../tools/gen_math_utils_tables.go -out math_utils_tables_static.go
 
+// celtUdiv is celt_udiv: an unsigned 32-bit division of n, clamped at zero,
+// by a positive d.
 func celtUdiv(n, d int) int {
 	if d <= 0 {
 		return 0
@@ -17,17 +19,39 @@ func celtUdiv(n, d int) int {
 	if n < 0 {
 		n = 0
 	}
-	return n / d
+	return int(uint32(n) / uint32(d))
 }
 
+// celtSudiv is celt_sudiv: a signed 32-bit division by a positive d.
 func celtSudiv(n, d int) int {
 	if d <= 0 {
 		return 0
 	}
-	if n < 0 {
-		return -celtUdiv(-n, d)
+	return int(int32(n) / int32(d))
+}
+
+// celtUdivBlocks is celt_udiv(n, B) for a block count B, which the band
+// code keeps a power of two; it shifts instead of dividing then.
+func celtUdivBlocks(n, B int) int {
+	if B > 0 && B&(B-1) == 0 && n >= 0 {
+		return n >> bits.TrailingZeros(uint(B))
 	}
-	return celtUdiv(n, d)
+	return celtUdiv(n, B)
+}
+
+// celtSudivBalance is celt_sudiv(balance, d) for the band-balance divisor
+// d = IMIN(3, codedBands-i) of quant_all_bands, which is 1, 2 or 3; the
+// constant divisions truncate toward zero exactly as the C division does.
+func celtSudivBalance(n, d int) int {
+	switch d {
+	case 3:
+		return int(int32(n) / 3)
+	case 2:
+		return int(int32(n) / 2)
+	case 1:
+		return int(int32(n))
+	}
+	return celtSudiv(n, d)
 }
 
 func fracMul16(a, b int) int {

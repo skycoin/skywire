@@ -3,15 +3,18 @@ package celt
 // ModeConfig contains frame-size-dependent configuration for CELT decoding.
 // Parameters vary based on frame duration (2.5ms to 20ms).
 type ModeConfig struct {
-	FrameSize   int // Samples at 48kHz: 120, 240, 480, 960
+	FrameSize   int // Samples per channel for the active mode.
 	ShortBlocks int // Number of short MDCTs if transient: 1, 2, 4, 8
 	LM          int // Log mode index: 0, 1, 2, 3
 	EffBands    int // Effective number of bands for this frame size
 	MDCTSize    int // MDCT window size for long blocks
 }
 
-// GetModeConfig returns the mode configuration for the given frame size.
-// Valid frame sizes are 120, 240, 480, and 960 samples at 48kHz.
+// GetModeConfig returns the mode configuration for a CELT frame size.
+// It recognizes 120, 240, 480, 960, and 1920 samples per channel and returns
+// the 960-sample configuration for any other value. The 1920-sample geometry is
+// used by native 96 kHz HD mode. This lookup does not check the active mode or
+// build configuration; the caller validates those separately.
 func GetModeConfig(frameSize int) ModeConfig {
 	switch frameSize {
 	case 120: // 2.5ms frame
@@ -66,7 +69,8 @@ func GetModeConfig(frameSize int) ModeConfig {
 	}
 }
 
-// ValidFrameSize returns true if the frame size is valid for CELT.
+// ValidFrameSize reports whether frameSize has an entry in GetModeConfig.
+// It does not check the active sample rate, mode, or build configuration.
 func ValidFrameSize(frameSize int) bool {
 	switch frameSize {
 	case 120, 240, 480, 960, 1920:
@@ -76,17 +80,12 @@ func ValidFrameSize(frameSize int) bool {
 	}
 }
 
-// CustomModeConfig parameterizes the CELT control plane for a non-standard
-// Opus Custom mode in the Fs==400*shortMdctSize family. These modes share the
-// 48 kHz eBands/logN/allocVectors tables, so only the base short-MDCT size
-// (which sets band-bin scaling and overlap) and the per-rate pre-emphasis
-// differ from the four static 48 kHz modes.
+// CustomModeConfig describes an Opus Custom mode with Fs == 400*ShortMdctSize.
+// These modes use the standard 48 kHz eBands, logN and allocation tables.
+// ShortMdctSize determines band-bin scaling and overlap; Fs selects preemphasis.
 //
-// The base short-MDCT size replaces the hardwired 48 kHz value (120) so that
-// band-edge bins scale as eBands[i] * (frameSize / ShortMdctSize) == eBands[i]
-// << LM, matching libopus celt/bands.c, rather than the static eBands[i] *
-// (frameSize/120). For standard 48 kHz modes ShortMdctSize == 120 and the two
-// expressions coincide, so the static path is byte-unchanged.
+// Band edges use eBands[i] * (FrameSize / ShortMdctSize), equal to eBands[i]
+// << LM, matching libopus celt/bands.c. Standard 48 kHz modes use size 120.
 //
 // Reference: libopus celt/modes.c opus_custom_mode_create() (CUSTOM_MODES).
 type CustomModeConfig struct {

@@ -12,7 +12,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +41,7 @@ import (
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/svcmode"
+	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -65,12 +68,16 @@ func New(cfg *Config, log *logging.Logger) services.Service {
 }
 
 type service struct {
-	cfg *Config
-	log *logging.Logger
+	// chartsAPI is the running API, whose charts the host shows on its status page.
+	chartsAPI atomic.Pointer[api.API]
+	cfg       *Config
+	log       *logging.Logger
 
 	// state, set by build and startCXO, is reported by State.
 	store, nonceStore string
 	cxo               services.CXOSet
+	// stats, set by Run, counts the process and its traffic for the status page.
+	stats *charts.ServiceStats
 }
 
 // State implements services.Stater.
@@ -150,6 +157,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 			closeAll()
 			return nil, fmt.Errorf("transport-discovery: load live transport set: %w", err)
 		}
+	} else {
+		// An in-memory store is the whole set already.
+		store.ShareStore(ctx, storeCfg.URL, st)
 	}
 
 	nonceStoreConfig := cfg.NonceStoreConfig(plainHTTP)
@@ -174,7 +184,11 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if storeDataPath == "" {
 		storeDataPath = "/var/lib/skywire/tpd/bandwidth"
 	}
+	if la, ok := st.(interface{ SetLeafArchive(string) }); ok {
+		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
+	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
+	s.chartsAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
 	if live {
 		if err := tpdAPI.SeedReconcile(ctx); err != nil {
@@ -190,6 +204,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if cs, err := s.chartStore(storeCfg); err != nil {
 		logger.WithError(err).Warn("charts unavailable")
 	} else {
+		tpdAPI.Stats = s.stats
 		tpdAPI.StartCharts(ctx, cs, logger)
 	}
 
@@ -228,6 +243,8 @@ func (s *service) Run(ctx context.Context) error {
 	cfg := s.cfg
 
 	logger := services.NewLogger(cfg.LogTag("transport_discovery"), cfg.LogLevel)
+	s.stats = charts.NewServiceStats("transport discovery")
+	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(logger)()
 
 	pk := cfg.PubKey
@@ -279,6 +296,7 @@ func (s *service) Run(ctx context.Context) error {
 	surveyWL := cfg.SurveyKeys()
 
 	h, err := svcmode.Start(runCtx, svcmode.Config{
+		Stats:               s.stats,
 		Mode:                resolvedMode,
 		HTTPAddr:            addr,
 		Handler:             tpdAPI,
@@ -366,8 +384,6 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "metrics", skyenv.DmsgTPDMetricsCXOPort, mp, err)
 	up, err := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
-	ap, err := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
-	s.cxo.AddPublisher(ctx, logger, "all-transports", skyenv.DmsgTPDAllTransportsCXOPort, ap, err)
 	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
@@ -464,4 +480,21 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
 	return mgr
+}
+
+// ChartsPage is the charts page of the running service, for the host's status
+// page. Nil before the service has started.
+func (s *service) ChartsPage() *charts.Page {
+	if a := s.chartsAPI.Load(); a != nil {
+		return a.Charts()
+	}
+	return nil
+}
+
+// ApplyCheckpoints passes stream checkpoints to a store that matches them.
+func (s *aggregatorSink) ApplyCheckpoints(ctx context.Context, id uuid.UUID, reporter cipher.PubKey, sent, recv telemetrywire.DirCheckpoints) error {
+	if c, ok := s.Store.(cxoaggregator.CheckpointSink); ok {
+		return c.ApplyCheckpoints(ctx, id, reporter, sent, recv)
+	}
+	return nil
 }

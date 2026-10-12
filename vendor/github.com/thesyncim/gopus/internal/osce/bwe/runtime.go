@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 
+	"github.com/thesyncim/gopus/internal/celt"
 	"github.com/thesyncim/gopus/internal/dnnblob"
 	"github.com/thesyncim/gopus/internal/dnnmath"
 	"github.com/thesyncim/gopus/internal/opusmath"
@@ -153,8 +154,28 @@ func (s *State) SetModel(blob *dnnblob.Blob) error {
 	return nil
 }
 
-// Model returns the bound BBWENet model, or nil when the runtime has not yet
-// been loaded with a valid weights blob.
+// SetModelPreservingState replaces the BBWENet weights without resetting the
+// recurrent and filter history. libopus's decoder model control reloads OSCE
+// weights while retaining each SILK channel's OSCE BWE state.
+func (s *State) SetModelPreservingState(blob *dnnblob.Blob) error {
+	if s == nil {
+		return errInvalidBWEModel
+	}
+	if blob == nil {
+		s.model = nil
+		return nil
+	}
+	model, err := LoadModel(blob)
+	if err != nil {
+		s.model = nil
+		return err
+	}
+	s.model = model
+	return nil
+}
+
+// Model returns the bound BBWENet model, or nil until a valid weights blob is
+// bound.
 func (s *State) Model() *Model {
 	if s == nil {
 		return nil
@@ -519,36 +540,38 @@ func (s *State) upsample2x(ch int, xOut, xIn []float32) {
 	for k := range xIn {
 		x := xIn[k]
 
+		// dnn/osce.c:upsamp_2x shares each rounded product between
+		// the output and recursive state updates.
 		// even sample, pass 1
 		y := x - sEven[0]
-		X := y * he0
+		X := roundMul32(y, he0)
 		tmp1 := sEven[0] + X
 		sEven[0] = x + X
 		// pass 2
 		y = tmp1 - sEven[1]
-		X = y * he1
+		X = roundMul32(y, he1)
 		tmp2 := sEven[1] + X
 		sEven[1] = tmp1 + X
 		// pass 3
 		y = tmp2 - sEven[2]
-		X = y * (1 + he2)
+		X = roundMul32(y, (1 + he2))
 		tmp3 := sEven[2] + X
 		sEven[2] = tmp2 + X
 		xOut[2*k] = tmp3
 
 		// odd sample, pass 1
 		y = x - sOdd[0]
-		X = y * ho0
+		X = roundMul32(y, ho0)
 		tmp1 = sOdd[0] + X
 		sOdd[0] = x + X
 		// pass 2
 		y = tmp1 - sOdd[1]
-		X = y * ho1
+		X = roundMul32(y, ho1)
 		tmp2 = sOdd[1] + X
 		sOdd[1] = tmp1 + X
 		// pass 3
 		y = tmp2 - sOdd[2]
-		X = y * (1 + ho2)
+		X = roundMul32(y, (1 + ho2))
 		tmp3 = sOdd[2] + X
 		sOdd[2] = tmp2 + X
 		xOut[2*k+1] = tmp3
@@ -578,8 +601,12 @@ func (s *State) interpol32(ch int, xOut, xIn []float32) {
 
 	iOut := 0
 	for k := 0; k < numSamples; k += 2 {
-		var v0, v1, v2 float32
-		for j := range 8 {
+		// dnn/osce.c:interpol_3_2 contracts the first product into the
+		// rounded second product, then accumulates taps 2 through 7.
+		v0 := mulAdd32(buffer[k], frac01_24[0], roundMul32(buffer[k+1], frac01_24[1]))
+		v1 := mulAdd32(buffer[k], frac17_24[0], roundMul32(buffer[k+1], frac17_24[1]))
+		v2 := mulAdd32(buffer[k+1], frac09_24[0], roundMul32(buffer[k+2], frac09_24[1]))
+		for j := 2; j < 8; j++ {
 			v0 += buffer[k+j] * frac01_24[j]
 			v1 += buffer[k+j] * frac17_24[j]
 			v2 += buffer[k+1+j] * frac09_24[j]
@@ -611,13 +638,10 @@ func applyValinActivation(x []float32) {
 // ----------------------------------------------------------------------------
 
 // computeLinear evaluates a LinearLayer: out = W^T * in + bias. Mirrors
-// libopus `compute_linear_c` (dnn/nnet_arch.h): the float-weight path runs
-// `sgemv` (column-major W[j*N+i]), the int8 path runs `cgemv8x4` -- a packed
-// 8x4 block kernel where weights are laid out as consecutive 32-element
-// (8 rows by 4 cols) tiles iterating rows in groups of 8 then cols in groups
-// of 4. The int8 path quantises the input to signed int8 via
-// floor(0.5 + 127*x), accumulates as float multiplied by the int8 weight,
-// then scales each output row by `scale[i]` (per-row dequantisation).
+// libopus `compute_linear_c` and `dnn/nnet_arch.h`: float weights use the
+// column-major sgemv path; int8 weights use 8x4 tiles of 32 values, then scale
+// each output row. The selected AVX2 path uses fused sgemv, unsigned input
+// quantization and subias; scalar and NEON paths use their matching kernels.
 func computeLinear(layer *LinearLayer, out, in []float32) {
 	n := layer.NbOutputs
 	m := layer.NbInputs
@@ -626,18 +650,31 @@ func computeLinear(layer *LinearLayer, out, in []float32) {
 	case !layer.FloatWeights.Empty():
 		// Weight layout: rows = n outputs, cols = m inputs, col-major:
 		// weight(row, col) = w[col*n + row]. Mirrors libopus sgemv layout.
-		for i := range n {
-			var sum float32
-			for j := range m {
-				sum += layer.FloatWeights.At(j*n+i) * in[j]
+		if dnnmath.X86VectorKernels {
+			dnnmath.SGEMVX86(out[:n], layer.FloatWeights, n, m, n, in[:m])
+		} else {
+			for i := range n {
+				var sum float32
+				if n == 1 {
+					// dnn/vec.h:sgemv accumulates each product into the
+					// running output. The selected scalar and NEON builds use
+					// different contraction behavior for this one-row tail.
+					for j := range m {
+						sum = accumulateLinearOne(sum, layer.FloatWeights.At(j*n+i), in[j])
+					}
+				} else {
+					for j := range m {
+						sum += layer.FloatWeights.At(j*n+i) * in[j]
+					}
+				}
+				out[i] = sum
 			}
-			out[i] = sum
 		}
 	case !layer.Weights.Empty():
-		// Quantised int8 path; mirrors libopus `cgemv8x4` from vec.h.
-		// USE_SU_BIAS is only enabled on AVX/AVX2 builds; the pure-Go
-		// reference matches the default scalar libopus build (signed
-		// int8 input quantisation, plain `bias`).
+		if dnnmath.X86VectorKernels {
+			// dnn/vec_avx.h defines USE_SU_BIAS for this path.
+			bias = layer.Subias
+		}
 		cgemv8x4(out[:n], layer.Weights, layer.Scale, n, m, in[:m])
 	default:
 		for i := range n {
@@ -672,18 +709,26 @@ func EvaluateLayerInt8(layer *LinearLayer, out, in []float32) {
 	}
 }
 
-// cgemv8x4 mirrors the scalar fallback in libopus dnn/vec.h. The weight
-// matrix is stored as a sequence of 8-row by 4-col tiles (32 int8 values per
-// tile) iterating cols of 4 within each row-of-8, then rows of 8. After
-// integer accumulation each row is multiplied by `scale[row]` to recover the
-// float-domain product. The input is symmetrically quantised to int8 via
-// floor(0.5 + 127*x) so the dynamic range matches the trained kernel.
+// cgemv8x4 dispatches to the selected AVX2 path when available; otherwise it
+// mirrors libopus's scalar 8x4 kernel. The scalar input uses
+// floor(0.5+127*x), while AVX2 uses its unsigned-byte pack sequence.
 //
 // Requires rows % 8 == 0 and cols % 4 == 0 (verified at model load time by
 // the libopus 1.6.1 BBWENet layer dimensions: every int8 layer satisfies
 // these constraints).
 func cgemv8x4(out []float32, weights dnnblob.Int8View, scale dnnblob.Float32View, rows, cols int, x []float32) {
 	const maxCols = 512
+	if dnnmath.X86VectorKernels {
+		if cols > maxCols {
+			for i := range rows {
+				out[i] = 0
+			}
+			return
+		}
+		var q [maxCols]uint8
+		dnnmath.CGEMV8x4X86(out, weights, scale, rows, cols, x, q[:cols])
+		return
+	}
 	var q [maxCols]int8
 	if cols > maxCols {
 		// Should never happen for BBWENet (max int8 cols is 384).
@@ -693,7 +738,7 @@ func cgemv8x4(out []float32, weights dnnblob.Int8View, scale dnnblob.Float32View
 		return
 	}
 	for i := range cols {
-		q[i] = dnnmath.Cgemv8x4QuantizeInputScalar(x[i])
+		q[i] = dnnmath.Cgemv8x4QuantizeInput(x[i])
 	}
 	for i := range rows {
 		out[i] = 0
@@ -730,9 +775,9 @@ func computeActivation(out, in []float32, n, activation int) {
 			copy(out[:n], in[:n])
 		}
 	case actSigmoid:
-		dnnmath.SigmoidVectorScalarApprox(out, in, n)
+		dnnmath.SigmoidVectorApprox(out, in, n)
 	case actTanh:
-		dnnmath.TanhVectorScalarApprox(out, in, n)
+		dnnmath.TanhVectorApprox(out, in, n)
 	case actRelu:
 		for i := range n {
 			v := in[i]
@@ -744,7 +789,7 @@ func computeActivation(out, in []float32, n, activation int) {
 	case actSoftmax:
 		dnnmath.SoftmaxApprox(out, in, n)
 	case actExp:
-		dnnmath.ExpVectorScalarApprox(out, in, n)
+		dnnmath.ExpVectorApprox(out, in, n)
 	default:
 		copy(out[:n], in[:n])
 	}
@@ -799,7 +844,9 @@ func computeGenericGRU(inputW, recurrentW *LinearLayer, state, in []float32) {
 	}
 	computeActivation(h, h, n, actTanh)
 	for i := range n {
-		h[i] = z[i]*state[i] + (1-z[i])*h[i]
+		// dnn/nnet.c:compute_generic_gru rounds the trailing product
+		// before the first product's multiply-add.
+		h[i] = mulAdd32(z[i], state[i], roundMul32(1-z[i], h[i]))
 		state[i] = h[i]
 	}
 }
@@ -852,7 +899,9 @@ func adaconvProcessFrame(
 			for k := range kernelSize {
 				idx := (o*inChannels+ic)*kernelSize + k
 				v := kernelBuf[idx]
-				norm += v * v
+				// dnn/nndsp.c:scale_kernel accumulates kernel[k]*kernel[k]
+				// using the selected C compiler's contraction behavior.
+				norm = accumulateBWENorm(norm, v)
 			}
 		}
 		invNorm := scaleKernelInvNorm(norm)
@@ -865,31 +914,27 @@ func adaconvProcessFrame(
 		}
 	}
 
-	// Compute output: cross-correlation of kernel0/kernel1 with the input
-	// signal. For sample i: y[i] = sum_k kernel[k] * input[i + k - leftPadding].
+	// Compute output with the selected CELT correlation kernel. libopus
+	// dnn/nndsp.c passes zero-padded ADACONV_MAX_KERNEL_SIZE kernels to
+	// celt_pitch_xcorr, even when this stage's model kernel is shorter.
+	var kernelOld, kernelNew [maxKernel]float32
+	var sumOld, sumNew [maxFrame]float32
 	for o := range outChannels {
 		for ic := range inChannels {
-			// pInput points into inputBuf at p_input[i_in_channels * (frame_size+kernel_size)] +
-			// kernel_size (the start of the new frame). Apply left padding.
 			base := ic*(frameSize+kernelSize) + kernelSize
-			// Old kernel (kernel0 from previous frame's last_kernel).
-			kernelOld := lastKernel[(o*inChannels+ic)*kernelSize : (o*inChannels+ic)*kernelSize+kernelSize]
-			kernelNew := kernelBuf[(o*inChannels+ic)*kernelSize : (o*inChannels+ic)*kernelSize+kernelSize]
+			clear(kernelOld[:])
+			clear(kernelNew[:])
+			copy(kernelOld[:], lastKernel[(o*inChannels+ic)*kernelSize:(o*inChannels+ic)*kernelSize+kernelSize])
+			copy(kernelNew[:], kernelBuf[(o*inChannels+ic)*kernelSize:(o*inChannels+ic)*kernelSize+kernelSize])
+			input := inputBuf[base-leftPadding:]
+			celt.PitchXCorrFloat32(sumOld[:overlapSize], kernelOld[:], input, maxKernel, overlapSize)
+			celt.PitchXCorrFloat32(sumNew[:frameSize], kernelNew[:], input, maxKernel, frameSize)
 			for i := range frameSize {
-				// Compute new-frame contribution.
-				var sumNew float32
-				for k := range kernelSize {
-					sumNew += kernelNew[k] * inputBuf[base+i+k-leftPadding]
-				}
 				if i < overlapSize {
-					var sumOld float32
-					for k := range kernelSize {
-						sumOld += kernelOld[k] * inputBuf[base+i+k-leftPadding]
-					}
-					outputBuf[o*frameSize+i] += window[i] * sumOld
-					outputBuf[o*frameSize+i] += (1.0 - window[i]) * sumNew
+					outputBuf[o*frameSize+i] += window[i] * sumOld[i]
+					outputBuf[o*frameSize+i] += (1.0 - window[i]) * sumNew[i]
 				} else {
-					outputBuf[o*frameSize+i] += sumNew
+					outputBuf[o*frameSize+i] += sumNew[i]
 				}
 			}
 		}
@@ -941,7 +986,10 @@ func adashapeProcessFrame(
 			}
 			sum += v
 		}
-		tenv[i] = dnnmath.CeltLog(sum*f + 1.52587890625e-05)
+		// dnn/nndsp.c:adashape_process_frame stores celt_log's float
+		// result before adding it to mean. Keep its log2-to-ln product
+		// separate from that addition.
+		tenv[i] = float32(dnnmath.CeltLog(mulAdd32(sum, f, 1.52587890625e-05)))
 		mean += tenv[i]
 	}
 	mean /= float32(tenvSize)
@@ -973,8 +1021,21 @@ func adashapeProcessFrame(
 	}
 
 	// Apply exp activation in place, then modulate.
-	dnnmath.ExpVectorScalarApprox(outBuf[:frameSize], outBuf[:frameSize], frameSize)
+	dnnmath.ExpVectorApprox(outBuf[:frameSize], outBuf[:frameSize], frameSize)
 	for i := range frameSize {
 		xOut[i] = outBuf[i] * xIn[i]
 	}
+}
+
+// mulAdd32 follows the scalar OSCE reference's contraction policy: an FMADD on
+// arm64 and separate operations on amd64. OSCE uses this scalar C build in both
+// Go SIMD and nosimd configurations.
+func mulAdd32(a, b, c float32) float32 {
+	return a*b + c
+}
+
+// roundMul32 preserves a C float product shared by subsequent expressions.
+// The explicit conversion prevents contraction into their additions.
+func roundMul32(a, b float32) float32 {
+	return float32(a * b)
 }

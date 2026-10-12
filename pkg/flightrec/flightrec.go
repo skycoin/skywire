@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package flightrec pkg/flightrec/flightrec.go c1-util-debug
 //
 // A process-wide execution-trace flight recorder (runtime/trace): it keeps

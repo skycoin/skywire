@@ -23,6 +23,7 @@ cobra subcommand tree.
 - [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
 - [public-visor.md](public-visor.md) — make a visor reachable from the internet: `is_public`, a stable `transport_port`, router port-forwarding and host firewall (TCP **and** UDP), transport-type → protocol map, and reachability troubleshooting
+- [host-bridge.md](host-bridge.md) — give a browser visor the sockets of its computer: transports at an address of its own, and ports of the computer forwarded to it, such as its SOCKS proxy
 
 ## Application usage
 
@@ -41,6 +42,7 @@ cobra subcommand tree.
 - [multipath.md](multipath.md) — multiplexed route groups: starting apps with `--mux`, per-leg telemetry (`proxy mux info`), reshaping live groups, `mux-bw` measurements, and the WASM/Starlark routing-policy engine
 - [dmsg-tools.md](dmsg-tools.md) — the dmsg relay network from the CLI: carriers (tcp/quic/wss/WebTransport), server reachability probing (`mdisc check`, `dmsg conf probe`, `self-ping`), per-server pinning, and the standalone curl/cat/scp/iperf utilities
 - [deployment-health.md](deployment-health.md) — health, pprof profiles, and logs of the deployment services **and** any visor, fetched over dmsg: `svc health`, the discovery read APIs, and the survey-whitelist-gated `/debug` surfaces
+- [custom-deployment.md](custom-deployment.md) — run a whole deployment in one visor, join visors to it, and set up the DNS and TLS for its dmsg server's wss name and for a browse origin
 
 ## Advanced
 

@@ -1,5 +1,3 @@
-//go:build (!arm64 && !amd64) || purego
-
 package celt
 
 // pvqSearchPulseLoop places pulsesLeft pulses using the rate-distortion
@@ -14,13 +12,36 @@ func pvqSearchPulseLoop(absX, y []float32, iy []int32, xy, yy float32, n, pulses
 		ryy := yy + y[0]
 		bestNum := rxy * rxy
 		bestDen := ryy
-		for j := 1; j < n; j++ {
+		// Scan two positions per iteration. Keeping the best numerator and
+		// denominator updated after each position preserves the scalar
+		// comparison order while reducing loop overhead on ARM64.
+		j := 1
+		for j < n-1 {
 			rxy = xy + absX[j]
 			ryy = yy + y[j]
 			num := rxy * rxy
 			if bestDen*num > ryy*bestNum {
 				bestDen = ryy
 				bestNum = num
+				bestID = j
+			}
+
+			j++
+			rxy = xy + absX[j]
+			ryy = yy + y[j]
+			num = rxy * rxy
+			if bestDen*num > ryy*bestNum {
+				bestDen = ryy
+				bestNum = num
+				bestID = j
+			}
+			j++
+		}
+		if j < n {
+			rxy = xy + absX[j]
+			ryy = yy + y[j]
+			num := rxy * rxy
+			if bestDen*num > ryy*bestNum {
 				bestID = j
 			}
 		}

@@ -8,7 +8,7 @@ package celt
 // Reference: RFC 6716 Section 4.3.4, libopus celt/bands.c
 
 // FoldBand generates a normalized celt_norm vector by folding from a lower band.
-func FoldBand(lowband []celtNorm, n int, seed *uint32) []celtNorm {
+func FoldBand(lowband []celtNorm, n int, seed *uint32) []CeltNorm {
 	if n <= 0 {
 		return nil
 	}

@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 // Package router pkg/router/oracle_plan_cache.go c2-net-routing
 //
 // ONE destination-transport query per fill, and N distinct paths out of it.
@@ -175,6 +173,10 @@ func (c *oraclePlanCache) claim(src, dst cipher.PubKey, legs []twoHopLeg, eligib
 		c.sets[key] = s
 	}
 	now := c.now()
+	// When every leg is held, the oldest claim is reused, so crowded dials
+	// rotate through the candidates instead of all taking the first.
+	var oldest twoHopLeg
+	var oldestAt time.Time
 	for _, leg := range legs {
 		if len(leg.Forward) == 0 {
 			continue
@@ -184,6 +186,9 @@ func (c *oraclePlanCache) claim(src, dst cipher.PubKey, legs []twoHopLeg, eligib
 		}
 		id := leg.Forward[0].TpID
 		if at, held := s.claims[id]; held && now.Sub(at) <= ttl {
+			if len(oldest.Forward) == 0 || at.Before(oldestAt) {
+				oldest, oldestAt = leg, at
+			}
 			continue
 		}
 		s.claims[id] = now
@@ -191,7 +196,10 @@ func (c *oraclePlanCache) claim(src, dst cipher.PubKey, legs []twoHopLeg, eligib
 		return leg, true
 	}
 	c.crowded++
-	return twoHopLeg{}, false
+	if len(oldest.Forward) > 0 {
+		s.claims[oldest.Forward[0].TpID] = now
+	}
+	return oldest, false
 }
 
 // release drops a claim early — a dial that failed before using its path hands

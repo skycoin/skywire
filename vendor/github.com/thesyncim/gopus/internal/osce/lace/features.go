@@ -369,7 +369,9 @@ func (s *FeatureState) CalculateFeatures(
 
 	// Smoothed bit count, exactly as libopus
 	// `osce_features.c::osce_calculate_features`.
-	s.numbitsSmooth = 0.9*s.numbitsSmooth + 0.1*float32(numBits)
+	// osce_calculate_features contracts the history product into the
+	// rounded current-frame contribution.
+	s.numbitsSmooth = gruFMA32(0.9, s.numbitsSmooth, roundMul32(0.1, float32(numBits)))
 	numbits[0] = float32(numBits)
 	numbits[1] = s.numbitsSmooth
 
@@ -438,10 +440,9 @@ func (s *FeatureState) CalculateFeatures(
 			)
 		}
 
-		// Pitch post-processing with hangover (currently a no-op in libopus
-		// because OSCE_PITCH_HANGOVER==0 and OSCE_HANGOVER_BUGFIX is
-		// undefined; we mirror the exact branch logic so a future libopus
-		// bugfix flip just needs the constant change).
+		// Pitch post-processing with hangover. In the pinned libopus build,
+		// OSCE_PITCH_HANGOVER is 0 and OSCE_HANGOVER_BUGFIX is undefined, so
+		// voiced periods pass through and other signal types use noPitchValue.
 		periods[k] = pitchPostprocessing(s, ctrl.PitchL[k], ctrl.SignalType)
 
 		// Auto-correlation around the pitch lag.
@@ -504,7 +505,8 @@ func calculateLogSpectrumFromLPC(
 
 	// Log + 0.3 scaling, libopus log(spec + 1e-9)*0.3.
 	for i := range cleanSpecNumBands {
-		spec[i] = 0.3 * opusmath.LogF32(spec[i]+1e-9)
+		// calculate_log_spectrum_from_lpc multiplies C double log by 0.3f.
+		spec[i] = float32(opusmath.CReal(float32(0.3)) * opusmath.LogCReal(opusmath.CReal(float32(spec[i]+1e-9))))
 	}
 }
 
@@ -538,13 +540,15 @@ func calculateCepstrum(
 	}
 
 	// Orthonormal DCT-II: out[i] = sqrt(2/N) * sum_j in[j] * dct_table[j*N + i].
-	scale := opusmath.SqrtF32(2.0 / float32(noisySpecNumBands))
+	// dnn/freq.c:dct computes sqrt(2./NB_BANDS) and the final product
+	// in C double, then stores the float output.
+	scale := opusmath.SqrtCReal(2.0 / noisySpecNumBands)
 	for i := range noisySpecNumBands {
 		var sum float32
 		for j := range noisySpecNumBands {
 			sum += specBuf[j] * dctTable[j*noisySpecNumBands+i]
 		}
-		cepBuf[i] = sum * scale
+		cepBuf[i] = float32(opusmath.CReal(sum) * scale)
 	}
 	copy(cepstrum[:noisySpecNumBands], cepBuf[:])
 }
@@ -566,7 +570,8 @@ func magSpec320OneSided(
 	for k := range specNumFreqs {
 		re := real(fftOut[k])
 		im := imag(fftOut[k])
-		out[k] = float32(specWindowSize) * opusmath.SqrtF32(re*re+im*im)
+		// mag_spec_320_onesided multiplies C double sqrt before narrowing.
+		out[k] = float32(specWindowSize * opusmath.SqrtCReal(opusmath.CReal(gruFMA32(re, re, roundMul32(im, im)))))
 	}
 }
 
@@ -577,14 +582,20 @@ func applyFilterbankClean(out, in []float32) {
 	applyFilterbank(out, in, centerBinsClean[:], bandWeightsClean[:], cleanSpecNumBands)
 }
 
-// applyFilterbankNoisy is the 18-band specialisation.
+// applyFilterbankNoisy applies the 18-band layout from
+// osce_features.c::calculate_cepstrum.
 func applyFilterbankNoisy(out, in []float32) {
 	applyFilterbank(out, in, centerBinsNoisy[:], bandWeightsNoisy[:], noisySpecNumBands)
 }
 
 // applyFilterbank mirrors `osce_features.c::apply_filterbank`: triangular
-// overlap-add of the magnitude spectrum onto the supplied band layout.
+// overlap-add of the magnitude spectrum onto the supplied band layout. The
+// scalar ARM build contracts each second product into the running sum. The
+// selected ARM SIMD build does so for the 18-band noisy path; its 64-band
+// clean path keeps four rounded products. Other targets follow their selected
+// scalar or SIMD accumulation order.
 func applyFilterbank(out, in []float32, centerBins []int, bandWeights []float32, numBands int) {
+	useFMA := scalarOSCEGenericFMA || (selectedOSCENoisyFilterbankFMA && numBands == noisySpecNumBands)
 	out[0] = 0
 	for b := 0; b < numBands-1; b++ {
 		out[b+1] = 0
@@ -593,13 +604,39 @@ func applyFilterbank(out, in []float32, centerBins []int, bandWeights []float32,
 		c0 := centerBins[b]
 		c1 := centerBins[b+1]
 		span := float32(c1 - c0)
+		if useFMA {
+			for i := c0; i < c1; i++ {
+				frac := float32(c1-i) / span
+				out[b] = gruFMA32(roundMul32(w0, frac), in[i], out[b])
+				out[b+1] = gruFMA32(roundMul32(w1, 1-frac), in[i], out[b+1])
+			}
+			continue
+		}
+		if selectedOSCEFeatureSIMD {
+			i := c0
+			for roundedEnd := c0 + ((c1 - c0) &^ 3); i < roundedEnd; i++ {
+				frac := float32(c1-i) / span
+				out[b] += roundMul32(roundMul32(w0, frac), in[i])
+				out[b+1] += roundMul32(roundMul32(w1, 1-frac), in[i])
+			}
+			for ; i < c1; i++ {
+				frac := float32(c1-i) / span
+				out[b] += roundMul32(w0, frac) * in[i]
+				out[b+1] += roundMul32(w1, 1-frac) * in[i]
+			}
+			continue
+		}
 		for i := c0; i < c1; i++ {
 			frac := float32(c1-i) / span
-			out[b] += w0 * frac * in[i]
-			out[b+1] += w1 * (1.0 - frac) * in[i]
+			out[b] += roundMul32(w0, frac) * in[i]
+			out[b+1] += roundMul32(w1, 1-frac) * in[i]
 		}
 	}
-	out[numBands-1] += bandWeights[numBands-1] * in[centerBins[numBands-1]]
+	if useFMA {
+		out[numBands-1] = gruFMA32(bandWeights[numBands-1], in[centerBins[numBands-1]], out[numBands-1])
+	} else {
+		out[numBands-1] += bandWeights[numBands-1] * in[centerBins[numBands-1]]
+	}
 }
 
 // calculateAcorr mirrors `osce_features.c::calculate_acorr`. The cross-
@@ -625,18 +662,15 @@ func calculateAcorr(
 			yy += y * y
 			xy += x * y
 		}
-		acorr[k+2] = xy / opusmath.SqrtF32(xx*yy+1e-9)
+		// calculate_acorr divides by the C double sqrt of a float sum.
+		acorr[k+2] = float32(opusmath.CReal(xy) / opusmath.SqrtCReal(opusmath.CReal(gruFMA32(xx, yy, 1e-9))))
 	}
 }
 
 // pitchPostprocessing mirrors `osce_features.c::pitch_postprocessing`. In
-// libopus 1.6.1, OSCE_HANGOVER_BUGFIX is undefined so the hangover branches
-// are dead code; we still mirror the exact branch structure for future
-// constant flips. With the hangover gate compiled out, the behaviour
-// collapses to:
-//
-//	type == TYPE_VOICED -> return lag (and update last_lag)
-//	otherwise           -> return OSCE_NO_PITCH_VALUE
+// libopus 1.6.1, OSCE_HANGOVER_BUGFIX is undefined, so the hangover branches are
+// inactive. Voiced frames return lag and update lastLag; other frames return
+// noPitchValue.
 func pitchPostprocessing(s *FeatureState, lag, signalType int32) int {
 	const testBit = 0 // OSCE_HANGOVER_BUGFIX is undefined in libopus 1.6.1
 	modulus := int32(pitchHangover)

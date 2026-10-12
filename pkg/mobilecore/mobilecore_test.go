@@ -10,9 +10,9 @@
 // four client apps registered and skychat autostarted, on the lite module set
 // the phone ships — hence the build tag (make mobile-test):
 //
-//	go test -tags mobile,withoutsystray,nomsgpack ./pkg/mobilecore/ -count=3
+//	go test -tags mobile,withoutsystray ./pkg/mobilecore/ -count=3
 //
-// Desktop-only modules (uptime tracker, tpviz, the transportability check,
+// Desktop-only modules (uptime heartbeat, tpviz, the transportability check,
 // system survey) are not restartable in place and are not in that set.
 //
 // The visor dials the production dmsg deployment while it runs; the tests

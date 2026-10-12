@@ -1905,3 +1905,27 @@ func (mc *mockRPCClient) Skyenv() (SkyenvState, error) { return SkyenvState{}, n
 
 // SetSkyenv implements API.
 func (mc *mockRPCClient) SetSkyenv(_ SkyenvEdits) (SkyenvState, error) { return SkyenvState{}, nil }
+
+// EmbeddedServiceControl implements API.
+func (mc *mockRPCClient) EmbeddedServiceControl(_, _ string) error {
+	return nil
+}
+
+// HostBridgeConnect implements API.
+func (mc *mockRPCClient) HostBridgeConnect(string) error { return nil }
+
+// HostBridgeDisconnect implements API.
+func (mc *mockRPCClient) HostBridgeDisconnect() error { return nil }
+
+// HostBridgeStatus implements API.
+func (mc *mockRPCClient) HostBridgeStatus() (HostBridgeStatus, error) {
+	return HostBridgeStatus{}, nil
+}
+
+// HostBridgeForward implements API.
+func (mc *mockRPCClient) HostBridgeForward(host, local string) (HostBridgeForward, error) {
+	return HostBridgeForward{Host: host, Local: local}, nil
+}
+
+// HostBridgeUnforward implements API.
+func (mc *mockRPCClient) HostBridgeUnforward(string) error { return nil }

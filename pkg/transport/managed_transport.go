@@ -81,9 +81,6 @@ type ManagedTransport struct {
 	logUpdates  uint32
 	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
-	// rhdr is readPacket's header scratch. There is one reader per transport.
-	rhdr [routing.PacketHeaderSize]byte
-
 	// openedAt and onClose feed the manager's transport event ring; see
 	// transport_events.go.
 	openedAt time.Time
@@ -95,7 +92,14 @@ type ManagedTransport struct {
 	client      network.Client
 	transport   network.Transport
 	transportCh chan struct{}
+	// push is set by Start when reads go to the push workers. Guarded by
+	// transportMx.
+	push        *pushState
 	transportMx sync.Mutex
+	// sendDig and recvDig hash each direction of the current conn, for the
+	// checkpoints the peer's can be matched against (stream_digest.go).
+	sendDig streamDigest
+	recvDig streamDigest
 	// writeSem serializes writers against each other on the underlying conn, so
 	// a packet reaches the wire as one frame. It is deliberately NOT
 	// transportMx: readPacket takes that one on every read, and holding it
@@ -110,6 +114,13 @@ type ManagedTransport struct {
 	// literals exist in tests — via writeSlot.
 	semOnce  sync.Once
 	writeSem chan struct{}
+
+	// writeQ feeds writeLoop the writes whose caller may give up first.
+	// writePending counts callers about to send on it.
+	writeQOnce    sync.Once
+	writeQ        chan writeReq
+	writerRunning atomic.Bool
+	writePending  atomic.Int32
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -183,6 +194,11 @@ type ManagedTransport struct {
 	// browser visors dial into) until the OS eventually tore the socket down —
 	// hundreds of them, driving the scheduler/timer load.
 	lastRecvNanos atomic.Int64
+
+	// Used only by the readLoop goroutine in readPacket.
+	readHdr        [routing.PacketHeaderSize]byte
+	readDeadlineTp network.Transport
+	readDeadlineAt time.Time
 
 	// pingWriteFails counts consecutive transport-ping WRITES that
 	// errored (e.g. i/o timeout to a peer that vanished). Reset to 0 on
@@ -483,8 +499,8 @@ const unarmedSilenceThreshold = 5 * transportPingInterval // 5 min
 
 // Serve serves and manages the transport.
 //
-// Goroutine layout: one readLoop goroutine plus the Serve goroutine
-// itself, which blocks on the done channel until close fires. The
+// Goroutine layout: the Serve goroutine runs readLoop itself, then waits
+// on the done channel until close fires. The
 // previous per-transport logLoop and pingLoop tickers have been
 // centralized into Manager.runTransportMaintenance — on a hub visor
 // with hundreds of automatic transports those two per-transport
@@ -513,8 +529,6 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		mt.wg.Done()
 	}()
 
-	go mt.readLoop(readCh)
-
 	// On a datagram-capable transport (QUIC), also drain the native datagram
 	// channel into the same readCh so faithful-UDP DatagramPackets the router
 	// dispatches arrive over real unreliable datagrams (no HOL blocking). The
@@ -532,6 +546,8 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		go mt.datagramReadLoop(ctx, dc, readCh)
 	}
 
+	// readLoop returns once the transport closes, or after closing it itself.
+	mt.readLoop(readCh)
 	<-mt.done
 }
 
@@ -603,65 +619,17 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			mt.closeWith("read: " + err.Error())
 			return
 		}
-		// Any received packet (pong, the peer's own ping, or route data) proves
-		// the link is alive — feed the unarmed-silence reaper in tickPing.
-		mt.lastRecvNanos.Store(time.Now().UnixNano())
-		if !p.Type().Known() {
-			mt.malformedFrames.Add(1)
-			head := p
-			if len(head) > 24 {
-				head = head[:24]
-			}
-			log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
-				WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
-				Debug("Malformed frame: unknown packet type (peer framing off)")
+		if !mt.dispatchPacket(p) {
+			continue
 		}
-		// Intercept transport-level ping/pong before forwarding to router.
-		if p.RouteID() == 0 {
-			switch p.Type() {
-			case routing.TransportPingPacket:
-				mt.handleTransportPing(p)
-				continue
-			case routing.TransportPongPacket:
-				mt.handleTransportPong(p)
-				continue
-			case routing.TransportBwProbePacket:
-				mt.handleBwProbe(p)
-				continue
-			case routing.TransportBwAckPacket:
-				mt.handleBwAck(p)
-				continue
-			case routing.CascadeSetupPacket, routing.CascadeAckPacket:
-				if mt.cascadeHandler != nil {
-					mt.cascadeHandler(p, mt)
-				}
-				continue
-			case routing.DHTPacket:
-				if mt.dhtHandler != nil {
-					mt.dhtHandler(p, mt)
-				}
-				continue
-			case routing.SetupRPCPacket:
-				if mt.setupRPCHandler != nil {
-					mt.setupRPCHandler(p, mt)
-				}
-				continue
-			case routing.VisorRPCPacket:
-				if mt.visorRPCHandler != nil {
-					mt.visorRPCHandler(p, mt)
-				}
-				continue
-			case routing.SkynetForwardPacket:
-				if mt.skynetFwdHandler != nil {
-					mt.skynetFwdHandler(p, mt)
-				}
-				continue
-			case routing.AppDirectPacket:
-				if mt.appDirectHandler != nil {
-					mt.appDirectHandler(p, mt)
-				}
-				continue
-			}
+		// Try without a timer first, since time.After costs an allocation and
+		// a timer heap insert for every packet.
+		select {
+		case <-mt.done:
+			return
+		case readCh <- p:
+			continue
+		default:
 		}
 		select {
 		case <-mt.done:
@@ -757,7 +725,7 @@ func (mt *ManagedTransport) sendTransportPing() {
 		mt.log.WithError(err).Debug("Failed to set ping write deadline")
 	}
 	p := routing.MakeTransportPingPacket(time.Now().UnixNano())
-	n, err := tp.Write(p)
+	n, err := mt.sendDig.write(tp, p)
 	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
 		// A persistently failing write means the link is dead in the
@@ -807,7 +775,7 @@ func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
 		mt.log.WithError(err).Debug("Failed to set pong write deadline")
 	}
 	pong := routing.MakeTransportPongPacket(timestamp)
-	n, err := tp.Write(pong)
+	n, err := mt.sendDig.write(tp, pong)
 	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport pong")
 		return
@@ -898,7 +866,7 @@ func (mt *ManagedTransport) sendBwProbe() {
 	}
 	for seq := 0; seq < transportBwProbeTrain; seq++ {
 		p := routing.MakeTransportBwProbePacket(probeID, uint16(seq), transportBwProbeTrain) //nolint:gosec
-		n, err := tp.Write(p)
+		n, err := mt.sendDig.write(tp, p)
 		if err != nil {
 			mt.log.WithError(err).Debug("bw-probe: train write failed")
 			return
@@ -953,7 +921,7 @@ func (mt *ManagedTransport) handleBwProbe(p routing.Packet) {
 		mt.log.WithError(err).Debug("bw-probe: set ack write deadline")
 	}
 	ack := routing.MakeTransportBwAckPacket(probeID, uint64(estBps))
-	if n, err := tp.Write(ack); err != nil {
+	if n, err := mt.sendDig.write(tp, ack); err != nil {
 		mt.log.WithError(err).Debug("bw-probe: ack write failed")
 	} else if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
@@ -1032,7 +1000,12 @@ func (mt *ManagedTransport) closeWith(reason string) {
 		}
 		mt.transport = nil
 	}
+	ps := mt.push
 	mt.transportMx.Unlock()
+	if ps != nil {
+		// Not inline: closeWith can run under the manager's lock, which onEnd takes.
+		go ps.finish()
+	}
 	if mt.queueDeletion != nil {
 		mt.queueDeletion(mt.Entry.ID)
 	} else {
@@ -1060,7 +1033,11 @@ func (mt *ManagedTransport) closeWithoutDeregister() {
 		}
 		mt.transport = nil
 	}
+	ps := mt.push
 	mt.transportMx.Unlock()
+	if ps != nil {
+		go ps.finish()
+	}
 }
 
 // Accept accepts a new underlying transport.
@@ -1183,8 +1160,11 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 	mt.missedPongs.Store(0)
 	mt.pingWriteFails.Store(0)
 
+	mt.sendDig.reset(newTransport)
+	mt.recvDig.reset(newTransport)
 	// Set new underlying transport.
 	mt.transport = newTransport
+	mt.attachPush(newTransport)
 	select {
 	case mt.transportCh <- struct{}{}:
 		mt.log.Debug("Sent signal to 'mt.transportCh'.")
@@ -1301,8 +1281,8 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 // keeping: a routing packet must reach the wire as one frame, not interleaved
 // with another writer's. writeSem keeps exactly that, and nothing else.
 //
-// The write runs in a goroutine so ctx cancellation is respected even when the
-// conn is wedged; tp is passed in so the goroutine never reads the shared
+// A write whose ctx can end runs on writeLoop, so the caller can give up even
+// when the conn is wedged; tp is passed in so writeLoop never reads the shared
 // mt.transport field, which setTransport/close can mutate.
 //
 // Both the QUEUE and the write itself are bounded by ctx now. The deadline
@@ -1313,38 +1293,106 @@ func (mt *ManagedTransport) getUnderlying() network.Transport {
 // router's inbound loop. A caller that says how long it is willing to wait now
 // gets exactly that, and the waiting is where it gives up.
 func (mt *ManagedTransport) writeTo(ctx context.Context, tp network.Transport, packet routing.Packet) (int, error) {
-	type writeResult struct {
-		n   int
-		err error
+	// A context that cannot end leaves the caller nothing to give up on.
+	if ctx.Done() == nil {
+		return mt.writeLocked(ctx, tp, packet)
 	}
-	ch := make(chan writeResult, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
-			}
-		}()
-		sem := mt.writeSlot()
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			ch <- writeResult{0, ctx.Err()}
-			return
-		}
-		defer func() { <-sem }()
-		if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
-			mt.log.WithError(err).Debug("Failed to set write deadline")
-		}
-		n, err := tp.Write(packet)
-		ch <- writeResult{n, err}
-	}()
-
+	req := writeReq{ctx: ctx, tp: tp, packet: packet, res: make(chan writeResult, 1)}
+	q := mt.writeQueue()
+	mt.writePending.Add(1)
+	if mt.writerRunning.CompareAndSwap(false, true) {
+		go mt.writeLoop(q)
+	}
+	select {
+	case q <- req:
+		mt.writePending.Add(-1)
+	case <-ctx.Done():
+		mt.writePending.Add(-1)
+		return 0, ctx.Err()
+	case <-mt.done:
+		mt.writePending.Add(-1)
+		return 0, io.ErrClosedPipe
+	}
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case res := <-ch:
+	case res := <-req.res:
 		return res.n, res.err
 	}
+}
+
+type writeResult struct {
+	n   int
+	err error
+}
+
+type writeReq struct {
+	ctx    context.Context
+	tp     network.Transport
+	packet routing.Packet
+	res    chan writeResult
+}
+
+func (mt *ManagedTransport) writeQueue() chan writeReq {
+	mt.writeQOnce.Do(func() { mt.writeQ = make(chan writeReq) })
+	return mt.writeQ
+}
+
+// writerIdle is how long writeLoop waits for work before it exits.
+const writerIdle = 5 * time.Second
+
+// writeLoop runs queued writes so their callers can stop waiting on a wedged
+// conn. One goroutine per write would cost a thread per packet under TinyGo.
+// It exits when the transport closes or after writerIdle with nothing queued.
+func (mt *ManagedTransport) writeLoop(q chan writeReq) {
+	idle := time.NewTicker(writerIdle)
+	defer idle.Stop()
+	worked := true
+	for {
+		select {
+		case req := <-q:
+			worked = true
+			if err := req.ctx.Err(); err != nil {
+				req.res <- writeResult{0, err}
+				continue
+			}
+			n, err := mt.writeLocked(req.ctx, req.tp, req.packet)
+			req.res <- writeResult{n, err}
+		case <-idle.C:
+			if worked {
+				worked = false
+				continue
+			}
+			// Stop, unless a caller is about to hand over a write.
+			mt.writerRunning.Store(false)
+			if mt.writePending.Load() == 0 || !mt.writerRunning.CompareAndSwap(false, true) {
+				return
+			}
+		case <-mt.done:
+			return
+		}
+	}
+}
+
+// writeLocked takes the write slot, then writes packet to tp under the
+// deadline from ctx. A panic in the conn comes back as an error.
+func (mt *ManagedTransport) writeLocked(ctx context.Context, tp network.Transport, packet routing.Packet) (n int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			n, err = 0, fmt.Errorf("panic in transport write: %v", r)
+		}
+	}()
+	sem := mt.writeSlot()
+	select {
+	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	defer func() { <-sem }()
+	if err := tp.SetWriteDeadline(writeDeadline(ctx)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
+	}
+	return mt.sendDig.write(tp, packet)
 }
 
 // datagramConnOf returns the transport's native datagram channel (QUIC) and
@@ -1415,7 +1463,7 @@ func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
-	n, err := tp.Write(packet)
+	n, err := mt.sendDig.write(tp, packet)
 	<-sem
 	if err != nil {
 		if cur := mt.getUnderlying(); cur != nil && cur != tp {
@@ -1447,38 +1495,36 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Tran
 		}
 	}
 
-	trace := mt.log.IsLevelEnabled(logrus.TraceLevel)
-	if trace {
-		mt.log.WithField("func", "readPacket").Trace("Awaiting packet...")
-	}
-
 	// Set a read deadline to prevent blocking forever on a half-open TCP connection.
 	// Without this, a dead transport causes the readLoop goroutine to leak permanently.
-	// The deadline is refreshed on each read attempt; successful reads reset it.
+	// Refreshing it costs a timer or poller wakeup, so do that only once a quarter
+	// of it has passed, or when the conn under this transport changed.
 	const readTimeout = 3 * time.Minute
-	if err = tp.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debug("Failed to set read deadline")
+	if now := time.Now(); tp != mt.readDeadlineTp || mt.readDeadlineAt.Sub(now) < readTimeout*3/4 {
+		mt.readDeadlineTp, mt.readDeadlineAt = tp, now.Add(readTimeout)
+		if err = tp.SetReadDeadline(mt.readDeadlineAt); err != nil {
+			mt.log.WithError(err).Debug("Failed to set read deadline")
+		}
 	}
 
-	h := mt.rhdr[:]
+	h := mt.readHdr[:]
 	if _, err = io.ReadFull(tp, h); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet header.")
+		mt.log.WithError(err).Debug("Failed to read packet header.")
 		return nil, tp, err
 	}
+	// One allocation per packet: the header and payload share the slice.
 	packet = make(routing.Packet, routing.PacketHeaderSize+int(routing.Packet(h).Size()))
 	copy(packet, h)
 	if _, err = io.ReadFull(tp, packet[routing.PacketHeaderSize:]); err != nil {
-		mt.log.WithField("func", "readPacket").WithError(err).Debugf("Failed to read packet payload.")
+		mt.log.WithError(err).Debug("Failed to read packet payload.")
 		return nil, tp, err
 	}
-
+	mt.recvDig.add(tp, packet)
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
-
-	if trace {
-		mt.log.WithField("func", "readPacket").
-			WithField("type", packet.Type().String()).
+	if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+		mt.log.WithField("type", packet.Type().String()).
 			WithField("rt_id", packet.RouteID()).
 			WithField("size", packet.Size()).
 			Trace("Received packet.")
@@ -1649,4 +1695,71 @@ func (mt *ManagedTransport) MalformedFrames() int64 { return mt.malformedFrames.
 func (mt *ManagedTransport) Attached() bool {
 	a, ok := mt.getTransport().(interface{ Attached() bool })
 	return ok && a.Attached()
+}
+
+// dispatchPacket records p as received and handles the transport level
+// packets. It reports whether p is for the router.
+func (mt *ManagedTransport) dispatchPacket(p routing.Packet) bool {
+	log := mt.log
+	// Any received packet (pong, the peer's own ping, or route data) proves
+	// the link is alive — feed the unarmed-silence reaper in tickPing.
+	mt.lastRecvNanos.Store(time.Now().UnixNano())
+	if !p.Type().Known() {
+		mt.malformedFrames.Add(1)
+		head := p
+		if len(head) > 24 {
+			head = head[:24]
+		}
+		log.WithField("type", byte(p.Type())).WithField("size", p.Size()).
+			WithField("head_hex", fmt.Sprintf("%x", []byte(head))).
+			Debug("Malformed frame: unknown packet type (peer framing off)")
+	}
+	// Intercept transport-level ping/pong before forwarding to router.
+	if p.RouteID() == 0 {
+		switch p.Type() {
+		case routing.TransportPingPacket:
+			mt.handleTransportPing(p)
+			return false
+		case routing.TransportPongPacket:
+			mt.handleTransportPong(p)
+			return false
+		case routing.TransportBwProbePacket:
+			mt.handleBwProbe(p)
+			return false
+		case routing.TransportBwAckPacket:
+			mt.handleBwAck(p)
+			return false
+		case routing.CascadeSetupPacket, routing.CascadeAckPacket:
+			if mt.cascadeHandler != nil {
+				mt.cascadeHandler(p, mt)
+			}
+			return false
+		case routing.DHTPacket:
+			if mt.dhtHandler != nil {
+				mt.dhtHandler(p, mt)
+			}
+			return false
+		case routing.SetupRPCPacket:
+			if mt.setupRPCHandler != nil {
+				mt.setupRPCHandler(p, mt)
+			}
+			return false
+		case routing.VisorRPCPacket:
+			if mt.visorRPCHandler != nil {
+				mt.visorRPCHandler(p, mt)
+			}
+			return false
+		case routing.SkynetForwardPacket:
+			if mt.skynetFwdHandler != nil {
+				mt.skynetFwdHandler(p, mt)
+			}
+			return false
+		case routing.AppDirectPacket:
+			if mt.appDirectHandler != nil {
+				mt.appDirectHandler(p, mt)
+			}
+			return false
+		}
+	}
+	return true
 }

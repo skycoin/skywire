@@ -1,5 +1,3 @@
-//go:build !tinygo || (js && wasm)
-
 package disc
 
 import (

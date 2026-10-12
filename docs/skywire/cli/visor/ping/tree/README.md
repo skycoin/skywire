@@ -7,7 +7,7 @@ discovered visor and rendering the results as a scrollable tree.
 
 The BFS runs server-side via the StreamPingTree gRPC RPC (see
 #2732 / pkg/visor/rpcgrpc/server_ping_tree.go); this command is a
-thin Bubble Tea TUI on top of that stream.
+thin TUI on top of that stream.
 
 The non-interactive sibling 'cli visor ping tree-stream' emits the
 same events as NDJSON on stdout — use that one for CI, coding-agent

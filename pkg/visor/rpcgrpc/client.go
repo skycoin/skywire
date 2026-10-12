@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -32,8 +34,20 @@ type PingClient struct {
 }
 
 // NewPingClient creates a new gRPC ping client
+// NewPingClient creates a new gRPC ping client. It dials through vnet, so in
+// a browser tab the address reaches the in-tab visor, and passthrough keeps
+// gRPC from resolving it over DNS, which a tab does not have.
 func NewPingClient(addr string) (*PingClient, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("passthrough:///"+addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, a string) (net.Conn, error) {
+			timeout := 30 * time.Second
+			if dl, ok := ctx.Deadline(); ok {
+				timeout = time.Until(dl)
+			}
+			return vnet.DialTimeout("tcp", a, timeout)
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
@@ -54,7 +68,7 @@ func (c *PingClient) Close() error {
 // other PingClient methods this returns the raw protoc-generated
 // stream type because callers want event-level control (e.g. the
 // 'cli visor ping tree-stream' command emits NDJSON envelopes, the
-// upcoming Bubble Tea TUI rewire will drive its own update loop).
+// ping tree TUI drives its own update loop).
 // Wrapping in a callback pattern here would force every consumer to
 // re-marshal back to the event type.
 func (c *PingClient) StreamPingTree(ctx context.Context, req *PingTreeRequest) (PingService_StreamPingTreeClient, error) {

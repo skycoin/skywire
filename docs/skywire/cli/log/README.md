@@ -15,6 +15,7 @@ skywire cli log
 ## Subcommands
 
 - [file](file/README.md) — Stream a single visor's /visor.log to stdout
+- [heapdump](heapdump/README.md) — Have a remote visor write a heap dump to its own disk
 - [info](info/README.md) — Fetch a single visor's /node-info survey
 - [level](level/README.md) — Read or temporarily set a remote visor's log level
 - [pprof](pprof/README.md) — Fetch a runtime pprof profile from a remote visor

@@ -1,13 +1,12 @@
-// errors.go defines public error types for the gopus package.
-
 package gopus
 
 import "errors"
 
-// Public error types for encoding and decoding operations.
+// Errors returned by the public encoding, decoding, and streaming APIs.
 var (
 	// ErrInvalidSampleRate indicates a sample rate outside the Opus API set.
-	// Valid sample rates are: 8000, 12000, 16000, 24000, 48000.
+	// Rates are 8000, 12000, 16000, 24000, or 48000 Hz; builds with gopus_qext
+	// also accept 96000 Hz.
 	ErrInvalidSampleRate = errors.New("gopus: invalid sample rate (must be 8000, 12000, 16000, 24000, or 48000)")
 
 	// ErrInvalidChannels indicates an invalid channel count.
@@ -17,8 +16,9 @@ var (
 	// ErrInvalidSampleFormat indicates an invalid streaming PCM format.
 	ErrInvalidSampleFormat = errors.New("gopus: invalid sample format")
 
-	// ErrInvalidMaxPacketSamples indicates an invalid max packet sample cap.
-	ErrInvalidMaxPacketSamples = errors.New("gopus: invalid max packet samples (must be > 0)")
+	// ErrInvalidMaxPacketSamples indicates a negative max packet sample cap or
+	// one whose decoder scratch length cannot fit in int-sized storage.
+	ErrInvalidMaxPacketSamples = errors.New("gopus: invalid max packet samples (must be nonnegative and fit decoder scratch)")
 
 	// ErrInvalidMaxPacketBytes indicates an invalid max packet size cap.
 	ErrInvalidMaxPacketBytes = errors.New("gopus: invalid max packet bytes (must be > 0)")
@@ -26,8 +26,9 @@ var (
 	// ErrPacketTooLarge indicates the packet exceeds configured limits.
 	ErrPacketTooLarge = errors.New("gopus: packet exceeds configured limits")
 
-	// ErrBufferTooSmall indicates the output buffer is too small for the decoded frame.
-	// The buffer must be at least frameSize * channels samples.
+	// ErrBufferTooSmall indicates an encode packet budget or decode PCM buffer is
+	// too small for the operation. Decode buffers must hold frameSize * channels
+	// samples; encode buffers must hold the resulting packet.
 	ErrBufferTooSmall = errors.New("gopus: output buffer too small")
 
 	// ErrInvalidFrameSize indicates the input frame size doesn't match expected.
@@ -92,6 +93,11 @@ var (
 	// ErrInvalidArgument indicates one or more function arguments are invalid.
 	ErrInvalidArgument = errors.New("gopus: invalid argument")
 
+	// ErrInternalError indicates malformed packet extensions prevent a packet
+	// operation from collecting extension data. Repacketizer.OutRange and
+	// PacketPad return it for this extension-processing failure.
+	ErrInternalError = errors.New("gopus: internal error")
+
 	// ErrNilPacketReader indicates a nil PacketReader was supplied to NewReader.
 	ErrNilPacketReader = errors.New("gopus: nil packet reader")
 
@@ -106,7 +112,7 @@ var (
 	// build-time extension is not enabled in the current gopus build.
 	ErrOptionalExtensionUnavailable = errors.New("gopus: optional extension unavailable in this build")
 
-	// ErrUnimplemented indicates the requested functionality is not implemented yet.
+	// ErrUnimplemented indicates that the requested functionality is unsupported.
 	ErrUnimplemented = errors.New("gopus: feature not implemented")
 )
 
