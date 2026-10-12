@@ -349,7 +349,7 @@ func (c *quicClient) listen() (net.Listener, error) {
 			udpConn, err = c.socks().ListenPacket("udp", confPort)
 			if err != nil {
 				c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
-				c.port++
+				c.port = nextListenPort(err, c.port)
 				confPort = fmt.Sprintf(":%d", c.port)
 				continue
 			}
