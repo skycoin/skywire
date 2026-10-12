@@ -306,6 +306,21 @@
 		}
 	}
 
+	// ---- local network access through the page --------------------------
+	// A worker cannot raise the browser's local network access prompt, which a
+	// page reaching loopback or the LAN from a public origin needs. The page
+	// can, so __skywireLocalProbe(url) opens a WebSocket to url there and
+	// resolves once it opened or failed, and a dial from here that follows
+	// finds the permission decided. See the Local Network Access spec.
+	var lnaSeq = 1, lnaCalls = {};
+	self.__skywireLocalProbe = function (url) {
+		return new Promise(function (resolve) {
+			var id = lnaSeq++;
+			lnaCalls[id] = resolve;
+			post({ t: 'lna', id: id, url: url });
+		});
+	};
+
 	// tree answers the page's mount of this thread's whole tree.
 	var tree = globalThis.SkywireFSTree(post);
 
@@ -334,6 +349,11 @@
 			if (!interrupt(m.id)) pendingKill[m.id] = true;
 			return;
 		case 'rtc': rtcEvent(m); return;
+		case 'lnaRet': {
+			var lr = lnaCalls[m.id];
+			if (lr) { delete lnaCalls[m.id]; lr(!!m.ok); }
+			return;
+		}
 		case 'vopen': openConn(m.cid, m.port); return;
 		case 'vdata': {
 			var idv = conns[m.cid];
