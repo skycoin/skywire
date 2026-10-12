@@ -8,6 +8,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -225,14 +227,14 @@ var startCmd = &cobra.Command{
 						return
 					case appserver.AppStatusErrored:
 						fmt.Printf("\nError: %s\n", state.DetailedStatus)
-						os.Exit(1)
+						cmdutil.Exit(1)
 					case appserver.AppStatusStopped:
 						if state.DetailedStatus != "" {
 							fmt.Printf("\nStopped: %s\n", state.DetailedStatus)
 						} else {
 							fmt.Println("\nStopped unexpectedly")
 						}
-						os.Exit(1)
+						cmdutil.Exit(1)
 					}
 					break
 				}
@@ -315,7 +317,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 

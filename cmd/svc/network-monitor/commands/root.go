@@ -153,7 +153,7 @@ HTTP Endpoints:
 
 		s, err := store.New(storeConfig)
 		if err != nil {
-			log.Fatal("failed to initialize store: ", err)
+			cmdutil.Fatal("failed to initialize store: ", err)
 		}
 
 		mLogger := logging.NewMasterLogger()
@@ -249,10 +249,10 @@ var deregisterCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		// Validate required flags
 		if deregPK == "" {
-			log.Fatal("--pk is required: specify the public key(s) to deregister")
+			cmdutil.Fatal("--pk is required: specify the public key(s) to deregister")
 		}
 		if deregType == "" && !deregAllTypes {
-			log.Fatal("--type or --all-types is required: specify the service type(s)")
+			cmdutil.Fatal("--type or --all-types is required: specify the service type(s)")
 		}
 
 		// Parse public keys to deregister
@@ -265,12 +265,12 @@ var deregisterCmd = &cobra.Command{
 			}
 			var pk cipher.PubKey
 			if err := pk.Set(pkStr); err != nil {
-				log.Fatalf("invalid public key %q: %v", pkStr, err)
+				cmdutil.Fatalf("invalid public key %q: %v", pkStr, err)
 			}
 			pks = append(pks, pk)
 		}
 		if len(pks) == 0 {
-			log.Fatal("no valid public keys provided")
+			cmdutil.Fatal("no valid public keys provided")
 		}
 
 		// Determine service types to deregister from
@@ -284,7 +284,7 @@ var deregisterCmd = &cobra.Command{
 				sType = "skysocks"
 			}
 			if sType != "vpn" && sType != "visor" && sType != "skysocks" {
-				log.Fatalf("invalid service type %q: must be vpn, visor, or skysocks (proxy)", deregType)
+				cmdutil.Fatalf("invalid service type %q: must be vpn, visor, or skysocks (proxy)", deregType)
 			}
 			serviceTypes = []string{sType}
 		}
@@ -294,19 +294,19 @@ var deregisterCmd = &cobra.Command{
 			// Direct signing mode - use the provided secret key
 			var nmSecKey cipher.SecKey
 			if err := nmSecKey.Set(deregNMSK); err != nil {
-				log.Fatalf("invalid secret key: %v", err)
+				cmdutil.Fatalf("invalid secret key: %v", err)
 			}
 
 			// Derive public key from secret key
 			nmPubKey, err := nmSecKey.PubKey()
 			if err != nil {
-				log.Fatalf("failed to derive public key from secret key: %v", err)
+				cmdutil.Fatalf("failed to derive public key from secret key: %v", err)
 			}
 
 			// Generate signature (sign the public key hex with the secret key)
 			nmSign, err := cipher.SignPayload([]byte(nmPubKey.Hex()), nmSecKey)
 			if err != nil {
-				log.Fatalf("failed to sign payload: %v", err)
+				cmdutil.Fatalf("failed to sign payload: %v", err)
 			}
 
 			// Convert pks to string slice for direct API call
@@ -329,7 +329,7 @@ var deregisterCmd = &cobra.Command{
 			const rpcDialTimeout = time.Second * 5
 			conn, err := net.DialTimeout("tcp", deregRPCAddr, rpcDialTimeout)
 			if err != nil {
-				log.Fatalf("RPC connection failed; is skywire running?: %v", err)
+				cmdutil.Fatalf("RPC connection failed; is skywire running?: %v", err)
 			}
 			rpcClient := visorapi.NewRPCClient(logger, conn, visorapi.RPCPrefix, 30*time.Second)
 			defer rpcClient.Close() //nolint:errcheck
@@ -391,6 +391,6 @@ func deregisterFromSD(sdURL, serviceType string, pks []string, nmPK cipher.PubKe
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("failed to execute command: ", err)
+		cmdutil.Fatal("failed to execute command: ", err)
 	}
 }

@@ -3,7 +3,8 @@ package commands
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		_, err := script.Echo(string(dmsg.DmsghttpJSON)).JQ(`.prod.dmsg_servers`).Stdout()
 		if err != nil {
-			log.Fatal("Failed to execute command: ", err)
+			cmdutil.Fatal("Failed to execute command: ", err)
 		}
 	},
 }

@@ -4,9 +4,10 @@ package commands
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"runtime"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 
@@ -65,5 +66,5 @@ func printEnvs(envfile string) {
 		envfile = strings.Join(envfileslice, "\n")
 	}
 	fmt.Println(envfile)
-	os.Exit(0)
+	cmdutil.Exit(0)
 }

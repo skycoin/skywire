@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"regexp"
@@ -374,7 +373,7 @@ A target scheme that disagrees with an explicit --transport errors.`,
 			resp, err := (&tcpCli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, ptyExecEnv, nil, timeout)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			reportExecResult(cmd, resp)
 			return nil
@@ -457,7 +456,7 @@ A target scheme that disagrees with an explicit --transport errors.`,
 		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		reportExecResult(cmd, resp)
 		return nil
@@ -486,10 +485,10 @@ func reportExecResult(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	}
 	if resp.TimedOut {
 		fmt.Fprintf(cmd.ErrOrStderr(), "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
-		os.Exit(124)
+		cmdutil.Exit(124)
 	}
 	if resp.ExitCode != 0 {
-		os.Exit(resp.ExitCode)
+		cmdutil.Exit(resp.ExitCode)
 	}
 }
 
@@ -565,11 +564,11 @@ func resolveTCPIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "pty --visor-key: read %s: %v\n", confPath, err) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if conf.SK == zero {
 			fmt.Fprintf(os.Stderr, "pty --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		sk = conf.SK
 	}
@@ -583,7 +582,7 @@ func resolveTCPIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 		// is deterministic. Treat unexpected failure as fatal — the
 		// caller can't proceed without a valid identity.
 		fmt.Fprintf(os.Stderr, "pty --via: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	return pk, sk
 }
@@ -599,14 +598,14 @@ var ptyUICmd = &cobra.Command{
 			if ptyPath != "" {
 				conf, err := visorconfig.ReadFile(ptyPath)
 				if err != nil {
-					log.Fatal("Failed to read in config file:", err)
+					cmdutil.Fatal("Failed to read in config file:", err)
 				}
 				ptyURL = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", conf.PK.Hex())
 			} else {
 				client := ptyRPCClient(cmd.Flags())
 				overview, err := client.Overview()
 				if err != nil {
-					log.Fatal("Failed to connect; is skywire running?\n", err)
+					cmdutil.Fatal("Failed to connect; is skywire running?\n", err)
 				}
 				ptyURL = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", overview.PubKey.Hex())
 			}
@@ -614,7 +613,7 @@ var ptyUICmd = &cobra.Command{
 			ptyURL = fmt.Sprintf("http://127.0.0.1:8000/pty/%s", ptyPK)
 		}
 		if err := webbrowser.Open(ptyURL); err != nil {
-			log.Fatal("Failed to open dmsgpty UI in browser:", err)
+			cmdutil.Fatal("Failed to open dmsgpty UI in browser:", err)
 		}
 	},
 }

@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
 )
@@ -82,7 +84,7 @@ Needs a browser started with --remote-debugging-port.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if err := probeRun(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

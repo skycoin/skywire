@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/peterh/liner"
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
@@ -540,20 +542,20 @@ var stopCmd = &cobra.Command{
 func runInteractive(cmd *cobra.Command, args []string) {
 	if rpcAddress == "" {
 		fmt.Fprintln(os.Stderr, "empty address")
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	r, err := getCLIRPCClient()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	defer r.Close() //nolint:errcheck,gosec
 
 	if execCmd != "" {
 		if err := executeInteractiveCommand(r, execCmd); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		return
 	}
@@ -595,7 +597,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 		if err != nil {
 			if err != liner.ErrPromptAborted {
 				fmt.Fprintln(os.Stderr, "fatal error:", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			return
 		}

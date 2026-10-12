@@ -4,7 +4,6 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
@@ -100,7 +99,7 @@ func printFilteredJSON(keepHTTP, keepDmsg bool) {
 	}
 	out, err := json.MarshalIndent(wrapper, "", "  ")
 	if err != nil {
-		log.Fatal(err)
+		cmdutil.Fatal(err)
 	}
 	fmt.Printf("%s\n", string(out))
 }

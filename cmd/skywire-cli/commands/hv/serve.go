@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -75,7 +77,7 @@ page never asks anyone to type a secret key.`,
 			js, err := os.ReadFile(filepath.Clean(serveExecTinyGoJS))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "read --exec-js-tinygo:", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			wasmhv.WasmExecTinyGoJS = js
 		}
@@ -104,7 +106,7 @@ page never asks anyone to type a secret key.`,
 			BootReportFile:   serveBootReports,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

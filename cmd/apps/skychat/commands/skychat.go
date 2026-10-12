@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -752,7 +751,7 @@ var RootCmd = &cobra.Command{
 		ctx := context.Background()
 
 		if err := RunSkychat(ctx, args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

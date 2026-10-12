@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 )
 
@@ -295,7 +297,7 @@ func ncProbeTCP(host, port string) error {
 		}
 		// Match nc's exit-1 convention without surfacing a Go error
 		// trace to stderr.
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	_ = conn.Close() //nolint:errcheck
 	if ncVerbose {

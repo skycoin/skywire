@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -45,7 +47,7 @@ func genCompletion(cmd *cobra.Command) {
 	//error on unrecognized
 	if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
 		fmt.Println("Invalid completion specified:", completion)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 }

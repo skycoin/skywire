@@ -19,6 +19,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/skycoin/skywire/pkg/util/treeprobe"
 )
 
@@ -34,7 +36,7 @@ func main() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "treeprobe: parse: %v\n", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		a.Observe(d)
 		events++
@@ -43,7 +45,7 @@ func main() {
 	rows, err := treeprobe.WriteCSV(os.Stdout, a)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "treeprobe: write csv: %v\n", err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 
 	// Summary on stderr — the driver can grep it without polluting

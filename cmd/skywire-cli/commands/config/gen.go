@@ -116,12 +116,12 @@ var pkFromSKCmd = &cobra.Command{
 		var sk cipher.SecKey
 		if err := sk.Set(args[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		pk, err := sk.PubKey()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliconfig.Keypair{PublicKey: pk.Hex()}))
 	},
@@ -576,7 +576,7 @@ var genConfigCmd = &cobra.Command{
 			} else {
 				fmt.Println(envfile)
 			}
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -587,7 +587,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 			internal.Catch(cmd.Flags(), cmd.Help())
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		// Re-resolve ${OUTPUT} before anything reads `output`.
 		//

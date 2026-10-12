@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -85,14 +87,14 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to connect to visor RPC: %v\n", err)
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 
 			if vizStatus {
 				status, err := rpcClient.UIServerStatus()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to get UI server status: %v\n", err)
-					os.Exit(1)
+					cmdutil.Exit(1)
 				}
 				if status.Running {
 					fmt.Printf("UI server is running at http://%s\n", status.LocalAddr)
@@ -105,7 +107,7 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			if vizStop {
 				if err := rpcClient.StopUIServer(); err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to stop UI server: %v\n", err)
-					os.Exit(1)
+					cmdutil.Exit(1)
 				}
 				fmt.Println("UI server stopped")
 				return
@@ -116,7 +118,7 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 				addr := fmt.Sprintf("%s:%d", vizAddr, vizPort)
 				if err := rpcClient.StartUIServer(addr); err != nil {
 					fmt.Fprintf(os.Stderr, "Failed to start UI server: %v\n", err)
-					os.Exit(1)
+					cmdutil.Exit(1)
 				}
 				fmt.Printf("Visor UI server started at http://%s\n", addr)
 				fmt.Println("The visor's embedded UI server has direct access to local transport/route data.")
@@ -190,7 +192,7 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 
 		if err := server.ListenAndServe(); err != nil {
 			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

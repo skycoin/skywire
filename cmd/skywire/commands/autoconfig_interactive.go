@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"strconv"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
@@ -62,7 +64,7 @@ func autoconfigInteractiveRun(_ *cobra.Command, _ []string) {
 	if autoconfigIPort != 0 {
 		if err := autoconfigServeWeb(path); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		return
 	}
@@ -70,14 +72,14 @@ func autoconfigInteractiveRun(_ *cobra.Command, _ []string) {
 	act, err := autoconfigui.RunTUI(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	switch act {
 	case autoconfigui.ActionPrint:
 		cmd, err := m.Command()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		fmt.Println(cmd)
 	case autoconfigui.ActionApply:
@@ -90,7 +92,7 @@ func autoconfigInteractiveRun(_ *cobra.Command, _ []string) {
 		fmt.Print(out)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
@@ -81,7 +82,7 @@ var RootCmd = &cobra.Command{
 		}()
 
 		if err := run(ctx); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }
@@ -89,7 +90,7 @@ var RootCmd = &cobra.Command{
 // Execute is invoked from the package-main entrypoint.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		cmdutil.Fatal(err)
 	}
 }
 

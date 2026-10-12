@@ -10,6 +10,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/skycoin/skywire/pkg/hostbridge"
 )
 
@@ -25,7 +27,7 @@ func main() {
 	t, err := hostbridge.ResolveToken(*token, *tokenFile)
 	if err != nil {
 		_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 	// An explicit token keeps no files, so the pairing stays in memory too.
 	pairFile := ""
@@ -35,7 +37,7 @@ func main() {
 	if *unpair {
 		if err := hostbridge.Unpair(pairFile); err != nil {
 			_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	}
 	cfg := hostbridge.Config{Token: t, Origins: hostbridge.SplitOrigins(*origin), PairFile: pairFile}
@@ -47,6 +49,6 @@ func main() {
 	})
 	if err != nil {
 		_, _ = os.Stderr.WriteString("hostbridge: " + err.Error() + "\n") //nolint:errcheck
-		os.Exit(1)
+		cmdutil.Exit(1)
 	}
 }

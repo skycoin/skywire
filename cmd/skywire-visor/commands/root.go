@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -196,7 +198,7 @@ var RootCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
 			}
 			fmt.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		// -z --completion
 		genCompletion(cmd)
