@@ -97,6 +97,12 @@ func (s *Server) handle(c net.Conn) {
 	}
 	if err != nil {
 		s.logf("refused %s: %v", c.RemoteAddr(), err)
+		// Closing the session at once can drop the refusal before it is sent.
+		// The tab hangs up once it has read it.
+		select {
+		case <-sess.CloseChan():
+		case <-time.After(helloTimeout):
+		}
 		return
 	}
 	s.logf("visor %s connected from %s", pk, c.RemoteAddr())
