@@ -1,5 +1,5 @@
 {
-  "body": "{\"csrf_token\":\"eyJOb25jZSI6IlVTMzBNUEpJdVFDcitVZzdBRklFSXRJK0NaN0RUTXc1cXFETTlFbWc2Q01Sa3ZMTTBKekgwWWt0elJKaXZja2FWKzdJbTM2b1l5UGd4bEduUGVwc2h3PT0iLCJFeHBpcmVzQXQiOiIyMDI2LTA5LTMwVDA2OjA4OjAxLjkwMjk3NCswODowMCJ9.SevkGRV4c2zqktc8po1Co8ap9rZG-dEDaHAEIiN9Do0\"}\n",
+  "body": "{\"csrf_token\":\"eyJOb25jZSI6InNJRGN2M3dOMWJuQ2NWQTVyMzFnNFpuR3BvYU90d1JmaHpXYi9pb1ZaYWsxMjJlajZ2T2xZUE9LYVRpdXQ2cUthengxR3pEY0IrblNFanZOd0tKSWJ3PT0iLCJFeHBpcmVzQXQiOiIyMDI2LTEwLTEyVDExOjExOjU2Ljk1MjE5MiswODowMCJ9.vP-i3aZ6P0FGPjmWJEYIFVCu25KtOyTYmSdM-P53JrA\"}\n",
   "headers": {
     "content-type": "application/json"
   },

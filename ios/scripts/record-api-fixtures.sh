@@ -35,11 +35,13 @@ if curl -s -m 2 "$BASE/api/ping" >/dev/null; then
   exit 1
 fi
 
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/skywire-fixtures.XXXXXX")
+# No trailing slash, or the path the visor writes is not the one scrubbed below.
+TMP=${TMPDIR:-/tmp}
+WORK=$(mktemp -d "${TMP%/}/skywire-fixtures.XXXXXX")
 JAR=$WORK/cookies
 VISOR_PID=
 cleanup() {
-  [[ -n $VISOR_PID ]] && kill "$VISOR_PID" 2>/dev/null && wait "$VISOR_PID" 2>/dev/null
+  [[ -n $VISOR_PID ]] && kill "$VISOR_PID" 2>/dev/null && { wait "$VISOR_PID" 2>/dev/null || true; }
   rm -rf "${WORK:?}"
 }
 trap cleanup EXIT
@@ -136,6 +138,28 @@ SETTINGS=$(curl -s -b "$JAR" "$BASE/api/visors/$PK/router-settings" |
 rec put-router-settings PUT "/api/visors/$PK/router-settings" "$SETTINGS" csrf
 rec svc-fetch-proxy GET "/api/svc-fetch?service=sd&path=$(jq -rn '"/api/services?type=proxy"|@uri')"
 rec dmsg-reconnect POST /api/dmsg/reconnect '{}' csrf
+# Skymail. Mail to this visor's own address is delivered locally, so a lone
+# core answers every route; example.com is refused before any dial.
+rec mail-status GET "/api/visors/$PK/mail"
+ADDRESS=$(curl -s -b "$JAR" "$BASE/api/visors/$PK/mail" | jq -r .address_dmsg)
+rec mail-send POST "/api/visors/$PK/mail/send" "$(jq -cn --arg to "$ADDRESS" '{to: [$to], subject: "Fixture",
+  body: "Hello from the recorder.\n", attachments: [{name: "note.txt", content_type: "text/plain", data: "aGVsbG8K"}]}')" csrf
+rec mail-send-refused POST "/api/visors/$PK/mail/send" '{"to":["bob@example.com"],"subject":"Nowhere","body":"x"}' csrf
+rec mail-inbox GET "/api/visors/$PK/mail/INBOX"
+rec mail-sent GET "/api/visors/$PK/mail/Sent"
+ID=$(curl -s -b "$JAR" "$BASE/api/visors/$PK/mail/INBOX" | jq -r '.[0].id')
+rec mail-read GET "/api/visors/$PK/mail/INBOX/$ID"
+rec mail-attachment GET "/api/visors/$PK/mail/INBOX/$ID/attachments/0"
+rec mail-whitelist PUT "/api/visors/$PK/mail/whitelist" "{\"pks\":[\"$PK\"]}" csrf
+rec mail-settings-off PUT "/api/visors/$PK/mail/settings" '{"enable":false}' csrf
+rec mail-status-off GET "/api/visors/$PK/mail"
+curl -s -b "$JAR" -X PUT -H "X-CSRF-Token: $(curl -s "$BASE/api/csrf" | jq -r .csrf_token)" \
+  -H 'Content-Type: application/json' --data '{"enable":true}' "$BASE/api/visors/$PK/mail/settings" >/dev/null
+for _ in $(seq 1 20); do
+  [[ $(curl -s -b "$JAR" "$BASE/api/visors/$PK/mail" | jq -r .running) == true ]] && break
+  sleep 0.5
+done
+rec mail-delete DELETE "/api/visors/$PK/mail/INBOX/$ID" "" csrf
 rec restart POST "/api/visors/$PK/restart" '{}' csrf
 rm -f "$RAW/.h" "$RAW/.b"
 

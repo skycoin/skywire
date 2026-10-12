@@ -4,6 +4,6 @@
     "content-type": "application/json"
   },
   "method": "GET",
-  "path": "/api/visors/0357910e5680bad3fedb1d9c9a9a8f273f2f4ad080f0179fdd27999667887a74dd/apps/skychat/logs?since=2026-09-30T06%3A07%3A11.3261%2B08%3A00",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/apps/skychat/logs?since=2026-10-12T11%3A11%3A06.5244%2B08%3A00",
   "status": 500
 }

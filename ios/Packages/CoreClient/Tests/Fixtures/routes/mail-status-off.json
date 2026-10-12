@@ -1,0 +1,9 @@
+{
+  "body": "{\"enabled\":false,\"running\":false,\"reason\":\"disabled\",\"limits\":{\"max_message_size\":1048576,\"max_total_size\":16777216,\"max_age\":604800000000000},\"usage\":0,\"whitelist\":[],\"unread\":0,\"total\":0}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/mail",
+  "status": 200
+}

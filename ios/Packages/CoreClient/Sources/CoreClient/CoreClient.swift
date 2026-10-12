@@ -394,6 +394,72 @@ public actor CoreClient {
         return try Self.decode(RouterSettings.self, response, path)
     }
 
+    // MARK: Mail
+
+    /// For a send, which the visor delivers before it answers: a dmsg dial and
+    /// an SMTP exchange per recipient, and a route setup for a .skynet address
+    /// (Android: 90 s read, 95 s call).
+    static let mailSendTimeout: TimeInterval = 95
+
+    public func mailStatus() async throws -> MailStatus {
+        try await get("/api/visors/\(try await localPK())/mail")
+    }
+
+    public func mailList(_ folder: String) async throws -> [MailSummary] {
+        try await getList(try await mailPath(folder))
+    }
+
+    /// The message reduced to text; reading it marks it read.
+    public func mailRead(_ folder: String, id: String) async throws -> MailMessage {
+        try await get(try await mailPath(folder, id))
+    }
+
+    /// Attachment `n` of a message, as its bytes.
+    public func mailAttachment(_ folder: String, id: String, n: Int) async throws -> Data {
+        let path = try await mailPath(folder, id) + "/attachments/\(n)"
+        let response = try await authed(.get, path)
+        try Self.check(response, "GET", path)
+        return response.body
+    }
+
+    public func mailDelete(_ folder: String, id: String) async throws {
+        let path = try await mailPath(folder, id)
+        let response = try await authed(.delete, path)
+        try Self.check(response, "DELETE", path)
+    }
+
+    /// Delivers now and answers per recipient. A send that reached nobody
+    /// (502) comes back as a result with `error` set, not as a throw, so the
+    /// screen can say which address failed and why.
+    public func mailSend(_ message: MailOutgoing) async throws -> MailSendResult {
+        let path = "/api/visors/\(try await localPK())/mail/send"
+        let response = try await authed(.post, path, body: try JSONEncoder().encode(message), timeout: Self.mailSendTimeout)
+        if let result = try? JSONDecoder().decode(MailSendResult.self, from: response.body),
+           response.isSuccess || !result.error.isEmpty {
+            return result
+        }
+        throw Self.httpError(response, "POST", path)
+    }
+
+    /// Who may deliver, as hex keys; empty accepts everyone.
+    public func mailSetWhitelist(_ pks: [String]) async throws {
+        let path = "/api/visors/\(try await localPK())/mail/whitelist"
+        let response = try await authed(.put, path, body: try JSONSerialization.data(withJSONObject: ["pks": pks]))
+        try Self.check(response, "PUT", path)
+    }
+
+    /// Turns the mailbox on or off at once; the visor keeps the choice with the mail.
+    public func mailSetEnabled(_ enabled: Bool) async throws {
+        let path = "/api/visors/\(try await localPK())/mail/settings"
+        let response = try await authed(.put, path, body: try JSONSerialization.data(withJSONObject: ["enable": enabled]))
+        try Self.check(response, "PUT", path)
+    }
+
+    private func mailPath(_ folder: String, _ id: String? = nil) async throws -> String {
+        let base = "/api/visors/\(try await localPK())/mail/\(Self.queryEncode(folder))"
+        return id.map { "\(base)/\(Self.queryEncode($0))" } ?? base
+    }
+
     // MARK: Voice calls
 
     /// Calls ringing right now, awaiting an answer, as the visor lists them

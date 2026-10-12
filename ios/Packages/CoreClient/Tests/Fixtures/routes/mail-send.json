@@ -1,0 +1,9 @@
+{
+  "body": "{\"id\":\"1791774696435664000.Me076692ed23f4667.skymail\",\"message_id\":\"<1791774696434924000.M778f0d34b2e5f76d.skymail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg>\",\"recipients\":[{\"rcpt\":\"mail@ak623g2y5qylsdvspzsvgc7rcwnyagob7zyplyg2etsroggeyu7s6.dmsg\",\"via\":\"local\"}]}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "POST",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/mail/send",
+  "status": 200
+}

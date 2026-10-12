@@ -11,7 +11,10 @@ the routes in the order a first launch reaches them.
 The tests serve these through `FakeVisor`: an exchange is found by its exact
 request line, behind the server's session rules (session cookie, CSRF on
 mutations, account creation, password check). The per-visor paths therefore
-carry the recording's public key, and the tests address the visor by it.
+carry the recording's public key, and the tests address the visor by it. A
+route recorded in two states (the mailbox on and off, a send delivered and one
+refused) has one exchange per state; the extra one is served only when a test
+asks for it (`FakeVisor.serveVariant`).
 
 Before the files are written, the script replaces what identifies the
 recording machine: its public and LAN addresses and host name become

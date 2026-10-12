@@ -1,5 +1,5 @@
 {
-  "body": "{\"public_key\":\"0357910e5680bad3fedb1d9c9a9a8f273f2f4ad080f0179fdd27999667887a74dd\",\"build\":{\"go\":\"go1.26.4\",\"version\":\"v1.3.96-211-g723936ec7-723936ec7c53\",\"commit\":\"723936ec7c537789028e69992caf092bb37629a5\",\"date\":\"2026-09-29T21:47:52Z\",\"os\":\"darwin\",\"arch\":\"arm64\",\"build_tags\":\"mobile,withoutsystray,nomsgpack\"},\"dmsg_connected\":false,\"dmsg_sessions\":0}\n",
+  "body": "{\"public_key\":\"02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f\",\"build\":{\"go\":\"go1.27.1\",\"version\":\"v1.3.100-169-g23ec5807a-23ec5807a25e\",\"commit\":\"23ec5807a25ebc366e3a6f77a08044ff41e41bfa\",\"date\":\"2026-10-12T03:04:28Z\",\"os\":\"darwin\",\"arch\":\"arm64\",\"build_tags\":\"mobile,withoutsystray\"},\"dmsg_connected\":false,\"dmsg_sessions\":0}\n",
   "headers": {
     "content-type": "application/json"
   },
