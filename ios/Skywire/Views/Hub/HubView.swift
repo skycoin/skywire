@@ -96,8 +96,15 @@ struct HubView: View {
                             subtitle: model.skyBalance.map { Text(verbatim: L10n.format("hub_wallet_balance", $0)) } ?? Text("hub_wallet_sub"),
                             status: nil) { navigator.openFromHub(.wallet) }
                 .accessibilityIdentifier("hub-wallet"))
+        case .mail:
+            AnyView(WideAppCard(icon: MI.roundedEmail, name: L10n.format("hub_name_beta", L10n.text("app_skymail")),
+                                subtitle: model.unreadMail > 0 ? Text(verbatim: L10n.format("hub_mail_unread", model.unreadMail)) : Text("hub_mail_sub"),
+                                badge: model.unreadMail) {
+                navigator.push(.mail)
+            }
+            .accessibilityIdentifier("hub-mail"))
         case .fleet:
-            AnyView(WideAppCard(icon: MI.roundedHub, name: L10n.key("app_fleet"),
+            AnyView(WideAppCard(icon: MI.roundedHub, name: L10n.text("app_fleet"),
                                 subtitle: model.fleetOnline.map { Text(verbatim: L10n.format("hub_fleet_connected", $0)) } ?? Text("hub_fleet_sub")) {
                 navigator.push(.fleet)
             }
@@ -122,7 +129,7 @@ enum HubFilter: CaseIterable {
 }
 
 private enum HubTile: CaseIterable {
-    case socks, dex, chat, wallet, fleet, meet
+    case socks, dex, chat, wallet, mail, fleet, meet
 
     static let all = HubTile.allCases
 
@@ -130,11 +137,11 @@ private enum HubTile: CaseIterable {
         switch self {
         case .socks, .fleet: .network
         case .dex, .wallet: .finance
-        case .chat, .meet: .social
+        case .chat, .mail, .meet: .social
         }
     }
 
-    var wide: Bool { self == .fleet || self == .meet }
+    var wide: Bool { self == .mail || self == .fleet || self == .meet }
 }
 
 /// The hub's chip: primary when selected, a hairline pill otherwise.
@@ -233,8 +240,9 @@ private struct AppCard: View {
 
 private struct WideAppCard: View {
     let icon: String
-    let name: LocalizedStringKey
+    let name: String
     let subtitle: Text
+    var badge = 0
     let action: () -> Void
 
     var body: some View {
@@ -242,11 +250,14 @@ private struct WideAppCard: View {
             HStack(spacing: 13) {
                 IconTile(icon: icon)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(name).skyText(.titleMedium).foregroundStyle(Color.skyOnSurface).lineLimit(1)
+                    Text(verbatim: name).skyText(.titleMedium).foregroundStyle(Color.skyOnSurface).lineLimit(1)
                     subtitle.skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1).padding(.top, 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                MaterialIcon(MI.roundedChevronRight, size: 20).foregroundStyle(Color.skyOutline)
+                HStack(spacing: 8) {
+                    if badge > 0 { CountBadge(count: badge) }
+                    MaterialIcon(MI.roundedChevronRight, size: 20).foregroundStyle(Color.skyOutline)
+                }
             }
             .padding(14)
             .background(Color.skySurfaceVariant, in: .sky(SkyRadius.large))
@@ -418,10 +429,12 @@ final class HubModel: ObservableObject {
     @Published private(set) var minHops: Int?
     @Published private(set) var skyBalance: String?
     @Published private(set) var fleetOnline: Int?
+    /// Unread mail in the visor's Skymail inbox.
+    @Published private(set) var unreadMail = 0
 
-    /// Android's "installed" count: the five tiles that run, SkyVPN and SkyDNS.
-    static let installed = 7
-    static let apps = [SocksProfile.app, SkychatProfile.app, SkydexProfile.app]
+    /// Android's "installed" count: the six tiles that run, SkyVPN and SkyDNS.
+    static let installed = 8
+    static let apps = [SocksProfile.app, SkychatProfile.app, SkydexProfile.app, MailProfile.app]
     static let pollInterval: Duration = .seconds(5)
 
     var running: Int { states.values.filter(\.running).count }
@@ -446,6 +459,7 @@ final class HubModel: ObservableObject {
                 }
             }
             readBalance()
+            await countMail(app)
             if tick % 3 == 0 { await countFleet(app) }
             tick += 1
             do { try await Task.sleep(for: Self.pollInterval) } catch { return }
@@ -468,6 +482,17 @@ final class HubModel: ObservableObject {
         skyBalance = store.activeWalletId(CoinSpec.sky.id)
             .flatMap { store.cachedSnapshot($0) }
             .map { Amounts.format($0.confirmed, exponent: CoinSpec.sky.exponent, minDecimals: 0) }
+    }
+
+    /// The inbox's unread count while the mailbox runs; a failed read keeps the last one.
+    private func countMail(_ app: AppModel) async {
+        guard states[MailProfile.app]?.running == true else {
+            unreadMail = 0
+            return
+        }
+        if let status = try? await app.client.mailStatus() {
+            unreadMail = status.unread
+        }
     }
 
     private func countFleet(_ app: AppModel) async {

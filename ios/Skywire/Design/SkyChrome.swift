@@ -4,7 +4,7 @@ import SwiftUI
 
 /// What a screen's ? button explains (Android: HelpTopic).
 enum HelpTopic {
-    case chat, dex, hub, settings, socks, vpn, wallet, fleet
+    case chat, dex, hub, settings, socks, vpn, wallet, fleet, mail
 
     var title: LocalizedStringKey {
         switch self {
@@ -16,6 +16,7 @@ enum HelpTopic {
         case .vpn: L10n.key("help_vpn_title")
         case .wallet: L10n.key("help_wallet_title")
         case .fleet: L10n.key("help_fleet_title")
+        case .mail: L10n.key("help_mail_title")
         }
     }
 
@@ -29,6 +30,7 @@ enum HelpTopic {
         case .vpn: L10n.key("help_vpn_body")
         case .wallet: L10n.key("help_wallet_body")
         case .fleet: L10n.key("help_fleet_body")
+        case .mail: L10n.key("help_mail_body")
         }
     }
 }

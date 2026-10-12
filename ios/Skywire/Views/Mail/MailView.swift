@@ -1,0 +1,632 @@
+import CoreClient
+import SwiftUI
+import UIKit
+
+/// Skymail (Android: MailScreen): the visor's own mailbox, mail between visors over Skywire.
+/// One screen with four views (the folders, a message, a draft, the settings), so back steps
+/// out of the inner one first.
+struct MailView: View {
+    @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var navigator: Navigator
+    @EnvironmentObject private var dialogs: SkyDialogs
+    @ObservedObject private var router = MailRouter.shared
+    @StateObject private var model = MailModel()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SkyTopBar(title: title, onBack: stepBack, help: .mail) {
+                if listView {
+                    SquareBarButton(icon: MI.roundedSettings) { model.openSettings() }
+                        .accessibilityLabel(Text("mail_settings_title"))
+                        .accessibilityIdentifier("mail-settings")
+                }
+            }
+            ZStack(alignment: .bottomTrailing) {
+                content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if listView && model.status?.running == true {
+                    ExtendedFab(icon: MI.roundedEdit, label: Text("mail_write")) { model.compose() }
+                        .padding(16)
+                        .accessibilityIdentifier("mail-write")
+                }
+            }
+        }
+        .background(Color.skyBackground)
+        .task(id: app.connected) { await model.run(app) }
+        .onChange(of: router.pending) { link in
+            if link != nil { model.pendingLinkArrived() }
+        }
+        .onChange(of: model.notice) { notice in
+            guard let notice else { return }
+            dialogs.snackbar(Text(verbatim: notice))
+            model.notice = nil
+        }
+        .sheet(item: $model.share, onDismiss: nil) { file in
+            ActivitySheet(items: [file.url]) { model.shareDone(file) }
+        }
+    }
+
+    private var title: Text {
+        if model.draft != nil { return Text("mail_compose_title") }
+        if model.settingsOpen { return Text("mail_settings_title") }
+        return Text("app_skymail")
+    }
+
+    private var listView: Bool { !model.inner && app.connected }
+
+    private func stepBack() {
+        if model.draft != nil {
+            model.discardDraft()
+        } else if model.settingsOpen {
+            model.closeSettings()
+        } else if model.open != nil {
+            model.closeMessage()
+        } else {
+            navigator.back()
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if !app.connected {
+            Text(app.coreState == .stopped ? L10n.key("socks_core_offline") : L10n.key("socks_core_starting"))
+                .skyText(.bodyMedium)
+                .foregroundStyle(Color.skyOnSurfaceVariant)
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.draft != nil {
+            MailComposeView(model: model)
+        } else if model.settingsOpen {
+            MailSettingsView(model: model)
+        } else if model.open != nil {
+            MailMessageView(model: model)
+        } else {
+            MailFolderView(model: model)
+        }
+    }
+}
+
+// MARK: The folders
+
+private struct MailFolderView: View {
+    @ObservedObject var model: MailModel
+
+    var body: some View {
+        if let status = model.status {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if status.running {
+                        AddressCard(address: model.myAddress)
+                        SkySegmentedRow(items: [MailFolder.inbox, MailFolder.sent], selected: model.folder, label: { folder in
+                            if folder == MailFolder.sent { return Text("mail_sent_folder") }
+                            return status.unread > 0 ? Text(verbatim: L10n.format("mail_inbox_unread", status.unread)) : Text("mail_inbox")
+                        }, onSelect: model.selectFolder)
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("mail-folders")
+                        rows
+                    } else {
+                        MailboxOffCard(status: status, busy: model.busy) { model.setEnabled(true) }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 96)
+            }
+        } else {
+            MaterialSpinner().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder private var rows: some View {
+        let sent = model.folder == MailFolder.sent
+        if let messages = model.messages {
+            if messages.isEmpty {
+                Text(sent ? L10n.key("mail_empty_sent") : L10n.key("mail_empty_inbox"))
+                    .skyText(.bodyMedium)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 4)
+            } else {
+                ForEach(messages) { message in
+                    MailRow(message: message, sent: sent) { model.open(model.folder, message) }
+                }
+            }
+        } else {
+            MaterialSpinner().frame(maxWidth: .infinity).padding(24)
+        }
+    }
+}
+
+private struct AddressCard: View {
+    let address: String?
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        SectionCard {
+            Text("mail_your_address").skyText(.titleMedium)
+            Text(verbatim: Format.breakable(address ?? ""))
+                .skyText(.bodySmall, mono: true)
+                .textSelection(.enabled)
+                .padding(.top, 6)
+                .accessibilityIdentifier("mail-address")
+            Text("mail_address_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 6)
+            if let address {
+                HStack(spacing: 8) {
+                    Button {
+                        UIPasteboard.general.string = address
+                        dialogs.toast(Text("copied_to_clipboard"))
+                    } label: {
+                        Label { Text("mail_copy") } icon: { MaterialIcon(MI.roundedContentCopy, size: 18) }
+                    }
+                    .buttonStyle(.tonal)
+                    ShareLink(item: address) {
+                        Label { Text("mail_share") } icon: { MaterialIcon(MI.roundedShare, size: 18) }
+                    }
+                    .buttonStyle(.tonal)
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+}
+
+private struct MailboxOffCard: View {
+    let status: MailStatus
+    let busy: Bool
+    let turnOn: () -> Void
+
+    var body: some View {
+        SectionCard {
+            Text("mail_off_title").skyText(.titleMedium)
+            Group {
+                if status.enabled && !status.reason.isEmpty {
+                    Text(verbatim: L10n.format("mail_not_running", status.reason))
+                } else {
+                    Text("mail_off_body")
+                }
+            }
+            .skyText(.bodyMedium)
+            .foregroundStyle(Color.skyOnSurfaceVariant)
+            .padding(.top, 6)
+            if !status.enabled {
+                Button(action: turnOn) { Text("mail_turn_on") }
+                    .buttonStyle(.filled)
+                    .disabled(busy)
+                    .padding(.top, 10)
+                    .accessibilityIdentifier("mail-turn-on")
+            }
+        }
+    }
+}
+
+private struct MailRow: View {
+    let message: MailSummary
+    let sent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let unread = !sent && !message.seen
+        VStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 0) {
+                    Circle().fill(unread ? Color.skyPrimary : Color.clear).frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 6) {
+                            Text(verbatim: MailText.displayAddress(sent ? message.to : message.from))
+                                .skyText(.bodyLarge, bold: unread)
+                                .foregroundStyle(Color.skyOnSurface)
+                                .lineLimit(1)
+                            if !sent && !message.fromVerified {
+                                MaterialIcon(MI.roundedWarning, size: 14)
+                                    .foregroundStyle(Color.skyError)
+                                    .accessibilityLabel(Text("mail_unverified"))
+                            }
+                        }
+                        Group {
+                            if message.subject.isEmpty { Text("mail_no_subject") } else { Text(verbatim: message.subject) }
+                        }
+                        .skyText(.bodyMedium, bold: unread)
+                        .foregroundStyle(Color.skyOnSurface)
+                        .lineLimit(1)
+                    }
+                    .padding(.leading, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(verbatim: MailText.shortDate(message.date))
+                        .skyText(.labelSmall)
+                        .foregroundStyle(Color.skyOnSurfaceVariant)
+                        .padding(.leading, 8)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle(layer: .skyOnSurface))
+            .accessibilityIdentifier("mail-row")
+            SkyDivider()
+        }
+    }
+}
+
+// MARK: A message
+
+private struct MailMessageView: View {
+    @ObservedObject var model: MailModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        if let open = model.open {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    let subject = open.message?.subject ?? open.summary.subject
+                    Group {
+                        if subject.isEmpty { Text("mail_no_subject") } else { Text(verbatim: subject) }
+                    }
+                    .skyText(.titleLarge)
+                    .foregroundStyle(Color.skyOnSurface)
+                    .padding(.bottom, 10)
+                    if let error = open.error {
+                        Text(verbatim: error).skyText(.bodyMedium).foregroundStyle(Color.skyError)
+                    } else if let message = open.message {
+                        body(open, message)
+                    } else {
+                        MaterialSpinner()
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder private func body(_ open: OpenMail, _ message: MailMessage) -> some View {
+        HeaderLine(label: Text("mail_from"), value: message.from)
+        if open.folder == MailFolder.inbox {
+            VerifiedLine(verified: message.fromVerified, peerPK: message.peerPK)
+        }
+        HeaderLine(label: Text("mail_to"), value: message.to)
+        if !message.cc.isEmpty {
+            HeaderLine(label: Text("mail_cc"), value: message.cc)
+        }
+        HeaderLine(label: Text("mail_date"), value: message.date)
+        SkyDivider().padding(.vertical, 12)
+        if message.fromHTML {
+            Text("mail_from_html").skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 6)
+        }
+        Text(verbatim: message.text.trimmingTrailingWhitespace())
+            .skyText(.bodyLarge)
+            .foregroundStyle(Color.skyOnSurface)
+            .textSelection(.enabled)
+            .accessibilityIdentifier("mail-text")
+        if !message.attachments.isEmpty {
+            Text("mail_attachments").skyText(.titleSmall).foregroundStyle(Color.skyOnSurface).padding(.top, 16)
+            ForEach(Array(message.attachments.enumerated()), id: \.offset) { index, attachment in
+                HStack(spacing: 6) {
+                    MaterialIcon(MI.roundedAttachFile, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+                    Text(verbatim: "\(attachment.name.isEmpty ? "attachment" : attachment.name) · \(MailModel.formatBytes(attachment.size))")
+                        .skyText(.bodyMedium)
+                        .foregroundStyle(Color.skyOnSurface)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { model.saveAttachment(index) } label: {
+                        Label { Text("mail_save") } icon: { MaterialIcon(MI.roundedDownload, size: 18) }
+                    }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier("mail-save-attachment")
+                }
+            }
+        }
+        HStack(spacing: 8) {
+            if open.folder == MailFolder.inbox {
+                Button { model.reply() } label: {
+                    Label { Text("mail_reply") } icon: { MaterialIcon(MI.roundedReply, size: 18) }
+                }
+                .buttonStyle(.filled)
+                .accessibilityIdentifier("mail-reply")
+            }
+            Button { confirmDelete() } label: {
+                Label { Text("mail_delete") } icon: { MaterialIcon(MI.roundedDelete, size: 18) }
+            }
+            .buttonStyle(.outlined)
+            .disabled(model.busy)
+            .accessibilityIdentifier("mail-delete")
+        }
+        .padding(.top, 20)
+    }
+
+    private func confirmDelete() {
+        dialogs.show(SkyDialog(message: Text("mail_delete_confirm"), actions: [
+            SkyDialog.Action(label: Text("cancel")),
+            SkyDialog.Action(label: Text("mail_delete")) { model.delete() },
+        ]))
+    }
+}
+
+private struct HeaderLine: View {
+    let label: Text
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            label.skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 56, alignment: .leading)
+            Text(verbatim: value).skyText(.bodySmall).foregroundStyle(Color.skyOnSurface).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// What the transport proved about the sender: the From line can be typed by anyone.
+private struct VerifiedLine: View {
+    let verified: Bool
+    let peerPK: String
+
+    /// The line's accessibility value, in any language: what the UI tests read.
+    static let provedValue = "verified"
+    static let unprovedValue = "unverified"
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            MaterialIcon(verified ? MI.roundedCheckCircle : MI.roundedWarning, size: 14)
+                .foregroundStyle(verified ? Color.skyPrimary : Color.skyError)
+            Group {
+                if verified {
+                    Text("mail_verified_line")
+                } else {
+                    Text(verbatim: L10n.format("mail_unverified_line", MailText.shortPK(peerPK)))
+                }
+            }
+            .skyText(.labelSmall)
+            .foregroundStyle(verified ? Color.skyOnSurfaceVariant : Color.skyError)
+        }
+        .padding(.leading, 56)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(Text(verbatim: verified ? Self.provedValue : Self.unprovedValue))
+        .accessibilityIdentifier("mail-verified")
+    }
+}
+
+// MARK: A draft
+
+private struct MailComposeView: View {
+    @ObservedObject var model: MailModel
+    @State private var showCc = false
+    @State private var picking = false
+
+    var body: some View {
+        let book = VoiceCalls.shared.addressBook
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 0) {
+                    SkyOutlinedTextField(label: L10n.key("mail_to"), text: binding(\.to), identifier: "mail-to",
+                                         supporting: Text("mail_to_hint"))
+                    if !book.isEmpty {
+                        Menu {
+                            ForEach(book.sorted { $0.value.lowercased() < $1.value.lowercased() }, id: \.key) { pk, name in
+                                Button { model.addRecipient(pk) } label: { Text(verbatim: name) }
+                            }
+                        } label: {
+                            MaterialIcon(MI.roundedContacts).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 56)
+                        }
+                        .accessibilityLabel(Text("mail_contacts"))
+                    }
+                }
+                if showCc || !(model.draft?.cc.isEmpty ?? true) {
+                    SkyOutlinedTextField(label: L10n.key("mail_cc"), text: binding(\.cc), identifier: "mail-cc")
+                } else {
+                    Button { showCc = true } label: { Text("mail_add_cc") }.buttonStyle(.skyText)
+                }
+                SkyOutlinedTextField(label: L10n.key("mail_subject"), text: binding(\.subject), identifier: "mail-subject", prose: true)
+                SkyOutlinedTextField(label: L10n.key("mail_body"), text: binding(\.body), identifier: "mail-body", minLines: 6, prose: true)
+                ForEach(Array((model.draft?.attachments ?? []).enumerated()), id: \.offset) { index, attachment in
+                    HStack(spacing: 6) {
+                        MaterialIcon(MI.roundedAttachFile, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+                        Text(verbatim: "\(attachment.name) · \(MailModel.formatBytes(Int64(attachment.bytes.count)))")
+                            .skyText(.bodyMedium)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { model.removeAttachment(index) } label: {
+                            MaterialIcon(MI.roundedClose).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 48)
+                        }
+                        .accessibilityLabel(Text("mail_remove"))
+                    }
+                }
+                Button { picking = true } label: {
+                    Label { Text("mail_attach") } icon: { MaterialIcon(MI.roundedAttachFile, size: 18) }
+                }
+                .buttonStyle(.outlined)
+                .disabled(model.sending)
+                if let result = model.lastSend {
+                    SendResultCard(result: result)
+                }
+                Text("mail_send_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                Button { model.send() } label: {
+                    HStack(spacing: 8) {
+                        if model.sending {
+                            MaterialSpinner(size: 18, stroke: 2)
+                            Text("mail_sending")
+                        } else {
+                            MaterialIcon(MI.roundedSend, size: 18)
+                            Text("mail_send")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.filled)
+                .disabled(model.sending)
+                .accessibilityIdentifier("mail-send")
+            }
+            .padding(16)
+        }
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case let .success(urls) = result { model.addAttachments(urls) }
+        }
+    }
+
+    private func binding(_ field: WritableKeyPath<MailDraft, String>) -> Binding<String> {
+        Binding(get: { model.draft?[keyPath: field] ?? "" }, set: { model.draft?[keyPath: field] = $0 })
+    }
+}
+
+private struct SendResultCard: View {
+    let result: MailSendResult
+
+    var body: some View {
+        SectionCard {
+            Text("mail_result_title").skyText(.titleSmall)
+            ForEach(Array(result.recipients.enumerated()), id: \.offset) { _, recipient in
+                Text(verbatim: MailText.displayAddress(recipient.rcpt)).skyText(.bodyMedium).padding(.top, 6)
+                Text(verbatim: recipient.error.isEmpty
+                    ? L10n.format("mail_result_delivered", recipient.via)
+                    : L10n.format("mail_result_failed", recipient.error))
+                    .skyText(.bodySmall)
+                    .foregroundStyle(recipient.error.isEmpty ? Color.skyPrimary : Color.skyError)
+            }
+            if result.recipients.isEmpty && !result.error.isEmpty {
+                Text(verbatim: result.error).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 6)
+            }
+        }
+        .accessibilityIdentifier("mail-send-result")
+    }
+}
+
+// MARK: Settings
+
+private struct MailSettingsView: View {
+    @ObservedObject var model: MailModel
+    @State private var entry = ""
+    @State private var entryBad = false
+
+    var body: some View {
+        if let status = model.status {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionCard {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("mail_setting_on").skyText(.titleMedium)
+                                Text("mail_setting_on_desc").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle(isOn: Binding(get: { status.enabled }, set: { model.setEnabled($0) })) { Text("mail_setting_on") }
+                                .toggleStyle(.skySwitch)
+                                .labelsHidden()
+                                .disabled(model.busy)
+                                .accessibilityIdentifier("mail-enabled")
+                        }
+                        if status.enabled && !status.running && !status.reason.isEmpty {
+                            Text(verbatim: L10n.format("mail_not_running", status.reason))
+                                .skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 6)
+                        }
+                    }
+                    // The visor counts usage only while the mailbox runs.
+                    if status.running {
+                        SectionCard {
+                            let total = status.limits.maxTotalSize
+                            Text(verbatim: L10n.format("mail_usage", MailModel.formatBytes(status.usage), MailModel.formatBytes(total)))
+                                .skyText(.bodyMedium)
+                            if total > 0 {
+                                ProgressBar(value: Double(status.usage) / Double(total)).padding(.top, 6)
+                            }
+                            Text(verbatim: L10n.format("mail_limits", MailModel.formatBytes(status.limits.maxMessageSize), status.limits.maxAgeDays))
+                                .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 6)
+                        }
+                    }
+                    allowed(status)
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    private func allowed(_ status: MailStatus) -> some View {
+        SectionCard {
+            Text("mail_allowed_title").skyText(.titleMedium)
+            Text(status.whitelist.isEmpty ? L10n.key("mail_allowed_everyone") : L10n.key("mail_allowed_only"))
+                .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
+            ForEach(status.whitelist, id: \.self) { pk in
+                HStack(spacing: 0) {
+                    Text(verbatim: VoiceCalls.shared.displayName(pk)).skyText(.bodyMedium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { model.removeSender(pk) } label: { Text("mail_remove") }
+                        .buttonStyle(.skyText)
+                        .disabled(model.busy)
+                }
+            }
+            SkyOutlinedTextField(label: L10n.key("mail_allow_hint"), text: $entry, isError: entryBad,
+                                 notch: .skySurfaceVariant, identifier: "mail-allow-entry",
+                                 supporting: entryBad ? Text("mail_allow_bad") : nil)
+                .padding(.top, 6)
+                .onChange(of: entry) { _ in entryBad = false }
+            Button {
+                if model.allowSender(entry) { entry = "" } else { entryBad = true }
+            } label: { Text("mail_allow_add") }
+            .buttonStyle(.skyText)
+            .disabled(entry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
+            .accessibilityIdentifier("mail-allow-add")
+        }
+    }
+}
+
+// MARK: Helpers
+
+enum MailText {
+    /// An address short enough to read: the display name when there is one, a
+    /// SkyChat contact's name for the key, or the address with its key cut.
+    @MainActor
+    static func displayAddress(_ raw: String) -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let open = text.firstIndex(of: "<") {
+            let name = text[..<open].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            if !name.isEmpty { return name }
+        }
+        var address = text
+        if let open = text.firstIndex(of: "<") {
+            address = String(text[text.index(after: open)...])
+            if let close = address.firstIndex(of: ">") { address = String(address[..<close]) }
+            address = address.trimmingCharacters(in: .whitespaces)
+        }
+        if let pk = SkymailAddress.pk(ofAddress: address), let name = VoiceCalls.shared.addressBook[pk], !name.isEmpty {
+            return name
+        }
+        guard let at = address.firstIndex(of: "@") else { return address }
+        let local = address[..<at]
+        let domain = address[address.index(after: at)...]
+        if domain.count <= 16 { return address }
+        let suffix = domain.lastIndex(of: ".").map { String(domain[$0...]) } ?? ""
+        return "\(local)@\(domain.prefix(8))…\(suffix)"
+    }
+
+    /// The day a message was dated, in the app's language; empty for Go's zero time (no Date header).
+    static func shortDate(_ rfc3339: String) -> String {
+        guard let date = parse(rfc3339), Calendar(identifier: .gregorian).component(.year, from: date) >= 1970 else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = L10n.locale
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
+    /// `03ab…c9d1`, as a call names a peer.
+    static func shortPK(_ pk: String) -> String {
+        pk.count <= 12 ? pk : "\(pk.prefix(6))…\(pk.suffix(4))"
+    }
+
+    private static func parse(_ text: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+    }
+}
+
+/// The system share sheet over SwiftUI, for a file to save or send on.
+struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+    let done: () -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        sheet.completionWithItemsHandler = { _, _, _, _ in done() }
+        return sheet
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}

@@ -17,7 +17,7 @@ CDN = "https://cdn.jsdelivr.net/npm/@material-design-icons/svg@0.14.15"
 FOLDER = {"Filled": "filled", "Outlined": "outlined", "Rounded": "round"}
 
 ICONS = """
-Filled.ArrowDropDown Filled.Call Filled.CallEnd Filled.Close Filled.ExpandLess
+Filled.ArrowDropDown Filled.Call Filled.Check Filled.CallEnd Filled.Close Filled.ExpandLess
 Filled.ExpandMore Filled.Mic Filled.MicOff Filled.Pause Filled.Person
 Filled.PlayArrow Filled.Refresh Filled.Share Filled.VolumeDown Filled.VolumeUp
 Filled.KeyboardArrowRight Filled.Star
@@ -33,6 +33,9 @@ Rounded.AccountBalanceWallet Rounded.AltRoute Rounded.ArrowBack
 Rounded.CandlestickChart Rounded.Chat Rounded.ChevronRight Rounded.Dns Rounded.Forum
 Rounded.HelpOutline Rounded.Home Rounded.Hub Rounded.Route Rounded.Settings
 Rounded.Videocam Rounded.VpnLock
+Rounded.AttachFile Rounded.CheckCircle Rounded.Close Rounded.Contacts
+Rounded.ContentCopy Rounded.Delete Rounded.Download Rounded.Edit Rounded.Email
+Rounded.Reply Rounded.Send Rounded.Share Rounded.Warning
 """.split()
 
 

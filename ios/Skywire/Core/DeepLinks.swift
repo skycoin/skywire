@@ -76,3 +76,35 @@ final class ChatRouter: ObservableObject {
         pending = Request(target: target, id: sequence)
     }
 }
+
+/// The inbox message a tapped Skymail notification asked to show (Android:
+/// DeepLinks.pendingMail). The visor tags a mail notification with the
+/// message's id; the Skymail screen opens it once its inbox lists it.
+@MainActor
+final class MailRouter: ObservableObject {
+    static let shared = MailRouter()
+
+    /// A message id with the sequence that makes two taps on one two events.
+    struct Link: Equatable {
+        let id: String
+        let sequence: Int
+    }
+
+    @Published private(set) var pending: Link?
+
+    private var sequence = 0
+
+    func open(id: String) {
+        let id = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else { return }
+        sequence += 1
+        pending = Link(id: id, sequence: sequence)
+    }
+
+    /// Drops `link` once the screen opened it or knows it never will; a newer one stays.
+    func handled(_ link: Link) {
+        if pending == link {
+            pending = nil
+        }
+    }
+}

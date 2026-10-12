@@ -164,6 +164,9 @@ final class VoiceCalls: ObservableObject {
         return pk.count <= 12 ? pk : "\(pk.prefix(6))…\(pk.suffix(4))"
     }
 
+    /// The same names, for screens that offer a contact to pick.
+    var addressBook: [String: String] { names }
+
     func setNames(_ book: [String: String]) {
         names = book.mapKeys { $0.lowercased() }
     }
