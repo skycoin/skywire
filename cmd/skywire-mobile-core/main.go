@@ -5,7 +5,7 @@ app: `make ios-core` builds it with -buildmode=c-archive for the device and
 Simulator slices and packages them as ios/Frameworks/SkywireCore.xcframework.
 iOS cannot exec a child process, so where Android runs cmd/skywire-mobile as
 libskywire-mobile.so, iOS links this archive and calls pkg/mobilecore through
-the eight functions below. They cover the lifecycle only; the app drives
+the nine functions below. They cover the lifecycle only; the app drives
 everything else over the visor's local HTTP API, as Android does.
 
 C API (the generated header, skywire_core.h, carries the prototypes):
@@ -16,6 +16,7 @@ C API (the generated header, skywire_core.h, carries the prototypes):
 	char   *skywire_last_error(void);
 	int32_t skywire_config_gen(const char *out_path, const char *options_json);
 	int32_t skywire_set_tun_fd(int32_t fd);
+	char   *skywire_tun_settings(void);
 	void    skywire_set_log_sink(skywire_log_fn cb);
 	void    skywire_free(void *p);
 
@@ -156,6 +157,20 @@ func skywire_set_tun_fd(fd C.int32_t) C.int32_t {
 		return fail(err)
 	}
 	return succeed()
+}
+
+// skywire_tun_settings returns the tunnel vpn-client last asked for, as JSON
+// ({"up", "addr", "gateway", "mtu", "dns", "seq"}), for the extension to apply
+// as its tunnel settings; NULL on failure. Free the result with skywire_free.
+//
+//export skywire_tun_settings
+func skywire_tun_settings() *C.char {
+	s, err := mobilecore.TunSettings()
+	if err != nil {
+		fail(err)
+		return nil
+	}
+	return C.CString(s)
 }
 
 // skywire_set_log_sink installs cb as the log sink, replacing the previous
