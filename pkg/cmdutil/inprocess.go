@@ -118,6 +118,10 @@ func execute(ctx context.Context, root *cobra.Command, stderr io.Writer) (code i
 		}
 	}()
 	if err := root.ExecuteContext(ctx); err != nil {
+		// RunRoot reports what a root that silences cobra does not.
+		if root.SilenceErrors {
+			fmt.Fprintln(stderr, "Failed to execute command:", err) //nolint:errcheck
+		}
 		return 1
 	}
 	return 0
