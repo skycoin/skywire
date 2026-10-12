@@ -812,7 +812,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		useSkynet = false
 		useDmsg = false
 		standaloneLog := logrus.New()
-		standaloneLog.SetOutput(os.Stderr)
+		standaloneLog.SetOutput(cmdutil.Stderr())
 		standaloneLog.SetFormatter(&logging.TextFormatter{
 			FullTimestamp:      true,
 			AlwaysQuoteStrings: true,

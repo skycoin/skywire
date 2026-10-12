@@ -30,11 +30,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -867,7 +868,7 @@ errors out):
 			since = t
 		}
 		if !jsonMode {
-			fmt.Println("Listening for group messages. Ctrl+C to exit.")
+			cmdutil.Println("Listening for group messages. Ctrl+C to exit.")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -904,14 +905,14 @@ errors out):
 				if mErr != nil {
 					return
 				}
-				fmt.Println(string(b))
+				cmdutil.Println(string(b))
 				return
 			}
 			out := body
 			if !groupListenRaw {
 				out = escapeForOneLine(body)
 			}
-			fmt.Printf("[%s] [%s] %s: %s\n", ts.Format(time.RFC3339), groupID, senderPK, out)
+			cmdutil.Printf("[%s] [%s] %s: %s\n", ts.Format(time.RFC3339), groupID, senderPK, out)
 		}
 
 		for {
@@ -921,7 +922,7 @@ errors out):
 			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
 			if err != nil {
 				if !lastErrLogged {
-					fmt.Fprintf(os.Stderr, "group listen: gRPC dial %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
+					cmdutil.Eprintf("group listen: gRPC dial %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
 					lastErrLogged = true
 				}
 				t := time.NewTimer(backoff)
@@ -944,7 +945,7 @@ errors out):
 			// canceled (Ctrl+C).
 			err = grpcClient.StreamGroupMessages(ctx, "", since.UnixNano(), nil, func(evt *rpcgrpc.GroupMessageEvent) {
 				if lastErrLogged {
-					fmt.Fprintln(os.Stderr, "group listen: reconnected") //nolint:errcheck
+					cmdutil.Eprintln("group listen: reconnected") //nolint:errcheck
 					lastErrLogged = false
 					backoff = minBackoff
 				}
@@ -955,7 +956,7 @@ errors out):
 				return
 			}
 			if err != nil && !lastErrLogged {
-				fmt.Fprintf(os.Stderr, "group listen: %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
+				cmdutil.Eprintf("group listen: %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
 				lastErrLogged = true
 			}
 			t := time.NewTimer(backoff)
@@ -1015,11 +1016,11 @@ Examples:
 			}
 			if jsonMode {
 				b, _ := json.Marshal(groups) //nolint:errcheck
-				fmt.Println(string(b))
+				cmdutil.Println(string(b))
 				return
 			}
 			for _, g := range groups {
-				fmt.Println(g)
+				cmdutil.Println(g)
 			}
 			return
 		}
@@ -1044,14 +1045,14 @@ Examples:
 				if mErr != nil {
 					continue
 				}
-				fmt.Println(string(b))
+				cmdutil.Println(string(b))
 				continue
 			}
 			body := m.Text
 			if !groupHistoryRaw {
 				body = escapeForOneLine(body)
 			}
-			fmt.Printf("[%s] [%s] %s: %s\n",
+			cmdutil.Printf("[%s] [%s] %s: %s\n",
 				m.TS.UTC().Format(time.RFC3339), m.GroupID, m.SenderPK, body)
 		}
 	},

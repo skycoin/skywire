@@ -278,7 +278,7 @@ func runMount(
 	if err != nil {
 		return fmt.Errorf("ptyfs: FUSE mount %s: %w", mountpoint, err)
 	}
-	fmt.Fprintf(os.Stderr, "ptyfs: mounted %s -> %s (remote-root=%s)\n", mountpoint, display, root.root.remoteRoot) //nolint:errcheck
+	cmdutil.Eprintf("ptyfs: mounted %s -> %s (remote-root=%s)\n", mountpoint, display, root.root.remoteRoot) //nolint:errcheck
 
 	// Either the caller's ctx fires (Ctrl-C) or the kernel unmounts
 	// out from under us (e.g. external `fusermount -u`). Wait for
@@ -302,8 +302,8 @@ func runMount(
 		return nil
 	}
 	if err := server.Unmount(); err != nil {
-		fmt.Fprintf(os.Stderr, "ptyfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
-		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                         //nolint:errcheck,gosec // fixed system binary, mountpoint is the operator-supplied path we just unmounted
+		cmdutil.Eprintf("ptyfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
+		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                  //nolint:errcheck,gosec // fixed system binary, mountpoint is the operator-supplied path we just unmounted
 	}
 	return nil
 }
@@ -376,7 +376,7 @@ func (r *sftpRoot) session() (*sftp.Client, int, error) {
 	r.cli = c
 	r.gen++
 	if r.gen > 1 {
-		fmt.Fprintln(os.Stderr, "ptyfs: reconnected to the peer") //nolint:errcheck
+		cmdutil.Eprintln("ptyfs: reconnected to the peer") //nolint:errcheck
 	}
 	return c, r.gen, nil
 }

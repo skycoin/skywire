@@ -4,8 +4,9 @@ package clivisor
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -89,7 +90,7 @@ var rewardCmd = &cobra.Command{
 
 		for i, pk := range pks {
 			if i > 0 {
-				fmt.Println()
+				cmdutil.Println()
 			}
 			fetchAndDisplayReward(cmd, rpcClient, rewardDmsg, pk)
 		}
@@ -104,11 +105,11 @@ func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visorapi.API, rewardDms
 		Method: "GET",
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to fetch reward data for %s: %v\n", pk, err)
+		cmdutil.Eprintf("Failed to fetch reward data for %s: %v\n", pk, err)
 		return
 	}
 	if resp.StatusCode != 200 {
-		fmt.Fprintf(os.Stderr, "Reward system returned status %d for %s\n", resp.StatusCode, pk)
+		cmdutil.Eprintf("Reward system returned status %d for %s\n", resp.StatusCode, pk)
 		return
 	}
 
@@ -123,7 +124,7 @@ func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visorapi.API, rewardDms
 			}
 			return
 		}
-		fmt.Fprintf(os.Stderr, "Failed to parse reward data for %s: %v\n", pk, err)
+		cmdutil.Eprintf("Failed to parse reward data for %s: %v\n", pk, err)
 		return
 	}
 
@@ -135,7 +136,7 @@ func fetchAndDisplayReward(cmd *cobra.Command, rpcClient visorapi.API, rewardDms
 		return
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk, rewardDays) //nolint:errcheck,gosec
 	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")      //nolint:errcheck,gosec
 	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")       //nolint:errcheck,gosec

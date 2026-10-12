@@ -143,7 +143,7 @@ Usage Examples:
 			logger.Fatalf("lookup failed: %v", err)
 		}
 
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(cmdutil.Stdout())
 		enc.SetIndent("", "  ")
 		if err = enc.Encode(res); err != nil {
 			logger.Warn("failed to encode response: %v", err)

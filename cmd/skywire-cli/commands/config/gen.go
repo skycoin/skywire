@@ -115,12 +115,12 @@ var pkFromSKCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var sk cipher.SecKey
 		if err := sk.Set(args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
+			cmdutil.Eprintf("invalid secret key: %v\n", err) //nolint:errcheck,gosec
 			cmdutil.Exit(1)
 		}
 		pk, err := sk.PubKey()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
+			cmdutil.Eprintf("failed to derive public key: %v\n", err) //nolint:errcheck,gosec
 			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliconfig.Keypair{PublicKey: pk.Hex()}))
@@ -572,9 +572,9 @@ var genConfigCmd = &cobra.Command{
 				if err := os.WriteFile(envfileOut, []byte(envfile+"\n"), 0644); err != nil { //nolint:gosec
 					log.Fatalf("Failed to write conf file: %v", err)
 				}
-				fmt.Printf("Conf template written to %s\n", envfileOut)
+				cmdutil.Printf("Conf template written to %s\n", envfileOut)
 			} else {
-				fmt.Println(envfile)
+				cmdutil.Println(envfile)
 			}
 			cmdutil.Exit(0)
 		}
@@ -2781,7 +2781,7 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	// straight pass-through to the standard library off Android.
 	interfaces, err := anet.Interfaces()
 	if err != nil {
-		fmt.Println("Error:", err)
+		cmdutil.Println("Error:", err)
 		return ""
 	}
 

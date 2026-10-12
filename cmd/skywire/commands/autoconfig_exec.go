@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // skywireBin returns the absolute path to the running skywire binary so the
@@ -60,7 +62,7 @@ func extraGenArgs() []string { return nil }
 func execConfigGen(r resolvedConfig, args []string) error {
 	var stderrBuf bytes.Buffer
 	cmd := exec.Command(skywireBin(), args...) //nolint:gosec
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = cmdutil.Stdout()
 	cmd.Stderr = &stderrBuf
 	cmd.Env = os.Environ()
 	if r.skyenvPath != "" {
@@ -73,7 +75,7 @@ func execConfigGen(r resolvedConfig, args []string) error {
 	}
 	if err := cmd.Run(); err != nil {
 		if stderrBuf.Len() > 0 {
-			fmt.Fprint(os.Stderr, stderrBuf.String())
+			cmdutil.Eprint(stderrBuf.String())
 		}
 		return err
 	}

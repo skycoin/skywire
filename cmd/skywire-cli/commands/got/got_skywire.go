@@ -175,7 +175,7 @@ func downloadSkywire(cmd *cobra.Command, rawURL string) error {
 		return err
 	}
 	if resp.statusCode >= 400 {
-		fmt.Fprintf(os.Stderr, "%s\n", resp.status)
+		cmdutil.Eprintf("%s\n", resp.status)
 	}
 
 	dest := output
@@ -190,7 +190,7 @@ func downloadSkywire(cmd *cobra.Command, rawURL string) error {
 	}
 
 	if dest == "-" {
-		if _, err := os.Stdout.Write(resp.body); err != nil {
+		if _, err := cmdutil.Stdout().Write(resp.body); err != nil {
 			return err
 		}
 		return nil
@@ -198,7 +198,7 @@ func downloadSkywire(cmd *cobra.Command, rawURL string) error {
 	if err := os.WriteFile(dest, resp.body, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", dest, err)
 	}
-	fmt.Fprintf(os.Stderr, "%s\nSaved to %s (%d bytes)\n", resp.status, dest, len(resp.body))
+	cmdutil.Eprintf("%s\nSaved to %s (%d bytes)\n", resp.status, dest, len(resp.body))
 	return nil
 }
 
@@ -235,14 +235,14 @@ func requestSkywireCmd(cmd *cobra.Command, method, rawURL string) error {
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "%s\n", resp.status)
+		cmdutil.Eprintf("%s\n", resp.status)
 		for k, v := range resp.header {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", k, v)
+			cmdutil.Eprintf("%s: %s\n", k, v)
 		}
-		fmt.Fprintln(os.Stderr)
+		cmdutil.Eprintln()
 	}
 
-	out := io.Writer(os.Stdout)
+	out := cmdutil.Stdout()
 	if output != "" {
 		f, err := os.Create(output) //nolint:gosec
 		if err != nil {
@@ -279,9 +279,9 @@ func headSkywire(cmd *cobra.Command, rawURL string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s\n", resp.status)
+	cmdutil.Printf("%s\n", resp.status)
 	for k, v := range resp.header {
-		fmt.Printf("%s: %s\n", k, v)
+		cmdutil.Printf("%s: %s\n", k, v)
 	}
 	return nil
 }

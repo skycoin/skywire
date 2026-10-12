@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
@@ -254,7 +256,7 @@ func generateAndCacheStats() (err error) {
 	err = generateAndCacheCountryStats()
 	if err != nil {
 		// Log but don't fail the whole stats generation
-		fmt.Println("Warning: failed to generate country stats:", err)
+		cmdutil.Println("Warning: failed to generate country stats:", err)
 	}
 
 	return nil
@@ -324,7 +326,7 @@ func generateAndCacheCountryStats() error {
 
 	db, dbErr := geoip2.OpenBytes(geoip.EmbeddedDB())
 	if dbErr != nil {
-		fmt.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
+		cmdutil.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
 	} else {
 		defer db.Close() //nolint:errcheck,gosec
 		for ip := range ipToVisors {

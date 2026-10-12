@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -124,7 +123,7 @@ Server entries come from the live discovery (fetched over dmsg, like
 		wg.Wait()
 
 		if probeJSON {
-			enc := json.NewEncoder(os.Stdout)
+			enc := json.NewEncoder(cmdutil.Stdout())
 			enc.SetIndent("", "  ")
 			return enc.Encode(results)
 		}
@@ -280,35 +279,35 @@ func printProbeTable(entries []*disc.Entry, results []probeResult) {
 			cols = append(cols, c)
 		}
 	}
-	fmt.Printf("%-66s", "server")
+	cmdutil.Printf("%-66s", "server")
 	for _, c := range cols {
-		fmt.Printf(" %-12s", c)
+		cmdutil.Printf(" %-12s", c)
 	}
-	fmt.Println()
+	cmdutil.Println()
 	for _, e := range entries {
 		pk := e.Static.Hex()
 		row, ok := byPK[pk]
 		if !ok {
 			continue
 		}
-		fmt.Printf("%-66s", pk)
+		cmdutil.Printf("%-66s", pk)
 		for _, c := range cols {
 			r, ok := row[c]
 			switch {
 			case !ok:
-				fmt.Printf(" %-12s", "-")
+				cmdutil.Printf(" %-12s", "-")
 			case r.OK:
-				fmt.Printf(" %-12s", fmt.Sprintf("ok %dms", r.LatencyMs))
+				cmdutil.Printf(" %-12s", fmt.Sprintf("ok %dms", r.LatencyMs))
 			default:
-				fmt.Printf(" %-12s", "FAIL")
+				cmdutil.Printf(" %-12s", "FAIL")
 			}
 		}
-		fmt.Println()
+		cmdutil.Println()
 	}
 	// Failure details below the table so rows stay scannable.
 	for _, r := range results {
 		if !r.OK {
-			fmt.Printf("FAIL %s %s (%s): %s\n", r.PK, r.Carrier, r.Addr, r.Err)
+			cmdutil.Printf("FAIL %s %s (%s): %s\n", r.PK, r.Carrier, r.Addr, r.Err)
 		}
 	}
 }

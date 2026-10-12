@@ -175,11 +175,11 @@ func longText() string {
 		//nolint:gosec
 		reward, err := os.ReadFile(rewardFile)
 		if err != nil {
-			fmt.Printf("    reward settings misconfigured!")
+			cmdutil.Printf("    reward settings misconfigured!")
 		}
 		_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(string(reward)))
 		if err != nil {
-			fmt.Printf("    invalid address in reward config %v", err)
+			cmdutil.Printf("    invalid address in reward config %v", err)
 		}
 		isRewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
@@ -286,7 +286,7 @@ var rewardCmd = &cobra.Command{
 				internal.PrintOutput(cmd.Flags(), out, out)
 				cmdutil.Exit(0)
 			}
-			fmt.Println("No reward address set. Use: skywire cli reward <address|xpub>")
+			cmdutil.Println("No reward address set. Use: skywire cli reward <address|xpub>")
 			cmdutil.Exit(0)
 		}
 		if rewardAddress == "" {
@@ -301,7 +301,7 @@ var rewardCmd = &cobra.Command{
 		}
 		if isXpub {
 			if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
-				fmt.Fprintf(os.Stderr, "\n%s\n\n", warning)
+				cmdutil.Eprintf("\n%s\n\n", warning)
 			}
 		}
 

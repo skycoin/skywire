@@ -30,6 +30,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
@@ -88,7 +90,7 @@ func reconcileLegs(rpcClient muxLegAPI, app string, rgPort uint16, targets []rou
 			continue
 		}
 		if err := rpcClient.AddMuxRoute(app, t.Forward, t.Reverse, rgPort); err != nil {
-			fmt.Fprintf(os.Stderr, "  add leg (first tp=%s): %v\n", tp, err)
+			cmdutil.Eprintf("  add leg (first tp=%s): %v\n", tp, err)
 			continue
 		}
 		res.added = append(res.added, fmt.Sprint(tp))
@@ -101,7 +103,7 @@ func reconcileLegs(rpcClient muxLegAPI, app string, rgPort uint16, targets []rou
 				continue
 			}
 			if err := rpcClient.RemoveMuxRoute(app, tp, rgPort); err != nil {
-				fmt.Fprintf(os.Stderr, "  remove leg (tp=%s): %v\n", tp, err)
+				cmdutil.Eprintf("  remove leg (tp=%s): %v\n", tp, err)
 				continue
 			}
 			res.removed = append(res.removed, fmt.Sprint(tp))
@@ -130,7 +132,7 @@ func init() {
 func readRoutePairs(src string) ([]routePair, error) {
 	var rd io.Reader
 	if src == "" || src == "-" {
-		rd = os.Stdin
+		rd = cmdutil.Stdin()
 	} else {
 		f, err := os.Open(src) //nolint:gosec
 		if err != nil {
@@ -217,10 +219,10 @@ Example:
 		}
 		if !cliout.JSONMode(cmd) {
 			for _, tp := range res.added {
-				fmt.Printf("+ added leg (first tp=%s)\n", tp)
+				cmdutil.Printf("+ added leg (first tp=%s)\n", tp)
 			}
 			for _, tp := range res.removed {
-				fmt.Printf("- removed leg (tp=%s)\n", tp)
+				cmdutil.Printf("- removed leg (tp=%s)\n", tp)
 			}
 		}
 

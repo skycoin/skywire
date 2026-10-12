@@ -301,7 +301,7 @@ See docs/guides/remote-visor-cli.md.`,
 		if err := rpcClient.AddHypervisor(pk); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Connected to hypervisor %s\n", pk)
+		cmdutil.Printf("Connected to hypervisor %s\n", pk)
 	},
 }
 
@@ -344,7 +344,7 @@ is required.`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			fmt.Printf("Disconnected from %d runtime-added hypervisor(s)\n", n)
+			cmdutil.Printf("Disconnected from %d runtime-added hypervisor(s)\n", n)
 			return
 		}
 		var pk cipher.PubKey
@@ -354,7 +354,7 @@ is required.`,
 		if err := rpcClient.RemoveHypervisor(pk); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Disconnected from hypervisor %s\n", pk)
+		cmdutil.Printf("Disconnected from hypervisor %s\n", pk)
 	},
 }
 
@@ -386,7 +386,7 @@ from an env-var or a process-substitution.`,
 			if err := rpcClient.SetHypervisorPasswordForce(hvPasswdNew); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			fmt.Println("Hypervisor UI password set; all existing sessions invalidated.")
+			cmdutil.Println("Hypervisor UI password set; all existing sessions invalidated.")
 			return
 		}
 		if hvPasswdOld == "" {
@@ -395,7 +395,7 @@ from an env-var or a process-substitution.`,
 		if err := rpcClient.SetHypervisorPassword(hvPasswdOld, hvPasswdNew); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println("Hypervisor UI password updated; all existing sessions invalidated.")
+		cmdutil.Println("Hypervisor UI password updated; all existing sessions invalidated.")
 	},
 }
 

@@ -7,6 +7,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // registerNodeProxy sets up reverse proxy routes for a fiber/skycoin node API.
@@ -48,7 +50,7 @@ func registerNodeProxy(mux *http.ServeMux, targetURL string) error {
 	// skycoin-web needs /csrf for POST requests
 	mux.Handle("GET /csrf", corsProxy)
 
-	fmt.Printf("Proxying /api/v1/*, /api/v2/*, /csrf → %s\n", targetURL)
+	cmdutil.Printf("Proxying /api/v1/*, /api/v2/*, /csrf → %s\n", targetURL)
 	return nil
 }
 

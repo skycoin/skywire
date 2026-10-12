@@ -31,7 +31,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -94,7 +93,7 @@ gesture runs.`,
 	Args: cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := inputRun(cmd, args); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			cmdutil.Eprintln(err)
 			cmdutil.Exit(1)
 		}
 	},
@@ -253,7 +252,7 @@ func inputRun(cmd *cobra.Command, args []string) error {
 		if inputStrict {
 			return fmt.Errorf("%s", msg)
 		}
-		fmt.Fprintln(os.Stderr, "warning: "+msg)
+		cmdutil.Eprintln("warning: " + msg)
 		return nil
 	}
 	settle := func() { time.Sleep(time.Duration(inputSettle) * time.Millisecond) }

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -66,14 +68,14 @@ Use --dmsg-only to only test over dmsg.`,
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
 			<-sigCh
-			fmt.Println("\nCanceled.")
+			cmdutil.Println("\nCanceled.")
 			cancel()
 		}()
 
 		// Progress callback
 		progressCallback := func(bytesSent, bytesReceived uint64, elapsed time.Duration, uploadSpeed, downloadSpeed float64, isFinal bool, testErr error) {
 			if testErr != nil {
-				fmt.Printf("Error: %v\n", testErr)
+				cmdutil.Printf("Error: %v\n", testErr)
 				return
 			}
 			if isFinal {
@@ -98,26 +100,26 @@ Use --dmsg-only to only test over dmsg.`,
 
 		// Test over dmsg if requested
 		if bwUseDmsg || bwDmsgOnly {
-			fmt.Printf("Starting DMSG bandwidth test to %s (duration: %v, packet size: %dKB)...\n", pk, bwDuration, bwPcktSize)
+			cmdutil.Printf("Starting DMSG bandwidth test to %s (duration: %v, packet size: %dKB)...\n", pk, bwDuration, bwPcktSize)
 			err = grpcClient.StreamDmsgBandwidthTest(ctx, pk.String(), bwDuration, int32(bwPcktSize), progressCallback)
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				fmt.Printf("\nDMSG Bandwidth Test Error: %v\n", err)
+				cmdutil.Printf("\nDMSG Bandwidth Test Error: %v\n", err)
 			}
-			fmt.Println()
+			cmdutil.Println()
 		}
 
 		// Test over skywire route (unless dmsg-only)
 		if !bwDmsgOnly {
-			fmt.Printf("Starting bandwidth test to %s (duration: %v, packet size: %dKB)...\n", pk, bwDuration, bwPcktSize)
+			cmdutil.Printf("Starting bandwidth test to %s (duration: %v, packet size: %dKB)...\n", pk, bwDuration, bwPcktSize)
 			err = grpcClient.StreamBandwidthTest(ctx, pk.String(), bwDuration, int32(bwPcktSize), bwLocalRoute, progressCallback)
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				fmt.Printf("\nBandwidth Test Error: %v\n", err)
+				cmdutil.Printf("\nBandwidth Test Error: %v\n", err)
 			}
 		}
 	},

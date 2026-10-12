@@ -107,7 +107,7 @@ func newTableCmd(cfg Config) *cobra.Command {
 			}
 			filtered := applyFilters(entries, onlineOnly, pkFilter, versionEq, minVersion, minDaily)
 			if jsonOut {
-				_ = json.NewEncoder(os.Stdout).Encode(filtered) //nolint:errcheck,gosec
+				_ = json.NewEncoder(cmdutil.Stdout()).Encode(filtered) //nolint:errcheck,gosec
 				return
 			}
 			switch {
@@ -116,7 +116,7 @@ func newTableCmd(cfg Config) *cobra.Command {
 				if onlineOnly {
 					label = "online visors"
 				}
-				fmt.Printf("%d %s\n", len(filtered), label)
+				cmdutil.Printf("%d %s\n", len(filtered), label)
 			case listVers:
 				printVersions(filtered)
 			default:
@@ -219,7 +219,7 @@ and --per-day modes; --hours ignores them.`,
 				}
 			}
 			if jsonOut {
-				_ = json.NewEncoder(os.Stdout).Encode(filtered) //nolint:errcheck,gosec
+				_ = json.NewEncoder(cmdutil.Stdout()).Encode(filtered) //nolint:errcheck,gosec
 				return
 			}
 			switch {
@@ -448,7 +448,7 @@ func printTable(entries []uptimestats.VisorSummary, version string, dr dateRange
 	}
 	dates := collectDates(entries, dr)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 	showVersion := version != "v1"
 
 	header := []string{"pk"}
@@ -499,7 +499,7 @@ func printVersions(entries []uptimestats.VisorSummary) {
 		if v == "" {
 			v = "(none)"
 		}
-		fmt.Printf("%6d %s\n", vc.Count, v)
+		cmdutil.Printf("%6d %s\n", vc.Count, v)
 	}
 }
 
@@ -524,10 +524,10 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 	for _, e := range sorted {
 		if verbose {
 			if !first {
-				fmt.Println()
+				cmdutil.Println()
 			}
-			fmt.Printf("%s  %s  %s\n", e.PK.Hex(), stringOrDash(e.Version), onlineWord(e.Online))
-			fmt.Println("  date        00 03 06 09 12 15 18 21      daily%")
+			cmdutil.Printf("%s  %s  %s\n", e.PK.Hex(), stringOrDash(e.Version), onlineWord(e.Online))
+			cmdutil.Println("  date        00 03 06 09 12 15 18 21      daily%")
 		}
 		first = false
 
@@ -540,7 +540,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 		sort.Strings(days)
 		if len(days) == 0 {
 			if verbose {
-				fmt.Println("  (no timeline data in selected range)")
+				cmdutil.Println("  (no timeline data in selected range)")
 			}
 			continue
 		}
@@ -551,11 +551,11 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 				pct = v + "%"
 			}
 			if verbose {
-				fmt.Printf("  %s  %s      %s\n", d, blocks, pct)
+				cmdutil.Printf("  %s  %s      %s\n", d, blocks, pct)
 			} else {
 				// Compact: pk prefix per row so each line is
 				// self-identifying when grep'd.
-				fmt.Printf("%s  %s  %s  %s\n", e.PK.Hex(), d, blocks, pct)
+				cmdutil.Printf("%s  %s  %s  %s\n", e.PK.Hex(), d, blocks, pct)
 			}
 		}
 	}
@@ -631,7 +631,7 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 
 	for i, e := range sorted {
 		if verbose {
-			fmt.Printf("%s  %s  %s  range: %s → %s (%d days)\n",
+			cmdutil.Printf("%s  %s  %s  range: %s → %s (%d days)\n",
 				e.PK.Hex(), stringOrDash(e.Version), onlineWord(e.Online),
 				dates[0], dates[len(dates)-1], len(dates))
 		}
@@ -640,7 +640,7 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 		if end < trim {
 			end = trim
 		}
-		fmt.Printf("%s %s\n", e.PK.Hex(), b[trim:end])
+		cmdutil.Printf("%s %s\n", e.PK.Hex(), b[trim:end])
 	}
 }
 
@@ -659,16 +659,16 @@ func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, ve
 	}
 
 	if verbose {
-		fmt.Printf("# last %dh ending %s  (tick labels below)\n",
+		cmdutil.Printf("# last %dh ending %s  (tick labels below)\n",
 			hoursBack, now.Format(time.RFC3339))
 		// A single label row at the top so it's not repeated per
 		// visor. Indent to line up under the first block column; PK
 		// is 64 chars + 1 space = 65.
-		fmt.Printf("%s %s\n", strings.Repeat(" ", 64), rollingLabels(hoursBack))
+		cmdutil.Printf("%s %s\n", strings.Repeat(" ", 64), rollingLabels(hoursBack))
 	}
 
 	for _, e := range sorted {
-		fmt.Printf("%s %s\n", e.PK.Hex(), uptimestats.RollingBar(e.Timeline, now, hoursBack))
+		cmdutil.Printf("%s %s\n", e.PK.Hex(), uptimestats.RollingBar(e.Timeline, now, hoursBack))
 
 		if verbose {
 			// Per-window aggregate underneath the bar when verbose.
@@ -681,7 +681,7 @@ func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, ve
 			if total > 0 {
 				pct = 100 * float64(online) / float64(total)
 			}
-			fmt.Printf("%s   window uptime: %.2f%% (%d/%d slots)\n",
+			cmdutil.Printf("%s   window uptime: %.2f%% (%d/%d slots)\n",
 				strings.Repeat(" ", 64), pct, online, total)
 		}
 	}

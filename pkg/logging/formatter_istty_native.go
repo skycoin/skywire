@@ -12,6 +12,8 @@ import (
 
 func (f *TextFormatter) checkIfTerminal(w io.Writer) bool {
 	switch v := w.(type) {
+	case stderrWriter:
+		return f.checkIfTerminal(Stderr())
 	case *os.File:
 		return term.IsTerminal(int(v.Fd())) //nolint:gosec
 	default:

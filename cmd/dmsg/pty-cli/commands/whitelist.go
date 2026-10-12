@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -33,7 +35,7 @@ var whitelistCmd = &cobra.Command{
 			log.Println("Whitelist Empty")
 		} else {
 			for _, pk := range pks {
-				fmt.Println(pk)
+				cmdutil.Println(pk)
 			}
 		}
 		return nil
@@ -57,7 +59,7 @@ var whitelistAddCmd = &cobra.Command{
 		}
 		err = wlC.WhitelistAdd(pks...)
 		if err != nil {
-			fmt.Println(err)
+			cmdutil.Println(err)
 			return nil
 		}
 		return nil

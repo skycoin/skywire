@@ -183,14 +183,14 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 	}()
 
 	// Prepare output
-	output := os.Stdout
+	output := cmdutil.Stdout()
 	if curlOutput != "" {
-		var err error
-		output, err = prepareOutputFile(curlOutput, curlReplace)
+		f, err := prepareOutputFile(curlOutput, curlReplace)
 		if err != nil {
 			return fmt.Errorf("failed to prepare output file: %w", err)
 		}
-		defer output.Close() //nolint:errcheck
+		defer f.Close() //nolint:errcheck
+		output = f
 	}
 
 	// Prepare request
@@ -261,7 +261,7 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 		}
 
 		if curlOutput != "" {
-			fmt.Printf("Downloaded %d bytes to %s\n", len(resp.Body), curlOutput)
+			cmdutil.Printf("Downloaded %d bytes to %s\n", len(resp.Body), curlOutput)
 		}
 		return nil
 	}
@@ -295,14 +295,14 @@ func curlStandalone(ctx context.Context, log *logging.Logger, pk cipher.PubKey, 
 	}
 
 	// Prepare output
-	output := os.Stdout
+	output := cmdutil.Stdout()
 	if curlOutput != "" {
-		var err error
-		output, err = prepareOutputFile(curlOutput, curlReplace)
+		f, err := prepareOutputFile(curlOutput, curlReplace)
 		if err != nil {
 			return fmt.Errorf("failed to prepare output file: %w", err)
 		}
-		defer output.Close() //nolint:errcheck
+		defer f.Close() //nolint:errcheck
+		output = f
 	}
 
 	// Make request
@@ -357,7 +357,7 @@ func curlStandalone(ctx context.Context, log *logging.Logger, pk cipher.PubKey, 
 		}
 
 		if curlOutput != "" {
-			fmt.Printf("Downloaded %d bytes to %s\n", n, curlOutput)
+			cmdutil.Printf("Downloaded %d bytes to %s\n", n, curlOutput)
 		}
 		return nil
 	}

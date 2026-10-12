@@ -11,6 +11,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -135,7 +137,7 @@ var healthCmd = &cobra.Command{
 				}
 			}
 			// Fall through to direct query
-			fmt.Println("(visor not available, querying services directly)")
+			cmdutil.Println("(visor not available, querying services directly)")
 		}
 
 		// Direct query fallback
@@ -513,7 +515,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 	// quic session is held, that isolates in-process (quic-go) interference.
 	if healthHoldCarrier != "" {
 		if addr := carrierAddr(entry, healthHoldCarrier); addr == "" {
-			fmt.Printf("(hold-carrier %s not advertised by %s; skipping hold)\n", healthHoldCarrier, srvPK.Hex()[:8])
+			cmdutil.Printf("(hold-carrier %s not advertised by %s; skipping hold)\n", healthHoldCarrier, srvPK.Hex()[:8])
 		} else {
 			hConf := dmsg.DefaultConfig()
 			hConf.Carriers = []string{healthHoldCarrier}
@@ -524,7 +526,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 			hC, hStop, herr := direct.StartDmsg(hCtx, log, hPK, hSK, hClient, hConf)
 			hCancel()
 			if herr != nil {
-				fmt.Printf("(could not hold a %s session to %s: %v; probing anyway)\n", healthHoldCarrier, srvPK.Hex()[:8], herr)
+				cmdutil.Printf("(could not hold a %s session to %s: %v; probing anyway)\n", healthHoldCarrier, srvPK.Hex()[:8], herr)
 			} else {
 				got := ""
 				for _, s := range hC.SessionCarriers() {
@@ -532,7 +534,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 						got = s.Carrier
 					}
 				}
-				fmt.Printf("holding a %s session to %s (landed on %q) during probes\n", healthHoldCarrier, srvPK.Hex()[:8], got)
+				cmdutil.Printf("holding a %s session to %s (landed on %q) during probes\n", healthHoldCarrier, srvPK.Hex()[:8], got)
 				defer hStop()
 			}
 		}
@@ -545,7 +547,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 		internal.PrintOutput(cmd.Flags(), map[string]interface{}{"server": srvPK.Hex(), "carriers": results}, "")
 		return
 	}
-	fmt.Printf("dmsg server %s — direct per-carrier reachability:\n", srvPK.Hex()[:8])
+	cmdutil.Printf("dmsg server %s — direct per-carrier reachability:\n", srvPK.Hex()[:8])
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "CARRIER\tSTATUS\tLATENCY\tADDR\tERROR") //nolint:errcheck,gosec
 	for _, r := range results {

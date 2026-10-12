@@ -122,7 +122,7 @@ Example:
   skywire cli config gen-keys | tee sd-keys.txt
   service-discovery --sk $(tail -n1 sd-keys.txt)`,
 	Run: func(_ *cobra.Command, _ []string) {
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
 		cfg, err := buildConfig()

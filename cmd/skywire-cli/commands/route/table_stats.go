@@ -6,6 +6,8 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -44,8 +46,8 @@ leaking them.`,
 			internal.PrintOutput(cmd.Flags(), stats, "")
 			return
 		}
-		fmt.Printf("rules:    %d\n", stats.Count)
-		fmt.Printf("next_id:  %d  (route-ID high-water; never reused)\n", stats.NextID)
+		cmdutil.Printf("rules:    %d\n", stats.Count)
+		cmdutil.Printf("next_id:  %d  (route-ID high-water; never reused)\n", stats.NextID)
 		if len(stats.ByType) > 0 {
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "by type\tcount") //nolint:errcheck,gosec

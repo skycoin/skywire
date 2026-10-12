@@ -2,6 +2,7 @@
 package logging
 
 import (
+	"io"
 	"os"
 	"time"
 
@@ -49,6 +50,15 @@ type MasterLogger struct {
 	*logrus.Logger
 }
 
+// Stderr is where a logger with no output of its own writes: the process's
+// stderr, or that of an in-process run (cmdutil replaces it).
+var Stderr = func() io.Writer { return os.Stderr }
+
+// stderrWriter writes to whatever Stderr is at the time of each write.
+type stderrWriter struct{}
+
+func (stderrWriter) Write(p []byte) (int, error) { return Stderr().Write(p) }
+
 // ExitFunc ends the program after a Fatal line. A host that runs commands in
 // its own process replaces it (cmdutil.Exit).
 var ExitFunc = os.Exit
@@ -59,7 +69,7 @@ func NewMasterLogger() *MasterLogger {
 
 	return &MasterLogger{
 		Logger: &logrus.Logger{
-			Out: os.Stderr,
+			Out: stderrWriter{},
 			Formatter: &TextFormatter{
 				FullTimestamp:      true,
 				AlwaysQuoteStrings: true,

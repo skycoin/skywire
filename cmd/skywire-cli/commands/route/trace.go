@@ -22,10 +22,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -125,7 +126,7 @@ Output:
 		}
 
 		if !traceQuiet {
-			fmt.Fprintf(os.Stderr, "trace: %s -> %s (rf=%s, max-hops=%d)\n",
+			cmdutil.Eprintf("trace: %s -> %s (rf=%s, max-hops=%d)\n",
 				shortPK(srcPK), shortPK(dstPK), traceRfURL, traceMaxHops)
 		}
 
@@ -162,7 +163,7 @@ Output:
 			return
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "HOP\tPK\tRTT\tNOTES") //nolint:errcheck
 		for _, r := range results {
 			rtt := "n/a"

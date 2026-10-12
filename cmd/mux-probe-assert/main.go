@@ -93,7 +93,7 @@ func main() {
 	var baselinePath string
 	flag.StringVar(&baselinePath, "baseline", "", "path to baseline JSON (required)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s -baseline=<path> < tally.txt\n\n", os.Args[0])
+		cmdutil.Eprintf("usage: %s -baseline=<path> < tally.txt\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -105,17 +105,17 @@ func main() {
 
 	baseline, err := loadBaseline(baselinePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "load baseline %q: %v\n", baselinePath, err)
+		cmdutil.Eprintf("load baseline %q: %v\n", baselinePath, err)
 		cmdutil.Exit(exitUsage)
 	}
 
-	tally, err := parseTally(os.Stdin)
+	tally, err := parseTally(cmdutil.Stdin())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse tally: %v\n", err)
+		cmdutil.Eprintf("parse tally: %v\n", err)
 		cmdutil.Exit(exitUsage)
 	}
 
-	code := assertTally(tally, baseline, os.Stderr)
+	code := assertTally(tally, baseline, cmdutil.Stderr())
 	cmdutil.Exit(code)
 }
 

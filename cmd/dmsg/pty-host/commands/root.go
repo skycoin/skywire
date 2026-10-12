@@ -283,7 +283,7 @@ func configFromJSON(conf pty.Config) (pty.Config, error) {
 	var jsonConf pty.Config
 
 	if confStdin {
-		if err := json.NewDecoder(os.Stdin).Decode(&jsonConf); err != nil {
+		if err := json.NewDecoder(cmdutil.Stdin()).Decode(&jsonConf); err != nil {
 			return pty.Config{}, fmt.Errorf("flag 'confstdin' is set, but config read from stdin is invalid: %w", err)
 		}
 	}

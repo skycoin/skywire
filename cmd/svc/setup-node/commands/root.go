@@ -106,7 +106,7 @@ Usage:
 			rdr = f
 		} else {
 			logger.Info("Reading config from STDIN")
-			rdr = bufio.NewReader(os.Stdin)
+			rdr = bufio.NewReader(cmdutil.Stdin())
 		}
 		raw, err := io.ReadAll(rdr)
 		if err != nil {
@@ -140,7 +140,7 @@ var checkHealthCmd = &cobra.Command{
 	Long:  "Health check of route setup node",
 	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 1 {
-			fmt.Println("supply setup node public key as argument")
+			cmdutil.Println("supply setup node public key as argument")
 			cmdutil.Exit(1)
 		}
 
@@ -205,7 +205,7 @@ var checkHealthCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Println("Health check OK:", reply.Status)
+		cmdutil.Println("Health check OK:", reply.Status)
 	},
 }
 

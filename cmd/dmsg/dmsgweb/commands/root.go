@@ -2,7 +2,6 @@
 package commands
 
 import (
-	"fmt"
 	"net/http"
 	"runtime"
 	"strings"
@@ -65,6 +64,6 @@ func printEnvs(envfile string) {
 		}
 		envfile = strings.Join(envfileslice, "\n")
 	}
-	fmt.Println(envfile)
+	cmdutil.Println(envfile)
 	cmdutil.Exit(0)
 }

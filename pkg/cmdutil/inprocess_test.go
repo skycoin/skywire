@@ -5,12 +5,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func testTree(started chan<- struct{}) *cobra.Command {
@@ -43,7 +48,8 @@ func testTree(started chan<- struct{}) *cobra.Command {
 
 func TestRun(t *testing.T) {
 	root := testTree(make(chan struct{}))
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel) // ends the bg command, still waiting after its Exit
 	run := func(args ...string) (int, string, string) {
 		var out, errb bytes.Buffer
 		code := Run(ctx, root, args, strings.NewReader(""), &out, &errb)
@@ -91,4 +97,40 @@ func TestRunOverlapping(t *testing.T) {
 		t.Fatal("the blocking run did not end")
 	}
 	require.Equal(t, "blocking\n", blockOut.String())
+}
+
+// Output written without a writer at hand reaches the run it belongs to: from
+// the command's goroutine, from one it starts, and through the logger.
+func TestRunStdio(t *testing.T) {
+	root := &cobra.Command{Use: "t", SilenceUsage: true, SilenceErrors: true}
+	say := func(_ *cobra.Command, args []string) {
+		fmt.Fprintln(Stdout(), "own", args[0]) //nolint:errcheck
+		done := make(chan struct{})
+		go func() {
+			fmt.Fprintln(Stdout(), "child", args[0]) //nolint:errcheck
+			close(done)
+		}()
+		<-done
+		logging.MustGetLogger("t").Warn("logged " + args[0])
+	}
+	// Two commands: one command's flags are package state, so it does not overlap itself.
+	root.AddCommand(&cobra.Command{Use: "a", Run: say}, &cobra.Command{Use: "b", Run: say})
+	var a, b, aerr, berr bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		Run(context.Background(), root, []string{"a", "a"}, strings.NewReader(""), &a, &aerr)
+	}()
+	go func() {
+		defer wg.Done()
+		Run(context.Background(), root, []string{"b", "b"}, strings.NewReader(""), &b, &berr)
+	}()
+	wg.Wait()
+	require.Equal(t, "own a\nchild a\n", a.String())
+	require.Equal(t, "own b\nchild b\n", b.String())
+	require.Contains(t, aerr.String(), "logged a")
+	require.NotContains(t, aerr.String(), "logged b")
+	require.Eventually(t, func() bool { return active.Load() == 0 }, 5*time.Second, 10*time.Millisecond)
+	require.Same(t, Stdout(), io.Writer(os.Stdout), "outside a run it is the process's own")
 }

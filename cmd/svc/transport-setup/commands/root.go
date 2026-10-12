@@ -177,9 +177,9 @@ var addTPCmd = &cobra.Command{
 			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		if nice {
-			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
+			cmdutil.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
 		} else {
-			fmt.Printf("%v", res)
+			cmdutil.Printf("%v", res)
 		}
 
 	},
@@ -214,9 +214,9 @@ var rmTPCmd = &cobra.Command{
 			cmdutil.Fatalf("Error occurred: %v\n", err)
 		}
 		if nice {
-			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
+			cmdutil.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
 		} else {
-			fmt.Printf("%v", res)
+			cmdutil.Printf("%v", res)
 		}
 	},
 }
@@ -234,9 +234,9 @@ var listTPCmd = &cobra.Command{
 			cmdutil.Fatal("something unexpected happened: ", err, res)
 		}
 		if nice {
-			fmt.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
+			cmdutil.Printf("%v", string(pretty.Color(pretty.Pretty([]byte(res)), nil)))
 		} else {
-			fmt.Printf("%v", res)
+			cmdutil.Printf("%v", res)
 		}
 	},
 }

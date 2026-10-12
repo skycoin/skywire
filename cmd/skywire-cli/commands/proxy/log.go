@@ -4,7 +4,6 @@ package skysocksc
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -60,12 +59,12 @@ and leaves the running proxy untouched.
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to fetch recent app log: %w", err))
 		}
 		for _, ln := range recent {
-			fmt.Fprintln(os.Stdout, ln) //nolint:errcheck // best-effort stdout write
+			cmdutil.Println(ln) //nolint:errcheck // best-effort stdout write
 		}
 
 		if !logFollow {
 			if len(recent) == 0 {
-				fmt.Fprintf(os.Stderr, "no recent events for %q (is the proxy running? try -f to wait for new ones)\n", clientName)
+				cmdutil.Eprintf("no recent events for %q (is the proxy running? try -f to wait for new ones)\n", clientName)
 			}
 			return
 		}
@@ -80,15 +79,15 @@ and leaves the running proxy untouched.
 		vs, err := clirpc.OpenVerboseTo(ctx, clirpc.Addr, clirpc.VerboseFilter{
 			AppName: clientName,
 			Level:   logLevel,
-		}, os.Stdout)
+		}, cmdutil.Stdout())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		_ = vs.WaitSubscribed(ctx, 2*time.Second) //nolint:errcheck
-		fmt.Fprintf(os.Stderr, "--- attached to %q; streaming events (ctrl+c to detach) ---\n", clientName)
+		cmdutil.Eprintf("--- attached to %q; streaming events (ctrl+c to detach) ---\n", clientName)
 
 		<-ctx.Done()
-		fmt.Fprintln(os.Stderr, "detaching...")
+		cmdutil.Eprintln("detaching...")
 		vs.Close()
 	},
 }

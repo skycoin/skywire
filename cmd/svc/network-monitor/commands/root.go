@@ -143,7 +143,7 @@ HTTP Endpoints:
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
 			log.Printf("failed to output build info: %v", err)
 		}
 
@@ -320,7 +320,7 @@ var deregisterCmd = &cobra.Command{
 				if err := deregisterFromSD(deregSDURL, sType, pkStrs, nmPubKey, nmSign); err != nil {
 					log.Printf("failed to deregister from %s: %v", sType, err)
 				} else {
-					fmt.Printf("Successfully deregistered %d key(s) from %s\n", len(pks), sType)
+					cmdutil.Printf("Successfully deregistered %d key(s) from %s\n", len(pks), sType)
 				}
 			}
 		} else {
@@ -339,7 +339,7 @@ var deregisterCmd = &cobra.Command{
 				if err := rpcClient.DeregisterService(pks, sType); err != nil {
 					log.Printf("failed to deregister from %s: %v", sType, err)
 				} else {
-					fmt.Printf("Successfully deregistered %d key(s) from %s\n", len(pks), sType)
+					cmdutil.Printf("Successfully deregistered %d key(s) from %s\n", len(pks), sType)
 				}
 			}
 		}

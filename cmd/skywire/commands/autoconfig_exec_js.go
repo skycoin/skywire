@@ -106,7 +106,7 @@ func finishAutoconfig(r resolvedConfig) {
 	msg2(fmt.Sprintf("Starting visor in the foreground:\n  %sskywire visor -c %s%s", colorCyan, r.configPath, colorReset))
 	RootCmd.SetArgs([]string{"visor", "-c", r.configPath})
 	if err := RootCmd.Execute(); err != nil {
-		fmt.Printf("%s>>> FATAL:%s visor exited with error: %v\n", colorRed, colorReset, err)
+		cmdutil.Printf("%s>>> FATAL:%s visor exited with error: %v\n", colorRed, colorReset, err)
 		cmdutil.Exit(1)
 	}
 }

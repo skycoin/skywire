@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/bitree"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -79,10 +81,10 @@ the tree companion to 'proxy log' (which streams the events/log).
 			// would be empty for a working proxy. Say what the direct path
 			// is carrying instead of implying the proxy is down.
 			if direct := fetchProxyDirect(rpcClient, clientName); len(direct) > 0 {
-				fmt.Printf("%s\n", renderProxyDirect(direct))
+				cmdutil.Printf("%s\n", renderProxyDirect(direct))
 				return
 			}
-			fmt.Printf("no active route group for app=%s (is the proxy running?)\n", clientName)
+			cmdutil.Printf("no active route group for app=%s (is the proxy running?)\n", clientName)
 			return
 		}
 
@@ -91,7 +93,7 @@ the tree companion to 'proxy log' (which streams the events/log).
 		if wantColor(treeColor) {
 			opts.StyleCell = ansiStyleCell
 		}
-		fmt.Println(bitree.Render(proxystatus.RouteTree(snap), opts))
+		cmdutil.Println(bitree.Render(proxystatus.RouteTree(snap), opts))
 	},
 }
 
