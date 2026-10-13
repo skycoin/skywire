@@ -51,8 +51,8 @@ skywire cli serve add 8080 --to 8080 --label "My App" --desc "Web dashboard"
 # Skynet only
 skywire cli serve add 3000 --to 3000 --dmsg=false
 
-# Host a website on port 80 (HTTP reverse-proxy through the
-# landing-page handler — replaces the visor's default landing page)
+# Replace the landing page on the bare name with your own site (vhosts,
+# below, serve other names on port 80)
 skywire cli serve add 80 --to 127.0.0.1:3000 --label "My Website"
 ```
 
@@ -105,16 +105,61 @@ port-80 HTTP reverse-proxy**, so a single site needs nothing but the one
 `serve add` command. The visor forwards port-80 HTTP straight to your local
 app. Good for a single dashboard, API, or static site.
 
-### Many sites, HTTPS, per-PK auth → "websites over skywire"
+### Many sites by name: vhosts
 
-For **more than one site**, `Host`/path routing, HTTPS, or a backend that needs
-the caller's identity, run a normal reverse proxy (Caddy / nginx) on the host
-and forward the visor's port 80 to it with `--preserve-host` so it sees the
-vhost the visitor asked for:
+The visor's port 80 picks a site by the name it was asked for. The resolving
+proxy turns `http://example.com.<label>.skynet/` into a request for
+`example.com`, so one visor can serve many named sites. The bare
+`<label>.skynet` is the visor's own name and keeps its landing page and its
+routes (`/health`, `/ping`, `/services`, `/node-info`).
+
+A vhost serves one name from a local service, with no reverse proxy needed:
 
 ```bash
-skywire cli serve add 80 --to 127.0.0.1:80 --preserve-host --label "sites"
+skywire cli serve vhost add status --to 8092
+skywire cli serve vhost add blog --to 127.0.0.1:4000 --alias blog.example.org
 ```
+
+The vhost named `*` takes every name no other vhost has. Point it at Caddy or
+nginx and that server chooses the site by Host, as it does on clearnet:
+
+```bash
+skywire cli serve vhost add '*' --to 80 --preserve-host
+```
+
+`skywire cli serve vhost` lists them and `serve vhost rm <name>` removes one.
+
+### Your own landing page
+
+The bare name's page is set apart from the vhosts. `serve add 80` replaces the
+landing page with a local site of your own, and the vhosts stay as they are:
+
+```bash
+skywire cli serve add 80 --to 127.0.0.1:8080
+```
+
+The site can be anything local, including the same Caddy on a second port:
+
+```caddyfile
+http://:8080 {
+	root * /srv/landing
+	file_server
+}
+```
+
+The visor's routes still answer on the bare name. `serve rm 80` brings the
+default landing page back and keeps the vhosts.
+
+Older setups sent port 80 straight to Caddy with `serve add 80 --to
+127.0.0.1:80 --preserve-host`. That still works, but Caddy then also gets the
+bare name, so the landing page is gone. To move to a catch-all vhost:
+
+```bash
+skywire cli serve vhost add '*' --to 80 --preserve-host
+skywire cli serve rm 80
+```
+
+### HTTPS and per-PK auth → "websites over skywire"
 
 That's a whole topic of its own — **websites over skywire** — covered in depth
 elsewhere so it isn't re-explained here:
@@ -126,8 +171,9 @@ elsewhere so it isn't re-explained here:
 - **[Resolver TLS mode](skynet-tls.md)** — HTTPS for `.dmsg`/`.skynet` browser
   requests, and the base32 hostname format.
 
-Rule of thumb: **one HTTP app → the built-in proxy** above; **many sites /
-HTTPS / auth → a reverse proxy** and those two guides.
+Rule of thumb: **one HTTP app → the built-in proxy** above; **a few named
+sites → vhosts**; **many sites / HTTPS / auth → a reverse proxy behind the `*`
+vhost** and those two guides.
 
 ## Access Control
 
