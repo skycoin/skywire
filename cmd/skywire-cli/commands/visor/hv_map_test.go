@@ -81,3 +81,17 @@ func TestHVMap(t *testing.T) {
 	require.Greater(t, leafCol, subCol)
 	require.Contains(t, out, "offline")
 }
+
+func TestHVMapOnly(t *testing.T) {
+	hv, _ := cipher.GenerateKeyPair()
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	tree := visorapi.HVVisorTree{Sections: []visorapi.HVVisorTreeNode{
+		{HypervisorPK: hv, Visors: []visorapi.HVVisorEntry{{PK: hv, IsLocal: true}, {PK: a}, {PK: b}}},
+	}}
+	m := collectHVMap(nil, tree, map[cipher.PubKey]bool{a: true})
+	require.Equal(t, hv, m.Hypervisor)
+	require.Len(t, m.Visors, 1)
+	require.Equal(t, a, m.Visors[0].PK)
+	require.Len(t, collectHVMap(nil, tree, nil).Visors, 3)
+}

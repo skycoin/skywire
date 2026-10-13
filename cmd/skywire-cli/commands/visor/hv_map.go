@@ -40,16 +40,26 @@ func init() {
 }
 
 var hvMapCmd = &cobra.Command{
-	Use:   "map",
+	Use:   "map [visor-pk...]",
 	Short: "Show the visors of this hypervisor with their services, apps and forwarded ports",
 	Long: `Show every visor attached to this hypervisor as a tree, asking each one
 live for the deployment services it embeds, its apps and its forwarded ports.
 
 The root is this hypervisor. A visor attached through a sub-hypervisor hangs
 under that hypervisor. Keys that the chosen deployment publishes are named by
-their role, and a final branch lists the published keys no visor here runs.`,
-	Args: cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
+their role, and a final branch lists the published keys no visor here runs.
+
+Given keys, the tree shows only those visors, in that order, and the final
+branch lists the published keys none of them embeds.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		only := map[cipher.PubKey]bool{}
+		for _, a := range args {
+			var pk cipher.PubKey
+			if err := pk.Set(a); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid visor key %q: %w", a, err))
+			}
+			only[pk] = true
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -58,7 +68,14 @@ their role, and a final branch lists the published keys no visor here runs.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors: %w", err))
 		}
-		m := collectHVMap(rpcClient, *tree)
+		m := collectHVMap(rpcClient, *tree, only)
+		order := map[cipher.PubKey]int{}
+		for i, a := range args {
+			var pk cipher.PubKey
+			_ = pk.Set(a) //nolint:errcheck // checked above
+			order[pk] = i
+		}
+		sort.SliceStable(m.Visors, func(i, j int) bool { return order[m.Visors[i].PK] < order[m.Visors[j].PK] })
 		roles := map[cipher.PubKey]string{}
 		switch hvMapEnv {
 		case "prod":
@@ -130,9 +147,10 @@ type mapKey struct {
 	Role string        `json:"role"`
 }
 
-// collectHVMap asks every visor in tree, at once, what it runs. A visor
-// listed under several hypervisors is shown under the first.
-func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree) hvMap {
+// collectHVMap asks every visor in tree, at once, what it runs, or only the
+// visors in only when it is not empty. A visor listed under several
+// hypervisors is shown under the first.
+func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher.PubKey]bool) hvMap {
 	var m hvMap
 	if len(tree.Sections) == 0 {
 		return m
@@ -141,7 +159,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree) hvMap {
 	seen := map[cipher.PubKey]bool{}
 	for _, s := range tree.Sections {
 		for _, e := range s.Visors {
-			if seen[e.PK] {
+			if seen[e.PK] || len(only) > 0 && !only[e.PK] {
 				continue
 			}
 			seen[e.PK] = true
