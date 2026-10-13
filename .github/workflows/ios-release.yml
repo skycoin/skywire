@@ -114,13 +114,16 @@ jobs:
             -derivedDataPath ios/DerivedData \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
             test
-          plist=ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app/Info.plist
-          stamped="$(plutil -extract CFBundleShortVersionString raw "$plist") ($(plutil -extract CFBundleVersion raw "$plist"))"
-          if [ "$stamped" != "$VERSION ($BUILD)" ]; then
-            echo "::error::the app says $stamped, expected $VERSION ($BUILD)"
-            exit 1
-          fi
-          echo "Info.plist: $stamped"
+          # Apple wants the extension's version and build to be its app's.
+          app=ios/DerivedData/Build/Products/Debug-iphonesimulator/Skywire.app
+          for plist in "$app/Info.plist" "$app/PlugIns/PacketTunnel.appex/Info.plist"; do
+            stamped="$(plutil -extract CFBundleShortVersionString raw "$plist") ($(plutil -extract CFBundleVersion raw "$plist"))"
+            if [ "$stamped" != "$VERSION ($BUILD)" ]; then
+              echo "::error::$plist says $stamped, expected $VERSION ($BUILD)"
+              exit 1
+            fi
+            echo "${plist#"$app/"}: $stamped"
+          done
 
       # Secrets cannot appear in an `if:`, so the decision is an output: a tag
       # delivers, a dispatch delivers only when asked, a pull request never.
