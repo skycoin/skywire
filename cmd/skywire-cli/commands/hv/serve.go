@@ -46,7 +46,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveBrowseSuffix, "browse-suffix", "", fmt.Sprintf("browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local); when --browse-origin is set (hosted mode) and this is empty it defaults to the deployment's browse_origin_suffix (%q from services-config.json)", deployment.Prod.BrowseOriginSuffix))
 	serveCmd.Flags().StringVar(&serveBrowseOrigin, "browse-origin", "", "ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)")
 	serveCmd.Flags().StringVar(&serveVOrigin, "v-origin", "", "the PUBLIC origin(s) of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Comma-separated for several apps sharing one browse domain, or \"*\" to accept any parent. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)")
-	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start")
+	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module kept beside this binary (skywire.wasm.gz), or in the user cache directory when that directory is not writable; when there is none yet, the release's is fetched the first time the desk is opened")
 	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
 	serveCmd.Flags().StringArrayVar(&serveLinks, "link", nil, "link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev")
@@ -61,11 +61,13 @@ var serveCmd = &cobra.Command{
 Serves the desk: the tab as a Linux host, whose terminal runs the ONE skywire
 command module (/skywire.wasm — the desk host, the in-tab visor and every
 'skywire' command) and whose nested browser opens the hypervisor UI that visor
-serves. The module is the one installed beside this binary (skywire.wasm.gz,
-which every package ships) or --exec-wasm, served as it is: this command has
-no visor to refresh it through. Restart the process after an update (e.g. wire
-it to a systemd service that restarts on auto-update) and put a reverse proxy
-(Caddy) in front on a subdomain. Without a module serve refuses to start.
+serves. The module is --exec-wasm, or the one kept beside this binary (skywire.wasm.gz),
+or in the user cache directory when that directory is not writable. Packages
+do not ship it: with none yet, the first desk open fetches the release's and
+checks it against its manifest. This command has no visor to refresh it
+through after that. Restart the process after an update (e.g. wire it to a
+systemd service that restarts on auto-update) and put a reverse proxy (Caddy)
+in front on a subdomain.
 
 The same surface can be hosted BY the visor itself (one binary, one process):
 set hypervisor.wasm_serve.addr in the visor config. This command is the

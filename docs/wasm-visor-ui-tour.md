@@ -212,9 +212,10 @@ skywire cli hv serve --tls -a 127.0.0.1:8443
 
 builds the single-file page and serves it, with the wasm module, over HTTPS;
 accept the local certificate once and the visor boots in the tab. The module
-is the one installed beside the binary (`skywire.wasm.gz`, which every package
-ships; `make wasm-module` puts one beside a source build) or `--exec-wasm`, and
-`hv serve` refuses to start without one.
+is `--exec-wasm`, or the one kept beside the binary (`skywire.wasm.gz`; `make
+wasm-module` puts one beside a source build). Packages do not ship it: with none
+yet, the first desk open fetches it, from the deployment's source visor when a
+visor serves the desk, else from the release.
 
 A visor hosts the same surface itself from `hypervisor.wasm_serve.addr`, and a
 hypervisor serves it beside the dashboard at `hypervisor.desk_addr` (`:8010`).

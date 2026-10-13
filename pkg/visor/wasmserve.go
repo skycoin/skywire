@@ -22,6 +22,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"html"
 	"math/big"
@@ -64,7 +65,8 @@ type WasmServeConfig struct {
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
 	// ExecWasmPath serves the skywire command module from that file at
-	// /skywire.wasm. Empty means the module installed beside the binary.
+	// /skywire.wasm. Empty means the module kept beside the binary, or in the
+	// user cache directory (execwasm.DefaultPath), fetched when there is none.
 	ExecWasmPath string
 	// module returns the refresher for that module, nil to serve it as it is,
 	// as a standalone `hv serve` does.
@@ -97,8 +99,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// The ONE module everything served here runs out of: the desk host, the
 	// tab's visor, every command the terminal executes (execModuleSource).
 	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
+	if execWasmPath == "" {
+		return errors.New("no place for the skywire command module: pass --exec-wasm")
+	}
+	if cfg.module == nil && cfg.ExecWasmPath == "" {
+		// Standalone, with no visor to fetch it through: the release's.
+		standalone := newReleaseModule(execWasmPath, log)
+		cfg.module = func() *wasmModuleRefresher { return standalone }
+	}
 	if !haveExecWasm {
-		return fmt.Errorf("no skywire command module at %q: install skywire.wasm.gz beside the binary or pass --exec-wasm", execWasmPath)
+		log.WithField("path", execWasmPath).Info("No skywire command module yet; it is fetched when the desk is first opened")
 	}
 	cfg.ExecWasmPath = execWasmPath
 	uiFS, err := HypervisorUIFS()
@@ -217,7 +227,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// start without one) — the desk host, the tab's visor and every command
 	// the terminal runs.
 	mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
-		cfg.refresher().await(r.Context())
+		cfg.refresher().ready(r.Context())
 		serveExecWasm(w, r, execWasmPath)
 	})
 	// The desk — the ONE page, served AT THE ROOT below: the tab as a Linux

@@ -1,10 +1,10 @@
 // Package execwasm pkg/wasmhv/execwasm/execwasm.go c3-wasm-embed
 //
 // The full skywire command module for GOOS=js: the desk's `skywire` command
-// and the tab visor. It is not embedded in the native binary. It ships beside
-// it as skywire.wasm.gz with a manifest, skywire.wasm.json, both written by
-// scripts/wasm-module.sh, and a visor serves that copy at /skywire.wasm and
-// refreshes it when the desk is opened (pkg/visor/wasmmodule.go).
+// and the tab visor. It is not embedded in the native binary, and packages do
+// not ship it. It lives beside the binary as skywire.wasm.gz with a manifest,
+// skywire.wasm.json, both written by scripts/wasm-module.sh, and is fetched
+// when the desk is first opened and refreshed after (pkg/visor/wasmmodule.go).
 package execwasm
 
 import (
@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // The module and its manifest, as installed beside the binary.
@@ -30,17 +31,53 @@ type Manifest struct {
 	Size     int64  `json:"size"`
 }
 
-// DefaultPath is the module installed beside the running binary, "" when the
-// executable cannot be located.
+// DefaultPath is where the module is kept: beside the running binary, or in
+// the user's cache directory when it is not there already and the binary's
+// directory cannot be written, as for a packaged binary run by a user. It is
+// "" when the executable cannot be located.
 func DefaultPath() string {
-	exe, err := os.Executable()
+	defaultOnce.Do(func() {
+		exe, err := os.Executable()
+		if err != nil {
+			return
+		}
+		if p, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = p
+		}
+		cache, _ := os.UserCacheDir() //nolint:errcheck // no cache dir leaves the binary's
+		defaultPath = pathIn(filepath.Dir(exe), cache)
+	})
+	return defaultPath
+}
+
+var (
+	defaultOnce sync.Once
+	defaultPath string
+)
+
+// pathIn picks the module beside the binary in dir when it exists there or dir
+// is writable, else the one under cache, which is created.
+func pathIn(dir, cache string) string {
+	beside := filepath.Join(dir, ModuleName)
+	if _, err := os.Stat(beside); err == nil || cache == "" || writable(dir) {
+		return beside
+	}
+	cached := filepath.Join(cache, "skywire", ModuleName)
+	if err := os.MkdirAll(filepath.Dir(cached), 0o755); err != nil { //nolint:gosec // the module is public
+		return beside
+	}
+	return cached
+}
+
+// writable reports whether a file can be created in dir.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".skywire-write-")
 	if err != nil {
-		return ""
+		return false
 	}
-	if p, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = p
-	}
-	return filepath.Join(filepath.Dir(exe), ModuleName)
+	f.Close()           //nolint:errcheck,gosec
+	os.Remove(f.Name()) //nolint:errcheck,gosec
+	return true
 }
 
 // ManifestPath is the manifest beside the module at path.
