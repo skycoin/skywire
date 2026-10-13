@@ -25,9 +25,9 @@ final class FleetChecks: XCTestCase {
         XCTAssertTrue(app.switches["fleet-screen-toggle"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.switches["fleet-screen-toggle"].value as? String, "1", "Fleet is off in the app")
         // Rows name a visor by its short key (ten characters, an ellipsis,
-        // the last eight) until the user names it.
+        // the last eight) until the user names it, in a text inside the row.
         let row = app.descendants(matching: .any).matching(identifier: "fleet-visor")
-            .matching(NSPredicate(format: "label CONTAINS %@", String(peer.prefix(10)))).firstMatch
+            .containing(NSPredicate(format: "label BEGINSWITH %@", String(peer.prefix(10)))).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 240), "the peer never appeared in Fleet")
         usleep(700_000)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
