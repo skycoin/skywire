@@ -138,8 +138,8 @@ type WasmServeConf struct {
 	Password string `json:"password,omitempty"` // optional access-password gate (use with TLS)
 	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
 	// /skywire.wasm: the desk host, the tab's visor and every command the
-	// desk's terminal runs. Empty means the module installed beside the
-	// binary, which is refreshed when the desk is opened. A path here is a
+	// desk's terminal runs. Empty means the module kept beside the binary,
+	// which is fetched and refreshed when the desk is opened. A path here is a
 	// developer's own build and is served as it is. Same as
 	// `skywire cli hv serve --exec-wasm`.
 	ExecWasm string `json:"exec_wasm,omitempty"`
