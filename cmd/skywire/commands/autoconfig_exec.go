@@ -117,16 +117,14 @@ func restartOrPrompt(r resolvedConfig) {
 		systemctlArgs = append(systemctlArgs, "--user")
 	}
 
-	// A running `hv serve` (the standalone wasm-visor page) serves the wasm build
-	// EMBEDDED in the running binary, so it goes stale after a binary update until
-	// its service restarts — the reason theskywirenetwork.net can lag develop.
-	// Refresh it here as part of autoconfig, but only if it's ALREADY active
-	// (never start it), and always as a system unit (it isn't a --user service).
-	// A no-op when the unit isn't installed, so this is safe whether or not the
-	// package ships skywire-wasm-visor-serve.service yet.
-	if exec.Command("systemctl", "is-active", "--quiet", "skywire-wasm-visor-serve.service").Run() == nil { //nolint:gosec
-		msg3("Restarting skywire-wasm-visor-serve (hv serve re-embeds the updated blob)…")
-		_ = exec.Command("systemctl", "restart", "skywire-wasm-visor-serve.service").Run() //nolint:errcheck,gosec
+	// The packaged units that run the skywire binary beside the visor keep the
+	// old binary after an update until they restart. Restart the ones already
+	// active, never start one, always as system units.
+	for _, unit := range companionUnits {
+		if exec.Command("systemctl", "is-active", "--quiet", unit).Run() == nil { //nolint:gosec
+			msg3("Restarting " + unit + "…")
+			_ = exec.Command("systemctl", "restart", unit).Run() //nolint:errcheck,gosec
+		}
 	}
 
 	checkArgs := append(append([]string{}, systemctlArgs...), "is-active", "--quiet", "skywire")
@@ -193,4 +191,12 @@ func syncDeploymentDropIn(path string) (bool, error) {
 		return false, err
 	}
 	return true, os.WriteFile(deploymentDropIn, []byte(content), 0o644) //nolint:gosec
+}
+
+// companionUnits are the packaged units that run the skywire binary beside the
+// visor, which autoconfig restarts when they are active (init/).
+var companionUnits = []string{
+	"skywire-wasm-visor-serve.service",
+	"skywire-skycoin.service",
+	"skywire-skycoin-explorer.service",
 }
