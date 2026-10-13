@@ -9,10 +9,13 @@ The root is this hypervisor. A visor attached through a sub-hypervisor hangs
 under that hypervisor. Keys that the chosen deployment publishes are named by
 their role, and a final branch lists the published keys no visor here runs.
 
+Given keys, the tree shows only those visors, in that order, and the final
+branch lists the published keys none of them embeds.
+
 ## Usage
 
 ```
-skywire cli visor hv map
+skywire cli visor hv map [visor-pk...]
 ```
 
 ## Flags
