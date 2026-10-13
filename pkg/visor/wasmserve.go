@@ -79,7 +79,10 @@ type WasmServeConfig struct {
 	// BootReportFile keeps the boot reports desks post (wasmserve_bootreport.go)
 	// as JSON lines, moved to <file>.1 at 1 MiB. Empty keeps them only in the log.
 	BootReportFile string
-	Log            *logging.Logger // nil → package default
+	// Links are shown under the boot message as plain anchors, so a crawler finds
+	// the deployment's other sites before any script runs.
+	Links []WasmLink
+	Log   *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -224,7 +227,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// loopback the nested browser opens it maximized on top. A visor the
 	// operator stopped stays stopped across reloads (desk-boot's session).
 	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-	deskPage := deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
+	deskPage := withLinks(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort)), cfg.Links)
 	if cfg.Harness {
 		// --harness injects ctl-bridge.js (its presence IS the harness
 		// signal). On the desk it registers the tab and mirrors the foreground visor
@@ -700,6 +703,7 @@ const deskShellTemplate = `<!DOCTYPE html>
   #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
   #boot .t{color:#9d7cff;font:600 18px system-ui}
   #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
+  #boot nav a{color:#9d7cff;margin:0 .6em;font-size:12px;text-decoration:none}
   #boot.gone{display:none}
 </style>
 </head>
@@ -824,4 +828,22 @@ func (cfg WasmServeConfig) refresher() *wasmModuleRefresher {
 		return nil
 	}
 	return cfg.module()
+}
+
+// WasmLink is a site linked from the served page.
+type WasmLink struct{ Name, URL string }
+
+// withLinks adds links under the boot message of a desk page.
+func withLinks(page []byte, links []WasmLink) []byte {
+	if len(links) == 0 {
+		return page
+	}
+	var b strings.Builder
+	b.WriteString(`<nav>`)
+	for _, l := range links {
+		fmt.Fprintf(&b, `<a href="%s">%s</a>`, html.EscapeString(l.URL), html.EscapeString(l.Name))
+	}
+	b.WriteString(`</nav>`)
+	const msg = `<div class="s" id="boot-msg">loading…</div>`
+	return []byte(strings.Replace(string(page), msg, msg+"\n  "+b.String(), 1))
 }
