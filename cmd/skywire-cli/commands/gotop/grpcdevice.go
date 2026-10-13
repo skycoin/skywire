@@ -15,8 +15,8 @@ import (
 )
 
 // grpcDevice is a gotop device extension that fetches stats from a remote visor via gRPC.
-// It registers with gotop's device system and provides remote data using the same
-// device names as local gopsutil devices, so the data overwrites local values.
+// It replaces gotop's local gopsutil devices, so the widgets show only what
+// the visor reports.
 type grpcDevice struct {
 	client *rpcgrpc.PingClient
 	ctx    context.Context
@@ -31,9 +31,8 @@ type grpcDevice struct {
 
 var globalGRPCDevice *grpcDevice
 
-// SetupGRPCDevice initializes the gRPC device extension.
-// The device functions use the same names as local gopsutil devices (e.g., "CPU0", "Main")
-// so that remote data overwrites local data in gotop's widget maps.
+// SetupGRPCDevice makes the local visor gotop's only source of CPU, memory and
+// temperature readings.
 func SetupGRPCDevice(client *rpcgrpc.PingClient, _ string, updateInterval time.Duration, includeProcs bool, procLimit int32) error {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -44,13 +43,7 @@ func SetupGRPCDevice(client *rpcgrpc.PingClient, _ string, updateInterval time.D
 		initialized: make(chan struct{}),
 	}
 
-	// Register device functions with gotop
-	// These are registered AFTER the local gopsutil devices (which register in init()),
-	// so they run last and their values overwrite the local values in the map.
-	devices.RegisterCPU(globalGRPCDevice.updateCPU)
-	devices.RegisterMem(globalGRPCDevice.updateMem)
-	devices.RegisterTemp(globalGRPCDevice.updateTemp)
-	devices.RegisterShutdown(globalGRPCDevice.shutdown)
+	globalGRPCDevice.register()
 
 	// Start background streaming
 	go globalGRPCDevice.streamStats(updateInterval, includeProcs, procLimit)
@@ -84,11 +77,7 @@ func SetupRemoteGRPCDevice(client *rpcgrpc.PingClient, remotePK string, updateIn
 		initialized: make(chan struct{}),
 	}
 
-	// Register device functions with gotop
-	devices.RegisterCPU(globalGRPCDevice.updateCPU)
-	devices.RegisterMem(globalGRPCDevice.updateMem)
-	devices.RegisterTemp(globalGRPCDevice.updateTemp)
-	devices.RegisterShutdown(globalGRPCDevice.shutdown)
+	globalGRPCDevice.register()
 
 	// Start background streaming from remote visor
 	go globalGRPCDevice.streamRemoteStats(remotePK, updateInterval, includeProcs, procLimit)
@@ -218,4 +207,17 @@ func (g *grpcDevice) updateTemp(temps map[string]int) map[string]error {
 	}
 
 	return nil
+}
+
+// register makes g the only CPU, memory and temperature device. Registered next
+// to the local gopsutil ones, a remote visor's readings only overwrote the local
+// ones they shared a name with, so cores and sensors it lacked stayed local.
+func (g *grpcDevice) register() {
+	devices.ClearCPU()
+	devices.ClearMem()
+	devices.ClearTemps()
+	devices.RegisterCPU(g.updateCPU)
+	devices.RegisterMem(g.updateMem)
+	devices.RegisterTemp(g.updateTemp)
+	devices.RegisterShutdown(g.shutdown)
 }
