@@ -15,6 +15,9 @@ import (
 // dmsgServersFromCXO returns the servers in the current snapshot, or nil
 // when there is no snapshot yet or it has no server leaves.
 func (v *Visor) dmsgServersFromCXO() []*dmsgdisc.Entry {
+	if !takesNetworkFeeds {
+		return nil
+	}
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
 		return nil
