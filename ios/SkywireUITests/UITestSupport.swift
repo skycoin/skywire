@@ -103,6 +103,36 @@ extension XCTestCase {
         wait(for: state(app), anyOf: ["connected"], timeout: 180)
     }
 
+    func openSocks(_ app: XCUIApplication) {
+        openTab(.apps, in: app)
+        let row = app.buttons["hub-socks"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.staticTexts["socks-state"].waitForExistence(timeout: 10))
+    }
+
+    /// Taps proxies from service discovery, first to last (at most four),
+    /// until one connects: a public proxy that answered yesterday may not
+    /// today, so the last one picked is not relied on.
+    func connectFromTheList(_ app: XCUIApplication) {
+        // A row holds the server and its star, so it is a container, not a button.
+        let rows = app.descendants(matching: .any).matching(identifier: "socks-server-row")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 120), "service discovery listed no proxy")
+        let state = app.staticTexts["socks-state"]
+        for index in 0..<min(rows.count, 4) {
+            rows.element(boundBy: index).tap()
+            if wait(for: state, label: "Connected", timeout: 90) {
+                return
+            }
+        }
+        XCTFail("no proxy connected; state \(state.label)")
+    }
+
+    func wait(for element: XCUIElement, label: String, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", label), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     func state(_ app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["core-state"]
     }
