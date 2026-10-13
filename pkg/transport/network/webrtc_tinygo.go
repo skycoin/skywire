@@ -18,11 +18,11 @@ import (
 
 var errWebRTCUnsupported = errors.New("webrtc: not supported on this TinyGo target")
 
-func webrtcDial(_ context.Context, _ io.ReadWriteCloser, _ []string) (net.Conn, error) {
+func webrtcDial(_ context.Context, _ io.ReadWriteCloser, _ []string, _ func(string)) (net.Conn, error) {
 	return nil, errWebRTCUnsupported
 }
 
-func webrtcAccept(_ context.Context, _ io.ReadWriteCloser, _ []string) (net.Conn, error) {
+func webrtcAccept(_ context.Context, _ io.ReadWriteCloser, _ []string, _ func(string)) (net.Conn, error) {
 	return nil, errWebRTCUnsupported
 }
 

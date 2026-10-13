@@ -153,6 +153,7 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 	var err error
 	if e, found := c.tableEntry(rPK); found {
 		c.log.Debugf("Dialing WT %v @ %s (table)", rPK, e.URL)
+		c.announceDial(types.WT, e.URL)
 		conn, err = wtDial(ctx, e.URL, e.CertHash, e.CertHashNext)
 	} else {
 		conn, err = c.dialResolvedWT(ctx, rPK)

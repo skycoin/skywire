@@ -148,9 +148,11 @@ func ParseIP(addr string) (net.IP, bool, error) {
 		}
 	}
 
-	// filter out port if it exists
-	if strings.Contains(addr, ":") {
-		addr = strings.Split(addr, ":")[0]
+	// filter out port if it exists, keeping a bare or bracketed IPv6 address whole
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host
+	} else {
+		addr = strings.Trim(addr, "[]")
 	}
 
 	ip := net.ParseIP(addr)
