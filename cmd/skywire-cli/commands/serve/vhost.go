@@ -25,7 +25,7 @@ func init() {
 	vhostAddCmd.Flags().StringVar(&vhostTo, "to", "", "local service: host:port, or a port on 127.0.0.1")
 	vhostAddCmd.Flags().StringSliceVar(&vhostAliases, "alias", nil, "another Host name for the site, e.g. status.skywire.dev (repeatable)")
 	vhostAddCmd.Flags().StringVar(&vhostWhitelist, "whitelist", "", "comma-separated PKs allowed to reach the site (empty = everyone)")
-	vhostAddCmd.Flags().BoolVar(&vhostPreserveHost, "preserve-host", false, "pass the request's Host to the service instead of its own address")
+	vhostAddCmd.Flags().BoolVar(&vhostPreserveHost, "preserve-host", false, "send the name the site was asked by (e.g. status.skywire.dev) as the Host, not the service's address")
 	vhostCmd.AddCommand(vhostAddCmd, vhostRmCmd, vhostLsCmd)
 	RootCmd.AddCommand(vhostCmd)
 }
@@ -37,7 +37,12 @@ var vhostCmd = &cobra.Command{
 		"without Caddy: http://status.<pk>.skynet/ reaches the vhost named status, and\n" +
 		"http://status.skywire.dev.<pk>.skynet/ the one with that alias, as the resolving\n" +
 		"proxy rewrites the Host. The service can listen on localhost only. A site gets\n" +
-		"every path; the visor's own pages stay on its bare name. Bare `vhost` lists them.",
+		"every path; the visor's own pages stay on its bare name. The vhost named * takes\n" +
+		"every name no other vhost has, so a web server can choose the site itself. The\n" +
+		"bare name's own website is `serve add 80 --to ...`. Bare `vhost` lists them.",
+	Example: `  serve vhost add status --to 8092
+  serve vhost add '*' --to 80 --preserve-host   # every other name to Caddy
+  serve add 80 --to 8080                         # the bare <pk>.skynet's own site`,
 	Run: func(cmd *cobra.Command, _ []string) { listVhosts(cmd) },
 }
 
@@ -48,7 +53,7 @@ var vhostLsCmd = &cobra.Command{
 }
 
 var vhostAddCmd = &cobra.Command{
-	Use:   "add <name>",
+	Use:   "add <name|*>",
 	Short: "Serve a local service for a Host name, replacing one of that name",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -198,4 +203,21 @@ func parsePKs(s string) ([]cipher.PubKey, error) {
 		out = append(out, pk)
 	}
 	return out, nil
+}
+
+// vhostsOn are the vhosts on the port 80 entry, or none for another port.
+func vhostsOn(cmd *cobra.Command, rpcClient visorapi.API, port int) []visorapi.Vhost {
+	if port != 80 {
+		return nil
+	}
+	ports, err := rpcClient.ListForwardedPorts()
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	for _, p := range ports {
+		if p.Port == 80 {
+			return p.Vhosts
+		}
+	}
+	return nil
 }

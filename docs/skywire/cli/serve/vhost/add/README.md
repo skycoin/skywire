@@ -7,14 +7,14 @@ Serve a local service for a Host name, replacing one of that name
 ## Usage
 
 ```
-skywire cli serve vhost add <name>
+skywire cli serve vhost add <name|*>
 ```
 
 ## Flags
 
 ```
       --alias strings      another Host name for the site, e.g. status.skywire.dev (repeatable)
-      --preserve-host      pass the request's Host to the service instead of its own address
+      --preserve-host      send the name the site was asked by (e.g. status.skywire.dev) as the Host, not the service's address
       --to string          local service: host:port, or a port on 127.0.0.1
       --whitelist string   comma-separated PKs allowed to reach the site (empty = everyone)
 ```

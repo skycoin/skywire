@@ -6,7 +6,9 @@ A vhost is a local service the visor serves on its port 80 for a Host name,
 without Caddy: http://status.<pk>.skynet/ reaches the vhost named status, and
 http://status.skywire.dev.<pk>.skynet/ the one with that alias, as the resolving
 proxy rewrites the Host. The service can listen on localhost only. A site gets
-every path; the visor's own pages stay on its bare name. Bare `vhost` lists them.
+every path; the visor's own pages stay on its bare name. The vhost named * takes
+every name no other vhost has, so a web server can choose the site itself. The
+bare name's own website is `serve add 80 --to ...`. Bare `vhost` lists them.
 
 ## Usage
 
@@ -19,6 +21,14 @@ skywire cli serve vhost
 - [add](add/README.md) — Serve a local service for a Host name, replacing one of that name
 - [ls](ls/README.md) — List the vhosts
 - [rm](rm/README.md) — Stop serving a vhost
+
+## Examples
+
+```
+serve vhost add status --to 8092
+  serve vhost add '*' --to 80 --preserve-host   # every other name to Caddy
+  serve add 80 --to 8080                         # the bare <pk>.skynet's own site
+```
 
 ## Global Flags
 
