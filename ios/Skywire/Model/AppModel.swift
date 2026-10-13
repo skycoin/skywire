@@ -149,8 +149,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Seals the config when the user asked for it and the core is down.
-    private func sealIfAsked() {
-        guard settings.configEncrypted, coreState == .stopped || coreState == .failed else { return }
+    private func sealIfAsked(coreStopped: Bool = false) {
+        guard settings.configEncrypted, coreStopped || coreState == .stopped || coreState == .failed else { return }
         do {
             try vault.seal(enabled: true)
         } catch {
@@ -288,8 +288,10 @@ final class AppModel: ObservableObject {
         busy = true
         lastError = nil
         Task {
+            var finished = false
             do {
                 try await operation()
+                finished = true
             } catch {
                 // A start that Disconnect aborted fails with "stopped while
                 // starting": the user's doing, not an error to show.
@@ -301,7 +303,8 @@ final class AppModel: ObservableObject {
             busy = false
             if sealAfterStop {
                 sealAfterStop = false
-                sealIfAsked()
+                // The stop has finished; coreState may read "stopping" until its next 250 ms poll.
+                if finished { sealIfAsked(coreStopped: true) }
             }
         }
     }
