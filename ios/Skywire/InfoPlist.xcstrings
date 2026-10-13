@@ -53,19 +53,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat uses the microphone to record voice and video messages."
+            "value" : "SkyChat uses the microphone for calls and to record voice and video messages."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
+            "value" : "SkyChat usa el micrófono para las llamadas y para grabar mensajes de voz y de vídeo."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "SkyChat 使用麦克风录制语音和视频消息。"
+            "value" : "SkyChat 使用麦克风进行通话，以及录制语音和视频消息。"
           }
         }
       }

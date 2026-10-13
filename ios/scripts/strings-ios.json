@@ -129,9 +129,9 @@
       "es": "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
     },
     "NSMicrophoneUsageDescription": {
-      "en": "SkyChat uses the microphone to record voice and video messages.",
-      "zh-Hans": "SkyChat 使用麦克风录制语音和视频消息。",
-      "es": "SkyChat usa el micrófono para grabar mensajes de voz y de vídeo."
+      "en": "SkyChat uses the microphone for calls and to record voice and video messages.",
+      "zh-Hans": "SkyChat 使用麦克风进行通话，以及录制语音和视频消息。",
+      "es": "SkyChat usa el micrófono para las llamadas y para grabar mensajes de voz y de vídeo."
     },
     "NSCameraUsageDescription": {
       "en": "Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.",

@@ -44,7 +44,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Skywire uses Face ID to unlock the app when the app lock is on, and to confirm wallet sends and the showing of a recovery phrase.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SkyChat uses the microphone to record voice and video messages.</string>
+	<string>SkyChat uses the microphone for calls and to record voice and video messages.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
