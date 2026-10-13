@@ -61,8 +61,9 @@ ios/
 │   ├── CoreBridge/              # the only code that sees the C API (module SkywireCore)
 │   ├── CoreClient/              # the local-API client, the phone profile, provider messages; `swift test` on the Mac
 │   └── WalletCore/              # the Swift port of android/wallet-core; `swift test` on the Mac
-├── scripts/                     # CI helpers, the string seeder, the API fixture recorder
-├── gates/                       # milestone gate records and their evidence (text only)
+├── scripts/                     # CI helpers, the string seeder, the API fixture recorder, the bench (peer, calls, footprint, screenshots)
+├── gates/                       # milestone gate records, their evidence (text only), the regression checklist
+├── store/                       # App Store material: TestFlight and review notes, export compliance, privacy, screenshots
 └── Frameworks/SkywireCore.xcframework   # build output of make ios-core, gitignored
 ```
 
@@ -143,7 +144,12 @@ bind 127.0.0.1:8000 as well, so the app must not be connected while they run.
 | `Packages/WalletCore` (`swift test`) | the wallet against the Kotlin module's vectors and fixtures | Mac, CI |
 | `SkywireTests` | the core started and stopped through CoreBridge (it dials the real network); the string catalogues | Simulator, CI |
 | `SkywireAppTests` | SecretStore in the real Keychain, the wallet store, calls, the config regenerate, the diagnostics logs; `TunnelProbeTests` only on request (below) | Simulator (hosted by the app), CI |
-| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, restart from Home, the Fleet switch, Skymail (to itself, and both ways with a desktop peer) | Simulator, by hand |
+| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, the app's flows, chat, SOCKS, DEX, Fleet, Skymail and the wallet, some with a desktop peer; `FootprintTour` holds each state for the footprint table | Simulator, by hand |
+
+The release candidate's full run is `ios/gates/regression.md`: every flow as a
+numbered step, with the desktop peer (`ios/scripts/desktop-peer.sh`), the
+calls driven from the Mac (`ios/scripts/peer-call.py`) and the footprint table
+(`ios/scripts/footprint-table.py`).
 
 The screen tour and its screenshots:
 
@@ -297,6 +303,9 @@ All of it in the Apple developer portal and App Store Connect, by hand:
 - the privacy policy URL and the export-compliance answers.
 
 The identifiers are provisional until then, all in `Config/Shared.xcconfig`.
+The texts App Store Connect asks for (TestFlight notes, the App Review notes,
+export compliance, App Privacy, screenshots) are drafted in `store/`, with
+the decisions they leave to the account holder.
 
 ## Troubleshooting
 
