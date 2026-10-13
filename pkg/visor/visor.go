@@ -456,6 +456,7 @@ type Visor struct {
 	tpdAnnounce           tpdAnnounceStats           // announces of the transport-list feed, for visor state
 	tpdFeed               atomic.Pointer[tpdFeedRef] // the transport-list feed, for tpdFeedHealthy
 	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
+	serviceHealth         healthCache                // the last service-health probe (service_health_cache.go)
 	autoTpCooldown        autoTpCooldown             // automatic transports that failed recently, by peer and type
 	mail                  skymailHost
 	embeddedWisp          *EmbeddedWisp
