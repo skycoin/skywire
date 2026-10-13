@@ -54,6 +54,12 @@ import (
 //     over DMSG, so discovery registration is the health signal)
 //   - Transport Setup Nodes: same scheme as RSN
 func (v *Visor) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
+	return v.serviceHealth.get(serviceHealthMaxAge, time.Now, v.probeServiceHealth), nil
+}
+
+// probeServiceHealth probes as ServiceHealth describes. complete is false
+// while the dmsg HTTP client is not ready and every service reads N/A.
+func (v *Visor) probeServiceHealth() (_ []visorapi.ServiceHealthEntry, complete bool) {
 	// ---------- HTTP / DMSG services (ordered) ----------
 	type svcURLs struct {
 		httpURL, dmsgURL string
@@ -116,7 +122,7 @@ func (v *Visor) ServiceHealth() ([]visorapi.ServiceHealthEntry, error) {
 		results = append(results, v.dmsgServerHealth(dmsgClient)...)
 	}
 
-	return results, nil
+	return results, dmsgClient != nil
 }
 
 // healthProbeTimeout bounds a single /health probe. ServiceHealth fans every
