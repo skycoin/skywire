@@ -8,9 +8,11 @@ struct CallScreen: View {
 
     var body: some View {
         let ui = model.ui
-        ZStack {
-            Color.skyBackground.ignoresSafeArea()
-            if let peer = ui.peer {
+        // Without a name, nothing (Android's `state.peer ?: return`): a call the chat page placed and
+        // the peer answered before the next poll arrives as an id only, and the page's panel has it.
+        if let peer = ui.peer {
+            ZStack {
+                Color.skyBackground.ignoresSafeArea()
                 VStack(spacing: 0) {
                     VStack(spacing: 0) {
                         Color.clear.frame(height: 24)
@@ -40,11 +42,9 @@ struct CallScreen: View {
                 .padding(.horizontal, 32)
                 .padding(.vertical, 48)
                 .ignoresSafeArea()
-            } else {
-                MaterialSpinner()
             }
+            .foregroundStyle(Color.skyOnSurface)
         }
-        .foregroundStyle(Color.skyOnSurface)
     }
 
     /// Elapsed time, how the call being placed is going, why it ended, or "Incoming call".
