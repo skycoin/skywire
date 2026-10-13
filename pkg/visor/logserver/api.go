@@ -474,7 +474,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 
 		// Sites served by Host, linked under this visor's name.
 		for _, v := range api.vhostList() {
-			if !callerAllowed(req, v.Whitelist) {
+			if v.Name == AnyVhost || !callerAllowed(req, v.Whitelist) {
 				continue
 			}
 			url := html.EscapeString(fmt.Sprintf("http://%s.%s/", v.Names[0], host))
@@ -818,6 +818,9 @@ type Vhost struct {
 	Whitelist []cipher.PubKey // empty = everyone
 }
 
+// AnyVhost is the name of the vhost that serves every name no other has.
+const AnyVhost = "*"
+
 // SetVhosts replaces the sites served by Host. Nil or empty serves none.
 func (api *API) SetVhosts(vs []Vhost) {
 	m := make(map[string]*Vhost, len(vs))
@@ -832,16 +835,25 @@ func (api *API) SetVhosts(vs []Vhost) {
 }
 
 // vhostRouter serves a request whose Host names a vhost from that site, all
-// of its paths, and every other request from next.
+// of its paths, and every other request from next. The vhost "*" takes any
+// name no other vhost has, and the visor's own names never reach a vhost.
 func (api *API) vhostRouter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if vs := api.vhosts.Load(); vs != nil {
-			if v := (*vs)[vhostName(req.Host)]; v != nil {
+		name := vhostName(req.Host)
+		if vs := api.vhosts.Load(); vs != nil && name != "" {
+			v := (*vs)[name]
+			if v == nil {
+				v = (*vs)[AnyVhost]
+			}
+			if v != nil {
 				if !callerAllowed(req, v.Whitelist) {
 					w.WriteHeader(http.StatusForbidden)
 					return
 				}
-				v.Handler.ServeHTTP(w, req)
+				// The site sees the name it was asked by, not the visor's suffix.
+				r := *req
+				r.Host = name
+				v.Handler.ServeHTTP(w, &r)
 				return
 			}
 		}
@@ -851,7 +863,8 @@ func (api *API) vhostRouter(next http.Handler) http.Handler {
 
 // vhostName is the site a Host names: what the resolving proxy left of it
 // ("status", "status.skywire.dev"), or the vhost part of a Host it did not
-// rewrite (status.<pk>.skynet). A bare <pk>.skynet names none.
+// rewrite (status.<pk>.skynet). The visor's own names, a bare PK, an IP
+// address or localhost, name none.
 func vhostName(host string) string {
 	h := strings.ToLower(strings.TrimSuffix(host, "."))
 	if hh, _, err := net.SplitHostPort(h); err == nil {
@@ -865,6 +878,16 @@ func vhostName(host string) string {
 			}
 			return vhost
 		}
+	}
+	if h == "localhost" || net.ParseIP(strings.Trim(h, "[]")) != nil {
+		return ""
+	}
+	var pk cipher.PubKey
+	if pk.Set(h) == nil {
+		return ""
+	}
+	if _, err := cipher.ParseDNSLabel(h); err == nil {
+		return ""
 	}
 	return h
 }

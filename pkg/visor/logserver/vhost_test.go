@@ -96,3 +96,39 @@ func TestVhostName(t *testing.T) {
 		require.Equal(t, want, vhostName(host), host)
 	}
 }
+
+// The vhost * takes every name the others do not, and gets the short name as
+// its Host; the bare name stays the visor, whose own website is separate.
+func TestVhostCatchAll(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	echo := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, name+" "+r.Host+" "+r.URL.Path) //nolint:errcheck,gosec // a test fixture
+		})
+	}
+	api.SetVhosts([]Vhost{
+		{Name: "status", Names: []string{"status"}, Handler: echo("status")},
+		{Name: AnyVhost, Names: []string{AnyVhost}, Handler: echo("caddy")},
+	})
+	api.SetWebsiteHandler(echo("website"))
+	get := func(host, path string) string {
+		req := httptest.NewRequest(http.MethodGet, "http://x"+path, nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		api.Handler.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+	label := visorPK.DNSLabel()
+
+	require.Equal(t, "status status /a", get("status."+label+".skynet", "/a"))
+	require.Equal(t, "caddy skywire.dev /", get("skywire.dev", "/"))
+	require.Equal(t, "caddy skywire.dev /health", get("skywire.dev."+label+".skynet:80", "/health"))
+	require.Equal(t, "caddy blog.example.org /x", get("blog.example.org."+visorPK.Hex()+".dmsg", "/x"))
+
+	for _, own := range []string{label + ".skynet", visorPK.Hex() + ".dmsg", visorPK.Hex() + ":80", label, "127.0.0.1:80", "[::1]:80", "localhost", ""} {
+		require.Equal(t, "website "+own+" /", get(own, "/"), own)
+		require.NotContains(t, get(own, "/health"), "caddy", own)
+	}
+}
