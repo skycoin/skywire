@@ -31,6 +31,7 @@ var (
 	serveExecWasm     string
 	serveExecTinyGoJS string
 	serveBootReports  string
+	serveLinks        []string
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start")
 	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
+	serveCmd.Flags().StringArrayVar(&serveLinks, "link", nil, "link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -90,6 +92,15 @@ page never asks anyone to type a secret key.`,
 		if browseSuffix == "" && serveBrowseOrigin != "" {
 			browseSuffix = deployment.Prod.BrowseOriginSuffix
 		}
+		var links []visor.WasmLink
+		for _, l := range serveLinks {
+			name, u, ok := strings.Cut(l, "=")
+			if !ok || name == "" || u == "" {
+				cmd.PrintErrln("serve: --link wants name=url, got", l)
+				cmdutil.Exit(1)
+			}
+			links = append(links, visor.WasmLink{Name: name, URL: u})
+		}
 		if err := visor.ServeWasm(cmd.Context(), visor.WasmServeConfig{
 			Addr:             serveAddr,
 			TLS:              serveTLS,
@@ -104,6 +115,7 @@ page never asks anyone to type a secret key.`,
 			VOrigin:          serveVOrigin,
 			ExecWasmPath:     serveExecWasm,
 			BootReportFile:   serveBootReports,
+			Links:            links,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			cmdutil.Exit(1)
