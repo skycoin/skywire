@@ -87,3 +87,24 @@ func readTestFile(t *testing.T, p string) string {
 	}
 	return string(b)
 }
+
+// The settings editor opens the skywire.conf the config was generated from,
+// not whatever SKYENV the visor process happens to have.
+func TestSkyenvEditsTheRecordedFile(t *testing.T) {
+	recorded := filepath.Join(t.TempDir(), "skywire.conf")
+	if err := os.WriteFile(recorded, []byte("#ISHYPERVISOR=true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(skyenvfile.SKYENVVar, filepath.Join(t.TempDir(), "other.conf"))
+	conf, _ := newTestConfig(t)
+	conf.Skyenv = recorded
+	v := &Visor{conf: conf}
+
+	st, err := v.SetSkyenv(visorapi.SkyenvEdits{Set: map[string]string{"ishv": "true"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Path != recorded || st.Values["ISHYPERVISOR"] != "true" {
+		t.Errorf("edited %s, ISHYPERVISOR=%q; want %s", st.Path, st.Values["ISHYPERVISOR"], recorded)
+	}
+}
