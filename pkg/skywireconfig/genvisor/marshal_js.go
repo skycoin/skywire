@@ -260,10 +260,6 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("dmsgscp")
 		marshalDmsgscp(w, v.Dmsgscp, o.indent+1)
 	}
-	if v.UIServer != nil {
-		o.field("ui_server")
-		marshalUIServer(w, v.UIServer, o.indent+1)
-	}
 	if v.LogServer != nil {
 		o.field("log_server")
 		marshalLogServer(w, v.LogServer, o.indent+1)
@@ -625,21 +621,6 @@ func marshalDmsgscp(w *strings.Builder, d *visorconfig.Dmsgscp, indent int) {
 		o.field("whitelist")
 		writePubKeySlice(w, d.Whitelist, o.indent+1)
 	}
-	o.close()
-}
-
-func marshalUIServer(w *strings.Builder, u *visorconfig.UIServer, indent int) {
-	o := newObj(w, indent)
-	o.field("enable")
-	writeBool(w, u.Enable)
-	o.field("local_addr")
-	writeQuoted(w, u.LocalAddr)
-	o.field("dmsg_port")
-	writeUint(w, uint64(u.DmsgPort))
-	o.field("dmsg_whitelist")
-	writePubKeySlice(w, u.DmsgWhitelist, o.indent+1)
-	o.field("survey_dir")
-	writeQuoted(w, u.SurveyDir)
 	o.close()
 }
 

@@ -37,7 +37,6 @@ type v1JSON struct {
 	Dmsg          *dmsgspec.DmsgConfig `json:"dmsg"`
 	Pty           *Pty                 `json:"pty,omitempty"`
 	Dmsgscp       *Dmsgscp             `json:"dmsgscp,omitempty"`
-	UIServer      *UIServer            `json:"ui_server,omitempty"`
 	LogServer     *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
@@ -112,7 +111,6 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Dmsg = mirror.Dmsg
 	v.Pty = mirror.Pty
 	v.Dmsgscp = mirror.Dmsgscp
-	v.UIServer = mirror.UIServer
 	v.LogServer = mirror.LogServer
 	v.DmsgWeb = mirror.DmsgWeb
 	v.SkynetWeb = mirror.SkynetWeb
