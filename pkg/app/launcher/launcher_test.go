@@ -578,3 +578,38 @@ func TestNewLauncher(t *testing.T) {
 	_, err = appnet.ResolveNetworker(appnet.TypeDmsg)
 	require.NoError(t, err)
 }
+
+// TestInTreeAppRunsExternalWhenAsked: forcing external used to set the binary
+// to the app's name, which the registry then matched, so the app ran in
+// process anyway. A saved launcher_mode was ignored too, autostart included.
+func TestInTreeAppRunsExternalWhenAsked(t *testing.T) {
+	RegisterApp("intree-test", func(context.Context, []string) error { return nil })
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	start := func(ac appserver.AppConfig, mode string) appcommon.ProcConfig {
+		pm := &appserver.MockProcManager{}
+		var captured appcommon.ProcConfig
+		pm.On("Start", mock.AnythingOfType("appcommon.ProcConfig")).
+			Run(func(args mock.Arguments) { captured = args.Get(0).(appcommon.ProcConfig) }).
+			Return(appcommon.ProcID(1), nil)
+		l := newTestLauncher(t, pm, ac)
+		require.NoError(t, l.StartAppWithMode(ac.Name, nil, nil, mode))
+		return captured
+	}
+
+	ac := appserver.AppConfig{Name: "intree-test", Args: []string{"--x", "1"}}
+	pc := start(ac, "")
+	require.NotNil(t, pc.RunFunc, "in process stays the default")
+
+	pc = start(ac, "external")
+	require.Nil(t, pc.RunFunc)
+	require.Equal(t, exe, pc.BinaryLoc)
+	require.Equal(t, []string{"app", "intree-test", "--x", "1"}, pc.ProcArgs)
+	require.Equal(t, appcommon.RunModeExternal, pc.RunMode)
+
+	ac.LauncherMode = "external"
+	pc = start(ac, "")
+	require.Nil(t, pc.RunFunc, "a saved launcher_mode applies when none is passed")
+	require.Equal(t, exe, pc.BinaryLoc)
+}
