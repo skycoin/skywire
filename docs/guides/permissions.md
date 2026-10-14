@@ -25,6 +25,24 @@ getcap /path/to/skywire
 sudo skywire visor
 ```
 
+### SkyDNS
+
+SkyDNS (the `skydns` app) lets every program on the computer open `.dmsg` and
+`.skynet` names. It answers those names on a tun of its own, so it needs
+`CAP_NET_ADMIN` too, and systemd-resolved sends it only the `dmsg` and
+`skynet` zones.
+
+- **With `CAP_NET_ADMIN`** (a root visor, or `setcap` as above) it creates its
+  tun on each start and removes it on exit.
+- **Without it** it asks for a password once, through pkexec, and sets up a
+  persistent tun named `skydns0` owned by the visor's user. Later starts open
+  that tun and do not ask again. Remove it with `sudo ip link delete skydns0`.
+  This mode needs systemd-resolved.
+
+The dev loop (`scripts/dev-visor-loop.sh`) reinstalls the binary on every
+start, which drops a `setcap`. Its header shows a sudoers rule that lets it
+put the capability back after each build.
+
 ### VPN Server
 
 The VPN server requires elevated privileges to execute `iptables` and `sysctl` commands for:
