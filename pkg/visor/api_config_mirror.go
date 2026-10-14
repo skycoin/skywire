@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
@@ -67,20 +66,18 @@ func joinPKs(pks []cipher.PubKey) string {
 	return strings.Join(s, ",")
 }
 
-// skyenvPaths are the config autoconfig writes and the skywire.conf it reads.
-var skyenvPaths = func() (config, conf string) { return skyenv.SkywireConfig(), skyenvfile.DefaultPath() }
-
-// skyenvManaged reports the skywire.conf that autoconfig rebuilds this visor's
-// config from, or "" when the config is not autoconfig's.
+// skyenvManaged reports the skywire.conf this visor's config was generated
+// from, or "" when it was not generated from one.
 func (v *Visor) skyenvManaged() string {
-	config, path := skyenvPaths()
-	if v.conf == nil || v.conf.Path() == "" || v.conf.Path() != config {
+	if v.conf == nil || v.conf.Skyenv == "" {
 		return ""
 	}
-	if _, err := os.Stat(path); err != nil {
+	if _, err := os.Stat(v.conf.Skyenv); err != nil {
+		v.log.WithError(err).WithField("path", v.conf.Skyenv).
+			Warn("the skywire.conf this config was generated from is gone; live changes are not saved to it")
 		return ""
 	}
-	return path
+	return v.conf.Skyenv
 }
 
 // mirrorToSkyenv writes the given flag values into skywire.conf when autoconfig
@@ -101,7 +98,11 @@ func (v *Visor) mirrorToSkyenv(flags [][2]string) {
 		edits = append(edits, e)
 	}
 	if err := skyenvfile.Update(path, edits); err != nil {
-		v.log.WithError(err).WithField("path", path).
-			Warn("failed to mirror config fields into skywire.conf; the next autoconfig run will drop them")
+		names := make([]string, 0, len(edits))
+		for _, e := range edits {
+			names = append(names, e.Key)
+		}
+		v.log.WithError(err).WithField("path", path).WithField("settings", names).
+			Warn("could not save live changes to skywire.conf; the next autoconfig run will undo them")
 	}
 }
