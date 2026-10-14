@@ -120,3 +120,24 @@ type fakeResolver struct{}
 func (fakeResolver) Resolve(ctx context.Context, _ string) (context.Context, net.IP, error) {
 	return ctx, net.IPv4(127, 0, 0, 1), nil
 }
+
+// TestNoneRefuses: a resolver kept off the clearnet routes everything it does
+// not resolve to none, which has to refuse rather than fall back to direct.
+func TestNoneRefuses(t *testing.T) {
+	r, err := ParseRule("tracker.test=none")
+	require.NoError(t, err)
+	require.Equal(t, Rule{Suffix: "tracker.test", Upstream: None}, r)
+
+	exitA := serveSOCKS(t, backend(t, "A"))
+	rules, err := Normalize([]Rule{{Suffix: "a.test", Upstream: exitA}})
+	require.NoError(t, err)
+
+	fw := NewForwarder(None, rules)
+	require.True(t, fw.Active(), "a none default must keep the forwarder in the path, or the resolver dials direct")
+	require.Equal(t, "A", readAll(t, fw, "a.test:80"), "a rule still beats the none default")
+	_, err = fw.Dial("tcp", "example.com:443")
+	require.ErrorIs(t, err, ErrRefused)
+
+	_, err = NewForwarder(exitA, []Rule{r}).Dial("tcp", "www.tracker.test:80")
+	require.ErrorIs(t, err, ErrRefused, "a none rule refuses its domain")
+}
