@@ -15,7 +15,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -24,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -650,58 +650,58 @@ func (p *Proc) ConnectionsSummary() []ConnectionSummary {
 
 // appLogHooks keeps one hook per log file for the life of the process. Each
 // lumberjack.Logger starts a goroutine that its Close does not stop (v2.2.1).
-var appLogHooks sync.Map // path -> logrus.Hook
+var appLogHooks sync.Map // path -> *appLogHook
 
 // storeLog attaches the app's file log hook at <local_path>/log/skywire.log.
 func storeLog(log *logging.MasterLogger, localPath string) {
-	path := localPath + "/log/skywire.log"
-	hook, err := sharedAppLogHook(path)
-	if err != nil {
-		log.WithError(err).Warn("Failed to open the app log file; logging to stdout only")
-		return
-	}
-	log.Hooks.Add(hook)
+	log.Hooks.Add(sharedAppLogHook(localPath + "/log/skywire.log"))
 }
 
 // sharedAppLogHook returns the process's hook for path, building it once.
-func sharedAppLogHook(path string) (logrus.Hook, error) {
+func sharedAppLogHook(path string) *appLogHook {
 	if h, ok := appLogHooks.Load(path); ok {
-		return h.(logrus.Hook), nil
+		return h.(*appLogHook)
 	}
-	h, err := newAppLogHook(path)
-	if err != nil {
-		return nil, err
-	}
-	actual, _ := appLogHooks.LoadOrStore(path, h)
-	return actual.(logrus.Hook), nil
+	actual, _ := appLogHooks.LoadOrStore(path, newAppLogHook(path))
+	return actual.(*appLogHook)
 }
 
-// newAppLogHook builds the file hook for the app log at path.
+// appLogHook writes every level of an app's log to one rotating file.
 //
-// One writer, deliberately. lumberjackrus accepts a per-level LogFile map, and
-// this used to carry one entry per level, every one of them naming this same
-// file. That gave each level its own lumberjack.Logger over one path, and
-// rotation is per-writer: whichever level first crossed MaxSize renamed the
-// file and opened a fresh one while the others kept writing to the renamed —
-// then reaped — inode. DEBUG has the most volume so it always won, and the
-// INFO, WARN and ERROR lines were written to a file nobody could read. The
-// default logger alone, with no per-level overrides, keeps every level on a
-// single rotating writer. Same bug, same fix as pkg/visor/visor.go.
-func newAppLogHook(path string) (logrus.Hook, error) {
-	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
-		Filename:   path,
-		MaxSize:    1,
-		MaxBackups: 1,
-		MaxAge:     1,
-		Compress:   false,
-		LocalTime:  false,
-	},
-		logrus.TraceLevel,
-		&logging.TextFormatter{
-			DisableColors:   true,
-			FullTimestamp:   true,
-			ForceFormatting: true,
-		},
-		nil,
-	)
+// One writer, deliberately. This was a lumberjackrus hook with a LogFile per
+// level, every one of them naming this same file. That gave each level its
+// own lumberjack.Logger over one path, and rotation is per-writer: whichever
+// level first crossed MaxSize renamed the file and opened a fresh one while
+// the others kept writing to the renamed, then reaped, inode. DEBUG has the
+// most volume so it always won, and the INFO, WARN and ERROR lines were
+// written to a file nobody could read. Same bug, same fix as
+// pkg/visor/visor.go. The hook holds its writer so that it can be closed:
+// the file is otherwise open for the life of the process, and Windows does
+// not remove an open file.
+type appLogHook struct {
+	w *lumberjack.Logger
+	f logrus.Formatter
 }
+
+func newAppLogHook(path string) *appLogHook {
+	return &appLogHook{
+		w: &lumberjack.Logger{Filename: path, MaxSize: 1, MaxBackups: 1, MaxAge: 1},
+		f: &logging.TextFormatter{DisableColors: true, FullTimestamp: true, ForceFormatting: true},
+	}
+}
+
+// Levels implements logrus.Hook: every level goes to the file.
+func (h *appLogHook) Levels() []logrus.Level { return logrus.AllLevels }
+
+// Fire implements logrus.Hook.
+func (h *appLogHook) Fire(e *logrus.Entry) error {
+	b, err := h.f.Format(e)
+	if err != nil {
+		return err
+	}
+	_, err = h.w.Write(b)
+	return err
+}
+
+// Close closes the log file. The next Fire opens it again.
+func (h *appLogHook) Close() error { return h.w.Close() }
