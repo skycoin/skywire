@@ -17,6 +17,13 @@ import (
 // shared per file instead of leaking one goroutine per start.
 func TestStoreLogSharesOneWriterPerFile(t *testing.T) {
 	dir := t.TempDir()
+	// The hook outlives the test otherwise, and Windows does not remove the
+	// open file with the directory.
+	t.Cleanup(func() {
+		h, ok := appLogHooks.LoadAndDelete(dir + "/log/skywire.log")
+		require.True(t, ok)
+		require.NoError(t, h.(*appLogHook).Close())
+	})
 	before := millGoroutines()
 	for i := 0; i < 3; i++ {
 		ml := logging.NewMasterLogger()
