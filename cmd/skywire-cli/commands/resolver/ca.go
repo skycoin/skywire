@@ -60,9 +60,10 @@ Typical first-time setup (visitor-side):
   skywire cli resolver ca gen        # create the CA
   skywire cli resolver ca install    # add to OS trust store (sudo)
 
-Then enable TLS MITM in the visor config (skywire-config.json) by
-setting "tls_mitm": true and the ca paths under skynet_web and/or
-dmsg_web, and restart the visor.
+Then point both resolvers at it in skywire.conf and regenerate:
+
+  RESOLVERCA='<the directory holding ca.crt and ca.key, see "ca path">'
+  skywire autoconfig
 `,
 }
 
