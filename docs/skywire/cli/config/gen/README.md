@@ -102,10 +102,11 @@ skywire cli config gen
       --skynetweb                            enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446
       --wisp-socks string                    SOCKS5 proxy the embedded Wisp server (browser visor only) carries streams over (default: the local skysocks-client)
       --skymail-bridge                       enable SMTP to skywire bridge on 127.0.0.1:1025
-      --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)
-      --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic
+      --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb, direct dials it directly, none refuses it)
+      --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic (empty chains to skysocks-client when it autostarts, direct dials it directly, none refuses it)
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
+      --resolver-ca string                   directory with ca.crt and ca.key from "skywire cli resolver ca gen": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)
       --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
       --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".theskywirenetwork.net")

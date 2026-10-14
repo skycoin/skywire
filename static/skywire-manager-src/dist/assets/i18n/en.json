@@ -271,6 +271,7 @@
       "terminal": "Terminal",
       "wallet": "Wallet",
       "mail": "Mail",
+      "host-bridge": "Host bridge",
       "logs": "Logs",
       "settings": "Settings"
     },
