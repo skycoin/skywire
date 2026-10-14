@@ -300,6 +300,12 @@ func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcher
 	// appcommon.RunMode for the typed constants — at the RPC boundary
 	// this still arrives as a string so we compare against the named
 	// constants rather than introducing a new conversion.
+	// Without an explicit mode the app's saved preference applies, so autostart
+	// and a plain start honor what the operator chose.
+	if launcherMode == "" {
+		launcherMode = ac.LauncherMode
+	}
+	forceExternal := false
 	if launcherMode != "" {
 		acCopy := ac
 		switch appcommon.RunMode(launcherMode) {
@@ -307,6 +313,7 @@ func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcher
 			// Force internal: clear binary
 			acCopy.Binary = ""
 		case appcommon.RunModeExternal:
+			forceExternal = true
 			// Force external: ensure binary is set
 			if ac.Binary == "" {
 				// Use default binary name (app name)
@@ -320,6 +327,13 @@ func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcher
 	procConf, err := makeProcConfig(l.conf, ac, envs)
 	if err != nil {
 		return err
+	}
+	// An app built into this binary still resolves to its in-process func. To
+	// run it as its own process, exec this binary as "skywire app <name>".
+	if forceExternal && procConf.RunFunc != nil {
+		if err := externalize(&procConf, ac.Binary); err != nil {
+			return err
+		}
 	}
 	// Start proc and persist pid.
 	pid, err := l.procM.Start(procConf)
@@ -839,4 +853,19 @@ func (l *AppLauncher) killArbitraryProc(appName string, pid int) {
 		return
 	}
 	log.Info("Killed process.")
+}
+
+// externalize turns a proc config for an in-process app into one that runs
+// this binary as "<exe> app <name> <args>", where the app gets its own
+// process, for example to pick up the binary's file capabilities.
+func externalize(pc *appcommon.ProcConfig, name string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("run %s as its own process: %w", name, err)
+	}
+	pc.RunFunc = nil
+	pc.BinaryLoc = exe
+	pc.ProcArgs = append([]string{"app", name}, pc.ProcArgs...)
+	pc.RunMode = appcommon.RunModeExternal
+	return nil
 }
