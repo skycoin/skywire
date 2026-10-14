@@ -138,6 +138,16 @@ func installDesk() {
 			return files.New(sharedShellFS(), dir), nil
 		},
 	})
+	// The dashboard's host bridge page: the bridge for this computer, the
+	// command to run it, and the form that connects the visor to it.
+	desk.Register(desk.App{
+		Name: "hostbridge", Title: "host bridge",
+		Help:  "give this visor its computer's ports (docs/guides/host-bridge.md)",
+		Width: 820, Height: 620,
+		Open: func(_ []string) (desk.Pane, error) {
+			return browserPane{url: hostBridgeURL}, nil
+		},
+	})
 	registerPairingApps()
 	registerInstallApp()
 	registerMailApp()
