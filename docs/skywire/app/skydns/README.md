@@ -17,6 +17,7 @@ skywire app skydns
 ## Flags
 
 ```
+      --ca string    directory with ca.crt and ca.key from "skywire cli resolver ca gen": terminate HTTPS to mesh names with it
       --dns string   resolver for names that are not mesh names (empty means the phone's own DNS)
 ```
 
