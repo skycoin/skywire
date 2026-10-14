@@ -301,6 +301,11 @@ const envfileLinux = `#
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
 
+#--	Serve HTTPS for .dmsg and .skynet from both resolvers, with the CA in this
+#--	directory (ca.crt and ca.key from 'skywire cli resolver ca gen'). Browsers
+#--	must trust ca.crt, and the URL needs the base32 key: 'skywire cli pk dnslabel'.
+#RESOLVERCA='/root/.skywire/resolver'
+
 #--	Embedded Wisp server: the backend a browser-side Linux guest asks to open
 #--	its connections. Every browser visor runs it on virtual-loopback port
 #--	6001, and no native visor does. Its streams leave over skywire, through
