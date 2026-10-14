@@ -1,5 +1,5 @@
-![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg)
-![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg)
+[![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg?branch=develop&event=push)](https://github.com/skycoin/skywire/actions/workflows/test.yml?query=branch%3Adevelop+event%3Apush)
+[![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg?branch=develop&event=push)](https://github.com/skycoin/skywire/actions/workflows/deploy.yml?query=branch%3Adevelop)
 [![GitHub release](https://img.shields.io/github/release/skycoin/skywire.svg)](https://github.com/skycoin/skywire/releases/)
 [![skywire](https://img.shields.io/aur/version/skywire?color=1793d1&label=skywire&logo=arch-linux)](https://aur.archlinux.org/packages/skywire/)
 [![skywire-bin](https://img.shields.io/aur/version/skywire-bin?color=1793d1&label=skywire-bin&logo=arch-linux)](https://aur.archlinux.org/packages/skywire-bin/)
