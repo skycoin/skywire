@@ -71,6 +71,7 @@ type v1JSON struct {
 	LogLevel             string                       `json:"log_level"`
 	LogHookLevel         string                       `json:"log_hook_level,omitempty"`
 	LocalPath            string                       `json:"local_path"`
+	Skyenv               string                       `json:"skyenv,omitempty"`
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"`
 	IsPublic             bool                         `json:"is_public"`
@@ -140,6 +141,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.LogLevel = mirror.LogLevel
 	v.LogHookLevel = mirror.LogHookLevel
 	v.LocalPath = mirror.LocalPath
+	v.Skyenv = mirror.Skyenv
 	v.StunServers = mirror.StunServers
 	v.ShutdownTimeout = mirror.ShutdownTimeout
 	v.IsPublic = mirror.IsPublic

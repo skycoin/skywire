@@ -93,6 +93,7 @@ type V1 struct {
 	LogLevel             string                       `json:"log_level"`
 	LogHookLevel         string                       `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 	LocalPath            string                       `json:"local_path"`
+	Skyenv               string                       `json:"skyenv,omitempty"` // the skywire.conf config gen read; live changes are written back there
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                         `json:"is_public"`

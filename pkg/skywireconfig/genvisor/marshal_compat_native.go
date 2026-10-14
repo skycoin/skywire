@@ -377,6 +377,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 	}
 	o.field("local_path")
 	writeQuotedNative(w, v.LocalPath)
+	if v.Skyenv != "" {
+		o.field("skyenv")
+		writeQuotedNative(w, v.Skyenv)
+	}
 	o.field("stun_servers")
 	writeStringSliceNative(w, v.StunServers, o.indent+1)
 
