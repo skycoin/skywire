@@ -31,12 +31,10 @@ func TestAutoconfigFlagForIsValid(t *testing.T) {
 }
 
 func TestSetPtyWhitelistLiveAndMirrored(t *testing.T) {
-	conf, path := newTestConfig(t)
+	conf, _ := newTestConfig(t)
 	envFile := filepath.Join(t.TempDir(), "skywire.conf")
 	require.NoError(t, os.WriteFile(envFile, []byte("#DMSGPTYPKS=('')\n#VISORISPUBLIC=false\n"), 0o600))
-	restore := skyenvPaths
-	skyenvPaths = func() (string, string) { return path, envFile }
-	t.Cleanup(func() { skyenvPaths = restore })
+	conf.Skyenv = envFile
 
 	hv, _ := cipher.GenerateKeyPair()
 	a, _ := cipher.GenerateKeyPair()
@@ -66,4 +64,29 @@ func TestSetPtyWhitelistLiveAndMirrored(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(env), "DMSGPTYPKS=('"+b.String()+"')")
 	require.True(t, strings.Contains(string(env), "VISORISPUBLIC=true"), string(env))
+}
+
+// A config that records no skywire.conf was not generated from one, so a live
+// change leaves every skywire.conf alone.
+func TestNoSkyenvRecordedWritesNothing(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("#VISORISPUBLIC=false\n"), 0o600))
+	conf.Skyenv = ""
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+
+	_, err := v.SetConfigFields(map[string]json.RawMessage{"is_public": json.RawMessage(`true`)})
+	require.NoError(t, err)
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Equal(t, "#VISORISPUBLIC=false\n", string(env))
+}
+
+// skyenv names the file the visor writes, so only config gen sets it.
+func TestSkyenvIsNotSettable(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	_, err := v.SetConfigFields(map[string]json.RawMessage{"skyenv": json.RawMessage(`"/etc/passwd"`)})
+	require.ErrorContains(t, err, "skywire autoconfig")
+	require.Empty(t, conf.Skyenv)
 }

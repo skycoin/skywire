@@ -1496,6 +1496,7 @@ func configureLauncher(log *logging.Logger) {
 	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
+	conf.Skyenv = skyenvSource()
 	if stunServers != "" {
 		conf.StunServers = strings.Split(stunServers, ",")
 		for i := range conf.StunServers {
