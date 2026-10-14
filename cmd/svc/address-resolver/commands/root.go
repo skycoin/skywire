@@ -85,7 +85,7 @@ GET /security/nonces/{pk}
 
 func init() {
 	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "ar", Addr: ":9093", Tag: "address_resolver", EntryTimeout: 5 * time.Minute})
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH")
@@ -106,8 +106,6 @@ Depends: redis
 
 Production: ` + deployment.Prod.AddressResolver + `
             ` + dmsg.Prod.AddressResolver + `
-Test:       ` + deployment.Test.AddressResolver + `
-            ` + dmsg.Test.AddressResolver + `
 
 HTTP Endpoints:
   GET  /health                  Health check

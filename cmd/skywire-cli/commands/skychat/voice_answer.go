@@ -1,10 +1,9 @@
 // Package cliskychat cmd/skywire-cli/commands/skychat/voice_answer.go c4-vis-cli
 //
-// Explicit-answer controls for inbound voice calls. When a visor runs with real
-// audio (SKYWIRE_VOICE_AUDIO=mic|monitor) incoming calls RING instead of
-// auto-answering, so the microphone is never streamed without an explicit
-// answer. `voice incoming` lists ringing calls; `voice answer`/`voice decline`
-// act on one by id.
+// Explicit-answer controls for inbound voice calls. Incoming calls RING
+// instead of auto-answering, so the microphone is never streamed without an
+// explicit answer. `voice incoming` lists ringing calls; `voice answer`/`voice
+// decline` act on one by id.
 package cliskychat
 
 import (

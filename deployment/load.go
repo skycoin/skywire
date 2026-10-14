@@ -21,41 +21,29 @@ func LoadFile(path string) error {
 	return nil
 }
 
-// applyServicesJSON sets Prod, Test, ProdConf and TestConf from a
-// services-config.
+// applyServicesJSON sets Prod and ProdConf from a services-config.
 func applyServicesJSON(data []byte) error {
 	var env EnvServices
 	if err := json.Unmarshal(data, &env); err != nil {
 		return err
 	}
-	var prod, test Services
-	var prodConf, testConf Conf
-	for _, s := range []struct {
-		raw  json.RawMessage
-		svc  *Services
-		conf *Conf
-	}{{env.Prod, &prod, &prodConf}, {env.Test, &test, &testConf}} {
-		if s.raw == nil {
-			continue
-		}
-		if err := json.Unmarshal(s.raw, s.svc); err != nil {
+	var prod Services
+	var prodConf Conf
+	if env.Prod != nil {
+		if err := json.Unmarshal(env.Prod, &prod); err != nil {
 			return err
 		}
-		if err := json.Unmarshal(s.raw, s.conf); err != nil {
+		if err := json.Unmarshal(env.Prod, &prodConf); err != nil {
 			return err
 		}
 	}
 	// services-config.json is dmsg-only (no plain-HTTP deployment URLs except
 	// geoip), so the HTTP-named fields come from their dmsg:// siblings.
 	prod.BackfillClearnetFromDmsg()
-	test.BackfillClearnetFromDmsg()
 	if prodConf.Conf == "" {
 		prodConf.Conf = prod.ConfDmsg
 	}
-	if testConf.Conf == "" {
-		testConf.Conf = test.ConfDmsg
-	}
-	Prod, Test, ProdConf, TestConf = prod, test, prodConf, testConf
+	Prod, ProdConf = prod, prodConf
 	ServicesJSON = data
 	return nil
 }

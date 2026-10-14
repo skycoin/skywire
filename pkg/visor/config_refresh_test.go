@@ -24,7 +24,7 @@ func TestApplyDeploymentServicesTwoRotationsAcrossRestart(t *testing.T) {
 	common, err := visorconfig.NewCommon(nil, confPath, &sk)
 	require.NoError(t, err)
 	svcs := deployment.Prod
-	conf := visorconfig.MakeBaseConfig(common, false, false, &svcs, nil)
+	conf := visorconfig.MakeBaseConfig(common, false, &svcs, nil)
 	conf.LocalPath = dir
 	log := logging.MustGetLogger("test")
 

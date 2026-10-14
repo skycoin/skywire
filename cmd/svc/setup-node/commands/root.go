@@ -163,7 +163,7 @@ var checkHealthCmd = &cobra.Command{
 		// dmsg-server set seeds the initial bootstrap.
 		ctx := context.Background()
 		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
-			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(false), "")
+			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(), "")
 		if err != nil {
 			cmdutil.Fatalf("Failed to bootstrap dmsg: %v", err)
 		}

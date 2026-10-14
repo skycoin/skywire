@@ -9,10 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
 )
 
-var (
-	output  string
-	testEnv bool
-)
+var output string
 
 func init() {
 	//disable sorting, flags appear in the order shown here
@@ -20,7 +17,6 @@ func init() {
 	RootCmd.AddCommand(genConfigCmd)
 
 	genConfigCmd.Flags().StringVarP(&output, "output", "o", "", "config output path/name")
-	genConfigCmd.Flags().BoolVarP(&testEnv, "testenv", "t", false, "use test deployment")
 }
 
 var genConfigCmd = &cobra.Command{
@@ -35,11 +31,6 @@ var genConfigCmd = &cobra.Command{
 
 		// set default config values
 		dmsgserver.GenerateDefaultConfig(conf)
-
-		//use test deployment
-		if testEnv {
-			conf.Discovery = dmsgserver.DefaultDiscoverURLTest
-		}
 
 		// use output path/name
 		if output != "" {

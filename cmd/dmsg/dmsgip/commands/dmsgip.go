@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	dmsgDisc     = dmsg.DiscAddr(false)
+	dmsgDisc     = dmsg.DiscAddr()
 	sk           cipher.SecKey
 	logLvl       string
 	dmsgServers  []string

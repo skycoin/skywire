@@ -63,7 +63,7 @@ POST /routes
 
 func init() {
 	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "rf", Addr: ":9092", Tag: "route_finder", EntryTimeout: 10 * time.Minute})
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
 }
@@ -81,8 +81,6 @@ Depends: redis (shares Redis with TPD)
 
 Production: ` + deployment.Prod.RouteFinder + `
             ` + dmsg.Prod.RouteFinder + `
-Test:       ` + deployment.Test.RouteFinder + `
-            ` + dmsg.Test.RouteFinder + `
 
 HTTP Endpoints:
   GET  /health     Health check

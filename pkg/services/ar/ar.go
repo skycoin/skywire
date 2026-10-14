@@ -233,7 +233,7 @@ func (s *service) Run(ctx context.Context) error {
 	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := cfg.SurveyKeys()

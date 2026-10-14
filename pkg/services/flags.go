@@ -34,7 +34,7 @@ type FlagDefaults struct {
 func (f *Flags) Bind(fs *pflag.FlagSet, d FlagDefaults) {
 	fs.StringVarP(&f.ConfigPath, "config", "c", "", "path to a JSON config file; keys it sets override these flags\n\r(generate one with: skywire cli config gen --"+d.Gen+")")
 	fs.StringVarP(&f.Addr, "addr", "a", d.Addr, "plain-HTTP listen address")
-	fs.StringVar(&f.Mode, "mode", "", "listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)")
+	fs.StringVar(&f.Mode, "mode", "", "listeners: http|dmsg|dual (default dual with a key, else http)")
 	fs.Uint16Var(&f.DmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsghttp listener port")
 	fs.Var(&f.SecKey, "sk", "dmsg secret key")
 	fs.StringVar(&f.KeyFile, "keyfile", "", "file holding the secret key (generated if missing)")
@@ -47,7 +47,6 @@ func (f *Flags) Bind(fs *pflag.FlagSet, d FlagDefaults) {
 	fs.StringVarP(&f.PprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	fs.StringVarP(&f.PprofAddr, "pprofaddr", "r", "", "address http profiling serves on; alone it implies --pprofmode http (default "+DefaultPprofAddr+")")
 	fs.BoolVarP(&f.Testing, "testing", "t", false, "run for a test network: keep entries in memory unless --redis is set")
-	fs.BoolVar(&f.TestEnvironment, "test-environment", false, "use the test deployment's defaults instead of production's")
 	fs.SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
 }
 

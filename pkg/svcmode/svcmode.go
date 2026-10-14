@@ -38,7 +38,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -80,11 +79,6 @@ const (
 	ModeDual Mode = "dual"
 )
 
-// ModeEnv is the environment variable name that overrides --mode.
-// Useful for container deployments that want to toggle mode without
-// rewriting the command line.
-const ModeEnv = "SKYWIRE_SVC_MODE"
-
 // ParseMode normalizes a mode string to one of the known Mode values.
 // Empty / unrecognized input returns an error. Use ResolveMode to
 // apply the "default based on SK presence" fallback.
@@ -103,17 +97,10 @@ func ParseMode(s string) (Mode, error) {
 	}
 }
 
-// ResolveMode resolves the effective mode from (in order of precedence):
-//  1. SKYWIRE_SVC_MODE environment variable
-//  2. The passed-in flag value (usually from --mode)
-//  3. The default: ModeDual if SK is non-null, else ModeHTTP
-//
-// Returns an error only if an explicit value from step 1 or 2 is
-// unrecognized.
+// ResolveMode resolves the effective mode: the passed-in value (usually from
+// --mode or the service config), else ModeDual if SK is non-null, else
+// ModeHTTP. Returns an error only if an explicit value is unrecognized.
 func ResolveMode(flagValue string, skNonNull bool) (Mode, error) {
-	if env := os.Getenv(ModeEnv); env != "" {
-		return ParseMode(env)
-	}
 	if flagValue != "" {
 		return ParseMode(flagValue)
 	}
@@ -181,8 +168,7 @@ type Config struct {
 
 	// EmbeddedDmsgServers is the list of dmsg server entries to use
 	// for initial bootstrap. Services should typically pass
-	// dmsg.Prod.DmsgServers (or dmsg.Test.DmsgServers when in test
-	// environment) from the embedded services-config.json.
+	// dmsg.Prod.DmsgServers from the embedded services-config.json.
 	EmbeddedDmsgServers []disc.Entry
 
 	// SurveyWhitelist is the list of public keys permitted to

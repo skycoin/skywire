@@ -137,9 +137,6 @@ func (s *service) build(ctx context.Context, log *logging.Logger, dmsgAddr strin
 	geoipURL := cfg.GeoIP
 	if geoipURL == "" {
 		geoipURL = deployment.Prod.GeoIP
-		if cfg.TestEnvironment {
-			geoipURL = deployment.Test.GeoIP
-		}
 	}
 	sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
 	s.chartsAPI.Store(sdAPI)
@@ -230,7 +227,7 @@ func (s *service) Run(ctx context.Context) error {
 	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := cfg.SurveyKeys()

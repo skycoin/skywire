@@ -154,7 +154,6 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addSoloBool("DISABLEPUBLICAUTOCONN", "disable-public-autoconn", autoconfigVals.DisablePubAuto)
 
 	// Service discovery / deployment
-	addSoloBool("TESTENV", "testenv", autoconfigVals.TestEnv)
 	addArray("SVCCONFADDR", "url", autoconfigVals.URL)
 	addString("SVCCONF", "svcconf", autoconfigVals.SvcConf)
 	addInt("MINDMSGSESS", "minsess", autoconfigVals.MinSess)

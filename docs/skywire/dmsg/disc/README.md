@@ -232,7 +232,7 @@ skywire dmsg disc
       --keyfile string            file holding the secret key (generated if missing)
   -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string            address to serve Prometheus metrics on
-      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http)
       --official-servers string   list of official dmsg servers keys separated by comma
   -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
@@ -242,7 +242,6 @@ skywire dmsg disc
       --syslog string             address in which to dial to syslog server
       --syslog-net string         network in which to dial to syslog server (default "udp")
       --tag string                logging tag (default "dmsg_disc")
-      --test-environment          use the test deployment's defaults instead of production's
   -t, --testing                   run for a test network: keep entries in memory unless --redis is set
       --whitelist-keys string     network-monitor keys allowed to deregister entries, comma-separated
 ```

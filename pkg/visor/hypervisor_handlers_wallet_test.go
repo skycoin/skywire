@@ -128,9 +128,9 @@ func TestDashboardWalletCipher(t *testing.T) {
 // TestWalletRequiresSession checks that the wallet proxy needs a login when
 // auth is on, while the static cipher stays public.
 func TestWalletRequiresSession(t *testing.T) {
-	config := visorconfig.MakeConfig(false)
+	config := visorconfig.MakeConfig()
 	config.EnableAuth = true
-	config.FillDefaults(false)
+	config.FillDefaults()
 	config.DBPath = filepath.Join(t.TempDir(), "users_wallet.db")
 
 	addr, client, closeFn := makeStartNode(t, config)

@@ -25,11 +25,6 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
-
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
 	u, err := url.Parse(serviceURL)
@@ -81,11 +76,8 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
@@ -102,14 +94,11 @@ var (
 	minTransports  int
 	noFilterOnline bool
 	jsonOutput     bool
-	testEnv        bool
 )
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "b", dep.TransportDiscovery, "transport discovery url")
 	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
@@ -146,36 +135,10 @@ Combines data from:
 Shows public keys with their advertised services and transport counts by
 type (stcpr/squicr/sudph/stcp/webrtc/swsr/swtr/dmsg). Filter with --country, --version, --min
 (minimum transport count); --noton keeps offline/not-in-UT visors. --json
-emits the combined rows as machine-readable output.
-
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
+emits the combined rows as machine-readable output.`,
 		getDeployment().ServiceDiscovery,
 		getDeployment().TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			// --testenv was specified at runtime (not via SKYWIRETEST env)
-			// Override values that weren't explicitly changed by user
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("tpdurl") {
-				tpdURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdt") {
-				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs with endpoints
 		sdProxyURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeProxy
 		sdVpnURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVPN

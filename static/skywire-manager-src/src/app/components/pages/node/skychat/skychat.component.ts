@@ -1111,9 +1111,9 @@ return {
 
   // --- Voice calls -----------------------------------------------
   // Opus voice over the encrypted mesh (dmsg/skynet), same media plane as
-  // the wasm visor. Native audio flows only when the visor runs with
-  // SKYWIRE_VOICE_AUDIO=mic|monitor; otherwise the call still connects
-  // (silent), so the control plane is always demonstrable from here.
+  // the wasm visor. Native audio uses the visor's audio device; on a host
+  // without one the call still connects (silent), so the control plane is
+  // always demonstrable from here.
 
   /** window.skywireVisor when this node is an in-browser wasm visor with the
    *  voice hooks present, else null (native → HTTP bridge). */

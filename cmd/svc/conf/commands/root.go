@@ -83,18 +83,14 @@ var HTTPConfCmd = &cobra.Command{
 // HTTP-only, DMSG-only, or both. Identity-only fields (PubKey slices
 // like route_setup_nodes, transport_setup, survey_whitelist and the
 // dns/stun server lists) are kept in both views since they are not
-// scheme-specific. The outer {"prod": ..., "test": ...} wrapper is
-// preserved so the output matches the shape of services-config.json.
+// scheme-specific. The outer {"prod": ...} wrapper is preserved so the output matches the shape of services-config.json.
 func printFilteredJSON(keepHTTP, keepDmsg bool) {
 	prodFiltered := filterServices(deployment.Prod, keepHTTP, keepDmsg)
-	testFiltered := filterServices(deployment.Test, keepHTTP, keepDmsg)
 
 	wrapper := struct {
 		Prod deployment.Services `json:"prod"`
-		Test deployment.Services `json:"test"`
 	}{
 		Prod: prodFiltered,
-		Test: testFiltered,
 	}
 	out, err := json.MarshalIndent(wrapper, "", "  ")
 	if err != nil {
