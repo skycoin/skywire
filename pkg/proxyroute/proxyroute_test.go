@@ -141,3 +141,12 @@ func TestNoneRefuses(t *testing.T) {
 	_, err = NewForwarder(exitA, []Rule{r}).Dial("tcp", "www.tracker.test:80")
 	require.ErrorIs(t, err, ErrRefused, "a none rule refuses its domain")
 }
+
+// TestDirectDefault: an empty upstream auto-chains to skysocks-client in the
+// visor, so "direct" is how a resolver is told to dial everything itself.
+func TestDirectDefault(t *testing.T) {
+	fw := NewForwarder(Direct, nil)
+	require.False(t, fw.Active(), "direct with no rules leaves the resolver dialing directly")
+	require.Equal(t, "A", readAll(t, fw, backend(t, "A")))
+	require.Equal(t, "", fw.Upstream("example.com:443"))
+}
