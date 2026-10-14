@@ -137,9 +137,12 @@ type Forwarder struct {
 }
 
 // NewForwarder builds a Forwarder. def is the upstream for hosts no rule
-// matches; empty means direct and None refuses. rules must already be
-// Normalized.
+// matches; empty or Direct dials directly and None refuses. rules must
+// already be Normalized.
 func NewForwarder(def string, rules []Rule) *Forwarder {
+	if def == Direct {
+		def = ""
+	}
 	return &Forwarder{
 		def:      def,
 		rules:    rules,

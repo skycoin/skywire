@@ -297,8 +297,9 @@ const envfileLinux = `#
 
 #--	Upstream SOCKS5 server skynetweb forwards NON-.skynet traffic to.
 #--	127.0.0.1:1080 is the skysocks-client, i.e. the clearnet exit.
-#--	Unset, it is dialed directly from this host. 'none' refuses it, so the
-#--	proxy reaches only .dmsg and .skynet names.
+#--	Unset, it is skysocks-client when that autostarts. 'direct' dials it
+#--	from this host, and 'none' refuses it so the proxy reaches only .dmsg and
+#--	.skynet names.
 #SKYNETWEBUPSTREAM='127.0.0.1:1080'
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
