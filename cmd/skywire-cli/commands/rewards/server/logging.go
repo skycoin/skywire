@@ -2,11 +2,12 @@
 package clirewardsserver
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // statusWriter records the status code a handler wrote, for the request log.
@@ -50,7 +51,7 @@ func logRequests(next http.Handler) http.Handler {
 		}
 		reqHost := r.Host
 
-		fmt.Printf("[FIBER] %s |%s %3d %s| %13v | %15s | %72s | %18s |%s %-7s %s %s\n",
+		cmdutil.Printf("[FIBER] %s |%s %3d %s| %13v | %15s | %72s | %18s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
 			getBackgroundColor(sw.status),
 			sw.status,

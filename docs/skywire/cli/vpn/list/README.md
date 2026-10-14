@@ -9,8 +9,6 @@ dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api
 Set cache dir to "" to avoid using cache files
 default virtual port of servers: 44
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
-
 ## Usage
 
 ```
@@ -38,7 +36,6 @@ skywire cli vpn list
   -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats              return only a count of the results
-      --testenv            use test deployment
   -w, --uturl string       TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --version string     filter by version
 ```

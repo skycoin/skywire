@@ -14,7 +14,9 @@ import (
 	"net/http/pprof"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -25,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/visor/logserver/landingpage"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -133,6 +136,8 @@ type API struct {
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
+	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
+	vhosts atomic.Pointer[map[string]*Vhost]
 	// statusPage serves /status, the status of the deployment services the
 	// visor runs. Nil answers 404.
 	statusPage http.Handler
@@ -451,20 +456,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		// Add forwarded ports visible on the landing page.
 		// Use the request Host to construct proper URLs that work
 		// in the browser (e.g. http://pk.skynet:8000/).
+		host := landingHost(req)
 		if api.forwardedPortLister != nil {
-			host := req.Host
-			// Strip existing port from host if present
-			if h, _, err := net.SplitHostPort(host); err == nil {
-				host = h
-			}
-			// If host is a bare PK (66 hex chars or 53 base32 chars),
-			// append .skynet so generated URLs route through the
-			// SOCKS5 proxy. Base32 is the canonical form (the only
-			// one TLS-MITM can mint a cert for); hex is accepted
-			// for backcompat with older URLs.
-			if !strings.Contains(host, ".") && (len(host) == 66 || len(host) == 53) {
-				host += ".skynet"
-			}
 			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
 				label := fp.Label
 				if label == "" {
@@ -477,6 +470,15 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 				url := html.EscapeString(fmt.Sprintf("http://%s:%d/", host, fp.Port))
 				links = append(links, fmt.Sprintf(`<a href="%s">%s</a>%s`, url, label, desc))
 			}
+		}
+
+		// Sites served by Host, linked under this visor's name.
+		for _, v := range api.vhostList() {
+			if v.Name == AnyVhost || !callerAllowed(req, v.Whitelist) {
+				continue
+			}
+			url := html.EscapeString(fmt.Sprintf("http://%s.%s/", v.Names[0], host))
+			links = append(links, fmt.Sprintf(`<a href="%s">%s</a> - site`, url, html.EscapeString(v.Name)))
 		}
 
 		// Render via the shared landingpage package so this page and the browser
@@ -498,25 +500,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		if api.websiteHandler != nil {
 			// Enforce the forwarded port's PK whitelist on the website.
-			if api.forwardedPortLister != nil {
-				if wl := api.forwardedPortLister.PortWhitelist(80); len(wl) > 0 {
-					remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
-					if err != nil {
-						w.WriteHeader(http.StatusForbidden)
-						return
-					}
-					allowed := false
-					for _, pk := range wl {
-						if remotePK == pk.String() {
-							allowed = true
-							break
-						}
-					}
-					if !allowed {
-						w.WriteHeader(http.StatusForbidden)
-						return
-					}
-				}
+			if api.forwardedPortLister != nil && !callerAllowed(req, api.forwardedPortLister.PortWhitelist(80)) {
+				w.WriteHeader(http.StatusForbidden)
+				return
 			}
 			api.websiteHandler.ServeHTTP(w, req)
 			return
@@ -524,7 +510,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		writeString(w, http.StatusNotFound, "404 not found")
 	})
 
-	var h http.Handler = r
+	h := api.vhostRouter(r)
 	if printLog {
 		h = loggingMiddleware(h)
 	}
@@ -822,3 +808,136 @@ const (
 	cyan    = "\033[97;46m"
 	reset   = "\033[0m"
 )
+
+// Vhost is a site served on port 80 for the Host names it lists, ahead of
+// the visor's own pages, which stay on its bare name.
+type Vhost struct {
+	Name      string   // shown on the landing page
+	Names     []string // Host names, lower case: the name and its aliases
+	Handler   http.Handler
+	Whitelist []cipher.PubKey // empty = everyone
+}
+
+// AnyVhost is the name of the vhost that serves every name no other has.
+const AnyVhost = "*"
+
+// SetVhosts replaces the sites served by Host. Nil or empty serves none.
+func (api *API) SetVhosts(vs []Vhost) {
+	m := make(map[string]*Vhost, len(vs))
+	for i := range vs {
+		for _, n := range vs[i].Names {
+			if n != "" {
+				m[n] = &vs[i]
+			}
+		}
+	}
+	api.vhosts.Store(&m)
+}
+
+// vhostRouter serves a request whose Host names a vhost from that site, all
+// of its paths, and every other request from next. The vhost "*" takes any
+// name no other vhost has, and the visor's own names never reach a vhost.
+func (api *API) vhostRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		name := vhostName(req.Host)
+		if vs := api.vhosts.Load(); vs != nil && name != "" {
+			v := (*vs)[name]
+			if v == nil {
+				v = (*vs)[AnyVhost]
+			}
+			if v != nil {
+				if !callerAllowed(req, v.Whitelist) {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				// The site sees the name it was asked by, not the visor's suffix.
+				r := *req
+				r.Host = name
+				v.Handler.ServeHTTP(w, &r)
+				return
+			}
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
+// vhostName is the site a Host names: what the resolving proxy left of it
+// ("status", "status.skywire.dev"), or the vhost part of a Host it did not
+// rewrite (status.<pk>.skynet). The visor's own names, a bare PK, an IP
+// address or localhost, name none.
+func vhostName(host string) string {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	if hh, _, err := net.SplitHostPort(h); err == nil {
+		h = hh
+	}
+	for _, suffix := range []string{".skynet", ".dmsg"} {
+		if strings.HasSuffix(h, suffix) {
+			vhost, _, _, _, err := skynetweb.ParseResolverHost(h, suffix, nil)
+			if err != nil {
+				return ""
+			}
+			return vhost
+		}
+	}
+	if h == "localhost" || net.ParseIP(strings.Trim(h, "[]")) != nil {
+		return ""
+	}
+	var pk cipher.PubKey
+	if pk.Set(h) == nil {
+		return ""
+	}
+	if _, err := cipher.ParseDNSLabel(h); err == nil {
+		return ""
+	}
+	return h
+}
+
+// callerAllowed reports whether the noise-authenticated caller, whose PK is
+// the host of RemoteAddr, is on wl. An empty wl allows everyone.
+func callerAllowed(req *http.Request, wl []cipher.PubKey) bool {
+	if len(wl) == 0 {
+		return true
+	}
+	remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	for _, pk := range wl {
+		if remotePK == pk.String() {
+			return true
+		}
+	}
+	return false
+}
+
+// landingHost is the request's Host without its port, as a name links on the
+// landing page can use: a bare PK gets .skynet so they route through the
+// SOCKS5 proxy. Base32 is the canonical form; hex is accepted for older URLs.
+func landingHost(req *http.Request) string {
+	host := req.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if !strings.Contains(host, ".") && (len(host) == 66 || len(host) == 53) {
+		host += ".skynet"
+	}
+	return host
+}
+
+// vhostList is each site once, by name.
+func (api *API) vhostList() []*Vhost {
+	vs := api.vhosts.Load()
+	if vs == nil {
+		return nil
+	}
+	seen := map[*Vhost]bool{}
+	var out []*Vhost
+	for _, v := range *vs {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}

@@ -16,7 +16,7 @@ func dmsgURL(pk cipher.PubKey) string { return "dmsg://" + pk.Hex() + ":80" }
 // which fills them from the deployment; so does this.
 func prodConfig() *V1 {
 	svcs := deployment.Prod
-	conf := MakeBaseConfig(nil, false, false, &svcs, nil)
+	conf := MakeBaseConfig(nil, false, &svcs, nil)
 	conf.Transport.TransportSetupPKs = svcs.TransportSetupPKs
 	conf.SurveyWhitelist = svcs.SurveyWhitelist
 	return conf

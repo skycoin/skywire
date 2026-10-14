@@ -18,6 +18,9 @@ func RegisterMem(f func(map[string]MemoryInfo) map[string]error) {
 	memFuncs = append(memFuncs, f)
 }
 
+// ClearMem removes every registered memory device, as ClearCPU does.
+func ClearMem() { memFuncs = nil }
+
 func UpdateMem(mem map[string]MemoryInfo) {
 	for _, f := range memFuncs {
 		errs := f(mem)

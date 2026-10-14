@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -132,14 +134,14 @@ var pingCmd = &cobra.Command{
 		if createTp && !useDmsg {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
-			fmt.Printf("Creating %s transport to %s...\n", tpType, pk)
+			cmdutil.Printf("Creating %s transport to %s...\n", tpType, pk)
 			_, err = rpcClient.AddTransport(pk, tpType, 30*time.Second, "", false, false)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to create transport: %w", err))
 			}
-			fmt.Println("Transport created.")
+			cmdutil.Println("Transport created.")
 		}
 
 		// Use gRPC streaming for real-time output
@@ -158,7 +160,7 @@ var pingCmd = &cobra.Command{
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
 			<-sigCh
-			fmt.Println("\nCanceled.")
+			cmdutil.Println("\nCanceled.")
 			cancel()
 		}()
 
@@ -166,39 +168,39 @@ var pingCmd = &cobra.Command{
 		callback := func(seq int32, latency time.Duration, isSetup bool, routeHops []rpcgrpc.RouteHopDetail, serverPK string, routeCalcTime time.Duration, pingErr error) {
 			if isSetup {
 				if useDmsg {
-					fmt.Printf("Dmsg dial: %0.2f ms", 1000*latency.Seconds())
+					cmdutil.Printf("Dmsg dial: %0.2f ms", 1000*latency.Seconds())
 					if serverPK != "" {
-						fmt.Printf(" (via server %s)", serverPK)
+						cmdutil.Printf(" (via server %s)", serverPK)
 					}
-					fmt.Println()
+					cmdutil.Println()
 				} else {
 					// Show calculation time separately if local route mode
 					if routeCalcTime > 0 {
-						fmt.Printf("Route calc: %0.2f ms, Setup: %0.2f ms (total: %0.2f ms)\n",
+						cmdutil.Printf("Route calc: %0.2f ms, Setup: %0.2f ms (total: %0.2f ms)\n",
 							1000*routeCalcTime.Seconds(), 1000*(latency-routeCalcTime).Seconds(), 1000*latency.Seconds())
 					} else {
-						fmt.Printf("Route setup: %0.2f ms\n", 1000*latency.Seconds())
+						cmdutil.Printf("Route setup: %0.2f ms\n", 1000*latency.Seconds())
 					}
 					// Print route if requested and available
 					if showRoute && len(routeHops) > 0 {
 						// Format matching route finder: [From -> To @ TpID (type) ...]
-						fmt.Printf("Route: [")
+						cmdutil.Printf("Route: [")
 						for i, hop := range routeHops {
 							if i > 0 {
-								fmt.Printf(" ")
+								cmdutil.Printf(" ")
 							}
-							fmt.Printf("%s -> %s @ %s (%s)", hop.From, hop.To, hop.TpID, hop.TpType)
+							cmdutil.Printf("%s -> %s @ %s (%s)", hop.From, hop.To, hop.TpID, hop.TpType)
 						}
-						fmt.Printf("]\n")
+						cmdutil.Printf("]\n")
 					}
 				}
 				return
 			}
 			if pingErr != nil {
 				if useDmsg {
-					fmt.Printf("Dmsg Ping %d: error: %v\n", seq, pingErr)
+					cmdutil.Printf("Dmsg Ping %d: error: %v\n", seq, pingErr)
 				} else {
-					fmt.Printf("Ping %d: error: %v\n", seq, pingErr)
+					cmdutil.Printf("Ping %d: error: %v\n", seq, pingErr)
 				}
 				return
 			}
@@ -219,32 +221,32 @@ var pingCmd = &cobra.Command{
 				if len(servers) == 0 {
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("remote visor not connected to any DMSG servers"))
 				}
-				fmt.Printf("Remote visor is connected to %d DMSG server(s)\n", len(servers))
+				cmdutil.Printf("Remote visor is connected to %d DMSG server(s)\n", len(servers))
 				for i, server := range servers {
-					fmt.Printf("\n=== Server %d/%d: %s ===\n", i+1, len(servers), server)
+					cmdutil.Printf("\n=== Server %d/%d: %s ===\n", i+1, len(servers), server)
 					err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, server, callback)
 					if err != nil {
 						if ctx.Err() != nil {
 							return
 						}
-						fmt.Printf("Error: %v\n", err)
+						cmdutil.Printf("Error: %v\n", err)
 					}
 				}
 				return
 			}
 
 			// Normal DMSG ping (optionally via specific server)
-			fmt.Printf("Dialing dmsg ping to %s...\n", pk)
+			cmdutil.Printf("Dialing dmsg ping to %s...\n", pk)
 			err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, dmsgServerPK, callback)
 		} else if routeSpec != "" {
 			fwd, rev, perr := parseRouteSpec(routeSpec)
 			if perr != nil {
 				internal.PrintFatalError(cmd.Flags(), perr)
 			}
-			fmt.Printf("Dialing pinned %d-hop route to %s...\n", len(fwd), pk)
+			cmdutil.Printf("Dialing pinned %d-hop route to %s...\n", len(fwd), pk)
 			err = grpcClient.StreamPingWithRoute(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, fwd, rev, callback)
 		} else {
-			fmt.Printf("Dialing ping to %s...\n", pk)
+			cmdutil.Printf("Dialing ping to %s...\n", pk)
 			err = grpcClient.StreamPing(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, callback)
 		}
 		// Handle errors appropriately
@@ -266,7 +268,7 @@ var testCmd = &cobra.Command{
 		pingConfig := visorapi.PingConfig{Tries: tries, PcktSize: pcktSize, PubVisCount: pubVisCount}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		results, err := rpcClient.TestVisor(pingConfig)
 		internal.Catch(cmd.Flags(), err)
@@ -293,9 +295,9 @@ Use this to clean up orphaned routes from interrupted ping operations.`,
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to stop pings: %w", err))
 		}
 
-		fmt.Printf("Stopped %d ping connections\n", stopped)
+		cmdutil.Printf("Stopped %d ping connections\n", stopped)
 		for _, e := range errs {
-			fmt.Printf("  Warning: %s\n", e)
+			cmdutil.Printf("  Warning: %s\n", e)
 		}
 	},
 }

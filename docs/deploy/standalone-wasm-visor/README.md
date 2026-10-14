@@ -7,10 +7,12 @@ process behind a reverse proxy.
 
 ## How it works
 
-Every skywire package installs the one skywire command module for js/wasm beside
-the binary (`skywire.wasm.gz`, with its manifest `skywire.wasm.json`), and the
-binary embeds the hypervisor UI. `hv serve` serves that module as it is and
-refuses to start without one or `--exec-wasm`. So:
+The binary embeds the hypervisor UI, and the one skywire command module for
+js/wasm (`skywire.wasm.gz`, with its manifest `skywire.wasm.json`) is kept beside
+it, or in the user cache directory when the binary's directory is not writable.
+Packages do not ship the module. When there is none yet, `hv serve` fetches the
+release's the first time the desk is opened and checks it against its manifest.
+`--exec-wasm` serves a module of your own instead. So:
 
 ```
 skywire cli hv serve --addr 127.0.0.1:7999

@@ -9,6 +9,7 @@ package visor
 
 import (
 	"runtime"
+	"runtime/metrics"
 	"sort"
 	"time"
 
@@ -31,6 +32,11 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		NumGC:       m.NumGC,
 		GoVersion:   runtime.Version(),
 	}}
+	live := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
+	metrics.Read(live)
+	if live[0].Value.Kind() == metrics.KindUint64 {
+		d.Runtime.HeapLiveMB = float64(live[0].Value.Uint64()) / (1 << 20)
+	}
 
 	if n, last := logging.PanicStats(); n > 0 {
 		d.Panics = &visorapi.DiagPanics{Count: n, Last: last}

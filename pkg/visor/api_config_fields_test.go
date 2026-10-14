@@ -341,3 +341,52 @@ func TestResolveConfigTargetNamesMirrorFields(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown config path")
 }
+
+// An embedded service is addressed by its name, or by its type when it has
+// none, and the edit lands in the block the config writes.
+func TestSetConfigFieldsEmbeddedService(t *testing.T) {
+	conf, path := newTestConfig(t)
+	require.NoError(t, json.Unmarshal([]byte(`[
+		{"type":"setup-node","name":"setup-node","log_level":"debug","keyfile":"/k/setup.key"},
+		{"type":"address-resolver","redis_pool_size":150}
+	]`), &conf.EmbeddedServices))
+	v := &Visor{conf: conf}
+
+	changes, err := v.SetConfigFields(map[string]json.RawMessage{
+		"embedded_services[setup-node].log_level":             json.RawMessage(`info`),
+		"embedded_services[address-resolver].redis_pool_size": json.RawMessage(`200`),
+	})
+	require.NoError(t, err)
+	require.Len(t, changes, 2)
+	for _, c := range changes {
+		require.False(t, c.Live, c.Path)
+	}
+	require.Equal(t, `"debug"`, string(changes[1].Old))
+	require.Equal(t, "info", conf.EmbeddedServices[0].LogLevel)
+
+	onDisk, err := os.ReadFile(path) //nolint:gosec
+	require.NoError(t, err)
+	var got struct {
+		Services []map[string]interface{} `json:"embedded_services"`
+	}
+	require.NoError(t, json.Unmarshal(onDisk, &got))
+	require.Len(t, got.Services, 2)
+	require.Equal(t, "info", got.Services[0]["log_level"])
+	require.Equal(t, "/k/setup.key", got.Services[0]["keyfile"], "other keys are kept")
+	require.EqualValues(t, 200, got.Services[1]["redis_pool_size"])
+
+	for p, want := range map[string]string{
+		"embedded_services[nope].log_level":                   "no embedded service named",
+		"embedded_services[setup-node].type":                  "cannot be set by path",
+		"embedded_services[setup-node].sk":                    "not editable",
+		"embedded_services[setup-node].log_level.x":           "name one key",
+		"embedded_services[address-resolver].redis_pool_size": "",
+	} {
+		_, err := v.SetConfigFields(map[string]json.RawMessage{p: json.RawMessage(`"x"`)})
+		if want == "" {
+			require.Error(t, err, "a number field refuses a string")
+			continue
+		}
+		require.ErrorContains(t, err, want, p)
+	}
+}

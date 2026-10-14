@@ -17,6 +17,7 @@ const (
 	opListen   byte = 2
 	opUDP      byte = 3
 	opAccepted byte = 4
+	opHello    byte = 5
 )
 
 const (
@@ -36,12 +37,13 @@ func writeMsg(w io.Writer, op byte, fields ...string) error {
 	return err
 }
 
-func readMsg(r *bufio.Reader, nfields int) (byte, []string, error) {
+// readMsg reads an op and the two fields every message carries.
+func readMsg(r *bufio.Reader) (byte, []string, error) {
 	op, err := r.ReadByte()
 	if err != nil {
 		return 0, nil, err
 	}
-	fields := make([]string, nfields)
+	fields := make([]string, 2)
 	for i := range fields {
 		if fields[i], err = readField(r, maxField); err != nil {
 			return 0, nil, err
@@ -75,7 +77,7 @@ func writeReply(w io.Writer, err error, a, b string) error {
 }
 
 func readReply(r *bufio.Reader) (string, string, error) {
-	st, f, err := readMsg(r, 2)
+	st, f, err := readMsg(r)
 	if err != nil {
 		return "", "", err
 	}

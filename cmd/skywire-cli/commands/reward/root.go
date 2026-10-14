@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/bottle/vnet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -173,11 +175,11 @@ func longText() string {
 		//nolint:gosec
 		reward, err := os.ReadFile(rewardFile)
 		if err != nil {
-			fmt.Printf("    reward settings misconfigured!")
+			cmdutil.Printf("    reward settings misconfigured!")
 		}
 		_, _, err = rewardconfig.ValidateRewardAddress(strings.TrimSpace(string(reward)))
 		if err != nil {
-			fmt.Printf("    invalid address in reward config %v", err)
+			cmdutil.Printf("    invalid address in reward config %v", err)
 		}
 		isRewarded = true
 		defaultRewardAddress = fmt.Sprintf("%s\n", reward)
@@ -202,7 +204,7 @@ var rewardCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 			internal.Catch(cmd.Flags(), cmd.Help())
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -215,7 +217,7 @@ var rewardCmd = &cobra.Command{
 			if err != nil {
 				out1 := "reward file does not exist - reward address not set\n"
 				internal.PrintOutput(cmd.Flags(), out1, out1)
-				os.Exit(0)
+				cmdutil.Exit(0)
 			}
 		}
 		//using the rpc of the running visor avoids needing sudo permissions
@@ -237,7 +239,7 @@ var rewardCmd = &cobra.Command{
 					internal.PrintError(cmd.Flags(), err)
 				}
 			}
-			os.Exit(0)
+			cmdutil.Exit(0)
 			return
 		}
 		//print reward address and exit
@@ -248,7 +250,7 @@ var rewardCmd = &cobra.Command{
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
 					internal.PrintOutput(cmd.Flags(), out, out)
-					os.Exit(0)
+					cmdutil.Exit(0)
 				}
 			}
 			// fallback to local file
@@ -259,7 +261,7 @@ var rewardCmd = &cobra.Command{
 			}
 			out := fmt.Sprintf("%s\n", dat)
 			internal.PrintOutput(cmd.Flags(), out, out)
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		//set reward address from first argument
 		if len(args) > 0 {
@@ -275,17 +277,17 @@ var rewardCmd = &cobra.Command{
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
 					internal.PrintOutput(cmd.Flags(), out, out)
-					os.Exit(0)
+					cmdutil.Exit(0)
 				}
 			}
 			// Fallback to file
 			if dat, err := os.ReadFile(output); err == nil { //nolint:gosec
 				out := fmt.Sprintf("%s\n", dat)
 				internal.PrintOutput(cmd.Flags(), out, out)
-				os.Exit(0)
+				cmdutil.Exit(0)
 			}
-			fmt.Println("No reward address set. Use: skywire cli reward <address|xpub>")
-			os.Exit(0)
+			cmdutil.Println("No reward address set. Use: skywire cli reward <address|xpub>")
+			cmdutil.Exit(0)
 		}
 		if rewardAddress == "" {
 			rewardAddress = defaultRewardAddress
@@ -299,7 +301,7 @@ var rewardCmd = &cobra.Command{
 		}
 		if isXpub {
 			if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
-				fmt.Fprintf(os.Stderr, "\n%s\n\n", warning)
+				cmdutil.Eprintf("\n%s\n\n", warning)
 			}
 		}
 

@@ -9,7 +9,6 @@
 Config Bootstrap Server - provides initial configuration for visors.
 
 Production: dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80
-Test:       dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80
 
 HTTP Endpoints:
   GET  /health     Health check
@@ -73,7 +72,7 @@ skywire svc confbs
                                    (default "skywire.skycoin.com")
       --keyfile string            path to file containing secret key (auto-generated if missing)
                                   
-      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http)
       --pprofaddr string          address to bind pprof debug server (e.g. localhost:6060)
       --sk cipher.SecKey          dmsg secret key
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)

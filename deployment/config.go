@@ -1,6 +1,6 @@
 // Package deployment github.com/skycoin/skywire/deployment/config.go
 //
-// The init() that populates Prod / Test / ProdConf / TestConf lives
+// The init() that populates Prod and ProdConf lives
 // in two build-tag-gated files: config_native.go (//go:build !js)
 // unmarshals the embedded services-config.json via encoding/json
 // with SKYDEPLOY override support; config_js.go (//go:build js)
@@ -44,15 +44,14 @@ custom deployment configuration (e.g., for private networks or testing).
 //go:embed services-config.json
 var ServicesJSON []byte
 
-// EnvServices is the wrapper struct for the outer JSON — i.e. the 'prod' or
-// 'test' deployment config. It lives in this untagged file (importing
+// EnvServices is the wrapper struct for the outer JSON, the 'prod' deployment
+// config. It lives in this untagged file (importing
 // encoding/json, which compiles under TinyGo 0.41) so consumers like
 // pkg/dmsg/dmsg's InitConfig can unmarshal the embedded config on every target,
 // including a TinyGo dmsg client. The native init() in config_native.go and the
-// static-literal init() in config_js.go both populate Prod/Test; this type is
+// static-literal init() in config_js.go both populate Prod; this type is
 // just the shared shape they (and dmsg) decode into.
 type EnvServices struct {
-	Test json.RawMessage `json:"test"`
 	Prod json.RawMessage `json:"prod"`
 }
 
@@ -183,7 +182,7 @@ func EmbeddedServersForDiscoveryPK(want cipher.PubKey) []*disc.Entry {
 	if (want == cipher.PubKey{}) {
 		return nil
 	}
-	for _, s := range []Services{Prod, Test} {
+	for _, s := range []Services{Prod} {
 		if len(s.DmsgServers) == 0 {
 			continue
 		}
@@ -294,13 +293,7 @@ var Prod Services
 // ProdConf is the service configuration address / URL for the skywire production deployment
 var ProdConf Conf
 
-// Test is the test deployment services
-var Test Services
-
-// TestConf is the service configuration address / URL for the skywire test deployment
-var TestConf Conf
-
-// init() that populates Prod / Test / ProdConf / TestConf lives in
+// init() that populates Prod and ProdConf lives in
 // the build-tag-gated config_native.go (!js, uses encoding/json
 // + SKYDEPLOY override) and config_js.go (js, copies from the
 // generated static literals). See the package doc above for the

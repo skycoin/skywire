@@ -11,10 +11,11 @@
 package cliutil
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 )
@@ -41,20 +42,20 @@ Use with skywire port forwarding to host a website:
 		dir := args[0]
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
-			fmt.Fprintf(os.Stderr, "Error: %s is not a directory\n", dir)
-			os.Exit(1)
+			cmdutil.Eprintf("Error: %s is not a directory\n", dir)
+			cmdutil.Exit(1)
 		}
 
 		lis, err := net.Listen("tcp", staticServeAddr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			cmdutil.Eprintf("Error: %v\n", err)
+			cmdutil.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "Serving %s on http://%s\n", dir, lis.Addr())
+		cmdutil.Eprintf("Serving %s on http://%s\n", dir, lis.Addr())
 
 		if err := http.Serve(lis, http.FileServer(http.Dir(dir))); err != nil { //nolint:gosec
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			cmdutil.Eprintf("Error: %v\n", err)
+			cmdutil.Exit(1)
 		}
 	},
 }

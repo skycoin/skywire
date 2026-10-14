@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Drives a voice call between the desktop peer and the phone, for the call
 steps of ios/gates/regression.md. The peer is ios/scripts/desktop-peer.sh's
-visor (API on 127.0.0.1:18000, no login); its voice bridge hands the call's
-audio to its API, so the level it receives from the phone is the check that
-audio crossed.
+visor (API on 127.0.0.1:18000, no login); its API reports a call's audio
+levels, so the level it receives from the phone is the check that audio
+crossed.
 
   ios/scripts/peer-call.py dial <phone pk>     # rings the phone, prints the call id
   ios/scripts/peer-call.py incoming            # ids of calls ringing on the peer (the phone dialled it)
@@ -13,7 +13,9 @@ audio crossed.
 
 recv is the RMS of the last 0.1 s the peer received, 0 to 1. The Simulator's
 microphone is the Mac's: a quiet room reads around 0.001 to 0.01, a voice
-higher, and a muted phone 0.
+higher, and a muted phone 0. The peer plays the call on the Mac too, so keep
+the Mac's volume low while reading levels, or its playback reaches that
+microphone.
 """
 import http.cookiejar
 import json

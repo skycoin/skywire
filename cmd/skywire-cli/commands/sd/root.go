@@ -12,6 +12,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	pterm "github.com/skycoin/skywire/cmd/skywire-cli/cliutil/pterm"
@@ -22,11 +24,6 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
-
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
 
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
@@ -79,11 +76,8 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
@@ -100,14 +94,11 @@ var (
 	minTransports  int
 	noFilterOnline bool
 	jsonOutput     bool
-	testEnv        bool
 )
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "b", dep.TransportDiscovery, "transport discovery url")
 	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
@@ -144,36 +135,10 @@ Combines data from:
 Shows public keys with their advertised services and transport counts by
 type (stcpr/squicr/sudph/stcp/webrtc/swsr/swtr/dmsg). Filter with --country, --version, --min
 (minimum transport count); --noton keeps offline/not-in-UT visors. --json
-emits the combined rows as machine-readable output.
-
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
+emits the combined rows as machine-readable output.`,
 		getDeployment().ServiceDiscovery,
 		getDeployment().TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			// --testenv was specified at runtime (not via SKYWIRETEST env)
-			// Override values that weren't explicitly changed by user
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("tpdurl") {
-				tpdURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdt") {
-				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs with endpoints
 		sdProxyURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeProxy
 		sdVpnURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVPN
@@ -388,7 +353,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		}
 
 		// Print legend
-		fmt.Printf("Legend: %s %s %s\n\n",
+		cmdutil.Printf("Legend: %s %s %s\n\n",
 			pterm.Red("*offline"),
 			pterm.BgRed.Sprint(pterm.White("*not in UT")),
 			pterm.BgRed.Sprint(pterm.Black("*online <2 transports")))
@@ -416,14 +381,14 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 			// First line is header - print without color
 			if i == 0 {
-				fmt.Println(line)
+				cmdutil.Println(line)
 				continue
 			}
 
 			// Get the corresponding entry (i-1 because of header)
 			entryIdx := i - 1
 			if entryIdx >= len(entries) {
-				fmt.Println(line)
+				cmdutil.Println(line)
 				continue
 			}
 
@@ -437,16 +402,16 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			switch {
 			case e.UTStatus == "":
 				// Not in UT: white text on red background
-				fmt.Println(pterm.BgRed.Sprint(pterm.White(line)))
+				cmdutil.Println(pterm.BgRed.Sprint(pterm.White(line)))
 			case e.UTStatus == "offline":
 				// Offline: red text
-				fmt.Println(pterm.Red(line))
+				cmdutil.Println(pterm.Red(line))
 			case e.UTStatus == "online" && realTransports < 2:
 				// Online but fewer than 2 real transports: black text on red background
-				fmt.Println(pterm.BgRed.Sprint(pterm.Black(line)))
+				cmdutil.Println(pterm.BgRed.Sprint(pterm.Black(line)))
 			default:
 				// Normal: no color
-				fmt.Println(line)
+				cmdutil.Println(line)
 			}
 		}
 	},

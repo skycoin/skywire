@@ -15,7 +15,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -66,7 +65,7 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, args []string) {
 		if err := RunSkydexMarket(context.Background(), args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

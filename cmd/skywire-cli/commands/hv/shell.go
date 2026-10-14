@@ -39,6 +39,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
 )
@@ -104,8 +106,8 @@ Needs a browser started with --remote-debugging-port=9222.`,
 	Run: func(_ *cobra.Command, args []string) {
 		if err := driveShell(shellPort, shellURL, shellOut, shellLoad, shellBoot,
 			shellSettle, shellNoConsole, shellKeepTabs, args); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -327,9 +329,9 @@ func (d *cdp) clickText(text string) string {
 func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, keepTabs bool, cmds []string) error {
 	if !keepTabs {
 		if n, err := closeOrigin(port, pageURL); err != nil {
-			fmt.Fprintln(os.Stderr, "could not close existing tabs:", err)
+			cmdutil.Eprintln("could not close existing tabs:", err)
 		} else if n > 0 {
-			fmt.Printf("closed %d existing tab(s) on this origin\n", n)
+			cmdutil.Printf("closed %d existing tab(s) on this origin\n", n)
 		}
 	}
 	tab, err := newTab(port)
@@ -363,22 +365,22 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 	if !d.waitFor(`(!!document.querySelector('#view-toggle') ||
 		[...document.querySelectorAll('*')].some(x => (x.textContent||'').trim() === '☰'))`,
 		time.Duration(load)*time.Second) {
-		fmt.Fprintln(os.Stderr, "warning: the page never looked ready; carrying on")
+		cmdutil.Eprintln("warning: the page never looked ready; carrying on")
 	}
 
 	if !noConsole {
-		fmt.Println("tour:   ", d.clickText("skip"))
+		cmdutil.Println("tour:   ", d.clickText("skip"))
 		time.Sleep(time.Second)
-		fmt.Println("menu:   ", d.clickText("☰"))
+		cmdutil.Println("menu:   ", d.clickText("☰"))
 		time.Sleep(1500 * time.Millisecond)
-		fmt.Println("console:", d.clickText("console"))
+		cmdutil.Println("console:", d.clickText("console"))
 		for i := 0; i < boot; i++ {
 			time.Sleep(time.Second)
 			if t := d.eval("typeof globalThis.skywireShell"); t == "object" || t == "function" {
 				break
 			}
 		}
-		fmt.Println("shell:  ", d.eval("typeof globalThis.skywireShell"))
+		cmdutil.Println("shell:  ", d.eval("typeof globalThis.skywireShell"))
 		time.Sleep(3 * time.Second)
 		d.eval("(document.querySelector('.winbox .xterm-helper-textarea')||{focus(){}}).focus()")
 	} else {
@@ -388,20 +390,20 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 
 	for _, cmd := range cmds {
 		before := d.eval("window.__hvshellDone|0")
-		fmt.Print("typing:  ", cmd)
+		cmdutil.Print("typing:  ", cmd)
 		start := time.Now()
 		if noConsole {
 			d.typeLine(cmd)
 			time.Sleep(time.Duration(settle) * time.Second)
-			fmt.Println()
+			cmdutil.Println()
 			continue
 		}
 		d.typeLine(cmd + doneMarker)
 		if d.waitFor(fmt.Sprintf("(window.__hvshellDone|0) > %s", before),
 			time.Duration(settle)*time.Second) {
-			fmt.Printf("   [%s]\n", time.Since(start).Round(time.Millisecond))
+			cmdutil.Printf("   [%s]\n", time.Since(start).Round(time.Millisecond))
 		} else {
-			fmt.Printf("   [no completion within %ds — still running or wedged]\n", settle)
+			cmdutil.Printf("   [no completion within %ds — still running or wedged]\n", settle)
 		}
 	}
 
@@ -415,8 +417,8 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
       if (rows.length) { return [...rows].map(r => r.textContent.replace(/\s+$/,'')).join('\n'); }
       return '(canvas renderer — screen text unavailable, see the screenshot)';
     })()`)
-	fmt.Println("---- screen ----")
-	fmt.Println(screen)
+	cmdutil.Println("---- screen ----")
+	cmdutil.Println(screen)
 
 	if shot, err := d.send("Page.captureScreenshot", map[string]interface{}{"format": "png"}); err == nil {
 		var s struct {
@@ -425,7 +427,7 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 		_ = json.Unmarshal(shot, &s) //nolint:errcheck
 		if b, de := base64.StdEncoding.DecodeString(s.Data); de == nil {
 			_ = os.WriteFile(out+".png", b, 0o600) //nolint:errcheck,gosec
-			fmt.Println("screenshot:", out+".png")
+			cmdutil.Println("screenshot:", out+".png")
 		}
 	}
 
@@ -434,7 +436,7 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 	d.mu.Unlock()
 	_ = os.WriteFile(out+".console.txt", []byte(strings.Join(logs, "\n")+"\n"), 0o600) //nolint:errcheck,gosec
 	seen := map[string]bool{}
-	fmt.Println("---- console errors ----")
+	cmdutil.Println("---- console errors ----")
 	n := 0
 	for _, l := range logs {
 		k := l
@@ -445,13 +447,13 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, ke
 			continue
 		}
 		seen[k] = true
-		fmt.Println(" ", l)
+		cmdutil.Println(" ", l)
 		if n++; n >= 8 {
 			break
 		}
 	}
 	if n == 0 {
-		fmt.Println("  none")
+		cmdutil.Println("  none")
 	}
 	return nil
 }

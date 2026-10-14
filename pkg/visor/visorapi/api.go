@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -1335,6 +1336,31 @@ type ForwardedPort struct {
 	// header is only trustworthy if the backend is reachable ONLY through
 	// the visor (bind it to loopback); see docs/guides/skynet-website-auth.md.
 	InjectPK bool `json:"inject_pk,omitempty"`
+	// Vhosts are sites on port 80 chosen by the request's Host, each a local
+	// service reverse-proxied without Caddy. Set on the port 80 entry.
+	Vhosts []Vhost `json:"vhosts,omitempty"`
+}
+
+// Vhost is a site the visor serves on port 80 for one or more Host names, as
+// the resolving proxy rewrites them: "status" for status.<pk>.skynet, or
+// "status.skywire.dev" for status.skywire.dev.<pk>.skynet.
+type Vhost struct {
+	Name      string          `json:"name"`
+	Aliases   []string        `json:"aliases,omitempty"`
+	ProxyAddr string          `json:"proxy_addr"`
+	Whitelist []cipher.PubKey `json:"whitelist,omitempty"` // empty = everyone
+	// PreserveHost passes the request's Host to the backend, as for a port 80
+	// forward; by default the backend sees its own address.
+	PreserveHost bool `json:"preserve_host,omitempty"`
+}
+
+// Names are the Host names v answers to, lower case.
+func (v Vhost) Names() []string {
+	out := []string{strings.ToLower(v.Name)}
+	for _, a := range v.Aliases {
+		out = append(out, strings.ToLower(a))
+	}
+	return out
 }
 
 // EffectiveLocalPort returns the local TCP port to forward to.

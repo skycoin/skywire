@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -27,7 +26,6 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -109,10 +107,8 @@ func init() {
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks clients")
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the skysocks client to stop")
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
 	// test command flags
-	testCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	testCmd.Flags().StringVarP(&testURL, "url", "u", dep.GeoIP, "URL to fetch through proxy for testing")
 	testCmd.Flags().IntVarP(&testTimeout, "timeout", "t", 10, "timeout in seconds for HTTP request (route setup has separate 30s timeout)")
 	testCmd.Flags().IntVarP(&testBatchSize, "batch", "b", 1, "number of proxies to test (1=sequential/stable, >1=parallel/experimental)")
@@ -256,7 +252,7 @@ var startCmd = &cobra.Command{
 
 		// In --verbose mode the SignalContext-driven cleanup path needs
 		// to print after the streamer has flushed its last entries, so
-		// the os.Exit(1) is gated on a non-verbose run. Verbose mode
+		// the cmdutil.Exit(1) is gated on a non-verbose run. Verbose mode
 		// instead returns from the Run func — letting the deferred
 		// rpcClient.Close + grpc.Close run cleanly.
 		var tCtxCancelFunc context.CancelFunc
@@ -275,8 +271,8 @@ var startCmd = &cobra.Command{
 				return // let the main goroutine exit gracefully
 			}
 			rpcClient.KillApp(clientName) //nolint:errcheck,gosec
-			fmt.Print("\nStopped!")
-			os.Exit(1)
+			cmdutil.Print("\nStopped!")
+			cmdutil.Exit(1)
 		}()
 
 		// --verbose: open a gRPC log stream BEFORE StartAppWithMode so
@@ -550,12 +546,12 @@ var startCmd = &cobra.Command{
 			// group afterwards: a pin the operator gave is not advisory, and a
 			// session quietly running on the auto route instead is the failure
 			// this used to print as success.
-			res, pErr := pinRoutes(rpcClient, clientName, targets, routePinBudget, os.Stderr)
+			res, pErr := pinRoutes(rpcClient, clientName, targets, routePinBudget, cmdutil.Stderr())
 			if pErr != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--route: %w", pErr))
 			}
 			if !startVerbose {
-				fmt.Printf("route pinned: %d leg(s) added, %d pruned, %d already present\n",
+				cmdutil.Printf("route pinned: %d leg(s) added, %d pruned, %d already present\n",
 					len(res.added), len(res.removed), res.existing)
 			}
 		}
@@ -569,9 +565,9 @@ var startCmd = &cobra.Command{
 		// the CLI exits — operator pressed ctrl+c expecting to STOP
 		// the proxy, not just detach from it.
 		if startVerbose && !appReachedRunning && ctx.Err() != nil {
-			fmt.Fprintln(os.Stderr, "canceled during startup; stopping app...")
+			cmdutil.Eprintln("canceled during startup; stopping app...")
 			if err := rpcClient.StopApp(clientName); err != nil {
-				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+				cmdutil.Eprintf("stop app: %v\n", err)
 			}
 			if verboseStream != nil {
 				verboseStream.Close()
@@ -586,7 +582,7 @@ var startCmd = &cobra.Command{
 		// the operator has to ctrl+c just to get their terminal
 		// back, with no idea why nothing is flowing.
 		if startVerbose && appReachedRunning {
-			fmt.Fprintln(os.Stderr, "--- app running; streaming logs (ctrl+c to stop) ---")
+			cmdutil.Eprintln("--- app running; streaming logs (ctrl+c to stop) ---")
 			appExited := make(chan string, 1)
 			go func() {
 				ticker := time.NewTicker(2 * time.Second)
@@ -614,12 +610,12 @@ var startCmd = &cobra.Command{
 			}()
 			select {
 			case <-ctx.Done():
-				fmt.Fprintln(os.Stderr, "stopping app...")
+				cmdutil.Eprintln("stopping app...")
 				if err := rpcClient.StopApp(clientName); err != nil {
-					fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+					cmdutil.Eprintf("stop app: %v\n", err)
 				}
 			case msg := <-appExited:
-				fmt.Fprintln(os.Stderr, "app exited: "+msg)
+				cmdutil.Eprintln("app exited: " + msg)
 			}
 			if verboseStream != nil {
 				verboseStream.Close()
@@ -650,7 +646,7 @@ var stopCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.StopApp(clientName))
 		if left := awaitNoRouteGroups(rpcClient, clientName); left > 0 {
-			fmt.Fprintf(os.Stderr, "warning: %d route group(s) still registered for app=%s after %s; see 'proxy mux info'\n",
+			cmdutil.Eprintf("warning: %d route group(s) still registered for app=%s after %s; see 'proxy mux info'\n",
 				left, clientName, stopRouteGroupWait)
 		}
 		internal.PrintOutput(cmd.Flags(), fmt.Sprintf("skysocks client %s stopped", clientName), fmt.Sprintf("skysocks client %s stopped\n", clientName))
@@ -895,9 +891,7 @@ var (
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
@@ -918,24 +912,8 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
@@ -1077,12 +1055,12 @@ var listCmd = &cobra.Command{
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
 					}
-					fmt.Println(pterm.Red(fmt.Sprintf("%s %s %s", pkStr, countryCode, svc.Version)))
+					cmdutil.Println(pterm.Red(fmt.Sprintf("%s %s %s", pkStr, countryCode, svc.Version)))
 				}
 			}
 
 			if isStats {
-				fmt.Printf("%d\n", count)
+				cmdutil.Printf("%d\n", count)
 			}
 			return
 		}
@@ -1128,12 +1106,12 @@ var listCmd = &cobra.Command{
 						if svc.Geo != nil {
 							countryCode = svc.Geo.Country
 						}
-						fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+						cmdutil.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
 					}
 				}
 
 				if isStats {
-					fmt.Printf("%d\n", count)
+					cmdutil.Printf("%d\n", count)
 				}
 				return
 			}
@@ -1224,12 +1202,12 @@ var listCmd = &cobra.Command{
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
 					}
-					fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+					cmdutil.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
 				}
 			}
 
 			if isStats {
-				fmt.Printf("%d\n", count)
+				cmdutil.Printf("%d\n", count)
 			}
 			return
 		}
@@ -1303,26 +1281,8 @@ make an HTTP request through the proxy to verify it's working.
 With --connect flag, connects to all online proxies (adds transports)
 without HTTP testing. Use --version to filter by visor version.
 
-Results show which proxies are reachable and their response latency.
-
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
+Results show which proxies are reachable and their response latency.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URL for cache file
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -1365,7 +1325,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Found %d transports for via visor %s\n", len(entries), viaVisor)
+				cmdutil.Printf("Found %d transports for via visor %s\n", len(entries), viaVisor)
 			}
 
 			// Extract destination PKs (the "other" edge from each transport)
@@ -1380,7 +1340,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Found %d unique destination visors via %s\n", len(viaDestinations), viaVisor)
+				cmdutil.Printf("Found %d unique destination visors via %s\n", len(viaDestinations), viaVisor)
 			}
 		}
 
@@ -1419,7 +1379,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				restore.fatal(fmt.Errorf("failed to start proxy: %w", err))
 			}
 
-			fmt.Printf("Started skysocks-client with server %s\n", serverPK.String())
+			cmdutil.Printf("Started skysocks-client with server %s\n", serverPK.String())
 
 			// Wait for it to be ready and test
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(testTimeout)*time.Second)
@@ -1454,7 +1414,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				restore.fatal(fmt.Errorf("proxy client failed to start"))
 			}
 
-			fmt.Println("Proxy is running!")
+			cmdutil.Println("Proxy is running!")
 
 			// Test the proxy
 			proxyAddr := "127.0.0.1" + addr
@@ -1477,11 +1437,11 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			start := time.Now()
 			resp, err := client.Get(testURL)
 			if err != nil {
-				fmt.Printf("HTTP test failed: %v\n", err)
+				cmdutil.Printf("HTTP test failed: %v\n", err)
 			} else {
 				defer resp.Body.Close() //nolint:errcheck,gosec
 				latency := time.Since(start).Milliseconds()
-				fmt.Printf("HTTP test succeeded in %dms (status: %d)\n", latency, resp.StatusCode)
+				cmdutil.Printf("HTTP test succeeded in %dms (status: %d)\n", latency, resp.StatusCode)
 			}
 
 			return
@@ -1524,7 +1484,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Testing %d destinations via %s\n", len(proxiesToTest), viaVisor)
+				cmdutil.Printf("Testing %d destinations via %s\n", len(proxiesToTest), viaVisor)
 			}
 		} else {
 			// Fetch proxy servers from service discovery
@@ -1562,7 +1522,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Found %d proxy servers\n", len(proxyServices))
+				cmdutil.Printf("Found %d proxy servers\n", len(proxyServices))
 			}
 
 			for _, svc := range proxyServices {
@@ -1610,7 +1570,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 		if testVerbose && len(viaDestinations) == 0 {
 			if testConnectOnly {
-				fmt.Printf("Connecting to %d proxies\n", len(proxiesToTest))
+				cmdutil.Printf("Connecting to %d proxies\n", len(proxiesToTest))
 			} else {
 				withTp := 0
 				for _, p := range proxiesToTest {
@@ -1618,16 +1578,16 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 						withTp++
 					}
 				}
-				fmt.Printf("Testing %d proxies (%d with existing transport)\n", len(proxiesToTest), withTp)
+				cmdutil.Printf("Testing %d proxies (%d with existing transport)\n", len(proxiesToTest), withTp)
 			}
 		}
 
 		// Progress indicator
 		total := len(proxiesToTest)
 		if viaVisor != "" {
-			fmt.Printf("Testing %d destinations via %s (batch=%d, timeout=%ds)\n", total, viaVisor, testBatchSize, testTimeout)
+			cmdutil.Printf("Testing %d destinations via %s (batch=%d, timeout=%ds)\n", total, viaVisor, testBatchSize, testTimeout)
 		} else {
-			fmt.Printf("Processing %d proxies (batch=%d, timeout=%ds)...\n", total, testBatchSize, testTimeout)
+			cmdutil.Printf("Processing %d proxies (batch=%d, timeout=%ds)...\n", total, testBatchSize, testTimeout)
 		}
 
 		results := make([]ProxyTestResult, len(proxiesToTest))
@@ -1660,21 +1620,21 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				stopErr := rpcClient.StopApp("skysocks-client")
 				// Check for connection error and try to reconnect
 				if isRPCConnectionError(stopErr) {
-					fmt.Println("[RPC] Connection lost, reconnecting...")
+					cmdutil.Println("[RPC] Connection lost, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
 						rpcClient.Close() //nolint:errcheck,gosec
 					}
 					newClient, err := clirpc.Client(cmd.Flags())
 					if err != nil {
-						fmt.Printf("[RPC] Reconnection failed: %v\n", err)
+						cmdutil.Printf("[RPC] Reconnection failed: %v\n", err)
 						result.Error = fmt.Sprintf("RPC reconnection failed: %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+						cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
-					fmt.Println("[RPC] Reconnected successfully")
+					cmdutil.Println("[RPC] Reconnected successfully")
 					rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 				}
 				time.Sleep(100 * time.Millisecond)
@@ -1689,7 +1649,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				err := rpcClient.DoCustomSetting("skysocks-client", arguments)
 				if isRPCConnectionError(err) {
 					// Try reconnecting once
-					fmt.Println("[RPC] Connection lost during configure, reconnecting...")
+					cmdutil.Println("[RPC] Connection lost during configure, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
 						rpcClient.Close() //nolint:errcheck,gosec
@@ -1698,7 +1658,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if reconnErr != nil {
 						result.Error = fmt.Sprintf("configure failed (reconnect failed): %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+						cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
@@ -1708,14 +1668,14 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("configure failed: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
 				err = rpcClient.StartApp("skysocks-client")
 				if isRPCConnectionError(err) {
 					// Try reconnecting once
-					fmt.Println("[RPC] Connection lost during start, reconnecting...")
+					cmdutil.Println("[RPC] Connection lost during start, reconnecting...")
 					// Close old connection to prevent leak
 					if rpcClient != nil {
 						rpcClient.Close() //nolint:errcheck,gosec
@@ -1724,7 +1684,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if reconnErr != nil {
 						result.Error = fmt.Sprintf("start failed (reconnect failed): %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+						cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
@@ -1734,7 +1694,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("start failed: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1747,7 +1707,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					states, err := rpcClient.Apps()
 					if isRPCConnectionError(err) {
 						// Try to reconnect
-						fmt.Println("[RPC] Connection lost during status check, reconnecting...")
+						cmdutil.Println("[RPC] Connection lost during status check, reconnecting...")
 						// Close old connection to prevent leak
 						if rpcClient != nil {
 							rpcClient.Close() //nolint:errcheck,gosec
@@ -1793,7 +1753,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 				if result.Error != "" {
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1807,7 +1767,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					}
 					result.Error = errMsg
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1820,7 +1780,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("SOCKS5 dialer: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1835,7 +1795,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("HTTP: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
+					cmdutil.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1875,9 +1835,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if result.Bandwidth > 0 {
 						bwStr = fmt.Sprintf(" %.0fkbps", result.Bandwidth)
 					}
-					fmt.Printf("[%d/%d] OK %s - %.0fms%s%s%s\n", i+1, total, pxy.pk.String(), result.Latency, locStr, ipStr, bwStr)
+					cmdutil.Printf("[%d/%d] OK %s - %.0fms%s%s%s\n", i+1, total, pxy.pk.String(), result.Latency, locStr, ipStr, bwStr)
 				} else {
-					fmt.Printf("[%d/%d] FAIL %s - HTTP %d\n", i+1, total, pxy.pk.String(), resp.StatusCode)
+					cmdutil.Printf("[%d/%d] FAIL %s - HTTP %d\n", i+1, total, pxy.pk.String(), resp.StatusCode)
 				}
 			}
 
@@ -1895,7 +1855,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			clientPool := make(chan testClient, testBatchSize)
 			var createdClients []string
 
-			fmt.Printf("Setting up %d test clients...\n", testBatchSize)
+			cmdutil.Printf("Setting up %d test clients...\n", testBatchSize)
 			for i := 0; i < testBatchSize; i++ {
 				clientName := fmt.Sprintf("proxy-test-%d", i)
 				port := 10800 + i
@@ -1911,7 +1871,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					}
 					err = rpcClient.AddApp(clientName, binaryName)
 					if err != nil {
-						fmt.Printf("Warning: failed to add test client %s: %v\n", clientName, err)
+						cmdutil.Printf("Warning: failed to add test client %s: %v\n", clientName, err)
 						continue
 					}
 				}
@@ -1925,7 +1885,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 			// Cleanup function
 			defer func() {
-				fmt.Printf("Cleaning up test clients...\n")
+				cmdutil.Printf("Cleaning up test clients...\n")
 				for _, name := range createdClients {
 					rpcClient.StopApp(name) //nolint:errcheck,gosec
 				}
@@ -1947,18 +1907,18 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			reconnectRPC := func() bool {
 				rpcWrapper.mu.Lock()
 				defer rpcWrapper.mu.Unlock()
-				fmt.Println("[RPC] Connection lost, reconnecting...")
+				cmdutil.Println("[RPC] Connection lost, reconnecting...")
 				// Close old connection to prevent leak
 				if rpcWrapper.client != nil {
 					rpcWrapper.client.Close() //nolint:errcheck,gosec
 				}
 				newClient, err := clirpc.Client(cmd.Flags())
 				if err != nil {
-					fmt.Printf("[RPC] Reconnection failed: %v\n", err)
+					cmdutil.Printf("[RPC] Reconnection failed: %v\n", err)
 					return false
 				}
 				rpcWrapper.client = newClient
-				fmt.Println("[RPC] Reconnected successfully")
+				cmdutil.Println("[RPC] Reconnected successfully")
 				return true
 			}
 
@@ -2089,9 +2049,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 							if result.Bandwidth > 0 {
 								bwStr = fmt.Sprintf(" %.1fkbps", result.Bandwidth)
 							}
-							fmt.Printf("[%d/%d] OK %s%s - %.0fms%s%s%s\n", current, total, pxy.pk.String(), verStr, result.Latency, locStr, ipStr, bwStr)
+							cmdutil.Printf("[%d/%d] OK %s%s - %.0fms%s%s%s\n", current, total, pxy.pk.String(), verStr, result.Latency, locStr, ipStr, bwStr)
 						} else {
-							fmt.Printf("[%d/%d] FAIL %s%s - %s\n", current, total, pxy.pk.String(), verStr, result.Error)
+							cmdutil.Printf("[%d/%d] FAIL %s%s - %s\n", current, total, pxy.pk.String(), verStr, result.Error)
 						}
 					}
 				}(i, p)
@@ -2100,8 +2060,8 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			wg.Wait()
 
 			if atomic.LoadInt32(&aborted) == 1 {
-				fmt.Printf("\nTest aborted: RPC connection to visor was lost\n")
-				fmt.Printf("Showing partial results (%d completed)...\n", atomic.LoadInt32(&completed))
+				cmdutil.Printf("\nTest aborted: RPC connection to visor was lost\n")
+				cmdutil.Printf("Showing partial results (%d completed)...\n", atomic.LoadInt32(&completed))
 			}
 		}
 
@@ -2159,11 +2119,11 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		}
 		w.Flush() //nolint:errcheck,gosec
 
-		fmt.Print(b.String())
+		cmdutil.Print(b.String())
 		if testConnectOnly {
-			fmt.Printf("\nSummary: %d/%d proxies connected\n", successCount, len(results))
+			cmdutil.Printf("\nSummary: %d/%d proxies connected\n", successCount, len(results))
 		} else {
-			fmt.Printf("\nSummary: %d/%d proxies working\n", successCount, len(results))
+			cmdutil.Printf("\nSummary: %d/%d proxies working\n", successCount, len(results))
 		}
 	},
 }

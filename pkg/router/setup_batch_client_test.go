@@ -256,5 +256,62 @@ func TestSetupBatcher_MemberCancelLeavesTheGroupAlone(t *testing.T) {
 
 	require.True(t, errors.Is(quickErr, context.DeadlineExceeded), "the impatient member gave up")
 	require.NoError(t, patientErr, "its sibling's setup completed regardless")
-	require.Equal(t, []int{2}, sender.sizes())
+	require.Equal(t, []int{1}, sender.sizes(), "the member that left before the send is not set up")
+}
+
+// A request every member has given up on is canceled instead of running out
+// batchSendDeadline, so a setup node that never answers cannot pile them up.
+func TestSetupBatcher_AbandonedRequestIsCanceled(t *testing.T) {
+	t.Cleanup(rs.Reset)
+	require.True(t, SetSetupBatchWindow(10*time.Millisecond))
+
+	b := newSetupBatcher()
+	src, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	log := logging.MustGetLogger("test")
+
+	ended := make(chan error, 1)
+	mute := func(ctx context.Context, _ *logging.Logger, _ *dmsg.Client,
+		_ []cipher.PubKey, _ []routing.BidirectionalRoute) ([]batchOutcome, error) {
+		<-ctx.Done()
+		ended <- ctx.Err()
+		return nil, ctx.Err()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	inter, _ := cipher.GenerateKeyPair()
+	_, _, err := b.dial(ctx, log, nil, nil, biRouteTo(src, inter, dst, 100), mute)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	select {
+	case err := <-ended:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the abandoned request is still running")
+	}
+}
+
+// A member that leaves a group still collecting siblings is never sent.
+func TestSetupBatcher_LeaveBeforeSendSendsNothing(t *testing.T) {
+	t.Cleanup(rs.Reset)
+	require.True(t, SetSetupBatchWindow(200*time.Millisecond))
+
+	b := newSetupBatcher()
+	src, _ := cipher.GenerateKeyPair()
+	dst, _ := cipher.GenerateKeyPair()
+	sender := &recordingSender{}
+	log := logging.MustGetLogger("test")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	inter, _ := cipher.GenerateKeyPair()
+	_, _, err := b.dial(ctx, log, nil, nil, biRouteTo(src, inter, dst, 100), sender.send)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	time.Sleep(300 * time.Millisecond)
+	require.Empty(t, sender.sizes())
+	b.mu.Lock()
+	require.Empty(t, b.groups)
+	b.mu.Unlock()
 }

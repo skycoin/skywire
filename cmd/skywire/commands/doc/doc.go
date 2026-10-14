@@ -41,6 +41,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -110,7 +112,7 @@ Run from the repo root so the default --out path resolves:
 
 		if dryRun {
 			for _, p := range pages {
-				fmt.Println(p.path())
+				cmdutil.Println(p.path())
 			}
 			return
 		}
@@ -118,22 +120,22 @@ Run from the repo root so the default --out path resolves:
 		for _, p := range pages {
 			full := filepath.Join(outDir, p.path())
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { //nolint:gosec // docs are world-readable
-				fmt.Fprintf(os.Stderr, "doc: mkdir %s: %v\n", filepath.Dir(full), err)
-				os.Exit(1)
+				cmdutil.Eprintf("doc: mkdir %s: %v\n", filepath.Dir(full), err)
+				cmdutil.Exit(1)
 			}
 			f, err := os.Create(full) //nolint:gosec // path derived deterministically from outDir + cobra command segments
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "doc: create %s: %v\n", full, err)
-				os.Exit(1)
+				cmdutil.Eprintf("doc: create %s: %v\n", full, err)
+				cmdutil.Exit(1)
 			}
 			if err := render(f, p); err != nil {
 				_ = f.Close() //nolint:errcheck
-				fmt.Fprintf(os.Stderr, "doc: render %s: %v\n", full, err)
-				os.Exit(1)
+				cmdutil.Eprintf("doc: render %s: %v\n", full, err)
+				cmdutil.Exit(1)
 			}
 			_ = f.Close() //nolint:errcheck
 		}
-		fmt.Printf("doc: wrote %d markdown files under %s\n", len(pages), outDir)
+		cmdutil.Printf("doc: wrote %d markdown files under %s\n", len(pages), outDir)
 	},
 }
 

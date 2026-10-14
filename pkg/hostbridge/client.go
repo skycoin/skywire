@@ -23,10 +23,16 @@ type Client struct {
 	lis  map[string]*listener
 }
 
-// NewClient runs the tab end over conn, the tab's WebSocket to the bridge.
-func NewClient(conn net.Conn) (*Client, error) {
+// NewClient runs the tab end over conn, the tab's WebSocket to the bridge,
+// after pairing with it as p. When the bridge pairs for the first time it
+// sets p.Secret, which the visor keeps for later sessions.
+func NewClient(conn net.Conn, p *Pairing) (*Client, error) {
 	sess, err := yamux.Client(conn, muxConfig())
 	if err != nil {
+		return nil, err
+	}
+	if err := clientHello(sess, p); err != nil {
+		_ = sess.Close() //nolint:errcheck
 		return nil, err
 	}
 	c := &Client{sess: sess, lis: map[string]*listener{}}
@@ -133,7 +139,7 @@ func (c *Client) acceptLoop() {
 
 func (c *Client) route(st net.Conn) {
 	br := bufio.NewReader(st)
-	op, f, err := readMsg(br, 2)
+	op, f, err := readMsg(br)
 	if err != nil || op != opAccepted {
 		_ = st.Close() //nolint:errcheck
 		return

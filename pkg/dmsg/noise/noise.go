@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/flynn/noise"
 
@@ -16,15 +15,11 @@ import (
 
 var noiseLogger = logging.MustGetLogger("noise")
 
-// requirePQ, when SKYWIRE_REQUIRE_PQ is set in the environment, makes a
-// handshake that COMPLETED classical-only (no ML-KEM shared secret) HARD-FAIL
-// instead of silently downgrading — the downgrade *prevention* that
-// complements the downgrade *observability* (the warn in applyHybrid). It is
-// the in-process enforcement knob for the unauthenticated-PQ-negotiation
-// finding: a payload-stripping MITM can no longer force a session to classical
-// without the handshake failing. Default OFF: flip on fleet-wide ONLY after
-// every peer is PQ-capable, or handshakes to not-yet-updated visors break.
-var requirePQ = os.Getenv("SKYWIRE_REQUIRE_PQ") != ""
+// errClassicalOnly refuses a handshake that completed without the ML-KEM
+// secret. PQ negotiation is not authenticated, so accepting one would let a
+// payload-stripping MITM force a session to classical; every visor since
+// v1.3.80 negotiates the hybrid.
+var errClassicalOnly = errors.New("noise: the peer negotiated a classical-only handshake; post-quantum is required (the peer needs skywire v1.3.80 or later)")
 
 // ErrInvalidCipherText occurs when a ciphertext is received which is too short in size.
 var ErrInvalidCipherText = errors.New("noise decrypt unsafe: ciphertext cannot be less than 8 bytes")
@@ -58,11 +53,9 @@ type Noise struct {
 	encNonce uint64 // increment after encryption
 	decNonce uint64 // expect increment with each subsequent packet
 
-	// Post-quantum hybrid (ML-KEM-768). PQ is offered UNCONDITIONALLY and
-	// composes with the classical handshake; if the peer doesn't reciprocate
-	// (empty payload — an older visor), we transparently fall back to classical.
-	// No flag, reverse-compatible by construction. See pqhybrid.go +
-	// docs/design/pq-hybrid-noise-handshake.md.
+	// Post-quantum hybrid (ML-KEM-768), composed with the classical handshake
+	// and required: a peer that does not reciprocate is refused (applyHybrid).
+	// See pqhybrid.go and docs/design/pq-hybrid-noise-handshake.md.
 	suite      noise.CipherSuite // retained to rebuild CipherStates for the hybrid re-key
 	pqInit     *pqInitiator      // initiator's ephemeral ML-KEM keys (lazily generated)
 	pqSendData []byte            // PQ payload queued for the next handshake message
@@ -176,15 +169,14 @@ func (ns *Noise) ProcessHandshakeMessage(msg []byte) (err error) {
 // pqOfferPayload returns the post-quantum data to embed in the next handshake
 // message: the initiator's ephemeral ML-KEM public key on its first message, or
 // a responder's ML-KEM ciphertext once it has encapsulated. Returns nil when
-// there's nothing to offer — which produces an empty payload, the natural "I'm
-// not doing PQ / I'm an older visor" signal that yields a classical handshake.
-// Best-effort: an ML-KEM keygen failure silently proceeds classical.
+// there's nothing to offer. A keygen failure offers nothing, and applyHybrid
+// then refuses the classical-only result.
 func (ns *Noise) pqOfferPayload() []byte {
 	if ns.init && ns.pqInit == nil && ns.pqSecret == nil {
 		k, err := newPQInitiator()
 		if err != nil {
 			noiseLogger.WithError(err).
-				Warn("post-quantum keygen failed; proceeding with a CLASSICAL-only handshake")
+				Warn("post-quantum keygen failed; the handshake will be refused")
 			return nil
 		}
 		ns.pqInit = k
@@ -201,8 +193,7 @@ func (ns *Noise) pqOfferPayload() []byte {
 // pqHandlePeerPayload reacts to a peer's handshake payload: a responder
 // encapsulates against the initiator's ML-KEM public key; an initiator
 // decapsulates the responder's ciphertext. A malformed, empty, or unexpected
-// payload simply leaves PQ off (classical fallback) — it NEVER fails the
-// handshake, which is what makes this reverse-compatible with older visors.
+// payload leaves PQ off, and applyHybrid refuses the handshake.
 func (ns *Noise) pqHandlePeerPayload(payload []byte) {
 	if len(payload) == 0 || ns.pqSecret != nil {
 		return
@@ -236,30 +227,12 @@ func (ns *Noise) applyHybrid() error {
 		defer func() { ns.pqInit = nil }()
 	}
 	if ns.pqSecret == nil || ns.enc == nil || ns.dec == nil {
-		// Downgrade observability: if we (the initiator) OFFERED an ML-KEM
-		// public key but the handshake completed (enc+dec set) with no shared
-		// secret, the peer returned no/malformed ciphertext — a PQ-capable
-		// handshake silently fell back to classical. That is expected against
-		// an older classical-only peer, but it is ALSO exactly what an active
-		// MITM stripping the ML-KEM payload looks like: PQ negotiation is not
-		// authenticated, so there is no in-band downgrade signal. Surfacing it
-		// is the minimum mitigation — a silent, undetectable downgrade becomes
-		// an observable one (prerequisite to a future require-PQ enforcement
-		// once the fleet is fully PQ-capable). Responders can't distinguish
-		// "peer is classical" from "MITM stripped", so only the
-		// initiator-offered case is logged.
+		// No ML-KEM secret: the peer returned none, or never offered one.
+		// That is an older peer or a MITM stripping the payload, and PQ
+		// negotiation is not authenticated, so neither can be accepted.
 		if ns.enc != nil && ns.dec != nil {
-			// Handshake completed classical-only.
-			if requirePQ {
-				// Prevention: refuse the downgrade outright. Covers BOTH roles
-				// (initiator whose offer was stripped, and responder who saw no
-				// ML-KEM material), since under enforcement any classical-only
-				// completion is unacceptable.
-				return errors.New("post-quantum required (SKYWIRE_REQUIRE_PQ) but the session negotiated classical-only — refusing the handshake")
-			}
-			if ns.init && ns.pqInit != nil {
-				noiseLogger.Warn("post-quantum DOWNGRADE: offered ML-KEM but peer returned no ciphertext; session is CLASSICAL-only (older peer, or a payload-stripping MITM)")
-			}
+			// Handshake completed classical-only, in either role: refused.
+			return errClassicalOnly
 		}
 		return nil
 	}

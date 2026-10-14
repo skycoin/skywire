@@ -3,9 +3,10 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"regexp"
 	"runtime"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	cc "github.com/0magnet/coloredcobra"
 	"github.com/bitfield/script"
@@ -44,23 +45,23 @@ var rootCmd = &cobra.Command{
 			//go tool dist list | awk -F '/' '{print $NF}' | awk '{$1=$1};1' | sort | uniq
 			_, err := script.Exec(`go tool dist list`).ReplaceRegexp(regexp.MustCompile(".*/"), "").Freq().ReplaceRegexp(regexp.MustCompile(`^\s*\d+\s+`), "").Tee().WriteFile(writeFile)
 			if err != nil {
-				log.Fatal(err)
+				cmdutil.Fatal(err)
 			}
 		} else {
 			rawOutput, err := script.Exec(`go tool dist list`).ReplaceRegexp(regexp.MustCompile(".*/"), "").Freq().ReplaceRegexp(regexp.MustCompile(`^\s*\d+\s+`), "").Slice()
 			if err != nil {
-				log.Fatal(err)
+				cmdutil.Fatal(err)
 			}
 
 			jsonData, err := json.Marshal(rawOutput)
 			if err != nil {
-				log.Fatal(err)
+				cmdutil.Fatal(err)
 			}
 			//equivalent bash one-liner:
 			//go tool dist list | awk -F '/' '{print $NF}' | awk '{$1=$1};1' | sort | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))' | tee arches.json
 			_, err = script.Echo(string(jsonData) + "\n").Tee().WriteFile(writeFile)
 			if err != nil {
-				log.Fatal(err)
+				cmdutil.Fatal(err)
 			}
 		}
 	},

@@ -14,9 +14,20 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const testToken = "0123456789abcdef"
+
+// testPairing is the visor every test connects as, so a bridge outside the
+// test process stays paired with it.
+var testPairing = newPairing()
+
+func newPairing() *Pairing {
+	pk, _ := cipher.GenerateKeyPair()
+	return &Pairing{PK: pk.Hex()}
+}
 
 // startBridge runs a bridge in the test, or returns HOSTBRIDGE_EXTERNAL, the
 // address of one started with -token 0123456789abcdef, such as a TinyGo build.
@@ -47,12 +58,17 @@ func dialWS(t *testing.T, url, origin string) (*websocket.Conn, *http.Response, 
 
 func connect(t *testing.T, addr string) *Client {
 	t.Helper()
-	ws, _, err := dialWS(t, "ws://"+addr+"/"+testToken, DefaultOrigin)
-	require.NoError(t, err)
-	c, err := NewClient(websocket.NetConn(context.Background(), ws, websocket.MessageBinary))
+	c, err := connectAs(t, addr, testPairing)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
 	return c
+}
+
+func connectAs(t *testing.T, addr string, p *Pairing) (*Client, error) {
+	t.Helper()
+	ws, _, err := dialWS(t, "ws://"+addr+"/"+testToken, DefaultOrigin)
+	require.NoError(t, err)
+	return NewClient(websocket.NetConn(context.Background(), ws, websocket.MessageBinary), p)
 }
 
 func TestHandshakeRefusals(t *testing.T) {
@@ -292,4 +308,70 @@ func TestParseAddrPort(t *testing.T) {
 		_, err := parseAddrPort(bad)
 		require.Error(t, err, bad)
 	}
+}
+
+func serveBridge(t *testing.T, cfg Config) string {
+	t.Helper()
+	s, err := NewServer(cfg)
+	require.NoError(t, err)
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = l.Close() }) //nolint:errcheck
+	go s.Serve(l)                       //nolint:errcheck
+	return l.Addr().String()
+}
+
+func TestPairing(t *testing.T) {
+	pairFile := filepath.Join(t.TempDir(), "hostbridge-visor")
+	cfg := Config{Token: testToken, Origins: []string{DefaultOrigin}, PairFile: pairFile}
+	first, second := newPairing(), newPairing()
+
+	addr := serveBridge(t, cfg)
+	c, err := connectAs(t, addr, first)
+	require.NoError(t, err)
+	_ = c.Close() //nolint:errcheck
+	require.Len(t, first.Secret, 64, "pairing gives the visor a secret")
+
+	// The first visor is recorded. Another one is refused, the first is not.
+	b, err := os.ReadFile(pairFile) //nolint:gosec // a file in the test's temp dir
+	require.NoError(t, err)
+	require.Equal(t, first.PK+" "+first.Secret, strings.TrimSpace(string(b)))
+	_, err = connectAs(t, addr, second)
+	require.ErrorContains(t, err, first.PK)
+	c, err = connectAs(t, addr, first)
+	require.NoError(t, err)
+	_ = c.Close() //nolint:errcheck
+
+	// The right key with the wrong secret is refused, and so is asking to
+	// pair again.
+	_, err = connectAs(t, addr, &Pairing{PK: first.PK, Secret: strings.Repeat("0", 64)})
+	require.ErrorContains(t, err, "wrong pairing secret")
+	_, err = connectAs(t, addr, &Pairing{PK: first.PK})
+	require.ErrorContains(t, err, "wrong pairing secret")
+
+	// A restarted bridge reads the pairing back.
+	addr = serveBridge(t, cfg)
+	_, err = connectAs(t, addr, second)
+	require.Error(t, err)
+	c, err = connectAs(t, addr, first)
+	require.NoError(t, err)
+	_ = c.Close() //nolint:errcheck
+
+	// Unpairing lets the next visor pair.
+	require.NoError(t, Unpair(pairFile))
+	addr = serveBridge(t, cfg)
+	c, err = connectAs(t, addr, second)
+	require.NoError(t, err)
+	_ = c.Close() //nolint:errcheck
+}
+
+func TestHelloRefusesABadKey(t *testing.T) {
+	addr := serveBridge(t, Config{Token: testToken, Origins: []string{DefaultOrigin}})
+	_, err := connectAs(t, addr, &Pairing{PK: "not a key"})
+	require.ErrorContains(t, err, "visor key")
+}
+
+func TestPairFile(t *testing.T) {
+	require.Equal(t, "", PairFile("none"))
+	require.Equal(t, filepath.Join("/x/y", "hostbridge-visor"), PairFile("/x/y/hostbridge-token"))
 }

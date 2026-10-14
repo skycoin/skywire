@@ -371,6 +371,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 	writeQuotedNative(w, v.CLIAddr)
 	o.field("log_level")
 	writeQuotedNative(w, v.LogLevel)
+	if v.LogHookLevel != "" {
+		o.field("log_hook_level")
+		writeQuotedNative(w, v.LogHookLevel)
+	}
 	o.field("local_path")
 	writeQuotedNative(w, v.LocalPath)
 	o.field("stun_servers")
@@ -1444,6 +1448,10 @@ func marshalSkymailNative(w *strings.Builder, s *visorconfig.SkymailConfig, inde
 
 func marshalHostBridgeNative(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
 	o := newObjNative(w, indent)
+	if s.Secret != "" {
+		o.field("secret")
+		writeQuotedNative(w, s.Secret)
+	}
 	o.field("url")
 	writeQuotedNative(w, s.URL)
 	o.field("forwards")

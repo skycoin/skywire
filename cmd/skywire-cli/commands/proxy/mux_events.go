@@ -4,10 +4,11 @@ package skysocksc
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -116,12 +117,12 @@ func renderMuxEvents(cmd *cobra.Command, infos any) {
 		}
 	}
 	if len(rows) == 0 {
-		fmt.Printf("no recorded route-group events for app=%s (%d active group(s))\n", muxEventsApp, len(rgs))
+		cmdutil.Printf("no recorded route-group events for app=%s (%d active group(s))\n", muxEventsApp, len(rgs))
 		return
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].ev.At.Before(rows[j].ev.At) })
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "time\trg\trole\tevent\tby\tleg\tfirst hop\treason") //nolint:errcheck,gosec
 	for _, r := range rows {
 		hop := r.ev.RemotePK

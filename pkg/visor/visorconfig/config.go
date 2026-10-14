@@ -12,22 +12,9 @@ import (
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
 // This is used as default values if no config is given, or for missing *required* fields.
 // This function always returns the latest config version.
-func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
-
-	// Pick the deployment-default Services bundle when the caller
-	// didn't supply one. Previously this re-unmarshalled
-	// deployment.ServicesJSON via encoding/json; the deployment
-	// package's init() already does that work and exposes the
-	// result as deployment.Prod / deployment.Test, so we just point
-	// at those structs. Eliminates two json.Unmarshal calls from
-	// the WASM build graph (visorconfig.Services is now a type
-	// alias to deployment.Services — same memory shape).
+func MakeBaseConfig(common *Common, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
 	if services == nil {
-		if testEnv {
-			services = &deployment.Test
-		} else {
-			services = &deployment.Prod
-		}
+		services = &deployment.Prod
 	}
 	conf := new(V1)
 	if common != nil {
@@ -103,21 +90,12 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	// Use dmsg urls for services and add dmsg-servers
 	if dmsgHTTP {
 		if dmsgHTTPServersList != nil {
-			if testEnv {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Test.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
-			} else {
-				conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
-				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
-				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
-				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
-				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
-			}
+			conf.Dmsg.Servers = dmsgHTTPServersList.Prod.DMSGServers
+			conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
+			conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
+			conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
+			conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
+			conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 		}
 	}
 	conf.IsPublic = skyenv.IsPublic
@@ -145,7 +123,6 @@ func defaultDmsgPtyCLIAddr() string {
 
 // DmsgHTTPServers struct use to unmarshal dmsghttp file
 type DmsgHTTPServers struct {
-	Test DmsgHTTPServersData `json:"test"`
 	Prod DmsgHTTPServersData `json:"prod"`
 }
 

@@ -5,9 +5,9 @@
 # (API 18000, skychat 18001, launcher 15505, ui_server 18081, desk 18010,
 # SkySOCKS client 11080, SkyDEX client 18051), its API answering on loopback
 # without a login, skychat keeping its history (the chat test reads it), and
-# the voice bridge on, so the level of a call's audio from the phone can be
-# read (ios/scripts/peer-call.py), and its CLI RPC on localhost:13435 for
-# `skywire-cli --via dmsg://<phone pk>` (remote management).
+# its CLI RPC on localhost:13435 for `skywire-cli --via dmsg://<phone pk>`
+# (remote management). Its calls use the Mac's audio device, and its API
+# reports the level of a call's audio from the phone (ios/scripts/peer-call.py).
 #
 #   ios/scripts/desktop-peer.sh <dir> [phone pk]
 #
@@ -70,4 +70,4 @@ EOF
 
 echo "peer: API http://127.0.0.1:18000, skychat http://127.0.0.1:18001, pk $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["pk"])' "$cfg")"
 cd "$dir"
-exec env SKYWIRE_VOICE_AUDIO=bridge ./bin/skywire-mobile visor -c "$cfg"
+exec ./bin/skywire-mobile visor -c "$cfg"

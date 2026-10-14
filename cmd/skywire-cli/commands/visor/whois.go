@@ -20,10 +20,11 @@ package clivisor
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -101,8 +102,7 @@ rather than failing the whole command.`,
 		// it on stderr in case the operator meant `visor info`.
 		if rc, rerr := clirpc.Client(cmd.Flags()); rerr == nil {
 			if ov, ovErr := rc.Overview(); ovErr == nil && ov.PubKey == pk {
-				fmt.Fprintf(os.Stderr,
-					"note: %s is the local visor; consider `cli visor info` for richer detail\n", pk)
+				cmdutil.Eprintf("note: %s is the local visor; consider `cli visor info` for richer detail\n", pk)
 			}
 		}
 
@@ -142,8 +142,8 @@ rather than failing the whole command.`,
 			return
 		}
 
-		fmt.Printf("PK: %s\n\n", pk)
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		cmdutil.Printf("PK: %s\n\n", pk)
+		w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "SOURCE\tHTTP\tSUMMARY")                                                         //nolint:errcheck
 		fmt.Fprintf(w, "transports\t%s\t%s\n", httpCell(report.Transports), valOrErr(report.Transports)) //nolint:errcheck
 		fmt.Fprintf(w, "services\t%s\t%s\n", httpCell(report.Services), valOrErr(report.Services))       //nolint:errcheck

@@ -35,7 +35,7 @@ var servicesCmd = &cobra.Command{
 		go func() {
 			<-ctx.Done()
 			cancel()
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}()
 
 		servicesConf, err := fetchServicesConf(cmd.Flags())
@@ -68,16 +68,5 @@ func fetchServicesConf(cmdFlags *pflag.FlagSet) (servicesConf, error) {
 		return newConf, err
 	}
 	newConf.Prod = prodConf
-
-	// Fetch test config via the same chain.
-	testBody, err := clirpc.FetchServiceURL(cmdFlags, testServiceConfURL)
-	if err != nil {
-		return newConf, err
-	}
-	var testConf visorconfig.Services
-	if err := json.Unmarshal(testBody, &testConf); err != nil {
-		return newConf, err
-	}
-	newConf.Test = testConf
 	return newConf, nil
 }

@@ -35,7 +35,6 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 			_, sk := cipher.GenerateKeyPair()
 			return Options{SecretKey: sk}
 		}(), nil},
-		{"testenv", Options{TestEnv: true}, nil},
 		{"resolver-rules-tls", Options{}, func(v *visorconfig.V1) {
 			rules := []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}, {Suffix: "lan.example", Upstream: proxyroute.Direct}}
 			if v.DmsgWeb == nil {
@@ -49,7 +48,7 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 			v.Resolvers = []visorconfig.ResolverConfig{{Name: "lan", Enable: true, ProxyPort: 4447, UpstreamRules: rules, TLSUpstreamPort: 8080}}
 		}},
 		{"host-bridge", Options{}, func(v *visorconfig.V1) {
-			v.HostBridge = &visorconfig.HostBridgeConfig{URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{{Host: "127.0.0.1:1080", Local: "127.0.0.1:1080"}, {Host: "0.0.0.0:7000", Local: "127.0.0.1:7000"}}}
+			v.HostBridge = &visorconfig.HostBridgeConfig{Secret: "ab12", URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{{Host: "127.0.0.1:1080", Local: "127.0.0.1:1080"}, {Host: "0.0.0.0:7000", Local: "127.0.0.1:7000"}}}
 		}},
 		{"host-bridge-no-forwards", Options{}, func(v *visorconfig.V1) {
 			v.HostBridge = &visorconfig.HostBridgeConfig{URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{}}

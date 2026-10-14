@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -752,7 +751,7 @@ var RootCmd = &cobra.Command{
 		ctx := context.Background()
 
 		if err := RunSkychat(ctx, args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }
@@ -813,7 +812,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		useSkynet = false
 		useDmsg = false
 		standaloneLog := logrus.New()
-		standaloneLog.SetOutput(os.Stderr)
+		standaloneLog.SetOutput(cmdutil.Stderr())
 		standaloneLog.SetFormatter(&logging.TextFormatter{
 			FullTimestamp:      true,
 			AlwaysQuoteStrings: true,

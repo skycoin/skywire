@@ -57,27 +57,6 @@ const (
 	configFilePerms = 0600
 )
 
-// testenvPortOffset is added to localhost ports when generating a testenv config
-// to avoid conflicts with a production visor running on the same machine.
-const testenvPortOffset = 10000
-
-// offsetAddr adds testenvPortOffset to a host:port or :port address string.
-// Returns the original address unchanged if parsing fails or testenv is not enabled.
-func offsetAddr(addr string) string {
-	if !isTestEnv {
-		return addr
-	}
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return addr
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return addr
-	}
-	return net.JoinHostPort(host, strconv.Itoa(port+testenvPortOffset))
-}
-
 // RootCmd contains commands that interact with the config of local skywire-visor
 var checkPKCmd = &cobra.Command{
 	Use:   "check-pk <public-key>",
@@ -115,13 +94,13 @@ var pkFromSKCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var sk cipher.SecKey
 		if err := sk.Set(args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
-			os.Exit(1)
+			cmdutil.Eprintf("invalid secret key: %v\n", err) //nolint:errcheck,gosec
+			cmdutil.Exit(1)
 		}
 		pk, err := sk.PubKey()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
-			os.Exit(1)
+			cmdutil.Eprintf("failed to derive public key: %v\n", err) //nolint:errcheck,gosec
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliconfig.Keypair{PublicKey: pk.Hex()}))
 	},
@@ -169,8 +148,6 @@ func init() {
 	// Network and deployment flags
 	skyenvArrayVarP(genConfigCmd.Flags(), &serviceConfURL, "url", "a", fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	skyenvBoolVarP(genConfigCmd.Flags(), &isTestEnv, "testenv", "t", "${TESTENV:-false}", "use test deployment (ports offset +10000 from prod)")
-	gHiddenFlags = append(gHiddenFlags, "testenv")
 	// Deployment services are dmsg-only. --dmsghttp is the (default) behavior and
 	// kept as a hidden no-op for back-compat; the former --http / --dual modes are
 	// gone — plain HTTP to deployment services is no longer supported.
@@ -572,11 +549,11 @@ var genConfigCmd = &cobra.Command{
 				if err := os.WriteFile(envfileOut, []byte(envfile+"\n"), 0644); err != nil { //nolint:gosec
 					log.Fatalf("Failed to write conf file: %v", err)
 				}
-				fmt.Printf("Conf template written to %s\n", envfileOut)
+				cmdutil.Printf("Conf template written to %s\n", envfileOut)
 			} else {
-				fmt.Println(envfile)
+				cmdutil.Println(envfile)
 			}
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 
 		//--all unhides flags, prints help menu, and exits
@@ -587,7 +564,7 @@ var genConfigCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 			internal.Catch(cmd.Flags(), cmd.Help())
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		// Re-resolve ${OUTPUT} before anything reads `output`.
 		//
@@ -658,10 +635,6 @@ var genConfigCmd = &cobra.Command{
 			if !cmd.Flags().Changed("cascade") {
 				cascadeRouteSetup = true
 			}
-		}
-		//use test deployment
-		if isTestEnv {
-			serviceConfURL = testServiceConfURL
 		}
 		var err error
 		if !isStdout {
@@ -889,9 +862,6 @@ func fetchServiceConfig(log *logging.Logger) {
 		// config bootstrapper hasn't been updated to serve them yet.
 		if !services.HasDmsgEndpoints() {
 			embedded := deployment.Prod
-			if isTestEnv {
-				embedded = deployment.Test
-			}
 			services.DmsgServers = embedded.DmsgServers
 			services.ConfDmsg = embedded.ConfDmsg
 			services.DmsgDiscoveryDmsg = embedded.DmsgDiscoveryDmsg
@@ -920,9 +890,6 @@ func fetchServiceConfig(log *logging.Logger) {
 			return
 		}
 		services = servicesConfig.Prod
-		if isTestEnv {
-			services = servicesConfig.Test
-		}
 	}
 }
 
@@ -930,9 +897,6 @@ func fetchServiceConfig(log *logging.Logger) {
 // over DMSG using a short-lived direct client. Returns true if successful.
 func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	embeddedConf := deployment.Prod
-	if isTestEnv {
-		embeddedConf = deployment.Test
-	}
 
 	// An explicit dmsg:// --url overrides the embedded conf-service address.
 	// Without this the flag was silently ignored on the DMSG path and only
@@ -1049,9 +1013,6 @@ func loadServicesFromFile(log *logging.Logger) {
 		return
 	}
 	services = servicesConfig.Prod
-	if isTestEnv {
-		services = servicesConfig.Test
-	}
 }
 
 // resolveGenOutput picks the path `config gen` writes. An -o passed on
@@ -1391,9 +1352,6 @@ func configureDMSG() {
 // configureTransports sets up transport configuration on conf.
 func configureTransports() {
 	tpLogPath := skyenv.LocalPath + "/" + skyenv.TpLogStore
-	if isTestEnv {
-		tpLogPath = skyenv.LocalPath + "-testenv/" + skyenv.TpLogStore
-	}
 	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
 	conf.Transport = &visorconfig.Transport{
 		Discovery:             services.TransportDiscovery, //utilenv.TpDiscAddr,
@@ -1508,20 +1466,17 @@ func configureRouting() {
 func configureLauncher(log *logging.Logger) {
 	_ = log
 	localPath := skyenv.LocalPath
-	if isTestEnv {
-		localPath = skyenv.LocalPath + "-testenv"
-	}
 	conf.Launcher = &visorconfig.Launcher{
 		ServiceDisc:   services.ServiceDiscovery, //utilenv.ServiceDiscAddr,
 		Apps:          nil,
-		ServerAddr:    offsetAddr(skyenv.AppSrvAddr),
+		ServerAddr:    skyenv.AppSrvAddr,
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: isDisplayNodeIP,
 	}
 	if cliAddr != "" {
-		conf.CLIAddr = offsetAddr(cliAddr)
+		conf.CLIAddr = cliAddr
 	} else {
-		conf.CLIAddr = offsetAddr(skyenv.RPCAddr)
+		conf.CLIAddr = skyenv.RPCAddr
 	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
@@ -1572,9 +1527,6 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	dmsgptyAddr := pty.DefaultCLIAddr()
-	if isTestEnv {
-		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
-	}
 	conf.Pty = &visorconfig.Pty{
 		DmsgPort:     skyenv.DmsgPtyPort,
 		CLINet:       skyenv.DmsgPtyCLINet,
@@ -1583,7 +1535,7 @@ func configureLauncher(log *logging.Logger) {
 	}
 
 	conf.STCP = &network.STCPConfig{
-		ListeningAddress: offsetAddr(skyenv.STCPAddr),
+		ListeningAddress: skyenv.STCPAddr,
 		PKTable:          nil,
 	}
 
@@ -1621,9 +1573,6 @@ func configureLauncher(log *logging.Logger) {
 	} else if dmsgHTTPServersList != nil {
 		// Legacy fallback: separate dmsghttp-config.json (custom deployments).
 		dmsgConf := &dmsgHTTPServersList.Prod
-		if isTestEnv {
-			dmsgConf = &dmsgHTTPServersList.Test
-		}
 		conf.Dmsg.Servers = dmsgConf.DMSGServers
 		conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 		conf.Transport.AddressResolver = dmsgConf.AddressResolver
@@ -1791,18 +1740,14 @@ func configureHypervisor(log *logging.Logger) {
 	// Always include hypervisor config (for runtime enable/disable).
 	// The Enable field controls whether it auto-starts.
 	{
-		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
+		config := visorconfig.GenerateWorkDirConfig()
 		config.Enable = isHypervisor
 		if hvDeskAddr != "" {
 			config.DeskAddr = hvDeskAddr
-		} else {
-			config.DeskAddr = offsetAddr(config.DeskAddr)
 		}
 		config.EnablePKEndpoint = isEnablePKEndpoint
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
-		} else {
-			config.HTTPAddr = offsetAddr(config.HTTPAddr)
 		}
 		// Embedded LAN/WAN DMSG server. Implicit-on whenever this
 		// visor is also a hypervisor — the hypervisor's
@@ -2147,7 +2092,7 @@ func skycoinWebFlags(external bool) (flags []string) {
 	case addr == skycoinWebNoPort:
 		flags = append(flags, "--no-listen")
 	case addr != "":
-		if h, p, err := net.SplitHostPort(offsetAddr(addr)); err == nil {
+		if h, p, err := net.SplitHostPort(addr); err == nil {
 			flags = append(flags, "--host", h, "--port", p)
 		}
 	}
@@ -2187,9 +2132,8 @@ func skycoinWebFlags(external bool) (flags []string) {
 // configureApps sets up launcher app configurations (internal or external),
 // handles app disable/enable flags, and configures VPN/proxy app settings.
 func configureApps(log *logging.Logger) {
-	// Apply port offsets for testenv to avoid conflicts with production visor
-	chatAddr := offsetAddr(skychatAddr)
-	socksClientAddr := offsetAddr(skyenv.SkysocksClientAddr)
+	chatAddr := skychatAddr
+	socksClientAddr := skyenv.SkysocksClientAddr
 
 	// App config settings
 	if externalApps {
@@ -2781,7 +2725,7 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 	// straight pass-through to the standard library off Android.
 	interfaces, err := anet.Interfaces()
 	if err != nil {
-		fmt.Println("Error:", err)
+		cmdutil.Println("Error:", err)
 		return ""
 	}
 
@@ -2822,7 +2766,6 @@ var (
 	flagToEnv = map[string]string{
 		"pkg":                  "PKGENV=true",
 		"ishv":                 "ISHYPERVISOR=true",
-		"testenv":              "TESTENV=true",
 		"dmsghttp":             "DMSGHTTP=true",
 		"public":               "VISORISPUBLIC=true",
 		"servevpn":             "VPNSERVER=true",

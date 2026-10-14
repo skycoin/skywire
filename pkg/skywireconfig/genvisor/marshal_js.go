@@ -353,6 +353,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 	writeQuoted(w, v.CLIAddr)
 	o.field("log_level")
 	writeQuoted(w, v.LogLevel)
+	if v.LogHookLevel != "" {
+		o.field("log_hook_level")
+		writeQuoted(w, v.LogHookLevel)
+	}
 	o.field("local_path")
 	writeQuoted(w, v.LocalPath)
 	o.field("stun_servers")
@@ -1429,6 +1433,10 @@ func marshalSkymail(w *strings.Builder, s *visorconfig.SkymailConfig, indent int
 
 func marshalHostBridge(w *strings.Builder, s *visorconfig.HostBridgeConfig, indent int) {
 	o := newObj(w, indent)
+	if s.Secret != "" {
+		o.field("secret")
+		writeQuoted(w, s.Secret)
+	}
 	o.field("url")
 	writeQuoted(w, s.URL)
 	o.field("forwards")

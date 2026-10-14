@@ -52,9 +52,7 @@ func (s *hostBridgeSockets) attach(c *hostbridge.Client) {
 	s.mu.Unlock()
 	if c != nil {
 		for _, l := range lis {
-			if err := l.rebind(c); err != nil && s.log != nil {
-				s.log.WithError(err).WithField("addr", l.addr).Warn("Could not listen again on the bridge's host")
-			}
+			_ = l.bind(c) //nolint:errcheck // keepBound retries and logs
 		}
 		for _, p := range pcs {
 			if err := p.rebind(c); err != nil && s.log != nil {
@@ -85,23 +83,49 @@ func (s *hostBridgeSockets) next() <-chan struct{} {
 	return s.changed
 }
 
-// Listen implements network.Sockets.
+// Listen implements network.Sockets. It needs a session, so a carrier learns
+// its port at once.
 func (s *hostBridgeSockets) Listen(network, addr string) (net.Listener, error) {
 	c, err := s.current()
 	if err != nil {
 		return nil, err
 	}
-	l := &durableListener{s: s, network: network, conns: make(chan net.Conn), done: make(chan struct{})}
-	l.addr = addr
-	if err := l.rebind(c); err != nil {
+	l := s.newListener(network, addr)
+	if err := l.bind(c); err != nil {
 		return nil, err
 	}
-	// Later sessions rebind the port this one got, at the host asked for.
-	l.addr = rebindAddr(addr, l.bound)
+	s.register(l)
+	return l, nil
+}
+
+// listenDeferred listens on the bridge's host whenever a session is up, so
+// an app can bind a host address before the bridge connects. Its Addr is the
+// one asked for until a bind reports the port.
+func (s *hostBridgeSockets) listenDeferred(network, addr string) (net.Listener, error) {
+	asked, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	l := s.newListener(network, addr)
+	l.bound = asked
+	s.register(l)
+	if c, err := s.current(); err == nil {
+		_ = l.bind(c) //nolint:errcheck // keepBound retries
+	}
+	return l, nil
+}
+
+func (s *hostBridgeSockets) newListener(network, addr string) *durableListener {
+	return &durableListener{s: s, network: network, addr: addr, conns: make(chan net.Conn), done: make(chan struct{})}
+}
+
+// register adds l to the listeners each attach rebinds, and keeps it bound.
+func (s *hostBridgeSockets) register(l *durableListener) {
 	s.mu.Lock()
+	s.init()
 	s.lis[l] = struct{}{}
 	s.mu.Unlock()
-	return l, nil
+	go l.keepBound()
 }
 
 // ListenPacket implements network.Sockets.
@@ -135,41 +159,107 @@ func (s *hostBridgeSockets) DialContext(ctx context.Context, network, addr strin
 type durableListener struct {
 	s       *hostBridgeSockets
 	network string
-	addr    string
-	bound   net.Addr
 	conns   chan net.Conn
 	once    sync.Once
 	done    chan struct{}
+
+	// bindMu serializes binds, which wait on the bridge, so mu stays short.
+	bindMu sync.Mutex
+	mu     sync.Mutex
+	addr   string
+	bound  net.Addr
+	pinned bool
+	inner  net.Listener
+	client *hostbridge.Client
 }
 
-func (l *durableListener) rebind(c *hostbridge.Client) error {
-	inner, err := c.Listen(l.network, l.addr)
+// bind listens on c unless l already does. The first bind pins the port, so
+// later sessions rebind the same one at the host asked for.
+func (l *durableListener) bind(c *hostbridge.Client) error {
+	l.bindMu.Lock()
+	defer l.bindMu.Unlock()
+	l.mu.Lock()
+	addr, same := l.addr, l.inner != nil && l.client == c
+	l.mu.Unlock()
+	if same {
+		return nil
+	}
+	inner, err := c.Listen(l.network, addr)
 	if err != nil {
 		return err
 	}
-	if l.bound == nil {
-		l.bound = inner.Addr()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	select {
+	case <-l.done:
+		_ = inner.Close() //nolint:errcheck
+		return net.ErrClosed
+	default:
 	}
-	go func() {
-		defer inner.Close() //nolint:errcheck
-		go func() {
-			<-l.done
-			_ = inner.Close() //nolint:errcheck
-		}()
-		for {
-			conn, err := inner.Accept()
-			if err != nil {
-				return
-			}
-			select {
-			case l.conns <- conn:
-			case <-l.done:
-				_ = conn.Close() //nolint:errcheck
-				return
+	if l.inner != nil {
+		_ = l.inner.Close() //nolint:errcheck
+	}
+	l.inner, l.client = inner, c
+	if !l.pinned {
+		l.pinned = true
+		l.bound = inner.Addr()
+		l.addr = rebindAddr(l.addr, l.bound)
+	}
+	go l.pump(inner)
+	return nil
+}
+
+func (l *durableListener) pump(inner net.Listener) {
+	defer func() {
+		_ = inner.Close() //nolint:errcheck
+		l.mu.Lock()
+		if l.inner == inner {
+			l.inner = nil
+		}
+		l.mu.Unlock()
+	}()
+	for {
+		conn, err := inner.Accept()
+		if err != nil {
+			return
+		}
+		select {
+		case l.conns <- conn:
+		case <-l.done:
+			_ = conn.Close() //nolint:errcheck
+			return
+		}
+	}
+}
+
+// keepBound binds l again whenever a session is up and l is not listening
+// on it, as when its port was still held at the last attempt. It logs only
+// when that changes.
+func (l *durableListener) keepBound() {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	var failing error
+	for {
+		select {
+		case <-l.done:
+			return
+		case <-t.C:
+		}
+		c, err := l.s.current()
+		if err != nil {
+			continue
+		}
+		err = l.bind(c)
+		if log := l.s.log; log != nil {
+			switch {
+			case err != nil && failing == nil:
+				log.WithError(err).WithField("addr", l.Addr()).Warn("Could not listen on the bridge's host, retrying")
+			case err == nil && failing != nil:
+				log.WithField("addr", l.Addr()).Info("Listening on the bridge's host again")
 			}
 		}
-	}()
-	return nil
+		failing = err
+	}
 }
 
 func (l *durableListener) Accept() (net.Conn, error) {
@@ -184,6 +274,11 @@ func (l *durableListener) Accept() (net.Conn, error) {
 func (l *durableListener) Close() error {
 	l.once.Do(func() {
 		close(l.done)
+		l.mu.Lock()
+		if l.inner != nil {
+			_ = l.inner.Close() //nolint:errcheck
+		}
+		l.mu.Unlock()
 		l.s.mu.Lock()
 		delete(l.s.lis, l)
 		l.s.mu.Unlock()
@@ -191,7 +286,11 @@ func (l *durableListener) Close() error {
 	return nil
 }
 
-func (l *durableListener) Addr() net.Addr { return l.bound }
+func (l *durableListener) Addr() net.Addr {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.bound
+}
 
 // durablePacketConn is a UDP socket on the bridge's host, bound again at the
 // same address on each reconnect. Datagrams sent while the bridge is away are
@@ -366,4 +465,20 @@ func rebindAddr(asked string, bound net.Addr) string {
 		return bound.String()
 	}
 	return net.JoinHostPort(host, port)
+}
+
+// hostBridgeHost is the "host:" namespace of bottle vnet in a browser visor:
+// an app given a host address listens or dials on the bridge's host.
+type hostBridgeHost struct{ s *hostBridgeSockets }
+
+// Listen binds before the bridge connects too, so an app's host address
+// works whenever a bridge is up.
+func (h hostBridgeHost) Listen(network, addr string) (net.Listener, error) {
+	return h.s.listenDeferred(network, addr)
+}
+
+func (h hostBridgeHost) DialTimeout(network, addr string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return h.s.DialContext(ctx, network, addr)
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/peterh/liner"
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
@@ -27,7 +29,7 @@ const (
 )
 
 var (
-	out io.Writer = os.Stdout
+	out io.Writer = cmdutil.Stdout()
 
 	rpcAddress string
 	execCmd    string
@@ -539,21 +541,21 @@ var stopCmd = &cobra.Command{
 
 func runInteractive(cmd *cobra.Command, args []string) {
 	if rpcAddress == "" {
-		fmt.Fprintln(os.Stderr, "empty address")
-		os.Exit(1)
+		cmdutil.Eprintln("empty address")
+		cmdutil.Exit(1)
 	}
 
 	r, err := getCLIRPCClient()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		cmdutil.Eprintln(err)
+		cmdutil.Exit(1)
 	}
 	defer r.Close() //nolint:errcheck,gosec
 
 	if execCmd != "" {
 		if err := executeInteractiveCommand(r, execCmd); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 		return
 	}
@@ -583,7 +585,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 	})
 
 	if err := loadHistory(line); err != nil {
-		fmt.Fprintln(os.Stderr, "error loading history:", err)
+		cmdutil.Eprintln("error loading history:", err)
 	}
 	defer saveHistory(line)
 
@@ -594,8 +596,8 @@ func runInteractive(cmd *cobra.Command, args []string) {
 		input, err := line.Prompt("> ")
 		if err != nil {
 			if err != liner.ErrPromptAborted {
-				fmt.Fprintln(os.Stderr, "fatal error:", err)
-				os.Exit(1)
+				cmdutil.Eprintln("fatal error:", err)
+				cmdutil.Exit(1)
 			}
 			return
 		}
@@ -617,7 +619,7 @@ func runInteractive(cmd *cobra.Command, args []string) {
 		}
 
 		if err := executeInteractiveCommand(r, input); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			cmdutil.Eprintln(err)
 		}
 		line.AppendHistory(input)
 	}
@@ -1175,11 +1177,11 @@ func saveHistory(line *liner.State) {
 	hf := histroyFilePath()
 	fl, err := os.Create(hf) //nolint:gosec
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error saving history:", err)
+		cmdutil.Eprintln("error saving history:", err)
 		return
 	}
 	defer fl.Close() //nolint:errcheck,gosec
 	if _, err = line.WriteHistory(fl); err != nil {
-		fmt.Fprintln(os.Stderr, "error saving history:", err)
+		cmdutil.Eprintln("error saving history:", err)
 	}
 }

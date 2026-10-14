@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"text/template"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 )
@@ -54,9 +56,9 @@ var getlogsCmd = &cobra.Command{
 	Long:  "getlogs.sh - `skywire cli log` wrapper",
 	Run: func(_ *cobra.Command, _ []string) {
 		if getlogsshMinVer != "" {
-			fmt.Println("_minversion=" + getlogsshMinVer)
+			cmdutil.Println("_minversion=" + getlogsshMinVer)
 		}
-		fmt.Println(string(getlogsSH))
+		cmdutil.Println(string(getlogsSH))
 	},
 }
 
@@ -66,10 +68,10 @@ var rewardCmd = &cobra.Command{
 	Long:  "reward.sh - `skywire cli rewards` wrapper script",
 	Run: func(_ *cobra.Command, _ []string) {
 		if rewardshDate != "" {
-			fmt.Println("_wdate=" + rewardshDate)
+			cmdutil.Println("_wdate=" + rewardshDate)
 		}
-		fmt.Println(string(rewardSH))
-		os.Exit(0)
+		cmdutil.Println(string(rewardSH))
+		cmdutil.Exit(0)
 	},
 }
 
@@ -146,7 +148,7 @@ must be run with sufficient permissions to write to output path`,
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to: " + outPath)
+		cmdutil.Println("Wrote to: " + outPath)
 
 		// Create a new template and parse the service file template into it
 		tmpl1, err := template.New("").Parse(fiberRewardSvcTpl)
@@ -170,7 +172,7 @@ must be run with sufficient permissions to write to output path`,
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to: " + outPath)
+		cmdutil.Println("Wrote to: " + outPath)
 
 		outPath = outputPath
 
@@ -181,7 +183,7 @@ must be run with sufficient permissions to write to output path`,
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Wrote to: " + outPath)
+		cmdutil.Println("Wrote to: " + outPath)
 
 	},
 }

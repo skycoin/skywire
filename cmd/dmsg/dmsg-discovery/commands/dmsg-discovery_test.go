@@ -58,14 +58,13 @@ func TestMergeFile(t *testing.T) {
 		}
 		src := &dmsgdisc.Config{
 			Common: services.Common{
-				SecKey:          srcSK,
-				Addr:            "file-addr",
-				Redis:           "file-redis",
-				DmsgPort:        81,
-				EntryTimeout:    services.Duration(time.Minute),
-				Mode:            "dual",
-				TestEnvironment: true,
-				Testing:         true,
+				SecKey:       srcSK,
+				Addr:         "file-addr",
+				Redis:        "file-redis",
+				DmsgPort:     81,
+				EntryTimeout: services.Duration(time.Minute),
+				Mode:         "dual",
+				Testing:      true,
 			},
 			AuthPassphrase:    "secret",
 			OfficialServers:   []string{"pk1"},
@@ -87,7 +86,6 @@ func TestMergeFile(t *testing.T) {
 		assert.Equal(t, "type", dst.DmsgServerType)
 		assert.True(t, dst.Testing)
 		assert.True(t, dst.EnableLoadTesting)
-		assert.True(t, dst.TestEnvironment)
 		assert.Equal(t, []string{"wl1"}, dst.Whitelist)
 	})
 

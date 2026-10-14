@@ -12,8 +12,6 @@ Depends: redis (shares Redis with TPD)
 
 Production: dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
             dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
-Test:       dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
-            dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
 
 HTTP Endpoints:
   GET  /health     Health check
@@ -83,14 +81,14 @@ skywire svc rf
       --keyfile string            file holding the secret key (generated if missing)
   -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string            address to serve Prometheus metrics on
-      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http)
+      --no-landmark-routing       answer every route with the exhaustive search, not hub composition
   -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
       --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
       --redis-pool-size int       redis connection pool size (default 10)
       --sk cipher.SecKey          dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                logging tag (default "route_finder")
-      --test-environment          use the test deployment's defaults instead of production's
   -t, --testing                   run for a test network: keep entries in memory unless --redis is set
 ```
 

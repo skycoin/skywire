@@ -34,6 +34,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 )
 
@@ -115,8 +117,7 @@ Exit codes:
 		}
 		template := args[1]
 		if !strings.Contains(template, "{pk}") && !strings.Contains(template, "{i}") {
-			fmt.Fprintln(os.Stderr,
-				"warning: command template contains no {pk}/{i} placeholders — every target will run the same command")
+			cmdutil.Eprintln("warning: command template contains no {pk}/{i} placeholders — every target will run the same command")
 		}
 
 		jsonMode, _ := cmd.Flags().GetBool("json") //nolint:errcheck
@@ -139,7 +140,7 @@ Exit codes:
 		}
 
 		if jsonMode {
-			enc := json.NewEncoder(os.Stdout)
+			enc := json.NewEncoder(cmdutil.Stdout())
 			for _, r := range results {
 				_ = enc.Encode(r) //nolint:errcheck
 			}
@@ -147,10 +148,10 @@ Exit codes:
 		// Non-JSON output was already streamed by runForeach. Just
 		// emit the exit code.
 		if anyTimeout {
-			os.Exit(2)
+			cmdutil.Exit(2)
 		}
 		if anyNonZero {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		return nil
 	},
@@ -217,24 +218,24 @@ func runForeach(ctx context.Context, targets []string, template string) []foreac
 			results[work.i] = r
 			resultsMu.Unlock()
 			if !foreachQuiet {
-				fmt.Printf("=== [%d] %s ===\n", r.Index, shortTarget(r.Target))
+				cmdutil.Printf("=== [%d] %s ===\n", r.Index, shortTarget(r.Target))
 				if r.Stdout != "" {
-					fmt.Print(r.Stdout)
+					cmdutil.Print(r.Stdout)
 					if !strings.HasSuffix(r.Stdout, "\n") {
-						fmt.Println()
+						cmdutil.Println()
 					}
 				}
 				if r.Stderr != "" {
-					fmt.Fprint(os.Stderr, r.Stderr)
+					cmdutil.Eprint(r.Stderr)
 					if !strings.HasSuffix(r.Stderr, "\n") {
-						fmt.Fprintln(os.Stderr)
+						cmdutil.Eprintln()
 					}
 				}
 				status := fmt.Sprintf("exit=%d dur=%s", r.ExitCode, time.Duration(r.DurationMS)*time.Millisecond)
 				if r.TimedOut {
 					status = "timed-out " + status
 				}
-				fmt.Println(status)
+				cmdutil.Println(status)
 			}
 			// Stop-on triggers.
 			switch foreachStopOn {

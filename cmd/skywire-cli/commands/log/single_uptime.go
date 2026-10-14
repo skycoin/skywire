@@ -7,7 +7,6 @@ package clilog
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ Gated by the remote visor's survey_whitelist.`,
 		}
 		defer cleanup()
 
-		if err := fetchSurveyEndpoint(ctx, hc, pk, path, os.Stdout); err != nil {
+		if err := fetchSurveyEndpoint(ctx, hc, pk, path, cmdutil.Stdout()); err != nil {
 			log.Fatal(err)
 		}
 	},

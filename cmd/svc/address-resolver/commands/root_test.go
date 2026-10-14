@@ -137,7 +137,6 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 			Testing:         true,
 			Mode:            "dual",
 			SurveyWhitelist: []cipher.PubKey{pk},
-			TestEnvironment: true,
 			DmsgPort:        81,
 		},
 		UDPAddr:       ":udp",

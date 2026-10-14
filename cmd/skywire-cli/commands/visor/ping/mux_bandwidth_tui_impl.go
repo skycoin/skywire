@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -29,8 +30,8 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mux-bw-tui: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("mux-bw-tui: gRPC client connect: %v\n", err)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -49,8 +50,8 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 
 	stream, err := client.StreamMuxBandwidth(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mux-bw-tui: StreamMuxBandwidth call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("mux-bw-tui: StreamMuxBandwidth call: %v\n", err)
+		cmdutil.Exit(1)
 	}
 
 	model := newMuxBwTUIModel(targetPK, req)
@@ -62,20 +63,20 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 	})
 	cancel()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mux-bw-tui: TUI: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("mux-bw-tui: TUI: %v\n", err)
+		cmdutil.Exit(1)
 	}
 
 	// The screen is cleared on exit, so print the final dashboard where
 	// it stays in the scrollback. Same pattern as ping tree.
-	fmt.Print(model.renderHeader() + "\n")
-	fmt.Print(model.renderRoutes() + "\n")
-	fmt.Print(model.renderStats() + "\n")
-	fmt.Print(model.renderThroughputBlock() + "\n")
+	cmdutil.Print(model.renderHeader() + "\n")
+	cmdutil.Print(model.renderRoutes() + "\n")
+	cmdutil.Print(model.renderStats() + "\n")
+	cmdutil.Print(model.renderThroughputBlock() + "\n")
 	if muxBwProbeRTT {
-		fmt.Print(model.renderRttBlock() + "\n")
+		cmdutil.Print(model.renderRttBlock() + "\n")
 	}
-	fmt.Print(model.renderDone() + "\n")
+	cmdutil.Print(model.renderDone() + "\n")
 }
 
 // ---------------------------------------------------------------------------

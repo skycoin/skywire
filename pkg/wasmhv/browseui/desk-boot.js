@@ -202,6 +202,16 @@
 			return bestClean;
 		} catch (e) { return false; }
 	}
+	// visorStillRunning: an autoconfig instance has not exited. Its RPC port can be
+	// down while it boots, and a second visor would share its stores.
+	function visorStillRunning() {
+		try {
+			var reg = globalThis.__skywireExecTails || {};
+			return Object.keys(reg).some(function (k) {
+				return /autoconfig/.test((reg[k].argv || []).join(' ')) && !reg[k].exitInfo;
+			});
+		} catch (e) { return false; }
+	}
 	// notifyReload: the same bargain autoupdate.js offers — say what is about
 	// to happen, count down, and let the operator decline. Used where the desk
 	// wants a RELOAD rather than an in-place restart: a reload is the only way
@@ -1279,6 +1289,7 @@
 							if (++downFor < DOWN_TICKS) { return; }
 							downFor = 0;
 							if (visorStoppedByOperator()) { return; }
+							if (visorStillRunning()) { return; }
 							if (restarts >= MAX_RESTARTS) { return; }
 							restarts++;
 							cooldown = 15; // ~30s to let the restart come up before judging it

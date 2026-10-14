@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,7 +106,7 @@ Usage:
 			rdr = f
 		} else {
 			logger.Info("Reading config from STDIN")
-			rdr = bufio.NewReader(os.Stdin)
+			rdr = bufio.NewReader(cmdutil.Stdin())
 		}
 		raw, err := io.ReadAll(rdr)
 		if err != nil {
@@ -141,13 +140,13 @@ var checkHealthCmd = &cobra.Command{
 	Long:  "Health check of route setup node",
 	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 1 {
-			fmt.Println("supply setup node public key as argument")
-			os.Exit(1)
+			cmdutil.Println("supply setup node public key as argument")
+			cmdutil.Exit(1)
 		}
 
 		var snpk cipher.PubKey
 		if err := snpk.Set(args[0]); err != nil {
-			log.Fatalf("Invalid setup node public key: %v", err)
+			cmdutil.Fatalf("Invalid setup node public key: %v", err)
 		}
 
 		// generate keys to use for dmsg client
@@ -164,9 +163,9 @@ var checkHealthCmd = &cobra.Command{
 		// dmsg-server set seeds the initial bootstrap.
 		ctx := context.Background()
 		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
-			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(false), "")
+			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(), "")
 		if err != nil {
-			log.Fatalf("Failed to bootstrap dmsg: %v", err)
+			cmdutil.Fatalf("Failed to bootstrap dmsg: %v", err)
 		}
 		defer bootstrap.Close()
 		dmsgC := bootstrap.Client
@@ -177,7 +176,7 @@ var checkHealthCmd = &cobra.Command{
 		addr := dmsg.Addr{PK: snpk, Port: skyenv.DmsgSetupPort}
 		conn, err := dmsgC.Dial(ctx, addr)
 		if err != nil {
-			log.Fatalf("Failed to dial setup node: %v", err)
+			cmdutil.Fatalf("Failed to dial setup node: %v", err)
 		}
 		//nolint:errcheck
 		defer conn.Close()
@@ -199,14 +198,14 @@ var checkHealthCmd = &cobra.Command{
 
 		select {
 		case <-callCtx.Done():
-			log.Fatal("HealthCheck timed out")
+			cmdutil.Fatal("HealthCheck timed out")
 		case <-call.Done:
 			if call.Error != nil {
-				log.Fatalf("RPC error: %v", call.Error)
+				cmdutil.Fatalf("RPC error: %v", call.Error)
 			}
 		}
 
-		fmt.Println("Health check OK:", reply.Status)
+		cmdutil.Println("Health check OK:", reply.Status)
 	},
 }
 

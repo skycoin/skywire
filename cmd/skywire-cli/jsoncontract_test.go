@@ -58,6 +58,8 @@ var streamingCommands = map[string]string{
 	"commands/skychat/sendfile.go":                  "progress for a file transfer",
 	"commands/util/foreach.go":                      "relays whatever the inner command printed",
 	"commands/log/log.go":                           "bulk log collection; per-file progress",
+	"commands/log/single_heapdump.go":               "one line naming where the visor wrote the dump",
+	"commands/proxy/log.go":                         "stream of route and transport events",
 	"commands/rewards/server/server.go":             "an HTTP server, not a command that returns a value",
 	"commands/rewards/server/login.go":              "part of the rewards HTTP server",
 	"commands/rewards/server/logging.go":            "part of the rewards HTTP server",
@@ -175,7 +177,7 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 				return true
 			}
 			switch {
-			case pkg.Name == "fmt" && strings.HasPrefix(sel.Sel.Name, "Print"):
+			case (pkg.Name == "fmt" || pkg.Name == "cmdutil") && strings.HasPrefix(sel.Sel.Name, "Print"):
 				prints = true
 			// Any use of the printer counts, including Fprint — a command whose
 			// output is ALWAYS a document (survey) reaches for that one, since it

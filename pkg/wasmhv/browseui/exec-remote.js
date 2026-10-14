@@ -357,6 +357,22 @@
 			rtcPCs = {};
 		}
 
+		// lnaProbe opens a WebSocket to m.url for the worker, so the browser asks
+		// about local network access here, then tells the worker how it went.
+		function lnaProbe(m) {
+			var done = false, ws = null;
+			function reply(ok) {
+				if (done) return;
+				done = true;
+				try { if (ws) ws.close(); } catch (e) { /* gone */ }
+				post({ t: 'lnaRet', id: m.id, ok: ok });
+			}
+			try { ws = new WebSocket(m.url); } catch (e) { reply(false); return; }
+			ws.onopen = function () { reply(true); };
+			ws.onerror = function () { reply(false); };
+			setTimeout(function () { reply(false); }, 60000);
+		}
+
 		// ---- message pump ----------------------------------------------
 		var readyRes = null;
 		var settled = false;
@@ -390,6 +406,7 @@
 			case 'exit': finish(m.id, m.code, null); return;
 			case 'fail': finish(m.id, 1, m.msg || 'exec failed'); return;
 			case 'rtc': rtcHost(m); return;
+			case 'lna': lnaProbe(m); return;
 			case 'fs': if (tree) tree.call(m); return;
 			case 'fsr': if (tree) tree.answer(m); return;
 			case 'vlisten': claim(m.port); return;

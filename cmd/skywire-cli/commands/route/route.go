@@ -15,6 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -91,7 +93,7 @@ is assumed as the source.`,
 		//print the help menu if no arguments
 		if len(args) == 0 {
 			internal.Catch(cmd.Flags(), cmd.Help())
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 		// disble finding route, because of minhop value that set 0
 		if frMinHops == 0 {
@@ -336,7 +338,7 @@ computes paths but installs nothing).
 		rules, err := rpcClient.RoutingRules()
 		internal.Catch(cmd.Flags(), err)
 		if showNextRid {
-			fmt.Println(getNextAvailableRouteID(rules...))
+			cmdutil.Println(getNextAvailableRouteID(rules...))
 		} else {
 			printRoutingRules(cmd.Flags(), rules...)
 		}
@@ -382,21 +384,21 @@ var rmRuleCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), err)
 
 			if len(rules) == 0 {
-				fmt.Println("No routing rules to remove")
+				cmdutil.Println("No routing rules to remove")
 				return
 			}
 
-			fmt.Printf("Removing %d routing rules...\n", len(rules))
+			cmdutil.Printf("Removing %d routing rules...\n", len(rules))
 			removed := 0
 			for _, rule := range rules {
 				routeID := rule.KeyRouteID()
 				if err := rpcClient.RemoveRoutingRule(routeID); err != nil {
-					fmt.Printf("Failed to remove rule %d: %v\n", routeID, err)
+					cmdutil.Printf("Failed to remove rule %d: %v\n", routeID, err)
 				} else {
 					removed++
 				}
 			}
-			fmt.Printf("Removed %d/%d routing rules\n", removed, len(rules))
+			cmdutil.Printf("Removed %d/%d routing rules\n", removed, len(rules))
 			return
 		}
 
@@ -447,7 +449,7 @@ var appRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
@@ -500,7 +502,7 @@ var fwdRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 
@@ -541,7 +543,7 @@ var intFwdRuleCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SaveRoutingRule(rule))
 

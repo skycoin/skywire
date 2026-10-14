@@ -57,7 +57,6 @@ one that no longer exists. Regenerate rather than edit by hand.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SVCCONFADDR` | `('')` | Set custom service conf URLs |
-| `TESTENV` | `true` | Use test deployment |
 | `DMSGHTTP` | `true` | Use dmsghttp to connect to the production deployment |
 | `MINDMSGSESS` | `8` | Number of dmsg serverts to connect to (0 unlimits) |
 

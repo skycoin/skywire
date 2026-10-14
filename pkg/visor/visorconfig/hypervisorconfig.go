@@ -138,8 +138,8 @@ type WasmServeConf struct {
 	Password string `json:"password,omitempty"` // optional access-password gate (use with TLS)
 	// ExecWasm is the path to the FULL skywire CLI built for GOOS=js, served at
 	// /skywire.wasm: the desk host, the tab's visor and every command the
-	// desk's terminal runs. Empty means the module installed beside the
-	// binary, which is refreshed when the desk is opened. A path here is a
+	// desk's terminal runs. Empty means the module kept beside the binary,
+	// which is fetched and refreshed when the desk is opened. A path here is a
 	// developer's own build and is served as it is. Same as
 	// `skywire cli hv serve --exec-wasm`.
 	ExecWasm string `json:"exec_wasm,omitempty"`
@@ -174,7 +174,7 @@ type WasmServeConf struct {
 // as a hypervisor at startup.
 func DefaultHypervisorConfig() HypervisorConfig {
 	c := HypervisorConfig{}
-	c.FillDefaults(false)
+	c.FillDefaults()
 	c.DBPath = filepath.Join(skyenv.SkywirePath, "local", "hypervisor", "users.db")
 	return c
 }
@@ -204,9 +204,9 @@ type TPVizConfig struct {
 }
 
 // MakeConfig returns hypervisor config.
-func MakeConfig(testenv bool) HypervisorConfig {
+func MakeConfig() HypervisorConfig {
 	var c HypervisorConfig
-	c.FillDefaults(testenv)
+	c.FillDefaults()
 	return c
 }
 
@@ -214,19 +214,19 @@ func MakeConfig(testenv bool) HypervisorConfig {
 // When the working directory cannot be resolved the db path is left relative
 // to it ("users.db"), which names the same file: config gen runs inside the
 // phone core's process (pkg/mobilecore), where a fatal would end the app.
-func GenerateWorkDirConfig(testenv bool) HypervisorConfig {
+func GenerateWorkDirConfig() HypervisorConfig {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Printf("hypervisor config: cannot resolve the working directory (%v); db_path stays relative", err)
 		dir = ""
 	}
-	c := MakeConfig(testenv)
+	c := MakeConfig()
 	c.DBPath = filepath.Join(dir, "users.db")
 	return c
 }
 
 // FillDefaults fills the config with default values.
-func (c *HypervisorConfig) FillDefaults(testEnv bool) {
+func (c *HypervisorConfig) FillDefaults() {
 	if c.PK.Null() || c.SK.Null() {
 		c.PK, c.SK = cipher.GenerateKeyPair()
 	}
@@ -240,17 +240,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	}
 
 	if c.DmsgDiscovery == "" {
-		// deployment.Prod / deployment.Test are populated at
-		// deployment.init() time from the embedded
-		// services-config.json. Use those directly rather than
-		// re-unmarshalling — keeps json.Unmarshal off the WASM
-		// build graph and avoids duplicating the parse cost on
-		// every hypervisor-config FillDefaults call.
-		if testEnv {
-			c.DmsgDiscovery = deployment.Test.DmsgDiscovery
-		} else {
-			c.DmsgDiscovery = deployment.Prod.DmsgDiscovery
-		}
+		c.DmsgDiscovery = deployment.Prod.DmsgDiscovery
 		if c.DmsgPort == 0 {
 			c.DmsgPort = skyenv.DmsgHypervisorPort
 		}

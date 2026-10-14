@@ -108,16 +108,16 @@ var RootCmd = &cobra.Command{
 		}
 		if len(args) == 0 {
 			dlog.WithError(fmt.Errorf("no URL(s) provided")).Error(errorDesc["FAILED_INIT"] + "\n")
-			os.Exit(errorCode["FAILED_INIT"])
+			cmdutil.Exit(errorCode["FAILED_INIT"])
 		}
 		if len(args) > 1 {
 			dlog.WithError(fmt.Errorf("multiple URLs are not yet supported")).Error(errorDesc["FAILED_INIT"] + "\n")
-			os.Exit(errorCode["FAILED_INIT"])
+			cmdutil.Exit(errorCode["FAILED_INIT"])
 		}
 		parsedURL, err := url.Parse(args[0])
 		if err != nil {
 			dlog.WithError(fmt.Errorf("failed to parse provided URL")).Error(errorDesc["URL_MALFORMAT"] + "\n")
-			os.Exit(errorCode["URL_MALFORMAT"])
+			cmdutil.Exit(errorCode["URL_MALFORMAT"])
 		}
 		destSlc := strings.Split(parsedURL.Host, ":")
 		if len(destSlc) == 1 {
@@ -138,7 +138,7 @@ var RootCmd = &cobra.Command{
 			dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 			if err != nil {
 				dlog.WithError(fmt.Errorf("Error creating SOCKS5 dialer: %v", err)).Error(errorDesc["COULDNT_RESOLVE_PROXY"])
-				os.Exit(errorCode["COULDNT_RESOLVE_PROXY"])
+				cmdutil.Exit(errorCode["COULDNT_RESOLVE_PROXY"])
 			}
 			transport := &http.Transport{
 				DialContext: dialer.(proxy.ContextDialer).DialContext,
@@ -332,7 +332,7 @@ func closeAndCleanFile(file *os.File, err error) {
 	if fErr := file.Close(); fErr != nil {
 		dlog.WithError(fErr).Warn("Failed to close output file.\n")
 	}
-	if err != nil && file != os.Stdout {
+	if err != nil && file != cmdutil.Stdout() {
 		if rErr := os.RemoveAll(file.Name()); rErr != nil {
 			dlog.WithError(rErr).Warn("Failed to remove output file.\n")
 		}
@@ -398,11 +398,11 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 		pc = "unknown"
 	}
 	if dmsgcurlOutput != "" {
-		fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
+		cmdutil.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 		if current != total {
-			fmt.Print("\r")
+			cmdutil.Print("\r")
 		} else {
-			fmt.Print("\n")
+			cmdutil.Print("\n")
 		}
 	}
 	return n, nil

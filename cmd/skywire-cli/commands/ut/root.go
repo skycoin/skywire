@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -18,11 +20,6 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/transport"
 )
-
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
 
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
@@ -89,11 +86,8 @@ func writeCacheJSON(path, body string) {
 	_ = os.WriteFile(path, []byte(body), 0o600) //nolint:errcheck,gosec
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
@@ -114,7 +108,6 @@ var (
 	minVersion    string
 	listVersions  bool
 	maxTP         int
-	testEnv       bool
 	dateFilter    string
 )
 
@@ -122,9 +115,7 @@ var minUT int
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	utCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	utCmd.Flags().StringVarP(&pk, "pk", "k", "", "check uptime for the specified key")
 	utCmd.Flags().BoolVarP(&online, "on", "o", false, "list currently online visors")
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
@@ -168,25 +159,8 @@ Check the local visor's daily uptime percent with:
 
   $ skywire cli ut -n0 -k $(skywire cli visor pk)
 
-Set the cache dir to "" to avoid using cache files.
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment().TransportDiscovery),
+Set the cache dir to "" to avoid using cache files.`, getDeployment().TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("url") && !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("tpdurl") {
-				tpdURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-			if !cmd.Flags().Changed("cdt") {
-				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs. Online-status callers (-o / -os / -ot) read only
 		// the .on / .version fields, so fetch the days=1 window instead of the
 		// 30-day daily bitmap for every visor — the .on flag is present in
@@ -367,7 +341,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			}
 			if listVersions {
 				for _, k := range keys {
-					fmt.Printf("%s %s\n", k, versionFilter)
+					cmdutil.Printf("%s %s\n", k, versionFilter)
 				}
 				return
 			}

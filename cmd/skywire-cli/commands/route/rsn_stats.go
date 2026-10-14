@@ -8,6 +8,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -61,7 +63,7 @@ Requires the visor to have an embedded route setup-node configured
 			return
 		}
 
-		fmt.Print(formatRSNStats(snap))
+		cmdutil.Print(formatRSNStats(snap))
 	},
 }
 

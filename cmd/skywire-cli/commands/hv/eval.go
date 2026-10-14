@@ -31,8 +31,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/0magnet/wfdrive/bidi"
 	"github.com/coder/websocket"
@@ -80,8 +81,8 @@ running "hv drive" session instead of taking the single session for itself.`,
 	Args: cobra.RangeArgs(1, 2),
 	Run: func(_ *cobra.Command, args []string) {
 		if err := evalRun(args); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -108,7 +109,7 @@ func evalRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(out)
+		cmdutil.Println(out)
 		return nil
 	}
 
@@ -128,7 +129,7 @@ func evalRun(args []string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Println(out)
+			cmdutil.Println(out)
 			return nil
 		})
 	}
@@ -164,7 +165,7 @@ func firstPageTarget(port string) (string, error) {
 	}
 	for _, t := range targets {
 		if t.Type == "page" && t.WS != "" {
-			fmt.Fprintf(os.Stderr, "evaluating in %s\n", t.URL)
+			cmdutil.Eprintf("evaluating in %s\n", t.URL)
 			return t.WS, nil
 		}
 	}
@@ -200,7 +201,7 @@ func cdpEval(wsURL, expr string, timeout time.Duration) error {
 		}
 		if id, ok := m["id"].(float64); ok && int(id) == 2 {
 			b, _ := json.Marshal(m["result"]) //nolint:errcheck
-			fmt.Println(string(b))
+			cmdutil.Println(string(b))
 			return nil
 		}
 	}

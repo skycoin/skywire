@@ -28,9 +28,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/coder/websocket"
 	"github.com/spf13/cobra"
@@ -81,8 +82,8 @@ alone.
 Needs a browser started with --remote-debugging-port.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if err := probeRun(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -166,7 +167,7 @@ func probeRun() error {
 		_, data, err := c.Read(ctx)
 		if err != nil {
 			// A watch that runs out its clock is the normal ending, not a fault.
-			fmt.Printf("%s stream ended: %v\n", at(), err)
+			cmdutil.Printf("%s stream ended: %v\n", at(), err)
 			return probeVerdict(faults, evalResult, gotResult)
 		}
 		var m probeMsg
@@ -179,7 +180,7 @@ func probeRun() error {
 		}
 		if wantID != 0 && m.ID == wantID {
 			evalResult, gotResult = string(m.Result), true
-			fmt.Printf("%s result %s\n", at(), evalResult)
+			cmdutil.Printf("%s result %s\n", at(), evalResult)
 			// Normally the result is the end of the watch. But a fault
 			// gate has to outlive it: an exception thrown from a timer or
 			// a promise lands after the expression that scheduled it has
@@ -273,24 +274,24 @@ func printProbeEvent(at string, m probeMsg) {
 			}
 			parts = append(parts, s)
 		}
-		fmt.Printf("%s console.%s %s\n", at, m.Params.Type, clip(strings.Join(parts, " "), 300))
+		cmdutil.Printf("%s console.%s %s\n", at, m.Params.Type, clip(strings.Join(parts, " "), 300))
 	case "Runtime.exceptionThrown":
 		d := m.Params.ExceptionDetails.Exception.Description
 		if d == "" {
 			d = m.Params.ExceptionDetails.Text
 		}
-		fmt.Printf("%s EXCEPTION %s\n", at, clip(d, 400))
+		cmdutil.Printf("%s EXCEPTION %s\n", at, clip(d, 400))
 	case "Log.entryAdded":
-		fmt.Printf("%s log.%s %s\n", at, m.Params.Entry.Level, clip(m.Params.Entry.Text, 300))
+		cmdutil.Printf("%s log.%s %s\n", at, m.Params.Entry.Level, clip(m.Params.Entry.Text, 300))
 	case "Inspector.targetCrashed":
-		fmt.Printf("%s *** RENDERER CRASHED ***\n", at)
+		cmdutil.Printf("%s *** RENDERER CRASHED ***\n", at)
 	case "Inspector.detached":
-		fmt.Printf("%s *** DETACHED: %s ***\n", at, m.Params.Name)
+		cmdutil.Printf("%s *** DETACHED: %s ***\n", at, m.Params.Name)
 	case "Runtime.executionContextCreated":
-		fmt.Printf("%s execution context created\n", at)
+		cmdutil.Printf("%s execution context created\n", at)
 	case "Page.loadEventFired":
-		fmt.Printf("%s load event\n", at)
+		cmdutil.Printf("%s load event\n", at)
 	case "Page.frameStoppedLoading":
-		fmt.Printf("%s frame stopped loading\n", at)
+		cmdutil.Printf("%s frame stopped loading\n", at)
 	}
 }

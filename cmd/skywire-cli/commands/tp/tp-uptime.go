@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
@@ -302,5 +304,5 @@ func parsePubKeys(in []string) ([]cipher.PubKey, error) {
 
 func fatal(cmd *cobra.Command, err error) {
 	fmt.Fprintf(cmd.ErrOrStderr(), "error: %v\n", err) //nolint:errcheck,gosec
-	os.Exit(1)
+	cmdutil.Exit(1)
 }

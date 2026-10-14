@@ -4,7 +4,6 @@ package clisvc
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -23,26 +22,19 @@ import (
 // matching what `sd` / `ut` already offer. All default empty / prod so
 // existing invocations behave exactly as before.
 var (
-	svcTestEnv  bool
 	svcTPDURL   string
 	svcDmsgdURL string
 	svcARURL    string
 )
 
-// svcIsTestEnv mirrors sd/ut: SKYWIRETEST=1 selects the test deployment.
-func svcIsTestEnv() bool { return os.Getenv("SKYWIRETEST") == "1" }
-
 // svcDeployment returns the deployment.Services set the svc commands
-// resolve URLs from, honoring --testenv (or SKYWIRETEST=1).
+// resolve URLs from.
 func svcDeployment() deployment.Services {
-	if svcTestEnv {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
 // baseURLFor resolves the deployment base URL for a svc service key,
-// honoring --testenv and the per-service --tpdurl / --dmsgdurl / --arurl
+// honoring the per-service --tpdurl / --dmsgdurl / --arurl
 // overrides. An explicit override always wins; otherwise the selected
 // deployment's URL is used.
 func baseURLFor(service string) string {
@@ -69,11 +61,10 @@ func baseURLFor(service string) string {
 
 // registerDeploymentFlags installs the deployment-selection + fetch-chain
 // flags on RootCmd's persistent set, so every svc subcommand inherits one
-// consistent vocabulary (--testenv, --tpdurl/--dmsgdurl/--arurl, and the
+// consistent vocabulary (--tpdurl/--dmsgdurl/--arurl, and the
 // --no-cxo/--no-rpc/--no-dmsg/--sk/--config fetch-chain controls).
 func registerDeploymentFlags() {
 	pf := RootCmd.PersistentFlags()
-	pf.BoolVar(&svcTestEnv, "testenv", svcIsTestEnv(), "use the test deployment services (or set SKYWIRETEST=1)")
 	pf.StringVar(&svcTPDURL, "tpdurl", "", "override the transport-discovery base URL (used by tpd / nm)")
 	pf.StringVar(&svcDmsgdURL, "dmsgdurl", "", "override the dmsg-discovery base URL (used by dmsgd)")
 	pf.StringVar(&svcARURL, "arurl", "", "override the address-resolver base URL (used by ar)")
@@ -106,7 +97,7 @@ func init() {
 
 // fetchViaVisorOrDirect fetches data from a service, preferring visor RPC.
 // The direct/HTTP fallback base URL is resolved from the service key via
-// baseURLFor, so --testenv and the per-service URL overrides apply.
+// baseURLFor, so the per-service URL overrides apply.
 func fetchViaVisorOrDirect(cmd *cobra.Command, service, path string) ([]byte, error) {
 	if !directQuery {
 		rpcClient, err := clirpc.Client(cmd.Flags())

@@ -119,7 +119,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	addr := cfg.Addr
 	if addr == "" {
@@ -129,6 +129,7 @@ func (s *service) Run(ctx context.Context) error {
 	defer cancel()
 	h, err := svcmode.Start(runCtx, svcmode.Config{
 		Mode:                mode,
+		LogHookLevel:        cfg.LogHookLevel,
 		HTTPAddr:            addr,
 		Handler:             conAPI,
 		PK:                  pk,

@@ -32,6 +32,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -160,8 +162,8 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("error: gRPC client connect: %v\n", err)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -188,8 +190,8 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 
 	stream, err := client.StreamPingTree(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: StreamPingTree call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("error: StreamPingTree call: %v\n", err)
+		cmdutil.Exit(1)
 	}
 
 	// File tee (always NDJSON when --output is set).
@@ -197,14 +199,14 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 	if streamOutFile != "" {
 		f, fErr := os.OpenFile(streamOutFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
 		if fErr != nil {
-			fmt.Fprintf(os.Stderr, "error: open --output file: %v\n", fErr)
-			os.Exit(1)
+			cmdutil.Eprintf("error: open --output file: %v\n", fErr)
+			cmdutil.Exit(1)
 		}
 		defer f.Close() //nolint:errcheck
 		fileEnc = json.NewEncoder(f)
 	}
 
-	stdoutEnc := json.NewEncoder(os.Stdout)
+	stdoutEnc := json.NewEncoder(cmdutil.Stdout())
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames:   true, // snake_case fields, matches proto declarations
 		EmitUnpopulated: false,
@@ -214,7 +216,7 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 	startedAt := time.Now()
 
 	if !streamJSON && !streamQuiet {
-		fmt.Fprintln(os.Stderr, treeStreamHumanHeader(req))
+		cmdutil.Eprintln(treeStreamHumanHeader(req))
 	}
 
 	for {
@@ -224,8 +226,8 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 			if recvErr == io.EOF || recvErr == context.Canceled {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "error: stream recv: %v\n", recvErr)
-			os.Exit(1)
+			cmdutil.Eprintf("error: stream recv: %v\n", recvErr)
+			cmdutil.Exit(1)
 		}
 
 		// Always update stats so the summary is correct regardless of
@@ -235,8 +237,8 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		// File tee always emits NDJSON.
 		if fileEnc != nil {
 			if err := emitOne(fileEnc, marshaler, ev); err != nil {
-				fmt.Fprintf(os.Stderr, "error: emit to file: %v\n", err)
-				os.Exit(1)
+				cmdutil.Eprintf("error: emit to file: %v\n", err)
+				cmdutil.Exit(1)
 			}
 		}
 
@@ -244,20 +246,20 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		switch {
 		case streamJSON:
 			if err := emitOne(stdoutEnc, marshaler, ev); err != nil {
-				fmt.Fprintf(os.Stderr, "error: emit: %v\n", err)
-				os.Exit(1)
+				cmdutil.Eprintf("error: emit: %v\n", err)
+				cmdutil.Exit(1)
 			}
 		case streamQuiet:
 			// Suppress per-event rows; summary still prints at end.
 		default:
-			emitHumanRow(os.Stdout, ev, startedAt)
+			emitHumanRow(cmdutil.Stdout(), ev, startedAt)
 		}
 	}
 
 	// Final summary in human modes (default + --quiet). In --json
 	// mode the consumer parses run_done out of the NDJSON stream.
 	if !streamJSON {
-		stats.printSummary(os.Stdout)
+		stats.printSummary(cmdutil.Stdout())
 	}
 }
 

@@ -7,11 +7,13 @@ Serve the keyless standalone wasm-VISOR desk over HTTP.
 Serves the desk: the tab as a Linux host, whose terminal runs the ONE skywire
 command module (/skywire.wasm — the desk host, the in-tab visor and every
 'skywire' command) and whose nested browser opens the hypervisor UI that visor
-serves. The module is the one installed beside this binary (skywire.wasm.gz,
-which every package ships) or --exec-wasm, served as it is: this command has
-no visor to refresh it through. Restart the process after an update (e.g. wire
-it to a systemd service that restarts on auto-update) and put a reverse proxy
-(Caddy) in front on a subdomain. Without a module serve refuses to start.
+serves. The module is --exec-wasm, or the one kept beside this binary (skywire.wasm.gz),
+or in the user cache directory when that directory is not writable. Packages
+do not ship it: with none yet, the first desk open fetches the release's and
+checks it against its manifest. This command has no visor to refresh it
+through after that. Restart the process after an update (e.g. wire it to a
+systemd service that restarts on auto-update) and put a reverse proxy (Caddy)
+in front on a subdomain.
 
 The same surface can be hosted BY the visor itself (one binary, one process):
 set hypervisor.wasm_serve.addr in the visor config. This command is the
@@ -37,8 +39,9 @@ skywire cli hv serve
       --desk-docs-port int      run 'skywire doc serve' on this desk vnet port (0 = off) — same cost as above
       --desk-help-terminal      open a desk terminal that has already run 'skywire --help' — costs a whole extra Go/wasm runtime of the full binary, and that memory is never returned
       --exec-js-tinygo string   path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none
-      --exec-wasm string        path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" -o build/skywire.wasm .). Empty = the module installed beside this binary (skywire.wasm.gz), served as it is. Without one, serve refuses to start
+      --exec-wasm string        path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags "withoutsystray withoutgotop" -o build/skywire.wasm .). Empty = the module kept beside this binary (skywire.wasm.gz), or in the user cache directory when that directory is not writable; when there is none yet, the release's is fetched the first time the desk is opened
       --harness                 mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly
+      --link stringArray        link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev
       --password string         gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear
       --tls                     serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
       --tls-cert string         PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key

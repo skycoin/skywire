@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -87,7 +86,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if err := RunVPNClient(ctx, args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

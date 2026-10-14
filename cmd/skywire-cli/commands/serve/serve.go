@@ -200,6 +200,8 @@ Examples:
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+		// The vhosts share the port 80 entry and outlive its website.
+		fp.Vhosts = vhostsOn(cmd, rpcClient, port)
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -324,6 +326,14 @@ var servePortRmCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+		if vs := vhostsOn(cmd, rpcClient, port); len(vs) > 0 {
+			if err := rpcClient.UpdateForwardedPort(visorapi.ForwardedPort{Port: 80, Vhosts: vs}); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			internal.PrintOutput(cmd.Flags(), map[string]any{"port": port, "removed": true, "vhosts": len(vs)},
+				fmt.Sprintf("Port 80's website removed; its %d vhost(s) stay (serve vhost rm)\n", len(vs)))
+			return
+		}
 		if err := rpcClient.DeregisterTCPPort(port); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -380,8 +390,14 @@ func listForwardedPorts(cmd *cobra.Command) {
 	fmt.Fprintln(tw, "PORT\tTO\tLABEL\tSKYNET\tDMSG\tLANDING\tWHITELIST\tDESCRIPTION") //nolint:errcheck,gosec
 	for _, p := range ports {
 		to := p.ProxyAddr
-		if to == "" {
+		switch {
+		case to == "" && p.Port == 80 && p.LocalPort == 0:
+			to = "landing page"
+		case to == "":
 			to = fmt.Sprintf("localhost:%d", p.EffectiveLocalPort())
+		}
+		if n := len(p.Vhosts); n > 0 {
+			to += fmt.Sprintf(" + %d vhost(s)", n)
 		}
 		wl := "open"
 		if n := len(p.Whitelist); n > 0 {

@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 )
 
@@ -112,7 +114,7 @@ func runLoginChain() {
 	// Wipe blockchain data (fresh chain every startup)
 	for _, dir := range []string{publisherDataDir, peerDataDir} {
 		if err := os.RemoveAll(dir); err != nil {
-			fmt.Printf("Failed to remove %s: %v\n", dir, err)
+			cmdutil.Printf("Failed to remove %s: %v\n", dir, err)
 			return
 		}
 	}
@@ -122,27 +124,27 @@ func runLoginChain() {
 	data, err := os.ReadFile(genesisPath) //nolint:gosec
 	if err == nil {
 		if err := json.Unmarshal(data, &gw); err != nil || len(gw.Entries) == 0 {
-			fmt.Printf("Failed to parse login_genesis.json: %v\n", err)
+			cmdutil.Printf("Failed to parse login_genesis.json: %v\n", err)
 			return
 		}
-		fmt.Printf("Login chain: using existing genesis wallet %s\n", gw.Entries[0].Address)
+		cmdutil.Printf("Login chain: using existing genesis wallet %s\n", gw.Entries[0].Address)
 	} else {
-		fmt.Println("Login chain: generating genesis wallet via addressGen...")
+		cmdutil.Println("Login chain: generating genesis wallet via addressGen...")
 		genCmd := exec.Command(skywireBin, "skycoin", "cli", "addressGen") //nolint:gosec
 		genOut, err := genCmd.Output()
 		if err != nil {
-			fmt.Printf("addressGen failed: %v\n", err)
+			cmdutil.Printf("addressGen failed: %v\n", err)
 			return
 		}
 		if err := json.Unmarshal(genOut, &gw); err != nil || len(gw.Entries) == 0 {
-			fmt.Printf("Failed to parse addressGen output: %v\n", err)
+			cmdutil.Printf("Failed to parse addressGen output: %v\n", err)
 			return
 		}
 		if err := os.WriteFile(genesisPath, genOut, 0600); err != nil {
-			fmt.Printf("Failed to write login_genesis.json: %v\n", err)
+			cmdutil.Printf("Failed to write login_genesis.json: %v\n", err)
 			return
 		}
-		fmt.Printf("Login chain: generated new genesis wallet %s\n", gw.Entries[0].Address)
+		cmdutil.Printf("Login chain: generated new genesis wallet %s\n", gw.Entries[0].Address)
 	}
 
 	genesisAddr := gw.Entries[0].Address
@@ -151,7 +153,7 @@ func runLoginChain() {
 	// Write publisher fiber.toml only — peer toml created after publisher signs genesis
 	publisherTOML := fmt.Sprintf(loginFiberTOMLTemplate, genesisTimestamp, genesisAddr)
 	if err := os.WriteFile(fiberTOMLPath, []byte(publisherTOML), 0600); err != nil {
-		fmt.Printf("Failed to write login_fiber.toml: %v\n", err)
+		cmdutil.Printf("Failed to write login_fiber.toml: %v\n", err)
 		return
 	}
 
@@ -170,12 +172,12 @@ func runLoginChain() {
 		"--log-level=warn",
 	)
 	publisherCmd.Env = append(sharedEnv, "FIBER_TOML="+fiberTOMLPath)
-	publisherCmd.Stdout = os.Stdout
-	publisherCmd.Stderr = os.Stderr
+	publisherCmd.Stdout = cmdutil.Stdout()
+	publisherCmd.Stderr = cmdutil.Stderr()
 
-	fmt.Println("Login chain: starting block publisher on :6001/:6421 ...")
+	cmdutil.Println("Login chain: starting block publisher on :6001/:6421 ...")
 	if err := publisherCmd.Start(); err != nil {
-		fmt.Printf("Failed to start publisher: %v\n", err)
+		cmdutil.Printf("Failed to start publisher: %v\n", err)
 		return
 	}
 
@@ -193,17 +195,17 @@ func runLoginChain() {
 		}
 	}
 	if !publisherHealthy {
-		fmt.Println("Login chain: publisher failed to become healthy after 30s")
+		cmdutil.Println("Login chain: publisher failed to become healthy after 30s")
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		return
 	}
-	fmt.Println("Login chain: publisher is healthy")
+	cmdutil.Println("Login chain: publisher is healthy")
 
 	// Step 2: Publisher wrote genesis signature back to login_fiber.toml.
 	// Create peer toml from the updated publisher toml (with signed genesis).
 	updatedTOML, err := os.ReadFile(fiberTOMLPath) //nolint:gosec
 	if err != nil {
-		fmt.Printf("Failed to read updated login_fiber.toml: %v\n", err)
+		cmdutil.Printf("Failed to read updated login_fiber.toml: %v\n", err)
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		return
 	}
@@ -211,7 +213,7 @@ func runLoginChain() {
 	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, "web_interface_port = 6421", "web_interface_port = 6422")
 	peerTOMLContent = strings.ReplaceAll(peerTOMLContent, `"127.0.0.1:6002"`, `"127.0.0.1:6001"`)
 	if err := os.WriteFile(peerTOMLPath, []byte(peerTOMLContent), 0600); err != nil { //nolint:gosec
-		fmt.Printf("Failed to write login_peer.toml: %v\n", err)
+		cmdutil.Printf("Failed to write login_peer.toml: %v\n", err)
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		return
 	}
@@ -231,13 +233,13 @@ func runLoginChain() {
 	// Peer does NOT use GENESIS env — the signed fiber.toml has all credentials.
 	// GENESIS would clear the genesis signature, causing "Failed to recover pubkey".
 	peerCmd.Env = append(os.Environ(), "FIBER_TOML="+peerTOMLPath)
-	peerCmd.Stdout = os.Stdout
-	peerCmd.Stderr = os.Stderr
+	peerCmd.Stdout = cmdutil.Stdout()
+	peerCmd.Stderr = cmdutil.Stderr()
 
-	fmt.Println("Login chain: starting peer node on :6002/:6422 ...")
+	cmdutil.Println("Login chain: starting peer node on :6002/:6422 ...")
 	if err := peerCmd.Start(); err != nil {
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
-		fmt.Printf("Failed to start peer: %v\n", err)
+		cmdutil.Printf("Failed to start peer: %v\n", err)
 		return
 	}
 
@@ -246,10 +248,10 @@ func runLoginChain() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		fmt.Println("\nLogin chain: shutting down...")
+		cmdutil.Println("\nLogin chain: shutting down...")
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		peerCmd.Process.Kill()      //nolint:errcheck,gosec
-		os.Exit(0)
+		cmdutil.Exit(0)
 	}()
 
 	// Wait for peer to be healthy
@@ -266,22 +268,22 @@ func runLoginChain() {
 		}
 	}
 	if !peerHealthy {
-		fmt.Println("Login chain: peer failed to become healthy after 30s")
+		cmdutil.Println("Login chain: peer failed to become healthy after 30s")
 		publisherCmd.Process.Kill() //nolint:errcheck,gosec
 		peerCmd.Process.Kill()      //nolint:errcheck,gosec
 		return
 	}
-	fmt.Println("Login chain: peer is healthy")
+	cmdutil.Println("Login chain: peer is healthy")
 
 	// Bootstrap: create block #1
 	if err := bootstrapLoginChain(skywireBin, "http://127.0.0.1:6421", fiberTOMLPath, genesisPath, genesisAddr); err != nil {
-		fmt.Printf("Login chain: bootstrap failed: %v\n", err)
-		fmt.Println("Login chain: nodes still running — you can bootstrap manually")
+		cmdutil.Printf("Login chain: bootstrap failed: %v\n", err)
+		cmdutil.Println("Login chain: nodes still running — you can bootstrap manually")
 	}
 
-	fmt.Println("\nLogin chain is running. Connect the reward server with:")
-	fmt.Println("  skywire cli rewards ui --login-node http://127.0.0.1:6422")
-	fmt.Println("\nPress Ctrl+C to stop.")
+	cmdutil.Println("\nLogin chain is running. Connect the reward server with:")
+	cmdutil.Println("  skywire cli rewards ui --login-node http://127.0.0.1:6422")
+	cmdutil.Println("\nPress Ctrl+C to stop.")
 
 	// Wait for either process to exit
 	done := make(chan error, 2)
@@ -301,7 +303,7 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 		"RPC_ADDR="+publisherURL,
 	)
 
-	fmt.Println("Login chain: creating bootstrap transaction...")
+	cmdutil.Println("Login chain: creating bootstrap transaction...")
 	createCmd := exec.Command(skywireBin, "skycoin", "cli", "createRawTransaction", //nolint:gosec
 		genesisPath, genesisAddr, "1000")
 	createCmd.Env = cliEnv
@@ -315,7 +317,7 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 		return fmt.Errorf("createRawTransaction returned empty output")
 	}
 
-	fmt.Println("Login chain: injecting bootstrap transaction...")
+	cmdutil.Println("Login chain: injecting bootstrap transaction...")
 	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
 	injectReq, err := http.NewRequest("POST", publisherURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
@@ -331,10 +333,10 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 	if injectResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("inject failed (%d): %s", injectResp.StatusCode, string(injectOut))
 	}
-	fmt.Printf("Login chain: bootstrap tx injected: %s\n", strings.TrimSpace(string(injectOut)))
+	cmdutil.Printf("Login chain: bootstrap tx injected: %s\n", strings.TrimSpace(string(injectOut)))
 
 	// Wait for block #1 on the peer node
-	fmt.Println("Login chain: waiting for bootstrap block...")
+	cmdutil.Println("Login chain: waiting for bootstrap block...")
 	peerURL := "http://127.0.0.1:6422"
 	for i := 0; i < 30; i++ {
 		time.Sleep(2 * time.Second)
@@ -345,7 +347,7 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 		body, _ := io.ReadAll(resp.Body) //nolint:errcheck,gosec
 		resp.Body.Close()                //nolint:errcheck,gosec
 		if strings.Contains(string(body), `"seq": 1`) {
-			fmt.Println("Login chain: bootstrap complete — block #1 confirmed on peer")
+			cmdutil.Println("Login chain: bootstrap complete — block #1 confirmed on peer")
 			return nil
 		}
 	}

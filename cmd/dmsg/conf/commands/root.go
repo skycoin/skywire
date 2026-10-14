@@ -3,7 +3,8 @@ package commands
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -24,7 +25,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		_, err := script.Echo(string(dmsg.DmsghttpJSON)).JQ(`.prod.dmsg_servers`).Stdout()
 		if err != nil {
-			log.Fatal("Failed to execute command: ", err)
+			cmdutil.Fatal("Failed to execute command: ", err)
 		}
 	},
 }
@@ -38,7 +39,7 @@ var genKeysCmd = &cobra.Command{
 	Short: "Generate a new dmsg keypair",
 	Run: func(_ *cobra.Command, _ []string) {
 		pk, sk := cipher.GenerateKeyPair()
-		fmt.Printf("%s\n%s\n", pk.Hex(), sk.Hex())
+		cmdutil.Printf("%s\n%s\n", pk.Hex(), sk.Hex())
 	},
 }
 
@@ -56,7 +57,7 @@ var verifyKeysCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to derive public key: %w", err)
 		}
-		fmt.Println(pk.Hex())
+		cmdutil.Println(pk.Hex())
 		return nil
 	},
 }

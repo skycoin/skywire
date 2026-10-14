@@ -26,10 +26,7 @@ const (
 	DefaultConfigPath = "config.json"
 )
 
-var defaultDiscoveryURL = dmsg.DiscAddr(false)
-
-// DefaultDiscoverURLTest default URL for discovery in test env
-var DefaultDiscoverURLTest = dmsg.DiscAddr(true)
+var defaultDiscoveryURL = dmsg.DiscAddr()
 
 // PeerConfig represents a peer dmsg server to connect to for server-to-server mesh.
 type PeerConfig struct {
@@ -178,6 +175,7 @@ type Config struct {
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`
+	LogHookLevel     string        `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 	UpdateInterval   time.Duration `json:"update_interval"`
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
