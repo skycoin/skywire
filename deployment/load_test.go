@@ -7,13 +7,12 @@ import (
 )
 
 func TestLoadFile(t *testing.T) {
-	prod, test, prodConf, testConf, raw := Prod, Test, ProdConf, TestConf, ServicesJSON
-	t.Cleanup(func() { Prod, Test, ProdConf, TestConf, ServicesJSON = prod, test, prodConf, testConf, raw })
+	prod, prodConf, raw := Prod, ProdConf, ServicesJSON
+	t.Cleanup(func() { Prod, ProdConf, ServicesJSON = prod, prodConf, raw })
 
 	const pk = "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
 	conf := `{"prod":{"dmsg_discovery_dmsg":"dmsg://` + pk + `:80",
-		"dmsg_servers":[{"static":"` + pk + `","server":{"address":"203.0.113.7:8080","address_ws":"wss://x.example.net/dmsg"}}]},
-		"test":{}}`
+		"dmsg_servers":[{"static":"` + pk + `","server":{"address":"203.0.113.7:8080","address_ws":"wss://x.example.net/dmsg"}}]}}`
 	path := filepath.Join(t.TempDir(), "services-config.json")
 	if err := os.WriteFile(path, []byte(conf), 0o600); err != nil {
 		t.Fatal(err)

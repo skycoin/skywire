@@ -174,7 +174,7 @@ type WasmServeConf struct {
 // as a hypervisor at startup.
 func DefaultHypervisorConfig() HypervisorConfig {
 	c := HypervisorConfig{}
-	c.FillDefaults(false)
+	c.FillDefaults()
 	c.DBPath = filepath.Join(skyenv.SkywirePath, "local", "hypervisor", "users.db")
 	return c
 }
@@ -204,25 +204,25 @@ type TPVizConfig struct {
 }
 
 // MakeConfig returns hypervisor config.
-func MakeConfig(testenv bool) HypervisorConfig {
+func MakeConfig() HypervisorConfig {
 	var c HypervisorConfig
-	c.FillDefaults(testenv)
+	c.FillDefaults()
 	return c
 }
 
 // GenerateWorkDirConfig generates a config with default values and uses db from current working directory.
-func GenerateWorkDirConfig(testenv bool) HypervisorConfig {
+func GenerateWorkDirConfig() HypervisorConfig {
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("failed to generate WD config: %s", dir)
 	}
-	c := MakeConfig(testenv)
+	c := MakeConfig()
 	c.DBPath = filepath.Join(dir, "users.db")
 	return c
 }
 
 // FillDefaults fills the config with default values.
-func (c *HypervisorConfig) FillDefaults(testEnv bool) {
+func (c *HypervisorConfig) FillDefaults() {
 	if c.PK.Null() || c.SK.Null() {
 		c.PK, c.SK = cipher.GenerateKeyPair()
 	}
@@ -236,17 +236,7 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	}
 
 	if c.DmsgDiscovery == "" {
-		// deployment.Prod / deployment.Test are populated at
-		// deployment.init() time from the embedded
-		// services-config.json. Use those directly rather than
-		// re-unmarshalling — keeps json.Unmarshal off the WASM
-		// build graph and avoids duplicating the parse cost on
-		// every hypervisor-config FillDefaults call.
-		if testEnv {
-			c.DmsgDiscovery = deployment.Test.DmsgDiscovery
-		} else {
-			c.DmsgDiscovery = deployment.Prod.DmsgDiscovery
-		}
+		c.DmsgDiscovery = deployment.Prod.DmsgDiscovery
 		if c.DmsgPort == 0 {
 			c.DmsgPort = skyenv.DmsgHypervisorPort
 		}

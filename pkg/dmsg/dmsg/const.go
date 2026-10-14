@@ -43,22 +43,13 @@ var DmsghttpJSON = deployment.ServicesJSON
 // Prod is the production deployment dmsghttp-config.json services
 var Prod DmsghttpConfig
 
-// Test is the test deployment dmsghttp-config.json services
-var Test DmsghttpConfig
-
 // DiscURL returns the URL of the dmsg discovery service
-func DiscURL(testenv bool) string {
-	if testenv {
-		return deployment.Test.DmsgDiscovery
-	}
+func DiscURL() string {
 	return deployment.Prod.DmsgDiscovery
 }
 
 // DiscAddr returns the dmsg address of the dmsg discovery service in the format "dmsg://<pk>:<port>"
-func DiscAddr(testenv bool) string {
-	if testenv {
-		return Test.DmsgDiscovery
-	}
+func DiscAddr() string {
 	return Prod.DmsgDiscovery
 }
 
@@ -109,12 +100,6 @@ func InitConfig() error {
 			return err
 		}
 		Prod.DmsgServers, err = shuffleServers(Prod.DmsgServers)
-		if err != nil {
-			return err
-		}
-	}
-	if envServices.Test != nil {
-		err = json.Unmarshal(envServices.Test, &Test)
 		if err != nil {
 			return err
 		}

@@ -409,7 +409,7 @@ func loadConfig() (*visorconfig.V1, error) {
 		return nil, errors.New("config version is incompatible")
 	}
 	if hypervisorUI {
-		config := visorconfig.GenerateWorkDirConfig(false)
+		config := visorconfig.GenerateWorkDirConfig()
 		conf.Hypervisor = &config
 	}
 	if noHypervisorUI {

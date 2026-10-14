@@ -119,7 +119,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	addr := cfg.Addr
 	if addr == "" {

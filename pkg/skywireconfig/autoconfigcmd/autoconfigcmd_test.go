@@ -17,7 +17,7 @@ var allFlags = []string{
 	// Visor public/private + autoconnect
 	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
 	// Service discovery / deployment
-	"testenv", "url", "svcconf", "minsess", "maxtransports", "stun",
+	"url", "svcconf", "minsess", "maxtransports", "stun",
 	// Transport ports + privacy/routing knobs
 	"stcpr", "sudph", "transport-port", "min-hops", "ar-transport-limit",
 	"no-direct-transports", "pty-rpc-exec", "lan-dmsg-port", "lan-dmsg-public",
@@ -132,7 +132,6 @@ func TestNew_BindingsTrackValues(t *testing.T) {
 		{"stcpr", "7777", func() bool { return v.StcprPort == 7777 }},
 		{"transport-port", "7777", func() bool { return v.TransportPort == 7777 }},
 		// New flags from the parity expansion: cover one per group.
-		{"testenv", "true", func() bool { return v.TestEnv }},
 		{"minsess", "5", func() bool { return v.MinSess == 5 }},
 		{"survey", "abc,def", func() bool { return v.SurveyPks == "abc,def" }},
 		{"killsw", "/etc/foo", func() bool { return v.VpnKillSw == "/etc/foo" }},
@@ -242,7 +241,7 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 	}
 	// Sanity: every registered flag should appear in the help text.
 	// (We sample a few to keep the failure message readable.)
-	for _, name := range []string{"hvpks", "ishv", "rewardaddr", "testenv", "skycoindinstances", "loglvl"} {
+	for _, name := range []string{"hvpks", "ishv", "rewardaddr", "skycoindinstances", "loglvl"} {
 		if !strings.Contains(usage, "--"+name) {
 			t.Errorf("UsageString missing --%s", name)
 		}

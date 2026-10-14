@@ -136,7 +136,7 @@ func TestMergeFile_AllFieldsOverride(t *gotesting.T) {
 	mergeFile(dst, src)
 
 	// mergeFile copies the fields it knows about; assert each rather than the
-	// whole struct (TestEnvironment is intentionally not merged).
+	// whole struct.
 	require.Equal(t, src.SecKey, dst.SecKey)
 	require.Equal(t, src.Addr, dst.Addr)
 	require.Equal(t, src.MetricsAddr, dst.MetricsAddr)

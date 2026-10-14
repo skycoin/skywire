@@ -37,7 +37,7 @@ var json = fastjson.JSON
 // variables
 var (
 	// persistent flags
-	dmsgDisc     = dmsg.DiscAddr(false)
+	dmsgDisc     = dmsg.DiscAddr()
 	dmsgSessions = dmsg.DefaultMinSessions
 	dmsgPort     = pty.DefaultPort
 	cliNet       = pty.DefaultCLINet
@@ -392,7 +392,7 @@ func fillConfigFromENV(conf pty.Config) (pty.Config, error) {
 }
 
 func fillConfigFromFlags(conf pty.Config) pty.Config {
-	if dmsgDisc != dmsg.DiscAddr(false) {
+	if dmsgDisc != dmsg.DiscAddr() {
 		conf.DmsgDisc = dmsgDisc
 	}
 

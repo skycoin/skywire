@@ -14,11 +14,6 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
-
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
 	u, err := url.Parse(serviceURL)
@@ -70,11 +65,8 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
@@ -136,7 +128,6 @@ var (
 	startDirect           bool
 	// multi-hop testing
 	viaVisor string
-	testEnv  bool
 )
 
 // RootCmd contains commands that interact with the skywire-visor

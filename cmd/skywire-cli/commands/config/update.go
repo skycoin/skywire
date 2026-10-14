@@ -33,7 +33,6 @@ func init() {
 	updateCmd.Flags().BoolVarP(&isUpdateEndpoints, "endpoints", "a", false, "update server endpoints")
 	updateCmd.Flags().StringVar(&logLevel, "log-level", "", "level of logging in config")
 	updateCmd.Flags().StringVarP(&serviceConfURL, "url", "b", deployment.ProdConf.Conf, "service config URL")
-	updateCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", false, "use test deployment")
 	updateCmd.Flags().StringVar(&setPublicAutoconnect, "public-autoconn", "", "change public autoconnect configuration")
 	updateCmd.Flags().IntVar(&minHops, "set-minhop", -1, "change min hops value")
 	updateCmd.PersistentFlags().StringVarP(&input, "input", "i", "", "path of input config file.")
@@ -102,11 +101,7 @@ Top-level flags update service endpoints (-a/--endpoints), the log level
 min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 	PreRun: func(_ *cobra.Command, _ []string) {
 		if isUpdateEndpoints && (serviceConfURL == "") {
-			if !isTestEnv {
-				serviceConfURL = deployment.ProdConf.Conf
-			} else {
-				serviceConfURL = deployment.TestConf.Conf
-			}
+			serviceConfURL = deployment.ProdConf.Conf
 		}
 		setDefaults()
 		checkConfig()
@@ -117,9 +112,6 @@ min-hops (--set-minhop). Passing -b/--url a value implies --endpoints.`,
 		}
 		conf = initUpdate()
 		if isUpdateEndpoints {
-			if isTestEnv {
-				serviceConfURL = deployment.TestConf.Conf
-			}
 			// Reuse the same fetch chain `config gen` uses: DMSG first (the
 			// deployment is dmsg-only, so a plain http.Client can never reach
 			// the conf service), then plain HTTP, then the embedded

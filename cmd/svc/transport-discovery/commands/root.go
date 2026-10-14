@@ -142,8 +142,6 @@ Depends: redis
 
 Production: ` + deployment.Prod.TransportDiscovery + `
             ` + dmsg.Prod.TransportDiscovery + `
-Test:       ` + deployment.Test.TransportDiscovery + `
-            ` + dmsg.Test.TransportDiscovery + `
 
 HTTP Endpoints:
   GET  /health                        Health check

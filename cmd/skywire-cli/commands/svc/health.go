@@ -199,8 +199,7 @@ func printHealthResults(cmd *cobra.Command, results []visorapi.ServiceHealthEntr
 }
 
 func queryServicesDirect(cmdFlags *pflag.FlagSet) []visorapi.ServiceHealthEntry {
-	// Honor --testenv (or SKYWIRETEST=1); per-service --*url overrides
-	// apply to the services svc can also query individually.
+	// Per-service --*url overrides apply to the services svc can also query individually.
 	dep := svcDeployment()
 	services := map[string]string{
 		"Transport Discovery": baseURLFor("tpd"),

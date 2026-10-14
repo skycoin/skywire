@@ -80,11 +80,9 @@ branch lists the published keys none of them embeds.`,
 		switch hvMapEnv {
 		case "prod":
 			roles = deploymentRoles(deployment.Prod)
-		case "test":
-			roles = deploymentRoles(deployment.Test)
 		case "none", "":
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--deployment must be prod, test or none"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--deployment must be prod or none"))
 		}
 		m.applyRoles(roles)
 		if hvMapLinode {

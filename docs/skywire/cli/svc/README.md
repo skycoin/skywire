@@ -38,7 +38,6 @@ skywire cli svc
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --testenv            use the test deployment services (or set SKYWIRETEST=1)
       --tpdurl string      override the transport-discovery base URL (used by tpd / nm)
 ```
 
