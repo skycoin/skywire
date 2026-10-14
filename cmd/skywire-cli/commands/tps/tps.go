@@ -3,8 +3,9 @@ package clitps
 
 import (
 	"fmt"
-	"os"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -111,11 +112,11 @@ The target visor must trust this visor's TPS public key.`,
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to add transport: %w", err))
 		}
 
-		fmt.Printf("Transport created successfully:\n")
-		fmt.Printf("  ID:     %s\n", resp.ID)
-		fmt.Printf("  Local:  %s\n", resp.Local)
-		fmt.Printf("  Remote: %s\n", resp.Remote)
-		fmt.Printf("  Type:   %s\n", resp.Type)
+		cmdutil.Printf("Transport created successfully:\n")
+		cmdutil.Printf("  ID:     %s\n", resp.ID)
+		cmdutil.Printf("  Local:  %s\n", resp.Local)
+		cmdutil.Printf("  Remote: %s\n", resp.Remote)
+		cmdutil.Printf("  Type:   %s\n", resp.Type)
 	},
 }
 
@@ -156,7 +157,7 @@ The transport ID may be passed positionally (tps rm -t <pk> <id>) or with
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to remove transport: %w", err))
 		}
 
-		fmt.Printf("Transport %s removed successfully\n", id)
+		cmdutil.Printf("Transport %s removed successfully\n", id)
 	},
 }
 
@@ -182,11 +183,11 @@ var listCmd = &cobra.Command{
 		}
 
 		if len(transports) == 0 {
-			fmt.Printf("No transports found on %s\n", target)
+			cmdutil.Printf("No transports found on %s\n", target)
 			return
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.TabIndent)
+		w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 3, ' ', tabwriter.TabIndent)
 		fmt.Fprintln(w, "ID\tLOCAL\tREMOTE\tTYPE") //nolint:errcheck
 		for _, tp := range transports {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", tp.ID, tp.Local, tp.Remote, tp.Type) //nolint:errcheck

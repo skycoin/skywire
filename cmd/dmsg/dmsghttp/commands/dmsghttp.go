@@ -279,7 +279,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		if err != nil || net.ParseIP(clientIP) == nil {
 			clientIP = ""
 		}
-		fmt.Printf("[EXAMPLE] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
+		cmdutil.Printf("[EXAMPLE] %s |%s %3d %s| %13v | %15s | %72s |%s %-7s %s %s\n",
 			time.Now().Format("2006/01/02 - 15:04:05"),
 			statusCodeBackgroundColor,
 			statusCode,

@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 
@@ -75,7 +77,7 @@ func loadGenesisSeed() {
 	genesisPath := filepath.Join(wd, "login_genesis.json")
 	data, err := os.ReadFile(genesisPath) //nolint:gosec
 	if err != nil {
-		fmt.Printf("Warning: could not read genesis wallet for verify addresses: %v\n", err)
+		cmdutil.Printf("Warning: could not read genesis wallet for verify addresses: %v\n", err)
 		return
 	}
 	var wallet struct {
@@ -84,13 +86,13 @@ func loadGenesisSeed() {
 		} `json:"meta"`
 	}
 	if err := json.Unmarshal(data, &wallet); err != nil || wallet.Meta.Seed == "" {
-		fmt.Printf("Warning: could not parse genesis wallet seed: %v\n", err)
+		cmdutil.Printf("Warning: could not parse genesis wallet seed: %v\n", err)
 		return
 	}
 	genesisSeed = []byte(wallet.Meta.Seed)
 	// Start at index 1 — index 0 is the genesis address
 	atomic.StoreUint32(&verifyAddrIndex, 1)
-	fmt.Printf("Login chain: loaded genesis seed for verify address derivation\n")
+	cmdutil.Printf("Login chain: loaded genesis seed for verify address derivation\n")
 }
 
 // generateVerifyAddress derives a unique skycoin address from the genesis wallet
@@ -268,7 +270,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	// Create raw transaction using the genesis wallet
 	createRawTxCmd := fmt.Sprintf(`bash -c 'FIBER_TOML="%s" RPC_ADDR="%s" "%s" skycoin cli createRawTransaction "%s" "%s" "%s" 2>&1'`,
 		fiberTOMLPath, nodeURL, skywireBin, genesisPath, destAddress, coins)
-	fmt.Printf("Login chain: running: %s\n", createRawTxCmd)
+	cmdutil.Printf("Login chain: running: %s\n", createRawTxCmd)
 	rawTxStr, err := script.Exec(createRawTxCmd).String()
 	if err != nil {
 		return "", fmt.Errorf("createRawTransaction failed: %s: %w", rawTxStr, err)
@@ -279,7 +281,7 @@ func sendCoinsOnLoginChain(nodeURL, destAddress string, coins string) (string, e
 	}
 
 	// Inject transaction with no_broadcast
-	fmt.Printf("Login chain: injecting tx to %s (%d bytes)\n", nodeURL, len(rawTxStr))
+	cmdutil.Printf("Login chain: injecting tx to %s (%d bytes)\n", nodeURL, len(rawTxStr))
 	injectBody := fmt.Sprintf(`{"rawtx":"%s","no_broadcast":true}`, rawTxStr)
 	injectReq, err := http.NewRequest("POST", nodeURL+"/api/v1/injectTransaction", strings.NewReader(injectBody))
 	if err != nil {
@@ -393,7 +395,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		if isXpub {
 			// Check xpub depth before attempting derivation
 			if warning := rewardconfig.CheckXpubDepth(address); warning != "" {
-				fmt.Printf("Login chain: xpub depth error for %s...\n", address[:20])
+				cmdutil.Printf("Login chain: xpub depth error for %s...\n", address[:20])
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.WriteHeader(http.StatusBadRequest)
 				l := loginPageHeader("Login Error")
@@ -423,7 +425,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 				return
 			}
 			loginAddress = derived
-			fmt.Printf("Login chain: derived change chain address %s from xpub\n", loginAddress)
+			cmdutil.Printf("Login chain: derived change chain address %s from xpub\n", loginAddress)
 		}
 
 		// Fund the login address on the login chain if needed
@@ -431,18 +433,18 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		if loginNodeAddr != "" {
 			coins, err := checkBalanceOnLoginChain(loginNodeAddr, loginAddress)
 			if err != nil {
-				fmt.Printf("Warning: failed to check login chain balance: %v\n", err)
+				cmdutil.Printf("Warning: failed to check login chain balance: %v\n", err)
 			}
 			if coins == 0 {
 				// Send minimum coins (1 coin) to the login address
 				txID, err := sendCoinsOnLoginChain(loginNodeAddr, loginAddress, "1.000000")
 				if err != nil {
-					fmt.Printf("Warning: failed to fund login address: %v\n", err)
+					cmdutil.Printf("Warning: failed to fund login address: %v\n", err)
 					http.Redirect(w, r, "/login?msg=Failed+to+prepare+login+verification.+Please+try+again.", http.StatusFound)
 					return
 				}
 				fundedTxID = txID
-				fmt.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", loginAddress, txID)
+				cmdutil.Printf("Login chain: funded %s with 1 coin (tx: %s)\n", loginAddress, txID)
 			}
 		}
 
@@ -464,7 +466,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 			ExpiresAt:     time.Now().Add(10 * time.Minute),
 		}
 		pendingLoginsMu.Unlock()
-		fmt.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
+		cmdutil.Printf("Login chain: challenge %s → verify address %s\n", challenge[:8], verifyAddr)
 
 		http.Redirect(w, r, "/login/verify?challenge="+challenge, http.StatusFound)
 	})

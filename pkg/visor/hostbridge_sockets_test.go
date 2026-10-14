@@ -10,8 +10,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/hostbridge"
 )
+
+// testBridgeID is the visor the tests connect as, so the bridge stays paired
+// with it across their reconnects.
+var testBridgeID = func() *hostbridge.Pairing {
+	pk, _ := cipher.GenerateKeyPair()
+	return &hostbridge.Pairing{PK: pk.Hex()}
+}()
 
 func bridgeClient(t *testing.T, addr, token string) *hostbridge.Client {
 	t.Helper()
@@ -19,7 +27,7 @@ func bridgeClient(t *testing.T, addr, token string) *hostbridge.Client {
 	defer cancel()
 	conn, err := dialHostBridgeConn(ctx, "ws://"+addr+"/"+token)
 	require.NoError(t, err)
-	c, err := hostbridge.NewClient(conn)
+	c, err := hostbridge.NewClient(conn, testBridgeID)
 	require.NoError(t, err)
 	return c
 }
@@ -118,4 +126,57 @@ func TestHostBridgeSocketsSurviveReconnect(t *testing.T) {
 	conn, err := s.DialContext(ctx, "tcp", tcpAddr)
 	require.NoError(t, err)
 	_ = conn.Close() //nolint:errcheck
+}
+
+// A host address bound before the bridge connects, on a port another
+// listener still holds, is listening once both clear.
+func TestHostBridgeHostListenDeferred(t *testing.T) {
+	const token = "0123456789abcdef"
+	srv, err := hostbridge.NewServer(hostbridge.Config{Token: token})
+	require.NoError(t, err)
+	bl, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bl.Close() }) //nolint:errcheck
+	go srv.Serve(bl)                     //nolint:errcheck
+
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := held.Addr().String()
+
+	var s hostBridgeSockets
+	h := hostBridgeHost{&s}
+	l, err := h.Listen("tcp", addr)
+	require.NoError(t, err)
+	defer l.Close() //nolint:errcheck
+	require.Equal(t, addr, l.Addr().String())
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(c, c); _ = c.Close() }() //nolint:errcheck
+		}
+	}()
+
+	_, err = h.DialTimeout("tcp", addr, time.Second)
+	require.ErrorIs(t, err, errHostBridgeNotConnected)
+
+	s.attach(bridgeClient(t, bl.Addr().String(), token))
+	require.NoError(t, held.Close())
+	require.Eventually(t, func() bool {
+		c, err := h.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			return false
+		}
+		defer c.Close()                                //nolint:errcheck
+		_ = c.SetDeadline(time.Now().Add(time.Second)) //nolint:errcheck
+		if _, err := c.Write([]byte("x")); err != nil {
+			return false
+		}
+		b := make([]byte, 1)
+		_, err = io.ReadFull(c, b)
+		return err == nil && b[0] == 'x'
+	}, 10*time.Second, 100*time.Millisecond)
+	require.Equal(t, addr, l.Addr().String())
 }

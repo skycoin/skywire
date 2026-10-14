@@ -62,7 +62,7 @@ var groupExact = map[string]string{
 	"sk": "Identity and rewards", "version": "Identity and rewards",
 	"rewardaddr": "Identity and rewards", "public": "Identity and rewards",
 	"publicip": "Identity and rewards", "disable-public-autoconn": "Identity and rewards",
-	"testenv": "Networking and transports", "url": "Networking and transports",
+	"url":     "Networking and transports",
 	"svcconf": "Networking and transports", "minsess": "Networking and transports",
 	"maxtransports": "Networking and transports", "stun": "Networking and transports",
 	"stcpr": "Networking and transports", "sudph": "Networking and transports",

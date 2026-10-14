@@ -81,7 +81,7 @@ var logCmd = &cobra.Command{
 		go func() {
 			<-ctx.Done()
 			cancel()
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}()
 
 		// Preparing directories
@@ -642,11 +642,11 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	current := atomic.AddInt64(&pw.Current, int64(n))
 	total := atomic.LoadInt64(&pw.Total)
 	pc := fmt.Sprintf("%d%%", current*100/total)
-	fmt.Printf("Downloading: %d/%dB (%s)", current, total, pc)
+	cmdutil.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 	if current != total {
-		fmt.Print("\r")
+		cmdutil.Print("\r")
 	} else {
-		fmt.Print("\n")
+		cmdutil.Print("\n")
 	}
 	return n, nil
 }

@@ -3,10 +3,11 @@ package clivisor
 
 import (
 	"fmt"
-	"os"
 	"os/user"
 	"strconv"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -85,7 +86,7 @@ var userCmd = &cobra.Command{
 				internal.PrintOutput(cmd.Flags(), info, fmt.Sprintf("%s (uid=%s)\n", u.Username, u.Uid))
 			}
 		} else {
-			fmt.Fprintln(os.Stderr, "could not parse UID from /proc status")
+			cmdutil.Eprintln("could not parse UID from /proc status")
 		}
 	},
 }

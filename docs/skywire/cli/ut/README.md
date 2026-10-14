@@ -19,7 +19,6 @@ Check the local visor's daily uptime percent with:
   $ skywire cli ut -n0 -k $(skywire cli visor pk)
 
 Set the cache dir to "" to avoid using cache files.
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
 
 ## Usage
 
@@ -58,7 +57,6 @@ skywire cli ut
       --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                count the number of results
   -t, --stats2               with --on: tally online visors by version instead of listing PKs
-      --testenv              use test deployment
       --tpdurl string        transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -u, --url string           specify alternative (TPD-integrated) uptime tracker url
                               (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -224,7 +226,7 @@ func runMuxTelemetry(cmd *cobra.Command, poll func() (any, error)) {
 	}
 
 	// Sink: FILE (append) or stdout for "-".
-	sink := os.Stdout
+	sink := cmdutil.Stdout()
 	if muxInfoNDJSON != "-" {
 		f, err := os.OpenFile(muxInfoNDJSON, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
@@ -232,7 +234,7 @@ func runMuxTelemetry(cmd *cobra.Command, poll func() (any, error)) {
 		}
 		defer f.Close() //nolint:errcheck,gosec
 		sink = f
-		fmt.Fprintf(os.Stderr, "mux telemetry: app=%s interval=%s → %s (ctrl+c to stop)\n", muxInfoApp, interval, muxInfoNDJSON)
+		cmdutil.Eprintf("mux telemetry: app=%s interval=%s → %s (ctrl+c to stop)\n", muxInfoApp, interval, muxInfoNDJSON)
 	}
 	enc := json.NewEncoder(sink)
 
@@ -251,7 +253,7 @@ func runMuxTelemetry(cmd *cobra.Command, poll func() (any, error)) {
 	writeOnce := func() {
 		infos, err := poll()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "RouteGroupMuxInfo: %v\n", err)
+			cmdutil.Eprintf("RouteGroupMuxInfo: %v\n", err)
 			return
 		}
 		raw, _ := json.Marshal(infos) //nolint:errcheck

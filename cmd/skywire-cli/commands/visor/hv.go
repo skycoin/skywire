@@ -3,10 +3,11 @@ package clivisor
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -98,7 +99,7 @@ var hvpkCmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
@@ -155,7 +156,7 @@ var hvUIEnableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if err := rpcClient.EnableHypervisorUIPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -175,7 +176,7 @@ var hvUIDisableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if err := rpcClient.DisableHypervisorUIPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -195,7 +196,7 @@ var hvEnableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if err := rpcClient.EnableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -215,7 +216,7 @@ var hvDisableCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if err := rpcClient.DisableHypervisorPersist(hvPersist); err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -234,7 +235,7 @@ var hvStatusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if !rpcClient.IsHypervisorEnabled() {
 			internal.PrintOutput(cmd.Flags(), map[string]any{"enabled": false}, "disabled\n")
@@ -300,7 +301,7 @@ See docs/guides/remote-visor-cli.md.`,
 		if err := rpcClient.AddHypervisor(pk); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Connected to hypervisor %s\n", pk)
+		cmdutil.Printf("Connected to hypervisor %s\n", pk)
 	},
 }
 
@@ -343,7 +344,7 @@ is required.`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			fmt.Printf("Disconnected from %d runtime-added hypervisor(s)\n", n)
+			cmdutil.Printf("Disconnected from %d runtime-added hypervisor(s)\n", n)
 			return
 		}
 		var pk cipher.PubKey
@@ -353,7 +354,7 @@ is required.`,
 		if err := rpcClient.RemoveHypervisor(pk); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Disconnected from hypervisor %s\n", pk)
+		cmdutil.Printf("Disconnected from hypervisor %s\n", pk)
 	},
 }
 
@@ -385,7 +386,7 @@ from an env-var or a process-substitution.`,
 			if err := rpcClient.SetHypervisorPasswordForce(hvPasswdNew); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			fmt.Println("Hypervisor UI password set; all existing sessions invalidated.")
+			cmdutil.Println("Hypervisor UI password set; all existing sessions invalidated.")
 			return
 		}
 		if hvPasswdOld == "" {
@@ -394,7 +395,7 @@ from an env-var or a process-substitution.`,
 		if err := rpcClient.SetHypervisorPassword(hvPasswdOld, hvPasswdNew); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println("Hypervisor UI password updated; all existing sessions invalidated.")
+		cmdutil.Println("Hypervisor UI password updated; all existing sessions invalidated.")
 	},
 }
 

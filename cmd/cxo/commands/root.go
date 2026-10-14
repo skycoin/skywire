@@ -2,8 +2,7 @@
 package commands
 
 import (
-	"log"
-	"os"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/0magnet/calvin"
 	"github.com/spf13/cobra"
@@ -26,7 +25,7 @@ func init() {
 // Execute runs the root command
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal(err)
-		os.Exit(1)
+		cmdutil.Fatal(err)
+		cmdutil.Exit(1)
 	}
 }

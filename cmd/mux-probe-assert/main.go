@@ -33,6 +33,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // Tally holds the parsed fields from mux-route-probe.sh's stdout
@@ -91,30 +93,30 @@ func main() {
 	var baselinePath string
 	flag.StringVar(&baselinePath, "baseline", "", "path to baseline JSON (required)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s -baseline=<path> < tally.txt\n\n", os.Args[0])
+		cmdutil.Eprintf("usage: %s -baseline=<path> < tally.txt\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
 	if baselinePath == "" {
 		flag.Usage()
-		os.Exit(exitUsage)
+		cmdutil.Exit(exitUsage)
 	}
 
 	baseline, err := loadBaseline(baselinePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "load baseline %q: %v\n", baselinePath, err)
-		os.Exit(exitUsage)
+		cmdutil.Eprintf("load baseline %q: %v\n", baselinePath, err)
+		cmdutil.Exit(exitUsage)
 	}
 
-	tally, err := parseTally(os.Stdin)
+	tally, err := parseTally(cmdutil.Stdin())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse tally: %v\n", err)
-		os.Exit(exitUsage)
+		cmdutil.Eprintf("parse tally: %v\n", err)
+		cmdutil.Exit(exitUsage)
 	}
 
-	code := assertTally(tally, baseline, os.Stderr)
-	os.Exit(code)
+	code := assertTally(tally, baseline, cmdutil.Stderr())
+	cmdutil.Exit(code)
 }
 
 func loadBaseline(path string) (Baseline, error) {

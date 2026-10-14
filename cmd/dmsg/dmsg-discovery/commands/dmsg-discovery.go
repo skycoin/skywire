@@ -9,7 +9,6 @@ package commands
 import (
 	"context"
 	"log"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -81,12 +80,12 @@ Example:
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
 		sf := cmdutil.ServiceFlags{Syslog: syslogAddr, SyslogNet: syslogNet, LogLevel: flags.LogLevel, Tag: flags.LogTag("dmsg_disc")}
 		if err := sf.Check(); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 		logger := sf.Logger()
 

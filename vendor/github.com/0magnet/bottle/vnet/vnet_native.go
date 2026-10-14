@@ -2,14 +2,15 @@
 
 // Package vnet vnet/vnet_native.go
 //
-// Loopback listen/dial with a browser escape hatch. On native builds these
-// are exactly net.Listen / net.DialTimeout. On js/wasm they route LOOPBACK
-// addresses through the page's virtual network (vnet.js) when it is
-// installed, which is what lets `skywire visor` in one browser terminal and
-// `skywire cli` in another reach each other — separate wasm instances have
-// no shared network otherwise. Callers that bind or dial localhost control
-// ports use this package instead of net directly; everything else keeps
-// using net.
+// Loopback listen/dial with a browser escape hatch. On native builds the OS
+// loopback is this runtime's own loopback and the computer's network at
+// once, so both namespaces in vnet.go reach the OS and these are
+// net.Listen / net.DialTimeout once the prefix is gone. On js/wasm they
+// route loopback addresses through the page's virtual network (vnet.js),
+// which is what lets `skywire visor` in one browser terminal and
+// `skywire cli` in another reach each other. Callers that bind or dial
+// localhost control ports use this package instead of net directly;
+// everything else keeps using net.
 package vnet
 
 import (
@@ -19,10 +20,12 @@ import (
 
 // Listen is net.Listen on native builds.
 func Listen(network, address string) (net.Listener, error) {
-	return net.Listen(network, address)
+	addr, _ := Split(address)
+	return net.Listen(network, addr)
 }
 
 // DialTimeout is net.DialTimeout on native builds.
 func DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	return net.DialTimeout(network, address, timeout)
+	addr, _ := Split(address)
+	return net.DialTimeout(network, addr, timeout)
 }

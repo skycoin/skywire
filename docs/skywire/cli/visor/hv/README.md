@@ -21,6 +21,7 @@ skywire cli visor hv
 - [disable](disable/README.md) — Disable the hypervisor entirely (DMSG-RPC + tracking + web UI) at runtime
 - [enable](enable/README.md) — Enable the hypervisor (DMSG-RPC + tracking + web UI) at runtime
 - [ls](ls/README.md) — List visors connected to this hypervisor (default: one section per hypervisor)
+- [map](map/README.md) — Show the visors of this hypervisor with their services, apps and forwarded ports
 - [pair](pair/README.md) — List pending hypervisors by fingerprint and approve one (or mint a one-time code)
 - [passwd](passwd/README.md) — Set the hypervisor UI admin password
 - [pk](pk/README.md) — Public key of remote hypervisor(s)

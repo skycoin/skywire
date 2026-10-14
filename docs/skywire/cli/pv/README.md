@@ -11,8 +11,6 @@ Use -t to show transport counts per visor.
 Cache files are stored in directories named after service hosts.
 Set cache dir to "" to disable caching for that service.
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
-
 ## Usage
 
 ```
@@ -39,7 +37,6 @@ skywire cli pv
   -V, --showversion        show version per visor (implies -t; from the TPD-integrated uptime data pv already fetches)
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats              return only a count of the results
-      --testenv            use test deployment
   -d, --tpdurl string      transport discovery url (also serves the integrated uptime tracker) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -t, --transports         show transport count per visor
   -v, --version string     filter by version

@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -80,14 +82,14 @@ Examples:
 
 		var out map[string]any
 		if err := json.Unmarshal(bytes.TrimSpace(body), &out); err != nil {
-			fmt.Println(strings.TrimSpace(string(body)))
+			cmdutil.Println(strings.TrimSpace(string(body)))
 			return
 		}
 		if n, ok := out["dispatched"]; ok {
-			fmt.Printf("file dispatched to %v group member(s)\n", n)
+			cmdutil.Printf("file dispatched to %v group member(s)\n", n)
 			return
 		}
-		fmt.Printf("file sent (id %v)\n", out["id"])
+		cmdutil.Printf("file sent (id %v)\n", out["id"])
 	},
 }
 

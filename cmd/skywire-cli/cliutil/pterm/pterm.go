@@ -7,6 +7,8 @@ package pterm
 import (
 	"fmt"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 const reset = "\x1b[0m"
@@ -52,7 +54,7 @@ var (
 )
 
 // Println prints the arguments and a newline.
-func Println(a ...interface{}) { fmt.Print(fmt.Sprint(a...) + "\n") }
+func Println(a ...interface{}) { cmdutil.Print(fmt.Sprint(a...) + "\n") }
 
 // TreeNode is one node of a renderable tree.
 type TreeNode struct {
@@ -90,7 +92,7 @@ func (t *TreePrinter) Srender() string {
 
 // Render prints the tree and a blank line.
 func (t *TreePrinter) Render() error {
-	fmt.Print(t.Srender() + "\n")
+	cmdutil.Print(t.Srender() + "\n")
 	return nil
 }
 

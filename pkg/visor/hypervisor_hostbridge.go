@@ -145,7 +145,7 @@ button.secondary{background:transparent;color:var(--accent);border:1px solid var
 
 <h2>2. Run it</h2>
 <pre id="cmd"></pre>
-<p>It prints a URL with a secret token. The token is kept in your user config directory, so the URL stays the same when the bridge restarts. The bridge holds no keys, and only this page's origin may use it.</p>
+<p>It prints a URL with a secret token. The token is kept in your user config directory, so the URL stays the same when the bridge restarts. Only this page's origin may use it, and the first visor to connect pairs with it: after that the bridge serves only that visor, until it is run with <code>-unpair</code>.</p>
 
 <h2>3. Connect this visor to it</h2>
 <div class="row"><input id="url" placeholder="ws://127.0.0.1:3438/..." autocomplete="off" spellcheck="false"><button id="connect">Connect</button></div>
@@ -153,7 +153,7 @@ button.secondary{background:transparent;color:var(--accent);border:1px solid var
 <div id="status">Loading…</div>
 
 <h2>Forward a port of this computer</h2>
-<p>Connections to the host address go to the local address in the visor. For example 127.0.0.1:1080 to 127.0.0.1:1080 lets programs on this computer use the visor's SOCKS proxy.</p>
+<p>Connections to the host address go to the local address in the visor. For example 1080 to 1080 lets programs on this computer use the visor's SOCKS proxy. An address without a host is on 127.0.0.1; give 0.0.0.0:1080 to reach it from other computers.</p>
 <div class="row"><input id="fhost" placeholder="host 127.0.0.1:1080"><input id="flocal" placeholder="local 127.0.0.1:1080"><button id="forward">Forward</button></div>
 </main>
 <script>

@@ -51,6 +51,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/0magnet/wfdrive/bidi"
 	"github.com/spf13/cobra"
 )
@@ -107,7 +109,7 @@ func resolveProto(flag, port string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(os.Stderr, "port %s speaks %s\n", port, strings.ToUpper(p))
+		cmdutil.Eprintf("port %s speaks %s\n", port, strings.ToUpper(p))
 		return p, nil
 	}
 	return "", fmt.Errorf("--browser must be auto, cdp or bidi, not %q", flag)
@@ -171,7 +173,7 @@ func withBiDi(port string, fresh bool, timeout time.Duration, fn func(*bidi.Driv
 		select {
 		case <-sig:
 			d.End()
-			os.Exit(130)
+			cmdutil.Exit(130)
 		case <-done:
 		}
 	}()
@@ -191,7 +193,7 @@ func attachTab(d *bidi.Driver, want string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "attached to %s\n", tabURL)
+	cmdutil.Eprintf("attached to %s\n", tabURL)
 	return nil
 }
 
@@ -267,11 +269,11 @@ in the temp directory under names the driver picks; each answer says where.
 Needs a browser started with --remote-debugging-port=9223 --remote-allow-origins=*`,
 	Run: func(_ *cobra.Command, _ []string) {
 		err := bidi.Serve(context.Background(), drivePort, driveAddr, driveTab, func(tab string) {
-			fmt.Printf("driving BiDi :%s (tab %s), control on http://%s\n", drivePort, tab, driveAddr)
+			cmdutil.Printf("driving BiDi :%s (tab %s), control on http://%s\n", drivePort, tab, driveAddr)
 		})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -296,11 +298,11 @@ func probeBiDi() error {
 			}
 		})
 		if err := d.Subscribe("browsingContext.load", "browsingContext.domContentLoaded"); err != nil {
-			fmt.Printf("%s could not subscribe to load events: %v\n", at(), err)
+			cmdutil.Printf("%s could not subscribe to load events: %v\n", at(), err)
 		}
 		if probeNavigate != "" {
 			if err := d.Navigate(probeNavigate); err != nil {
-				fmt.Printf("%s navigate: %v\n", at(), err)
+				cmdutil.Printf("%s navigate: %v\n", at(), err)
 			}
 		}
 		var result string
@@ -308,10 +310,10 @@ func probeBiDi() error {
 		if probeEval != "" {
 			out, err := d.Eval(probeEval)
 			if err != nil {
-				fmt.Printf("%s eval: %v\n", at(), err)
+				cmdutil.Printf("%s eval: %v\n", at(), err)
 			} else {
 				result, gotResult = out, true
-				fmt.Printf("%s result %s\n", at(), result)
+				cmdutil.Printf("%s result %s\n", at(), result)
 			}
 		}
 		// A fault gate has to outlive the result: an exception thrown from a
@@ -367,14 +369,14 @@ func printBiDiEvent(at string, m bidi.Msg, want string) string {
 			return ""
 		}
 		if p.Type == "javascript" {
-			fmt.Printf("%s EXCEPTION %s\n", at, clip(p.Text, 400))
+			cmdutil.Printf("%s EXCEPTION %s\n", at, clip(p.Text, 400))
 			return "uncaught exception: " + p.Text
 		}
 		name := p.Method
 		if name == "" {
 			name = p.Level
 		}
-		fmt.Printf("%s console.%s %s\n", at, name, clip(p.Text, 300))
+		cmdutil.Printf("%s console.%s %s\n", at, name, clip(p.Text, 300))
 	case "browsingContext.domContentLoaded", "browsingContext.load":
 		var p struct {
 			Context string `json:"context"`
@@ -383,9 +385,9 @@ func printBiDiEvent(at string, m bidi.Msg, want string) string {
 			return ""
 		}
 		if m.Method == "browsingContext.load" {
-			fmt.Printf("%s load event\n", at)
+			cmdutil.Printf("%s load event\n", at)
 		} else {
-			fmt.Printf("%s DOMContentLoaded\n", at)
+			cmdutil.Printf("%s DOMContentLoaded\n", at)
 		}
 	}
 	return ""
@@ -414,13 +416,13 @@ func probeViaDriver() error {
 		return err
 	}
 	if warn, ok := body["warning"].(string); ok && warn != "" {
-		fmt.Printf("navigate: %s\n", warn)
+		cmdutil.Printf("navigate: %s\n", warn)
 	}
 	if con, _ := body["console"].(string); con != "" {
-		fmt.Println(con)
+		cmdutil.Println(con)
 	}
 	if png, _ := body["png"].(string); png != "" {
-		fmt.Printf("screenshot %s\n", png)
+		cmdutil.Printf("screenshot %s\n", png)
 	}
 	result, err := driverString(body, "eval")
 	if err != nil {
@@ -428,7 +430,7 @@ func probeViaDriver() error {
 	}
 	gotResult := probeEval != "" && result != ""
 	if gotResult {
-		fmt.Printf("result %s\n", result)
+		cmdutil.Printf("result %s\n", result)
 	}
 	return probeVerdict(nil, result, gotResult)
 }

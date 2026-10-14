@@ -15,7 +15,7 @@ import (
 
 func TestRedactTopLevelSK(t *testing.T) {
 	in := []byte("{\n  \"version\": \"v1.0.0\",\n  \"sk\": \"deadbeef\",\n  \"pk\": \"00\",\n  \"dmsg\": {\n    \"sk\": \"nested-untouched\"\n  }\n}")
-	out := string(redactTopLevelSK(in))
+	out := string(redactSecrets(in))
 	require.NotContains(t, out, "deadbeef")                  // top-level sk line removed
 	require.Contains(t, out, "\"version\": \"v1.0.0\"")      // sibling fields intact
 	require.Contains(t, out, "\"pk\": \"00\"")               // PK kept
@@ -61,4 +61,20 @@ func TestSetRuntimeConfig_SKRedactionRoundTrip(t *testing.T) {
 	err = v.SetRuntimeConfig(tampered)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "public key is not editable")
+}
+
+func TestRedactHostBridgeSecret(t *testing.T) {
+	_, sk := cipher.GenerateKeyPair()
+	common, err := visorconfig.NewCommon(nil, filepath.Join(t.TempDir(), "c.json"), &sk)
+	require.NoError(t, err)
+	conf := &visorconfig.V1{Common: common, HostBridge: &visorconfig.HostBridgeConfig{
+		Secret: "0123abcd", URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{},
+	}}
+	b, err := json.MarshalIndent(conf, "", "  ")
+	require.NoError(t, err)
+	out := redactSecrets(b)
+	require.NotContains(t, string(out), "0123abcd")
+	var back visorconfig.V1
+	require.NoError(t, json.Unmarshal(out, &back), "the redacted config must stay valid JSON")
+	require.Equal(t, "ws://127.0.0.1:3438/t", back.HostBridge.URL)
 }

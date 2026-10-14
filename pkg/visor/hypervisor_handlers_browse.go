@@ -120,11 +120,11 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			return
 		case "/skywire.wasm":
 			// The ONE skywire command module: the desk host, the visor the
-			// served desk runs in its terminal, every command. Installed
-			// beside the binary, or the operator's
-			// hypervisor.wasm_serve.exec_wasm. Without one there is no desk.
+			// served desk runs in its terminal, every command. Kept beside
+			// the binary and fetched when there is none yet, or the operator's
+			// hypervisor.wasm_serve.exec_wasm.
 			if p, ok := hv.execModule(); ok {
-				hv.wasmModule().await(r.Context())
+				hv.wasmModule().ready(r.Context())
 				serveExecWasm(w, r, p)
 				return
 			}
@@ -167,9 +167,10 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			// a legacy_ui switch choosing between them; both are served now,
 			// each on its own port, the same API and login behind each.
 			//
-			// The desk is `skywire desk-host` out of the command module. A
-			// visor with none installed beside its binary starts no desk listener,
-			// and its dashboard is the whole web UI (logUIRoot says so once).
+			// The desk is `skywire desk-host` out of the command module, which
+			// is fetched the first time the desk is opened. A visor with no
+			// place for one starts no desk listener, and its dashboard is the
+			// whole web UI (logUIRoot says so once).
 			if _, haveExec := hv.execModule(); haveExec && isDeskRoot(r) {
 				hv.wasmModule().refresh(r.Context())
 				hv.serveNativeDesk(w)
@@ -311,9 +312,9 @@ func (hv *Hypervisor) serveNativeDesk(w http.ResponseWriter) {
 
 // nativeDeskBootOpts is the skywireDeskBoot options object for the desk the
 // native hypervisor serves. The desk host is `skywire desk-host` out of the
-// ONE command module (installed beside the binary, or
+// ONE command module (kept beside the binary, or
 // hypervisor.wasm_serve.exec_wasm); serveNativeDesk is only reached when
-// there is one. No help terminal and no docs server — each is a whole extra
+// there is one or it can be fetched. No help terminal and no docs server — each is a whole extra
 // Go/wasm runtime the tab never gets back. The dashboard tab is
 // this origin's Angular UI — RELATIVE, since through a vnet service worker the
 // page can sit under a /vnet/<port>/ prefix the server never sees, and an

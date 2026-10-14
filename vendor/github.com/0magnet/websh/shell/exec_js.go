@@ -228,3 +228,9 @@ func isWasm(s *Shell, name string) bool {
 	n, err := io.ReadFull(f, head)
 	return err == nil && n == 4 && string(head) == "\x00asm"
 }
+
+// execProgram is the OS's exec, for a shell made by NewOS, which a page has no
+// way to make.
+func (s *Shell) execProgram(ctx context.Context, args []string, next interp.ExecHandlerFunc) error {
+	return next(ctx, args)
+}

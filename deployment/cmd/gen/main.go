@@ -1,6 +1,5 @@
 // Package main reads ../../services-config.json and emits Go-literal
-// declarations for deployment.Prod, deployment.Test, deployment.ProdConf,
-// and deployment.TestConf into ../../data_static_js.go.
+// declarations for deployment.Prod and deployment.ProdConf into ../../data_static_js.go.
 //
 // Why a generator: the deployment package's runtime init() invokes
 // encoding/json on the embedded services-config.json to populate
@@ -38,7 +37,6 @@ import (
 )
 
 type servicesEnv struct {
-	Test json.RawMessage `json:"test"`
 	Prod json.RawMessage `json:"prod"`
 }
 
@@ -108,12 +106,9 @@ func main() {
 	if err := json.Unmarshal(raw, &env); err != nil {
 		log.Fatalf("unmarshal env: %v", err)
 	}
-	var prod, test services
+	var prod services
 	if err := json.Unmarshal(env.Prod, &prod); err != nil {
 		log.Fatalf("unmarshal prod: %v", err)
-	}
-	if err := json.Unmarshal(env.Test, &test); err != nil {
-		log.Fatalf("unmarshal test: %v", err)
 	}
 
 	var buf bytes.Buffer
@@ -123,9 +118,9 @@ func main() {
 
 // Package deployment pkg/deployment/data_static_js.go
 //
-// Static-data variant of the prod / test deployment bundles. The
+// Static-data variant of the prod deployment bundle. The
 // non-WASM build path (config_native.go) populates deployment.Prod
-// / Test by unmarshalling the embedded services-config.json at
+// by unmarshalling the embedded services-config.json at
 // init time; that drags encoding/json and the reflect runtime
 // helpers TinyGo can't link. Under js/wasm we use these literals
 // instead — config_js.go's init copies them into the public vars.
@@ -143,12 +138,7 @@ import (
 	emitServices(&buf, prod)
 	buf.WriteString("}\n\n")
 
-	buf.WriteString("var testData = Services{\n")
-	emitServices(&buf, test)
-	buf.WriteString("}\n\n")
-
 	buf.WriteString(fmt.Sprintf("var prodConfData = Conf{Conf: %q}\n", prod.Conf))
-	buf.WriteString(fmt.Sprintf("var testConfData = Conf{Conf: %q}\n", test.Conf))
 
 	out, err := format.Source(buf.Bytes())
 	if err != nil {

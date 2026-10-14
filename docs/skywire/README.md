@@ -21,6 +21,7 @@ skywire
 - [cxo](cxo/README.md) — CXO object distribution system
 - [dmsg](dmsg/README.md) — DMSG services & utilities
 - [hostbridge](hostbridge/README.md) — Lend a browser visor this host's sockets
+- [sh](sh/README.md) — websh, the shell of the browser desk, on this terminal
 - [svc](svc/README.md) — Skywire services
 - [visor](visor/README.md) — Skywire Visor
 

@@ -14,8 +14,6 @@ type (stcpr/squicr/sudph/stcp/webrtc/swsr/swtr/dmsg). Filter with --country, --v
 (minimum transport count); --noton keeps offline/not-in-UT visors. --json
 emits the combined rows as machine-readable output.
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
-
 ## Usage
 
 ```
@@ -40,7 +38,6 @@ skywire cli sd
       --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
   -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --testenv            use test deployment
   -b, --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -w, --uturl string       TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -e, --version string     filter by version

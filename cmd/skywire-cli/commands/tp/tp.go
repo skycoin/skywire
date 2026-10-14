@@ -14,6 +14,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -205,7 +207,7 @@ var tpCmd = &cobra.Command{
 						result := remoteResult{TargetPK: targetPK, Error: "no TPS nodes available"}
 						allResults = append(allResults, result)
 						if !isJSON {
-							fmt.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
+							cmdutil.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
 						}
 						continue
 					}
@@ -241,9 +243,9 @@ var tpCmd = &cobra.Command{
 				// Stream output immediately (non-JSON mode)
 				if !isJSON {
 					if result.Error != "" {
-						fmt.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
+						cmdutil.Printf("[%d/%d] %s (error: %s)\n", i+1, len(targetPKs), targetPK.String(), result.Error)
 					} else {
-						fmt.Printf("[%d/%d] %s (%d transports)\n", i+1, len(targetPKs), targetPK.String(), len(result.Transports))
+						cmdutil.Printf("[%d/%d] %s (%d transports)\n", i+1, len(targetPKs), targetPK.String(), len(result.Transports))
 						if len(result.Transports) > 0 {
 							var b bytes.Buffer
 							w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
@@ -252,7 +254,7 @@ var tpCmd = &cobra.Command{
 								fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", tp.Type, tp.ID, tp.Local, tp.Remote) //nolint:errcheck
 							}
 							w.Flush() //nolint:errcheck,gosec
-							fmt.Print(b.String())
+							cmdutil.Print(b.String())
 						}
 					}
 				}
@@ -386,9 +388,9 @@ var tpCmd = &cobra.Command{
 		if bwDays > 0 {
 			logEntries, err = rpcClient.GetTransportLogs(bwDays)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to get transport logs: %v\n", err)
+				cmdutil.Eprintf("Warning: Failed to get transport logs: %v\n", err)
 			} else if len(logEntries) == 0 {
-				fmt.Fprintf(os.Stderr, "Note: No transport log entries found for the last %d day(s)\n", bwDays)
+				cmdutil.Eprintf("Note: No transport log entries found for the last %d day(s)\n", bwDays)
 			}
 			// Aggregate bandwidth by tpID (sum across all days)
 			for _, entry := range logEntries {

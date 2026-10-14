@@ -4,9 +4,10 @@ package clivisor
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/user"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
@@ -75,7 +76,7 @@ var reloadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		go func() {
@@ -105,7 +106,7 @@ the service manager unit. Resume with 'skywire cli visor resume'.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		if err := rpcClient.Suspend(); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error suspending visor: %v", err))
@@ -128,7 +129,7 @@ severed call.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		// Fire Resume; its own connection is expected to EOF during the
 		// re-init, so don't treat that as fatal — the state is polled below.
@@ -160,7 +161,7 @@ var isSuspendedCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		suspended, err := rpcClient.IsSuspended()
 		if err != nil {
@@ -177,7 +178,7 @@ var shutdownCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		rpcClient.Shutdown() //nolint: errcheck, gosec
 		internal.PrintOutput(cmd.Flags(), "Visor was shut down", fmt.Sprintln("Visor was shut down"))

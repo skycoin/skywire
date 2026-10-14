@@ -197,4 +197,4 @@ docs/wasm_exec.js:
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" $@
 
 serve-demo: demo ## serve the demo at http://127.0.0.1:8797
-	go run ./serve -dir docs -addr :8797
+	go run ./cmd/calvin serve --dir docs --addr :8797

@@ -116,8 +116,7 @@ Ctrl+C / Esc to quit.`,
 		// rolling PK. Stable PK requires --sk on every call.
 		myPK, mySK := resolveChatIdentity(sk)
 		if !cmd.Flags().Changed("sk") && os.Getenv("DMSG_SK") == "" {
-			fmt.Fprintf(os.Stderr,
-				"WARN: ephemeral identity. Your PK is %s — peers can't reach you across sessions. Use --sk or DMSG_SK= for a stable identity.\n\n",
+			cmdutil.Eprintf("WARN: ephemeral identity. Your PK is %s — peers can't reach you across sessions. Use --sk or DMSG_SK= for a stable identity.\n\n",
 				myPK)
 		}
 
@@ -158,7 +157,7 @@ Ctrl+C / Esc to quit.`,
 		errCh := make(chan error, 1)
 		go acceptInbound(ctx, listener, log, inCh, errCh)
 
-		fmt.Fprintf(os.Stderr, "Your PK: %s\nListening on :%d\n\n", myPK, chatPort)
+		cmdutil.Eprintf("Your PK: %s\nListening on :%d\n\n", myPK, chatPort)
 
 		return runChatTUI(ctx, log, dmsgC, myPK, recipient, inCh, errCh)
 	},

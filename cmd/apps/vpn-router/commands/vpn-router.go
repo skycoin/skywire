@@ -195,7 +195,7 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 // on-host operation or hardware testing.
 func runStandalone(ctx context.Context) error {
 	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger.SetOutput(cmdutil.Stderr())
 
 	// The mesh gateway (full or standalone) dials the mesh through the visor's
 	// app-server, which a directly-invoked binary doesn't have. Fail clearly

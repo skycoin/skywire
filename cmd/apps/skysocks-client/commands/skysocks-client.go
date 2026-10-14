@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,6 +15,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
@@ -224,7 +225,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if err := RunSkysocksClient(ctx, args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }
@@ -757,7 +758,7 @@ func httpProxy(ctx context.Context, httpAddr, sockscAddr string, log logrus.Fiel
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
+		cmdutil.Fatal("Failed to execute command: ", err)
 	}
 }
 

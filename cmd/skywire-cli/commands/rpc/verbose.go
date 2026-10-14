@@ -26,8 +26,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/sirupsen/logrus"
 
@@ -68,7 +69,7 @@ type VerboseStream struct {
 // rpcAddr is typically clirpc.Addr; the gRPC server is multiplexed
 // onto the same port as the standard RPC server via cmux.
 func OpenVerbose(ctx context.Context, rpcAddr string, filter VerboseFilter) (*VerboseStream, error) {
-	return OpenVerboseTo(ctx, rpcAddr, filter, os.Stderr)
+	return OpenVerboseTo(ctx, rpcAddr, filter, cmdutil.Stderr())
 }
 
 // OpenVerboseTo is OpenVerbose with an explicit destination writer for
@@ -100,7 +101,7 @@ func OpenVerboseTo(ctx context.Context, rpcAddr string, filter VerboseFilter, w 
 			emitEntry(w, e)
 		})
 		if err != nil && ctx.Err() == nil {
-			fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
+			cmdutil.Eprintf("verbose stream ended: %v\n", err)
 		}
 	}()
 	return v, nil
@@ -115,7 +116,7 @@ func (v *VerboseStream) WaitSubscribed(ctx context.Context, timeout time.Duratio
 	case <-v.subscribed:
 		return nil
 	case <-time.After(timeout):
-		fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within timeout; proceeding anyway")
+		cmdutil.Eprintln("verbose: subscription not confirmed within timeout; proceeding anyway")
 		return context.DeadlineExceeded
 	case <-ctx.Done():
 		return ctx.Err()

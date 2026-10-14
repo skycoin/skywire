@@ -12,8 +12,6 @@ Depends: redis
 
 Production: dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
             dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
-Test:       dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
-            dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
 
 HTTP Endpoints:
   GET  /health                        Health check
@@ -194,7 +192,7 @@ skywire svc tpd
       --keyfile string            file holding the secret key (generated if missing)
   -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string            address to serve Prometheus metrics on
-      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http)
   -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
       --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
@@ -202,7 +200,6 @@ skywire svc tpd
       --sk cipher.SecKey          dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
       --store-data-path string    path for bandwidth backup files (default "/var/lib/skywire/tpd/bandwidth")
       --tag string                logging tag (default "transport_discovery")
-      --test-environment          use the test deployment's defaults instead of production's
   -t, --testing                   run for a test network: keep entries in memory unless --redis is set
       --uptime-db string          path for the service-self uptime bbolt store (empty disables) (default "/var/lib/skywire/tpd/uptime.db")
       --whitelist-keys string     network-monitor keys allowed to deregister entries, comma-separated

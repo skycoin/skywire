@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -63,7 +62,7 @@ var RootCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if err := RunVPNServer(ctx, args); err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 		}
 	},
 }

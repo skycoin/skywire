@@ -44,23 +44,8 @@ func TestParseMode(t *testing.T) {
 }
 
 func TestResolveMode(t *testing.T) {
-	t.Setenv(ModeEnv, "")
-
-	// Env override wins.
-	t.Run("env override", func(t *testing.T) {
-		t.Setenv(ModeEnv, "dmsg")
-		got, err := ResolveMode("http", true)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != ModeDmsg {
-			t.Errorf("env override: got %v, want dmsg", got)
-		}
-	})
-
-	// Flag value when env is empty.
+	// The flag value wins.
 	t.Run("flag value", func(t *testing.T) {
-		t.Setenv(ModeEnv, "")
 		got, err := ResolveMode("http", true)
 		if err != nil {
 			t.Fatal(err)
@@ -72,7 +57,6 @@ func TestResolveMode(t *testing.T) {
 
 	// Default: SK present → dual.
 	t.Run("default with SK", func(t *testing.T) {
-		t.Setenv(ModeEnv, "")
 		got, err := ResolveMode("", true)
 		if err != nil {
 			t.Fatal(err)
@@ -84,7 +68,6 @@ func TestResolveMode(t *testing.T) {
 
 	// Default: no SK → http only.
 	t.Run("default without SK", func(t *testing.T) {
-		t.Setenv(ModeEnv, "")
 		got, err := ResolveMode("", false)
 		if err != nil {
 			t.Fatal(err)
@@ -94,10 +77,9 @@ func TestResolveMode(t *testing.T) {
 		}
 	})
 
-	t.Run("bad env", func(t *testing.T) {
-		t.Setenv(ModeEnv, "nonsense")
-		if _, err := ResolveMode("", true); err == nil {
-			t.Error("want error on bad env")
+	t.Run("bad flag", func(t *testing.T) {
+		if _, err := ResolveMode("nonsense", true); err == nil {
+			t.Error("want error on a bad mode")
 		}
 	})
 }

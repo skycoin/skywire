@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/fatih/color"
 	"github.com/oschwald/geoip2-golang/v2"
@@ -27,7 +29,7 @@ import (
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport/types"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
@@ -530,8 +532,8 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 	if saturationExponent >= 1.0 {
 		return
 	}
-	fmt.Printf("\n--- Regional Saturation Scaling ---\n")
-	fmt.Printf("saturation exponent: %.2f\n", saturationExponent)
+	cmdutil.Printf("\n--- Regional Saturation Scaling ---\n")
+	cmdutil.Printf("saturation exponent: %.2f\n", saturationExponent)
 
 	type countryStat struct {
 		code   string
@@ -562,10 +564,10 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 	}
 	sort.Slice(stats, func(i, j int) bool { return stats[i].shares > stats[j].shares })
 
-	fmt.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
+	cmdutil.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
 	for _, cs := range stats {
 		sky := cs.shares * dayReward / totalShares
-		fmt.Printf("%-4s %7d %5d %10.2f %10.2f\n", cs.code, cs.visors, cs.ips, cs.shares, sky/float64(cs.visors))
+		cmdutil.Printf("%-4s %7d %5d %10.2f %10.2f\n", cs.code, cs.visors, cs.ips, cs.shares, sky/float64(cs.visors))
 	}
 }
 
@@ -1048,7 +1050,7 @@ Architectures:
 
 		if grr {
 			for _, ni := range grrInfos {
-				fmt.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
+				cmdutil.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 			return
 		}
@@ -1186,45 +1188,45 @@ Architectures:
 
 		// Output stats
 		if !h0 {
-			fmt.Printf("date: %s\n", wdate)
-			fmt.Printf("days this month: %d\n", daysThisMonth)
-			fmt.Printf("days in the year: %d\n", daysThisYear)
-			fmt.Printf("this month's rewards: %.6f\n", monthReward)
-			fmt.Printf("reward per pool: %.6f\n", dayReward)
+			cmdutil.Printf("date: %s\n", wdate)
+			cmdutil.Printf("days this month: %d\n", daysThisMonth)
+			cmdutil.Printf("days in the year: %d\n", daysThisYear)
+			cmdutil.Printf("this month's rewards: %.6f\n", monthReward)
+			cmdutil.Printf("reward per pool: %.6f\n", dayReward)
 			if noBWPool {
 				reason := bwSkipReason
 				if reason == "" {
 					reason = "--no-bw-pool"
 				}
-				fmt.Printf("reward mode: presence only, Pool 2 repeats Pool 1 (%s)\n", reason)
+				cmdutil.Printf("reward mode: presence only, Pool 2 repeats Pool 1 (%s)\n", reason)
 			} else {
-				fmt.Printf("reward mode: presence + bandwidth\n")
+				cmdutil.Printf("reward mode: presence + bandwidth\n")
 			}
-			fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
-			fmt.Printf("presence pool budget: %.6f\n", presenceBudget)
-			fmt.Printf("Pool 1 Total: %.6f\n", pool1Sum)
-			fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
-			fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
+			cmdutil.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+			cmdutil.Printf("presence pool budget: %.6f\n", presenceBudget)
+			cmdutil.Printf("Pool 1 Total: %.6f\n", pool1Sum)
+			cmdutil.Printf("qualifying visors: %d\n", len(nodesInfos1))
+			cmdutil.Printf("total presence shares: %.6f\n", totalPresenceShares)
 			if totalPresenceShares > 0 {
-				fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
+				cmdutil.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
 			}
 			if noBWPool {
-				fmt.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
+				cmdutil.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
 			} else {
-				fmt.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
-				fmt.Printf("bandwidth pool budget: %.6f\n", dayReward)
-				fmt.Printf("Pool 2 Total: %.6f\n", pool2Sum)
-				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
-				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
+				cmdutil.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
+				cmdutil.Printf("bandwidth pool budget: %.6f\n", dayReward)
+				cmdutil.Printf("Pool 2 Total: %.6f\n", pool2Sum)
+				cmdutil.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
+				cmdutil.Printf("qualifying visors: %d\n", bwPoolCount)
 				var totalBW uint64
 				for _, ni := range nodesInfos1 {
 					if ni.Bandwidth >= minBWThreshold {
 						totalBW += ni.Bandwidth
 					}
 				}
-				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-				fmt.Printf("contributing IPs: %d\n", len(ipBytes))
-				fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
+				cmdutil.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
+				cmdutil.Printf("contributing IPs: %d\n", len(ipBytes))
+				cmdutil.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
 				if totalBWShares > 0 {
 					// Pool 2 rate is SKY per unit of effective
 					// pool-2 weight, where weight = bytes ×
@@ -1236,27 +1238,27 @@ Architectures:
 					// sqrt-weighted slice of the pool. Print the
 					// rate unconditionally so operators can
 					// reproduce any visor's reward as Weight×rate.
-					fmt.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
+					cmdutil.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
 					if bwSaturationExponent == 1.0 {
-						fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
+						cmdutil.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 					}
 				}
 			}
-			fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
-			fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
-			fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
+			cmdutil.Printf("\nUnique mac addresses: %d\n", len(macCounts))
+			cmdutil.Printf("Unique IP Addresses: %d\n", len(ipCounts))
+			cmdutil.Printf("Unique UUIDs: %d\n", len(uuidCounts))
 			printSaturationStats(nodesInfos1, presenceBudget, totalPresenceShares)
 		}
 
 		if !h1 {
-			fmt.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
+			cmdutil.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
 			for _, ni := range nodesInfos1 {
 				resolved := resolveRewardAddress(ni.SkyAddr)
 				xpub := ""
 				if strings.HasPrefix(ni.SkyAddr, "xpub") {
 					xpub = ni.SkyAddr
 				}
-				fmt.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
+				cmdutil.Printf("%s, %s, %.6f, %d, %.6f, %s, %s, %s, %s, %s, %s \n", resolved, ni.PK, ni.Share, ni.Bandwidth, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub)
 			}
 		}
 
@@ -1266,12 +1268,12 @@ Architectures:
 			for _, a := range sortedAddrs {
 				total += a.Reward
 			}
-			fmt.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
+			cmdutil.Printf("\nTotal Reward Amount (both pools): %.6f\n", total)
 		}
 		if !h2 {
-			fmt.Println("Skycoin Address, Reward Amount")
+			cmdutil.Println("Skycoin Address, Reward Amount")
 			for _, a := range sortedAddrs {
-				fmt.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
+				cmdutil.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
 			}
 		}
 
@@ -1422,7 +1424,7 @@ comparison. Detects both http and dmsghttp service configs.`,
 				log.Fatal("services are not configured correctly for http")
 			}
 			log.Info("services are configured correctly for http")
-			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			cmdutil.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
 			return
 		}
 
@@ -1431,12 +1433,12 @@ comparison. Detects both http and dmsghttp service configs.`,
 				log.Fatal("services are not configured correctly for dmsghttp")
 			}
 			log.Info("services are configured correctly for dmsghttp")
-			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			cmdutil.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
 			return
 		}
 
 		if !strings.HasPrefix(confType, "http://") && !strings.HasPrefix(confType, "dmsg://") {
-			fmt.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
+			cmdutil.Printf("%s\n", pretty.Color(pretty.Pretty(nodeInfoSvc), nil))
 			log.Fatal("could not determine config type from dmsg_discovery value ; invalid service configuration")
 		}
 	},
@@ -1521,5 +1523,5 @@ func toJSON(value interface{}) string {
 
 func printDifference(key string, value1, value2 interface{}) {
 	red := color.New(color.FgRed).SprintFunc()
-	fmt.Fprintf(os.Stderr, "%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
+	cmdutil.Eprintf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
 }

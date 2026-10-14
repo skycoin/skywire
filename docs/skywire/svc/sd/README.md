@@ -12,8 +12,6 @@ Depends: redis
 
 Production: dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
             dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
-Test:       dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
-            dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
 
 HTTP Endpoints:
   GET  /health                           Health check
@@ -115,14 +113,13 @@ skywire svc sd [flags]
       --keyfile string            file holding the secret key (generated if missing)
   -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string            address to serve Prometheus metrics on
-      --mode string               listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string               listeners: http|dmsg|dual (default dual with a key, else http)
   -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
       --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)
       --redis-pool-size int       redis connection pool size (default 10)
       --sk cipher.SecKey          dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                logging tag (default "service_discovery")
-      --test-environment          use the test deployment's defaults instead of production's
   -t, --testing                   run for a test network: keep entries in memory unless --redis is set
       --whitelist-keys string     network-monitor keys allowed to deregister entries, comma-separated
 ```

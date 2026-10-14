@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0magnet/bottle/vnet"
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 
@@ -654,6 +655,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		// bridge once one is connected (hostbridge.go), and no cmux is bound.
 		v.hostBridge.sockets.log = v.hostBridgeLog()
 		factory.Sockets = &v.hostBridge.sockets
+		vnet.SetHost(hostBridgeHost{&v.hostBridge.sockets})
 	} else if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {

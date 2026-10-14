@@ -17,9 +17,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -123,13 +124,13 @@ gate on doctor without parsing the output.`,
 		if cliout.JSONMode(cmd) {
 			internal.Catch(cmd.Flags(), cliout.Print(cmd, report))
 		} else {
-			fmt.Println(formatDoctorHuman(report))
+			cmdutil.Println(formatDoctorHuman(report))
 		}
 		switch report.Verdict {
 		case verdictRed:
-			os.Exit(2)
+			cmdutil.Exit(2)
 		case verdictYellow:
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

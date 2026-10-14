@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -68,21 +70,21 @@ func printConverge(r *visorapi.DmsgConvergeResult) {
 	if r == nil {
 		return
 	}
-	fmt.Printf("carrier preference: %s\n", strings.Join(r.Carriers, " > "))
-	fmt.Printf("converged this pass: %d session(s)\n", r.Converged)
+	cmdutil.Printf("carrier preference: %s\n", strings.Join(r.Carriers, " > "))
+	cmdutil.Printf("converged this pass: %d session(s)\n", r.Converged)
 	if len(r.Sessions) == 0 {
-		fmt.Println("no dmsg-server sessions")
+		cmdutil.Println("no dmsg-server sessions")
 		return
 	}
-	fmt.Println("sessions:")
+	cmdutil.Println("sessions:")
 	for _, s := range r.Sessions {
 		mark := ""
 		if s.Preferred != "" && s.Preferred != s.Carrier {
 			mark = fmt.Sprintf("  (prefers %s)", s.Preferred)
 		}
-		fmt.Printf("  %s  %-4s  %s%s\n", s.ServerPK.Hex()[:8], s.Carrier, s.Addr, mark)
+		cmdutil.Printf("  %s  %-4s  %s%s\n", s.ServerPK.Hex()[:8], s.Carrier, s.Addr, mark)
 		if s.Note != "" {
-			fmt.Printf("        ↳ %s\n", s.Note)
+			cmdutil.Printf("        ↳ %s\n", s.Note)
 		}
 	}
 }

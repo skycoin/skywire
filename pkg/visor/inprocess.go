@@ -43,7 +43,8 @@ type InProcessHost struct {
 // the package-global logger on every call, which is right for a process that
 // runs one visor and a leak for one that restarts its visor in place. An
 // in-process host shares one set across restarts, so a core that restarted
-// still shows the log that led up to it.
+// still shows the log that led up to it. The ring keeps the first start's
+// log_hook_level.
 type processLogs struct {
 	store logstore.Store
 	hook  logrus.Hook
@@ -55,9 +56,9 @@ var (
 	inProcessLogsVal  processLogs
 )
 
-func inProcessLogs() *processLogs {
+func inProcessLogs(hookLevel string) *processLogs {
 	inProcessLogsOnce.Do(func() {
-		store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(logstore.DefaultHookLevel))
+		store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(hookLevel, logstore.DefaultHookLevel))
 		bcast := logging.NewBroadcaster()
 		mLog.AddHook(hook)
 		mLog.AddHook(bcast)
@@ -84,7 +85,7 @@ func StartInProcess(ctx context.Context, conf *visorconfig.V1, opts Options, hos
 	if host == nil || host.Restart == nil || host.Stop == nil {
 		return nil, errors.New("visor: StartInProcess needs an InProcessHost with Restart and Stop")
 	}
-	logs := inProcessLogs()
+	logs := inProcessLogs(conf.LogHookLevel)
 	conf.MasterLogger().AddHook(logs.hook)
 	conf.MasterLogger().AddHook(logs.bcast)
 

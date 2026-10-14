@@ -35,9 +35,6 @@ const envfileLinux = `#
 #--	Set custom service conf URLs
 #SVCCONFADDR=('')
 
-#--	Use test deployment
-#TESTENV=true
-
 #--	Use dmsghttp to connect to the production deployment
 #DMSGHTTP=true
 
@@ -57,10 +54,6 @@ const envfileLinux = `#
 #TPSETUPPKS=('')
 
 ### Ports ###############################################################
-#	Note: when generating a test deployment config (-t / TESTENV=true),
-#	all ports are automatically offset by +10000 to allow prod and test
-#	visors to run simultaneously on the same machine.
-
 #- set port for UDP connections / SUDPH transports
 #SUDPHPORT=0
 
@@ -555,9 +548,6 @@ const envfileWindows = `#
 
 #--	Set custom service conf URLs
 #$SVCCONFADDR=@('')
-
-#--	Use test deployment
-#$TESTENV=$true
 
 #--	Use dmsghttp to connect to the production deployment
 #$DMSGHTTP=$true

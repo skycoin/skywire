@@ -16,7 +16,7 @@ import (
 // dmsg server. https serves the identical JSON on both hosts, and an https
 // subresource is fine on an http page, so https is correct in both directions.
 func TestGeoIPIsHTTPS(t *testing.T) {
-	for name, d := range map[string]Services{"Prod": Prod, "Test": Test} {
+	for name, d := range map[string]Services{"Prod": Prod} {
 		if d.GeoIP == "" {
 			continue
 		}

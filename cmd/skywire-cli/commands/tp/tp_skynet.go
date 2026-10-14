@@ -10,6 +10,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -90,10 +92,10 @@ func listSkynetTransports(cmd *cobra.Command, rpcClient visorapi.API, pkStrs []s
 			continue
 		}
 		if res.Error != "" {
-			fmt.Printf("[%d/%d] %s (error: %s)\n", i+1, len(pks), pk, res.Error)
+			cmdutil.Printf("[%d/%d] %s (error: %s)\n", i+1, len(pks), pk, res.Error)
 			continue
 		}
-		fmt.Printf("[%d/%d] %s (%d transports, signed %s)\n", i+1, len(pks), pk, len(res.Transports), res.At.Format(time.RFC3339))
+		cmdutil.Printf("[%d/%d] %s (%d transports, signed %s)\n", i+1, len(pks), pk, len(res.Transports), res.At.Format(time.RFC3339))
 		if len(res.Transports) == 0 {
 			continue
 		}
@@ -104,7 +106,7 @@ func listSkynetTransports(cmd *cobra.Command, rpcClient visorapi.API, pkStrs []s
 			fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", e.Type, e.ID, e.RemoteEdge(pk), e.Label) //nolint:errcheck
 		}
 		w.Flush() //nolint:errcheck,gosec
-		fmt.Print(b.String())
+		cmdutil.Print(b.String())
 	}
 	if isJSON {
 		internal.PrintOutput(cmd.Flags(), all, "")

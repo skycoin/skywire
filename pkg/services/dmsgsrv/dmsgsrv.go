@@ -513,7 +513,7 @@ func (s *service) serveDmsgSurfaces(
 	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
 	// separate :81 listener. The ring buffer captures recent global-logger output.
 	rb := logging.NewRingBuffer(0)
-	logging.AddHook(logging.NewWriteHook(rb))
+	logging.AddHook(logging.NewWriteHookLevel(rb, logging.HookLevel(cfg.LogHookLevel, logging.DefaultHookLevel)))
 	handler := dmsghttp.WithDebug(healthMux, deployment.Prod.SurveyWhitelist, rb.Bytes)
 	go func() {
 		if err := dmsghttp.ListenAndServe(ctx, cfg.SecKey, handler, dClient,

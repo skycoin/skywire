@@ -6,16 +6,15 @@ import (
 )
 
 func TestSkycoinWebFlags(t *testing.T) {
-	saved := []any{skycoinWebAddr, skycoinWebNodeURLs, skycoinWebWalletDir, enableDmsgWeb, enableSkynetWeb, isTestEnv}
+	saved := []any{skycoinWebAddr, skycoinWebNodeURLs, skycoinWebWalletDir, enableDmsgWeb, enableSkynetWeb}
 	t.Cleanup(func() {
 		skycoinWebAddr = saved[0].(string)
 		skycoinWebNodeURLs = saved[1].(string)
 		skycoinWebWalletDir = saved[2].(string)
 		enableDmsgWeb = saved[3].(bool)
 		enableSkynetWeb = saved[4].(bool)
-		isTestEnv = saved[5].(bool)
 	})
-	skycoinWebNodeURLs, isTestEnv = "", false
+	skycoinWebNodeURLs = ""
 	skycoinWebAddr, skycoinWebWalletDir = skycoinWebNoPort, "/opt/skywire/wallets"
 	enableDmsgWeb, enableSkynetWeb = true, true
 

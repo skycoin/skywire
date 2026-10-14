@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -76,9 +78,9 @@ Run 'go generate ./deployment/' afterwards to sync the js/wasm static variant.`,
 		if err := os.WriteFile(pullConfigPath, updated, 0o644); err != nil { //nolint:gosec // shared repo config
 			return fmt.Errorf("write %s: %w", pullConfigPath, err)
 		}
-		fmt.Printf("updated %d dmsg_servers array(s) in %s with %d servers (fetched over dmsg)\n",
+		cmdutil.Printf("updated %d dmsg_servers array(s) in %s with %d servers (fetched over dmsg)\n",
 			n, pullConfigPath, len(entries))
-		fmt.Println("now run: go generate ./deployment/   (to sync the js variant)")
+		cmdutil.Println("now run: go generate ./deployment/   (to sync the js variant)")
 		return nil
 	},
 }

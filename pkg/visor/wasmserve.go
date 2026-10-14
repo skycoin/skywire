@@ -22,6 +22,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"html"
 	"math/big"
@@ -64,7 +65,8 @@ type WasmServeConfig struct {
 	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
 	VOrigin string
 	// ExecWasmPath serves the skywire command module from that file at
-	// /skywire.wasm. Empty means the module installed beside the binary.
+	// /skywire.wasm. Empty means the module kept beside the binary, or in the
+	// user cache directory (execwasm.DefaultPath), fetched when there is none.
 	ExecWasmPath string
 	// module returns the refresher for that module, nil to serve it as it is,
 	// as a standalone `hv serve` does.
@@ -79,7 +81,10 @@ type WasmServeConfig struct {
 	// BootReportFile keeps the boot reports desks post (wasmserve_bootreport.go)
 	// as JSON lines, moved to <file>.1 at 1 MiB. Empty keeps them only in the log.
 	BootReportFile string
-	Log            *logging.Logger // nil → package default
+	// Links are shown under the boot message as plain anchors, so a crawler finds
+	// the deployment's other sites before any script runs.
+	Links []WasmLink
+	Log   *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -94,8 +99,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// The ONE module everything served here runs out of: the desk host, the
 	// tab's visor, every command the terminal executes (execModuleSource).
 	execWasmPath, haveExecWasm := execModuleSource(cfg.ExecWasmPath)
+	if execWasmPath == "" {
+		return errors.New("no place for the skywire command module: pass --exec-wasm")
+	}
+	if cfg.module == nil && cfg.ExecWasmPath == "" {
+		// Standalone, with no visor to fetch it through: the release's.
+		standalone := newReleaseModule(execWasmPath, log)
+		cfg.module = func() *wasmModuleRefresher { return standalone }
+	}
 	if !haveExecWasm {
-		return fmt.Errorf("no skywire command module at %q: install skywire.wasm.gz beside the binary or pass --exec-wasm", execWasmPath)
+		log.WithField("path", execWasmPath).Info("No skywire command module yet; it is fetched when the desk is first opened")
 	}
 	cfg.ExecWasmPath = execWasmPath
 	uiFS, err := HypervisorUIFS()
@@ -214,7 +227,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// start without one) — the desk host, the tab's visor and every command
 	// the terminal runs.
 	mux.HandleFunc("/skywire.wasm", func(w http.ResponseWriter, r *http.Request) {
-		cfg.refresher().await(r.Context())
+		cfg.refresher().ready(r.Context())
 		serveExecWasm(w, r, execWasmPath)
 	})
 	// The desk — the ONE page, served AT THE ROOT below: the tab as a Linux
@@ -224,7 +237,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// loopback the nested browser opens it maximized on top. A visor the
 	// operator stopped stays stopped across reloads (desk-boot's session).
 	serveBytes("/desk-boot.js", "text/javascript", wasmhv.DeskBootJS())
-	deskPage := deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort))
+	deskPage := withLinks(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(cfg, browseScheme, bport, suffix)), deskWasmBootOpts(cfg.DeskHelpTerminal, cfg.DeskDocsPort)), cfg.Links)
 	if cfg.Harness {
 		// --harness injects ctl-bridge.js (its presence IS the harness
 		// signal). On the desk it registers the tab and mirrors the foreground visor
@@ -700,6 +713,7 @@ const deskShellTemplate = `<!DOCTYPE html>
   #boot{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8em;z-index:10}
   #boot .t{color:#9d7cff;font:600 18px system-ui}
   #boot .s{color:#9aa0a6;font:12px monospace;max-width:44em;text-align:center}
+  #boot nav a{color:#9d7cff;margin:0 .6em;font-size:12px;text-decoration:none}
   #boot.gone{display:none}
 </style>
 </head>
@@ -824,4 +838,22 @@ func (cfg WasmServeConfig) refresher() *wasmModuleRefresher {
 		return nil
 	}
 	return cfg.module()
+}
+
+// WasmLink is a site linked from the served page.
+type WasmLink struct{ Name, URL string }
+
+// withLinks adds links under the boot message of a desk page.
+func withLinks(page []byte, links []WasmLink) []byte {
+	if len(links) == 0 {
+		return page
+	}
+	var b strings.Builder
+	b.WriteString(`<nav>`)
+	for _, l := range links {
+		fmt.Fprintf(&b, `<a href="%s">%s</a>`, html.EscapeString(l.URL), html.EscapeString(l.Name))
+	}
+	b.WriteString(`</nav>`)
+	const msg = `<div class="s" id="boot-msg">loading…</div>`
+	return []byte(strings.Replace(string(page), msg, msg+"\n  "+b.String(), 1))
 }

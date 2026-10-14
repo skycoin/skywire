@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -137,7 +138,7 @@ Examples:
 						return
 					}
 					// RPC query failed, fall back to HTTP query
-					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to HTTP query...\n", err)
+					cmdutil.Eprintf("RPC query failed: %v, falling back to HTTP query...\n", err)
 					useHTTPQuery = true
 				} else {
 					entries, err := rpcClient.DiscoverTransportsByPK(tppk)
@@ -146,12 +147,12 @@ Examples:
 						return
 					}
 					// RPC query failed, fall back to HTTP query
-					fmt.Fprintf(os.Stderr, "RPC query failed: %v, falling back to HTTP query...\n", err)
+					cmdutil.Eprintf("RPC query failed: %v, falling back to HTTP query...\n", err)
 					useHTTPQuery = true
 				}
 			} else {
 				// RPC connection failed, fall back to HTTP query
-				fmt.Fprintf(os.Stderr, "RPC connection failed: %v, falling back to HTTP query...\n", err)
+				cmdutil.Eprintf("RPC connection failed: %v, falling back to HTTP query...\n", err)
 				useHTTPQuery = true
 			}
 		}

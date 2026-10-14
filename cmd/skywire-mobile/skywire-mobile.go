@@ -20,7 +20,7 @@ isRawProcessApp) keys on the subcommand being named exactly "app".
 package main
 
 import (
-	"log"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -74,6 +74,6 @@ func init() {
 
 func main() {
 	if err := RootCmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
+		cmdutil.Fatal("Failed to execute command: ", err)
 	}
 }

@@ -3,7 +3,8 @@ package clivpn
 
 import (
 	"fmt"
-	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 	"github.com/toqueteos/webbrowser"
@@ -43,7 +44,7 @@ var vpnUICmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
@@ -74,7 +75,7 @@ var vpnURLCmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {

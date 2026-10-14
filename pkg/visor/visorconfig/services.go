@@ -6,7 +6,7 @@
 // json tags) but lived in two places, which forced a redundant
 // json.Unmarshal at every MakeBaseConfig call to convert the embedded
 // deployment.ServicesJSON into a visorconfig.Services. The alias
-// makes deployment.Prod / deployment.Test usable in-place — same
+// makes deployment.Prod usable in-place — same
 // memory, same fields, zero conversion — so visorconfig no longer
 // needs to invoke encoding/json on the WASM-clean code path.
 //

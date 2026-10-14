@@ -158,7 +158,7 @@ func startDmsg(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk ci
 	stop = func() {
 		err := dmsgC.Close()
 		log.WithError(err).Debug("Disconnected from dmsg network.")
-		fmt.Printf("\n")
+		cmdutil.Printf("\n")
 	}
 	log.WithField("public_key", pk.String()).WithField("dmsg_disc", dmsgDisc).
 		Debug("Connecting to dmsg network...")

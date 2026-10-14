@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -147,7 +149,7 @@ func init() {
 	hiddenflags = append(hiddenflags, "hv")
 	RootCmd.Flags().BoolVarP(&disableHypervisorPKs, "xhv", "k", false, "disable remote hypervisors \u001b[0m*")
 	hiddenflags = append(hiddenflags, "xhv")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ debug | warn | error | fatal | panic | trace ] \u001b[0m*")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "", "[ trace | debug | info | warn | error | fatal | panic | none ] \u001b[0m*")
 	hiddenflags = append(hiddenflags, "loglvl")
 	RootCmd.Flags().StringVarP(&pprofMode, "pprofmode", "q", "", "[ cpu | mem | mutex | block | trace | http ]")
 	hiddenflags = append(hiddenflags, "pprofmode")
@@ -193,10 +195,10 @@ var RootCmd = &cobra.Command{
 			//cmd.Flags().MarkHidden("all")  //nolint:errcheck,gosec
 			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
 			if err := cmd.Help(); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to print help: %v\n", err)
+				cmdutil.Eprintf("Failed to print help: %v\n", err)
 			}
-			fmt.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
-			os.Exit(0)
+			cmdutil.Println("\033[F                            * \u001b[94moverrides config file\u001b[0m")
+			cmdutil.Exit(0)
 		}
 		// -z --completion
 		genCompletion(cmd)
@@ -382,7 +384,7 @@ func loadConfig() (*visorconfig.V1, error) {
 	switch confPath {
 	case visorconfig.Stdin:
 		log.Info("Reading config from STDIN.")
-		r = os.Stdin
+		r = cmdutil.Stdin()
 	case "arg":
 		log.Info("Reading config from supplied argument.")
 		confPath = visorconfig.Stdin
@@ -407,7 +409,7 @@ func loadConfig() (*visorconfig.V1, error) {
 		return nil, errors.New("config version is incompatible")
 	}
 	if hypervisorUI {
-		config := visorconfig.GenerateWorkDirConfig(false)
+		config := visorconfig.GenerateWorkDirConfig()
 		conf.Hypervisor = &config
 	}
 	if noHypervisorUI {

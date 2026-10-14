@@ -21,6 +21,7 @@ type SetupConfig struct {
 	Dmsg               dmsgc.DmsgConfig `json:"dmsg"`
 	TransportDiscovery string           `json:"transport_discovery"`
 	LogLevel           string           `json:"log_level"`
+	LogHookLevel       string           `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 
 	// Cascade configures the cascade route setup protocol.
 	// When set, the RSN attempts to install routing rules via transport-level

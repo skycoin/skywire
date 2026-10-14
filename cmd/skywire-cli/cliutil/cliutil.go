@@ -4,8 +4,10 @@ package cliutil
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
@@ -36,8 +38,8 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
-		writeJSONError(os.Stderr, err)
-		os.Exit(1)
+		writeJSONError(cmdutil.Stderr(), err)
+		cmdutil.Exit(1)
 	}
 	log.Fatal(err)
 }
@@ -59,7 +61,7 @@ func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
-		writeJSONError(os.Stderr, err)
+		writeJSONError(cmdutil.Stderr(), err)
 		return
 	}
 	log.Error(err)
@@ -116,10 +118,10 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 		}
 		b, err := json.MarshalIndent(cliout.Skeleton(outputJSON), "", "  ")
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			cmdutil.Eprintln(err)
 			return
 		}
-		fmt.Print(string(b) + "\n")
+		cmdutil.Print(string(b) + "\n")
 		return
 	}
 	jqFilter, _ := cmdFlags.GetString(cliout.JQFlag)
@@ -130,23 +132,23 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 		}
 		b, err := json.MarshalIndent(outputJSON, "", "  ")
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			cmdutil.Eprintln(err)
 			return
 		}
 		if jqFilter != "" {
 			filtered, err := cliout.ApplyJQ(b, jqFilter)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				cmdutil.Eprintln(err)
 				return
 			}
-			fmt.Print(filtered)
+			cmdutil.Print(filtered)
 			return
 		}
-		fmt.Print(string(b) + "\n")
+		cmdutil.Print(string(b) + "\n")
 		return
 	}
 	if output != "" {
-		fmt.Print(output)
+		cmdutil.Print(output)
 	}
 }
 
@@ -154,7 +156,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 // `{"error": "..."}` and including a trailing newline.
 //
 //nolint:errcheck
-func writeJSONError(w *os.File, err error) {
+func writeJSONError(w io.Writer, err error) {
 	errJSON := struct {
 		Err string `json:"error"`
 	}{Err: err.Error()}

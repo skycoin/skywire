@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 	tele "gopkg.in/telebot.v3"
@@ -38,7 +40,7 @@ Requires two environment variables:
 		chatIDStr := os.Getenv("TG_CHAT_ID")
 		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 		if err != nil {
-			log.Fatalf("failed to parse chat ID: %v", err)
+			cmdutil.Fatalf("failed to parse chat ID: %v", err)
 		}
 		pref := tele.Settings{
 			Token:  os.Getenv("TG_BOT_TOKEN"),
@@ -47,7 +49,7 @@ Requires two environment variables:
 
 		b, err := tele.NewBot(pref)
 		if err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 			return
 		}
 
@@ -61,7 +63,7 @@ Requires two environment variables:
 		//	var lastModTime time.Time
 		lastModTime, err := os.Stat(filePath)
 		if err != nil {
-			log.Fatal(err)
+			cmdutil.Fatal(err)
 			return
 		}
 		// Use a goroutine to periodically check the file for changes

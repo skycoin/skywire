@@ -232,7 +232,7 @@ var RootCmd = &cobra.Command{
 			}
 			cmd.Flags().MarkHidden("help") //nolint:errcheck,gosec
 			cmd.Help()                     //nolint:errcheck,gosec
-			os.Exit(0)
+			cmdutil.Exit(0)
 		}
 	},
 }

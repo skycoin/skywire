@@ -38,6 +38,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"strconv"
 
 	"github.com/google/uuid"
@@ -316,7 +318,7 @@ type routePair struct {
 func readRoutePair(src string) (routePair, error) {
 	var rd io.Reader
 	if src == "" || src == "-" {
-		rd = os.Stdin
+		rd = cmdutil.Stdin()
 	} else {
 		f, err := os.Open(src) //nolint:gosec
 		if err != nil {

@@ -4,6 +4,8 @@ package clidmsg
 import (
 	"fmt"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -58,39 +60,39 @@ func printDmsgSessions(result *visorapi.DmsgClientSessions) {
 		if info == nil {
 			return
 		}
-		fmt.Printf("%s (%s)\n", info.Role, info.PK)
-		fmt.Printf("  Connected sessions: %d\n", info.Count)
+		cmdutil.Printf("%s (%s)\n", info.Role, info.PK)
+		cmdutil.Printf("  Connected sessions: %d\n", info.Count)
 		// Prefer the enriched session list (server PK + the protocol it was
 		// reached over); fall back to bare PKs for older visors.
 		if len(info.Sessions) > 0 {
 			for _, s := range info.Sessions {
-				fmt.Printf("    %s  %s  %s\n", s.PK, s.Protocol, formatStreams(s.Streams))
+				cmdutil.Printf("    %s  %s  %s\n", s.PK, s.Protocol, formatStreams(s.Streams))
 			}
 		} else {
 			for _, s := range info.Servers {
-				fmt.Printf("    %s\n", s)
+				cmdutil.Printf("    %s\n", s)
 			}
 		}
 		if len(info.RelayPeers) > 0 {
-			fmt.Println("  Relay nominees:")
+			cmdutil.Println("  Relay nominees:")
 			for _, pk := range info.RelayPeers {
-				fmt.Printf("    %s\n", pk)
+				cmdutil.Printf("    %s\n", pk)
 			}
 		}
 		if len(info.RelayClients) > 0 {
-			fmt.Println("  Relaying for:")
+			cmdutil.Println("  Relaying for:")
 			for _, pk := range info.RelayClients {
-				fmt.Printf("    %s\n", pk)
+				cmdutil.Printf("    %s\n", pk)
 			}
 		}
-		fmt.Println()
+		cmdutil.Println()
 	}
 	printOne(result.Main)
 	printOne(result.RouteSetup)
 	printOne(result.TransportSetup)
 
 	if result.Main == nil && result.RouteSetup == nil && result.TransportSetup == nil {
-		fmt.Println("No dmsg clients running on this visor.")
+		cmdutil.Println("No dmsg clients running on this visor.")
 	}
 }
 

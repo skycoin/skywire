@@ -3,7 +3,8 @@ package clitp
 
 import (
 	"fmt"
-	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -78,7 +79,7 @@ var rmTpCmd = &cobra.Command{
 				var errors []string
 
 				if len(targetPKs) > 1 {
-					fmt.Printf("=== Remote visor: %s ===\n", targetPK.String())
+					cmdutil.Printf("=== Remote visor: %s ===\n", targetPK.String())
 				}
 
 				for _, tpIDStr := range rmRemoteTransports {
@@ -127,7 +128,7 @@ var rmTpCmd = &cobra.Command{
 		} else if tpID != "" {
 			tID := internal.ParseUUID(cmd.Flags(), "transport-id", tpID)
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			internal.Catch(cmd.Flags(), rpcClient.RemoveTransport(tID))
 			internal.PrintOutput(cmd.Flags(), "OK", "OK\n")

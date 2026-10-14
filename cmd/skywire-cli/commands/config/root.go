@@ -19,7 +19,6 @@ var logger = logging.MustGetLogger("skywire-cli")
 var (
 	conf                = new(visorconfig.V1)
 	dmsgHTTPServersList = &visorconfig.DmsgHTTPServers{
-		Test: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 		Prod: visorconfig.DmsgHTTPServersData{DMSGServers: []*disc.Entry{}},
 	}
 	path                       string
@@ -40,7 +39,6 @@ var (
 	isSquash                   bool
 	isRegen                    bool
 	isRetainHypervisors        bool
-	isTestEnv                  bool
 	pText                      string
 	isPkgEnv                   bool
 	isUsrEnv                   bool
@@ -74,7 +72,6 @@ var (
 	selectedOS                 string
 	disableApps                string
 	serviceConfURL             = deployment.ProdConf.Conf
-	testServiceConfURL         = deployment.TestConf.Conf
 	dnsServer                  = "1.1.1.1"
 	services                   visorconfig.Services
 	servicesConfig             servicesConf
@@ -230,7 +227,6 @@ var RootCmd = &cobra.Command{
 }
 
 type servicesConf struct {
-	Test visorconfig.Services `json:"test"`
 	Prod visorconfig.Services `json:"prod"`
 }
 

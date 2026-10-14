@@ -4,9 +4,10 @@ package skynet
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -204,16 +205,16 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start %s: %w", appName, err))
 		}
 
-		fmt.Printf("Starting %s -> %s:%d -> localhost:%d ", appName, remotePk, remotePort, localPort)
+		cmdutil.Printf("Starting %s -> %s:%d -> localhost:%d ", appName, remotePk, remotePort, localPort)
 
 		// Poll for app status until running, errored, or stopped
 		for {
 			time.Sleep(time.Second)
-			fmt.Print(".")
+			cmdutil.Print(".")
 
 			states, err := rpcClient.Apps()
 			if err != nil {
-				fmt.Println()
+				cmdutil.Println()
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get app status: %w", err))
 			}
 
@@ -221,18 +222,18 @@ var startCmd = &cobra.Command{
 				if state.Name == appName {
 					switch state.Status {
 					case appserver.AppStatusRunning:
-						fmt.Println("\nRunning!")
+						cmdutil.Println("\nRunning!")
 						return
 					case appserver.AppStatusErrored:
-						fmt.Printf("\nError: %s\n", state.DetailedStatus)
-						os.Exit(1)
+						cmdutil.Printf("\nError: %s\n", state.DetailedStatus)
+						cmdutil.Exit(1)
 					case appserver.AppStatusStopped:
 						if state.DetailedStatus != "" {
-							fmt.Printf("\nStopped: %s\n", state.DetailedStatus)
+							cmdutil.Printf("\nStopped: %s\n", state.DetailedStatus)
 						} else {
-							fmt.Println("\nStopped unexpectedly")
+							cmdutil.Println("\nStopped unexpectedly")
 						}
-						os.Exit(1)
+						cmdutil.Exit(1)
 					}
 					break
 				}
@@ -285,10 +286,10 @@ Examples:
 				// included — same fix as the status listing.
 				if state.Binary == skynetClientBinaryName && state.Status == appserver.AppStatusRunning {
 					if err := rpcClient.StopApp(state.Name); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
+						cmdutil.Eprintf("Warning: failed to stop %s: %v\n", state.Name, err)
 					} else {
 						stopped++
-						fmt.Printf("Stopped %s\n", state.Name)
+						cmdutil.Printf("Stopped %s\n", state.Name)
 					}
 				}
 			}
@@ -315,7 +316,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 

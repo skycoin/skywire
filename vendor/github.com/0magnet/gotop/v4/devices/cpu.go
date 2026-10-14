@@ -25,6 +25,10 @@ func RegisterCPU(f func(map[string]int, bool) map[string]error) {
 	cpuFuncs = append(cpuFuncs, f)
 }
 
+// ClearCPU removes every registered CPU device, so that a source registered
+// next, such as another machine's, is the only one the widget shows.
+func ClearCPU() { cpuFuncs = nil }
+
 // CPUPercent calculates the percentage of cpu used either per CPU or combined.
 // Returns one value per cpu, or a single value if percpu is set to false.
 func UpdateCPU(cpus map[string]int, interval time.Duration, logical bool) {

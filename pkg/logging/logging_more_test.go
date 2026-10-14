@@ -39,6 +39,8 @@ func TestLevelFromString(t *testing.T) {
 		"fatal":    logrus.FatalLevel,
 		"critical": logrus.FatalLevel,
 		"panic":    logrus.PanicLevel,
+		"none":     logrus.PanicLevel,
+		"off":      logrus.PanicLevel,
 		"trace":    logrus.TraceLevel,
 		"INFO":     logrus.InfoLevel, // case-insensitive
 	}

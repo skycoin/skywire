@@ -26,7 +26,6 @@ skywire cli svc dmsgd all-servers
       --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --shape              print the output schema skeleton (zero values, all fields) instead of data
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --testenv            use the test deployment services (or set SKYWIRETEST=1)
       --timeout int        RPC timeout in seconds (0 = unlimited) (default 30)
       --tpdurl string      override the transport-discovery base URL (used by tpd / nm)
       --tui                browse commands and help interactively

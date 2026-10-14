@@ -131,7 +131,6 @@ type Values struct {
 	DisablePubAuto bool
 
 	// --- Service discovery / deployment ---
-	TestEnv     bool   // TESTENV
 	URL         string // SVCCONFADDR (services conf URL — accepts comma-list)
 	SvcConf     string // SVCCONF (fallback service-configuration file)
 	MinSess     int    // MINDMSGSESS
@@ -355,7 +354,6 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.DisablePubAuto, "disable-public-autoconn", false, "disable autoconnect to public visors — writes DISABLEPUBLICAUTOCONN=true in skywire.conf")
 
 	// --- Service discovery / deployment ---
-	cmd.Flags().BoolVar(&v.TestEnv, "testenv", false, "use test deployment (ports offset +10000 from prod) — writes TESTENV=true in skywire.conf")
 	cmd.Flags().StringVar(&v.URL, "url", "", "services-config URL(s), comma-separated — writes SVCCONFADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SvcConf, "svcconf", "", "fallback service-configuration file path — writes SVCCONF in skywire.conf")
 	cmd.Flags().IntVar(&v.MinSess, "minsess", 0, "number of dmsg servers to connect to (0 = unlimited; leave unset to keep default 2) — writes MINDMSGSESS in skywire.conf")
@@ -527,7 +525,6 @@ var envMap = map[string]EnvMapping{
 	"disable-public-autoconn": {Key: "DISABLEPUBLICAUTOCONN", Format: EnvFormatBool},
 
 	// Service discovery / deployment
-	"testenv":       {Key: "TESTENV", Format: EnvFormatBool},
 	"url":           {Key: "SVCCONFADDR", Format: EnvFormatBashArray},
 	"svcconf":       {Key: "SVCCONF", Format: EnvFormatString},
 	"minsess":       {Key: "MINDMSGSESS", Format: EnvFormatInt, Default: "2"},

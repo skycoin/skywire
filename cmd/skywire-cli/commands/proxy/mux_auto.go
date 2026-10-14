@@ -22,10 +22,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -135,15 +136,15 @@ Example:
 			pruned := 0
 			for _, d := range drops {
 				if muxAutoDry {
-					fmt.Printf("  would prune leg %s (%.0fms)\n", shortTpID(d.tpID.String()), d.lat)
+					cmdutil.Printf("  would prune leg %s (%.0fms)\n", shortTpID(d.tpID.String()), d.lat)
 					continue
 				}
 				if err := rpcClient.RemoveMuxRoute(muxAutoApp, d.tpID, muxAutoSrcPort); err != nil {
-					fmt.Fprintf(os.Stderr, "  prune leg %s: %v\n", shortTpID(d.tpID.String()), err)
+					cmdutil.Eprintf("  prune leg %s: %v\n", shortTpID(d.tpID.String()), err)
 					continue
 				}
 				pruned++
-				fmt.Printf("  - pruned leg %s (%.0fms)\n", shortTpID(d.tpID.String()), d.lat)
+				cmdutil.Printf("  - pruned leg %s (%.0fms)\n", shortTpID(d.tpID.String()), d.lat)
 			}
 			// GROW: after pruning, restore redundancy. When live legs are
 			// below the preset target, add disjoint legs. Planning runs
@@ -154,14 +155,14 @@ Example:
 			grown := 0
 			switch {
 			case muxAutoDry && live < p.keep:
-				fmt.Printf("  would grow %d leg(s) toward keep=%d\n", p.keep-live, p.keep)
+				cmdutil.Printf("  would grow %d leg(s) toward keep=%d\n", p.keep-live, p.keep)
 			case !muxAutoDry && live < p.keep:
 				added, gerr := rpcClient.GrowMuxRoute(muxAutoApp, p.keep, muxAutoMinHops, muxAutoSrcPort)
 				if gerr != nil {
-					fmt.Fprintf(os.Stderr, "  grow: %v\n", gerr)
+					cmdutil.Eprintf("  grow: %v\n", gerr)
 				} else if added > 0 {
 					grown = added
-					fmt.Printf("  + grew %d leg(s) toward keep=%d\n", added, p.keep)
+					cmdutil.Printf("  + grew %d leg(s) toward keep=%d\n", added, p.keep)
 				}
 			}
 
@@ -185,7 +186,7 @@ Example:
 		defer t.Stop()
 		for {
 			if err := tick(); err != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
+				cmdutil.Eprintf("%v\n", err)
 			}
 			<-t.C
 		}

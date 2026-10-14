@@ -251,12 +251,8 @@ func fetchAndSaveUT(date, histDir string) error {
 	return nil
 }
 
-// getDeploymentForUT picks prod by default; honors SKYWIRETEST=1 the same way
-// cli ut does, so test environments flow through correctly.
+// getDeploymentForUT is the production deployment.
 func getDeploymentForUT() deployment.Services {
-	if os.Getenv("SKYWIRETEST") == "1" {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 

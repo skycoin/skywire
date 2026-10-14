@@ -4,10 +4,11 @@ package clitp
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -126,7 +127,7 @@ Examples:
 		internal.PrintOutput(cmd.Flags(), jsonOut, buf.String())
 
 		if statsTop == 0 && statsMinTps == 0 && statsType == "" {
-			fmt.Fprintf(os.Stderr, "Showing all %d visors. Use --top N to limit.\n", len(visors))
+			cmdutil.Eprintf("Showing all %d visors. Use --top N to limit.\n", len(visors))
 		}
 	},
 }

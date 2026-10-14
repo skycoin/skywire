@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -42,13 +44,13 @@ directory unless -o names another; "-o -" writes it to stdout. With
 			out = safeName(a.Name)
 		}
 		if out == "-" {
-			_, _ = os.Stdout.Write(a.Data) //nolint:errcheck
+			_, _ = cmdutil.Stdout().Write(a.Data) //nolint:errcheck
 			return
 		}
 		if err := os.WriteFile(out, a.Data, 0o600); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("wrote %s (%d bytes)\n", out, len(a.Data))
+		cmdutil.Printf("wrote %s (%d bytes)\n", out, len(a.Data))
 	},
 }
 

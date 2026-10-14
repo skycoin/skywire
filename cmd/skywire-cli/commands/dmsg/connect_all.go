@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -93,7 +95,7 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 		}
 		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		if !isJSON {
-			fmt.Printf("Updated dmsg.sessions_count = %d (runtime + written to config)\n\n", setSessionsCount)
+			cmdutil.Printf("Updated dmsg.sessions_count = %d (runtime + written to config)\n\n", setSessionsCount)
 		}
 		printConnectAllResult(cmd, result)
 	},
@@ -105,16 +107,16 @@ func printConnectAllResult(cmd *cobra.Command, result *visorapi.DmsgConnectAllRe
 		internal.PrintOutput(cmd.Flags(), result, "")
 		return
 	}
-	fmt.Printf("DMSG connect-all\n================\n")
-	fmt.Printf("Total servers:      %d\n", result.Total)
-	fmt.Printf("Already connected:  %d\n", result.AlreadyConnected)
-	fmt.Printf("Newly connected:    %d\n", result.NewlyConnected)
+	cmdutil.Printf("DMSG connect-all\n================\n")
+	cmdutil.Printf("Total servers:      %d\n", result.Total)
+	cmdutil.Printf("Already connected:  %d\n", result.AlreadyConnected)
+	cmdutil.Printf("Newly connected:    %d\n", result.NewlyConnected)
 	failed := len(result.Failed)
 	if failed == 0 {
-		fmt.Printf("Failed:             0\n")
+		cmdutil.Printf("Failed:             0\n")
 		return
 	}
-	fmt.Printf("Failed:             %d\n\n", failed)
+	cmdutil.Printf("Failed:             %d\n\n", failed)
 	keys := make([]string, 0, failed)
 	for k := range result.Failed {
 		keys = append(keys, k)
@@ -125,6 +127,6 @@ func printConnectAllResult(cmd *cobra.Command, result *visorapi.DmsgConnectAllRe
 		if len(short) > 16 {
 			short = short[:16] + "…"
 		}
-		fmt.Printf("  %s  %s\n", short, result.Failed[k])
+		cmdutil.Printf("  %s  %s\n", short, result.Failed[k])
 	}
 }

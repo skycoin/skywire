@@ -38,9 +38,9 @@ jobs:
             --generate-notes || true
 
   wasm-module:
-    # The js/wasm module, built once and shipped beside every binary: on the
-    # release as skywire.wasm.gz with its manifest, and inside each archive,
-    # macOS package and MSI, so an installed visor has a desk to serve.
+    # The js/wasm module, built once and published as release assets only:
+    # skywire.wasm.gz with its manifest and checksum. Archives and packages do
+    # not carry it; a visor fetches it the first time its desk is opened.
     needs: create-release
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +83,7 @@ jobs:
             --clobber
 
   linux:
-    needs: [create-release, wasm-module]
+    needs: create-release
     runs-on: ubuntu-latest
     strategy:
       # Don't let one arch's transient failure (e.g. a flaky module fetch)
@@ -235,10 +235,8 @@ jobs:
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-linux-${{ matrix.arch }}"
           mkdir -p dist
           cp bin/skywire dist/
-          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
-            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           sha256sum "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Upload to release
@@ -252,7 +250,7 @@ jobs:
             --clobber
 
   darwin-amd64:
-    needs: [create-release, wasm-module]
+    needs: create-release
     runs-on: macos-15-intel
     steps:
       - uses: actions/setup-go@v7
@@ -290,10 +288,8 @@ jobs:
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p dist
           cp bin/skywire dist/
-          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
-            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -301,7 +297,6 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-amd64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
-          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -322,7 +317,7 @@ jobs:
             --clobber
 
   darwin-arm64:
-    needs: [create-release, wasm-module]
+    needs: create-release
     runs-on: macos-latest
     steps:
       - uses: actions/setup-go@v7
@@ -360,10 +355,8 @@ jobs:
           ARCHIVE_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p dist
           cp bin/skywire dist/
-          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} \
-            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir dist --clobber
           cd dist
-          tar -cvf - skywire skywire.wasm.gz skywire.wasm.json | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
+          tar -cvf - skywire | xz -9e -T0 -c > "${ARCHIVE_NAME}.tar.xz"
           shasum -a 256 "${ARCHIVE_NAME}.tar.xz" > "${ARCHIVE_NAME}.tar.xz.sha256"
 
       - name: Create macOS package
@@ -371,7 +364,6 @@ jobs:
           PKG_NAME="skywire-${{ env.RELEASE_TAG }}-darwin-arm64"
           mkdir -p pkg-root/usr/local/bin
           cp bin/skywire pkg-root/usr/local/bin/
-          cp dist/skywire.wasm.gz dist/skywire.wasm.json pkg-root/usr/local/bin/
           pkgbuild --root pkg-root \
             --identifier com.skycoin.skywire \
             --version "${{ env.RELEASE_TAG }}" \
@@ -392,7 +384,7 @@ jobs:
             --clobber
 
   windows:
-    needs: [create-release, wasm-module]
+    needs: create-release
     runs-on: windows-latest
     strategy:
       matrix:
@@ -508,9 +500,6 @@ jobs:
           $ARCHIVE_NAME = "skywire-${{ env.RELEASE_TAG }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Force -Path "dist"
           Copy-Item "bin\skywire.exe" "dist\"
-          gh release download "${{ env.RELEASE_TAG }}" --repo ${{ github.repository }} `
-            --pattern skywire.wasm.gz --pattern skywire.wasm.json --dir wasm --clobber
-          Copy-Item "wasm\skywire.wasm.gz", "wasm\skywire.wasm.json" "dist\"
 
           # Include hardware wallet binary and required DLLs if present
           if (Test-Path "bin\skyhw.exe") {
@@ -547,8 +536,6 @@ jobs:
           Set-Location scripts\win_installer
           New-Item -ItemType Directory -Force -Path "build\apps"
           Copy-Item ..\..\bin\skywire.exe build\skywire.exe
-          Copy-Item ..\..\wasm\skywire.wasm.gz build\skywire.wasm.gz
-          Copy-Item ..\..\wasm\skywire.wasm.json build\skywire.wasm.json
           Copy-Item skywire.bat build\skywire.bat
           Copy-Item skywire-autoconfig.bat build\skywire-autoconfig.bat
           New-Item -ItemType File -Path "build\new.update"
@@ -609,7 +596,7 @@ jobs:
         shell: bash
 
   create-checksums:
-    needs: [linux, darwin-amd64, darwin-arm64, windows]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download all checksums and create combined file
@@ -634,7 +621,7 @@ jobs:
     # old draft-gating publish step (needs all jobs) never ran. This job is a
     # belt-and-suspenders final pass: it runs regardless of upstream job
     # outcome (if: always()) and re-asserts the published state.
-    needs: [linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
     if: always()
     runs-on: ubuntu-latest
     steps:

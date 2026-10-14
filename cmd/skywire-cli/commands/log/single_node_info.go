@@ -10,7 +10,6 @@ package clilog
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ collection.`,
 		if err := fetchSurveyJSON(ctx, hc, pk, "/node-info", &survey); err != nil {
 			log.Fatal(err)
 		}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(cmdutil.Stdout())
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(survey); err != nil {
 			log.Fatal(err)

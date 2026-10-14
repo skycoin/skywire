@@ -29,9 +29,9 @@ const (
 )
 
 func TestNewNode(t *testing.T) {
-	config := visorconfig.MakeConfig(false)
+	config := visorconfig.MakeConfig()
 	config.EnableAuth = true
-	config.FillDefaults(false)
+	config.FillDefaults()
 
 	confDir := os.TempDir()
 
@@ -440,9 +440,9 @@ func TestPKEndpoint(t *testing.T) {
 	// registered, so any GET /api/pk returns 404 regardless of
 	// header state. Pins the off-by-default semantics.
 	t.Run("default_off_returns_404", func(t *testing.T) {
-		config := visorconfig.MakeConfig(false)
+		config := visorconfig.MakeConfig()
 		config.EnableAuth = false
-		config.FillDefaults(false)
+		config.FillDefaults()
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_off.db")
 
 		addr, client, closeFn := makeStartNode(t, config)
@@ -460,10 +460,10 @@ func TestPKEndpoint(t *testing.T) {
 
 	// Enabled + well-formed SW-Public → 200 with pubkey.
 	t.Run("enabled_with_header_returns_pk", func(t *testing.T) {
-		config := visorconfig.MakeConfig(false)
+		config := visorconfig.MakeConfig()
 		config.EnableAuth = false
 		config.EnablePKEndpoint = true
-		config.FillDefaults(false)
+		config.FillDefaults()
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_enabled.db")
 
 		addr, client, closeFn := makeStartNode(t, config)
@@ -488,10 +488,10 @@ func TestPKEndpoint(t *testing.T) {
 
 	// Enabled + no SW-Public → 401.
 	t.Run("enabled_missing_sw_public_returns_401", func(t *testing.T) {
-		config := visorconfig.MakeConfig(false)
+		config := visorconfig.MakeConfig()
 		config.EnableAuth = false
 		config.EnablePKEndpoint = true
-		config.FillDefaults(false)
+		config.FillDefaults()
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_noheader.db")
 
 		addr, client, closeFn := makeStartNode(t, config)
@@ -508,10 +508,10 @@ func TestPKEndpoint(t *testing.T) {
 
 	// Enabled + malformed SW-Public → 400.
 	t.Run("enabled_malformed_sw_public_returns_400", func(t *testing.T) {
-		config := visorconfig.MakeConfig(false)
+		config := visorconfig.MakeConfig()
 		config.EnableAuth = false
 		config.EnablePKEndpoint = true
-		config.FillDefaults(false)
+		config.FillDefaults()
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_malformed.db")
 
 		addr, client, closeFn := makeStartNode(t, config)

@@ -23,6 +23,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -133,11 +135,11 @@ NOTE: macOS and Windows are not yet supported by this subcommand.
 		update := append([]string{"sudo"}, updateCmd...)
 
 		if caInstallPrint {
-			fmt.Println("# Run these commands to install the CA into the system trust store:")
-			fmt.Println(strings.Join(copy, " "))
-			fmt.Println(strings.Join(update, " "))
-			fmt.Println()
-			fmt.Println("# Firefox uses its own NSS store; see docs/skynet-tls.md.")
+			cmdutil.Println("# Run these commands to install the CA into the system trust store:")
+			cmdutil.Println(strings.Join(copy, " "))
+			cmdutil.Println(strings.Join(update, " "))
+			cmdutil.Println()
+			cmdutil.Println("# Firefox uses its own NSS store; see docs/skynet-tls.md.")
 			return
 		}
 
@@ -147,8 +149,8 @@ NOTE: macOS and Windows are not yet supported by this subcommand.
 		if err := runVisible(update); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("trust update: %w", err))
 		}
-		fmt.Printf("CA installed at %s\n", dst)
-		fmt.Println("Firefox uses its own NSS store; see docs/skynet-tls.md.")
+		cmdutil.Printf("CA installed at %s\n", dst)
+		cmdutil.Println("Firefox uses its own NSS store; see docs/skynet-tls.md.")
 	},
 }
 
@@ -171,7 +173,7 @@ var caUninstallCmd = &cobra.Command{
 		if err := runVisible(append([]string{"sudo"}, updateCmd...)); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("trust update: %w", err))
 		}
-		fmt.Printf("Removed %s\n", dst)
+		cmdutil.Printf("Removed %s\n", dst)
 	},
 }
 
@@ -183,7 +185,7 @@ var caPathCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("cert: %s\nkey:  %s\n", certPath, keyPath)
+		cmdutil.Printf("cert: %s\nkey:  %s\n", certPath, keyPath)
 	},
 }
 
@@ -199,7 +201,7 @@ var caFingerprintCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("load CA: %w", err))
 		}
-		fmt.Println(skynetca.Fingerprint(ca))
+		cmdutil.Println(skynetca.Fingerprint(ca))
 	},
 }
 
@@ -246,11 +248,11 @@ func runVisible(argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("empty command")
 	}
-	fmt.Printf("$ %s\n", strings.Join(argv, " "))
+	cmdutil.Printf("$ %s\n", strings.Join(argv, " "))
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdin = cmdutil.Stdin()
+	cmd.Stdout = cmdutil.Stdout()
+	cmd.Stderr = cmdutil.Stderr()
 	if err := cmd.Run(); err != nil {
 		return err
 	}

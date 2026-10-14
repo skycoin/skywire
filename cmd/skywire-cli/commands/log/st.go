@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
@@ -42,7 +44,7 @@ visor's current online status + last-two-days uptime, read from /tmp/ut.json.`,
 				var pK cipher.PubKey
 				err := pK.Set(pk)
 				if err != nil {
-					log.Fatal(err)
+					cmdutil.Fatal(err)
 				}
 				pubKeys = append(pubKeys, pK)
 			}

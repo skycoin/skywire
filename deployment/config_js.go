@@ -2,8 +2,8 @@
 
 // Package deployment pkg/deployment/config_js.go
 //
-// js/wasm init for the deployment vars. Populates Prod / Test /
-// ProdConf / TestConf from the code-genned static literals in
+// js/wasm init for the deployment vars. Populates Prod and
+// ProdConf from the code-genned static literals in
 // data_static_js.go instead of unmarshalling services-config.json
 // via encoding/json — TinyGo 0.41.1's stdlib doesn't ship the
 // reflect runtime helpers (reflect.unsafe_New, reflect.mapassign,
@@ -36,19 +36,13 @@ func mustPubKey(s string) cipher.PubKey {
 
 func init() {
 	Prod = prodData
-	Test = testData
 	ProdConf = prodConfData
-	TestConf = testConfData
 	// services-config.json is dmsg-only (no plain-HTTP deployment URLs except
 	// geoip); backfill the HTTP-named fields from their dmsg:// siblings. Mirrors
 	// config_native.go. See Services.BackfillClearnetFromDmsg.
 	Prod.BackfillClearnetFromDmsg()
-	Test.BackfillClearnetFromDmsg()
 	if ProdConf.Conf == "" {
 		ProdConf.Conf = Prod.ConfDmsg
-	}
-	if TestConf.Conf == "" {
-		TestConf.Conf = Test.ConfDmsg
 	}
 	// SKYDEPLOY works as it does natively for a command given it in its
 	// environment. A bad file is logged, not fatal, so the desk still boots.

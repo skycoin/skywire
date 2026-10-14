@@ -4,10 +4,11 @@ package clijq
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
@@ -54,15 +55,15 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 		// Parse the query
 		query, err := gojq.Parse(filter)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jq: invalid query: %v\n", err)
-			os.Exit(1)
+			cmdutil.Eprintf("jq: invalid query: %v\n", err)
+			cmdutil.Exit(1)
 		}
 
 		// Compile the query
 		code, err := gojq.Compile(query)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jq: compile error: %v\n", err)
-			os.Exit(1)
+			cmdutil.Eprintf("jq: compile error: %v\n", err)
+			cmdutil.Exit(1)
 		}
 
 		// Get inputs
@@ -73,16 +74,16 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 			for _, file := range files {
 				fileInputs, err := readJSONFile(file)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "jq: %v\n", err)
-					os.Exit(1)
+					cmdutil.Eprintf("jq: %v\n", err)
+					cmdutil.Exit(1)
 				}
 				inputs = append(inputs, fileInputs...)
 			}
 		} else {
-			stdinInputs, err := readJSONFromReader(os.Stdin)
+			stdinInputs, err := readJSONFromReader(cmdutil.Stdin())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "jq: %v\n", err)
-				os.Exit(1)
+				cmdutil.Eprintf("jq: %v\n", err)
+				cmdutil.Exit(1)
 			}
 			inputs = stdinInputs
 		}
@@ -105,19 +106,19 @@ flag instead of piping through this:  skywire cli pv --stats --jq '.count'.`,
 					if haltErr, ok := err.(*gojq.HaltError); ok && haltErr.Value() == nil {
 						break
 					}
-					fmt.Fprintf(os.Stderr, "jq: %v\n", err)
+					cmdutil.Eprintf("jq: %v\n", err)
 					hasError = true
 					continue
 				}
 				if err := outputValue(v); err != nil {
-					fmt.Fprintf(os.Stderr, "jq: %v\n", err)
+					cmdutil.Eprintf("jq: %v\n", err)
 					hasError = true
 				}
 			}
 		}
 
 		if hasError {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }
@@ -150,7 +151,7 @@ func readJSONFromReader(r io.Reader) ([]any, error) {
 func outputValue(v any) error {
 	if rawOutput {
 		if s, ok := v.(string); ok {
-			fmt.Println(s)
+			cmdutil.Println(s)
 			return nil
 		}
 	}
@@ -171,6 +172,6 @@ func outputValue(v any) error {
 	if !strings.HasSuffix(s, "\n") {
 		s += "\n"
 	}
-	fmt.Print(s)
+	cmdutil.Print(s)
 	return nil
 }

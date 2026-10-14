@@ -75,6 +75,11 @@ type batchWaiter struct {
 type batchGroup struct {
 	waiters []*batchWaiter
 	timer   *time.Timer
+
+	// ctx is the request's context, canceled once every member has given up.
+	ctx    context.Context
+	cancel context.CancelFunc
+	live   int // members still waiting on a sent group, guarded by setupBatcher.mu
 }
 
 // batchSender issues one batched request and returns a result per member, in
@@ -147,6 +152,7 @@ func (b *setupBatcher) dial(
 	g := b.groups[key]
 	if g == nil {
 		g = &batchGroup{}
+		g.ctx, g.cancel = context.WithCancel(context.Background())
 		b.groups[key] = g
 	}
 	g.waiters = append(g.waiters, w)
@@ -176,8 +182,7 @@ func (b *setupBatcher) dial(
 
 	select {
 	case <-ctx.Done():
-		// The group still runs — its other members are waiting on it — and this
-		// member's result is simply dropped when it arrives (out is buffered).
+		b.leave(key, g, w)
 		return routing.EdgeRules{}, cipher.PubKey{}, ctx.Err()
 	case res := <-w.out:
 		return res.rules, res.node, res.err
@@ -197,28 +202,58 @@ func (b *setupBatcher) closeGroupLocked(
 	delete(b.groups, key)
 	waiters := g.waiters
 	if len(waiters) == 0 {
+		g.cancel()
 		return
 	}
+	g.live = len(waiters)
 	if len(waiters) == 1 {
 		b.singles++
 	} else {
 		b.batched += uint64(len(waiters)) //nolint:gosec // bounded by setup.batch_max
 	}
-	go b.send(waiters, log, dmsgC, setupNodes, send)
+	go b.send(g.ctx, g.cancel, waiters, log, dmsgC, setupNodes, send)
+}
+
+// leave drops a member whose dial gave up. A request nobody is waiting on any
+// more is canceled, so a dead setup node cannot pile up abandoned requests.
+func (b *setupBatcher) leave(key batchKey, g *batchGroup, w *batchWaiter) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.groups[key] == g {
+		for i, x := range g.waiters {
+			if x == w {
+				g.waiters = append(g.waiters[:i], g.waiters[i+1:]...)
+				break
+			}
+		}
+		if len(g.waiters) == 0 {
+			if g.timer != nil {
+				g.timer.Stop()
+			}
+			delete(b.groups, key)
+			g.cancel()
+		}
+		return
+	}
+	if g.live--; g.live == 0 {
+		g.cancel()
+	}
 }
 
 // send issues the batch and fans the results back to the waiters. Every waiter
 // is answered exactly once, whatever happens.
 func (b *setupBatcher) send(
+	groupCtx context.Context,
+	cancelGroup context.CancelFunc,
 	waiters []*batchWaiter,
 	log *logging.Logger,
 	dmsgC *dmsg.Client,
 	setupNodes []cipher.PubKey,
 	send batchSender,
 ) {
-	// The request outlives any single member's context: a member that gave up
-	// must not cancel the setup its siblings are still waiting on.
-	ctx, cancel := context.WithTimeout(context.Background(), batchSendDeadline)
+	// The request outlives any single member's context, but not all of them.
+	defer cancelGroup()
+	ctx, cancel := context.WithTimeout(groupCtx, batchSendDeadline)
 	defer cancel()
 
 	reqs := make([]routing.BidirectionalRoute, len(waiters))

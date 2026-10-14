@@ -30,6 +30,24 @@ linters:
     errcheck:
       check-type-assertions: false
       check-blank: true
+      # As fmt.Print*, which errcheck already leaves alone: stdout of a command.
+      exclude-functions:
+        - github.com/skycoin/skywire/pkg/cmdutil.Print
+        - github.com/skycoin/skywire/pkg/cmdutil.Printf
+        - github.com/skycoin/skywire/pkg/cmdutil.Println
+        - github.com/skycoin/skywire/pkg/cmdutil.Eprint
+        - github.com/skycoin/skywire/pkg/cmdutil.Eprintf
+        - github.com/skycoin/skywire/pkg/cmdutil.Eprintln
+    gosec:
+      config:
+        G104:
+          cmdutil:
+            - Print
+            - Printf
+            - Println
+            - Eprint
+            - Eprintf
+            - Eprintln
     goconst:
       min-len: 3
       min-occurrences: 3

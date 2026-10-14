@@ -2,8 +2,7 @@
 package commands
 
 import (
-	"fmt"
-	"os"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -22,30 +21,30 @@ func logBuildInfo(mLog *logging.MasterLogger) {
 func genCompletion(cmd *cobra.Command) {
 	switch completion {
 	case "bash":
-		err := cmd.Root().GenBashCompletion(os.Stdout)
+		err := cmd.Root().GenBashCompletion(cmdutil.Stdout())
 		if err != nil {
 			panic(err)
 		}
 	case "zsh":
-		err := cmd.Root().GenZshCompletion(os.Stdout)
+		err := cmd.Root().GenZshCompletion(cmdutil.Stdout())
 		if err != nil {
 			panic(err)
 		}
 	case "fish":
-		err := cmd.Root().GenFishCompletion(os.Stdout, true)
+		err := cmd.Root().GenFishCompletion(cmdutil.Stdout(), true)
 		if err != nil {
 			panic(err)
 		}
 	case "powershell":
-		err := cmd.Root().GenPowerShellCompletion(os.Stdout)
+		err := cmd.Root().GenPowerShellCompletion(cmdutil.Stdout())
 		if err != nil {
 			panic(err)
 		}
 	}
 	//error on unrecognized
 	if (completion != "bash") && (completion != "zsh") && (completion != "fish") && (completion != "") {
-		fmt.Println("Invalid completion specified:", completion)
-		os.Exit(1)
+		cmdutil.Println("Invalid completion specified:", completion)
+		cmdutil.Exit(1)
 	}
 
 }

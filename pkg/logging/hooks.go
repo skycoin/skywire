@@ -3,7 +3,6 @@ package logging
 
 import (
 	"io"
-	"os"
 
 	"github.com/sirupsen/logrus"
 )
@@ -26,21 +25,13 @@ import (
 // firehose out of the second formatter.
 const DefaultHookLevel = logrus.InfoLevel
 
-// HookLevelEnv names the environment variable an operator sets to change the
-// levels the capture hooks accept, e.g. SKYWIRE_LOG_HOOK_LEVEL=debug to put
-// debug lines back into /debug/log for a debugging session. Accepted values
-// are the ones LevelFromString takes; anything unparseable is ignored.
-const HookLevelEnv = "SKYWIRE_LOG_HOOK_LEVEL"
-
-// HookLevel returns def, or the level named by HookLevelEnv when that variable
-// is set to something LevelFromString understands. Capture hooks that want the
-// operator override use this to resolve their level.
-func HookLevel(def logrus.Level) logrus.Level {
-	s := os.Getenv(HookLevelEnv)
-	if s == "" {
+// HookLevel returns the level named by a config's log_hook_level, or def when
+// it is empty or not a level. debug puts debug lines into /debug/log.
+func HookLevel(name string, def logrus.Level) logrus.Level {
+	if name == "" {
 		return def
 	}
-	lvl, err := LevelFromString(s)
+	lvl, err := LevelFromString(name)
 	if err != nil {
 		return def
 	}
@@ -65,15 +56,14 @@ type WriteHook struct {
 	levels    []logrus.Level
 }
 
-// NewWriteHook returns a new WriteHook accepting DefaultHookLevel and above,
-// or the level named by HookLevelEnv when the operator has set it.
+// NewWriteHook returns a new WriteHook accepting DefaultHookLevel and above.
 func NewWriteHook(w io.Writer) *WriteHook {
-	return NewWriteHookLevel(w, HookLevel(DefaultHookLevel))
+	return NewWriteHookLevel(w, DefaultHookLevel)
 }
 
 // NewWriteHookLevel returns a new WriteHook that fires only for entries at
 // least as severe as level. Use it when the call site knows what it wants to
-// capture; NewWriteHook is the operator-configurable default.
+// capture; NewWriteHook is the default.
 func NewWriteHookLevel(w io.Writer, level logrus.Level) *WriteHook {
 	return &WriteHook{
 		w: w,

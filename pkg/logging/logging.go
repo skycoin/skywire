@@ -43,10 +43,13 @@ func LevelFromString(s string) (logrus.Level, error) {
 		return logrus.FatalLevel, nil
 	case "panic":
 		return logrus.PanicLevel, nil
+	case "none", "off":
+		// logrus has nothing quieter than panic, logged just before a crash.
+		return logrus.PanicLevel, nil
 	case "trace":
 		return logrus.TraceLevel, nil
 	default:
-		return logrus.InfoLevel, fmt.Errorf("unrecognized log level %q; want one of debug, info, warn, error, fatal, panic, trace", s)
+		return logrus.InfoLevel, fmt.Errorf("unrecognized log level %q; want one of debug, info, warn, error, fatal, panic, none, trace", s)
 	}
 }
 

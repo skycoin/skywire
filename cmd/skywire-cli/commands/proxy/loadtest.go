@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
@@ -113,7 +115,7 @@ never held: out-of-order chunks wait in a bounded window (--upload-window).`,
 			<-sig
 			_ = srv.Close() //nolint:errcheck
 		}()
-		fmt.Fprintf(os.Stderr, "loadtest serve: endless source on %s (ctrl+c to stop)\n", loadtestServeAddr)
+		cmdutil.Eprintf("loadtest serve: endless source on %s (ctrl+c to stop)\n", loadtestServeAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("serve: %w", err))
 		}
@@ -142,7 +144,7 @@ var loadtestRunCmd = &cobra.Command{
 			DisableCompression: true,
 		}}
 
-		sink := os.Stdout
+		sink := cmdutil.Stdout()
 		if loadtestOutput != "-" {
 			f, ferr := os.OpenFile(loadtestOutput, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // G304: operator-supplied NDJSON output path
 			if ferr != nil {
@@ -174,7 +176,7 @@ var loadtestRunCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("connect to source through proxy: %w", err))
 		}
 		defer resp.Body.Close() //nolint:errcheck,gosec
-		fmt.Fprintf(os.Stderr, "loadtest run: pulling %s via %s for %s, slice=%s → %s\n",
+		cmdutil.Eprintf("loadtest run: pulling %s via %s for %s, slice=%s → %s\n",
 			loadtestURL, socks, loadtestDuration, loadtestSlice, loadtestOutput)
 
 		// Read goroutine accumulates bytes into an atomic; the main loop snapshots

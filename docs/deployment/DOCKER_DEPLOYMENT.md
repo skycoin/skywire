@@ -238,16 +238,6 @@ sd.skywire.example.com {
 
 Note: The STUN server and AR UDP port (30178) are not HTTP services and should not be proxied.
 
-## Multiple Deployments
-
-When running separate production and test deployments:
-
-- Use the same Docker image (`skycoin/skywire:test`) on both to simplify image management
-- Each deployment needs its own set of secret keys
-- The STUN server can only run on servers with two public IPs
-- The config bootstrapper on each deployment should point visors to the correct service URLs
-- Use `-d <domain>` with `svc confbs` to set the deployment domain (e.g. `-d skywire.dev` for test)
-
 ## Troubleshooting
 
 ### STUN server restart loop

@@ -6,6 +6,12 @@ convert text to Calvin S ascii font (https://patorjk.com/software/taag/#p=displa
 ![calvin in the browser](docs/calvin-demo.png "text converted live to the Calvin S box-drawing font and to BlackboardBold")
 
 
+install:
+
+```
+go install github.com/0magnet/calvin/cmd/calvin@latest
+```
+
 example:
 
 ```
@@ -27,9 +33,25 @@ import (
 
 func main() {
 	println(calvin.AsciiFont("Hello, World!"))
+	println(calvin.BlackboardBold("Hello, World!"))
 }
 
 ```
+
+`BlackboardBold(string)` is the second font: it maps letters and digits to their
+Mathematical Double-Struck code points (𝕏 for `X`, 𝟘 for `0`) and passes every
+other character through unchanged. It is one rune out for one rune in, so unlike
+`AsciiFont` it does not draw a block. The command line uses `AsciiFont` only;
+the demo shows both.
+
+## Other packages
+
+- `calvin serve` is a static file server for the demo page (`--addr`, default
+  `:8797`; `--dir`, default `docs`), because a browser will not instantiate wasm
+  from `file://`.
+- `web/` is the js/wasm demo: a text box over `AsciiFont` and `BlackboardBold`.
+- `clihelp/` is the help menu other 0magnet CLIs share: the program name in
+  this font, the build it came from, colors, and the `--bv` and `--info` flags.
 
 ## Characters
 
@@ -145,7 +167,9 @@ $ calvin 'calvin -v 2.1 | wc -c
 Made with [goda](https://github.com/loov/goda):
 
 ```
-go run github.com/loov/goda@latest graph github.com/0magnet/calvin/... | dot -Tsvg -o docs/calvin-goda-graph.svg
+# GOOS=js: the import edges of a wasm program live in js/wasm-tagged
+# files and are invisible to a host-context run
+GOOS=js GOARCH=wasm go run github.com/loov/goda@latest graph github.com/0magnet/calvin/... | dot -Tsvg -o docs/calvin-goda-graph.svg
 ```
 
 ![Dependency Graph](docs/calvin-goda-graph.svg "github.com/0magnet/calvin Dependency Graph")
@@ -162,14 +186,17 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                               5             56             72            456
-Plain Text                       1             64              0            260
-Markdown                         1             26              0            111
-Makefile                         1             21             52            107
+Go                              10            113            182            865
+JavaScript                       1             61             36            478
+Plain Text                       2             65              0            263
+Markdown                         1             41              0            159
+Makefile                         1             27             54            119
 YAML                             1              0              7             98
+HTML                             1              0              4             65
 Bourne Shell                     1              8             16             30
-JSON                             2              0              0             28
+JSON                             1              0              0              8
+XML                              1              0              0              4
 -------------------------------------------------------------------------------
-TOTAL                           12            175            147           1090
+TOTAL                           20            315            299           2089
 -------------------------------------------------------------------------------
 ```

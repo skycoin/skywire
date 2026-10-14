@@ -17,8 +17,8 @@ import (
 // The hypervisor's /api surface gzips JSON over httputil.CompressMinBytes,
 // which httputil tests. A reply smaller than that, like this one, stays plain.
 func TestHypervisorAPISmallJSONStaysPlain(t *testing.T) {
-	conf := visorconfig.MakeConfig(false)
-	conf.FillDefaults(false)
+	conf := visorconfig.MakeConfig()
+	conf.FillDefaults()
 	conf.DBPath = filepath.Join(t.TempDir(), "users_test.db")
 
 	hv, err := NewHypervisor(conf, nil, nil)

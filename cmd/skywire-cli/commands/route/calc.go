@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -290,7 +292,7 @@ var calcCmd = &cobra.Command{
 			}
 			latencyByTpID, lookupErr := fetchTpLatencyMap(cmd, hopsView)
 			if lookupErr != nil {
-				fmt.Fprintf(os.Stderr, "calc: metric fetch partial failure: %v (routes still listed; some routes may sort with +Inf latency)\n", lookupErr)
+				cmdutil.Eprintf("calc: metric fetch partial failure: %v (routes still listed; some routes may sort with +Inf latency)\n", lookupErr)
 			}
 			for i := range pairs {
 				cum, allMeasured := cumulativeLatencyMS(pairs[i].Forward, latencyByTpID)
@@ -490,7 +492,7 @@ func streamRoutesViaGRPC(
 	cb := func(r *rpcgrpc.CalcRoute) bool {
 		fwd, err := protoHopsToRouting(r.Hops)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "calc: skipping malformed route: %v\n", err)
+			cmdutil.Eprintf("calc: skipping malformed route: %v\n", err)
 			return true
 		}
 		rev := reverseHops(fwd)
@@ -503,12 +505,12 @@ func streamRoutesViaGRPC(
 
 		// Text streaming: print as it arrives.
 		if emitted > 1 {
-			fmt.Println()
+			cmdutil.Println()
 		}
 		if count != 1 {
-			fmt.Printf("[%d]\n", emitted)
+			cmdutil.Printf("[%d]\n", emitted)
 		}
-		fmt.Printf("forward: %v\nreverse: %v\n", fwd, rev)
+		cmdutil.Printf("forward: %v\nreverse: %v\n", fwd, rev)
 		return count == 0 || emitted < count
 	}
 
@@ -528,7 +530,7 @@ func streamRoutesViaGRPC(
 			return fmt.Errorf("no route found: %w", err)
 		}
 		// Some routes arrived before the stream errored; treat as success.
-		fmt.Fprintf(os.Stderr, "calc: stream ended early: %v\n", err)
+		cmdutil.Eprintf("calc: stream ended early: %v\n", err)
 	}
 
 	if emitted == 0 {
@@ -538,10 +540,10 @@ func streamRoutesViaGRPC(
 		// Single-route back-compat shape preserved when count=1.
 		if count == 1 && len(collected) == 1 {
 			out, _ := json.Marshal(collected[0]) //nolint:errcheck
-			fmt.Println(string(out))
+			cmdutil.Println(string(out))
 		} else {
 			out, _ := json.Marshal(collected) //nolint:errcheck
-			fmt.Println(string(out))
+			cmdutil.Println(string(out))
 		}
 	}
 	return nil

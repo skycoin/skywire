@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -151,7 +152,7 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 	}
 
 	if len(entries) == 0 {
-		fmt.Fprintln(os.Stderr, "No bandwidth data found")
+		cmdutil.Eprintln("No bandwidth data found")
 		return
 	}
 
@@ -261,7 +262,7 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 	}
 
 	if len(sorted) == 0 {
-		fmt.Fprintln(os.Stderr, "No bandwidth data found")
+		cmdutil.Eprintln("No bandwidth data found")
 		return
 	}
 
@@ -362,7 +363,7 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 	}
 
 	if len(sorted) == 0 {
-		fmt.Fprintln(os.Stderr, "No bandwidth data found")
+		cmdutil.Eprintln("No bandwidth data found")
 		return
 	}
 

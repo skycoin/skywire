@@ -439,9 +439,12 @@ type DiagSnapshot struct {
 type DiagRuntime struct {
 	Goroutines  int     `json:"goroutines"`
 	HeapAllocMB float64 `json:"heap_alloc_mb"`
-	SysMB       float64 `json:"sys_mb"`
-	NumGC       uint32  `json:"num_gc"`
-	GoVersion   string  `json:"go_version"`
+	// HeapLiveMB is the heap still in use after the last GC, where the runtime
+	// reports it. HeapAllocMB also counts garbage not yet collected.
+	HeapLiveMB float64 `json:"heap_live_mb,omitempty"`
+	SysMB      float64 `json:"sys_mb"`
+	NumGC      uint32  `json:"num_gc"`
+	GoVersion  string  `json:"go_version"`
 }
 
 // DiagPanics is the recovered-panic accounting. Count keeps rising after Last

@@ -16,7 +16,8 @@ package run
 import (
 	"context"
 	"fmt"
-	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -69,20 +70,20 @@ Use --list to see which service types are registered.`,
 		if listOnly {
 			types := services.RegisteredTypes()
 			if len(types) == 0 {
-				fmt.Fprintln(os.Stdout, "no service types registered") //nolint:errcheck
+				cmdutil.Println("no service types registered") //nolint:errcheck
 				return nil
 			}
-			fmt.Fprintln(os.Stdout, "registered service types:") //nolint:errcheck
+			cmdutil.Println("registered service types:") //nolint:errcheck
 			for _, t := range types {
-				fmt.Fprintf(os.Stdout, "  %s\n", t) //nolint:errcheck
+				cmdutil.Printf("  %s\n", t) //nolint:errcheck
 			}
 			return nil
 		}
 		if configPath == "" {
 			return fmt.Errorf("--config is required (or pass --list)")
 		}
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to print build info: %v\n", err)
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
+			cmdutil.Eprintf("failed to print build info: %v\n", err)
 		}
 		master := logging.NewMasterLogger()
 		log := master.PackageLogger("skywire-svc-run")

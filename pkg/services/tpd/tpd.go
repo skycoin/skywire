@@ -290,7 +290,7 @@ func (s *service) Run(ctx context.Context) error {
 	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := cfg.SurveyKeys()
@@ -298,6 +298,7 @@ func (s *service) Run(ctx context.Context) error {
 	h, err := svcmode.Start(runCtx, svcmode.Config{
 		Stats:               s.stats,
 		Mode:                resolvedMode,
+		LogHookLevel:        cfg.LogHookLevel,
 		HTTPAddr:            addr,
 		Handler:             tpdAPI,
 		PK:                  pk,

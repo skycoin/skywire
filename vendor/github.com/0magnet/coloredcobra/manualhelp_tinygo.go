@@ -48,6 +48,13 @@ func renderUsage(cfg *Config, c *cobra.Command) error {
 
 	fmt.Fprintf(w, "%s\n  %s\n", paint(cfg.Headings, "Usage:"), paint(cfg.ExecName, c.UseLine()))
 
+	if len(c.Aliases) > 0 {
+		fmt.Fprintf(w, "\n%s\n  %s\n", paint(cfg.Headings, "Aliases:"), paint(cfg.Aliases, c.NameAndAliases()))
+	}
+	if c.HasExample() {
+		fmt.Fprintf(w, "\n%s\n%s\n", paint(cfg.Headings, "Examples:"), paint(cfg.Example, c.Example))
+	}
+
 	if c.HasAvailableSubCommands() {
 		fmt.Fprintf(w, "\n%s\n", paint(cfg.Headings, "Available Commands:"))
 		for _, sub := range c.Commands() {

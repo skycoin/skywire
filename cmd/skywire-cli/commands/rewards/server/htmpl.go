@@ -3,12 +3,13 @@ package clirewardsserver
 
 import (
 	"bytes"
-	"fmt"
 	htmpl "html/template"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
 )
@@ -202,11 +203,11 @@ func mainPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Server", "")
 	tmpl0, err1 := tmpl.Clone()
 	if err1 != nil {
-		fmt.Println("Error cloning template:", err1)
+		cmdutil.Println("Error cloning template:", err1)
 	}
 	_, err1 = tmpl0.New("this").Parse(htmlFrontPageTemplate)
 	if err1 != nil {
-		fmt.Println("Error parsing Front Page template:", err1)
+		cmdutil.Println("Error parsing Front Page template:", err1)
 	}
 	tmpl := tmpl0
 
@@ -247,7 +248,7 @@ func mainPage(w http.ResponseWriter, r *http.Request) {
 	var result bytes.Buffer
 	err = tmpl.Execute(&result, tmplData)
 	if err != nil {
-		fmt.Println("error: ", err)
+		cmdutil.Println("error: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

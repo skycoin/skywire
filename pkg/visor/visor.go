@@ -654,13 +654,9 @@ func Run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 // serving on this visor's configured local RPC address (cli_addr). Without it,
 // a second visor races the first for the transport UDP socket and the
 // hypervisor HTTP port and dies deep in init with an opaque bind error; here we
-// detect it up front and say exactly what is already running. Set
-// SKYWIRE_ALLOW_DUPLICATE=1 to bypass (rare — distinct cli_addr per instance is
-// the supported way to run more than one visor on a host).
+// detect it up front and say exactly what is already running. A second visor
+// on the host is configured with its own cli_addr, which this check passes.
 func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error {
-	if os.Getenv("SKYWIRE_ALLOW_DUPLICATE") == "1" {
-		return nil
-	}
 	addr := conf.CLIAddr
 	if addr == "" {
 		return nil // no local RPC configured — nothing to probe
@@ -679,7 +675,7 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 			"free it or set a different cli_addr before starting", addr, oerr)
 	}
 	return fmt.Errorf("a visor is already running on %s (pk %s); refusing to start a second instance — "+
-		"run `skywire cli visor halt` first (or set SKYWIRE_ALLOW_DUPLICATE=1 with a distinct cli_addr)", addr, ov.PubKey)
+		"run `skywire cli visor halt` first, or give this visor its own cli_addr", addr, ov.PubKey)
 }
 
 // applyStartOptions applies the start options that override the config:
@@ -730,9 +726,9 @@ func attachUIAssets(conf *visorconfig.V1) error {
 func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	// The runtime-log hook JSON-encodes every entry it accepts under a
 	// process-wide mutex, so it captures info and above by default rather than
-	// every level (see logstore.DefaultHookLevel). SKYWIRE_LOG_HOOK_LEVEL puts
-	// debug back in the buffer for a debugging session.
-	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(logstore.DefaultHookLevel))
+	// every level (see logstore.DefaultHookLevel). log_hook_level puts debug
+	// back in the buffer for a debugging session.
+	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(conf.LogHookLevel, logstore.DefaultHookLevel))
 	mLog.AddHook(hook)
 
 	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs

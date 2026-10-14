@@ -32,11 +32,12 @@
 package commands
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -71,11 +72,11 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if di {
-			fmt.Printf("%v\n", buildinfo.DebugBuildInfo())
+			cmdutil.Printf("%v\n", buildinfo.DebugBuildInfo())
 			return
 		}
 		if bv {
-			fmt.Printf("%v\n", buildinfo.DBIVersion())
+			cmdutil.Printf("%v\n", buildinfo.DBIVersion())
 			return
 		}
 		if err := cmd.Help(); err != nil {

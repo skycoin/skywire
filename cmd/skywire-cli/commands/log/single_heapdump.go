@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -55,7 +55,7 @@ Gated by the remote visor's survey_whitelist.`,
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Fprint(os.Stdout, out) //nolint:errcheck
+		cmdutil.Print(out) //nolint:errcheck
 	},
 }
 

@@ -119,3 +119,14 @@ func TestBootReportFileRotates(t *testing.T) {
 		t.Errorf("new file = %q", b)
 	}
 }
+
+// A crawler that runs no script still finds the deployment's other sites.
+func TestDeskPageLinks(t *testing.T) {
+	page := string(withLinks(deskShellHTML("", "{}"), []WasmLink{{Name: "status", URL: "https://status.skywire.dev"}, {Name: "a<b", URL: `https://x/?q="1"`}}))
+	if want := `<nav><a href="https://status.skywire.dev">status</a><a href="https://x/?q=&#34;1&#34;">a&lt;b</a></nav>`; !strings.Contains(page, want) {
+		t.Fatalf("page lacks %s", want)
+	}
+	if string(withLinks(deskShellHTML("", "{}"), nil)) != string(deskShellHTML("", "{}")) {
+		t.Fatal("no links must leave the page as it is")
+	}
+}

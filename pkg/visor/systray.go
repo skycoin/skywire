@@ -52,7 +52,7 @@ func RunTrayOnly(rpcAddr string) {
 	// needs the visor identity. The Hypervisor-UI link defaults to the conventional
 	// web address and is enabled only after a live probe (initUIBtns / getHVAddr),
 	// so a wrong guess just leaves the link hidden instead of opening a dead page.
-	conf := visorconfig.MakeBaseConfig(nil, false, false, nil, nil)
+	conf := visorconfig.MakeBaseConfig(nil, false, nil, nil)
 	conf.CLIAddr = rpcAddr
 	conf.Hypervisor = &visorconfig.HypervisorConfig{HTTPAddr: ":8000"}
 

@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -65,7 +67,7 @@ var pkCmd = &cobra.Command{
 		} else {
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			overview, err := rpcClient.Overview()
 			if err != nil {
@@ -119,7 +121,7 @@ With one argument: detects the form and prints the other.
 		// No arg — query the running visor.
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
@@ -137,7 +139,7 @@ var summaryCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		// --live: hand off to the livetui watcher and stay in a
@@ -247,7 +249,7 @@ var buildInfoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		overview, err := rpcClient.Overview()
 		if err != nil {
@@ -266,7 +268,7 @@ var portsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		ports, err := rpcClient.Ports()
 		if err != nil {
@@ -303,7 +305,7 @@ var dmsgServersCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 
 		if dmsgServersLive {
@@ -325,7 +327,7 @@ var dmsgServersCmd = &cobra.Command{
 		}
 
 		if len(servers) == 0 {
-			fmt.Println("No DMSG servers connected")
+			cmdutil.Println("No DMSG servers connected")
 			return
 		}
 
@@ -404,7 +406,7 @@ the raw per-entry JSON; otherwise entries are pretty-printed as
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		filter, ferr := newLogFilter(logMinLevel, logModuleRegex)
 		if ferr != nil {
@@ -449,14 +451,14 @@ the raw per-entry JSON; otherwise entries are pretty-printed as
 				// conn drops (e.g. an idle RPC-socket timeout) every later
 				// call fails forever and the stream silently stalls. Re-dial
 				// so it resumes on the next tick instead of dying quietly.
-				fmt.Fprintf(os.Stderr, "RuntimeLogsSince err: %v; reconnecting\n", err)
+				cmdutil.Eprintf("RuntimeLogsSince err: %v; reconnecting\n", err)
 				if nc, derr := clirpc.Client(cmd.Flags()); derr == nil {
 					if c, ok := rpcClient.(interface{ Close() error }); ok {
 						_ = c.Close() //nolint:errcheck
 					}
 					rpcClient = nc
 				} else {
-					fmt.Fprintf(os.Stderr, "reconnect failed: %v\n", derr)
+					cmdutil.Eprintf("reconnect failed: %v\n", derr)
 				}
 				continue
 			}
@@ -469,7 +471,7 @@ the raw per-entry JSON; otherwise entries are pretty-printed as
 			}
 			cursor = delta.Latest
 			if delta.Dropped > 0 {
-				fmt.Fprintf(os.Stderr, "[%d entries dropped]\n", delta.Dropped)
+				cmdutil.Eprintf("[%d entries dropped]\n", delta.Dropped)
 			}
 			for _, entry := range delta.Entries {
 				printLogEntry(entry, filter, jsonOut)
@@ -547,7 +549,7 @@ func renderLogs(raw string, filter *logFilter, jsonOut bool) {
 	var entries []json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 		// Not JSON — print raw.
-		fmt.Print(raw)
+		cmdutil.Print(raw)
 		return
 	}
 	for _, e := range entries {
@@ -564,14 +566,14 @@ func printLogEntry(rawJSON string, filter *logFilter, jsonOut bool) {
 	var entry map[string]any
 	if err := json.Unmarshal([]byte(rawJSON), &entry); err != nil {
 		// Malformed — print raw so nothing is silently swallowed.
-		fmt.Println(rawJSON)
+		cmdutil.Println(rawJSON)
 		return
 	}
 	if !filter.admit(entry) {
 		return
 	}
 	if jsonOut {
-		fmt.Println(rawJSON)
+		cmdutil.Println(rawJSON)
 		return
 	}
 	tStr, _ := entry["time"].(string)
@@ -589,10 +591,10 @@ func printLogEntry(rawJSON string, filter *logFilter, jsonOut bool) {
 		extras = append(extras, fmt.Sprintf("%s=%v", k, v))
 	}
 	if len(extras) > 0 {
-		fmt.Printf("  %s  %-5s  [%s]  %s  %s\n",
+		cmdutil.Printf("  %s  %-5s  [%s]  %s  %s\n",
 			tStr, strings.ToUpper(level), module, msg, strings.Join(extras, " "))
 	} else {
-		fmt.Printf("  %s  %-5s  [%s]  %s\n",
+		cmdutil.Printf("  %s  %-5s  [%s]  %s\n",
 			tStr, strings.ToUpper(level), module, msg)
 	}
 }
@@ -604,7 +606,7 @@ var runtimeStatsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		stats, err := rpcClient.RuntimeStats()
 		if err != nil {

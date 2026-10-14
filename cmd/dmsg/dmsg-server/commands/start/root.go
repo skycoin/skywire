@@ -45,7 +45,7 @@ var RootCmd = &cobra.Command{
 	Short:   "Start Dmsg Server",
 	PreRunE: func(_ *cobra.Command, _ []string) error { return sf.Check() },
 	Run: func(_ *cobra.Command, _ []string) {
-		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
+		if _, err := buildinfo.Get().WriteTo(cmdutil.Stdout()); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
 

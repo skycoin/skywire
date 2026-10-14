@@ -253,7 +253,7 @@ func TestFlushWithNoPriorFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCommon: %v", err)
 	}
-	conf := MakeBaseConfig(cc, false, true, nil, nil)
+	conf := MakeBaseConfig(cc, true, nil, nil)
 	if err := conf.Flush(); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -147,11 +149,11 @@ func watchState(cmd *cobra.Command, fetch func() (*visorapi.StateSnapshot, error
 	emit := func() {
 		snap, err := fetch()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "watch:", err)
+			cmdutil.Eprintln("watch:", err)
 			return
 		}
-		if err := writeNDJSON(os.Stdout, snap, jqFilter); err != nil {
-			fmt.Fprintln(os.Stderr, "watch:", err)
+		if err := writeNDJSON(cmdutil.Stdout(), snap, jqFilter); err != nil {
+			cmdutil.Eprintln("watch:", err)
 		}
 	}
 

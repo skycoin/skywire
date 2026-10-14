@@ -4,7 +4,7 @@
 //
 // Native (non-WASM) init for the deployment vars. Unmarshals the
 // embedded services-config.json (or an external file pointed at by
-// SKYDEPLOY) into Prod / Test / ProdConf / TestConf via
+// SKYDEPLOY) into Prod and ProdConf via
 // encoding/json. The js/wasm build starts from the static literals
 // instead; see config_js.go and data_static_js.go.
 package deployment

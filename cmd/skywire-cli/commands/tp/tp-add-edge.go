@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -103,7 +105,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if edgeVerbose {
-			fmt.Printf("Found %d edges for %s, attempting to connect...\n", len(pksToConnect), targetPK.String())
+			cmdutil.Printf("Found %d edges for %s, attempting to connect...\n", len(pksToConnect), targetPK.String())
 		}
 
 		// Process in parallel batches
@@ -143,9 +145,9 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 
 				if edgeVerbose && !cliout.JSONMode(cmd) {
 					if res.success {
-						fmt.Printf("✓ %s (%s)\n", edgePK.String(), res.tpType)
+						cmdutil.Printf("✓ %s (%s)\n", edgePK.String(), res.tpType)
 					} else {
-						fmt.Printf("✗ %s: %v\n", edgePK.String(), res.err)
+						cmdutil.Printf("✗ %s: %v\n", edgePK.String(), res.err)
 					}
 				}
 			}(i, pk)

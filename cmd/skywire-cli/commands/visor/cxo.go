@@ -18,10 +18,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -312,6 +313,6 @@ Paths per feed:
 			internal.PrintOutput(cmd.Flags(), out, "")
 			return
 		}
-		fmt.Fprint(os.Stdout, b.String()) //nolint:errcheck
+		cmdutil.Print(b.String()) //nolint:errcheck
 	},
 }

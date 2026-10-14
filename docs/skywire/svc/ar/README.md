@@ -12,8 +12,6 @@ Depends: redis
 
 Production: dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
             dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
-Test:       dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
-            dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
 
 HTTP Endpoints:
   GET  /health                  Health check
@@ -108,7 +106,7 @@ skywire svc ar
       --keyfile string              file holding the secret key (generated if missing)
   -l, --loglvl string               log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string              address to serve Prometheus metrics on
-      --mode string                 listeners: http|dmsg|dual (default dual with a key, else http; env SKYWIRE_SVC_MODE overrides)
+      --mode string                 listeners: http|dmsg|dual (default dual with a key, else http)
   -r, --pprofaddr string            address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string            [ cpu | mem | mutex | block | trace | http ]
       --public-udp-address string   externally-reachable host:port advertised in /health for SUDPH
@@ -117,7 +115,6 @@ skywire svc ar
       --redis-pool-size int         redis connection pool size (default 10)
       --sk cipher.SecKey            dmsg secret key (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                  logging tag (default "address_resolver")
-      --test-environment            use the test deployment's defaults instead of production's
   -t, --testing                     run for a test network: keep entries in memory unless --redis is set
       --udp-addr string             UDP address to bind to for SUDPH (default ":30178")
       --whitelist-keys string       network-monitor keys allowed to deregister entries, comma-separated

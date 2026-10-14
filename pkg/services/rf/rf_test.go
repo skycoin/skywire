@@ -169,7 +169,6 @@ func TestRunInMemoryHTTPLifecycle(t *testing.T) {
 			Addr:            freeTCPAddr(t),
 			Testing:         true, // in-memory transport store
 			LogLevel:        "info",
-			TestEnvironment: true,                  // survey-whitelist test branch
 			SurveyWhitelist: []cipher.PubKey{wlPK}, // survey-whitelist override branch
 		},
 	}

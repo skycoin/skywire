@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,13 +33,18 @@ type Config struct {
 	Token string
 	// Origins are the pages allowed to connect. "*" allows any.
 	Origins []string
-	Logf    func(format string, args ...any)
+	// PairFile keeps the visor the bridge paired with, so a restart serves
+	// only that visor. Empty keeps the pairing in memory.
+	PairFile string
+	Logf     func(format string, args ...any)
 }
 
 // Server is the host end of the bridge.
 type Server struct {
-	cfg Config
-	ids atomic.Uint64
+	cfg    Config
+	ids    atomic.Uint64
+	mu     sync.Mutex
+	paired Pairing
 }
 
 // NewServer returns a bridge with the given policy. An empty token is refused
@@ -47,7 +53,11 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.Token == "" {
 		return nil, errors.New("hostbridge: empty token")
 	}
-	return &Server{cfg: cfg}, nil
+	paired, err := loadPairing(cfg.PairFile)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{cfg: cfg, paired: paired}, nil
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -79,7 +89,23 @@ func (s *Server) handle(c net.Conn) {
 		return
 	}
 	defer sess.Close() //nolint:errcheck
-	s.logf("tab connected from %s", c.RemoteAddr())
+	pk, err := s.serverHello(sess)
+	if errors.Is(err, io.EOF) || errors.Is(err, yamux.ErrSessionShutdown) {
+		// A browser opens and closes one to ask about local network access.
+		s.logf("%s closed before its hello", c.RemoteAddr())
+		return
+	}
+	if err != nil {
+		s.logf("refused %s: %v", c.RemoteAddr(), err)
+		// Closing the session at once can drop the refusal before it is sent.
+		// The tab hangs up once it has read it.
+		select {
+		case <-sess.CloseChan():
+		case <-time.After(helloTimeout):
+		}
+		return
+	}
+	s.logf("visor %s connected from %s", pk, c.RemoteAddr())
 	for {
 		st, err := sess.Accept()
 		if err != nil {
@@ -87,7 +113,7 @@ func (s *Server) handle(c net.Conn) {
 		}
 		go s.serveStream(sess, st)
 	}
-	s.logf("tab disconnected from %s", c.RemoteAddr())
+	s.logf("visor %s disconnected from %s", pk, c.RemoteAddr())
 }
 
 // muxConfig turns off keepalive, since a busy tab can stall its event loop
@@ -103,7 +129,7 @@ func muxConfig() *yamux.Config {
 func (s *Server) serveStream(sess *yamux.Session, st net.Conn) {
 	defer st.Close() //nolint:errcheck
 	br := bufio.NewReader(st)
-	op, f, err := readMsg(br, 2)
+	op, f, err := readMsg(br)
 	if err != nil {
 		return
 	}

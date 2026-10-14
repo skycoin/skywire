@@ -778,7 +778,7 @@ func (v *Visor) GetRuntimeConfig() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return redactTopLevelSK(b), nil
+	return redactSecrets(b), nil
 }
 
 // GetConfigPath returns the filesystem path the visor loaded its config

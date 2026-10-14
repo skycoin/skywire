@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	plot "github.com/0magnet/plot-go"
 	"github.com/guptarohit/asciigraph"
 	"github.com/spf13/cobra"
@@ -230,7 +232,7 @@ func runMuxPlot(poll func() (any, error)) {
 			return frame(tracks), nil
 		}, livetui.Options{Title: "skywire mux · " + plotSubject(), Interval: muxPlotInterval})
 		if err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintf(os.Stderr, "tui: %v\n", err)
+			cmdutil.Eprintf("tui: %v\n", err)
 		}
 		return
 	}
@@ -248,11 +250,11 @@ func runMuxPlot(poll func() (any, error)) {
 			updateTracks(tracks, rgs[0])
 			render(tracks)
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "\rRouteGroupMuxInfo: %v", err)
+			cmdutil.Eprintf("\rRouteGroupMuxInfo: %v", err)
 		}
 		select {
 		case <-ctx.Done():
-			fmt.Print("\n")
+			cmdutil.Print("\n")
 			return
 		case <-ticker.C:
 		}
@@ -301,10 +303,10 @@ func runMuxPlotStream(cmd *cobra.Command) {
 		ev, recvErr := stream.Recv()
 		if recvErr != nil {
 			if recvErr == io.EOF || recvErr == context.Canceled {
-				fmt.Print("\n")
+				cmdutil.Print("\n")
 				return
 			}
-			fmt.Fprintf(os.Stderr, "\nstream recv: %v\n", recvErr)
+			cmdutil.Eprintf("\nstream recv: %v\n", recvErr)
 			return
 		}
 		switch p := ev.Payload.(type) {
@@ -324,15 +326,15 @@ func runMuxPlotStream(cmd *cobra.Command) {
 			pushMuxPlotEvent(fmt.Sprintf("R%d ✗ pump-failed %s", p.RouteFailure.RouteIndex, p.RouteFailure.ErrorMessage))
 		case *rpcgrpc.MuxBandwidthEvent_Done:
 			render(tracks)
-			fmt.Printf("\ndone: %s\n", p.Done.TerminationReason)
+			cmdutil.Printf("\ndone: %s\n", p.Done.TerminationReason)
 			return
 		case *rpcgrpc.MuxBandwidthEvent_Error:
-			fmt.Fprintf(os.Stderr, "\nerror: %s: %s\n", p.Error.Code, p.Error.Message)
+			cmdutil.Eprintf("\nerror: %s: %s\n", p.Error.Code, p.Error.Message)
 			return
 		}
 		select {
 		case <-ctx.Done():
-			fmt.Print("\n")
+			cmdutil.Print("\n")
 			return
 		default:
 		}
@@ -398,7 +400,7 @@ func runMuxPlotInfoStream(_ *cobra.Command, _ func() (any, error)) bool {
 		sample, recvErr := stream.Recv()
 		if recvErr != nil {
 			if recvErr == io.EOF || errors.Is(recvErr, context.Canceled) {
-				fmt.Print("\n")
+				cmdutil.Print("\n")
 				return true
 			}
 			// A failure before the FIRST sample most likely means the RPC
@@ -408,7 +410,7 @@ func runMuxPlotInfoStream(_ *cobra.Command, _ func() (any, error)) bool {
 			if !gotSample {
 				return false
 			}
-			fmt.Fprintf(os.Stderr, "\nstream recv: %v\n", recvErr)
+			cmdutil.Eprintf("\nstream recv: %v\n", recvErr)
 			return true
 		}
 		gotSample = true
@@ -421,7 +423,7 @@ func runMuxPlotInfoStream(_ *cobra.Command, _ func() (any, error)) bool {
 		}
 		select {
 		case <-ctx.Done():
-			fmt.Print("\n")
+			cmdutil.Print("\n")
 			return true
 		default:
 		}
@@ -575,7 +577,7 @@ func render(tracks map[int]*legTrack) {
 	if f == "" {
 		return
 	}
-	fmt.Print("\x1b[H\x1b[2J" + f) // clear + home, then the frame
+	cmdutil.Print("\x1b[H\x1b[2J" + f) // clear + home, then the frame
 }
 
 // frame assembles one chart frame (bandwidth panel over RTT panel, legend,

@@ -3,7 +3,8 @@
 > **Retired (stage 4 of #4484).** The committed `pkg/wasmhv/wasmbin` blobs, the
 > `?variant=` / `--variant` selection, `hv gen` and the `embed-wasm-visor*`
 > targets described below are gone. The one js/wasm module is the root binary
-> itself, installed beside the native binary (`pkg/wasmhv/execwasm`);
+> itself, kept beside the native binary and fetched when the desk is first
+> opened (`pkg/wasmhv/execwasm`);
 > every page serves it at `/skywire.wasm` and runs it in a role
 > (`skywire desk-host --role shell|browser|netview|cipher`). Kept as history.
 

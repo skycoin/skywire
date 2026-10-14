@@ -214,8 +214,7 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 
 		myPK, mySK := resolveChatIdentity(sk)
 		if !cmd.Flags().Changed("sk") && os.Getenv("DMSG_SK") == "" {
-			fmt.Fprintf(os.Stderr,
-				"WARN: ephemeral identity. Your PK is %s — the host's whitelist must accept this PK or the transfer will be rejected. Use --sk / DMSG_SK= for a stable identity.\n\n",
+			cmdutil.Eprintf("WARN: ephemeral identity. Your PK is %s — the host's whitelist must accept this PK or the transfer will be rejected. Use --sk / DMSG_SK= for a stable identity.\n\n",
 				myPK)
 		}
 
@@ -239,12 +238,12 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 			if err := c.Download(remotePath, localPath); err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "downloaded %s:%s -> %s\n", peerPK, remotePath, localPath)
+			cmdutil.Eprintf("downloaded %s:%s -> %s\n", peerPK, remotePath, localPath)
 		case scpDirUpload:
 			if err := c.Upload(localPath, remotePath); err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "uploaded %s -> %s:%s\n", localPath, peerPK, remotePath)
+			cmdutil.Eprintf("uploaded %s -> %s:%s\n", localPath, peerPK, remotePath)
 		}
 		return nil
 	},
@@ -294,9 +293,9 @@ func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection,
 	}
 	switch direction {
 	case scpDirDownload:
-		fmt.Fprintf(os.Stderr, "downloaded %s:%s -> %s (via visor %s)\n", peerPK, remotePath, abs, transport)
+		cmdutil.Eprintf("downloaded %s:%s -> %s (via visor %s)\n", peerPK, remotePath, abs, transport)
 	case scpDirUpload:
-		fmt.Fprintf(os.Stderr, "uploaded %s -> %s:%s (via visor %s)\n", abs, peerPK, remotePath, transport)
+		cmdutil.Eprintf("uploaded %s -> %s:%s (via visor %s)\n", abs, peerPK, remotePath, transport)
 	}
 	return nil
 }

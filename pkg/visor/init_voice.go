@@ -10,9 +10,7 @@ package visor
 import (
 	"context"
 	"net"
-	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -24,30 +22,13 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// voiceAudioBridge is the SKYWIRE_VOICE_AUDIO value that hands capture and
-// playback to the process that started the visor (see pkg/skychat/call.Bridge).
-const voiceAudioBridge = "bridge"
-
-// voiceAudioMode resolves the audio backend to use.
-//
-// Android and iOS default to the bridge because nothing else there can work:
-// GOOS=android satisfies the `linux` build tag, so the default path opens the
-// PulseAudio backend, finds no server, and silently degrades to a mute call,
-// and iOS has no backend at all. The host app owns the only real device on
-// both. An explicit SKYWIRE_VOICE_AUDIO still wins — including on a phone,
-// where "off" is a legitimate way to run a visor that never touches the
-// microphone.
-func voiceAudioMode() string {
-	return resolveVoiceAudioMode(runtime.GOOS, os.Getenv("SKYWIRE_VOICE_AUDIO"))
-}
-
-func resolveVoiceAudioMode(goos, env string) string {
-	mode := strings.ToLower(strings.TrimSpace(env))
-	if mode == "" && (goos == "android" || goos == "ios") {
-		return voiceAudioBridge
-	}
-	return mode
-}
+// voiceAudioBridged reports whether capture and playback go to the process
+// that started the visor (see pkg/skychat/call.Bridge). That is Android and
+// iOS, where nothing else can work: GOOS=android satisfies the `linux` build
+// tag, so the device path opens the PulseAudio backend, finds no server, and
+// degrades to a mute call, and iOS has no backend at all. The host app owns
+// the only real device on both.
+func voiceAudioBridged() bool { return runtime.GOOS == "android" || runtime.GOOS == "ios" }
 
 // VoiceAudioBridge returns the host-app audio device this visor is using, or
 // nil when it opens a device of its own (or has none). The local API's voice
@@ -129,31 +110,14 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	// voice answer`). That privacy guarantee is what lets us enable real audio
 	// BY DEFAULT — no env var or restart needed for voice chats to actually
 	// carry audio. On a headless host with no audio device, capture/playback
-	// degrade to silence and the call still connects (receive-only).
-	//
-	// SKYWIRE_VOICE_AUDIO only OVERRIDES the default:
-	//   (unset)/mic       → the system default input device (a mic, or on a
-	//                        desktop with no mic the monitor, per the OS default)
-	//   monitor           → force the default sink's monitor (system audio)
-	//   bridge            → the HOST APP's device, over the local API (below)
-	//   off/none/silent/0 → no local capture (receive-only), still explicit-answer
-	//   auto/auto-answer  → auto-accept inbound calls, silent (headless/testing)
+	// degrade to silence and the call still connects (receive-only). On
+	// Android the device belongs to the host app (voiceAudioBridged).
 	ring := func(inv skycall.Sig) {
 		log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
 			Warn("voice: INCOMING CALL — answer in the hvui or `skywire cli skychat voice answer <id>`")
 	}
-	switch mode := voiceAudioMode(); mode {
-	case "auto", "auto-answer", "autoanswer":
-		// Headless/testing: accept every inbound call silently.
-		cfg.OnIncoming = func(inv skycall.Sig) bool {
-			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (silent)")
-			return true
-		}
-	case "off", "none", "silent", "0", "false":
-		cfg.ManualAnswer = true
-		cfg.Ring = ring
-		log.Info("voice: real audio OFF (SKYWIRE_VOICE_AUDIO) — calls ring; answer to connect (silent)")
-	case voiceAudioBridge:
+	switch {
+	case voiceAudioBridged():
 		// The device belongs to the process that started us; we only present
 		// it to the call manager. Nothing is held open until a call exists,
 		// and a call still connects (mute) if the app never attaches — which
@@ -168,11 +132,10 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		log.Infof("voice: audio bridged to the host app (%d Hz mono) — calls ring; answer to connect",
 			skycall.SampleRate)
 	default:
-		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
 		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
 		cfg.NewSource = func() skycall.Source {
-			s, err := skycall.NewMicSource(monitor, 0)
+			s, err := skycall.NewMicSource(false, 0)
 			if err != nil {
 				log.WithError(err).Warn("voice: audio capture unavailable — using silence (call still connects)")
 				return skycall.SilentSource{}
@@ -187,11 +150,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 			return s
 		}
 		cfg.Ring = ring
-		srcKind := "system default input"
-		if monitor {
-			srcKind = "system-audio monitor"
-		}
-		log.Infof("voice: real audio enabled (%s) — calls ring; answer to connect", srcKind)
+		log.Info("voice: real audio enabled (system default input) — calls ring; answer to connect")
 	}
 
 	mgr := skycall.NewManager(cfg)

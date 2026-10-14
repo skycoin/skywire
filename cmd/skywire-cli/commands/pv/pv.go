@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
@@ -38,13 +40,7 @@ var (
 	showVersion    bool
 	showByType     bool
 	minTransports  int
-	testEnv        bool
 )
-
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
 
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
@@ -97,19 +93,14 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url (also serves the integrated uptime tracker)")
 	RootCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
@@ -139,9 +130,7 @@ Returns only public keys, one per line.
 Use -t to show transport counts per visor.
 
 Cache files are stored in directories named after service hosts.
-Set cache dir to "" to disable caching for that service.
-
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment().ServiceDiscovery, serviceType),
+Set cache dir to "" to disable caching for that service.`, getDeployment().ServiceDiscovery, serviceType),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// --bytype is a richer form of --transports; it needs the same TPD fetch.
 		if showByType {
@@ -152,24 +141,6 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		if showVersion {
 			showTransports = true
 		}
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			// --testenv was specified at runtime (not via SKYWIRETEST env)
-			// Override values that weren't explicitly changed by user
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("tpdurl") {
-				tpdURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdt") {
-				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs with endpoints. Uptime and transports both come
 		// from the transport-discovery base: the uptime tracker is
 		// TPD-integrated (CXO-backed v3), so there is no separate uptime
@@ -342,17 +313,17 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 				for _, t := range order {
 					line += fmt.Sprintf(" %s=%d", t, tpByType[r.pk][t])
 				}
-				fmt.Println(line)
+				cmdutil.Println(line)
 			}
 			return
 		}
 
 		for _, r := range results {
 			if showVersion {
-				fmt.Printf("%s %d %s\n", r.pk, r.count, versionOrDash(verByPK[r.pk]))
+				cmdutil.Printf("%s %d %s\n", r.pk, r.count, versionOrDash(verByPK[r.pk]))
 				continue
 			}
-			fmt.Printf("%s %d\n", r.pk, r.count)
+			cmdutil.Printf("%s %d\n", r.pk, r.count)
 		}
 	},
 }

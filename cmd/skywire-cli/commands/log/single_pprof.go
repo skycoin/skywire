@@ -9,7 +9,6 @@ package clilog
 import (
 	"context"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -118,7 +117,7 @@ Whitelisted via the remote visor's survey_whitelist.`,
 		}
 		defer cleanup()
 
-		if err := fetchSurveyEndpoint(ctx, hc, pk, path, os.Stdout); err != nil {
+		if err := fetchSurveyEndpoint(ctx, hc, pk, path, cmdutil.Stdout()); err != nil {
 			log.Fatal(err)
 		}
 	},

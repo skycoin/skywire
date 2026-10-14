@@ -159,7 +159,13 @@ func TestHostBridgeForwardAndReconnect(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, st.Connected)
 	require.Empty(t, st.URL)
-	require.Nil(t, v.conf.HostBridge, "disconnect must remove the saved bridge")
+	// Disconnecting forgets the bridge but keeps the pairing secret, so the
+	// visor can reconnect to the bridge it paired with.
+	require.Empty(t, v.conf.HostBridge.URL)
+	require.Empty(t, v.conf.HostBridge.Forwards)
+	require.Len(t, v.conf.HostBridge.Secret, 64)
+	require.NoError(t, v.HostBridgeConnect(url), "the kept secret must still be accepted")
+	require.NoError(t, v.HostBridgeDisconnect())
 }
 
 func TestHostBridgeReconnectsAtBoot(t *testing.T) {
@@ -210,4 +216,16 @@ func TestHostBridgeReconnectsAtBoot(t *testing.T) {
 	}, 15*time.Second, 50*time.Millisecond, "visor did not connect at boot")
 	echoOnce(t, host, "after boot")
 	require.NoError(t, v.HostBridgeDisconnect())
+}
+
+func TestLoopbackDefault(t *testing.T) {
+	for in, want := range map[string]string{
+		"1080":           "127.0.0.1:1080",
+		":1080":          "127.0.0.1:1080",
+		"0.0.0.0:1080":   "0.0.0.0:1080",
+		"127.0.0.1:1080": "127.0.0.1:1080",
+		"[::1]:80":       "[::1]:80",
+	} {
+		require.Equal(t, want, loopbackDefault(in), in)
+	}
 }

@@ -686,33 +686,6 @@ A JSON config file called `dmsghttp-config.json` can be created containing the d
 the following file is created manually to reflect the deployment
 ```
 {
-  "test": {
-    "dmsg_servers": [
-      {
-        "static":"024716428e6315d954356e9ad72bea32bb2b41aab5a54a9b5cb4313964016e64d8",
-        "server":{
-          "address":"172.104.188.39:30080"
-        }
-      },
-      {
-        "static":"03f6b0a20be8fe0fd2fd0bd850507cfb10d0eaa37dce5c174654d07db5749a41bf",
-        "server":{
-          "address":"192.53.115.181:8083"
-        }
-      },
-      {
-        "static":"02ae49c901480b49f9c40f6f90fa8e775cf9b00b61ded673a9b0776dfb7cccd374",
-        "server":{
-          "address":"139.162.45.141:8083"
-        }
-      }
-    ],
-    "dmsg_discovery": "dmsg://03cd2336e5de74bdab2bbdb44b06b0c8c713a5ee9029615f5526f8c99a6afe87b8:80",
-    "transport_discovery": "dmsg://02703cf828ea11d25b2c8eb0796132ecc7e53b22325b20ce3674ce5cd8693e4fb6:80",
-    "address_resolver": "dmsg://030eb7d8cf6eac40c19bbc433de6d6b9bb7a47f2e1d7095c6a01aa676471670ad2:80",
-    "route_finder": "dmsg://02ece5b69eaee13ef967b7eb67ca93f1dfddad3a51c9cb1808c4bd0d8d8aa32053:80",
-    "service_discovery": "dmsg://038f751df4af75fb3d51f6693602bfe8289145e633ffdd1e67d686bea595f84d55:80"
-  },
   "prod": {
     "dmsg_servers": [
       {

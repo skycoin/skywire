@@ -4,8 +4,9 @@ package clitp
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -182,7 +183,7 @@ var addTpCmd = &cobra.Command{
 			// For each remote visor, request transports to all target PKs
 			for ti, targetPK := range targetPKs {
 				if len(targetPKs) > 1 && !isJSON {
-					fmt.Printf("\n=== Remote visor %d/%d: %s ===\n", ti+1, len(targetPKs), targetPK.String())
+					cmdutil.Printf("\n=== Remote visor %d/%d: %s ===\n", ti+1, len(targetPKs), targetPK.String())
 				}
 
 				successCount := 0
@@ -190,7 +191,7 @@ var addTpCmd = &cobra.Command{
 
 				for i, pk := range pks {
 					if !isJSON {
-						fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String(), pk.String())
+						cmdutil.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String(), pk.String())
 					}
 
 					var tpResp *visorapi.TPSTransportResponse
@@ -267,28 +268,28 @@ var addTpCmd = &cobra.Command{
 				totalFail += failCount
 
 				if len(pks) > 1 && !isJSON {
-					fmt.Printf("Visor %s: %d/%d transports established\n", targetPK.String(), successCount, len(pks))
+					cmdutil.Printf("Visor %s: %d/%d transports established\n", targetPK.String(), successCount, len(pks))
 				}
 			}
 
 			// Print results
 			if !isJSON {
-				fmt.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
+				cmdutil.Printf("\nTotal Summary: %d/%d transports established via TPS\n", totalSuccess, totalSuccess+totalFail)
 			}
 
 			if isJSON {
 				internal.PrintOutput(cmd.Flags(), tpsResults, "")
 			} else {
 				for _, tp := range tpsResults {
-					fmt.Printf("id: %s\n", tp.ID)
-					fmt.Printf("local: %s\n", tp.Local)
-					fmt.Printf("remote: %s\n", tp.Remote)
-					fmt.Printf("type: %s\n", tp.Type)
+					cmdutil.Printf("id: %s\n", tp.ID)
+					cmdutil.Printf("local: %s\n", tp.Local)
+					cmdutil.Printf("remote: %s\n", tp.Remote)
+					cmdutil.Printf("type: %s\n", tp.Type)
 				}
 			}
 
 			if totalFail > 0 && totalSuccess == 0 {
-				os.Exit(1)
+				cmdutil.Exit(1)
 			}
 			return
 		}
@@ -301,7 +302,7 @@ var addTpCmd = &cobra.Command{
 
 		for i, pk := range pks {
 			if len(pks) > 1 && !isJSON {
-				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String())
+				cmdutil.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String())
 			}
 
 			// (Removed pre-creation dmsg port 136 probe. Direct transports
@@ -384,7 +385,7 @@ var addTpCmd = &cobra.Command{
 
 		// Print results
 		if len(pks) > 1 && !isJSON {
-			fmt.Printf("\nSummary: %d/%d transports established\n", successCount, len(pks))
+			cmdutil.Printf("\nSummary: %d/%d transports established\n", successCount, len(pks))
 		}
 
 		if isJSON {
@@ -404,7 +405,7 @@ var addTpCmd = &cobra.Command{
 		}
 
 		if failCount > 0 && successCount == 0 {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	},
 }

@@ -207,8 +207,7 @@ func (s *service) runDMSG(
 ) error {
 	// Source priority for the dmsg-server transit set:
 	//   1. config.dmsg_servers (explicit list)
-	//   2. embedded deployment keyring (Prod, or Test when
-	//      TestEnvironment is set)
+	//   2. embedded deployment keyring (Prod)
 	//   3. legacy API self-poll (last-resort: blocks until at least
 	//      one server registers over HTTP)
 	var servers []*disc.Entry
@@ -220,10 +219,6 @@ func (s *service) runDMSG(
 	default:
 		src := deployment.Prod
 		srcName := "deployment.Prod"
-		if cfg.TestEnvironment {
-			src = deployment.Test
-			srcName = "deployment.Test"
-		}
 		servers = src.ToDiscEntries()
 		if len(servers) > 0 {
 			log.WithField("count", len(servers)).WithField("source", srcName).
@@ -276,7 +271,7 @@ func (s *service) runDMSG(
 	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
 	// separate :81 listener. The ring buffer captures recent global-logger output.
 	rb := logging.NewRingBuffer(0)
-	logging.AddHook(logging.NewWriteHook(rb))
+	logging.AddHook(logging.NewWriteHookLevel(rb, logging.HookLevel(cfg.LogHookLevel, logging.DefaultHookLevel)))
 	s.stats.CountDmsg(dmsgDC)
 	a.SetServerHealthClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC), Timeout: serverHealthFetchTimeout})
 	s.stats.NamePort(dmsg.DefaultDmsgHTTPPort, "http")

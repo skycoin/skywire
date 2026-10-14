@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -109,8 +108,8 @@ var startCmd = &cobra.Command{
 				return // let the main goroutine exit gracefully
 			}
 			rpcClient.KillApp("vpn-client") //nolint:errcheck,gosec
-			fmt.Print("\nStopped!")
-			os.Exit(1)
+			cmdutil.Print("\nStopped!")
+			cmdutil.Exit(1)
 		}()
 
 		// --verbose: open a gRPC log stream BEFORE StartVPNClientWithMode
@@ -197,11 +196,11 @@ var startCmd = &cobra.Command{
 		// --verbose: stay in the foreground, streaming logs until the
 		// user hits ctrl+c. Then stop the app cleanly and exit.
 		if startVerbose && appReachedRunning {
-			fmt.Fprintln(os.Stderr, "--- vpn running; streaming logs (ctrl+c to stop) ---")
+			cmdutil.Eprintln("--- vpn running; streaming logs (ctrl+c to stop) ---")
 			<-ctx.Done()
-			fmt.Fprintln(os.Stderr, "stopping app...")
+			cmdutil.Eprintln("stopping app...")
 			if err := rpcClient.StopApp(stateName); err != nil {
-				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+				cmdutil.Eprintf("stop app: %v\n", err)
 			}
 			if verboseStream != nil {
 				verboseStream.Close()
@@ -229,7 +228,7 @@ var statusCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
@@ -270,9 +269,7 @@ var (
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
@@ -294,24 +291,8 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
@@ -453,12 +434,12 @@ var listCmd = &cobra.Command{
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
 					}
-					fmt.Println(pterm.Red(fmt.Sprintf("%s %s %s", pkStr, countryCode, svc.Version)))
+					cmdutil.Println(pterm.Red(fmt.Sprintf("%s %s %s", pkStr, countryCode, svc.Version)))
 				}
 			}
 
 			if isStats {
-				fmt.Printf("%d\n", count)
+				cmdutil.Printf("%d\n", count)
 			}
 			return
 		}
@@ -504,12 +485,12 @@ var listCmd = &cobra.Command{
 						if svc.Geo != nil {
 							countryCode = svc.Geo.Country
 						}
-						fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+						cmdutil.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
 					}
 				}
 
 				if isStats {
-					fmt.Printf("%d\n", count)
+					cmdutil.Printf("%d\n", count)
 				}
 				return
 			}
@@ -600,12 +581,12 @@ var listCmd = &cobra.Command{
 					if svc.Geo != nil {
 						countryCode = svc.Geo.Country
 					}
-					fmt.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
+					cmdutil.Printf("%s %s %s\n", pkStr, countryCode, svc.Version)
 				}
 			}
 
 			if isStats {
-				fmt.Printf("%d\n", count)
+				cmdutil.Printf("%d\n", count)
 			}
 			return
 		}

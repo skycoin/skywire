@@ -43,6 +43,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -208,8 +210,8 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 
 	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mux-bw: gRPC client connect: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("mux-bw: gRPC client connect: %v\n", err)
+		cmdutil.Exit(1)
 	}
 	defer client.Close() //nolint:errcheck
 
@@ -231,11 +233,11 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 
 	stream, err := client.StreamMuxBandwidth(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "mux-bw: StreamMuxBandwidth call: %v\n", err)
-		os.Exit(1)
+		cmdutil.Eprintf("mux-bw: StreamMuxBandwidth call: %v\n", err)
+		cmdutil.Exit(1)
 	}
 
-	stdoutEnc := json.NewEncoder(os.Stdout)
+	stdoutEnc := json.NewEncoder(cmdutil.Stdout())
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames:   true,
 		EmitUnpopulated: false,
@@ -245,8 +247,8 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 	if muxBwOutFile != "" {
 		f, fErr := os.OpenFile(muxBwOutFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
 		if fErr != nil {
-			fmt.Fprintf(os.Stderr, "mux-bw: open --output file: %v\n", fErr)
-			os.Exit(1)
+			cmdutil.Eprintf("mux-bw: open --output file: %v\n", fErr)
+			cmdutil.Exit(1)
 		}
 		defer f.Close() //nolint:errcheck
 		fileEnc = json.NewEncoder(f)
@@ -256,7 +258,7 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 	startedAt := time.Now()
 
 	if !muxBwJSON && !muxBwQuiet {
-		fmt.Fprintln(os.Stderr, muxBwHumanHeader(targetPK, req))
+		cmdutil.Eprintln(muxBwHumanHeader(targetPK, req))
 	}
 
 	for {
@@ -265,34 +267,34 @@ func runMuxBandwidth(cmd *cobra.Command, args []string) {
 			if recvErr == io.EOF || recvErr == context.Canceled {
 				break
 			}
-			fmt.Fprintf(os.Stderr, "mux-bw: stream recv: %v\n", recvErr)
-			os.Exit(1)
+			cmdutil.Eprintf("mux-bw: stream recv: %v\n", recvErr)
+			cmdutil.Exit(1)
 		}
 
 		tracker.record(ev)
 
 		if fileEnc != nil {
 			if err := emitMuxBwOne(fileEnc, marshaler, ev); err != nil {
-				fmt.Fprintf(os.Stderr, "mux-bw: emit to file: %v\n", err)
-				os.Exit(1)
+				cmdutil.Eprintf("mux-bw: emit to file: %v\n", err)
+				cmdutil.Exit(1)
 			}
 		}
 
 		switch {
 		case muxBwJSON:
 			if err := emitMuxBwOne(stdoutEnc, marshaler, ev); err != nil {
-				fmt.Fprintf(os.Stderr, "mux-bw: emit: %v\n", err)
-				os.Exit(1)
+				cmdutil.Eprintf("mux-bw: emit: %v\n", err)
+				cmdutil.Exit(1)
 			}
 		case muxBwQuiet:
 			// Suppress per-event rows.
 		default:
-			muxBwEmitHumanRow(os.Stdout, ev, startedAt)
+			muxBwEmitHumanRow(cmdutil.Stdout(), ev, startedAt)
 		}
 	}
 
 	if !muxBwJSON {
-		tracker.printSummary(os.Stdout)
+		tracker.printSummary(cmdutil.Stdout())
 	}
 }
 

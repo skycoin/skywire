@@ -27,7 +27,7 @@ import (
 func makeApplyFlagsCmd() *cobra.Command {
 	c := &cobra.Command{Use: "fake"}
 	// Booleans
-	for _, name := range []string{"pkg", "ishv", "testenv", "dmsghttp", "public", "servevpn", "autoconn", "publicip"} {
+	for _, name := range []string{"pkg", "ishv", "dmsghttp", "public", "servevpn", "autoconn", "publicip"} {
 		c.Flags().Bool(name, false, "")
 	}
 	// Single-value strings

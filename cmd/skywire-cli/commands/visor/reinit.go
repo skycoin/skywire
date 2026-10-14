@@ -3,7 +3,8 @@ package clivisor
 
 import (
 	"fmt"
-	"os"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -29,7 +30,7 @@ var reinitCmd = &cobra.Command{
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		err = rpcClient.ReinitiateModule(module)
 		if err != nil {

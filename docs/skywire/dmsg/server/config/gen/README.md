@@ -14,7 +14,6 @@ skywire dmsg server config gen
 
 ```
   -o, --output string   config output path/name
-  -t, --testenv         use test deployment
 ```
 
 ## Global Flags

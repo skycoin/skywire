@@ -11,8 +11,6 @@ without HTTP testing. Use --version to filter by visor version.
 
 Results show which proxies are reachable and their response latency.
 
-Use --testenv or SKYWIRETEST=1 to use test deployment services.
-
 ## Usage
 
 ```
@@ -33,7 +31,6 @@ skywire cli proxy test
       --local-route      calculate routes locally instead of using route finder
   -s, --pk string        test a specific proxy server by public key
   -a, --sdurl string     service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
-      --testenv          use test deployment
   -t, --timeout int      timeout in seconds for HTTP request (route setup has separate 30s timeout) (default 10)
   -p, --transport        only test proxies that have an existing transport
   -u, --url string       URL to fetch through proxy for testing (default "https://ip.skycoin.com")

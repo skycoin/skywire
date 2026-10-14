@@ -299,7 +299,7 @@ func (s *service) startDMSGHealth(
 	// router logs via the global logger) so /debug/log needs no disk file —
 	// e.g. the live id-reservation failures behind the /stats counters.
 	rb := logging.NewRingBuffer(0)
-	logging.AddHook(logging.NewWriteHook(rb))
+	logging.AddHook(logging.NewWriteHookLevel(rb, logging.HookLevel(conf.LogHookLevel, logging.DefaultHookLevel)))
 	handler := dmsghttp.WithDebug(mux, deployment.Prod.SurveyWhitelist, rb.Bytes)
 	go func() {
 		if err := dmsghttp.ListenAndServe(ctx, conf.SK, handler, nil,

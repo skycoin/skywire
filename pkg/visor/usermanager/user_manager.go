@@ -124,6 +124,11 @@ func (s *UserManager) Login() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusUnauthorized, ErrBadLogin)
 			return
 		}
+		if user.UpgradePassword(rb.Password) {
+			if err := s.db.SetUser(*user); err != nil {
+				s.log.WithError(err).Warnf("Failed to rehash the password of %q", rb.Username)
+			}
+		}
 
 		session := Session{
 			User:   rb.Username,

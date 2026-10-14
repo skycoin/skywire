@@ -4,9 +4,10 @@ package skynet
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -147,7 +148,7 @@ var srvStartCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start %s: %w", appName, err))
 		}
 
-		fmt.Printf("Started %s (exposing ports: %s)\n", appName, srvPorts)
+		cmdutil.Printf("Started %s (exposing ports: %s)\n", appName, srvPorts)
 	},
 }
 
@@ -199,10 +200,10 @@ Examples:
 				// skynet-client apps under default naming.
 				if state.Binary == skynetBinaryName && state.Status == appserver.AppStatusRunning {
 					if err := rpcClient.StopApp(state.Name); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
+						cmdutil.Eprintf("Warning: failed to stop %s: %v\n", state.Name, err)
 					} else {
 						stopped++
-						fmt.Printf("Stopped %s\n", state.Name)
+						cmdutil.Printf("Stopped %s\n", state.Name)
 					}
 				}
 			}
@@ -229,7 +230,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 

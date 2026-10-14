@@ -99,11 +99,11 @@ var RootCmd = &cobra.Command{
 			conn, derr := tcpnoise.Dial(ctx, hostPort, pk, sk, rPK)
 			lat := time.Since(startT).Round(time.Millisecond)
 			if derr != nil {
-				fmt.Printf("tcp://%s@%s — unreachable (%s)\n", rPK, hostPort, lat)
+				cmdutil.Printf("tcp://%s@%s — unreachable (%s)\n", rPK, hostPort, lat)
 				return nil
 			}
 			_ = conn.Close() //nolint:errcheck
-			fmt.Printf("tcp://%s@%s — reachable (%s)\n", rPK, hostPort, lat)
+			cmdutil.Printf("tcp://%s@%s — reachable (%s)\n", rPK, hostPort, lat)
 			return nil
 		}
 
@@ -154,7 +154,7 @@ var RootCmd = &cobra.Command{
 		if reachable {
 			state = "reachable"
 		}
-		fmt.Printf("dmsg://%s:%d%s — %s (%s)\n", dpk, port, suffix, state, lat)
+		cmdutil.Printf("dmsg://%s:%d%s — %s (%s)\n", dpk, port, suffix, state, lat)
 		return nil
 	},
 }

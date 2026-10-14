@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -388,38 +386,7 @@ func (s *Session) onData(data string) {
 }
 
 func (s *Session) complete(word string, isFirstWord bool) []string {
-	if isFirstWord && !strings.Contains(word, "/") {
-		var names []string
-		for _, n := range append(shell.AppletNames(), Builtins...) {
-			if strings.HasPrefix(n, word) {
-				names = append(names, n)
-			}
-		}
-		sort.Strings(names)
-		return names
-	}
-	dir, base := filepath.Split(word)
-	search := dir
-	if !filepath.IsAbs(search) {
-		search = filepath.Join(s.Shell.Dir(), dir)
-	}
-	infos, err := afero.ReadDir(s.Shell.FS, filepath.Clean(search))
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, info := range infos {
-		if !strings.HasPrefix(info.Name(), base) {
-			continue
-		}
-		cand := dir + info.Name()
-		if info.IsDir() {
-			cand += "/"
-		}
-		names = append(names, cand)
-	}
-	sort.Strings(names)
-	return names
+	return s.Shell.Complete(word, isFirstWord)
 }
 
 // writeStdin hands input to the running command, in order.
@@ -579,16 +546,8 @@ func partialRune(b []byte) int {
 	return 0
 }
 
-// Builtins are the interpreter's own commands, which completion offers
-// alongside the applets.
-var Builtins = []string{
-	"cd", "pwd", "echo", "printf", "read", "exit", "export", "unset",
-	"source", "test", "true", "false", "set", "shift", "local",
-	"declare", "eval", "alias", "unalias", "type", "return", "break",
-	"continue", "pushd", "popd", "dirs", "let", "getopts", "wait",
-	"jobs", "kill", "disown", "fg", "bg", "enable", "compgen", "history",
-	"builtin", "umask", "times", "trap", "shopt", "mapfile", "readarray",
-}
+// Builtins are the interpreter's own commands; see shell.Builtins.
+var Builtins = shell.Builtins
 
 // echoCtl is what a terminal in cooked mode echoes for data, as a tty with
 // ECHOCTL does: a line ending as a new line, a tab as itself, and any other

@@ -43,7 +43,6 @@ import (
 	"io"
 	"math"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -169,7 +168,7 @@ whitelist (if any) can authorize it.`,
 		defer conn.Close() //nolint:errcheck
 
 		if iperfVerbose {
-			fmt.Fprintf(os.Stderr, "connected: dmsg %s:%d (transport=dmsg)\n", peerPK.String(), port)
+			cmdutil.Eprintf("connected: dmsg %s:%d (transport=dmsg)\n", peerPK.String(), port)
 		}
 		if iperfRTT {
 			if iperfRTTRate <= 0 {
@@ -226,7 +225,7 @@ This is standalone-dmsg only — the CLI bootstraps its own dmsg.Client.
 		defer lis.Close() //nolint:errcheck
 
 		if iperfVerbose {
-			fmt.Fprintf(os.Stderr, "listening: dmsg %s:%d (transport=dmsg) — awaiting inbound\n",
+			cmdutil.Eprintf("listening: dmsg %s:%d (transport=dmsg) — awaiting inbound\n",
 				listenerPK.String(), port)
 		}
 
@@ -239,7 +238,7 @@ This is standalone-dmsg only — the CLI bootstraps its own dmsg.Client.
 		defer conn.Close() //nolint:errcheck
 
 		if iperfVerbose {
-			fmt.Fprintf(os.Stderr, "accepted: %s\n", conn.RemoteAddr())
+			cmdutil.Eprintf("accepted: %s\n", conn.RemoteAddr())
 		}
 		if iperfEcho {
 			runIperfEcho(ctx, conn)
@@ -291,7 +290,7 @@ sendLoop:
 			sent.Add(uint64(n)) //nolint:gosec // n is non-negative per io.Writer contract
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "write error after %s: %v\n", time.Since(start).Round(time.Millisecond), err)
+			cmdutil.Eprintf("write error after %s: %v\n", time.Since(start).Round(time.Millisecond), err)
 			break sendLoop
 		}
 	}
@@ -333,7 +332,7 @@ func runIperfReceiver(ctx context.Context, conn net.Conn, interval time.Duration
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				fmt.Fprintf(os.Stderr, "read error after %s: %v\n", time.Since(start).Round(time.Millisecond), err)
+				cmdutil.Eprintf("read error after %s: %v\n", time.Since(start).Round(time.Millisecond), err)
 			}
 			break
 		}
@@ -360,7 +359,7 @@ func runSamplePrinter(ctx context.Context, counter *atomic.Uint64, interval time
 			delta := cur - lastBytes
 			window := now.Sub(last)
 			rate := bytesPerSec(delta, window)
-			fmt.Fprintf(os.Stderr, "[%s %5.1fs] %s window total %s\n",
+			cmdutil.Eprintf("[%s %5.1fs] %s window total %s\n",
 				dir, now.Sub(start).Seconds(), humanRate(rate), humanBytes(cur))
 			lastBytes = cur
 			last = now
@@ -375,7 +374,7 @@ func printTotals(counter *atomic.Uint64, start time.Time, dir string) {
 	total := counter.Load()
 	elapsed := time.Since(start)
 	avg := bytesPerSec(total, elapsed)
-	fmt.Printf("dir=%s total=%s duration=%s avg=%s\n",
+	cmdutil.Printf("dir=%s total=%s duration=%s avg=%s\n",
 		dir, humanBytes(total), elapsed.Round(time.Millisecond), humanRate(avg))
 }
 
@@ -503,7 +502,7 @@ func runIperfRTT(ctx context.Context, conn net.Conn, duration time.Duration, rat
 		for {
 			if _, err := io.ReadFull(conn, buf); err != nil {
 				if !errors.Is(err, io.EOF) && rxCtx.Err() == nil {
-					fmt.Fprintf(os.Stderr, "rtt rx error: %v\n", err)
+					cmdutil.Eprintf("rtt rx error: %v\n", err)
 				}
 				close(samples)
 				return
@@ -536,7 +535,7 @@ sendLoop:
 			putBigEndianUint64(wireBuf[:8], seq)
 			putBigEndianUint64(wireBuf[8:16], uint64(now.UnixNano())) //nolint:gosec
 			if _, err := conn.Write(wireBuf); err != nil {
-				fmt.Fprintf(os.Stderr, "rtt tx error after %s: %v\n",
+				cmdutil.Eprintf("rtt tx error after %s: %v\n",
 					time.Since(start).Round(time.Millisecond), err)
 				break sendLoop
 			}
@@ -594,12 +593,12 @@ func runIperfEcho(ctx context.Context, conn net.Conn) {
 // stderr.
 func printRTTSummary(samples []rxSample, sent uint64, elapsed time.Duration) {
 	if sent == 0 {
-		fmt.Println("dir=rtt sent=0 received=0 (nothing pumped)")
+		cmdutil.Println("dir=rtt sent=0 received=0 (nothing pumped)")
 		return
 	}
 	recvCount := uint64(len(samples))
 	if recvCount == 0 {
-		fmt.Printf("dir=rtt sent=%d received=0 loss=100.00%% duration=%s (no echos)\n",
+		cmdutil.Printf("dir=rtt sent=%d received=0 loss=100.00%% duration=%s (no echos)\n",
 			sent, elapsed.Round(time.Millisecond))
 		return
 	}
@@ -629,7 +628,7 @@ func printRTTSummary(samples []rxSample, sent uint64, elapsed time.Duration) {
 		std = time.Duration(math.Sqrt(sqSum / float64(recvCount)))
 	}
 	loss := 100 * float64(sent-recvCount) / float64(sent)
-	fmt.Printf("dir=rtt sent=%d received=%d loss=%.2f%% duration=%s min=%s mean=%s max=%s stddev=%s\n",
+	cmdutil.Printf("dir=rtt sent=%d received=%d loss=%.2f%% duration=%s min=%s mean=%s max=%s stddev=%s\n",
 		sent, recvCount, loss, elapsed.Round(time.Millisecond),
 		min.Round(time.Microsecond),
 		mean.Round(time.Microsecond),

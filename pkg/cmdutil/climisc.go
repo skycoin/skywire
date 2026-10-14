@@ -3,7 +3,6 @@ package cmdutil
 
 import (
 	stdjson "encoding/json"
-	"log"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,7 +13,7 @@ import (
 // package (svc, apps, cli) previously copied verbatim.
 func RunRoot(cmd *cobra.Command) {
 	if err := cmd.Execute(); err != nil {
-		log.Fatal("Failed to execute command: ", err)
+		Fatal("Failed to execute command: ", err)
 	}
 }
 

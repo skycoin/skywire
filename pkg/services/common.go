@@ -40,6 +40,8 @@ type Common struct {
 	// LogLevel is the minimum log level; Tag names the service's logger.
 	LogLevel string `json:"log_level,omitempty"`
 	Tag      string `json:"tag,omitempty"`
+	// LogHookLevel is the most verbose level kept for /debug/log, info when empty.
+	LogHookLevel string `json:"log_hook_level,omitempty"`
 	// MetricsAddr exposes Prometheus metrics; empty disables it.
 	MetricsAddr string `json:"metrics_addr,omitempty"`
 	// PprofMode is cpu, mem, mutex, block, trace or http (see StartPprof);
@@ -55,10 +57,6 @@ type Common struct {
 	// SurveyWhitelist are the keys allowed to read the service's debug and
 	// survey endpoints. Empty means the deployment's list (see SurveyKeys).
 	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist,omitempty"`
-
-	// TestEnvironment selects the test deployment's defaults (dmsg
-	// servers and discovery) over production's.
-	TestEnvironment bool `json:"test_environment,omitempty"`
 }
 
 // DefaultRedisPoolSize is the pool size when RedisPoolSize is unset.
@@ -101,14 +99,10 @@ func NonceStoreType(store storeconfig.Type, plainHTTP bool) storeconfig.Type {
 	return storeconfig.Memory
 }
 
-// SurveyKeys is SurveyWhitelist, or the whitelist of the deployment
-// TestEnvironment selects.
+// SurveyKeys is SurveyWhitelist, or the deployment's whitelist.
 func (c *Common) SurveyKeys() []cipher.PubKey {
 	if len(c.SurveyWhitelist) > 0 {
 		return c.SurveyWhitelist
-	}
-	if c.TestEnvironment {
-		return deployment.Test.SurveyWhitelist
 	}
 	return deployment.Prod.SurveyWhitelist
 }
@@ -194,6 +188,9 @@ func MergeCommon(dst *Common, src Common) {
 	if src.LogLevel != "" {
 		dst.LogLevel = src.LogLevel
 	}
+	if src.LogHookLevel != "" {
+		dst.LogHookLevel = src.LogHookLevel
+	}
 	if src.Tag != "" {
 		dst.Tag = src.Tag
 	}
@@ -211,8 +208,5 @@ func MergeCommon(dst *Common, src Common) {
 	}
 	if len(src.SurveyWhitelist) > 0 {
 		dst.SurveyWhitelist = src.SurveyWhitelist
-	}
-	if src.TestEnvironment {
-		dst.TestEnvironment = true
 	}
 }

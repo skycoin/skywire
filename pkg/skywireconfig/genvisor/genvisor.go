@@ -1,8 +1,7 @@
 // Package genvisor pkg/skywireconfig/genvisor/genvisor.go c3-vis-core
 // composes a fresh visor configuration (pkg/visor/visorconfig.V1)
 // from a small Options struct plus the deployment-default services
-// embedded in pkg/skycoin/skywire/deployment (deployment.Prod /
-// deployment.Test).
+// embedded in pkg/skycoin/skywire/deployment (deployment.Prod).
 //
 // Lives in pkg/skywireconfig so it sits alongside autoconfigcmd
 // and keypair as the third leg of the WASM-clean configuration
@@ -69,12 +68,6 @@ type Options struct {
 	// operators can dial it as a transport endpoint.
 	IsPublic bool
 
-	// TestEnv selects the test deployment instead of prod. Affects
-	// every service URL Generate composes (dmsg-discovery,
-	// transport-discovery, route-finder, etc.). Mirrors the
-	// `--testenv` flag in cli config gen.
-	TestEnv bool
-
 	// WalletCustody, when non-empty, sets V1.Wallet.Custody — where the
 	// skycoin-web wallet keeps keys (browser | disk | remote; see the
 	// visorconfig.WalletCustody* constants). Empty leaves the wallet block
@@ -124,7 +117,7 @@ func Generate(opts Options) (*visorconfig.V1, error) {
 	// when services==nil. We pass nil so the embedded Prod (or
 	// Test) deployment is used — same path the visor takes on
 	// first boot when the conf-service is unreachable.
-	conf := visorconfig.MakeBaseConfig(common, opts.TestEnv, false, nil, nil)
+	conf := visorconfig.MakeBaseConfig(common, false, nil, nil)
 	if conf == nil {
 		return nil, errors.New("genvisor: MakeBaseConfig returned nil (services unmarshal failed)")
 	}
@@ -166,7 +159,7 @@ func Generate(opts Options) (*visorconfig.V1, error) {
 // is what the operator usually means by --ishv, and that's what's
 // set here.
 func hypervisorConfigDefault() *visorconfig.HypervisorConfig {
-	hv := visorconfig.GenerateWorkDirConfig(false)
+	hv := visorconfig.GenerateWorkDirConfig()
 	hv.Enable = true
 	return &hv
 }

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -149,4 +150,85 @@ func TestWasmModuleSource(t *testing.T) {
 
 	_, err = wasmModuleSource(&visorconfig.HypervisorConfig{WasmModuleSource: "not-a-key"})
 	require.Error(t, err)
+}
+
+// releaseServer fakes a release's download URL: the module and its manifest
+// at the root, as GitHub serves release assets.
+func releaseServer(t *testing.T, module []byte) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		switch r.URL.Path {
+		case "/" + execwasm.ManifestName:
+			sum := sha256.Sum256(module)
+			fmt.Fprintf(w, `{"version":"v1.3.101","revision":"r","sha256":%q,"size":%d}`, hex.EncodeToString(sum[:]), len(module)) //nolint:errcheck,gosec // a test fake
+		case "/" + execwasm.ModuleName:
+			_, _ = w.Write(module) //nolint:errcheck,gosec // a test fake
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+// With no module and no source, the release's is installed and checked.
+func TestWasmModuleFromRelease(t *testing.T) {
+	srv, hits := releaseServer(t, []byte("release module"))
+	path := filepath.Join(t.TempDir(), execwasm.ModuleName)
+	m := &wasmModuleRefresher{path: path, release: srv.URL + "/", web: srv.Client(), log: logging.MustGetLogger("wasmmodule_test")}
+
+	m.ready(context.Background())
+	got, err := os.ReadFile(path) //nolint:gosec // a test file
+	require.NoError(t, err)
+	require.Equal(t, "release module", string(got))
+	mf, err := execwasm.ReadManifest(path)
+	require.NoError(t, err)
+	require.Equal(t, "v1.3.101", mf.Version)
+	require.Equal(t, int32(2), hits.Load())
+}
+
+// A module on disk can be newer than any release, so the release never
+// replaces it.
+func TestWasmModuleReleaseNeverReplaces(t *testing.T) {
+	srv, hits := releaseServer(t, []byte("release module"))
+	path := filepath.Join(t.TempDir(), execwasm.ModuleName)
+	require.NoError(t, os.WriteFile(path, []byte("develop module"), 0o600))
+	m := &wasmModuleRefresher{path: path, release: srv.URL + "/", web: srv.Client(), log: logging.MustGetLogger("wasmmodule_test")}
+
+	m.refresh(context.Background())
+	m.ready(context.Background())
+	got, err := os.ReadFile(path) //nolint:gosec // a test file
+	require.NoError(t, err)
+	require.Equal(t, "develop module", string(got))
+	require.Zero(t, hits.Load())
+}
+
+// A source that cannot give the module is followed by the release only when
+// there is no module.
+func TestWasmModuleSourceFailsThenRelease(t *testing.T) {
+	srv, hits := releaseServer(t, []byte("release module"))
+	src := &wasmSource{module: []byte("tampered!!"), good: []byte("source module")}
+	m := newRefresher(t, src)
+	m.release, m.web = srv.URL+"/", srv.Client()
+
+	m.refresh(context.Background())
+	got, err := os.ReadFile(m.path)
+	require.NoError(t, err)
+	require.Equal(t, "old module", string(got), "a module on disk stays when the source fails")
+	require.Zero(t, hits.Load())
+
+	require.NoError(t, os.Remove(m.path))
+	m.lastCheck = time.Time{}
+	m.ready(context.Background())
+	got, err = os.ReadFile(m.path)
+	require.NoError(t, err)
+	require.Equal(t, "release module", string(got))
+}
+
+func TestWasmModuleRelease(t *testing.T) {
+	require.Equal(t, wasmModuleReleases+"download/v1.3.101/", wasmModuleRelease("v1.3.101"))
+	require.Equal(t, wasmModuleReleases+"latest/download/", wasmModuleRelease("v1.3.101-5-gabcdef012"))
+	require.Equal(t, wasmModuleReleases+"latest/download/", wasmModuleRelease("unknown"))
 }

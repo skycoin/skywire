@@ -4,7 +4,6 @@ package skysocksc
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -54,7 +53,7 @@ func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visorapi.API, appName 
 		case <-sigCtx.Done():
 			r.restore()
 			internal.PrintOutput(r.cmd.Flags(), nil, fmt.Sprintf("\nInterrupted; %s configuration restored.\n", appName))
-			os.Exit(1)
+			cmdutil.Exit(1)
 		}
 	}()
 	return r

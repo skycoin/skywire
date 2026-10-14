@@ -25,8 +25,8 @@ package store
 import (
 	"bytes"
 	"context"
-	"os"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -56,9 +56,14 @@ const (
 	landmarkDirectDepth = 3
 )
 
-// landmarkRoutingEnabled gates the feature. On unless RF_LANDMARK_ROUTING=0, so
-// it can be reverted on the deployment host without a rebuild.
-var landmarkRoutingEnabled = os.Getenv("RF_LANDMARK_ROUTING") != "0"
+// landmarkRoutingOff gates the feature, which is on unless the route finder's
+// disable_landmark_routing config turns it off.
+var landmarkRoutingOff atomic.Bool
+
+// SetLandmarkRouting turns landmark routing on or off for every graph.
+func SetLandmarkRouting(on bool) { landmarkRoutingOff.Store(!on) }
+
+func landmarkRouting() bool { return !landmarkRoutingOff.Load() }
 
 // landmarkTables holds, for one immutable Graph, the precomputed routes between
 // every node and the selected hubs. Routes are full routing.Route values (not

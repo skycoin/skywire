@@ -9,10 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -202,7 +203,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		body := sendBody
 		if !cmd.Flags().Changed("message") {
-			raw, err := io.ReadAll(os.Stdin)
+			raw, err := io.ReadAll(cmdutil.Stdin())
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("read body: %w", err))
 			}

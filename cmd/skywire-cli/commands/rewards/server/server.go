@@ -46,7 +46,7 @@ func buildRouter() http.Handler {
 	// Set RPC_ADDR so skywire skycoin cli targets the explicit Skycoin mainnet node
 	if skycoinNode != "" {
 		os.Setenv("RPC_ADDR", skycoinNode) //nolint:errcheck,gosec // G104
-		fmt.Printf("Skycoin mainnet node: %s\n", skycoinNode)
+		cmdutil.Printf("Skycoin mainnet node: %s\n", skycoinNode)
 	}
 
 	if wl != "" {
@@ -75,11 +75,11 @@ func buildRouter() http.Handler {
 	var err1 error
 	tmpl, err1 = htmpl.New("index").Parse(htmlMainPageTemplate)
 	if err1 != nil {
-		fmt.Println("Error parsing index template:", err1)
+		cmdutil.Println("Error parsing index template:", err1)
 	}
 	_, err1 = tmpl.New("head").Parse(htmlHeadTemplate)
 	if err1 != nil {
-		fmt.Println("Error parsing head template:", err1)
+		cmdutil.Println("Error parsing head template:", err1)
 	}
 
 	r1 := http.NewServeMux()
@@ -931,11 +931,11 @@ func buildRouter() http.Handler {
 
 			tmpl0, err1 := tmpl.Clone()
 			if err1 != nil {
-				fmt.Println("Error cloning template:", err1)
+				cmdutil.Println("Error cloning template:", err1)
 			}
 			_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
 			if err1 != nil {
-				fmt.Println("Error parsing Front Page template:", err1)
+				cmdutil.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
 			htmlPageTemplateData1 := (htmlTemplateData{
@@ -949,7 +949,7 @@ func buildRouter() http.Handler {
 			var result bytes.Buffer
 			err = tmpl.Execute(&result, tmplData)
 			if err != nil {
-				fmt.Println("error: ", err)
+				cmdutil.Println("error: ", err)
 			}
 
 			w.Write(normalizeNewlines(result.Bytes())) //nolint:errcheck,gosec
@@ -1062,7 +1062,7 @@ func buildRouter() http.Handler {
 					}
 					//record the transaction ID for the reward notification system - append the file!
 					txnFile := wd + `/` + "transactions0.txt"
-					fmt.Printf("[reward] Appending txid to %s\n", txnFile)
+					cmdutil.Printf("[reward] Appending txid to %s\n", txnFile)
 					_, err = script.Echo(txid).AppendFile(txnFile)
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
@@ -1158,7 +1158,7 @@ func buildRouter() http.Handler {
 				_, err9 := time.Parse("2006-01-02", strings.Replace(r.PathValue("date"), "_pool2_rewardtxn0.csv", "", -1))
 				if err1 != nil && err2 != nil && err3 != nil && err4 != nil && err5 != nil &&
 					err6 != nil && err7 != nil && err8 != nil && err9 != nil {
-					fmt.Println("cant parse date or match filename")
+					cmdutil.Println("cant parse date or match filename")
 					w.WriteHeader(http.StatusNotFound)
 					flush(w)
 					return
@@ -1184,7 +1184,7 @@ func buildRouter() http.Handler {
 						flush(w)
 						return
 					}
-					fmt.Println("non nil script.File error")
+					cmdutil.Println("non nil script.File error")
 					w.WriteHeader(http.StatusNotFound)
 					flush(w)
 					return
@@ -1192,7 +1192,7 @@ func buildRouter() http.Handler {
 				if err3 == nil {
 					l2, err := script.File(wd + `/hist/` + r.PathValue("date")).Slice()
 					if err != nil {
-						fmt.Println("non nil script.File error")
+						cmdutil.Println("non nil script.File error")
 						w.WriteHeader(http.StatusNotFound)
 						flush(w)
 						return
@@ -1214,7 +1214,7 @@ func buildRouter() http.Handler {
 				if err4 == nil {
 					l2, err := script.File(wd + `/hist/` + r.PathValue("date")).Slice()
 					if err != nil {
-						fmt.Println("non nil script.File error")
+						cmdutil.Println("non nil script.File error")
 						w.WriteHeader(http.StatusNotFound)
 						flush(w)
 						return
@@ -1226,21 +1226,21 @@ func buildRouter() http.Handler {
 						}
 						thispk, err := script.Echo(line).Column(2).String()
 						if err != nil {
-							fmt.Println("non nil script.Echo(line).Column(2).String() error")
+							cmdutil.Println("non nil script.Echo(line).Column(2).String() error")
 							w.WriteHeader(http.StatusNotFound)
 							flush(w)
 							return
 						}
 						share, err := script.Echo(line).Column(3).String()
 						if err != nil {
-							fmt.Println("non nil script.Echo(line).Column(3).String() error")
+							cmdutil.Println("non nil script.Echo(line).Column(3).String() error")
 							w.WriteHeader(http.StatusNotFound)
 							flush(w)
 							return
 						}
 						sky, err := script.Echo(line).Column(4).String()
 						if err != nil {
-							fmt.Println("non nil script.Echo(line).Column(4).String() error")
+							cmdutil.Println("non nil script.Echo(line).Column(4).String() error")
 							w.WriteHeader(http.StatusNotFound)
 							flush(w)
 							return
@@ -1259,7 +1259,7 @@ func buildRouter() http.Handler {
 			}
 			rewardfiles, err := script.FindFiles(wd + `/hist`).Match(r.PathValue("date")).Slice()
 			if err != nil {
-				fmt.Println("non nil script.FindFiles(wd + `/hist`).Match(r.PathValue(\"date\")).Slice() error")
+				cmdutil.Println("non nil script.FindFiles(wd + `/hist`).Match(r.PathValue(\"date\")).Slice() error")
 				w.WriteHeader(http.StatusNotFound)
 				flush(w)
 				return
@@ -1272,7 +1272,7 @@ func buildRouter() http.Handler {
 			l := ""
 			l3, err := os.Stat(wd + `/hist/` + r.PathValue("date") + "_rewardtxn0.csv") //nolint:gosec // date was checked with time.Parse above
 			if err != nil {
-				fmt.Println("non nil os.Stat(wd + `/hist/` + r.PathValue(\"date\") + \"_rewardtxn0.csv\") error")
+				cmdutil.Println("non nil os.Stat(wd + `/hist/` + r.PathValue(\"date\") + \"_rewardtxn0.csv\") error")
 				w.WriteHeader(http.StatusNotFound)
 				flush(w)
 				return
@@ -1312,21 +1312,21 @@ func buildRouter() http.Handler {
 					}
 					thispk, err := script.Echo(line).Column(2).String()
 					if err != nil {
-						fmt.Println("non nil script.Echo(line).Column(2).String() error")
+						cmdutil.Println("non nil script.Echo(line).Column(2).String() error")
 						w.WriteHeader(http.StatusNotFound)
 						flush(w)
 						return
 					}
 					share, err := script.Echo(line).Column(3).String()
 					if err != nil {
-						fmt.Println("non nil script.Echo(line).Column(3).String() error")
+						cmdutil.Println("non nil script.Echo(line).Column(3).String() error")
 						w.WriteHeader(http.StatusNotFound)
 						flush(w)
 						return
 					}
 					sky, err := script.Echo(line).Column(skyCol).String()
 					if err != nil {
-						fmt.Printf("non nil script.Echo(line).Column(%d).String() error\n", skyCol)
+						cmdutil.Printf("non nil script.Echo(line).Column(%d).String() error\n", skyCol)
 						w.WriteHeader(http.StatusNotFound)
 						flush(w)
 						return
@@ -1408,7 +1408,7 @@ func buildRouter() http.Handler {
 
 			l1, err = script.File(wd + `/hist/` + r.PathValue("date") + "_stats.txt").String()
 			if err != nil {
-				fmt.Println("non nil script.File(wd + `/hist/` + r.PathValue(\"date\") + \"_stats.txt\").String() error")
+				cmdutil.Println("non nil script.File(wd + `/hist/` + r.PathValue(\"date\") + \"_stats.txt\").String() error")
 				w.WriteHeader(http.StatusNotFound)
 				flush(w)
 				return
@@ -1417,7 +1417,7 @@ func buildRouter() http.Handler {
 
 			l2, err = script.File(wd+`/`+"hist/"+r.PathValue("date")+"_rewardtxn0.csv").Replace(",", " ").Slice()
 			if err != nil {
-				fmt.Println("non nil script.File(wd+`/`+\"hist/\"+r.PathValue(\"date\")+\"_rewardtxn0.csv\").Replace(\",\", \" \").Slice() error")
+				cmdutil.Println("non nil script.File(wd+`/`+\"hist/\"+r.PathValue(\"date\")+\"_rewardtxn0.csv\").Replace(\",\", \" \").Slice() error")
 				w.WriteHeader(http.StatusNotFound)
 				flush(w)
 				return
@@ -1426,14 +1426,14 @@ func buildRouter() http.Handler {
 			for _, line := range l2 {
 				skyaddr, err := script.Echo(line).Column(1).String()
 				if err != nil {
-					fmt.Println("non nil script.Echo(line).Column(1).String() error")
+					cmdutil.Println("non nil script.Echo(line).Column(1).String() error")
 					w.WriteHeader(http.StatusNotFound)
 					flush(w)
 					return
 				}
 				skyamt, err := script.Echo(line).Column(2).String()
 				if err != nil {
-					fmt.Println("non nil script.Echo(line).Column(2).String() error")
+					cmdutil.Println("non nil script.Echo(line).Column(2).String() error")
 					w.WriteHeader(http.StatusNotFound)
 					flush(w)
 					return
@@ -1468,11 +1468,11 @@ func buildRouter() http.Handler {
 			l += "<br>" + htmltoplink
 			tmpl0, err1 := tmpl.Clone()
 			if err1 != nil {
-				fmt.Println("Error cloning template:", err1)
+				cmdutil.Println("Error cloning template:", err1)
 			}
 			_, err1 = tmpl0.New("this").Parse(htmlRewardPageTemplate)
 			if err1 != nil {
-				fmt.Println("Error parsing Front Page template:", err1)
+				cmdutil.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
 			// Build SEO-rich Title + Description + JSON-LD from the
@@ -1499,7 +1499,7 @@ func buildRouter() http.Handler {
 			var result bytes.Buffer
 			err = tmpl.Execute(&result, tmplData)
 			if err != nil {
-				fmt.Println("error: ", err)
+				cmdutil.Println("error: ", err)
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -1764,8 +1764,8 @@ func buildRouter() http.Handler {
 			// --login-node auto is no longer supported; ensureLoginChain
 			// always returns an error pointing at the standalone command.
 			_, _, err := ensureLoginChain(wd)
-			fmt.Printf("Warning: login chain auto-setup failed: %v\n", err)
-			fmt.Println("Continuing without login chain.")
+			cmdutil.Printf("Warning: login chain auto-setup failed: %v\n", err)
+			cmdutil.Println("Continuing without login chain.")
 			loginNode = ""
 		}
 
@@ -1785,7 +1785,7 @@ func buildRouter() http.Handler {
 				}
 			}
 			if loginGenesisAddress == "" {
-				fmt.Println("Warning: could not determine login genesis address")
+				cmdutil.Println("Warning: could not determine login genesis address")
 			}
 		}
 
@@ -1795,11 +1795,11 @@ func buildRouter() http.Handler {
 		// Login chain node reverse proxy
 		if loginNode != "" {
 			if err := nodeHealthCheck(loginNode); err != nil {
-				fmt.Printf("Warning: login node at %s not reachable: %v\n", loginNode, err)
-				fmt.Println("Node proxy routes will be registered but may not work until the node is available.")
+				cmdutil.Printf("Warning: login node at %s not reachable: %v\n", loginNode, err)
+				cmdutil.Println("Node proxy routes will be registered but may not work until the node is available.")
 			}
 			if err := registerNodeProxy(r1, loginNode); err != nil {
-				fmt.Printf("Error setting up node proxy: %v\n", err)
+				cmdutil.Printf("Error setting up node proxy: %v\n", err)
 			}
 		}
 
@@ -1901,7 +1901,7 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	// Start serving
 	wg.Add(1)
 	go func() {
-		fmt.Printf("listening on http://%s\n", bindAddr)
+		cmdutil.Printf("listening on http://%s\n", bindAddr)
 		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 		if err := srv.ListenAndServe(); err != nil {
 			log.WithError(err).Error("HTTP listener stopped")
@@ -1932,20 +1932,20 @@ func serveStandalone(h http.Handler, bindAddr string) {
 	go func() {
 		err := generateAndCacheJSON()
 		if err != nil {
-			fmt.Println("Error updating log-collection cache:", err)
+			cmdutil.Println("Error updating log-collection cache:", err)
 		}
 		err = generateAndCacheStats()
 		if err != nil {
-			fmt.Println("Error updating statistics cache:", err)
+			cmdutil.Println("Error updating statistics cache:", err)
 		}
 		for range time.NewTicker(cacheInterval).C {
 			err := generateAndCacheJSON()
 			if err != nil {
-				fmt.Println("Error updating log-collection cache:", err)
+				cmdutil.Println("Error updating log-collection cache:", err)
 			}
 			err = generateAndCacheStats()
 			if err != nil {
-				fmt.Println("Error updating statistics cache:", err)
+				cmdutil.Println("Error updating statistics cache:", err)
 			}
 		}
 	}()

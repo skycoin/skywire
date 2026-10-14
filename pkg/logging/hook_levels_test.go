@@ -43,7 +43,7 @@ func TestWriteHookSkipsDebugByDefault(t *testing.T) {
 	require.Contains(t, h.Levels(), logrus.InfoLevel)
 	require.Contains(t, h.Levels(), logrus.ErrorLevel)
 
-	h, cf := newCountingWriteHook(&buf, HookLevel(DefaultHookLevel))
+	h, cf := newCountingWriteHook(&buf, DefaultHookLevel)
 	l := logrus.New()
 	l.SetLevel(logrus.TraceLevel)
 	l.SetOutput(io.Discard)
@@ -79,21 +79,11 @@ func TestWriteHookDebugOptIn(t *testing.T) {
 	require.Contains(t, buf.String(), "wanted-debug")
 }
 
-func TestHookLevelEnvOverride(t *testing.T) {
-	require.Equal(t, logrus.InfoLevel, HookLevel(logrus.InfoLevel))
-
-	t.Setenv(HookLevelEnv, "debug")
-	require.Equal(t, logrus.DebugLevel, HookLevel(logrus.InfoLevel))
-
-	// The env var reaches the constructor, so an operator gets debug in the
-	// ring without a code change.
-	var buf bytes.Buffer
-	require.Contains(t, NewWriteHook(&buf).Levels(), logrus.DebugLevel)
-
-	// Garbage falls back to the caller's default rather than silently
-	// widening or breaking /debug/log.
-	t.Setenv(HookLevelEnv, "not-a-level")
-	require.Equal(t, logrus.InfoLevel, HookLevel(logrus.InfoLevel))
+func TestHookLevel(t *testing.T) {
+	require.Equal(t, logrus.InfoLevel, HookLevel("", logrus.InfoLevel))
+	require.Equal(t, logrus.DebugLevel, HookLevel("debug", logrus.InfoLevel))
+	// Garbage falls back to the default rather than widening /debug/log.
+	require.Equal(t, logrus.InfoLevel, HookLevel("not-a-level", logrus.InfoLevel))
 }
 
 func TestLevelsUpTo(t *testing.T) {

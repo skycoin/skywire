@@ -3,11 +3,12 @@ package commands
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/spf13/cobra"
 
@@ -61,36 +62,36 @@ func autoconfigInteractiveRun(_ *cobra.Command, _ []string) {
 	path := autoconfigSkyenvPath()
 	if autoconfigIPort != 0 {
 		if err := autoconfigServeWeb(path); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 		return
 	}
 	m := autoconfigui.NewModel(autoconfigcmd.Describe(), path)
 	act, err := autoconfigui.RunTUI(m)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		cmdutil.Eprintln(err)
+		cmdutil.Exit(1)
 	}
 	switch act {
 	case autoconfigui.ActionPrint:
 		cmd, err := m.Command()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
-		fmt.Println(cmd)
+		cmdutil.Println(cmd)
 	case autoconfigui.ActionApply:
 		args, _ := m.Args() //nolint:errcheck // validated by the form
 		if len(args) == 0 {
-			fmt.Println("no changes")
+			cmdutil.Println("no changes")
 			return
 		}
 		out, err := applyAutoconfig(args)
-		fmt.Print(out)
+		cmdutil.Print(out)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cmdutil.Eprintln(err)
+			cmdutil.Exit(1)
 		}
 	}
 }
@@ -105,6 +106,6 @@ func autoconfigServeWeb(path string) error {
 	w := autoconfigui.NewWeb(token, path, applyAutoconfig)
 	addr := autoconfigIAddr + ":" + strconv.Itoa(autoconfigIPort)
 	return w.Serve(ctx, addr, func(url string) {
-		fmt.Printf("autoconfig form for %s\nopen %s\n", path, url)
+		cmdutil.Printf("autoconfig form for %s\nopen %s\n", path, url)
 	})
 }

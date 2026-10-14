@@ -3,6 +3,7 @@ package usermanager
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/gob"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/0magnet/bbolt"
+	"golang.org/x/crypto/argon2"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
@@ -43,7 +45,35 @@ func init() {
 type User struct {
 	Name   string
 	PwSalt []byte
+	// PwHash is the SHA-256 of the password and salt, kept for users saved
+	// before PwKey existed. Such a password is rehashed at the next login.
 	PwHash cipher.SHA256
+	// PwKey is the Argon2id key of the password and salt under PwParams.
+	PwKey    []byte
+	PwParams *Argon2Params
+}
+
+// Argon2Params are the Argon2id costs a password key was derived with.
+type Argon2Params struct {
+	Time    uint32
+	Memory  uint32 // KiB
+	Threads uint8
+}
+
+// passwordParams are the costs for new passwords: the libsodium INTERACTIVE
+// preset (https://words.filippo.io/right-answers/, password handling).
+var passwordParams = Argon2Params{Time: 2, Memory: 64 * 1024, Threads: 1}
+
+const passwordKeyLen = 32
+
+// deriveSem runs one derivation at a time, so login attempts cannot add up
+// 64 MiB each on a small board.
+var deriveSem = make(chan struct{}, 1)
+
+func deriveKey(password string, salt []byte, p Argon2Params) []byte {
+	deriveSem <- struct{}{}
+	defer func() { <-deriveSem }()
+	return argon2.IDKey([]byte(password), salt, p.Time, p.Memory, p.Threads, passwordKeyLen)
 }
 
 // SetName checks the provided name, and sets the name if format is valid.
@@ -63,15 +93,38 @@ func (u *User) SetPassword(password string) error {
 		return err
 	}
 
-	u.PwSalt = cipher.RandByte(passwordSaltLen)
-	u.PwHash = cipher.SumSHA256(append([]byte(password), u.PwSalt...))
+	u.setKey(password)
 
 	return nil
 }
 
+func (u *User) setKey(password string) {
+	p := passwordParams
+	u.PwSalt = cipher.RandByte(passwordSaltLen)
+	u.PwKey = deriveKey(password, u.PwSalt, p)
+	u.PwParams = &p
+	u.PwHash = cipher.SHA256{}
+}
+
 // VerifyPassword verifies the password input with hash and salt.
 func (u *User) VerifyPassword(password string) bool {
-	return cipher.SumSHA256(append([]byte(password), u.PwSalt...)) == u.PwHash
+	if u.PwParams != nil {
+		return subtle.ConstantTimeCompare(deriveKey(password, u.PwSalt, *u.PwParams), u.PwKey) == 1
+	}
+	sum := cipher.SumSHA256(append([]byte(password), u.PwSalt...))
+	return subtle.ConstantTimeCompare(sum[:], u.PwHash[:]) == 1
+}
+
+// UpgradePassword rehashes a verified password saved with the old SHA-256
+// scheme or older costs, reporting whether the user changed and needs saving.
+// The password is not checked against the current format rules, which it may
+// predate.
+func (u *User) UpgradePassword(password string) bool {
+	if u.PwParams != nil && *u.PwParams == passwordParams {
+		return false
+	}
+	u.setKey(password)
+	return true
 }
 
 // Encode encodes the user to bytes.
