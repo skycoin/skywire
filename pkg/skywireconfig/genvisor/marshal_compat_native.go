@@ -278,10 +278,6 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("dmsgscp")
 		marshalDmsgscpNative(w, v.Dmsgscp, o.indent+1)
 	}
-	if v.UIServer != nil {
-		o.field("ui_server")
-		marshalUIServerNative(w, v.UIServer, o.indent+1)
-	}
 	if v.LogServer != nil {
 		o.field("log_server")
 		marshalLogServerNative(w, v.LogServer, o.indent+1)
@@ -643,21 +639,6 @@ func marshalDmsgscpNative(w *strings.Builder, d *visorconfig.Dmsgscp, indent int
 		o.field("whitelist")
 		writePubKeyNativeSlice(w, d.Whitelist, o.indent+1)
 	}
-	o.close()
-}
-
-func marshalUIServerNative(w *strings.Builder, u *visorconfig.UIServer, indent int) {
-	o := newObjNative(w, indent)
-	o.field("enable")
-	writeBoolNative(w, u.Enable)
-	o.field("local_addr")
-	writeQuotedNative(w, u.LocalAddr)
-	o.field("dmsg_port")
-	writeUintNative(w, uint64(u.DmsgPort))
-	o.field("dmsg_whitelist")
-	writePubKeyNativeSlice(w, u.DmsgWhitelist, o.indent+1)
-	o.field("survey_dir")
-	writeQuotedNative(w, u.SurveyDir)
 	o.close()
 }
 
