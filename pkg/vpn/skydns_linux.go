@@ -69,6 +69,7 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	sky, err := skydns.New(skydns.Config{
 		Dial:     cfg.Dial,
 		Upstream: skydns.NewUpstream(res.upstream, d.DialContext, false),
+		Minter:   cfg.Minter,
 		MTU:      TUNMTU,
 		Log:      log,
 	})
