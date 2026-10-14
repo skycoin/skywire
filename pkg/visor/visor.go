@@ -118,6 +118,10 @@ type Visor struct {
 	logstore logstore.Store
 	logBcast *logging.Broadcaster // fans entries out to gRPC StreamAppLogs subscribers
 
+	// skyenvSeen is each mirrored setting as skywire.conf last saw it.
+	skyenvMu   sync.Mutex
+	skyenvSeen map[string][2]string
+
 	startedAt       time.Time
 	startupComplete chan struct{}
 
@@ -900,6 +904,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		// initSDRegCXO attaches a publisher.
 		sdEntryMirror: newSDEntryMirror(),
 	}
+	v.watchSkyenv()
 	v.isServicesHealthy.init()
 	v.isUptimeTrackerHealthy.init()
 	v.isAutoconnectHealthy.init()

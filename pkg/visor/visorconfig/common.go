@@ -26,6 +26,8 @@ type Common struct {
 	path string
 	log  *logging.MasterLogger
 
+	afterFlush func()
+
 	Version string        `json:"version"`
 	SK      cipher.SecKey `json:"sk,omitempty"`
 	PK      cipher.PubKey `json:"pk,omitempty"`
@@ -86,3 +88,7 @@ func (c *Common) ensureKeys() error {
 // reflect runtime helpers TinyGo's stdlib lacks) and os.WriteFile
 // (no-op in a browser anyway). Callers under js/wasm can't reach
 // this method; any flush attempt panics with a clear error.
+
+// SetAfterFlush registers f to run after each write of the config file. Set
+// it before anything can flush. f must not lock the config.
+func (c *Common) SetAfterFlush(f func()) { c.afterFlush = f }

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -225,6 +226,12 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "rf")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableCalculateRoutes, "calculate-routes", "${CALCULATEROUTES:-false}", "enable local route calculation")
 	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableFlightRecorder, "flight-recorder", "${FLIGHTRECORDER:-false}", "keep a rolling execution trace for stall diagnosis")
+	gHiddenFlags = append(gHiddenFlags, "flight-recorder")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableMuxFEC, "mux-fec", "${MUXFEC:-false}", "forward error correction on mux routes")
+	gHiddenFlags = append(gHiddenFlags, "mux-fec")
+	skyenvBoolVar(genConfigCmd.Flags(), &hvUIDisable, "hv-ui-disable", "${HVUIDISABLE:-false}", "run the hypervisor without its web UI")
+	gHiddenFlags = append(gHiddenFlags, "hv-ui-disable")
 
 	// Hypervisor and security flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
@@ -785,6 +792,7 @@ var genConfigCmd = &cobra.Command{
 		configureLauncher(log)
 
 		configureHypervisor(log)
+		keepPersistentTransports()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1408,6 +1416,7 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
+		MuxFEC:             enableMuxFEC,
 		// Default routing policy: "none" (a single route, no mux). The adaptive
 		// composite preset is still maturing — it is not yet reliable under load —
 		// so it is NOT the shipped default. Operators opt in explicitly by setting
@@ -1496,6 +1505,7 @@ func configureLauncher(log *logging.Logger) {
 	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
+	conf.FlightRecorder = enableFlightRecorder
 	conf.Skyenv = skyenvSource()
 	if stunServers != "" {
 		conf.StunServers = strings.Split(stunServers, ",")
@@ -1697,6 +1707,19 @@ func configureLauncher(log *logging.Logger) {
 // the desk a hypervisor serves reaches that hypervisor at its own origin.
 var wsPeers string
 
+// keepPersistentTransports carries over on a regen the transports "skywire cli tp
+// add --persist" saved. WebSocket ones come from WSPEERS, so they are not kept.
+func keepPersistentTransports() {
+	if !isRegen || oldConfCache == nil {
+		return
+	}
+	for _, pt := range oldConfCache.PersistentTransports {
+		if pt.NetType != tptypes.WS {
+			conf.PersistentTransports = append(conf.PersistentTransports, pt)
+		}
+	}
+}
+
 // configureWSPeers pins each --ws-peer in transport.ws_table (the dialer
 // consults the table before the address resolver) and lists it as a persistent
 // transport, so the visor opens it at boot and re-dials it when it drops.
@@ -1728,7 +1751,10 @@ func configureWSPeers(log *logging.Logger) {
 			conf.Transport.WSTable = map[cipher.PubKey]string{}
 		}
 		conf.Transport.WSTable[pk] = url
-		conf.PersistentTransports = append(conf.PersistentTransports, tspec.PersistentTransports{PK: pk, NetType: tptypes.WS})
+		pt := tspec.PersistentTransports{PK: pk, NetType: tptypes.WS}
+		if !slices.Contains(conf.PersistentTransports, pt) {
+			conf.PersistentTransports = append(conf.PersistentTransports, pt)
+		}
 	}
 }
 
@@ -1796,6 +1822,7 @@ func configureHypervisor(log *logging.Logger) {
 				SK:            lanSK,
 			}
 		}
+		config.UIDisable = hvUIDisable
 		conf.Hypervisor = &config
 	}
 
@@ -2814,12 +2841,15 @@ var (
 		// left DMSGWEB commented in the conf it emitted, so a later run from
 		// that conf produced a config with no dmsg_web block at all. The proxy
 		// chain was silently off; found live with nothing on 4445 or 4446.
-		"dmsgweb":       "DMSGWEB=true",
-		"skynetweb":     "SKYNETWEB=true",
-		"skydns":        "SKYDNS=true",
-		"no-wallet":     "NOWALLET=true",
-		"cascade":       "CASCADE=true",
-		"external-apps": "EXTERNALAPPS=true",
+		"dmsgweb":         "DMSGWEB=true",
+		"skynetweb":       "SKYNETWEB=true",
+		"skydns":          "SKYDNS=true",
+		"no-wallet":       "NOWALLET=true",
+		"cascade":         "CASCADE=true",
+		"external-apps":   "EXTERNALAPPS=true",
+		"flight-recorder": "FLIGHTRECORDER=true",
+		"mux-fec":         "MUXFEC=true",
+		"hv-ui-disable":   "HVUIDISABLE=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{

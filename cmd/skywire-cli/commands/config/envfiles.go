@@ -77,6 +77,12 @@ const envfileLinux = `#
 #--	Enable local route calculation (instead of using route finder)
 #CALCULATEROUTES=true
 
+#--	Forward error correction on mux routes. Both ends must enable it.
+#MUXFEC=true
+
+#--	Keep a rolling execution trace in local/log/flightrec for stall diagnosis
+#FLIGHTRECORDER=true
+
 ### Remote Access #######################################################
 
 #--	Set remote hypervisor public keys
@@ -135,6 +141,9 @@ const envfileLinux = `#
 #	to make the choice survive a config rebuild (autoconfig runs on every
 #	package update). Windows and macOS force the gate on regardless.
 #HVAUTH=false
+
+#--	Run the hypervisor without its web UI. The RPC and managed visors stay up.
+#HVUIDISABLE=true
 
 #--	Embedded LAN/WAN DMSG server is always on whenever ISHYPERVISOR=true.
 #	Managed visors relay through this hypervisor instead of public DMSG

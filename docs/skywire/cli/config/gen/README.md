@@ -60,6 +60,9 @@ skywire cli config gen
       --ar                                   generate config for address-resolver service
       --rf                                   generate config for route-finder service
       --calculate-routes                     enable local route calculation
+      --flight-recorder                      keep a rolling execution trace for stall diagnosis
+      --mux-fec                              forward error correction on mux routes
+      --hv-ui-disable                        run the hypervisor without its web UI
   -i, --ishv                                 local hypervisor configuration
       --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
   -j, --hvpks string                         list of public keys to add as hypervisor
