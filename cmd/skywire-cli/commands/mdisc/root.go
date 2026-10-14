@@ -26,11 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// isTestEnv checks if test environment is enabled via SKYWIRETEST env var
-func isTestEnv() bool {
-	return os.Getenv("SKYWIRETEST") == "1"
-}
-
 // cacheDirPath returns a cache directory path based on the service URL host
 func cacheDirPath(serviceURL string) string {
 	u, err := url.Parse(serviceURL)
@@ -82,11 +77,8 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
-// getDeployment returns the appropriate deployment config based on test env
+// getDeployment returns the production deployment config
 func getDeployment() deployment.Services {
-	if isTestEnv() {
-		return deployment.Test
-	}
 	return deployment.Prod
 }
 
@@ -95,14 +87,12 @@ var (
 	cacheFilesAge int
 	mdURL         string
 	isStats       bool
-	testEnv       bool
 	// allEntries bool
 	masterLogger = logging.NewMasterLogger()
 )
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
 	RootCmd.AddCommand(
 		entryCmd,
@@ -111,33 +101,14 @@ func init() {
 		// `skywire cli ut mdisc` for consistency with the other
 		// uptime-data sources. See cmd/skywire-cli/commands/ut/mdisc.go.
 	)
-	// --testenv / --url / --cdd / --cfa are persistent so every
-	// subcommand (entry, servers, check) honors them, not just the
-	// bare `mdisc` entries listing. The testenv override (below, in
-	// PersistentPreRun) then applies to all of them uniformly.
-	RootCmd.PersistentFlags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
+	// --url / --cdd / --cfa are persistent so every subcommand (entry,
+	// servers, check) honors them, not just the bare `mdisc` entries listing.
 	RootCmd.PersistentFlags().StringVar(&cacheDirDMSGD, "cdd", cacheDirPath(dep.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
 	RootCmd.PersistentFlags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache file if older than n minutes")
 	RootCmd.PersistentFlags().StringVar(&mdURL, "url", dep.DmsgDiscovery, "specify alternative DMSG discovery url")
 	// --stats only shapes the bare `mdisc` entries listing (count of
 	// dmsg clients), so it stays local to the root command.
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
-}
-
-// applyTestEnv switches mdURL / cache dir to the test deployment when
-// --testenv is set and neither was pinned explicitly. Runs before
-// every mdisc subcommand via PersistentPreRun so `mdisc entry
-// --testenv`, `mdisc servers --testenv`, and `mdisc check --testenv`
-// all behave like the bare `mdisc --testenv`.
-func applyTestEnv(cmd *cobra.Command) {
-	if testEnv && !isTestEnv() {
-		if !cmd.Flags().Changed("url") {
-			mdURL = deployment.Test.DmsgDiscovery
-		}
-		if !cmd.Flags().Changed("cdd") {
-			cacheDirDMSGD = cacheDirPath(deployment.Test.DmsgDiscovery)
-		}
-	}
 }
 
 // RootCmd is the command that contains sub-commands which interacts with DMSG services.
@@ -152,12 +123,7 @@ The bare command lists the dmsg clients registered in discovery (add
   servers      list dmsg servers by load (connected~ / avail-sess)
   check        probe every server's advertised wss front (DNS/TLS/426)
 
---url points at an alternative discovery; --testenv (or SKYWIRETEST=1)
-selects the test deployment. Both apply to every subcommand.`,
-	// applyTestEnv runs for the root and every subcommand.
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		applyTestEnv(cmd)
-	},
+--url points at an alternative discovery and applies to every subcommand.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Build full URL
 		dmsgFullURL := mdURL + "/dmsg-discovery/entries"

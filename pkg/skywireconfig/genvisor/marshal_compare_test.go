@@ -35,7 +35,6 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 			_, sk := cipher.GenerateKeyPair()
 			return Options{SecretKey: sk}
 		}(), nil},
-		{"testenv", Options{TestEnv: true}, nil},
 		{"resolver-rules-tls", Options{}, func(v *visorconfig.V1) {
 			rules := []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}, {Suffix: "lan.example", Upstream: proxyroute.Direct}}
 			if v.DmsgWeb == nil {

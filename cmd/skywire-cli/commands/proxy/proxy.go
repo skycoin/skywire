@@ -26,7 +26,6 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -108,10 +107,8 @@ func init() {
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks clients")
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the skysocks client to stop")
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
 	// test command flags
-	testCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	testCmd.Flags().StringVarP(&testURL, "url", "u", dep.GeoIP, "URL to fetch through proxy for testing")
 	testCmd.Flags().IntVarP(&testTimeout, "timeout", "t", 10, "timeout in seconds for HTTP request (route setup has separate 30s timeout)")
 	testCmd.Flags().IntVarP(&testBatchSize, "batch", "b", 1, "number of proxies to test (1=sequential/stable, >1=parallel/experimental)")
@@ -894,9 +891,7 @@ var (
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
@@ -917,24 +912,8 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
@@ -1302,26 +1281,8 @@ make an HTTP request through the proxy to verify it's working.
 With --connect flag, connects to all online proxies (adds transports)
 without HTTP testing. Use --version to filter by visor version.
 
-Results show which proxies are reachable and their response latency.
-
-Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
+Results show which proxies are reachable and their response latency.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URL for cache file
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		rpcClient, err := clirpc.Client(cmd.Flags())

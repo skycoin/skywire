@@ -85,7 +85,7 @@ GET /security/nonces/{pk}
 
 func init() {
 	flags.Bind(RootCmd.Flags(), services.FlagDefaults{Gen: "sd", Addr: ":9098", Tag: "service_discovery", EntryTimeout: 5 * time.Minute})
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg-discovery")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&whitelistKeys, "whitelist-keys", "", "network-monitor keys allowed to deregister entries, comma-separated")
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service")
@@ -105,8 +105,6 @@ Depends: redis
 
 Production: ` + deployment.Prod.ServiceDiscovery + `
             ` + dmsg.Prod.ServiceDiscovery + `
-Test:       ` + deployment.Test.ServiceDiscovery + `
-            ` + dmsg.Test.ServiceDiscovery + `
 
 HTTP Endpoints:
   GET  /health                           Health check

@@ -202,7 +202,7 @@ func (s *service) Run(ctx context.Context) error {
 	// dmsg-HTTP via the bootstrap dmsg client — no plain-HTTP egress.
 	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
 	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr(false)
+		dmsgDiscDmsg = dmsg.DiscAddr()
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := cfg.SurveyKeys()
@@ -274,9 +274,6 @@ func dmsgDiscEntries(configServers []*disc.Entry) []disc.Entry {
 
 // setupNodes are the deployment's route setup nodes.
 func (c *Config) setupNodes() []cipher.PubKey {
-	if c.TestEnvironment {
-		return deployment.Test.RouteSetupNodes
-	}
 	return deployment.Prod.RouteSetupNodes
 }
 

@@ -3,7 +3,7 @@
 // The two routes that carry a call's AUDIO between the visor and the app that
 // started it, for a visor whose audio device belongs to that app rather than to
 // itself — Android, where nothing else can work (see pkg/skychat/call/bridge.go
-// and voiceAudioMode in init_voice.go).
+// and voiceAudioBridged in init_voice.go).
 //
 //	POST /skychat/voice/mic      the app's microphone, streamed in
 //	GET  /skychat/voice/speaker  what the calls want played, streamed out

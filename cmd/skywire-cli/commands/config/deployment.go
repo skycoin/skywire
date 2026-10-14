@@ -80,7 +80,7 @@ Another visor joins the deployment with it:
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%s: %w", path, err))
 		}
-		conf := servicesConf{Prod: svc, Test: svc}
+		conf := servicesConf{Prod: svc}
 		out, _ := json.MarshalIndent(conf, "", "  ") //nolint:errcheck
 		internal.PrintOutput(cmd.Flags(), conf, string(out)+"\n")
 	},

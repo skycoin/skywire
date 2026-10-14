@@ -18,10 +18,10 @@ import (
 
 var (
 	// DmsgDiscURL is the dmsg discovery URL
-	DmsgDiscURL = dmsg.DiscURL(false)
+	DmsgDiscURL = dmsg.DiscURL()
 
 	// DmsgDiscAddr is the dmsg discovery dmsg address
-	DmsgDiscAddr = dmsg.DiscAddr(false)
+	DmsgDiscAddr = dmsg.DiscAddr()
 
 	// DmsgSessions is the default number of sessions i.e. servers to connect to
 	DmsgSessions = 2

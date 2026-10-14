@@ -33,7 +33,6 @@ skywire cli config gen
   -x, --retainhv                             retain existing hypervisors with regen
   -a, --url string                           services conf url
                                               (default "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80")
-  -t, --testenv                              use test deployment (ports offset +10000 from prod)
   -d, --dmsghttp                             use only dmsg for skywire services, no http (this is the default)
   -D, --dmsgconf string                      dmsghttp config path
       --nofetch                              do not fetch the services from the service conf url

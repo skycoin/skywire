@@ -269,9 +269,7 @@ var (
 
 func init() {
 	dep := getDeployment()
-	defaultTestEnv := isTestEnv()
 
-	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
@@ -293,24 +291,8 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List servers",
-	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
+	Long:  fmt.Sprintf("List %v servers from service discovery\n%v/api/services?type=%v\n%v/api/services?type=%v&country=US\n\nSet cache dir to \"\" to avoid using cache files\ndefault virtual port of servers: %v", serviceType, getDeployment().ServiceDiscovery, serviceType, getDeployment().ServiceDiscovery, serviceType, serverPort),
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
-		if testEnv && !isTestEnv() {
-			if !cmd.Flags().Changed("sdurl") {
-				sdURL = deployment.Test.ServiceDiscovery
-			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
-			if !cmd.Flags().Changed("cds") {
-				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
-			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
-		}
-
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
 		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)

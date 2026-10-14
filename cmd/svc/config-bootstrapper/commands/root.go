@@ -90,13 +90,13 @@ func init() {
 	RootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location\n\r")
 	RootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints\n\r")
 	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "plain-HTTP url of dmsg-discovery (deprecated; leave empty for dmsg-only)\n\r")
-	RootCmd.Flags().StringVar(&dmsgDiscDmsg, "dmsg-disc-dmsg", dmsg.DiscAddr(false), "dmsg-PK url of dmsg-discovery (default: embedded prod)\n\r")
+	RootCmd.Flags().StringVar(&dmsgDiscDmsg, "dmsg-disc-dmsg", dmsg.DiscAddr(), "dmsg-PK url of dmsg-discovery (default: embedded prod)\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http)")
 }
 
 // RootCmd contains the root command
@@ -109,7 +109,6 @@ var RootCmd = &cobra.Command{
 Config Bootstrap Server - provides initial configuration for visors.
 
 Production: ` + deployment.ProdConf.Conf + `
-Test:       ` + deployment.TestConf.Conf + `
 
 HTTP Endpoints:
   GET  /health     Health check

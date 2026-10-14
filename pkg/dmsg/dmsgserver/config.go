@@ -26,10 +26,7 @@ const (
 	DefaultConfigPath = "config.json"
 )
 
-var defaultDiscoveryURL = dmsg.DiscAddr(false)
-
-// DefaultDiscoverURLTest default URL for discovery in test env
-var DefaultDiscoverURLTest = dmsg.DiscAddr(true)
+var defaultDiscoveryURL = dmsg.DiscAddr()
 
 // PeerConfig represents a peer dmsg server to connect to for server-to-server mesh.
 type PeerConfig struct {
