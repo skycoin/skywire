@@ -107,6 +107,7 @@ skywire cli config gen
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --resolver-ca string                   directory with ca.crt and ca.key from "skywire cli resolver ca gen": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)
+      --skydns                               autostart skydns: .dmsg and .skynet names for every program on this host (needs CAP_NET_ADMIN, and root without systemd-resolved)
       --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
       --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".theskywirenetwork.net")

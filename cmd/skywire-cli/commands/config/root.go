@@ -217,6 +217,7 @@ var (
 	dmsgRelayKeys        string
 	dmsgWebSecretKey     string
 	resolverCA           string
+	isSkyDNSEnable       bool
 	noDmsgRelay          bool
 )
 

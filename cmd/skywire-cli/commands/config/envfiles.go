@@ -309,6 +309,11 @@ const envfileLinux = `#
 #--	must trust ca.crt, and the URL needs the base32 key: 'skywire cli pk dnslabel'.
 #RESOLVERCA='/root/.skywire/resolver'
 
+#--	Autostart skydns: .dmsg and .skynet names for every program on this host,
+#--	with no proxy settings. It takes a tun, so it needs CAP_NET_ADMIN, and root
+#--	where systemd-resolved does not run. With RESOLVERCA set it serves HTTPS too.
+#SKYDNS=true
+
 #--	Embedded Wisp server: the backend a browser-side Linux guest asks to open
 #--	its connections. Every browser visor runs it on virtual-loopback port
 #--	6001, and no native visor does. Its streams leave over skywire, through
