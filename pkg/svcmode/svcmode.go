@@ -180,6 +180,9 @@ type Config struct {
 	// downstream helpers.
 	Log *logging.Logger
 
+	// LogHookLevel is the most verbose level kept for /debug/log, info when empty.
+	LogHookLevel string
+
 	// OnDmsgServersUpdated, if non-nil, is called periodically with
 	// the current list of connected dmsg server PKs. Services that
 	// publish this list via their API (e.g. in /health) should set
@@ -333,7 +336,7 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 				// recent log output (the service uses the global logger via
 				// MustGetLogger) so /debug/log needs no disk file.
 				rb := logging.NewRingBuffer(0)
-				logging.AddHook(logging.NewWriteHook(rb))
+				logging.AddHook(logging.NewWriteHookLevel(rb, logging.HookLevel(cfg.LogHookLevel, logging.DefaultHookLevel)))
 				handler = dmsghttp.WithDebug(cfg.Handler, cfg.SurveyWhitelist, rb.Bytes)
 				cfg.Log.Info("svcmode: debug (pprof + /debug/log) served on dmsg :80, survey-gated")
 			}

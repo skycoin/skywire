@@ -271,7 +271,7 @@ func (s *service) runDMSG(
 	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
 	// separate :81 listener. The ring buffer captures recent global-logger output.
 	rb := logging.NewRingBuffer(0)
-	logging.AddHook(logging.NewWriteHook(rb))
+	logging.AddHook(logging.NewWriteHookLevel(rb, logging.HookLevel(cfg.LogHookLevel, logging.DefaultHookLevel)))
 	s.stats.CountDmsg(dmsgDC)
 	a.SetServerHealthClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC), Timeout: serverHealthFetchTimeout})
 	s.stats.NamePort(dmsg.DefaultDmsgHTTPPort, "http")

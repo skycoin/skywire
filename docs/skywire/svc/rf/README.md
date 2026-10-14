@@ -82,6 +82,7 @@ skywire svc rf
   -l, --loglvl string             log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string            address to serve Prometheus metrics on
       --mode string               listeners: http|dmsg|dual (default dual with a key, else http)
+      --no-landmark-routing       answer every route with the exhaustive search, not hub composition
   -r, --pprofaddr string          address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string          [ cpu | mem | mutex | block | trace | http ]
       --redis string              redis URL of the store (default redis://localhost:6379; with --testing and none, the store is in memory)

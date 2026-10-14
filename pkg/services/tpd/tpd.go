@@ -298,6 +298,7 @@ func (s *service) Run(ctx context.Context) error {
 	h, err := svcmode.Start(runCtx, svcmode.Config{
 		Stats:               s.stats,
 		Mode:                resolvedMode,
+		LogHookLevel:        cfg.LogHookLevel,
 		HTTPAddr:            addr,
 		Handler:             tpdAPI,
 		PK:                  pk,

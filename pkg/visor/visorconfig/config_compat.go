@@ -69,6 +69,7 @@ type v1JSON struct {
 	KeyRing             *KeyRing        `json:"keyring,omitempty"`
 
 	LogLevel             string                       `json:"log_level"`
+	LogHookLevel         string                       `json:"log_hook_level,omitempty"`
 	LocalPath            string                       `json:"local_path"`
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"`
@@ -137,6 +138,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.CLIAddr = mirror.CLIAddr
 	v.KeyRing = mirror.KeyRing
 	v.LogLevel = mirror.LogLevel
+	v.LogHookLevel = mirror.LogHookLevel
 	v.LocalPath = mirror.LocalPath
 	v.StunServers = mirror.StunServers
 	v.ShutdownTimeout = mirror.ShutdownTimeout

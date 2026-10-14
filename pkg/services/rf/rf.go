@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/rf/api"
+	rfstore "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -47,6 +48,10 @@ type Config struct {
 
 	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
 	ChartsAddr string `json:"charts_addr,omitempty"`
+
+	// DisableLandmarkRouting answers every route with the exhaustive search
+	// instead of composing far pairs through hub nodes (see store.SetLandmarkRouting).
+	DisableLandmarkRouting bool `json:"disable_landmark_routing,omitempty"`
 }
 
 // LoadFile reads and strict-parses a Config from path.
@@ -101,6 +106,7 @@ type service struct {
 // close releases the store.
 func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr string) (*api.API, func(), error) {
 	cfg := s.cfg
+	rfstore.SetLandmarkRouting(!cfg.DisableLandmarkRouting)
 
 	storeConfig := cfg.StoreConfig()
 
@@ -215,6 +221,7 @@ func (s *service) Run(ctx context.Context) error {
 	h, err := svcmode.Start(runCtx, svcmode.Config{
 		Stats:               s.stats,
 		Mode:                resolvedMode,
+		LogHookLevel:        cfg.LogHookLevel,
 		HTTPAddr:            addr,
 		Handler:             rfAPI,
 		PK:                  pk,
