@@ -47,6 +47,7 @@ func TestFlagArgsForSkyenvResolvers(t *testing.T) {
 		{"SKYNETWEBUPSTREAM", "127.0.0.1:1080", []string{"--skynetweb-upstream", "127.0.0.1:1080"}},
 		{"DMSGWEBADDR", "0.0.0.0", []string{"--dmsgweb-addr", "0.0.0.0"}},
 		{"SKYNETWEBADDR", "0.0.0.0", []string{"--skynetweb-addr", "0.0.0.0"}},
+		{"RESOLVERCA", "/root/.skywire/resolver", []string{"--resolver-ca", "/root/.skywire/resolver"}},
 	} {
 		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
 		if !ok || !reflect.DeepEqual(got, tc.want) {
@@ -73,7 +74,7 @@ func TestEveryResolverFlagRoundTrips(t *testing.T) {
 	}
 	for _, flag := range []string{
 		"dmsgweb", "dmsgweb-upstream", "dmsgweb-addr", "dmsgweb-sk",
-		"skynetweb", "skynetweb-upstream", "skynetweb-addr",
+		"skynetweb", "skynetweb-upstream", "skynetweb-addr", "resolver-ca",
 	} {
 		if !mapped[flag] {
 			t.Errorf("--%s is in no flag↔SKYENV map, so it cannot round-trip through skywire.conf", flag)
