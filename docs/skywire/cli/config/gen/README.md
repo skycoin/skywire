@@ -92,7 +92,7 @@ skywire cli config gen
       --addvpn string                        set vpn server public key for vpn client
       --vpnwl string                         vpn server whitelist (comma separated; empty allows all)
       --secure string                        change secure mode status of vpn server
-      --netifc string                        VPN Server network interface (detected: eno1)
+      --netifc string                        VPN Server network interface (detected: eno1, skydns0)
       --proxyclientpk string                 set server public key for proxy client
       --startproxyclient                     autostart proxy client
       --serveproxy                           autostart proxy server (default true)

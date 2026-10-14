@@ -70,6 +70,10 @@ const envfileLinux = `#
 #-- Add route setup-node public keys
 #ROUTESETUPPKS=('')
 
+#--	Set up routes from the source (cascade) instead of through a route setup
+#--	node. A browser visor uses it by default; CASCADE=false turns it off there.
+#CASCADE=true
+
 #--	Enable local route calculation (instead of using route finder)
 #CALCULATEROUTES=true
 
@@ -211,6 +215,12 @@ const envfileLinux = `#
 
 #--	Autostart vpn server for this visor
 #VPNSERVER=true
+
+#--	Apps to leave out of the launcher config, comma separated.
+#DISABLEAPPS='vpn-server,skychat'
+
+#--	Run the launcher apps as their own processes instead of inside the visor.
+#EXTERNALAPPS=true
 
 #--	Autostart the vpn-router: a LAN/WiFi gateway that NATs downstream
 #	clients into the vpn-client tunnel. Needs VPNROUTERLANIFC (the
@@ -418,6 +428,15 @@ const envfileLinux = `#
 #	For multi-chain:
 #		SKYCOINWEBNODES=('http://127.0.0.1:6420' 'http://127.0.0.1:6421')
 #SKYCOINWEBNODES=('')
+
+#--	Where the skycoin-web wallet keeps its keys: browser, disk or remote.
+#--	disk uses WALLETDIR, remote uses the wallets on the visor WALLETREMOTE.
+#WALLETCUSTODY='browser'
+#WALLETDIR='/root/.skycoin/wallets'
+#WALLETREMOTE='<visor-pk>'
+
+#--	Do not serve the skycoin-web wallet frontend.
+#NOWALLET=true
 
 #--	Wallet directory override. Empty = upstream default at
 #	$HOME/.skycoin/wallets of whichever user the app runs as

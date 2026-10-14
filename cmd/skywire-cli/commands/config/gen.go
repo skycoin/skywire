@@ -130,10 +130,10 @@ func init() {
 	}
 	skyenvStringVarP(genConfigCmd.Flags(), &output, "out", "o", "${OUTPUT}", msg+"")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
-	genConfigCmd.Flags().StringVar(&walletCustody, "wallet-custody", "", "where the skycoin-web wallet keeps keys: browser|disk|remote")
-	genConfigCmd.Flags().StringVar(&walletDir, "wallet-dir", "", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
-	genConfigCmd.Flags().StringVar(&walletRemotePK, "wallet-remote", "", "visor PK holding the wallets, for --wallet-custody=remote")
-	genConfigCmd.Flags().BoolVar(&noWallet, "no-wallet", false, "do not serve the skycoin-web wallet frontend")
+	skyenvStringVar(genConfigCmd.Flags(), &walletCustody, "wallet-custody", "${WALLETCUSTODY}", "where the skycoin-web wallet keeps keys: browser|disk|remote")
+	skyenvStringVar(genConfigCmd.Flags(), &walletDir, "wallet-dir", "${WALLETDIR}", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
+	skyenvStringVar(genConfigCmd.Flags(), &walletRemotePK, "wallet-remote", "${WALLETREMOTE}", "visor PK holding the wallets, for --wallet-custody=remote")
+	skyenvBoolVar(genConfigCmd.Flags(), &noWallet, "no-wallet", "${NOWALLET:-false}", "do not serve the skycoin-web wallet frontend")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
 	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
@@ -206,7 +206,7 @@ func init() {
 	}
 	skyenvArrayVar(genConfigCmd.Flags(), &transportSetupPKs, "tpsetup", "${TPSETUPPKS[@]}", msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
-	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
+	skyenvBoolVar(genConfigCmd.Flags(), &cascadeRouteSetup, "cascade", "${CASCADE:-false}", "opt into source-driven cascade route setup (default: legacy setup-node path)")
 	skyenvStringVar(genConfigCmd.Flags(), &policyPerDial, "policy", "${POLICYPERDIAL}", "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
 	gHiddenFlags = append(gHiddenFlags, "policy")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
@@ -263,9 +263,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
-	genConfigCmd.Flags().BoolVar(&externalApps, "external-apps", false, "configure launcher apps as external processes")
+	skyenvBoolVar(genConfigCmd.Flags(), &externalApps, "external-apps", "${EXTERNALAPPS:-false}", "configure launcher apps as external processes")
 	gHiddenFlags = append(gHiddenFlags, "external-apps")
-	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
+	skyenvStringVarP(genConfigCmd.Flags(), &disableApps, "disableapps", "g", "${DISABLEAPPS}", "comma separated list of apps to disable")
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	skyenvStringVar(genConfigCmd.Flags(), &binPath, "binpath", "${BINPATH}", "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
@@ -1116,6 +1116,11 @@ func mergeExistingApps(log *logging.Logger) {
 	// So is where the status page of those services is served.
 	if oldConfCache.DeploymentStatusAddr != "" {
 		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
+	}
+	// keyring is the visor's too: the keys it minted for labels and the next
+	// index. Dropping it re-issues an index already in use.
+	if oldConfCache.KeyRing != nil {
+		conf.KeyRing = oldConfCache.KeyRing
 	}
 	// host_bridge is written by the visor, when it connects to a host bridge.
 	if oldConfCache.HostBridge != nil {
@@ -2564,6 +2569,16 @@ func configureResolvingProxies(log *logging.Logger) {
 			ProxyAddr:     skynetWebProxyAddr,
 		}
 	}
+	// Per-domain upstream rules are written by "skywire cli resolver route", not
+	// by config gen, so a regen keeps them.
+	if isRegen && oldConfCache != nil {
+		if conf.DmsgWeb != nil && oldConfCache.DmsgWeb != nil && len(conf.DmsgWeb.UpstreamRules) == 0 {
+			conf.DmsgWeb.UpstreamRules = oldConfCache.DmsgWeb.UpstreamRules
+		}
+		if conf.SkynetWeb != nil && oldConfCache.SkynetWeb != nil && len(conf.SkynetWeb.UpstreamRules) == 0 {
+			conf.SkynetWeb.UpstreamRules = oldConfCache.SkynetWeb.UpstreamRules
+		}
+	}
 	// Resolver HTTPS comes from the conf too, or the next autoconfig drops it.
 	if resolverCA != "" {
 		crt, key := filepath.Join(resolverCA, "ca.crt"), filepath.Join(resolverCA, "ca.key")
@@ -2798,9 +2813,12 @@ var (
 		// left DMSGWEB commented in the conf it emitted, so a later run from
 		// that conf produced a config with no dmsg_web block at all. The proxy
 		// chain was silently off; found live with nothing on 4445 or 4446.
-		"dmsgweb":   "DMSGWEB=true",
-		"skynetweb": "SKYNETWEB=true",
-		"skydns":    "SKYDNS=true",
+		"dmsgweb":       "DMSGWEB=true",
+		"skynetweb":     "SKYNETWEB=true",
+		"skydns":        "SKYDNS=true",
+		"no-wallet":     "NOWALLET=true",
+		"cascade":       "CASCADE=true",
+		"external-apps": "EXTERNALAPPS=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2818,6 +2836,10 @@ var (
 		"skynetweb-addr":     "SKYNETWEBADDR",
 		"dmsgweb-sk":         "DMSGWEBSK",
 		"resolver-ca":        "RESOLVERCA",
+		"wallet-custody":     "WALLETCUSTODY",
+		"wallet-dir":         "WALLETDIR",
+		"wallet-remote":      "WALLETREMOTE",
+		"disableapps":        "DISABLEAPPS",
 		"wisp-socks":         "WISPSOCKS",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
