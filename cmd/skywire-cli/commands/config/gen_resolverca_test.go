@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -16,11 +17,12 @@ func TestResolverCASetsBothResolvers(t *testing.T) {
 	enableDmsgWeb, enableSkynetWeb, resolverCA = true, true, "/root/.skywire/resolver"
 	configureResolvingProxies(logger)
 
+	crt, key := filepath.Join("/root/.skywire/resolver", "ca.crt"), filepath.Join("/root/.skywire/resolver", "ca.key")
 	d, s := conf.DmsgWeb, conf.SkynetWeb
-	if d == nil || !d.TLSMITM || d.TLSCAPath != "/root/.skywire/resolver/ca.crt" || d.TLSCAKeyPath != "/root/.skywire/resolver/ca.key" {
+	if d == nil || !d.TLSMITM || d.TLSCAPath != crt || d.TLSCAKeyPath != key {
 		t.Errorf("dmsg_web = %+v, want tls_mitm with the CA in /root/.skywire/resolver", d)
 	}
-	if s == nil || !s.TLSMITM || s.TLSCAPath != "/root/.skywire/resolver/ca.crt" || s.TLSCAKeyPath != "/root/.skywire/resolver/ca.key" {
+	if s == nil || !s.TLSMITM || s.TLSCAPath != crt || s.TLSCAKeyPath != key {
 		t.Errorf("skynet_web = %+v, want tls_mitm with the CA in /root/.skywire/resolver", s)
 	}
 
