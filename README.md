@@ -58,38 +58,66 @@ Next steps are [visor.md](docs/guides/visor.md) and
 
 ## Which Skywire to run
 
-The same visor runs three ways: as a native program, in a browser tab, and
-in the Android app. They share the network but not every capability.
+The same visor runs as a native program, [in a browser tab](https://skywire.dev)
+with nothing to install, and in the [Android app](android/README.md). They share
+one network but not every capability. A browser visor can borrow its
+computer's sockets through the [host bridge](docs/guides/host-bridge.md), a small
+program it hands out itself. The bridge is only for the browser (wasm) visor:
+native and Android visors already have their computer's sockets.
 
-| | Native | Browser tab | Android |
-|---|:-:|:-:|:-:|
-| Dial out over every transport | ✓ | partial ¹ | ✓ |
-| Accept inbound links (public visor) | ✓ | WebRTC only | partial ² |
-| Exit for others (VPN, SOCKS5) | ✓ | ✗ | ✗ |
-| VPN client | system wide | tab only ³ | system wide |
-| SOCKS5 proxy client | ✓ | ✓ | ✓ |
-| Multi-hop and multi-path routes | ✓ | ✓ | ✓ |
-| Browse `.dmsg` and `.skynet` sites | ✓ | ✓ | ✗ ⁴ |
-| Host a site, forward a port | ✓ | ✓ ⁵ | ✗ |
-| Chat, voice calls, mail | ✓ | ✓ | ✓ |
-| Remote shell and file mount (pty) | ✓ | ✓ ⁶ | ✗ |
-| Dashboard | ✓ | ✓ | native screens |
-| Desk (browser desktop) | ✓ | ✓ | ✗ |
-| Skycoin wallet | ✓ | ✓ | ✓ |
-| Runs in the background | ✓ | while the tab is open | ✓ |
-| Rewards | ✓ | ✗ | ✗ |
+| | Native | Browser tab | Browser tab + host bridge | Android |
+|---|:-:|:-:|:-:|:-:|
+| Dial out | every transport | WebSocket, WebTransport, WebRTC, dmsg ¹ | adds stcpr and sudph | every transport |
+| Accept inbound links (public visor) | ✓ | WebRTC only | stcpr and sudph on the computer's ports ² | partial ³ |
+| Exit for others (VPN, SOCKS5) | ✓ | ✗ | ✗ | ✗ |
+| VPN client | system wide | the tab only ⁴ | the tab only | system wide |
+| SOCKS5 proxy client | ✓ | in the tab | also for programs on the computer | ✓ |
+| Open `.dmsg` and `.skynet` names | every program ⁵ | in the desk browser | also for programs on the computer | every app ⁶ |
+| Host a site, forward a port | ✓ | on the tab's virtual loopback | also on the computer's ports | ✗ |
+| Chat, voice calls, mail | ✓ | ✓ | ✓ | ✓ |
+| Remote shell and file mount (pty) | ✓ | ✓ ⁷ | ✓ ⁷ | ✗ |
+| Dashboard | ✓ | ✓ | ✓ | native screens |
+| Desk (browser desktop) | ✓ | ✓ | ✓ | ✗ |
+| Skycoin wallet | ✓ | ✓ | ✓ | ✓ |
+| Runs in the background | ✓ | while the tab is open | while the tab is open | ✓ |
+| Rewards | ✓ | ✗ ⁸ | ✗ ⁸ | not yet ⁹ |
 
-¹ WebSocket, WebTransport, WebRTC and dmsg; a browser cannot open raw TCP or UDP.
+¹ A browser cannot open raw TCP or UDP sockets.
 
-² Carrier NAT blocks most inbound links, and public autoconnect is off by default to save battery and data.
+² Behind a home router, inbound links also need the port forwarded on the router.
 
-³ A network stack inside the tab, for the tab's own pages.
+³ Carrier NAT blocks most inbound links, and public autoconnect is off by default to save battery and data.
 
-⁴ The resolving proxy is in the core but not yet turned on or wired into the VPN.
+⁴ A network stack inside the tab, for the tab's own pages.
 
-⁵ On the tab's virtual loopback rather than the computer's.
+⁵ Through the [resolving proxy](docs/guides/resolving-proxy.md), or with
+[SkyDNS](docs/guides/resolving-proxy.md#skydns-no-proxy-at-all) for every program with no proxy setting.
 
-⁶ The tab hosts a websh shell and its own files rather than the computer's.
+⁶ SkyDNS, in the VPN tunnel or on its own.
+
+⁷ The tab hosts a websh shell and its own files, not the computer's.
+
+⁸ The reward calculation leaves out the `wasm` architecture.
+
+⁹ The app does not generate the survey or set a reward address yet.
+
+### Try it
+
+The project's own status page is served by a visor, over the mesh only. With
+the [resolving proxy](docs/guides/resolving-proxy.md) or SkyDNS set up, open
+
+- `http://status.skywire.dev.aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet/`, a site behind that visor's Caddy
+- `http://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet:8092/`, the same page on a forwarded port
+- `http://rewards.dmsg/`, the reward system by its alias, through the proxy only
+
+The long label is the visor's public key in base32 (`skywire cli pk dnslabel
+<pk>`). The hex key works too over the proxy, but only the base32 form works
+for HTTPS and SkyDNS. `.dmsg` in place of `.skynet` reaches the same visor
+over dmsg. [publishing a site](docs/guides/skynet.md) covers the other side.
+
+The browser visor opens the same addresses from a link:
+[skywire.dev/?skynet=status.skywire.dev.aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet&kiosk=1](https://skywire.dev/?skynet=status.skywire.dev.aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet&kiosk=1)
+or [skywire.dev/?dmsg=rewards.dmsg](https://skywire.dev/?dmsg=rewards.dmsg). `&kiosk=1` maximizes the window.
 
 ## Features
 
