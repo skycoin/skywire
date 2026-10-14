@@ -493,16 +493,16 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			}
 
 			// Not .skynet — forward to upstream or direct.
-			if upstream != nil {
-				// Reconstruct host:port using the original hostname
-				// (the resolved addr has 127.0.0.1 instead of the hostname).
-				if origHost != "" {
-					_, port, _ := net.SplitHostPort(addr) //nolint:errcheck
-					if port == "" {
-						port = "443"
-					}
-					addr = net.JoinHostPort(origHost, port)
+			// The resolved addr has 127.0.0.1 in place of the name, so both the
+			// upstream and a direct dial need the original host back.
+			if origHost != "" {
+				_, port, _ := net.SplitHostPort(addr) //nolint:errcheck
+				if port == "" {
+					port = "443"
 				}
+				addr = net.JoinHostPort(origHost, port)
+			}
+			if upstream != nil {
 				log.WithField("addr", addr).Debug("SOCKS5 → upstream")
 				c, err := upstream.Dial(network, addr)
 				if err != nil {

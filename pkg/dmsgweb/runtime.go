@@ -605,10 +605,12 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			// Not .dmsg — forward to upstream or direct.
+			// The resolved addr has 127.0.0.1 in place of the name, so both the
+			// upstream and a direct dial need the original host back.
+			if origHost != "" {
+				addr = net.JoinHostPort(origHost, origPort)
+			}
 			if upstream != nil {
-				if origHost != "" {
-					addr = net.JoinHostPort(origHost, origPort)
-				}
 				c, err := upstream.Dial(network, addr)
 				if err != nil {
 					return nil, err
