@@ -40,6 +40,8 @@ type Common struct {
 	// LogLevel is the minimum log level; Tag names the service's logger.
 	LogLevel string `json:"log_level,omitempty"`
 	Tag      string `json:"tag,omitempty"`
+	// LogHookLevel is the most verbose level kept for /debug/log, info when empty.
+	LogHookLevel string `json:"log_hook_level,omitempty"`
 	// MetricsAddr exposes Prometheus metrics; empty disables it.
 	MetricsAddr string `json:"metrics_addr,omitempty"`
 	// PprofMode is cpu, mem, mutex, block, trace or http (see StartPprof);
@@ -185,6 +187,9 @@ func MergeCommon(dst *Common, src Common) {
 	}
 	if src.LogLevel != "" {
 		dst.LogLevel = src.LogLevel
+	}
+	if src.LogHookLevel != "" {
+		dst.LogHookLevel = src.LogHookLevel
 	}
 	if src.Tag != "" {
 		dst.Tag = src.Tag

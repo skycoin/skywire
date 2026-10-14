@@ -175,6 +175,7 @@ type Config struct {
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`
+	LogHookLevel     string        `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 	UpdateInterval   time.Duration `json:"update_interval"`
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
