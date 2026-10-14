@@ -115,11 +115,7 @@ func removePK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
 // a restart. Best-effort: a non-file-backed config (wasm tab / STDIN) can't write
 // — the runtime connection change already took effect, so a write error is only
 // logged, never fatal.
-//
-// On a package install the json is a derived artifact: `skywire autoconfig`
-// (run by every package update) rebuilds it from skywire.conf, so the list is
-// mirrored into HYPERVISORPKS there too. Only the package config path does
-// this — a dev visor on a repo-local config never touches /etc/skywire.conf.
+// The write also saves HYPERVISORPKS to skywire.conf (see mirrorChanges).
 func (v *Visor) persistHypervisors(want []cipher.PubKey) {
 	if v.conf == nil || v.conf.Path() == "" {
 		return // not file-backed; runtime change stands without persistence
@@ -127,7 +123,6 @@ func (v *Visor) persistHypervisors(want []cipher.PubKey) {
 	if err := v.conf.UpdateHypervisors(want); err != nil {
 		v.log.WithError(err).Warn("failed to persist hypervisors to config")
 	}
-	v.mirrorToSkyenv([][2]string{{"hvpks", joinPKs(want)}})
 }
 
 // RemoveHypervisor tears down a runtime-added hypervisor connection by

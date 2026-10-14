@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // Every mirrored path must name a real config field and an autoconfig flag
@@ -44,6 +45,7 @@ func TestSetPtyWhitelistLiveAndMirrored(t *testing.T) {
 	wl := pty.NewMemoryWhitelist()
 	require.NoError(t, wl.Add(conf.PK, hv, a))
 	v := &Visor{conf: conf, peerWhitelist: wl, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
 
 	changes, err := v.SetConfigFields(map[string]json.RawMessage{
 		"pty.whitelist": json.RawMessage(`["` + b.String() + `"]`),
@@ -74,6 +76,7 @@ func TestNoSkyenvRecordedWritesNothing(t *testing.T) {
 	require.NoError(t, os.WriteFile(envFile, []byte("#VISORISPUBLIC=false\n"), 0o600))
 	conf.Skyenv = ""
 	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
 
 	_, err := v.SetConfigFields(map[string]json.RawMessage{"is_public": json.RawMessage(`true`)})
 	require.NoError(t, err)
@@ -89,4 +92,66 @@ func TestSkyenvIsNotSettable(t *testing.T) {
 	_, err := v.SetConfigFields(map[string]json.RawMessage{"skyenv": json.RawMessage(`"/etc/passwd"`)})
 	require.ErrorContains(t, err, "skywire autoconfig")
 	require.Empty(t, conf.Skyenv)
+}
+
+// regenKeeps are live settings that config gen carries over from the old
+// config on a regenerate instead of reading a skywire.conf variable.
+var regenKeeps = map[string]string{
+	"launcher.apps[*].auto_start":  "mergeExistingApps",
+	"launcher.apps[*].args":        "mergeExistingApps",
+	"launcher.apps[*].env":         "mergeExistingApps",
+	"routing.router_settings[*]":   "configureRouting",
+	"routing.transport_preference": "configureRouting",
+	"dmsg_web.upstream_rules":      "configureResolvingProxies",
+	"skynet_web.upstream_rules":    "configureResolvingProxies",
+	"persistent_transports":        "keepPersistentTransports",
+}
+
+// TestEveryLiveSettingSurvivesAutoconfig. A live change that neither reaches
+// skywire.conf nor is carried over is undone by the next autoconfig.
+func TestEveryLiveSettingSurvivesAutoconfig(t *testing.T) {
+	for _, f := range liveConfigFieldTable {
+		_, mirrored := autoconfigFlagFor[f.Path]
+		_, kept := regenKeeps[f.Path]
+		if !mirrored && !kept {
+			t.Errorf("%s is live but neither mirrored to skywire.conf nor kept by config gen", f.Path)
+		}
+	}
+}
+
+// A setter that persists without going through config set is saved to
+// skywire.conf too, since the save runs on every config write.
+func TestFlushMirrorsAnyWriter(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("#MINHOPS=0\n"), 0o600))
+	conf.Skyenv = envFile
+	if conf.Routing == nil {
+		conf.Routing = &visorconfig.Routing{}
+	}
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
+
+	require.NoError(t, conf.UpdateMinHops(3))
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "MINHOPS=3")
+}
+
+// Removing a block saves its settings as their zero values, so a regenerate
+// does not bring the block back.
+func TestFlushMirrorsARemovedBlock(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("DMSGWEB=true\n"), 0o600))
+	conf.Skyenv = envFile
+	conf.DmsgWeb = &visorconfig.DmsgWebConfig{Enable: true}
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
+
+	conf.DmsgWeb = nil
+	require.NoError(t, conf.Flush())
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "DMSGWEB=false")
 }

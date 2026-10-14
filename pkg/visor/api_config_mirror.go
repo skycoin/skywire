@@ -4,6 +4,7 @@ package visor
 import (
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,9 @@ var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
 	"pty.whitelist":             pkListFlag("dmsgpty-pks"),
 	"routing.min_hops":          uintFlag("min-hops"),
 	"routing.calculate_routes":  boolFlag("calculate-routes"),
+	"routing.mux_fec":           boolFlag("mux-fec"),
+	"flight_recorder":           boolFlag("flight-recorder"),
+	"hypervisor.ui_disable":     boolFlag("hv-ui-disable"),
 	"reward_address":            stringFlag("rewardaddr"),
 	"hypervisor.enable":         boolFlag("ishv"),
 	"hypervisor.enable_auth":    boolFlag("hv-auth"),
@@ -105,4 +109,92 @@ func (v *Visor) mirrorToSkyenv(flags [][2]string) {
 		v.log.WithError(err).WithField("path", path).WithField("settings", names).
 			Warn("could not save live changes to skywire.conf; the next autoconfig run will undo them")
 	}
+}
+
+// watchSkyenv records the mirrored settings as generated, then after each
+// config write saves the ones that changed to skywire.conf.
+func (v *Visor) watchSkyenv() {
+	if v.conf == nil {
+		return
+	}
+	v.skyenvSeen = v.mirroredValues()
+	v.conf.SetAfterFlush(v.mirrorChanges)
+}
+
+// mirrorChanges saves every mirrored setting that changed since the last save.
+func (v *Visor) mirrorChanges() {
+	v.skyenvMu.Lock()
+	defer v.skyenvMu.Unlock()
+	now := v.mirroredValues()
+	var flags [][2]string
+	for path, fv := range now {
+		if v.skyenvSeen[path] != fv {
+			flags = append(flags, fv)
+		}
+	}
+	v.skyenvSeen = now
+	sort.Slice(flags, func(i, j int) bool { return flags[i][0] < flags[j][0] })
+	v.mirrorToSkyenv(flags)
+}
+
+// mirroredValues is the autoconfig flag and value of every mirrored setting.
+// A setting whose block is absent counts as its zero value, so removing the
+// block is saved too.
+func (v *Visor) mirroredValues() map[string][2]string {
+	root := reflect.ValueOf(v.conf).Elem()
+	out := make(map[string][2]string, len(autoconfigFlagFor))
+	for path, flagFor := range autoconfigFlagFor {
+		var nv reflect.Value
+		if tgt, err := resolveConfigTarget(root, path); err == nil {
+			nv = tgt.get()
+		} else if t := configFieldType(root.Type(), path); t != nil {
+			nv = reflect.Zero(t)
+		} else {
+			continue
+		}
+		flag, val := flagFor(nv)
+		out[path] = [2]string{flag, val}
+	}
+	return out
+}
+
+// configFieldType walks a dotted path of json names through struct types.
+func configFieldType(t reflect.Type, path string) reflect.Type {
+	for _, name := range strings.Split(path, ".") {
+		for t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct {
+			return nil
+		}
+		f, ok := structFieldByJSONName(t, name)
+		if !ok {
+			return nil
+		}
+		t = f.Type
+	}
+	return t
+}
+
+func structFieldByJSONName(t reflect.Type, name string) (reflect.StructField, bool) {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Anonymous && f.Tag.Get("json") == "" {
+			et := f.Type
+			if et.Kind() == reflect.Pointer {
+				et = et.Elem()
+			}
+			if et.Kind() != reflect.Struct {
+				continue
+			}
+			if sf, ok := structFieldByJSONName(et, name); ok {
+				return sf, true
+			}
+			continue
+		}
+		if tag, _, _ := strings.Cut(f.Tag.Get("json"), ","); tag == name {
+			return f, true
+		}
+	}
+	return reflect.StructField{}, false
 }
