@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -24,11 +26,17 @@ import (
 	"github.com/skycoin/skywire/pkg/vpn"
 )
 
-var upstream, caDir string
+var upstream, caDir, setupTun string
 
 func init() {
 	RootCmd.Flags().StringVar(&upstream, "dns", "", "resolver for names that are not mesh names (empty means the phone's own DNS)")
 	RootCmd.Flags().StringVar(&caDir, "ca", "", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": terminate HTTPS to mesh names with it")
+	// --setup-tun is what an unprivileged skydns runs through pkexec: the one
+	// root step, not something to call by hand.
+	RootCmd.Flags().StringVar(&setupTun, "setup-tun", "", "set up the persistent tun for uid:gid as root, then exit")
+	if err := RootCmd.Flags().MarkHidden("setup-tun"); err != nil {
+		panic(err)
+	}
 	launcher.RegisterApp(skyenv.SkyDNSName, RunSkyDNS)
 }
 
@@ -43,6 +51,12 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
+		if setupTun != "" {
+			if err := runSetupTun(setupTun); err != nil {
+				cmdutil.Fatal(err)
+			}
+			return
+		}
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 		if err := RunSkyDNS(ctx, nil); err != nil {
@@ -103,4 +117,15 @@ func caMinter(dir string) (skynetca.LeafMinter, error) {
 		return nil, fmt.Errorf("skydns --ca %s: %w", dir, err)
 	}
 	return skynetca.NewMinter(ca, key, skynetca.LeafOptions{}), nil
+}
+
+// runSetupTun parses uid:gid and sets up the persistent tun as root.
+func runSetupTun(owner string) error {
+	u, g, ok := strings.Cut(owner, ":")
+	uid, uerr := strconv.Atoi(u)
+	gid, gerr := strconv.Atoi(g)
+	if !ok || uerr != nil || gerr != nil {
+		return fmt.Errorf("--setup-tun wants uid:gid, got %q", owner)
+	}
+	return vpn.SetupSkyDNSTun(uid, gid)
 }
