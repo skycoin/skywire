@@ -1566,13 +1566,6 @@ func configureLauncher(log *logging.Logger) {
 		PKTable:          nil,
 	}
 
-	// UI Server configuration (disabled by default)
-	conf.UIServer = &visorconfig.UIServer{
-		Enable:    false,
-		LocalAddr: "localhost:8081",
-		DmsgPort:  81,
-	}
-
 	// Log Server configuration (localhost serving disabled by default)
 	// Set local_addr to e.g. "localhost:8002" to enable localhost serving without auth
 	conf.LogServer = &visorconfig.LogServer{
