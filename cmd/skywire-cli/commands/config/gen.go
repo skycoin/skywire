@@ -322,6 +322,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	skyenvStringVar(genConfigCmd.Flags(), &resolverCA, "resolver-ca", "${RESOLVERCA}", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkyDNSEnable, "skydns", "${SKYDNS:-false}", "autostart skydns: .dmsg and .skynet names for every program on this host (needs CAP_NET_ADMIN, and root without systemd-resolved)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
@@ -1148,6 +1149,15 @@ func mergeExistingApps(log *logging.Logger) {
 			// reach a config that already has them.
 			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
 				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
+			}
+		}
+		// The same for skydns: its CA and autostart come from skywire.conf when set.
+		if name == skyenv.SkyDNSName {
+			if isSkyDNSEnable {
+				conf.Launcher.Apps[i].AutoStart = true
+			}
+			if resolverCA != "" {
+				conf.Launcher.Apps[i].Args = setFlag(conf.Launcher.Apps[i].Args, "--ca", resolverCA)
 			}
 		}
 		// Env belongs with the args it was written for: an old skycoin-web entry
@@ -2210,9 +2220,9 @@ func configureApps(log *logging.Logger) {
 				// default, since it takes a tun and a share of the host DNS.
 				Name:      skyenv.SkyDNSName,
 				Binary:    "skywire",
-				AutoStart: false,
+				AutoStart: isSkyDNSEnable,
 				Port:      routing.Port(skyenv.SkyDNSPort),
-				Args:      []string{"app", "skydns"},
+				Args:      skydnsArgs([]string{"app", "skydns"}),
 			},
 			{
 				Name:      skyenv.SkydexMarketName,
@@ -2314,8 +2324,8 @@ func configureApps(log *logging.Logger) {
 			},
 			{
 				Name:      skyenv.SkyDNSName,
-				AutoStart: false,
-				Args:      []string{},
+				AutoStart: isSkyDNSEnable,
+				Args:      skydnsArgs(nil),
 				Port:      routing.Port(skyenv.SkyDNSPort),
 			},
 			{
@@ -2790,6 +2800,7 @@ var (
 		// chain was silently off; found live with nothing on 4445 or 4446.
 		"dmsgweb":   "DMSGWEB=true",
 		"skynetweb": "SKYNETWEB=true",
+		"skydns":    "SKYDNS=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2979,4 +2990,13 @@ func setFlag(args []string, flag, val string) []string {
 		}
 	}
 	return append(out, flag, val)
+}
+
+// skydnsArgs gives skydns the resolver CA when one is configured, so HTTPS to
+// mesh names works through it as it does through the resolving proxies.
+func skydnsArgs(base []string) []string {
+	if resolverCA == "" {
+		return base
+	}
+	return setFlag(base, "--ca", resolverCA)
 }
