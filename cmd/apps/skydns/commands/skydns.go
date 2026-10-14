@@ -52,9 +52,7 @@ var RootCmd = &cobra.Command{
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
 		if setupTun != "" {
-			if err := runSetupTun(setupTun); err != nil {
-				cmdutil.Fatal(err)
-			}
+			runSetupTun(setupTun)
 			return
 		}
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -119,13 +117,16 @@ func caMinter(dir string) (skynetca.LeafMinter, error) {
 	return skynetca.NewMinter(ca, key, skynetca.LeafOptions{}), nil
 }
 
-// runSetupTun parses uid:gid and sets up the persistent tun as root.
-func runSetupTun(owner string) error {
+// runSetupTun parses uid:gid and sets up the persistent tun as root, exiting
+// on failure.
+func runSetupTun(owner string) {
 	u, g, ok := strings.Cut(owner, ":")
 	uid, uerr := strconv.Atoi(u)
 	gid, gerr := strconv.Atoi(g)
 	if !ok || uerr != nil || gerr != nil {
-		return fmt.Errorf("--setup-tun wants uid:gid, got %q", owner)
+		cmdutil.Fatal(fmt.Errorf("--setup-tun wants uid:gid, got %q", owner))
 	}
-	return vpn.SetupSkyDNSTun(uid, gid)
+	if err := vpn.SetupSkyDNSTun(uid, gid); err != nil {
+		cmdutil.Fatal(err)
+	}
 }
