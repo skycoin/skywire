@@ -17,6 +17,11 @@
 # everything the visor persists itself. Set SKIP_AUTOCONFIG=1 to run against a
 # hand-edited JSON instead.
 #
+# skydns and the VPN client need CAP_NET_ADMIN, which go install drops on each
+# rebuild. With this sudoers rule (sudo visudo -f /etc/sudoers.d/skywire-dev)
+# the loop puts it back after every build; without it the step is skipped:
+#   <user> ALL=(root) NOPASSWD: /usr/bin/setcap cap_net_admin+eip <GOBIN>/skywire
+#
 # Runs from the repo root regardless of where it is invoked.
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1 # script lives in scripts/, build from repo root
@@ -37,6 +42,12 @@ while true; do
 		echo ">>> build failed — not starting a stale binary; retrying in 5s"
 		sleep 5
 		continue
+	fi
+
+	# A fresh install has no file capabilities. Where a sudoers rule allows exactly
+	# this without a password, give it CAP_NET_ADMIN for the tun apps (skydns, vpn).
+	if sudo -n setcap cap_net_admin+eip "$SKYWIRE_BIN" 2>/dev/null; then
+		echo ">>> setcap cap_net_admin+eip $SKYWIRE_BIN"
 	fi
 
 	# Re-derive the config from skywire.conf. This is the ONLY thing that
