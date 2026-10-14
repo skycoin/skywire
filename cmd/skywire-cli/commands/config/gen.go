@@ -321,6 +321,7 @@ func init() {
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebProxyAddr, "dmsgweb-addr", "${DMSGWEBADDR}", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	skyenvStringVar(genConfigCmd.Flags(), &resolverCA, "resolver-ca", "${RESOLVERCA}", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
@@ -2553,6 +2554,16 @@ func configureResolvingProxies(log *logging.Logger) {
 			ProxyAddr:     skynetWebProxyAddr,
 		}
 	}
+	// Resolver HTTPS comes from the conf too, or the next autoconfig drops it.
+	if resolverCA != "" {
+		crt, key := filepath.Join(resolverCA, "ca.crt"), filepath.Join(resolverCA, "ca.key")
+		if conf.DmsgWeb != nil {
+			conf.DmsgWeb.TLSMITM, conf.DmsgWeb.TLSCAPath, conf.DmsgWeb.TLSCAKeyPath = true, crt, key
+		}
+		if conf.SkynetWeb != nil {
+			conf.SkynetWeb.TLSMITM, conf.SkynetWeb.TLSCAPath, conf.SkynetWeb.TLSCAKeyPath = true, crt, key
+		}
+	}
 	// The embedded Wisp server runs on every browser visor and no native one;
 	// the section only tunes it.
 	if wispUpstreamSOCKS != "" {
@@ -2795,6 +2806,7 @@ var (
 		"dmsgweb-addr":       "DMSGWEBADDR",
 		"skynetweb-addr":     "SKYNETWEBADDR",
 		"dmsgweb-sk":         "DMSGWEBSK",
+		"resolver-ca":        "RESOLVERCA",
 		"wisp-socks":         "WISPSOCKS",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).

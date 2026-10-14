@@ -216,6 +216,7 @@ var (
 	dmsgRelayAddr        string
 	dmsgRelayKeys        string
 	dmsgWebSecretKey     string
+	resolverCA           string
 	noDmsgRelay          bool
 )
 
