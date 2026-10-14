@@ -40,7 +40,7 @@ var skyenvRefused = map[string]string{
 
 // Skyenv implements visorapi.API.
 func (v *Visor) Skyenv() (visorapi.SkyenvState, error) {
-	path := skyenvfile.Path()
+	path := v.skyenvPath()
 	st := visorapi.SkyenvState{Path: path, Values: map[string]string{}, Flags: autoconfigcmd.Describe()}
 	vals, err := skyenvfile.Values(path)
 	switch {
@@ -89,7 +89,7 @@ func (v *Visor) SetSkyenv(req visorapi.SkyenvEdits) (visorapi.SkyenvState, error
 
 	skyenvMu.Lock()
 	defer skyenvMu.Unlock()
-	path := skyenvfile.Path()
+	path := v.skyenvPath()
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return visorapi.SkyenvState{}, fmt.Errorf("%s does not exist yet; `skywire autoconfig` creates it", path)
 	}
@@ -110,4 +110,13 @@ func skyenvWritable(path string) bool {
 	_ = f.Close()       //nolint:errcheck
 	_ = os.Remove(name) //nolint:errcheck
 	return true
+}
+
+// skyenvPath is the skywire.conf this visor's config was generated from, or
+// the default one when the config records none.
+func (v *Visor) skyenvPath() string {
+	if v.conf != nil && v.conf.Skyenv != "" {
+		return v.conf.Skyenv
+	}
+	return skyenvfile.Path()
 }
