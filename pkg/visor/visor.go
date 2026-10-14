@@ -683,9 +683,9 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	// The runtime-log hook JSON-encodes every entry it accepts under a
 	// process-wide mutex, so it captures info and above by default rather than
-	// every level (see logstore.DefaultHookLevel). SKYWIRE_LOG_HOOK_LEVEL puts
-	// debug back in the buffer for a debugging session.
-	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(logstore.DefaultHookLevel))
+	// every level (see logstore.DefaultHookLevel). log_hook_level puts debug
+	// back in the buffer for a debugging session.
+	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(conf.LogHookLevel, logstore.DefaultHookLevel))
 	mLog.AddHook(hook)
 
 	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs

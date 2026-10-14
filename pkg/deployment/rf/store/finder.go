@@ -142,7 +142,7 @@ func (g *Graph) computeRouteWeighted(ctx context.Context, source, destination ci
 	// ok=false only when neither the budget BFS nor composition found anything,
 	// in which case we fall through to the full exhaustive BFS below. See
 	// landmark.go.
-	if landmarkRoutingEnabled {
+	if landmarkRouting() {
 		if routes, ok := g.routesLandmarkHybrid(ctx, source, destination, minLen, maxLen, number); ok {
 			return routes, nil
 		}

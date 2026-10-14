@@ -93,13 +93,13 @@ func validateRoute(t *testing.T, g *Graph, r routing.Route, src, dst cipher.PubK
 
 // bfs/landmark route fetch through computeRouteWeighted (skips the memo, so the
 // flag toggle takes effect on each call; the lazily-built tables are
-// flag-independent). setLandmark flips the package gate around the call.
+// flag-independent). It flips the package gate around the call.
 // maxLen/number are fixed at the 8/3 every test here uses.
 func routesVia(t *testing.T, g *Graph, on bool, src, dst cipher.PubKey) ([]routing.Route, error) {
 	t.Helper()
-	prev := landmarkRoutingEnabled
-	landmarkRoutingEnabled = on
-	defer func() { landmarkRoutingEnabled = prev }()
+	prev := landmarkRouting()
+	SetLandmarkRouting(on)
+	defer SetLandmarkRouting(prev)
 	return g.computeRouteWeighted(context.Background(), src, dst, 0, 8, 3, true)
 }
 
@@ -185,7 +185,7 @@ func TestLandmarkClosePairParity(t *testing.T) {
 // per graph in production) so the benchmark measures the SERVE cost.
 func BenchmarkRouteFarPair_FullBFS(b *testing.B) {
 	g, src, dst := buildDenseGraph(b, 6)
-	landmarkRoutingEnabled = false
+	SetLandmarkRouting(false)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -195,7 +195,7 @@ func BenchmarkRouteFarPair_FullBFS(b *testing.B) {
 
 func BenchmarkRouteFarPair_Landmark(b *testing.B) {
 	g, src, dst := buildDenseGraph(b, 6)
-	landmarkRoutingEnabled = true
+	SetLandmarkRouting(true)
 	g.ensureLandmarks() // amortized once per graph; measure serve only
 	b.ReportAllocs()
 	b.ResetTimer()

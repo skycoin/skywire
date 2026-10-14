@@ -91,6 +91,7 @@ type V1 struct {
 	KeyRing *KeyRing `json:"keyring,omitempty"`
 
 	LogLevel             string                       `json:"log_level"`
+	LogHookLevel         string                       `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 	LocalPath            string                       `json:"local_path"`
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc

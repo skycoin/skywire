@@ -27,6 +27,7 @@ var (
 	dmsgDisc       string
 	dmsgServerType string
 	chartsAddr     string
+	noLandmark     bool
 )
 
 func generateExamples() string {
@@ -66,6 +67,7 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(), "url of dmsg-discovery")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&chartsAddr, "charts-addr", "", "serve only the charts page over plain HTTP on this address")
+	RootCmd.Flags().BoolVar(&noLandmark, "no-landmark-routing", false, "answer every route with the exhaustive search, not hub composition")
 }
 
 // RootCmd contains the root command
@@ -119,8 +121,9 @@ func buildConfig() (*rf.Config, error) {
 		return nil, err
 	}
 	cfg := &rf.Config{
-		Common:     common,
-		ChartsAddr: chartsAddr,
+		Common:                 common,
+		ChartsAddr:             chartsAddr,
+		DisableLandmarkRouting: noLandmark,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -141,6 +144,9 @@ func mergeFile(dst, src *rf.Config) {
 	dst.Dmsg.Merge(src.Dmsg)
 	if src.ChartsAddr != "" {
 		dst.ChartsAddr = src.ChartsAddr
+	}
+	if src.DisableLandmarkRouting {
+		dst.DisableLandmarkRouting = true
 	}
 }
 
