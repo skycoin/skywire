@@ -427,14 +427,9 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 		}
 		out = append(out, p.change)
 	}
-	var mirror [][2]string
-	for _, p := range plan {
-		if flagFor, ok := autoconfigFlagFor[p.target.tmpl]; ok {
-			flag, val := flagFor(p.newVal)
-			mirror = append(mirror, [2]string{flag, val})
-		}
-	}
-	v.mirrorToSkyenv(mirror)
+	// Most setters flush, which saves the change to skywire.conf. This catches
+	// one that does not.
+	v.mirrorChanges()
 	return out, nil
 }
 
