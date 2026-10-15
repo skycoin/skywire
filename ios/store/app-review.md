@@ -8,7 +8,9 @@ D) and are checked on an iPhone before submission.
 ## Notes for App Review
 
 Paste this into the Notes field (it is under App Store Connect's 4,000
-characters).
+characters). Its second paragraph, why the app installs a VPN configuration,
+is **device**: the Simulator has no packet tunnel and runs the node in the
+app.
 
 > Skywire is the iOS app of the Skywire network, an open source
 > peer-to-peer network (https://github.com/skycoin/skywire). The app runs a
@@ -53,11 +55,12 @@ characters).
   above all. Without a licence, leave those storefronts out of the
   availability list.
 
-**2.5.4 and the always-on tunnel.** The tunnel stays up while routing
-nothing, to host the node. Apple may read that as a VPN extension used for a
-non-VPN purpose; the notes above explain it. If review refuses it, the
-fallback is already built: `InAppCoreHost` on a device, where the node runs
-only while the app is open (calls and messages arrive only then).
+**2.5.4 and the always-on tunnel.** **device** The tunnel stays up while
+routing nothing, to host the node. Apple may read that as a VPN extension
+used for a non-VPN purpose; the notes above explain it. If review refuses it,
+the fallback is `InAppCoreHost`, where the node runs only while the app is
+open (calls and messages arrive only then). It is what the Simulator runs;
+on a device it is built but has not run yet.
 
 **3.1.5(i) wallets.** Non-custodial Skycoin, Bitcoin, Ethereum and USDT
 (ERC-20) wallet; allowed for an Organization account. No mining (3.1.5(ii)).
