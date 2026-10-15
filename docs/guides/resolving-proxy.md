@@ -44,8 +44,8 @@ A resolver hostname is `<public-key>.<suffix>:<port>/<path>`:
 
 - `<public-key>` — the target visor or service: its 66-character hex key, or
   the same key as a 53-character base32 label (`skywire cli pk dnslabel <hex>`).
-  Use the base32 form for HTTPS and with SkyDNS: a DNS label is at most 63
-  characters, so the hex form cannot be a TLS name or a DNS lookup.
+  Use the base32 form with SkyDNS, since a DNS label is at most 63 characters,
+  and for HTTPS in a browser, which refuses a certificate for the hex name.
 - `:<port>` — the **dmsg port** the target serves HTTP on. **Deployment services
   serve their API on dmsg port `80`.**
 - `.dmsg` addresses may carry routing prefixes, e.g. `<server-pk>.<dest-pk>.dmsg`
@@ -282,8 +282,8 @@ and `*.skynet`, so it cannot vouch for any other site.
 The decrypted request goes to the target's port 80, so a site published on
 port 80 is reachable over `https://` too.
 
-Use the base32 form of the key for HTTPS. A certificate name label holds at
-most 63 characters and a hex key has 66.
+Use the base32 form of the key for HTTPS in a browser. Chromium-based browsers
+refuse a certificate for the 66-character hex name, though curl accepts it.
 
 ```
 skywire cli pk dnslabel <hex-pk>
