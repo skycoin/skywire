@@ -496,6 +496,8 @@
 				.catch(function () {});
 		}
 		if (pendingDL && pendingDL.t === 'linux') { var ldl = pendingDL; pendingDL = null; openLinux(ldl.disk); }
+		// hv serve --lot-open starts LinuxOnTab when the page carries no link of its own.
+		else if (!pendingDL && globalThis.__SKYWIRE_LOT_OPEN__) openLinux('');
 		var deepWin = null;
 		function openDeepLink(dl) {
 			if (dl.t === 'linux') { openLinux(dl.disk); return; }

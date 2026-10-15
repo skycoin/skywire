@@ -74,6 +74,10 @@ skywire cli hv serve --addr 127.0.0.1:7997 --lot /opt/linuxontab/shell --browse-
 
 Then route `*.linux.theskywirenetwork.net` to 127.0.0.1:7996.
 
+Add `--lot-open` to start LinuxOnTab as soon as the desk opens, so a visitor
+sees it without knowing the menu. A link such as `?dmsg=` still opens its own
+site instead.
+
 ## When it does not work
 
 - **`curl: … [Errno -3] Try again`, or `curl` hangs.** The tab's exit is not
@@ -88,6 +92,10 @@ Then route `*.linux.theskywirenetwork.net` to 127.0.0.1:7996.
 - **The tab reloads by itself when LinuxOnTab opens.** The desk is not
   cross-origin isolated, and LinuxOnTab reloads the top window to get there,
   which restarts the visor. Serve with `--lot`.
+
+- **LinuxOnTab opens a window saying the page is not isolated.** The browser
+  did not isolate the page even with `--lot`, and the desk does not start
+  LinuxOnTab, since it would reload the page. Use a Chromium-based browser.
 
 - **The tab dies during a download.** The rootfs does not match the kernel.
   Use the rootfs published for the checkout you have.
