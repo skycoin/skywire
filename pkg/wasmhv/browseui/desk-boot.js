@@ -51,8 +51,25 @@
 	try { deskChannel = new BroadcastChannel('skywire-desk'); } catch (e) { /* no cross-tab channel */ }
 	var yielding = false; // this tab is handing the desk to another one
 
+	// labelToHex turns a key's 53 character base32 label (the form mesh names
+	// use) into hex, and returns anything else unchanged.
+	function labelToHex(s) {
+		if (!/^[a-z2-7]{53}$/i.test(s)) return s;
+		var alphabet = 'abcdefghijklmnopqrstuvwxyz234567', bits = 0, value = 0, out = '';
+		s = s.toLowerCase();
+		for (var i = 0; i < s.length; i++) {
+			value = (value << 5) | alphabet.indexOf(s[i]);
+			bits += 5;
+			if (bits >= 8) {
+				out += ('0' + ((value >>> (bits - 8)) & 255).toString(16)).slice(-2);
+				bits -= 8;
+			}
+		}
+		return out.length === 66 ? out : s;
+	}
+
 	// readDeepLink: what the page URL asks the desk to open, or null.
-	//   ?skydm=<pk>                  a skychat conversation with <pk>
+	//   ?skydm=<pk>                  a skychat conversation with <pk> (hex or base32)
 	//   ?skygroup=<invite>           the skychat join panel, filled in
 	//   ?skynet=<site>[&kiosk=1]     a mesh site, e.g. rewards.dmsg (?dmsg= too)
 	//   ?lot=1 (or ?lot=full)        LinuxOnTab, when this page serves it
@@ -61,7 +78,7 @@
 		var q = new URLSearchParams(location.search);
 		var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
 		function get(k) { return q.get(k) || h.get(k) || ''; }
-		var pk = get('skydm');
+		var pk = labelToHex(get('skydm'));
 		if (/^[0-9a-fA-F]{66}$/.test(pk)) return { t: 'dm', pk: pk.toLowerCase() };
 		var invite = get('skygroup');
 		if (invite && invite.length <= 4096) return { t: 'group', invite: invite };
