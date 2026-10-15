@@ -52,15 +52,16 @@ SUCCEEDED`; SkywireTests 8 tests, SkywireAppTests 72 with 1 skipped (the
 tunnel probe, which runs only on request).
 
 1.2 `(cd ios/Packages/CoreClient && swift test)`: 127 tests, 0 failures.
-`(cd ios/Packages/WalletCore && swift test)`: 38 tests, 4 skipped (the live
-ones, `SKYWIRE_NET_TESTS=1`), 0 failures.
+`(cd ios/Packages/WalletCore && swift test)`: 38 tests, 4 skipped (three
+live ones that need `SKYWIRE_NET_TESTS=1`, and `CrossCheckDumpTests`, which
+needs `WALLET_CROSSCHECK_OUT`), 0 failures.
 
 1.3 `go test ./pkg/vpn/ -run 'IOSTunDevice|TunSettings' -count=1`: ok.
 
 1.4 The packet-tunnel extension's device build (README): `BUILD SUCCEEDED`.
 
 1.5 *Once, not per device:* `make mobile-test` with no Simulator app
-running (it binds 8000 and 5505): ok, about 10 minutes.
+running (it binds 8000 and 5505): ok, 10 to 15 minutes.
 
 ## 2. First launch, the core, its config (hand) [M1, M2]
 
@@ -116,7 +117,9 @@ t() { xcodebuild -project ios/Skywire.xcodeproj -scheme SkywireTour \
 ```
 
 A `TEST_RUNNER_*` variable before `t` reaches the tests (xcodebuild passes
-them on without the prefix).
+them on without the prefix). After a run, passing or not, xcodebuild can sit
+10 minutes on "Failure collecting diagnostics from simulator" before it
+exits. The result stands.
 
 3.1 `t -only-testing:SkywireUITests/ScreenTour`: 3 tests pass (en, zh-Hans,
 es). Export the pictures (README) and look: every screen is drawn in its
