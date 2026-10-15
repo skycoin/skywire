@@ -4,14 +4,16 @@ package visorapi
 import (
 	"encoding/json"
 	"errors"
+	"time"
+
 	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	types "github.com/skycoin/skywire/pkg/transport/types"
-	"time"
 )
 
 const (

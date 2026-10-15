@@ -303,16 +303,21 @@ do not resolve through SkyDNS.
 
 Setup on a Linux desktop:
 
-1. systemd-resolved must be running, since SkyDNS hands it the `dmsg` and
-   `skynet` zones.
+1. Where systemd-resolved runs, SkyDNS hands it only the `dmsg` and `skynet`
+   zones, and a config made as root (as the packages make it) turns SkyDNS on
+   by default. Without systemd-resolved, SkyDNS puts itself first in
+   `/etc/resolv.conf` and passes every other name to the nameserver that was
+   first, so it stays off until you set `SKYDNS=true`. To use systemd-resolved
+   instead (with NetworkManager, also set `dns=systemd-resolved` in its
+   `[main]` section):
 
    ```
    sudo systemctl enable --now systemd-resolved
    sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
    ```
 
-2. Turn it on in `skywire.conf`, with the CA from [HTTPS](#https) if you want
-   `https://`, and regenerate.
+2. To set it either way, use `skywire.conf`, with the CA from [HTTPS](#https)
+   if you want `https://`, and regenerate.
 
    ```
    SKYDNS=true

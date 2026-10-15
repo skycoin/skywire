@@ -3,8 +3,9 @@ package appnet
 
 import (
 	"context"
-	"github.com/skycoin/skywire/pkg/router"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/router"
 
 	"github.com/stretchr/testify/require"
 )
