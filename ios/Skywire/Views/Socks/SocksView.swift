@@ -142,6 +142,7 @@ struct SocksView: View {
                     dialogs.toast(Text("copied_to_clipboard"))
                 } label: {
                     Text(verbatim: model.listenAddress).skyText(.titleMedium, mono: true)
+                        .lineLimit(1).minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                 }
@@ -151,7 +152,8 @@ struct SocksView: View {
                 Button {
                     dialogs.presentSheet { PortSheet(port: model.listenPort) { model.setListenPort($0, app) } }
                 } label: {
-                    Text("socks_change_port")
+                    // Android gives the address the rest of the row (weight 1f); the button keeps its width.
+                    Text("socks_change_port").fixedSize()
                 }
                 .buttonStyle(.tonal)
                 .disabled(model.busy || !app.connected)
