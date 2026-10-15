@@ -29,11 +29,11 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
-// scpPKPathRe matches a `PK:path` argument. The PK is a 66-char
-// lowercase-hex string (33 bytes encoded). The path captures
+// scpPKPathRe matches a `PK:path` argument. The PK is 66 hex characters
+// or the 53 character base32 label. The path captures
 // everything after the colon (may be empty if the caller intends
 // the rootDir itself, though our Host won't currently accept that).
-var scpPKPathRe = regexp.MustCompile(`^([a-f0-9]{66}):(.*)$`)
+var scpPKPathRe = regexp.MustCompile(`^([a-f0-9]{66}|[a-z2-7]{53}):(.*)$`)
 
 var (
 	scpPort       uint16
