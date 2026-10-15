@@ -62,6 +62,18 @@ curl -o linuxontab/shell/linux-dist/rootfs.ext4 https://next.linuxontab.com/linu
 
    prints the exit's address, not this computer's. `https://` works too.
 
+## Hosting it
+
+Behind a proxy, give the desk its own browse origins for the mesh browser.
+With `--lot` they carry the same isolation headers as the desk, so they must
+not be shared with a desk that is not isolated.
+
+```
+skywire cli hv serve --addr 127.0.0.1:7997 --lot /opt/linuxontab/shell --browse-origin 127.0.0.1:7996 --browse-suffix .linux.theskywirenetwork.net --v-origin https://linux.skywire.dev
+```
+
+Then route `*.linux.theskywirenetwork.net` to 127.0.0.1:7996.
+
 ## When it does not work
 
 - **`curl: … [Errno -3] Try again`, or `curl` hangs.** The tab's exit is not
