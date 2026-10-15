@@ -76,14 +76,14 @@ Install:
 sudo install -m 0644 app-mux.wasm /etc/skywire/policies/
 ```
 
-Point the visor at it via `skywire.json` — same field as the
-skylark policy; backend is picked by file extension:
+Point the visor at it the same way as a skylark policy. The backend is picked
+by the file extension. In skywire.conf, then `skywire autoconfig`:
 
-```json
-"routing": {
-  "policy_per_dial": "@/etc/skywire/policies/app-mux.wasm"
-}
 ```
+POLICYPERDIAL='@/etc/skywire/policies/app-mux.wasm'
+```
+
+Or on a running visor: `skywire cli config set routing.policy_per_dial=@/etc/skywire/policies/app-mux.wasm`.
 
 Per-app overrides accept WASM too:
 
