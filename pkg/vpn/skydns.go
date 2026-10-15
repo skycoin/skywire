@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skydns"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
@@ -35,5 +36,7 @@ type SkyDNSConfig struct {
 	// Minter, when set, terminates HTTPS to mesh names with leaves from a
 	// local CA the device trusts. Without it only plain HTTP reaches them.
 	Minter skynetca.LeafMinter
-	Log    logrus.FieldLogger
+	// Aliases maps names such as "home" to the visors they stand for.
+	Aliases map[string]cipher.PubKey
+	Log     logrus.FieldLogger
 }

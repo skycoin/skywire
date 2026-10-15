@@ -257,15 +257,21 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		vpnClientCfg.MeshGateway = true
 		vpnClientCfg.MeshGatewayCIDR = meshGWCIDR
 		vpnClientCfg.MeshDial = vpn.MeshDialer(appCl)
+		aliases := map[string]cipher.PubKey{}
 		if len(meshAliases) > 0 {
-			aliases, aerr := vpn.ParseMeshAliases(meshAliases)
+			parsed, aerr := vpn.ParseMeshAliases(meshAliases)
 			if aerr != nil {
 				logger.WithError(aerr).Error("invalid --mesh-alias")
 				setAppErr(appCl, logger, aerr)
 				return aerr
 			}
-			vpnClientCfg.MeshAliases = aliases
+			aliases = parsed
 		}
+		// home.skynet is this visor's directory of the mesh (dmsgweb.HomeAlias).
+		if _, ok := aliases["home"]; !ok {
+			aliases["home"] = appCl.Config().VisorPK
+		}
+		vpnClientCfg.MeshAliases = aliases
 		if meshTLS {
 			minter, merr := vpn.LoadOrCreateMeshCA(meshCACert, meshCAKey, defaultMeshCADir)
 			if merr != nil {

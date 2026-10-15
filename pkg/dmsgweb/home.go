@@ -101,7 +101,13 @@ func IsHomeHost(host, suffix string) bool { return isHomeHost(host, suffix) }
 
 // RenderHomePage exports renderHomePage (the self-contained alias directory).
 func RenderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey) []byte {
-	return renderHomePage(aliases, suffix, localPK)
+	return renderHomePage(aliases, suffix, localPK, nil)
+}
+
+// RenderHomePageWithVisors is RenderHomePage with a list of visors to link,
+// each by its base32 name.
+func RenderHomePageWithVisors(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, visors []cipher.PubKey) []byte {
+	return renderHomePage(aliases, suffix, localPK, visors)
 }
 
 type homeEntry struct {
@@ -113,7 +119,7 @@ type homeEntry struct {
 // alias map. Links use the resolver's own suffix so they resolve back through
 // the same proxy. Aliases are grouped (this visor / deployment services / setup
 // nodes / dmsg servers) and naturally sorted so dmsg2 precedes dmsg10.
-func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey) []byte {
+func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, visors []cipher.PubKey) []byte {
 	var self, services, setup, servers []homeEntry
 	for label, pk := range aliases {
 		e := homeEntry{label, pk}
@@ -180,6 +186,7 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	writeServiceEndpoints(&b, aliases, suffix)
 	writeHomeGroup(&b, "Setup nodes", setup, suffix, "/health")
 	writeHomeGroup(&b, "dmsg servers", servers, suffix, "/health")
+	writeVisors(&b, visors, suffix)
 	if len(self)+len(services)+len(setup)+len(servers) == 0 {
 		b.WriteString("<p><em>No aliases configured.</em></p>")
 	}
@@ -363,7 +370,11 @@ func homeSplitNum(s string) (string, int) {
 // the page exists only as seen through the proxy. The returned conn is handed to
 // go-socks5, which pipes the browser's request in and the response back.
 func serveHomeInProcess(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey) net.Conn {
-	body := renderHomePage(aliases, suffix, localPK)
+	return serveHomeBody(renderHomePage(aliases, suffix, localPK, nil))
+}
+
+// serveHomeBody serves body as the home page over an in-memory pipe.
+func serveHomeBody(body []byte) net.Conn {
 	srvConn, cliConn := net.Pipe()
 	go func() {
 		defer srvConn.Close() //nolint:errcheck
@@ -385,4 +396,19 @@ func serveHomeInProcess(aliases map[string]cipher.PubKey, suffix string, localPK
 		_, _ = srvConn.Write(body) //nolint:errcheck // best-effort; peer may have gone
 	}()
 	return cliConn
+}
+
+// writeVisors lists visors by their base32 names, with a box that filters the
+// list as you type, since the network has a couple of thousand of them.
+func writeVisors(b *strings.Builder, visors []cipher.PubKey, suffix string) {
+	if len(visors) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "<h2>Visors (%d)</h2>", len(visors))
+	b.WriteString(`<p><input id=vf placeholder="filter by key" oninput="var q=this.value.toLowerCase();for(var li of document.querySelectorAll('#vl li'))li.style.display=li.textContent.indexOf(q)<0?'none':''"></p><ul id=vl>`)
+	for _, pk := range visors {
+		name := pk.DNSLabel() + suffix
+		fmt.Fprintf(b, `<li><a href="http://%s/">%s</a> <code>%s</code></li>`, name, name, pk.Hex())
+	}
+	b.WriteString("</ul>")
 }

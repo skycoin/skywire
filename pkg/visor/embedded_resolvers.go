@@ -113,6 +113,7 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 			v.wireLocalResolverPublish(rt)
 			if resolverC == v.dmsgC {
 				rt.skynetDial = v.dmsgWebSkynetDial
+				rt.homePage = v.homePage
 			}
 			er.dmsg = rt
 		}
