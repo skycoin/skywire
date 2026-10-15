@@ -236,7 +236,10 @@ Notes:
 - **Memory limit.** The profile writes `memory_limit: "40MiB"`, the value
   the packet-tunnel extension will need. To measure without it, launch with
   `xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire -SkywireMemoryLimit none`
-  (a launch argument, so it lasts one launch).
+  (a launch argument, so it lasts one launch). The core also runs at GOGC 25
+  on iOS (`pkg/visor/gctune_ios.go`), so the heap grows to 1.25 times the live
+  set. To try another value for one launch:
+  `SIMCTL_CHILD_GOGC=100 xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire`.
 - **Language.** The app follows iOS's per-app language (Settings > Skywire >
   Language). To launch in one: `xcrun simctl launch "iPhone 18 Pro" com.skycoin.skywire
   -AppleLanguages '(zh-Hans)'`.
