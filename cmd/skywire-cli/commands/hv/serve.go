@@ -32,6 +32,7 @@ var (
 	serveExecTinyGoJS string
 	serveBootReports  string
 	serveLinks        []string
+	serveLinuxOnTab   string
 )
 
 func init() {
@@ -49,6 +50,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveExecWasm, "exec-wasm", "", "path to the full skywire CLI wasm module to serve at /skywire.wasm — the desk host, the tab's visor and the terminal's 'skywire' command (build: GOOS=js GOARCH=wasm go build -tags \"withoutsystray withoutgotop\" -o build/skywire.wasm .). Empty = the module kept beside this binary (skywire.wasm.gz), or in the user cache directory when that directory is not writable; when there is none yet, the release's is fetched the first time the desk is opened")
 	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
+	serveCmd.Flags().StringVar(&serveLinuxOnTab, "lot", "", "serve a LinuxOnTab shell directory at /lot/ and make the desk cross-origin isolated, so LinuxOnTab can run inside it with the tab visor as its network: /lot/wasm.html?disk=full&wisp=vnet:6001. See docs/guides/linuxontab.md")
 	serveCmd.Flags().StringArrayVar(&serveLinks, "link", nil, "link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev")
 	RootCmd.AddCommand(serveCmd)
 }
@@ -118,6 +120,7 @@ page never asks anyone to type a secret key.`,
 			ExecWasmPath:     serveExecWasm,
 			BootReportFile:   serveBootReports,
 			Links:            links,
+			LinuxOnTab:       serveLinuxOnTab,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			cmdutil.Exit(1)

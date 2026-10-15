@@ -85,7 +85,7 @@ serve` serves a standalone desk the same way.
 ## Other things the tab visor runs
 
 - A Wisp server, so an emulator in the page, such as LinuxOnTab, can use the
-  visor's network.
+  visor's network. [linuxontab.md](linuxontab.md) shows how.
 - The resolving proxies, so the desk browser and `curl` in the terminal reach
   mesh names.
 - Its own mailbox, chat and SOCKS5 client, as a native visor does.
