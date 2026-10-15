@@ -209,7 +209,7 @@ func Update(path string, edits []Edit) error {
 // (UPPER_CASE plus underscore + digits). Mixed-case `key=value` lines,
 // rare in skywire.conf, are left untouched — autoconfig will append
 // them as new lines instead of trying to replace.
-var keyRE = regexp.MustCompile(`^\s*#?\s*([A-Z_][A-Z0-9_]*)=`)
+var keyRE = regexp.MustCompile(`^\s*#?\s*\$?([A-Z_][A-Z0-9_]*)=`)
 
 // LineKey returns the bash variable name from a line that looks
 // like `KEY=value` or `#KEY=value`, or empty if the line isn't a

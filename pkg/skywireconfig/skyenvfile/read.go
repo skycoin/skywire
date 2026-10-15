@@ -102,9 +102,23 @@ func unquote(s string) string {
 	// Trailing comment on an assignment line, e.g. `SK='...' # the visor's`.
 	// Only stripped outside quotes, so a '#' inside a value survives.
 	s = stripTrailingComment(s)
+	// The PowerShell form older Windows installs were given: $true, @('a','b').
+	switch strings.ToLower(s) {
+	case "$true":
+		return "true"
+	case "$false":
+		return "false"
+	}
+	ps := strings.HasPrefix(s, "@(")
+	if ps {
+		s = s[1:]
+	}
 
 	if strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") {
 		inner := strings.TrimSuffix(strings.TrimPrefix(s, "("), ")")
+		if ps {
+			inner = strings.ReplaceAll(inner, ",", " ")
+		}
 		parts := strings.Fields(inner)
 		for i, p := range parts {
 			parts[i] = unquoteScalar(p)
