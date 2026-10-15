@@ -33,6 +33,7 @@ panes/cmd/desk-serve      a native binary that serves it, assets embedded
 
 panes/hostproto           the wire between a pane and the machine
 panes/hostagent           the half that runs on the machine: a pty, and files
+panes/hostauth            how a pane gets the host agent's token: injected, or asked for
 panes/hostterm            a pane that is a real shell on the machine
 panes/hostfs              the machine's filesystem, as an afero.Fs
 ```
@@ -108,9 +109,10 @@ The two commands are there too, since both compose rather than provide. What
 that buys: `go get github.com/0magnet/desk` brings winbox-go, and nothing
 else — no shell, no filesystem, no interpreter.
 
-They are developed together and released separately. The `replace` in
-`panes/go.mod` points at `../` and is ignored by anything that depends on the
-module, which is how a nested module is normally arranged.
+They are developed together and released separately. `panes/go.mod` requires
+`github.com/0magnet/desk` at a pseudo-version, like any other dependency, so a
+change to the desk reaches the panes once it is pushed and the requirement is
+updated.
 
 ## Running it
 
@@ -120,6 +122,9 @@ module, which is how a nested module is normally arranged.
 ./build.sh tinygo                # TinyGo only
 ./build.sh go                    # standard Go only
 ```
+
+`desk-serve` listens on `127.0.0.1:8080` and opens a browser; `-a`/`--addr`
+changes the address and `-o=false` (`--open=false`) leaves the browser alone.
 
 Both toolchains are carried. TinyGo is the default because the binary is a
 quarter the size and is fetched before anything appears; the standard Go build
@@ -149,7 +154,7 @@ lives:
 ```
 
 `--shell` adds the **host shell** app: xterm-go in a window, attached over a
-WebSocket to a pty running your `$SHELL`. It resizes with the window, because a
+WebSocket to a pty running your `$SHELL`, or whatever `--shell-cmd` names. It resizes with the window, because a
 resize becomes a `TIOCSWINSZ` and so a `SIGWINCH`, which is what makes a
 full-screen program redraw.
 
@@ -331,15 +336,17 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                              33            733           1573           5226
-JavaScript                       2            117             82            935
-Markdown                         1             62              0            229
+Go                              47           1078           3169           7393
+JavaScript                       3            156            185           1582
+Markdown                         1             72              0            280
+Makefile                         1             21             52            111
+HTML                             2              0              8            109
 YAML                             1              0              7             98
-HTML                             2              0              0             92
-Makefile                         1             19             31             86
-Bourne Shell                     2             13             29             50
-JSON                             2              0              0             28
+Bourne Shell                     3             22             62             79
+JSON                             1              0              0              8
+XML                              1              0              0              4
+Plain Text                       1              1              0              3
 -------------------------------------------------------------------------------
-TOTAL                           44            944           1722           6744
+TOTAL                           61           1350           3483           9667
 -------------------------------------------------------------------------------
 ```

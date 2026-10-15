@@ -1,9 +1,10 @@
-//go:build tinygo
+//go:build tinygo || js
 
 package coloredcobra
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -11,29 +12,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TinyGo cannot execute cobra's text/template help (it calls template methods
-// through reflect.Value.Call, which TinyGo does not implement). installManualHelp
-// installs a template-free usage/help renderer that reproduces cobra's default
-// layout while applying the same colors carried in cfg, so `cc.Init(cfg)` yields
-// colored help under TinyGo without any per-project workaround.
+// installManualHelp installs a template-free usage/help renderer that
+// reproduces cobra's default layout with the colors carried in cfg.
+//
+// TinyGo cannot execute cobra's text/template help: it calls template methods
+// through reflect.Value.Call, which TinyGo does not implement. The Go js/wasm
+// build can, but a usage template makes text/template's MethodByName
+// reachable, and the linker then keeps every exported method in the program:
+// about 5 MB of a 29 MB page. So js builds use this renderer too.
+const templatedHelp = false
+
 func installManualHelp(cfg *Config) {
 	cfg.RootCmd.SetUsageFunc(func(c *cobra.Command) error {
 		return renderUsage(cfg, c)
 	})
+	// As cobra's help template has it: the description, a blank line, then the
+	// usage, all of it on stdout.
 	cfg.RootCmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
-		if long := strings.TrimSpace(c.Long); long != "" {
-			fmt.Fprintln(c.OutOrStdout(), long)
-		} else if short := strings.TrimSpace(c.Short); short != "" {
-			fmt.Fprintln(c.OutOrStdout(), short)
+		w := c.OutOrStdout()
+		if text := strings.TrimSpace(c.Long); text != "" {
+			_, _ = fmt.Fprintf(w, "%s\n\n", text)
+		} else if text := strings.TrimSpace(c.Short); text != "" {
+			_, _ = fmt.Fprintf(w, "%s\n\n", text)
 		}
-		_ = c.Usage()
+		_, _ = fmt.Fprint(w, c.UsageString())
 	})
 }
 
 const ansiReset = "\x1b[0m"
 
 func renderUsage(cfg *Config, c *cobra.Command) error {
-	w := c.OutOrStderr()
+	w := &errWriter{w: c.OutOrStderr()}
 	on := colorEnabled()
 	paint := func(param uint8, s string) string {
 		if !on {
@@ -46,36 +55,36 @@ func renderUsage(cfg *Config, c *cobra.Command) error {
 		return code + s + ansiReset
 	}
 
-	fmt.Fprintf(w, "%s\n  %s\n", paint(cfg.Headings, "Usage:"), paint(cfg.ExecName, c.UseLine()))
+	w.printf("%s\n  %s\n", paint(cfg.Headings, "Usage:"), paint(cfg.ExecName, c.UseLine()))
 
 	if len(c.Aliases) > 0 {
-		fmt.Fprintf(w, "\n%s\n  %s\n", paint(cfg.Headings, "Aliases:"), paint(cfg.Aliases, c.NameAndAliases()))
+		w.printf("\n%s\n  %s\n", paint(cfg.Headings, "Aliases:"), paint(cfg.Aliases, c.NameAndAliases()))
 	}
 	if c.HasExample() {
-		fmt.Fprintf(w, "\n%s\n%s\n", paint(cfg.Headings, "Examples:"), paint(cfg.Example, c.Example))
+		w.printf("\n%s\n%s\n", paint(cfg.Headings, "Examples:"), paint(cfg.Example, c.Example))
 	}
 
 	if c.HasAvailableSubCommands() {
-		fmt.Fprintf(w, "\n%s\n", paint(cfg.Headings, "Available Commands:"))
+		w.printf("\n%s\n", paint(cfg.Headings, "Available Commands:"))
 		for _, sub := range c.Commands() {
 			if !sub.IsAvailableCommand() || sub.Name() == "completion" {
 				continue
 			}
-			fmt.Fprintf(w, "  %s %s\n",
+			w.printf("  %s %s\n",
 				paint(cfg.Commands, padRight(sub.Name(), 18)),
 				paint(cfg.CmdShortDescr, sub.Short))
 		}
 	}
 	if c.HasAvailableLocalFlags() {
-		fmt.Fprintf(w, "\n%s\n%s", paint(cfg.Headings, "Flags:"), colorFlags(cfg, c.LocalFlags().FlagUsages(), on))
+		w.printf("\n%s\n%s", paint(cfg.Headings, "Flags:"), colorFlags(cfg, c.LocalFlags().FlagUsages(), on))
 	}
 	if c.HasAvailableInheritedFlags() {
-		fmt.Fprintf(w, "\n%s\n%s", paint(cfg.Headings, "Global Flags:"), colorFlags(cfg, c.InheritedFlags().FlagUsages(), on))
+		w.printf("\n%s\n%s", paint(cfg.Headings, "Global Flags:"), colorFlags(cfg, c.InheritedFlags().FlagUsages(), on))
 	}
 	if c.HasAvailableSubCommands() {
-		fmt.Fprintf(w, "\nUse \"%s [command] --help\" for more information about a command.\n", c.CommandPath())
+		w.printf("\nUse \"%s [command] --help\" for more information about a command.\n", c.CommandPath())
 	}
-	return nil
+	return w.err
 }
 
 // colorFlags colorizes the flag name and description on each line of a
@@ -151,4 +160,17 @@ func colorEnabled() bool {
 		return false
 	}
 	return isTerminal(os.Stdout.Fd())
+}
+
+// errWriter keeps the first write error, so the usage can be written in one
+// pass and the error reported once at the end.
+type errWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (e *errWriter) printf(format string, a ...any) {
+	if e.err == nil {
+		_, e.err = fmt.Fprintf(e.w, format, a...)
+	}
 }

@@ -1,7 +1,10 @@
-//go:build !tinygo
+//go:build !tinygo && !js
 
 package coloredcobra
 
-// installManualHelp is a no-op on toolchains where cobra's templated help works.
-// See manualhelp_tinygo.go for the TinyGo implementation.
+// templatedHelp is whether Init installs the colored usage template. See
+// manualhelp_tinygo.go for the builds that render help without one.
+const templatedHelp = true
+
+// installManualHelp is a no-op where cobra's templated help is used.
 func installManualHelp(_ *Config) {}

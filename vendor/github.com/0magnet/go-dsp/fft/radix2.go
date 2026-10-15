@@ -80,6 +80,10 @@ func radix2FFT(x []complex128) []complex128 {
 	factors := getRadix2Factors(lx)
 	t := make([]complex128, lx) // temp
 	r := reorderData(x)
+	var rot []complex128
+	if simdEnabled {
+		rot = getRotFactors(lx, factors)
+	}
 	var blocks, stage, s_2 int
 	jobs := make(chan *fft_work, lx)
 	wg := sync.WaitGroup{}
@@ -93,6 +97,11 @@ func radix2FFT(x []complex128) []complex128 {
 	}
 	worker := func() {
 		for work := range jobs {
+			if simdEnabled && stage != 2 {
+				butterflySIMD(t, r, factors, rot, work.start, work.end, stage, blocks)
+				wg.Done()
+				continue
+			}
 			for nb := work.start; nb < work.end; nb += stage {
 				if stage != 2 {
 					for j := 0; j < s_2; j++ {
@@ -149,12 +158,22 @@ func radix2FFTSingleThread(x []complex128) []complex128 {
 	factors := getRadix2Factors(lx)
 	t := make([]complex128, lx) // temp
 	r := reorderData(x)
+	var rot []complex128
+	if simdEnabled {
+		rot = getRotFactors(lx, factors)
+	}
 	var blocks, stage, s_2 int
 
 	// Sequential processing: remove concurrency, process the FFT stages sequentially.
 	for stage = 2; stage <= lx; stage <<= 1 {
 		blocks = lx / stage
 		s_2 = stage / 2
+
+		if simdEnabled && stage != 2 {
+			butterflySIMD(t, r, factors, rot, 0, lx, stage, blocks)
+			r, t = t, r
+			continue
+		}
 
 		// Perform the FFT for each block
 		for nb := 0; nb < lx; nb += stage {

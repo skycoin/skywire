@@ -51,6 +51,8 @@ for _, c := range cells {
 - `Embed(n int, edges []Edge, p Params) []Vec3` — returns one unit vector per
   index `0..n-1`. Points with no measured edge are kept in place rather than
   dropped, so indices stay aligned with the caller's own slice.
+- `Params.Iterations` is the number of stress-majorization passes (200 by default);
+  zero leaves the points on the initial spiral.
 - `Params.Seed` makes the layout deterministic: the same input embeds the same
   way on every machine and across refreshes, which matters if several observers
   should agree on the picture.
@@ -58,6 +60,8 @@ for _, c := range cells {
   measurement cannot dominate the whole layout.
 - `Stress(pts, edges, p) float64` scores a layout; `Angle(a, b)` is the
   great-circle distance between two points.
+- `SortedByDegree(n, edges) []int` returns point indices by edge count, most
+  first, for labeling only the hubs.
 
 ### Tessellation
 
@@ -74,3 +78,35 @@ Standard library only.
 
 Extracted from [skywire](https://github.com/skycoin/skywire), where it lays out
 a network of hosts by measured RTT.
+
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+go run github.com/loov/goda@latest graph github.com/0magnet/spheregraph/... | dot -Tsvg -o docs/spheregraph-goda-graph.svg
+```
+
+![Dependency Graph](docs/spheregraph-goda-graph.svg "github.com/0magnet/spheregraph Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                               4             51            178            677
+Makefile                         1             22             52            111
+YAML                             1              0              7             98
+Markdown                         1             24              0             87
+Bourne Shell                     1              8             17             31
+-------------------------------------------------------------------------------
+TOTAL                            8            105            254           1004
+-------------------------------------------------------------------------------
+```

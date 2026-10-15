@@ -48,3 +48,36 @@ GOOS=js GOARCH=wasm go build -o progkitdemo.wasm ./cmd/progkitdemo
 ```
 
 `make check` runs the linters and the tests.
+
+## Dependency Graph
+
+Made with [goda](https://github.com/loov/goda):
+
+```
+go run github.com/loov/goda@latest graph github.com/0magnet/progkit/... | dot -Tsvg -o docs/progkit-goda-graph.svg
+```
+
+![Dependency Graph](docs/progkit-goda-graph.svg "github.com/0magnet/progkit Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                              16            148            135           1393
+HTML                             1              0              5            115
+Makefile                         1             21             52            111
+YAML                             1              0              7             98
+Markdown                         1             15              0             67
+Bourne Shell                     1              8             17             31
+-------------------------------------------------------------------------------
+TOTAL                           21            192            216           1815
+-------------------------------------------------------------------------------
+```
