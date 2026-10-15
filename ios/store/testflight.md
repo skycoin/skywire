@@ -29,8 +29,8 @@ Thanks for testing Skywire. Please try:
 - SkyChat: add a contact by its public key or a skychat: link, send text,
   pictures, voice and video messages, and make a voice call.
 - Skymail: send mail to another Skywire address and reply.
-- Apps > SkySOCKS: connect to a proxy from the list, then point an app that
-  supports SOCKS5 at 127.0.0.1:1080.
+- **device** Apps > SkySOCKS: connect to a proxy from the list, then point
+  an app that supports SOCKS5 at 127.0.0.1:1080.
 - Apps > SkyDEX: connect to a market by its key.
 - Wallet: create or restore a wallet, back up the recovery phrase, receive.
   Please use small amounts: this is a beta.
@@ -42,9 +42,9 @@ Known limits in this beta:
   status bar. The Skywire node runs inside Skywire's VPN extension, the only
   place iOS lets it keep running in the background. Your other traffic goes
   through it only when you turn SkyVPN on.
-- Incoming calls ring only while Skywire is open. A call to a phone where
-  iOS has suspended Skywire does not ring (the app says so on the call
-  screen).
+- **device** Incoming calls ring only while Skywire is open. A call to a
+  phone where iOS has suspended Skywire does not ring (the app says so on
+  the call screen).
 - Use Settings > Logs & diagnostics > Export all to attach logs to a report.
 
 ## Beta App Review information
