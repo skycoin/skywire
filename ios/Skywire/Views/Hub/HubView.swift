@@ -279,7 +279,8 @@ private struct SkyDnsCard: View {
             IconTile(icon: MI.roundedDns)
             VStack(alignment: .leading, spacing: 0) {
                 Text("app_skydns").skyText(.titleMedium).foregroundStyle(Color.skyOnSurface).lineLimit(1)
-                Text("hub_skydns_off").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1).padding(.top, 2)
+                // Two lines, not Android's one: a 390-point iPhone cuts the English and Chinese text.
+                Text("hub_skydns_off").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(2).padding(.top, 2)
             }
             .padding(.leading, 13)
             .frame(maxWidth: .infinity, alignment: .leading)
