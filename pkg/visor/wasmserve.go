@@ -87,7 +87,10 @@ type WasmServeConfig struct {
 	// LinuxOnTab is a LinuxOnTab shell directory served at /lot/. Setting it also
 	// makes the desk cross-origin isolated, which LinuxOnTab needs to run in it.
 	LinuxOnTab string
-	Log        *logging.Logger // nil → package default
+	// LinuxOnTabOpen opens LinuxOnTab when the desk starts, unless the page
+	// link asks for something else. Needs LinuxOnTab.
+	LinuxOnTabOpen bool
+	Log            *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -253,9 +256,13 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	}
 	// With LinuxOnTab served, the desk lists it as an app.
 	if cfg.LinuxOnTab != "" {
+		lotOpen := ""
+		if cfg.LinuxOnTabOpen {
+			lotOpen = "window.__SKYWIRE_LOT_OPEN__=true;"
+		}
 		deskPage = bytes.Replace(deskPage,
 			[]byte(`<script src="/desk-boot.js"></script>`),
-			[]byte("<script>window.__SKYWIRE_LOT_URL__=\"/lot/wasm.html?wisp=vnet:6001\";</script>\n<script src=\"/desk-boot.js\"></script>"), 1)
+			[]byte("<script>window.__SKYWIRE_LOT_URL__=\"/lot/wasm.html?wisp=vnet:6001\";"+lotOpen+"</script>\n<script src=\"/desk-boot.js\"></script>"), 1)
 	}
 	// The desk IS the root here too, matching the visor-attached hypervisor
 	// (#4491). The old separate path redirects rather than serving a second

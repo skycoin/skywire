@@ -43,6 +43,7 @@ skywire cli hv serve
       --harness                 mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly
       --link stringArray        link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev
       --lot string              serve a LinuxOnTab shell directory at /lot/ and make the desk cross-origin isolated, so LinuxOnTab can run inside it with the tab visor as its network: /lot/wasm.html?disk=full&wisp=vnet:6001. See docs/guides/linuxontab.md
+      --lot-open                open LinuxOnTab when the desk starts, unless the page link asks for something else. Needs --lot
       --password string         gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear
       --tls                     serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts
       --tls-cert string         PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key
