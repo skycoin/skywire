@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // On a package install, and in the browser visor, skywire.json is rebuilt by
@@ -40,6 +41,16 @@ var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
 	"skynet_web.upstream_socks": stringFlag("skynetweb-upstream"),
 	"transport.public_autoconnect": func(nv reflect.Value) (string, string) {
 		return "disable-public-autoconn", strconv.FormatBool(!nv.Bool())
+	},
+}
+
+// mirrorGetters cover mirrored settings the json path walk cannot read.
+var mirrorGetters = map[string]func(c *visorconfig.V1) (flag, value string, ok bool){
+	"dmsg.sessions_count": func(c *visorconfig.V1) (string, string, bool) {
+		if c.Dmsg == nil {
+			return "", "", false
+		}
+		return "minsess", strconv.Itoa(c.Dmsg.Primary().SessionsCount), true
 	},
 }
 
@@ -154,6 +165,11 @@ func (v *Visor) mirroredValues() map[string][2]string {
 		}
 		flag, val := flagFor(nv)
 		out[path] = [2]string{flag, val}
+	}
+	for path, get := range mirrorGetters {
+		if flag, val, ok := get(v.conf); ok {
+			out[path] = [2]string{flag, val}
+		}
 	}
 	return out
 }

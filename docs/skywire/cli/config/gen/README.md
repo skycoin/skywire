@@ -63,6 +63,14 @@ skywire cli config gen
       --flight-recorder                      keep a rolling execution trace for stall diagnosis
       --mux-fec                              forward error correction on mux routes
       --hv-ui-disable                        run the hypervisor without its web UI
+      --log-hook-level string                most verbose level kept for /debug/log (info when empty)
+      --log-server-addr string               also serve the log server on this local address, without auth
+      --pty-ssh-listen string                direct TCP pty listener address
+      --pty-persist                          keep pty sessions alive across a client disconnect
+      --no-dmsgscp                           do not serve files over dmsgscp
+      --dmsgscp-root string                  directory dmsgscp serves (local/scp-root when empty)
+      --no-stats                             do not keep or publish local telemetry
+      --stats-retention int                  days of local telemetry to keep (30 when 0)
   -i, --ishv                                 local hypervisor configuration
       --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
   -j, --hvpks string                         list of public keys to add as hypervisor

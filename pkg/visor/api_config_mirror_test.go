@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
@@ -154,4 +155,29 @@ func TestFlushMirrorsARemovedBlock(t *testing.T) {
 	env, err := os.ReadFile(envFile) //nolint:gosec
 	require.NoError(t, err)
 	require.Contains(t, string(env), "DMSGWEB=false")
+}
+
+// sessions_count lives in the primary deployment once a config is loaded.
+// Setting only the top-level copy was never written, and the old value came
+// back at the next start. The change is also saved to MINDMSGSESS.
+func TestSessionsCountIsWrittenAndMirrored(t *testing.T) {
+	conf, path := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("#MINDMSGSESS=2\n"), 0o600))
+	conf.Skyenv = envFile
+	conf.Dmsg = new(dmsgspec.DmsgConfig)
+	require.NoError(t, json.Unmarshal([]byte(`{"discovery":"http://d","sessions_count":2}`), conf.Dmsg))
+	require.Len(t, conf.Dmsg.Deployments, 1)
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
+
+	setSessionsCount(conf.Dmsg, 5)
+	require.NoError(t, conf.Flush())
+
+	written, err := os.ReadFile(path) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(written), `"sessions_count": 5`)
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "MINDMSGSESS=5")
 }
