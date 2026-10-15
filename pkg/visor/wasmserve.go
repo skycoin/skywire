@@ -179,13 +179,14 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		go func() {
 			if err := ServeBrowseOrigin(ctx, BrowseOriginConfig{
-				Addr:    cfg.BrowseOriginAddr,
-				VOrigin: vOrigin,
-				Suffix:  suffix,
-				TLS:     cfg.TLS,
-				TLSCert: cfg.TLSCert,
-				TLSKey:  cfg.TLSKey,
-				Log:     log,
+				Addr:     cfg.BrowseOriginAddr,
+				VOrigin:  vOrigin,
+				Suffix:   suffix,
+				TLS:      cfg.TLS,
+				TLSCert:  cfg.TLSCert,
+				TLSKey:   cfg.TLSKey,
+				Log:      log,
+				Isolated: cfg.LinuxOnTab != "",
 			}); err != nil {
 				log.WithError(err).Error("browse-origin bootstrap server failed")
 			}
@@ -466,6 +467,9 @@ type BrowseOriginConfig struct {
 	TLSCert string          // optional PEM cert (paired with TLSKey)
 	TLSKey  string          // optional PEM key
 	Log     *logging.Logger // nil → package default
+	// Isolated sends the cross-origin isolation headers, so an isolated desk
+	// (hv serve --lot) can frame these origins. Only that desk should set it.
+	Isolated bool
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
@@ -508,6 +512,9 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 	handler, err := realorigin.Handler(roCfg)
 	if err != nil {
 		return err
+	}
+	if cfg.Isolated {
+		handler = crossOriginIsolated(handler)
 	}
 
 	srv := &http.Server{
