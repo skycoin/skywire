@@ -35,6 +35,8 @@ var (
 	serveLinuxOnTab   string
 )
 
+var serveLinuxOnTabOpen bool
+
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
@@ -51,6 +53,7 @@ func init() {
 	serveCmd.Flags().StringVar(&serveExecTinyGoJS, "exec-js-tinygo", "", "path to TinyGo's wasm_exec.js (targets/wasm_exec.js in the TinyGo tree that built --exec-wasm), served at /wasm_exec_tinygo.js. The desk picks it for a module TinyGo built and keeps Go's loader for the rest. Empty = none")
 	serveCmd.Flags().StringVar(&serveBootReports, "boot-reports", defaultBootReports(), "keep the reports of desks that did not start in this file as JSON lines, moved to <file>.1 at 1 MiB (they are also logged). The default is under $STATE_DIRECTORY when systemd sets one (StateDirectory=), else the temp dir. Empty = log only")
 	serveCmd.Flags().StringVar(&serveLinuxOnTab, "lot", "", "serve a LinuxOnTab shell directory at /lot/ and make the desk cross-origin isolated, so LinuxOnTab can run inside it with the tab visor as its network: /lot/wasm.html?disk=full&wisp=vnet:6001. See docs/guides/linuxontab.md")
+	serveCmd.Flags().BoolVar(&serveLinuxOnTabOpen, "lot-open", false, "open LinuxOnTab when the desk starts, unless the page link asks for something else. Needs --lot")
 	serveCmd.Flags().StringArrayVar(&serveLinks, "link", nil, "link another site under the boot message, as name=url (repeatable), so crawlers find it in the page, e.g. --link status=https://status.skywire.dev")
 	RootCmd.AddCommand(serveCmd)
 }
@@ -79,6 +82,10 @@ Keyless: no key is baked in; each visitor's browser mints + persists its own
 ephemeral key (localStorage). That is what makes serving from a domain safe — the
 page never asks anyone to type a secret key.`,
 	Run: func(cmd *cobra.Command, _ []string) {
+		if serveLinuxOnTabOpen && serveLinuxOnTab == "" {
+			cmdutil.Eprintln("--lot-open needs --lot")
+			cmdutil.Exit(1)
+		}
 		if serveExecTinyGoJS != "" {
 			js, err := os.ReadFile(filepath.Clean(serveExecTinyGoJS))
 			if err != nil {
@@ -121,6 +128,7 @@ page never asks anyone to type a secret key.`,
 			BootReportFile:   serveBootReports,
 			Links:            links,
 			LinuxOnTab:       serveLinuxOnTab,
+			LinuxOnTabOpen:   serveLinuxOnTabOpen,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			cmdutil.Exit(1)
