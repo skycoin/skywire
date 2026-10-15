@@ -149,3 +149,6 @@ func followNetworkDNS(tun *androidTUN, up *skydns.Upstream, log logrus.FieldLogg
 	up.SetServer(server)
 	log.Infof("skydns: asking %s for other names", server)
 }
+
+// SkyDNSSplitDNS is false on Android, where the VPN service takes the DNS.
+func SkyDNSSplitDNS() bool { return false }

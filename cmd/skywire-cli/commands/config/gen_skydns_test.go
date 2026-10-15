@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -45,5 +46,15 @@ func TestSkyDNSKnobs(t *testing.T) {
 
 	if got, ok := FlagArgsForSkyenv("SKYDNS", "true"); !ok || !reflect.DeepEqual(got, []string{"--skydns=true"}) {
 		t.Errorf("FlagArgsForSkyenv(SKYDNS) = %v, %v", got, ok)
+	}
+}
+
+// skydns only defaults on for a config made as root, as the packages make it.
+func TestSkyDNSDefaultNeedsRoot(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root")
+	}
+	if skyDNSDefault() {
+		t.Error("skydns must not default on for a config made without root")
 	}
 }

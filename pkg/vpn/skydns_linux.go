@@ -151,8 +151,15 @@ type skyDNSResolver struct {
 	undo     func()
 }
 
+// SkyDNSSplitDNS reports whether systemd-resolved runs here, so SkyDNS can
+// answer only the mesh zones and leave every other name to the host.
+func SkyDNSSplitDNS() bool {
+	_, err := os.Stat(resolvedSocket)
+	return err == nil
+}
+
 func newSkyDNSResolver(ifName, upstream string) (*skyDNSResolver, error) {
-	if _, err := os.Stat(resolvedSocket); err == nil {
+	if SkyDNSSplitDNS() {
 		return resolvedSplitDNS(ifName, upstream)
 	}
 	return resolvConfDNS(upstream)
@@ -169,6 +176,11 @@ func resolvedSplitDNS(ifName, upstream string) (*skyDNSResolver, error) {
 		if err := osutil.Run("resolvectl", args...); err != nil {
 			return nil, err
 		}
+	}
+	// The tunnel is not a local network, so no LLMNR or mDNS on it. Best effort:
+	// an old systemd without these settings still gets the split DNS.
+	for _, proto := range []string{"llmnr", "mdns"} {
+		_ = osutil.Run("resolvectl", proto, ifName, "no") //nolint:errcheck
 	}
 	if upstream == "" {
 		upstream = shareDefaultDNS

@@ -46,6 +46,7 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 // Default timeouts
@@ -345,7 +346,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	skyenvStringVar(genConfigCmd.Flags(), &resolverCA, "resolver-ca", "${RESOLVERCA}", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)")
-	skyenvBoolVar(genConfigCmd.Flags(), &isSkyDNSEnable, "skydns", "${SKYDNS:-false}", "autostart skydns: .dmsg and .skynet names for every program on this host (needs CAP_NET_ADMIN, and root without systemd-resolved)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkyDNSEnable, "skydns", fmt.Sprintf("${SKYDNS:-%t}", skyDNSDefault()), "autostart skydns: .dmsg and .skynet names for every program on this host (on by default where systemd-resolved runs and the config is made as root; elsewhere it needs CAP_NET_ADMIN and edits /etc/resolv.conf)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
@@ -3070,6 +3071,13 @@ func setFlag(args []string, flag, val string) []string {
 		}
 	}
 	return append(out, flag, val)
+}
+
+// skyDNSDefault turns skydns on where it only takes the mesh zones: Linux with
+// systemd-resolved, and a config made as root, as the packages run the visor.
+// Elsewhere it would rewrite /etc/resolv.conf, so SKYDNS=true opts in there.
+func skyDNSDefault() bool {
+	return runtime.GOOS == "linux" && os.Geteuid() == 0 && vpn.SkyDNSSplitDNS()
 }
 
 // skydnsArgs gives skydns the resolver CA when one is configured, so HTTPS to
