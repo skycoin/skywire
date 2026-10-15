@@ -84,8 +84,9 @@ type WasmServeConfig struct {
 	// Links are shown under the boot message as plain anchors, so a crawler finds
 	// the deployment's other sites before any script runs.
 	Links []WasmLink
-	// LinuxOnTab is a LinuxOnTab shell directory served at /lot/. Setting it also
-	// makes the desk cross-origin isolated, which LinuxOnTab needs to run in it.
+	// LinuxOnTab is served at /lot/ from a shell directory, or proxied from a
+	// site that publishes it. Setting it also makes the desk cross-origin
+	// isolated, which LinuxOnTab needs to run in it.
 	LinuxOnTab string
 	// LinuxOnTabOpen opens LinuxOnTab when the desk starts, unless the page
 	// link asks for something else. Needs LinuxOnTab.
@@ -391,7 +392,11 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	})
 
 	if cfg.LinuxOnTab != "" {
-		mux.Handle("/lot/", http.StripPrefix("/lot/", http.FileServer(http.Dir(cfg.LinuxOnTab))))
+		lot, err := lotHandler(cfg.LinuxOnTab)
+		if err != nil {
+			return err
+		}
+		mux.Handle("/lot/", lot)
 	}
 	var handler http.Handler = mux
 	if cfg.Password != "" {
@@ -415,7 +420,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	})
 	if cfg.LinuxOnTab != "" {
 		handler = crossOriginIsolated(handler)
-		log.WithField("dir", cfg.LinuxOnTab).Info("Serving LinuxOnTab at /lot/, cross-origin isolated")
+		log.WithField("source", cfg.LinuxOnTab).Info("Serving LinuxOnTab at /lot/, cross-origin isolated")
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,

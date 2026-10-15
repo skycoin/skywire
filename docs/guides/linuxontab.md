@@ -64,12 +64,17 @@ curl -o linuxontab/shell/linux-dist/rootfs.ext4 https://next.linuxontab.com/linu
 
 ## Hosting it
 
+`--lot` also takes the URL of a site that publishes LinuxOnTab, and proxies it
+at `/lot/`. `--lot https://next.linuxontab.com` always serves what that site
+runs, so its kernel and images match without a local copy. Its changes and
+outages reach the desk at once.
+
 Behind a proxy, give the desk its own browse origins for the mesh browser.
 With `--lot` they carry the same isolation headers as the desk, so they must
 not be shared with a desk that is not isolated.
 
 ```
-skywire cli hv serve --addr 127.0.0.1:7997 --lot /opt/linuxontab/shell --browse-origin 127.0.0.1:7996 --browse-suffix .linux.theskywirenetwork.net --v-origin https://linux.skywire.dev
+skywire cli hv serve --addr 127.0.0.1:7997 --lot https://next.linuxontab.com --browse-origin 127.0.0.1:7996 --browse-suffix .linux.theskywirenetwork.net --v-origin https://linux.skywire.dev
 ```
 
 Then route `*.linux.theskywirenetwork.net` to 127.0.0.1:7996.
