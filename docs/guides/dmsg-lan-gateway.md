@@ -1,7 +1,7 @@
 # A `.dmsg` / `.skynet` gateway for your LAN (OpenWRT / DD-WRT)
 
 Skywire's deployment services — the reward system, transport discovery, route
-finder, address resolver, uptime tracker — are reachable **only over dmsg**;
+finder, address resolver — are reachable **only over dmsg**;
 there is no plain-HTTP endpoint. A `.dmsg` / `.skynet` name is not a normal
 hostname either: it encodes a public key, and the destination is a routing port
 on that key reachable only over the mesh.
@@ -151,7 +151,8 @@ skywire cli resolver up --bind 0.0.0.0
 ```
 
 `--bind 0.0.0.0` serves every interface (or give a specific LAN IP). This sets
-and **persists** the bind (`proxy_addr` + enabled) in `skywire.json`, and brings
+the bind (`proxy_addr` + enabled) in the running config and in skywire.conf
+(`DMSGWEBADDR` / `SKYNETWEBADDR`), so it survives autoconfig, and brings
 the `.dmsg` proxy up on **port 4445** and `.skynet` on **4446**.
 
 Confirm it's listening on the LAN (replace `192.168.1.50` with the board's IP):
@@ -161,10 +162,9 @@ ss -ltn | grep 4445                                          # on the board: 0.0
 curl -x socks5h://192.168.1.50:4445 http://tpd.dmsg/health   # from another LAN host
 ```
 
-> **On an `skywire autoconfig`-managed host** (the usual Linux install): a
-> later `autoconfig` run regenerates `skywire.json` from `skywire.conf` and
-> would reset a runtime `--bind`. There, set it in `skywire.conf` instead so it
-> persists across autoconfig:
+> **On an `skywire autoconfig`-managed host** (the usual Linux install), the
+> visor saves a runtime `--bind` to `skywire.conf` too, so a later `autoconfig`
+> keeps it. To set it there directly instead:
 >
 > ```
 > DMSGWEB=true

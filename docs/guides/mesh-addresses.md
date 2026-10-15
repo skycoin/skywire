@@ -27,7 +27,7 @@ the 66-character hex name, though curl accepts it. Hex works everywhere else.
 
 ## Ports
 
-`http://<pk>.skynet:8092/` connects to port 8092 on that visor. With no port,
+`http://<base32-pk>.skynet:8092/` connects to port 8092 on that visor. With no port,
 `http://` means port 80 and `https://` means 443. A visor serves what it has
 published on a port:
 
@@ -40,10 +40,10 @@ published on a port:
 A name to the left of the key picks a site on that visor:
 
 ```
-http://status.skywire.dev.<pk>.skynet/
+http://status.skywire.dev.<base32-pk>.skynet/
 ```
 
-This connects to port 80 of `<pk>` and sends `Host: status.skywire.dev`. If
+This connects to port 80 of that visor and sends `Host: status.skywire.dev`. If
 that visor forwards port 80 to a web server such as Caddy, the web server
 serves its `status.skywire.dev` site. One visor can serve many sites this way.
 [publish-a-site.md](publish-a-site.md) shows the visor side.

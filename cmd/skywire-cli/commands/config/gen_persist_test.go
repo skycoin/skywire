@@ -12,7 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// A regen keeps the transports "tp add --persist" saved. A WebSocket one comes
+// A regen keeps the persistent transports set at runtime. A WebSocket one comes
 // from WSPEERS and is kept only while WSPEERS still names it.
 func TestRegenKeepsPersistentTransports(t *testing.T) {
 	restoreRegen, restoreOld, restoreConf, restoreWS := isRegen, oldConfCache, conf, wsPeers
