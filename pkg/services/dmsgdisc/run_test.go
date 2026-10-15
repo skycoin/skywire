@@ -9,13 +9,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/services"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/services"
 
 	"github.com/stretchr/testify/require"
 )

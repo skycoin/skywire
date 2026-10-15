@@ -13,11 +13,12 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"math/rand"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestMockRPCClient_AllMethods(t *testing.T) {
