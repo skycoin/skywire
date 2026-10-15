@@ -17,6 +17,7 @@ import (
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -641,64 +642,7 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 				log.WithError(err).Debug("Forwarder accept error")
 				return
 			}
-			go func() {
-				defer conn.Close() //nolint:errcheck
-				// Identify the peer once (used for the whitelist gate AND,
-				// when enabled, the X-Skywire-Remote-PK header injection).
-				// remotePK pulls the PK from either dmsg.Addr or appnet.Addr.
-				fp := v.forwardedPorts.Get(port)
-				pk, pkOK := remotePK(conn.RemoteAddr())
-				// Per-port PK whitelist applies regardless of transport;
-				// fail closed if we can't identify the caller.
-				if fp != nil && len(fp.Whitelist) > 0 {
-					if !pkOK {
-						log.Warn("Rejected: cannot identify peer on whitelisted port")
-						return
-					}
-					if !v.isPeerAllowed(port, pk) {
-						log.WithField("peer", pk).Warn("Rejected: peer not in whitelist")
-						return
-					}
-				}
-				// ProxyAddr wins when set so users can forward to an arbitrary
-				// IP:port instead of localhost:localPort.
-				target := fmt.Sprintf("localhost:%d", localPort)
-				if fp != nil && fp.ProxyAddr != "" {
-					target = fp.ProxyAddr
-				}
-				// HTTP-aware mode: terminate HTTP and stamp the authenticated
-				// caller PK into a header the backend can trust, instead of a
-				// blind byte splice.
-				if fp != nil && fp.InjectPK {
-					v.servePKInjectedForward(conn, target, transport, pk, pkOK, fp.PreserveHost)
-					return
-				}
-				local, err := dialLocal(context.Background(), "tcp", target)
-				if err != nil {
-					log.WithError(err).Debug("Failed to dial local port")
-					return
-				}
-				defer local.Close() //nolint:errcheck
-				done := make(chan struct{}, 2)
-				pipe := func(dst, src net.Conn) {
-					buf := make([]byte, 32*1024)
-					for {
-						n, rErr := src.Read(buf)
-						if n > 0 {
-							if _, wErr := dst.Write(buf[:n]); wErr != nil {
-								break
-							}
-						}
-						if rErr != nil {
-							break
-						}
-					}
-					done <- struct{}{}
-				}
-				go pipe(local, conn)
-				go pipe(conn, local)
-				<-done
-			}()
+			go v.serveForwardConn(conn, port, localPort, transport, log)
 		}
 	}
 
@@ -764,4 +708,82 @@ func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
 		log.WithField("vhosts", len(sites)).Info("Serving vhosts on port 80")
 	}
 	return sites
+}
+
+// serveForwardConn bridges one caller of a forwarded port to its local target,
+// applying the port's whitelist and, when set, the caller-key header.
+func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport string, log logrus.FieldLogger) {
+	defer conn.Close() //nolint:errcheck
+	// Identify the peer once (used for the whitelist gate AND,
+	// when enabled, the X-Skywire-Remote-PK header injection).
+	// remotePK pulls the PK from either dmsg.Addr or appnet.Addr.
+	fp := v.forwardedPorts.Get(port)
+	pk, pkOK := remotePK(conn.RemoteAddr())
+	// Per-port PK whitelist applies regardless of transport;
+	// fail closed if we can't identify the caller.
+	if fp != nil && len(fp.Whitelist) > 0 {
+		if !pkOK {
+			log.Warn("Rejected: cannot identify peer on whitelisted port")
+			return
+		}
+		if !v.isPeerAllowed(port, pk) {
+			log.WithField("peer", pk).Warn("Rejected: peer not in whitelist")
+			return
+		}
+	}
+	// ProxyAddr wins when set so users can forward to an arbitrary
+	// IP:port instead of localhost:localPort.
+	target := fmt.Sprintf("localhost:%d", localPort)
+	if fp != nil && fp.ProxyAddr != "" {
+		target = fp.ProxyAddr
+	}
+	// HTTP-aware mode: terminate HTTP and stamp the authenticated
+	// caller PK into a header the backend can trust, instead of a
+	// blind byte splice.
+	if fp != nil && fp.InjectPK {
+		v.servePKInjectedForward(conn, target, transport, pk, pkOK, fp.PreserveHost)
+		return
+	}
+	local, err := dialLocal(context.Background(), "tcp", target)
+	if err != nil {
+		log.WithError(err).Debug("Failed to dial local port")
+		return
+	}
+	defer local.Close() //nolint:errcheck
+	done := make(chan struct{}, 2)
+	pipe := func(dst, src net.Conn) {
+		buf := make([]byte, 32*1024)
+		for {
+			n, rErr := src.Read(buf)
+			if n > 0 {
+				if _, wErr := dst.Write(buf[:n]); wErr != nil {
+					break
+				}
+			}
+			if rErr != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}
+	go pipe(local, conn)
+	go pipe(conn, local)
+	<-done
+}
+
+// selfDialForwarded serves this visor's own request for a forwarded port in
+// process, as its own key, so the resolving proxy reaches it like a visitor.
+func (v *Visor) selfDialForwarded(port uint16) (net.Conn, error) {
+	fp := v.forwardedPorts.Get(int(port))
+	if fp == nil || (!fp.DMSG && !fp.Skynet) {
+		return nil, fmt.Errorf("no local service registered on port %d", port)
+	}
+	localPort := fp.LocalPort
+	if localPort == 0 {
+		localPort = int(port)
+	}
+	clientEnd, serverEnd := net.Pipe()
+	log := v.log.WithField("fwd", port).WithField("transport", "self")
+	go v.serveForwardConn(&pkAddrConn{Conn: serverEnd, remote: dmsg.Addr{PK: v.conf.PK, Port: port}}, int(port), localPort, "self", log)
+	return clientEnd, nil
 }
