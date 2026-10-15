@@ -111,9 +111,11 @@ the [resolving proxy](docs/guides/resolving-proxy.md) or SkyDNS set up, open
 - `http://rewards.dmsg/`, the reward system by its alias, through the proxy only
 
 The long label is the visor's public key in base32 (`skywire cli pk dnslabel
-<pk>`). The hex key works too over the proxy, but only the base32 form works
-for HTTPS and SkyDNS. `.dmsg` in place of `.skynet` reaches the same visor
-over dmsg. [publishing a site](docs/guides/skynet.md) covers the other side.
+<pk>`). The hex key works too over the proxy, but SkyDNS and HTTPS in a
+browser need the base32 form. `.dmsg` in place of `.skynet` reaches the same
+visor over dmsg. [mesh-addresses.md](docs/guides/mesh-addresses.md) explains
+every form, and [publish-a-site.md](docs/guides/publish-a-site.md) covers the
+other side.
 
 The browser visor opens the same addresses from a link:
 [skywire.dev/?skynet=status.skywire.dev.aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet&kiosk=1](https://skywire.dev/?skynet=status.skywire.dev.aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet&kiosk=1)
@@ -540,6 +542,7 @@ Operator how-to guides ([index](docs/guides/README.md)):
 * [docs/guides/cli.md](docs/guides/cli.md) — Working with the CLI
 * [docs/guides/config-gen.md](docs/guides/config-gen.md) — Visor configuration — config generation
 * [docs/guides/config-runtime.md](docs/guides/config-runtime.md) — Visor configuration — runtime changes
+* [docs/guides/browser-visor.md](docs/guides/browser-visor.md) — The browser visor: how a visor runs in a tab
 * [docs/guides/configuration.md](docs/guides/configuration.md) — `autoconfig` vs `config gen`; see also [hypervisor.md](docs/guides/hypervisor.md) and [config-gen.md](docs/guides/config-gen.md)
 * [docs/guides/custom-deployment.md](docs/guides/custom-deployment.md) — Running your own deployment
 * [docs/guides/deployment-health.md](docs/guides/deployment-health.md) — Deployment Services: Health, pprof, and Logs over DMSG
@@ -551,10 +554,12 @@ Operator how-to guides ([index](docs/guides/README.md)):
 * [docs/guides/install-generator.md](docs/guides/install-generator.md) — Install Command Generator
 * [docs/guides/install.md](docs/guides/install.md) — install via package, release binary, Docker, Nix, or `go install`
 * [docs/guides/manual-routing.md](docs/guides/manual-routing.md) — manual route creation, multi-hop, route-finder
+* [docs/guides/mesh-addresses.md](docs/guides/mesh-addresses.md) — Mesh addresses: hex and base32 keys, ports, site names, short names
 * [docs/guides/multipath.md](docs/guides/multipath.md) — Multipath Routes and Routing Policies
 * [docs/guides/network-visualizer.md](docs/guides/network-visualizer.md) — Network visualization UI
 * [docs/guides/permissions.md](docs/guides/permissions.md) — VPN capabilities, sudoers, system survey
 * [docs/guides/privacy-and-performance.md](docs/guides/privacy-and-performance.md) — Tuning Skywire for privacy or performance
+* [docs/guides/publish-a-site.md](docs/guides/publish-a-site.md) — Publish a site or a port over skynet and dmsg
 * [docs/guides/public-visor.md](docs/guides/public-visor.md) — Running a Public (Reachable) Visor
 * [docs/guides/release.md](docs/guides/release.md) — creating a GitHub release
 * [docs/guides/remote-visor-cli.md](docs/guides/remote-visor-cli.md) — Controlling a Remote Visor from the CLI
