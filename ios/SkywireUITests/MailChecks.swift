@@ -89,11 +89,18 @@ final class MailChecks: XCTestCase {
         // The peer writes; the phone shows a banner, and the tap opens the message.
         goBack(app)
         let back = "From the peer \(stamp)"
-        try await peer.send(to: address, subject: back, body: "Opened from the banner.")
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let banner = springboard.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", back)).firstMatch
-        XCTAssertTrue(banner.waitForExistence(timeout: 30), "no banner for the peer's mail")
+        // Skymail delivers at once and never queues (pkg/skymail/send.go), and
+        // the dmsg path from the peer to the phone can fail for a while (G8:
+        // "dmsg error 202"), so the peer sends again while no banner came.
+        var sends = 0
+        repeat {
+            sends += 1
+            await peer.trySend(to: address, subject: "\(back) #\(sends)", body: "Opened from the banner.")
+        } while !banner.waitForExistence(timeout: 30) && sends < 4
+        XCTAssertTrue(banner.exists, "no banner for the peer's mail after \(sends) sends")
         snap("mail-banner")
         banner.tap()
         let text = app.staticTexts["mail-text"]
@@ -170,10 +177,17 @@ private struct MailPeer {
         return try XCTUnwrap(status["address_dmsg"] as? String)
     }
 
-    func send(to: String, subject: String, body: String) async throws {
-        let result = try await json("POST", "/api/visors/\(pk)/mail/send",
-                                    body: ["to": [to], "subject": subject, "body": body])
-        XCTAssertNil(result["error"], "the peer could not send: \(result)")
+    /// One send, its outcome in the test log. The peer's API drops a send
+    /// slower than its 10 s WriteTimeout even when the mail arrives, so the
+    /// phone's banner, not this answer, says whether it was delivered.
+    func trySend(to: String, subject: String, body: String) async {
+        do {
+            let result = try await json("POST", "/api/visors/\(pk)/mail/send",
+                                        body: ["to": [to], "subject": subject, "body": body])
+            print("peer send \"\(subject)\": \(result["error"].map { "\($0)" } ?? "delivered")")
+        } catch {
+            print("peer send \"\(subject)\": no answer, \(error.localizedDescription)")
+        }
     }
 
     func waitForInbox(subject: String, timeout: TimeInterval) async throws -> Bool {
