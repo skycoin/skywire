@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
 // vnetForward reaches a virtual-loopback address. It is bottle's vnet behind
@@ -61,6 +62,8 @@ type EmbeddedWisp struct {
 	log *logging.Logger
 	// bindPort replaces DefaultWispPort; tests use it to bind a free port.
 	bindPort uint
+	// mesh, when set, carries .dmsg and .skynet names over the mesh.
+	mesh *meshgw.Gateway
 
 	mu     sync.Mutex
 	lis    net.Listener
@@ -119,8 +122,12 @@ func (w *EmbeddedWisp) Start() error {
 	if err != nil {
 		return fmt.Errorf("wisp egress: %w", err)
 	}
+	var eg wisp.Egress = egress
+	if w.mesh != nil {
+		eg = &meshEgress{next: egress, gw: w.mesh}
+	}
 	srv, err := wisp.NewServer(wisp.Config{
-		Egress: egress,
+		Egress: eg,
 		Buffer: w.cfg.Buffer,
 		Log:    w.log.Slog(),
 	})
@@ -138,7 +145,7 @@ func (w *EmbeddedWisp) Start() error {
 	w.lis, w.cancel = lis, cancel
 
 	go w.serve(ctx, srv, lis)
-	w.log.Infof("Embedded wisp server on %s, egress %s", addr, egress.Describe())
+	w.log.Infof("Embedded wisp server on %s, egress %s", addr, eg.Describe())
 	return nil
 }
 
@@ -187,6 +194,11 @@ func initEmbeddedWisp(_ context.Context, v *Visor, log *logging.Logger) error {
 		cfg = v.conf.Wisp
 	}
 	w := newEmbeddedWisp(cfg, log)
+	if gw, err := meshgw.New(v.wispMeshDial, wispMeshCIDR, v.browseAliases(), log.FieldLogger); err == nil {
+		w.mesh = gw
+	} else {
+		log.WithError(err).Warn("wisp: no mesh names")
+	}
 	v.initLock.Lock()
 	v.embeddedWisp = w
 	v.initLock.Unlock()

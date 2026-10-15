@@ -176,6 +176,21 @@ func (g *Gateway) lookup(ip net.IP) (target, bool) {
 	return t, ok
 }
 
+// Resolve leases (or reuses) a synthetic IP for a .dmsg or .skynet name, as a
+// DNS answer from InstallDNS would.
+func (g *Gateway) Resolve(scheme, name string) (net.IP, error) {
+	return g.resolve(scheme, normalizeName(name))
+}
+
+// DialIP dials port on the mesh target leased for ip.
+func (g *Gateway) DialIP(ctx context.Context, ip net.IP, port uint16) (net.Conn, error) {
+	t, ok := g.lookup(ip)
+	if !ok {
+		return nil, fmt.Errorf("meshgw: no mesh name holds %s", ip)
+	}
+	return g.dial(ctx, t.scheme, t.dest, port)
+}
+
 // ServeTransparent accepts REDIRECT'd TCP connections on lis and bridges each to
 // its mesh target. Blocks until ctx is done or lis errors.
 func (g *Gateway) ServeTransparent(ctx context.Context, lis net.Listener) error {

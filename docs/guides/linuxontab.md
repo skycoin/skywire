@@ -62,6 +62,18 @@ curl -o linuxontab/shell/linux-dist/rootfs.ext4 https://next.linuxontab.com/linu
 
    prints the exit's address, not this computer's. `https://` works too.
 
+5. Mesh sites work by name in the guest too, over `http://`:
+
+   ```
+   curl http://rewards.dmsg/
+   curl http://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.skynet/
+   ```
+
+   The tab visor answers lookups for `.dmsg` and `.skynet` names itself, with
+   an address from SkyDNS's range, and carries the connection over the mesh.
+   The first connection to a `.skynet` site can take half a minute while its
+   route is set up.
+
 ## Hosting it
 
 `--lot` also takes the URL of a site that publishes LinuxOnTab, and proxies it
