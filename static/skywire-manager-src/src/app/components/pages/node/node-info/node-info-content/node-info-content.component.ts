@@ -6,6 +6,7 @@ import { Node } from '../../../../../app.datatypes';
 import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-label.component';
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
+import { pkLabel } from 'src/app/utils/pk-label';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { ApiService, RequestOptions, RequestTypes } from 'src/app/services/api.service';
@@ -27,6 +28,7 @@ import { ApiService, RequestOptions, RequestTypes } from 'src/app/services/api.s
 export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
+    this.meshLabel = pkLabel(val.localPk);
     // Reset the live-timer baseline whenever new data arrives.
     // baselineSeconds is the canonical secondsOnline from the
     // backend; nodeFetchedAt is the wall-clock moment that value
@@ -38,6 +40,8 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   node!: Node;
+  // The key as the base32 label .skynet and .dmsg names use.
+  meshLabel = '';
   timeOnline!: ElapsedTime;
 
   // Live-counter state for "Time online". The backend refreshes the
