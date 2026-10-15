@@ -77,7 +77,7 @@ again, and it keeps running while you browse the docs.
 
 ## Other resources
 
-- [Skycoin Blog](https://blog.theskywirenetwork.net) — release notes,
+- [Skycoin Blog](https://blog.skycoin.com) — release notes,
   protocol updates, and ecosystem news
   ([mirror: skycoin.github.io/blog](https://skycoin.github.io/blog))
 - [Source on GitHub](https://github.com/skycoin/skywire)
