@@ -18,12 +18,13 @@ extension XCTestCase {
 
     /// The first Connect asks whether the app may notify (once per install);
     /// the system's alert would otherwise sit over every later step.
-    func allowNotificationsIfAsked() {
+    @discardableResult
+    func allowNotificationsIfAsked(within timeout: TimeInterval = 3) -> Bool {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allow = springboard.alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 3) {
-            allow.tap()
-        }
+        guard allow.waitForExistence(timeout: timeout) else { return false }
+        allow.tap()
+        return true
     }
 
     /// Taps a bar slot and waits until it is the selected one (the cloud has no selected state).

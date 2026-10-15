@@ -111,6 +111,8 @@ final class ScreenTour: XCTestCase {
     private func snap(_ name: String) {
         // Let SwiftUI settle (a navigation push animates).
         usleep(700_000)
+        // A first-boot Simulator can raise the Connect tap's prompt a minute late.
+        if allowNotificationsIfAsked(within: 0) { usleep(700_000) }
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
