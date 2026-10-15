@@ -112,7 +112,7 @@ The handshake design already solved this; follow it rather than invent.
    signature; verifiers check it when present, accept absence.
 3. **Phase 2 — require between known-capable peers.** Once signed discovery
    says both sides support it, absence is a failure. Closes the downgrade tail.
-4. **Phase 3 — mandatory**, gated on the uptime-tracker version census showing
+4. **Phase 3 — mandatory**, gated on the version census from transport discovery (`skywire cli svc tpd versions`) showing
    the fleet floor is capable — the same gate the handshake design uses.
 
 Phases 2 and 3 must be gated on measured fleet version distribution, not

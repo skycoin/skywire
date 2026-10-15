@@ -60,7 +60,7 @@ A network attacker must not be able to force two PQ-capable peers down to classi
 1. **Phase 0 — capability ship:** release understands hybrid, **advertises** PQ support (signed TPD field), but still completes classical with non-PQ peers. No behavior change on the wire yet beyond an optional payload.
 2. **Phase 1 — opportunistic hybrid:** when both payloads are present, do hybrid. Most-of-fleet coverage as it updates.
 3. **Phase 2 — require between known-PQ peers:** once signed discovery says both support it, fail closed without hybrid (closes the downgrade tail).
-4. **Phase 3 — mandatory** once the fleet floor is PQ-capable (gated on the uptime-tracker version census we already have — cf. the version-distribution query).
+4. **Phase 3 — mandatory** once the fleet floor is PQ-capable (gated on the version census from transport discovery, `skywire cli svc tpd versions`).
 
 ## 8. Implementation plan (when greenlit)
 

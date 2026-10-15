@@ -58,7 +58,7 @@ TpID-shaped becomes a **vhost** — the resolver rewrites the outgoing HTTP `Hos
 header to it. So:
 
 ```
-http://example.com.<visor-pk>.skynet/
+http://example.com.<base32-pk>.skynet/
 ```
 
 dials `<visor-pk>`'s port 80 and sends `Host: example.com`. If that visor forwards
@@ -123,7 +123,6 @@ service's HTTP API by name instead of its 66-char public key. They're
 | `ar` | address resolver |
 | `rf` | route finder |
 | `sd` | service discovery |
-| `ut` | uptime tracker |
 | `rewards` | reward system |
 | `rsn`, `rsn0`, `rsn1`, … | route setup nodes (bare label = the first) |
 | `tsn`, `tsn0`, `tsn1`, … | transport setup nodes (bare label = the first) |
@@ -183,7 +182,7 @@ Using the [service aliases](#service-aliases-configured-deployment-services)
 (or the raw `<service-pk>.dmsg` if you prefer):
 
 ```
-# uptime tracker (dmsg-discovery copy); v3 = with the daily timeline
+# uptime data (served by dmsg discovery); v3 = with the daily timeline
 curl -x socks5h://127.0.0.1:4445 'http://dmsgd.dmsg/uptimes?v=v3'
 # service discovery — list VPN servers
 curl -x socks5h://127.0.0.1:4445 'http://sd.dmsg/api/services?type=vpn'
@@ -237,7 +236,7 @@ skywire cli resolver route          # list
 
 **Firefox, Waterfox, LibreWolf.** Settings, Network Settings, Manual proxy.
 Set SOCKS Host `127.0.0.1`, port `4445` (or `1080`), SOCKS v5, and tick
-"Proxy DNS when using SOCKS v5". Then open `http://<pk>.dmsg/` directly.
+"Proxy DNS when using SOCKS v5". Then open `http://<base32-pk>.dmsg/` directly.
 
 **Chromium, Brave, Chrome.** These have no proxy setting of their own. Either
 use [SkyDNS](#skydns-no-proxy-at-all) and no proxy, or start the browser with

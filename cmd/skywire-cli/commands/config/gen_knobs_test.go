@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/spf13/pflag"
@@ -63,4 +64,17 @@ func TestRegenKeepsKeyringAndResolverRules(t *testing.T) {
 	configureResolvingProxies(logging.MustGetLogger("test"))
 	require.Equal(t, rules, conf.DmsgWeb.UpstreamRules, "dmsg_web upstream_rules must survive a regen")
 	require.Equal(t, rules, conf.SkynetWeb.UpstreamRules, "skynet_web upstream_rules must survive a regen")
+}
+
+// TestEveryVariableIsInTheTemplate. A variable config gen reads but the
+// template does not list works, but nobody editing skywire.conf can find it.
+func TestEveryVariableIsInTheTemplate(t *testing.T) {
+	ref := regexp.MustCompile(`\$\{([A-Z_][A-Z0-9_]*)`)
+	for _, d := range skyenvFlagDefaults[genConfigCmd.Flags()] {
+		for _, m := range ref.FindAllStringSubmatch(d.expr, -1) {
+			if !regexp.MustCompile(`(?m)^#?` + m[1] + `=`).MatchString(envfileTemplate) {
+				t.Errorf("--%s reads %s, which the skywire.conf template does not list", d.name, m[1])
+			}
+		}
+	}
 }

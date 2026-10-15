@@ -71,7 +71,7 @@ again, and it keeps running while you browse the docs.
     **[SOCKS5 proxy](skysocks/README.md)**, and **[VPN](vpn/README.md)** —
     now have full guides in the **Apps** section above. The deployment
     services (transport-discovery, route-finder, service-discovery,
-    address-resolver, uptime-tracker) still live alongside the source under
+    address-resolver, config-bootstrapper) still live alongside the source under
     [`cmd/svc/`](https://github.com/skycoin/skywire/tree/develop/cmd/svc)
     and will be integrated here in a follow-up.
 

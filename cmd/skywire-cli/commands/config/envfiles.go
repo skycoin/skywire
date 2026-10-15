@@ -77,6 +77,17 @@ const envfileTemplate = `#
 #--	Enable local route calculation (instead of using route finder)
 #CALCULATEROUTES=true
 
+#--	Minimum route hops. 1 allows direct routes, 2 or more always goes through
+#	other visors, for sender privacy
+#MINHOPS=1
+
+#--	Never create direct transports. dmsg is still used
+#NODIRECTTRANSPORTS=true
+
+#--	Address resolver registration: 0 stays registered, N>0 leaves after N
+#	transports, a negative value never registers (no inbound transports)
+#ARTRANSPORTLIMIT=0
+
 #--	Forward error correction on mux routes. Both ends must enable it.
 #MUXFEC=true
 
@@ -93,6 +104,9 @@ const envfileTemplate = `#
 
 #--	Grant access to pseudoterminal (pty) for public keys
 #DMSGPTYPKS=('')
+
+#--	Let the visor RPC start pty commands (for a control or jump host only)
+#PTYRPCEXEC=true
 
 #--	Serve pty on a direct TCP listener too
 #PTYSSHLISTEN=':2022'
@@ -223,6 +237,13 @@ const envfileTemplate = `#
 #	front) already owns :443.
 #DMSGSERVERWSTLS=':443'
 
+#--	The local dmsg relay is served on a unix socket by default.
+#	NODMSGRELAY=true turns it off. DMSGRELAYADDR also serves it on a loopback
+#	address, for local services running as another user, and needs DMSGRELAYKEYS.
+#NODMSGRELAY=true
+#DMSGRELAYADDR='127.0.0.1:8083'
+#DMSGRELAYKEYS=''
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key
@@ -334,6 +355,12 @@ const envfileTemplate = `#
 #SKYNETWEBUPSTREAM='127.0.0.1:1080'
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
+
+#--	Run the dmsg resolver under this secret key instead of the visor's
+#DMSGWEBSK=''
+
+#--	Do not serve the local real-origin browse proxy and status pages
+#NOBROWSEORIGIN=true
 
 #--	Serve HTTPS for .dmsg and .skynet from both resolvers, with the CA in this
 #--	directory (ca.crt and ca.key from 'skywire cli resolver ca gen'). Browsers

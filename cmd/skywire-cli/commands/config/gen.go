@@ -1726,8 +1726,8 @@ func configureLauncher(log *logging.Logger) {
 // the desk a hypervisor serves reaches that hypervisor at its own origin.
 var wsPeers string
 
-// keepPersistentTransports carries over on a regen the transports "skywire cli tp
-// add --persist" saved. WebSocket ones come from WSPEERS, so they are not kept.
+// keepPersistentTransports carries over on a regen the transports set from the
+// dashboard or "config set". WebSocket ones come from WSPEERS, so they are not kept.
 func keepPersistentTransports() {
 	if !isRegen || oldConfCache == nil {
 		return
