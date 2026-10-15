@@ -172,7 +172,6 @@ func (e *Endpoint) newHandshake() (h *handshake) {
 		rcvWnd:      seqnum.Size(e.initialReceiveWindow()),
 		rcvWndScale: e.rcvWndScaleForHandshake(),
 	}
-	h.ep.AssertLockHeld(e)
 	h.resetState()
 	// Store reference to handshake state in endpoint.
 	e.h = h
@@ -1528,11 +1527,13 @@ func (e *Endpoint) handleTimeWaitSegments() (extendTimeWait bool, reuseTW func()
 					tcpEP := listenEP.(*Endpoint)
 					if EndpointState(tcpEP.State()) == StateListen {
 						reuseTW = func() {
+							// enqueueSegment takes its own reference on
+							// success, so drop ours regardless of outcome.
+							defer s.DecRef()
 							if !tcpEP.enqueueSegment(s) {
 								return
 							}
 							tcpEP.notifyProcessor()
-							s.DecRef()
 						}
 						// We explicitly do not DecRef the segment as it's still valid and
 						// being reflected to a listening endpoint.

@@ -58,6 +58,11 @@ type Options struct {
 
 	// In and Out are the terminal. Nil means os.Stdin and os.Stdout.
 	In, Out *os.File
+
+	// Signals carries Ctrl+C (os.Interrupt) and Ctrl+\ (SIGQUIT) for a terminal
+	// that is not the process's own, as a window's tab is: its host sends them
+	// here. Nil listens for the process's signals.
+	Signals <-chan os.Signal
 }
 
 // Run is an interactive websh on the terminal until the shell exits, and
@@ -147,13 +152,27 @@ func Run(opt Options) (int, error) {
 	// Ctrl+Z is ignored, and the ignoring is inherited by the programs the
 	// shell starts: without job control, a stopped program is one the shell
 	// would wait on forever.
-	sigs := make(chan os.Signal, 4)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGQUIT)
-	signal.Ignore(syscall.SIGTSTP)
-	defer signal.Stop(sigs)
+	sigs := opt.Signals
+	if sigs == nil {
+		ch := make(chan os.Signal, 4)
+		signal.Notify(ch, os.Interrupt, syscall.SIGQUIT)
+		signal.Ignore(syscall.SIGTSTP)
+		defer signal.Stop(ch)
+		sigs = ch
+	}
+	stop := make(chan struct{})
+	defer close(stop)
 	go func() {
-		for range sigs {
-			c.interrupt()
+		for {
+			select {
+			case <-stop:
+				return
+			case _, ok := <-sigs:
+				if !ok {
+					return
+				}
+				c.interrupt()
+			}
 		}
 	}()
 

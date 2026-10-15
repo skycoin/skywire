@@ -29,3 +29,7 @@ func DialTimeout(network, address string, timeout time.Duration) (net.Conn, erro
 	addr, _ := Split(address)
 	return net.DialTimeout(network, addr, timeout)
 }
+
+// setHost is SetHost natively: there is no browser between this program and
+// the computer, so there is nothing to install.
+func setHost(HostNetwork) {}
