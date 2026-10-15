@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpn"
@@ -94,7 +95,14 @@ func RunSkyDNS(ctx context.Context, args []string) error {
 		}
 		return err
 	}
-	err = vpn.RunSkyDNS(ctx, vpn.SkyDNSConfig{Dial: vpn.MeshDialer(appCl), Upstream: upstream, Minter: minter, Log: logger})
+	err = vpn.RunSkyDNS(ctx, vpn.SkyDNSConfig{
+		Dial:     vpn.MeshDialer(appCl),
+		Upstream: upstream,
+		Minter:   minter,
+		// home.skynet is this visor's directory of the mesh (dmsgweb.HomeAlias).
+		Aliases: map[string]cipher.PubKey{"home": appCl.Config().VisorPK},
+		Log:     logger,
+	})
 	if err != nil {
 		if appErr := appCl.SetError(err.Error()); appErr != nil {
 			logger.WithError(appErr).Warn("Failed to set error")

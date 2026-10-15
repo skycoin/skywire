@@ -92,6 +92,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 			runtime.skynetDial = v.dmsgWebSkynetDial
+			runtime.homePage = v.homePage
 			v.wireLocalResolverPublish(runtime)
 			v.embeddedDmsgWeb = runtime
 		}
