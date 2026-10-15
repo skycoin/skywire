@@ -294,8 +294,10 @@ final class AppModel: ObservableObject {
                 finished = true
             } catch {
                 // A start that Disconnect aborted fails with "stopped while
-                // starting": the user's doing, not an error to show.
-                if settings.wantsConnected || CoreBridge.shared.state != .stopped {
+                // starting": the user's doing, not an error to show. It returns
+                // while the stop still closes the core, so the state can read stopping.
+                let aborted = !settings.wantsConnected && (error as? CoreError)?.isStoppedWhileStarting == true
+                if !aborted && (settings.wantsConnected || CoreBridge.shared.state != .stopped) {
                     lastError = error.localizedDescription
                 }
             }
