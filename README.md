@@ -91,7 +91,7 @@ native and Android visors already have their computer's sockets.
 ⁴ A network stack inside the tab, for the tab's own pages.
 
 ⁵ Through the [resolving proxy](docs/guides/resolving-proxy.md), or with
-[SkyDNS](docs/guides/resolving-proxy.md#skydns-no-proxy-at-all) for every program with no proxy setting.
+[SkyDNS](docs/guides/resolving-proxy.md#skydns-no-proxy-at-all) for every program with no proxy setting. SkyDNS is on by default on Linux with systemd-resolved.
 
 ⁶ SkyDNS, in the VPN tunnel or on its own.
 

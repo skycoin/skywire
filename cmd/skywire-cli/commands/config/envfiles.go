@@ -368,8 +368,11 @@ const envfileTemplate = `#
 #RESOLVERCA='/root/.skywire/resolver'
 
 #--	Autostart skydns: .dmsg and .skynet names for every program on this host,
-#--	with no proxy settings. It takes a tun, so it needs CAP_NET_ADMIN, and root
-#--	where systemd-resolved does not run. With RESOLVERCA set it serves HTTPS too.
+#--	with no proxy settings. It takes a tun, so it needs CAP_NET_ADMIN. It is on
+#--	by default where systemd-resolved runs and the config is made as root, and
+#--	then only answers the mesh names. Elsewhere it puts itself first in
+#--	/etc/resolv.conf, so it stays off unless set here. With RESOLVERCA set it
+#--	serves HTTPS too.
 #SKYDNS=true
 
 #--	Embedded Wisp server: the backend a browser-side Linux guest asks to open

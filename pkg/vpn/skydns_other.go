@@ -15,3 +15,6 @@ func RunSkyDNS(_ context.Context, _ SkyDNSConfig) error {
 
 // SetupSkyDNSTun is Linux only: elsewhere SkyDNS has no persistent tun.
 func SetupSkyDNSTun(_, _ int) error { return errors.New("skydns: --setup-tun is Linux only") }
+
+// SkyDNSSplitDNS is Linux only: systemd-resolved does not run elsewhere.
+func SkyDNSSplitDNS() bool { return false }

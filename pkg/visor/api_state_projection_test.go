@@ -2,8 +2,9 @@
 package visor
 
 import (
-	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // TestStateFieldSet_All: a nil/empty --select builds every DEFAULT section

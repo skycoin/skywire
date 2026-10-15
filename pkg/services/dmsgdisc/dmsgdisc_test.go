@@ -8,13 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/services"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/services"
 
 	"github.com/stretchr/testify/require"
 
