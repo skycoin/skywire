@@ -553,6 +553,7 @@ Operator how-to guides ([index](docs/guides/README.md)):
 * [docs/guides/hypervisor.md](docs/guides/hypervisor.md) — The hypervisor
 * [docs/guides/install-generator.md](docs/guides/install-generator.md) — Install Command Generator
 * [docs/guides/install.md](docs/guides/install.md) — install via package, release binary, Docker, Nix, or `go install`
+* [docs/guides/linuxontab.md](docs/guides/linuxontab.md) — LinuxOnTab over the browser visor
 * [docs/guides/manual-routing.md](docs/guides/manual-routing.md) — manual route creation, multi-hop, route-finder
 * [docs/guides/mesh-addresses.md](docs/guides/mesh-addresses.md) — Mesh addresses: hex and base32 keys, ports, site names, short names
 * [docs/guides/multipath.md](docs/guides/multipath.md) — Multipath Routes and Routing Policies

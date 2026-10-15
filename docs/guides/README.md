@@ -31,6 +31,7 @@ cobra subcommand tree.
 - [vpn.md](vpn.md) — Skywire VPN client/server with `skywire cli vpn`
 - [socks5.md](socks5.md) — Skywire SOCKS5 proxy client with `skywire cli proxy`
 - [skynet.md](skynet.md) — SkyNet P2P port forwarding with `skywire cli skynet`
+- [linuxontab.md](linuxontab.md) — run LinuxOnTab inside the desk with the tab visor as its network
 - [mesh-addresses.md](mesh-addresses.md) — every form of a mesh address: hex and base32 keys, ports, site names, short names and route prefixes
 - [publish-a-site.md](publish-a-site.md) — serve a site or a port to the network by your visor key, with no domain or open port
 - [resolving-proxy.md](resolving-proxy.md) — the `.dmsg` / `.skynet` resolving SOCKS5 proxies (`skywire cli resolver`): reach visors and deployment services by public key over dmsg/skynet from a browser or `curl` — the supported way to view deployment-service data now that the CLI has no plain-HTTP fallback
