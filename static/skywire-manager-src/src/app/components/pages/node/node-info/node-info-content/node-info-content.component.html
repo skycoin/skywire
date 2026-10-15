@@ -21,6 +21,17 @@
           <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
           <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
         </span>
+        @if (meshLabel) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.mesh-name' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ meshLabel }}"></app-copy-to-clipboard-text>
+          </span>
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.landing-page' | translate }} </span>
+            <a class="mesh-link" href="http://{{ meshLabel }}.skynet/" target="_blank" rel="noopener">skynet</a>
+            <a class="mesh-link" href="http://{{ meshLabel }}.dmsg/" target="_blank" rel="noopener">dmsg</a>
+          </span>
+        }
         @if (node.hostname) {
           <span class="info-line">
             <span class="title">{{ 'node.details.node-info.hostname' | translate }} </span>
