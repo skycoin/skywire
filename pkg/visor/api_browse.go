@@ -92,7 +92,7 @@ func (v *Visor) browseHomePage(host string) *visorapi.SkynetHTTPResponse {
 	host = browseStripHost(host)
 	for _, suffix := range []string{".dmsg", ".skynet"} {
 		if dmsgweb.IsHomeHost(host, suffix) {
-			body := dmsgweb.RenderHomePage(v.browseAliases(), suffix, v.conf.PK)
+			body := v.homePage(suffix)
 			return &visorapi.SkynetHTTPResponse{
 				StatusCode: 200,
 				Status:     "200 OK",

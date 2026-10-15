@@ -45,6 +45,7 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 		Dial:     cfg.Dial,
 		Upstream: up,
 		Minter:   cfg.Minter,
+		Aliases:  cfg.Aliases,
 		MTU:      TUNMTU,
 		Log:      log,
 	})

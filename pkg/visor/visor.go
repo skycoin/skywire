@@ -222,6 +222,9 @@ type Visor struct {
 	router       router.Router
 	rfClient     rfclient.Client
 
+	// homeVisors caches the visor list home.skynet shows.
+	homeVisors homeVisorCache
+
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
