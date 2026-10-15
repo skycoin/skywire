@@ -15,17 +15,17 @@ guest → LinuxOnTab Wisp client → tab visor Wisp server (vnet:6001)
 
 - A LinuxOnTab checkout. Its `feature/linux-kernel-integration` branch accepts
   `?wisp=vnet:6001`.
-- The full root filesystem for that checkout, for `?disk=full`. The lean image
-  has no `curl`. Use the rootfs that matches the kernel in the checkout: a
-  mismatched pair boots, then crashes the tab under load.
+- Optionally, the full root filesystem for that checkout, for `?disk=full`.
+  The default lean image is small and installs programs on first use. Use a
+  rootfs that matches the kernel in the checkout: a mismatched pair boots, then
+  crashes the tab under load.
 - `skywire` on this computer, and a Chromium-based browser.
 
 ```
 git clone -b feature/linux-kernel-integration https://github.com/kilian-ai/linuxontab
+# only for ?disk=full, about 800 MB:
 curl -o linuxontab/shell/linux-dist/rootfs.ext4 https://next.linuxontab.com/linux-dist/rootfs.ext4
 ```
-
-The rootfs is about 800 MB.
 
 ## Run it
 
@@ -47,19 +47,12 @@ The rootfs is about 800 MB.
 
    prints the exit's key once it has one, and `null` before that.
 
-3. Open LinuxOnTab inside the desk. In the browser's developer console for
-   that tab, run:
-
-   ```js
-   const f = document.createElement('iframe');
-   f.id = 'lot';
-   f.src = '/lot/wasm.html?disk=full&wisp=vnet:6001';
-   f.style.cssText = 'position:fixed;inset:5%;width:90%;height:90%;z-index:99999;border:0';
-   document.body.appendChild(f);
-   ```
-
-   It must be a frame of the desk: that is how it finds the tab's network. The
-   guest reaches a shell in about half a minute.
+3. Open **linux** from the desk menu, or open the desk at
+   `https://127.0.0.1:8446/?lot=1` to start it straight away. It runs in a
+   window of the desk, which is how it finds the tab's network, and reaches a
+   shell in about half a minute. It boots the lean image, which installs a
+   program the first time you run it. `?lot=full` boots the full image instead,
+   an 800 MB download.
 
 4. In the guest:
 
@@ -88,7 +81,9 @@ The rootfs is about 800 MB.
   Use the rootfs published for the checkout you have.
 
 `curl` in the full image is a small Python program. Use `curl URL` or
-`curl -o FILE URL`; it does not support every curl option.
+`curl -o FILE URL`; it does not support every curl option. Exits differ too:
+some relay HTTPS but not plain HTTP. If `https://` works and `http://` does
+not, pick another exit as above.
 
 ## See also
 

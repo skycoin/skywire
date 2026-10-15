@@ -148,6 +148,22 @@ func installDesk() {
 			return browserPane{url: hostBridgeURL}, nil
 		},
 	})
+	// LinuxOnTab, when the page serves it. A plain frame of this page, since it
+	// reaches the tab's network through window.parent.vnet.
+	if lot := js.Global().Get("__SKYWIRE_LOT_URL__"); lot.Type() == js.TypeString && lot.String() != "" {
+		desk.Register(desk.App{
+			Name: "linux", Title: "linux",
+			Help:  "LinuxOnTab, a Linux system online through this visor (docs/guides/linuxontab.md)",
+			Width: 960, Height: 600,
+			Open: func(args []string) (desk.Pane, error) {
+				u := lot.String()
+				if len(args) > 0 && args[0] == "full" {
+					u += "&disk=full" // the full image, an 800 MB download
+				}
+				return framePane(u), nil
+			},
+		})
+	}
 	registerPairingApps()
 	registerInstallApp()
 	registerMailApp()

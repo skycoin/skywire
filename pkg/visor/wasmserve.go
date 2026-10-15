@@ -250,6 +250,12 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			[]byte(`<script src="/desk-boot.js"></script>`),
 			[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
 	}
+	// With LinuxOnTab served, the desk lists it as an app.
+	if cfg.LinuxOnTab != "" {
+		deskPage = bytes.Replace(deskPage,
+			[]byte(`<script src="/desk-boot.js"></script>`),
+			[]byte("<script>window.__SKYWIRE_LOT_URL__=\"/lot/wasm.html?wisp=vnet:6001\";</script>\n<script src=\"/desk-boot.js\"></script>"), 1)
+	}
 	// The desk IS the root here too, matching the visor-attached hypervisor
 	// (#4491). The old separate path redirects rather than serving a second
 	// copy, so a bookmark or a docs link still lands somewhere sensible.
