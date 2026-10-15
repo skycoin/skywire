@@ -68,7 +68,7 @@ nav .dropdown a{display:block;padding:4px 12px;}
   <details><summary>resources</summary><div class='dropdown'>
     <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
     <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
-    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+    <a title='Skywire Network blog' href='https://blog.skycoin.com'>blog</a>
   </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
@@ -236,7 +236,7 @@ func mainPage(w http.ResponseWriter, r *http.Request) {
 		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net/generator/'>install command generator</a> &middot; ` +
 		`<a href='https://deb.theskywirenetwork.net'>apt repo</a> &middot; ` +
 		`<a href='/skycoin-rewards'>view reward history</a> &middot; ` +
-		`<a href='https://blog.theskywirenetwork.net'>blog</a> &middot; ` +
+		`<a href='https://blog.skycoin.com'>blog</a> &middot; ` +
 		`<a href='https://t.me/skywire'>community</a><br>` +
 		`<span style='color:#94a3b8;font-size:9pt;'>Full eligibility rules below. Network statistics at <a href='/stats'>/stats</a>.</span>` +
 		`</div>`
@@ -289,7 +289,7 @@ var htmlMainPageTemplate = `
   <details><summary>resources</summary><div class='dropdown'>
     <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
     <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
-    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+    <a title='Skywire Network blog' href='https://blog.skycoin.com'>blog</a>
   </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>

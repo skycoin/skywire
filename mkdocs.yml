@@ -106,7 +106,7 @@ nav:
   - Code Graph: graph/index.md
   - Glossary: glossary.md
   - Rewards: rewards/index.md
-  - Blog: https://blog.theskywirenetwork.net
+  - Blog: https://blog.skycoin.com
 
 plugins:
   - search
@@ -145,7 +145,7 @@ extra:
       link: https://t.me/skywire
       name: Skywire on Telegram
     - icon: fontawesome/solid/rss
-      link: https://blog.theskywirenetwork.net
+      link: https://blog.skycoin.com
       name: Skycoin blog
 
 # Strict mode catches broken links at build time. Disabled for now —
