@@ -249,7 +249,11 @@ TEST_RUNNER_SKYWIRE_MAIL_PEER=http://127.0.0.1:18000 TEST_RUNNER_SKYWIRE_MAIL_PE
 ```
 
 3 tests pass: mail to itself (read, reply, delete), the mailbox off and on,
-mail both ways with the peer and the banner opening the message.
+mail both ways with the peer and the banner opening the message. The peer
+sends again, up to four times, while no banner comes. Skymail does not queue,
+the dmsg path to a phone can fail for a while ("dmsg error 202"), and the
+peer's API drops a send slower than 10 s even when it arrives. The test log
+prints each of the peer's sends.
 
 ## 9. Settings and diagnostics [M2, M6.5]
 
