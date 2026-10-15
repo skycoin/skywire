@@ -83,8 +83,8 @@ Expected: the pk (`PHONE`), `40MiB`, `''`, `{'enabled': False}`,
 `{'disabled': True}`, `False False`. Restart the peer with the phone
 granted for Fleet: `ios/scripts/desktop-peer.sh ../peer $PHONE`.
 
-2.3 `xcrun simctl spawn "$DEVICE" log show --last 10m --predicate 'subsystem == "com.skycoin.skywire"' | grep GOMEMLIMIT`
-shows `GOMEMLIMIT set to 40MiB`.
+2.3 `xcrun simctl spawn "$DEVICE" log show --last 10m --predicate 'subsystem == "com.skycoin.skywire"' | grep -E 'GOMEMLIMIT|GOGC'`
+shows `GOMEMLIMIT set to 40MiB` and `GOGC set to 25 on iOS`.
 
 2.4 *Background.* `xcrun simctl launch "$DEVICE" com.apple.Preferences`
 puts Skywire in the background. About 30 s later, the end of the background
