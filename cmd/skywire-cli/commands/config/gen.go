@@ -562,11 +562,7 @@ var genConfigCmd = &cobra.Command{
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
 		if isEnvs || envfileOut != "" {
-			if skyenv.OS == "windows" {
-				envfile = envfileWindows
-			} else {
-				envfile = envfileLinux
-			}
+			envfile = envfileTemplate
 			// Uncomment settings that match flags passed on the command line
 			envfile = applyFlagsToConf(envfile, cmd)
 

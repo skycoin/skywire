@@ -18,8 +18,6 @@ package cliconfig
 
 import (
 	"strings"
-
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // EnvFileTemplate returns the annotated SKYENV template for this OS with the
@@ -30,14 +28,10 @@ import (
 // Everything else is left commented at its documented default, exactly as
 // `config gen -Q` writes it, so the file reads as a menu of what can be set.
 func EnvFileTemplate(pkgEnv bool) string {
-	tpl := envfileLinux
+	tpl := envfileTemplate
 	key := "PKGENV"
 	if !pkgEnv {
 		key = "USRENV"
-	}
-	if skyenv.OS == "windows" {
-		// The PowerShell form of the same line: `#$PKGENV=$true`.
-		return uncommentLine(envfileWindows, "#$"+key+"=")
 	}
 	return uncommentLine(tpl, "#"+key+"=")
 }
