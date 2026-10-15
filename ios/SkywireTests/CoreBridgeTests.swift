@@ -76,8 +76,13 @@ final class CoreBridgeTests: XCTestCase {
         XCTAssertLessThan(took, .seconds(10), "stop during start took \(took)")
 
         // The start either lost the race (stopped while starting) or won it
-        // and was then stopped; both leave the core stopped.
-        _ = try? await start.value
+        // and was then stopped; both leave the core stopped. AppModel hides
+        // the first by its error, so the error must be recognised.
+        do {
+            try await start.value
+        } catch let error as CoreError {
+            XCTAssertTrue(error.isStoppedWhileStarting, "the aborted start failed with \(error.message)")
+        }
         XCTAssertEqual(core.state, .stopped)
         XCTAssertEqual(tcpConnectErrno(port: Self.apiPort), ECONNREFUSED, "a listener survived the aborted start")
 

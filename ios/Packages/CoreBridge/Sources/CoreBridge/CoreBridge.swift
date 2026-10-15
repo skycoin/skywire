@@ -71,6 +71,9 @@ public typealias CoreLogSink = @Sendable (CoreLogLevel, String) -> Void
 public struct CoreError: Error, LocalizedError, Sendable {
     public let message: String
     public var errorDescription: String? { message }
+
+    /// A start that a stop ended before the core was up (mobilecore.ErrStopped).
+    public var isStoppedWhileStarting: Bool { message == "mobilecore: stopped while starting" }
 }
 
 /// Overrides of the options the core generates its config with. The core
