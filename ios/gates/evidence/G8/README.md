@@ -207,3 +207,95 @@ Against G1: idle Go's share 10.5 MiB (G1 10.4 MB) holds. Connected Go's
 share fails the 33 MB criterion before and after the fixes (memory section
 above). The samples are `footprint-18pro-samples.tsv`; the limit runs and
 the Mac A/B are the other `footprint-*` and `host-*` files.
+
+## After the review
+
+G8 failed (`ios/gates/G8.md`) on four things. Each is answered below, checked
+on 2026-10-15 on Simulators made for it ("M8b iPhone 17e" and "M8b iPhone 18
+Pro", from `simctl create`) with the author's peer (`../peer-m8`).
+
+**3.1, clipped labels.** On both Simulators the Spanish "Cambiar el puerto"
+read "Cambiar el pu…", and on the 17e the Apps hub's SkyDNS line was cut in
+English and Chinese. The SkySOCKS port row let SwiftUI squeeze the button.
+Android gives the address the rest of the row (`weight(1f)`), so the button
+now keeps its width and the address may shrink to 80 %. The SkyDNS line may
+wrap to a second line, where Android keeps one. The tour on a new 17e: all
+three languages show the button whole with the address at full size, and the
+SkyDNS line on two lines in English and Chinese, one in Spanish.
+
+**8.1, the peer's mail to the phone.** The reviewer's peer twice got "dmsg
+error 202 - cannot connect to delegated server" about 40 s after the phone's
+core started. A send two minutes later was delivered. The phone's side holds
+up: its discovery entry listed the servers it was connected to from seconds
+after the start (`mail-17e-after-start.txt`, read every 5 s through the peer).
+With the author's peer every send arrived, but four of seven took 12 to 24 s,
+past the peer API's 10 s WriteTimeout, which drops the answer. Sends at
++111 s and +144 s were as slow as the first ones, so it is the dmsg path
+between the two nodes, not the start. Skymail delivers at once and never
+queues (`pkg/skymail/send.go`), so the test failed on the first such send.
+MailChecks now sends again, up to four times, while the phone shows no
+banner, and prints each send. On the new 17e: MailChecks 3 of 3, the first
+send unanswered by the peer's API and delivered all the same.
+
+**The footprint, connected.** Go keeps the heap growing to (1 + GOGC/100)
+times the live set, and the live set is about 12 to 15 MB, so at the default
+GOGC 100 Go's share settled near 37 MiB under the 40 MiB limit. iOS ends a
+process past its memory limit, so on iOS the core now runs at GOGC 25
+(`pkg/visor/gctune_ios.go`, as the wasm build runs at 50; a GOGC in the
+environment still wins). Outside XCUITest, connected, 5 to 11 minutes
+(`footprint-gogc.txt`):
+
+| GOGC | Go's share median (MiB) | range (MiB) | collections in 10 min |
+|---|---|---|---|
+| 100 (before the review, 18 Pro) | 36.8 | 35.7 to 38.0 | 26 |
+| 50 | 30.3 and 31.7 (two runs) | 25.7 to 35.0 | 52 |
+| 25 | 25.5 | 23.0 to 27.2 | 135 |
+
+GOGC 50 sits on the 33 MB (31.5 MiB) line, so 25. Each collection takes 1 to
+4 ms and gctrace puts the collector's CPU share at 0 %. Android and desktops
+are unchanged. Under XCUITest, `footprint-table.py` on the 18 Pro:
+
+FootprintTour's six tests passed (idle 250 s, connected 621 s, chat 267 s,
+SOCKS 276 s, DEX 328 s, call 284 s), with the peer's call answered.
+Samples in `footprint-18pro-gogc25-samples.tsv`. Seven of the ten SOCKS
+samples fetched 129.152.28.221 through the proxy (the Mac's address was
+45.56.79.245) and three got curl exit 97, a SOCKS connect that failed.
+
+| state | samples | phys_footprint median (MiB) | highest (MiB) | Go's share median (MiB) | range (MiB) | first review's Go median (MiB) |
+|---|---|---|---|---|---|---|
+| idle | 12 | 43.0 | 43.1 | 10.7 | 10.5 to 10.7 | 10.7 |
+| connected, 10 min | 36 | 59.5 | 64.9 | 24.9 | 21.9 to 26.8 | 37.5 |
+| chat open | 12 | 62.8 | 64.1 | 24.5 | 23.0 to 25.8 | 34.9 |
+| SkySOCKS active | 10 | 72.1 | 74.5 | 28.5 | 27.4 to 30.3 | 38.6 |
+| SkyDEX open, no market | 12 | 71.2 | 71.6 | 26.2 | 24.9 to 26.8 | 37.5 |
+| in a call | 12 | 62.7 | 63.5 | 26.4 | 25.4 to 27.2 | 38.7 |
+
+Connected, 24.9 MiB is 26.1 MB against at most 33 MB. Idle is unchanged
+beside G1's 10.4 MB.
+
+**The store material.** app-review.md now marks the Notes' second paragraph
+(the packet tunnel) and the 2.5.4 paragraph **device**, and no longer calls
+the in-app fallback "already built" on a device. testflight.md marks the
+127.0.0.1:1080 line and "a suspended phone does not ring" **device**.
+
+**From the notes.**
+- Note 10: Home no longer shows "mobilecore: stopped while starting" when
+  Disconnect ends a start. Start returns that error while the stop still
+  closes the core, so the state read stopping and slipped past the guard.
+  AppModel now recognises the error itself, and `testStopDuringStart` checks
+  the aborted start's error is that one.
+- The store screenshots' notification prompt: the tour answers a prompt that
+  is up before each picture. On the new 17e the prompt came 20 s after the
+  Connect tap, and XCUITest's own interruption handler took it at the next
+  tap. The case the reviewer met, a prompt with no tap before the picture,
+  did not come up in this run.
+- Notes 2, 3 and 4: regression.md now names the fourth WalletCore skip, says
+  10 to 15 minutes for 1.5, and says xcodebuild's 10 minute wait follows
+  passing runs too.
+- The store section's "startup geolocation uses the embedded database" does
+  not hold for the phone: the `mobile` build has no GeoLite2 database
+  (`pkg/geoip/geoip_embedded_mobile.go`), so the visor's geo lookup is nil.
+- Not changed: the SkyChat page's English (note 1, the shared web UI), what
+  DexChecks asserts (note 5), the SwiftUI warning in CallChecks (note 6), the
+  Fleet screen's text on a plain relaunch (note 7), and the Wallet card's
+  list ellipsis (note 11).
