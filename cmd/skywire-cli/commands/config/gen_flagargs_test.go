@@ -81,3 +81,25 @@ func TestEveryResolverFlagRoundTrips(t *testing.T) {
 		}
 	}
 }
+
+// The variables for settings that used to exist only in the json.
+func TestFlagArgsForSkyenvVisorSettings(t *testing.T) {
+	for _, tc := range []struct {
+		key, value string
+		want       []string
+	}{
+		{"LOGHOOKLEVEL", "debug", []string{"--log-hook-level", "debug"}},
+		{"LOGSERVERADDR", "localhost:8002", []string{"--log-server-addr", "localhost:8002"}},
+		{"PTYSSHLISTEN", ":2022", []string{"--pty-ssh-listen", ":2022"}},
+		{"PTYPERSIST", "true", []string{"--pty-persist=true"}},
+		{"NODMSGSCP", "true", []string{"--no-dmsgscp=true"}},
+		{"DMSGSCPROOT", "/srv/scp", []string{"--dmsgscp-root", "/srv/scp"}},
+		{"NOSTATS", "true", []string{"--no-stats=true"}},
+		{"STATSRETENTION", "60", []string{"--stats-retention", "60"}},
+	} {
+		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
+		if !ok || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("FlagArgsForSkyenv(%s, %q) = %v, %v; want %v", tc.key, tc.value, got, ok, tc.want)
+		}
+	}
+}

@@ -94,6 +94,18 @@ const envfileLinux = `#
 #--	Grant access to pseudoterminal (pty) for public keys
 #DMSGPTYPKS=('')
 
+#--	Serve pty on a direct TCP listener too
+#PTYSSHLISTEN=':2022'
+
+#--	Keep pty sessions alive when the client disconnects
+#PTYPERSIST=true
+
+#--	Do not serve files over dmsgscp
+#NODMSGSCP=true
+
+#--	Directory dmsgscp serves. Default is local/scp-root
+#DMSGSCPROOT=''
+
 ### Survey Access #######################################################
 
 #--	Grant access for survey collection to these public keys
@@ -553,6 +565,18 @@ const envfileLinux = `#
 #--	Set visor runtime log level.
 #	Default is info ; uncomment for debug logging
 #LOGLVL=debug
+
+#--	Most verbose level kept for /debug/log. Default is info
+#LOGHOOKLEVEL='debug'
+
+#--	Also serve the log server on a local address, without auth
+#LOGSERVERADDR='localhost:8002'
+
+#--	Keep up to this many days of local telemetry (default 30)
+#STATSRETENTION=30
+
+#--	Do not keep or publish local telemetry
+#NOSTATS=true
 
 `
 

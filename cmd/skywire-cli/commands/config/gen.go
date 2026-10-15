@@ -232,6 +232,22 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "mux-fec")
 	skyenvBoolVar(genConfigCmd.Flags(), &hvUIDisable, "hv-ui-disable", "${HVUIDISABLE:-false}", "run the hypervisor without its web UI")
 	gHiddenFlags = append(gHiddenFlags, "hv-ui-disable")
+	skyenvStringVar(genConfigCmd.Flags(), &logHookLevel, "log-hook-level", "${LOGHOOKLEVEL}", "most verbose level kept for /debug/log (info when empty)")
+	gHiddenFlags = append(gHiddenFlags, "log-hook-level")
+	skyenvStringVar(genConfigCmd.Flags(), &logServerAddr, "log-server-addr", "${LOGSERVERADDR}", "also serve the log server on this local address, without auth")
+	gHiddenFlags = append(gHiddenFlags, "log-server-addr")
+	skyenvStringVar(genConfigCmd.Flags(), &ptySSHListen, "pty-ssh-listen", "${PTYSSHLISTEN}", "direct TCP pty listener address")
+	gHiddenFlags = append(gHiddenFlags, "pty-ssh-listen")
+	skyenvBoolVar(genConfigCmd.Flags(), &ptyPersist, "pty-persist", "${PTYPERSIST:-false}", "keep pty sessions alive across a client disconnect")
+	gHiddenFlags = append(gHiddenFlags, "pty-persist")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgscp, "no-dmsgscp", "${NODMSGSCP:-false}", "do not serve files over dmsgscp")
+	gHiddenFlags = append(gHiddenFlags, "no-dmsgscp")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgscpRoot, "dmsgscp-root", "${DMSGSCPROOT}", "directory dmsgscp serves (local/scp-root when empty)")
+	gHiddenFlags = append(gHiddenFlags, "dmsgscp-root")
+	skyenvBoolVar(genConfigCmd.Flags(), &noStats, "no-stats", "${NOSTATS:-false}", "do not keep or publish local telemetry")
+	gHiddenFlags = append(gHiddenFlags, "no-stats")
+	skyenvIntVar(genConfigCmd.Flags(), &statsRetention, "stats-retention", "${STATSRETENTION:-0}", "days of local telemetry to keep (30 when 0)")
+	gHiddenFlags = append(gHiddenFlags, "stats-retention")
 
 	// Hypervisor and security flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
@@ -1130,6 +1146,11 @@ func mergeExistingApps(log *logging.Logger) {
 	if oldConfCache.KeyRing != nil {
 		conf.KeyRing = oldConfCache.KeyRing
 	}
+	// rewards hosts a reward system UI on this visor. config gen has no flag for
+	// it, so a regen keeps it as it was.
+	if oldConfCache.Rewards != nil {
+		conf.Rewards = oldConfCache.Rewards
+	}
 	// host_bridge is written by the visor, when it connects to a host bridge.
 	if oldConfCache.HostBridge != nil {
 		conf.HostBridge = oldConfCache.HostBridge
@@ -1555,10 +1576,12 @@ func configureLauncher(log *logging.Logger) {
 
 	dmsgptyAddr := pty.DefaultCLIAddr()
 	conf.Pty = &visorconfig.Pty{
-		DmsgPort:     skyenv.DmsgPtyPort,
-		CLINet:       skyenv.DmsgPtyCLINet,
-		CLIAddr:      dmsgptyAddr,
-		AllowRPCExec: ptyRPCExec,
+		DmsgPort:           skyenv.DmsgPtyPort,
+		CLINet:             skyenv.DmsgPtyCLINet,
+		CLIAddr:            dmsgptyAddr,
+		SshListen:          ptySSHListen,
+		PersistentSessions: ptyPersist,
+		AllowRPCExec:       ptyRPCExec,
 	}
 
 	conf.STCP = &network.STCPConfig{
@@ -1569,7 +1592,14 @@ func configureLauncher(log *logging.Logger) {
 	// Log Server configuration (localhost serving disabled by default)
 	// Set local_addr to e.g. "localhost:8002" to enable localhost serving without auth
 	conf.LogServer = &visorconfig.LogServer{
-		LocalAddr: "",
+		LocalAddr: logServerAddr,
+	}
+	conf.LogHookLevel = logHookLevel
+	if noDmsgscp || dmsgscpRoot != "" {
+		conf.Dmsgscp = &visorconfig.Dmsgscp{Disabled: noDmsgscp, RootDir: dmsgscpRoot}
+	}
+	if noStats || statsRetention != 0 {
+		conf.Stats = &visorconfig.Stats{Disabled: noStats, RetentionDays: statsRetention}
 	}
 
 	// Configure service URLs based on connection mode:
@@ -2843,6 +2873,9 @@ var (
 		"flight-recorder": "FLIGHTRECORDER=true",
 		"mux-fec":         "MUXFEC=true",
 		"hv-ui-disable":   "HVUIDISABLE=true",
+		"pty-persist":     "PTYPERSIST=true",
+		"no-dmsgscp":      "NODMSGSCP=true",
+		"no-stats":        "NOSTATS=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2865,6 +2898,10 @@ var (
 		"wallet-remote":      "WALLETREMOTE",
 		"disableapps":        "DISABLEAPPS",
 		"wisp-socks":         "WISPSOCKS",
+		"log-hook-level":     "LOGHOOKLEVEL",
+		"log-server-addr":    "LOGSERVERADDR",
+		"pty-ssh-listen":     "PTYSSHLISTEN",
+		"dmsgscp-root":       "DMSGSCPROOT",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
 	intFlagToEnv = map[string]string{
@@ -2873,6 +2910,7 @@ var (
 		"sudph":              "SUDPHPORT",
 		"min-hops":           "MINHOPS",
 		"ar-transport-limit": "ARTRANSPORTLIMIT",
+		"stats-retention":    "STATSRETENTION",
 	}
 	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
 	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties

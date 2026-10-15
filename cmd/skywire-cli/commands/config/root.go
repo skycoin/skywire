@@ -142,6 +142,14 @@ var (
 	rfConfig                   bool
 	externalApps               bool
 	enableCalculateRoutes      bool
+	logHookLevel               string
+	logServerAddr              string
+	ptySSHListen               string
+	ptyPersist                 bool
+	noDmsgscp                  bool
+	dmsgscpRoot                string
+	noStats                    bool
+	statsRetention             int
 	enableFlightRecorder       bool
 	enableMuxFEC               bool
 	hvUIDisable                bool
