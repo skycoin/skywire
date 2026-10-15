@@ -950,6 +950,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	v.logBcast = logBcast
 	v.logstore = logStore
 	v.services = NewServiceRegistry()
+	v.services.SetSelfDialFallback(v.selfDialForwarded)
 	// Constructed eagerly rather than as an init module: the hub has no
 	// dependencies and locks internally, and building it here removes any
 	// window where an app publishing early finds a nil hub.

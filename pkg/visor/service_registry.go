@@ -36,6 +36,9 @@ type ConnHandler func(conn net.Conn)
 type ServiceRegistry struct {
 	mu       sync.RWMutex
 	handlers map[uint16]registeredService
+	// fallback serves a self-dial for a port with no handler, such as a
+	// forwarded port. Set once, before any dial.
+	fallback func(port uint16) (net.Conn, error)
 }
 
 type registeredService struct {
@@ -98,6 +101,9 @@ func (r *ServiceRegistry) Get(port uint16) (ConnHandler, bool) {
 func (r *ServiceRegistry) SelfDial(port uint16) (net.Conn, error) {
 	h, ok := r.Get(port)
 	if !ok {
+		if r.fallback != nil {
+			return r.fallback(port)
+		}
 		return nil, fmt.Errorf("no local service registered on port %d", port)
 	}
 	clientEnd, serverEnd := net.Pipe()
@@ -121,6 +127,9 @@ func (r *ServiceRegistry) SelfDial(port uint16) (net.Conn, error) {
 func (r *ServiceRegistry) SelfDialAs(port uint16, remotePK cipher.PubKey) (net.Conn, error) {
 	h, ok := r.Get(port)
 	if !ok {
+		if r.fallback != nil {
+			return r.fallback(port)
+		}
 		return nil, fmt.Errorf("no local service registered on port %d", port)
 	}
 	clientEnd, serverEnd := net.Pipe()
@@ -257,3 +266,8 @@ func (l *singleConnListener) Addr() net.Addr {
 // overTransportConn marks a connection the skynet forwarding server took in
 // over a skywire transport, so an HTTP handler can tell it from a dmsg one.
 type overTransportConn struct{ net.Conn }
+
+// SetSelfDialFallback sets what serves a self-dial for a port with no handler.
+func (r *ServiceRegistry) SetSelfDialFallback(f func(port uint16) (net.Conn, error)) {
+	r.fallback = f
+}
