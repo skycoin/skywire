@@ -92,8 +92,8 @@ func (e *meshEgress) serveDNS(ctx context.Context, conn net.Conn, server string)
 		if err != nil {
 			return
 		}
-		ans, err := e.answerMesh(q)
-		if errors.Is(err, errNotMesh) {
+		ans, err := e.answerLocal(q)
+		if errors.Is(err, errForward) {
 			if up == nil {
 				if up, err = e.next.DialTCP(ctx, server, 53); err != nil {
 					return
@@ -109,23 +109,25 @@ func (e *meshEgress) serveDNS(ctx context.Context, conn net.Conn, server string)
 	}
 }
 
-var errNotMesh = errors.New("not a mesh name")
+var errForward = errors.New("for the resolver the guest asked")
 
-// answerMesh answers a query for a mesh name, or returns errNotMesh.
-func (e *meshEgress) answerMesh(raw []byte) ([]byte, error) {
+// answerLocal answers a query for a mesh name, and an IPv6 query for any
+// name, or returns errForward. The guest network is IPv4 only, so an IPv6
+// answer only sends a program to an address it cannot reach.
+func (e *meshEgress) answerLocal(raw []byte) ([]byte, error) {
 	var q dns.Msg
 	if err := q.Unpack(raw); err != nil || len(q.Question) != 1 {
-		return nil, errNotMesh
+		return nil, errForward
 	}
 	question := q.Question[0]
 	scheme := meshScheme(question.Name)
-	if scheme == "" {
-		return nil, errNotMesh
+	if scheme == "" && question.Qtype != dns.TypeAAAA {
+		return nil, errForward
 	}
 	m := new(dns.Msg)
 	m.SetReply(&q)
 	m.Authoritative = true
-	if question.Qtype == dns.TypeA {
+	if scheme != "" && question.Qtype == dns.TypeA {
 		ip, err := e.gw.Resolve(scheme, question.Name)
 		if err != nil {
 			m.Rcode = dns.RcodeNameError

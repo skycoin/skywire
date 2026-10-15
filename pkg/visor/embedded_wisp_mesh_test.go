@@ -146,3 +146,44 @@ func TestWispMeshEgress(t *testing.T) {
 		t.Fatalf("exit dials = %v, want the example.com lookup and connection only", exit.dials)
 	}
 }
+
+// TestWispIPv6LookupsGetNoAnswer: the guest network is IPv4 only, so an IPv6
+// lookup is answered empty here and never reaches the exit.
+func TestWispIPv6LookupsGetNoAnswer(t *testing.T) {
+	gw, err := meshgw.New(func(context.Context, string, cipher.PubKey, uint16) (net.Conn, error) {
+		return nil, errors.New("no mesh")
+	}, wispMeshCIDR, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exit := &fakeExit{}
+	e := &meshEgress{next: exit, gw: gw}
+
+	conn, err := e.DialTCP(context.Background(), "1.1.1.1", 53)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close() //nolint:errcheck
+	q := new(dns.Msg)
+	q.SetQuestion("ifconfig.me.", dns.TypeAAAA)
+	b, _ := q.Pack() //nolint:errcheck
+	if err := writeDNSFrame(conn, b); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := readDNSFrame(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m dns.Msg
+	if err := m.Unpack(raw); err != nil {
+		t.Fatal(err)
+	}
+	if m.Rcode != dns.RcodeSuccess || len(m.Answer) != 0 {
+		t.Fatalf("AAAA answer: rcode %d, %d records, want an empty success", m.Rcode, len(m.Answer))
+	}
+	exit.mu.Lock()
+	defer exit.mu.Unlock()
+	if len(exit.dials) != 0 {
+		t.Fatalf("exit dials = %v, want none", exit.dials)
+	}
+}
