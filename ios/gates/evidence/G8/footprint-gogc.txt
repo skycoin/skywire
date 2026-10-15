@@ -1,0 +1,20 @@
+Go's share in the app, iOS 27.0 Simulator "M8b iPhone 17e", connected, outside XCUITest,
+40 MiB limit, sampled every 15 s with footprint(1) as ios/scripts/footprint-table.py does.
+Launched with -core.wantsConnected YES. GOGC from the environment (SIMCTL_CHILD_GOGC) or the core's iOS default.
+
+GOGC=50 from the environment (footprint-17e-gogc50-env.tsv):
+60-660s: n=40 phys median 55.3 MiB, Go median 30.3 MiB (range 25.7-32.4)
+300-660s: n=24 phys median 55.4 MiB, Go median 30.3 MiB (range 25.7-32.4)
+
+GOGC=50 as the core's default, log "GOGC set to 50 on iOS (was 100)", GODEBUG=gctrace=1 (footprint-17e-gogc50.tsv):
+60-660s: n=40 phys median 56.2 MiB, Go median 31.0 MiB (range 28.6-35.0)
+300-660s: n=24 phys median 56.9 MiB, Go median 31.7 MiB (range 29.5-35.0)
+gctrace: 56 collections in 643 s, last: gc 56 @643.404s 0%: 0.12+4.1+0.007 ms clock, 1.0+0.089/7.1/3.1+0.061 ms cpu, 19->19->12 MB, 20 MB goal, 0 MB stacks, 0 MB globals, 8 P
+
+GOGC=25 from the environment, GODEBUG=gctrace=1 (footprint-17e-gogc25-env.tsv):
+60-660s: n=40 phys median 50.0 MiB, Go median 24.8 MiB (range 22.0-27.2)
+300-660s: n=24 phys median 50.7 MiB, Go median 25.5 MiB (range 23.0-27.2)
+gctrace: 147 collections in 652 s, last: gc 147 @652.244s 0%: 0.053+1.4+0.004 ms clock, 0.42+0.71/2.4/2.5+0.032 ms cpu, 15->15->12 MB, 15 MB goal, 0 MB stacks, 0 MB globals, 8 P
+
+For comparison, GOGC=100 (footprint-18pro-fix2-limit40.txt, the author's 18 Pro run before the review):
+5-10 min Go median 36.8 MiB, 26 collections (runtime stats).

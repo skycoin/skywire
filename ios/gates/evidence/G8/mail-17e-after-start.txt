@@ -1,0 +1,27 @@
+The phone's discovery entry and the peer's mail to it after a start, "M8b iPhone 17e" with the
+author's peer (../peer-m8, 0284c698…). Launched with -core.wantsConnected YES at +0 s. Every 5 s the
+entry was read through the peer (skywire-cli dmsg curl --rpc localhost:13435
+dmsg://022e607e…:80/dmsg-discovery/entry/<phone pk>), and every 10 s the peer sent the phone a mail
+through its API. The +3 s entry is the previous run's (sequence 10). From +9 s the phone had published a
+new one (sequence 12), unchanged to the end. In the run before, done the same way, the entry listed exactly
+the two servers the phone's log shows it connected to (0371ab4b at +1 s, 02a2d4c3 at +5 s).
+
+pk 036e24796f8abdc6eb33d5965c2fe9981c18c8f36d35fa58dfa07e93c66f0d19f9 addr mail@anxci6lprk64n2zt2wlfyl7jtaobrshtnu27uwg7ub7jhrtpbum7s.dmsg
+launch 11:54:42
+end 11:57:40
+
+entry (count, time of the first, sequence and delegated servers):
+   1 +3s seq 10 srv ['02a2d4c3', '0371ab4b']
+  22 +9s seq 12 srv ['02a2d4c3', '0281a102']
+
+mail sends (start..answer, the peer API's answer):
++0s..+23s EXC RemoteDisconnected Remote end closed connection without response
++33s..+45s EXC RemoteDisconnected Remote end closed connection without response
++55s..+63s 200 via=dmsg err=None
++73s..+82s 200 via=dmsg err=None
++92s..+101s 200 via=dmsg err=None
++111s..+134s EXC RemoteDisconnected Remote end closed connection without response
++144s..+168s EXC RemoteDisconnected Remote end closed connection without response
+
+The peer's log has "skymailbridge: relayed envelope … rcpts=1" for every one of the seven sends,
+including the four whose answer the peer's API dropped at its 10 s WriteTimeout.
