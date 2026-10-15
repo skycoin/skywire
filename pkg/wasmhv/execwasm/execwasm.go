@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -44,8 +45,7 @@ func DefaultPath() string {
 		if p, err := filepath.EvalSymlinks(exe); err == nil {
 			exe = p
 		}
-		cache, _ := os.UserCacheDir() //nolint:errcheck // no cache dir leaves the binary's
-		defaultPath = pathIn(filepath.Dir(exe), cache)
+		defaultPath = pathIn(filepath.Dir(exe), cacheDirs()...)
 	})
 	return defaultPath
 }
@@ -55,18 +55,35 @@ var (
 	defaultPath string
 )
 
+// cacheDirs are where the module can go when the binary's directory cannot
+// be written. A systemd service often has no $HOME, so os.UserCacheDir fails
+// there; the unit's own CacheDirectory= or StateDirectory= is used instead.
+func cacheDirs() []string {
+	var dirs []string
+	if d, err := os.UserCacheDir(); err == nil && d != "" {
+		dirs = append(dirs, filepath.Join(d, "skywire"))
+	}
+	for _, env := range []string{"CACHE_DIRECTORY", "STATE_DIRECTORY"} {
+		if d, _, _ := strings.Cut(os.Getenv(env), ":"); d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	return append(dirs, filepath.Join(os.TempDir(), "skywire"))
+}
+
 // pathIn picks the module beside the binary in dir when it exists there or dir
-// is writable, else the one under cache, which is created.
-func pathIn(dir, cache string) string {
+// is writable, else the one in the first of caches that can be written.
+func pathIn(dir string, caches ...string) string {
 	beside := filepath.Join(dir, ModuleName)
-	if _, err := os.Stat(beside); err == nil || cache == "" || writable(dir) {
+	if _, err := os.Stat(beside); err == nil || writable(dir) {
 		return beside
 	}
-	cached := filepath.Join(cache, "skywire", ModuleName)
-	if err := os.MkdirAll(filepath.Dir(cached), 0o755); err != nil { //nolint:gosec // the module is public
-		return beside
+	for _, c := range caches {
+		if os.MkdirAll(c, 0o755) == nil && writable(c) { //nolint:gosec // the module is public
+			return filepath.Join(c, ModuleName)
+		}
 	}
-	return cached
+	return beside
 }
 
 // writable reports whether a file can be created in dir.
