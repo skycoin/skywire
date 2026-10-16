@@ -40,6 +40,8 @@ func (a *AddressableEndpointState) StateFields() []string {
 	return []string{
 		"networkEndpoint",
 		"options",
+		"endpoints",
+		"primary",
 	}
 }
 
@@ -50,6 +52,8 @@ func (a *AddressableEndpointState) StateSave(stateSinkObject state.Sink) {
 	a.beforeSave()
 	stateSinkObject.Save(0, &a.networkEndpoint)
 	stateSinkObject.Save(1, &a.options)
+	stateSinkObject.Save(2, &a.endpoints)
+	stateSinkObject.Save(3, &a.primary)
 }
 
 func (a *AddressableEndpointState) afterLoad(context.Context) {}
@@ -58,6 +62,8 @@ func (a *AddressableEndpointState) afterLoad(context.Context) {}
 func (a *AddressableEndpointState) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &a.networkEndpoint)
 	stateSourceObject.Load(1, &a.options)
+	stateSourceObject.LoadWait(2, &a.endpoints)
+	stateSourceObject.Load(3, &a.primary)
 }
 
 func (a *AddressableEndpointStateOptions) StateTypeName() string {
@@ -83,6 +89,52 @@ func (a *AddressableEndpointStateOptions) afterLoad(context.Context) {}
 // +checklocksignore
 func (a *AddressableEndpointStateOptions) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &a.HiddenWhileDisabled)
+}
+
+func (a *addressState) StateTypeName() string {
+	return "pkg/tcpip/stack.addressState"
+}
+
+func (a *addressState) StateFields() []string {
+	return []string{
+		"addressableEndpointState",
+		"addr",
+		"subnet",
+		"temporary",
+		"refs",
+		"kind",
+		"configType",
+		"lifetimes",
+	}
+}
+
+func (a *addressState) beforeSave() {}
+
+// +checklocksignore
+func (a *addressState) StateSave(stateSinkObject state.Sink) {
+	a.beforeSave()
+	stateSinkObject.Save(0, &a.addressableEndpointState)
+	stateSinkObject.Save(1, &a.addr)
+	stateSinkObject.Save(2, &a.subnet)
+	stateSinkObject.Save(3, &a.temporary)
+	stateSinkObject.Save(4, &a.refs)
+	stateSinkObject.Save(5, &a.kind)
+	stateSinkObject.Save(6, &a.configType)
+	stateSinkObject.Save(7, &a.lifetimes)
+}
+
+func (a *addressState) afterLoad(context.Context) {}
+
+// +checklocksignore
+func (a *addressState) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+	stateSourceObject.Load(0, &a.addressableEndpointState)
+	stateSourceObject.Load(1, &a.addr)
+	stateSourceObject.Load(2, &a.subnet)
+	stateSourceObject.Load(3, &a.temporary)
+	stateSourceObject.Load(4, &a.refs)
+	stateSourceObject.Load(5, &a.kind)
+	stateSourceObject.Load(6, &a.configType)
+	stateSourceObject.Load(7, &a.lifetimes)
 }
 
 func (p *bridgePort) StateTypeName() string {
@@ -661,6 +713,7 @@ func (mt *MasqueradeTarget) StateTypeName() string {
 func (mt *MasqueradeTarget) StateFields() []string {
 	return []string{
 		"NetworkProtocol",
+		"Ports",
 	}
 }
 
@@ -670,6 +723,7 @@ func (mt *MasqueradeTarget) beforeSave() {}
 func (mt *MasqueradeTarget) StateSave(stateSinkObject state.Sink) {
 	mt.beforeSave()
 	stateSinkObject.Save(0, &mt.NetworkProtocol)
+	stateSinkObject.Save(1, &mt.Ports)
 }
 
 func (mt *MasqueradeTarget) afterLoad(context.Context) {}
@@ -677,6 +731,7 @@ func (mt *MasqueradeTarget) afterLoad(context.Context) {}
 // +checklocksignore
 func (mt *MasqueradeTarget) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &mt.NetworkProtocol)
+	stateSourceObject.Load(1, &mt.Ports)
 }
 
 func (c *CTTarget) StateTypeName() string {
@@ -864,6 +919,34 @@ func (fl *IPHeaderFilter) StateLoad(ctx context.Context, stateSourceObject state
 	stateSourceObject.Load(13, &fl.OutputInterfaceInvert)
 }
 
+func (p *PortOrIdentRange) StateTypeName() string {
+	return "pkg/tcpip/stack.PortOrIdentRange"
+}
+
+func (p *PortOrIdentRange) StateFields() []string {
+	return []string{
+		"Start",
+		"Size",
+	}
+}
+
+func (p *PortOrIdentRange) beforeSave() {}
+
+// +checklocksignore
+func (p *PortOrIdentRange) StateSave(stateSinkObject state.Sink) {
+	p.beforeSave()
+	stateSinkObject.Save(0, &p.Start)
+	stateSinkObject.Save(1, &p.Size)
+}
+
+func (p *PortOrIdentRange) afterLoad(context.Context) {}
+
+// +checklocksignore
+func (p *PortOrIdentRange) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+	stateSourceObject.Load(0, &p.Start)
+	stateSourceObject.Load(1, &p.Size)
+}
+
 func (d *dynamicCacheEntry) StateTypeName() string {
 	return "pkg/tcpip/stack.dynamicCacheEntry"
 }
@@ -1022,6 +1105,8 @@ func (n *neighborEntryMu) StateFields() []string {
 		"neigh",
 		"isRouter",
 		"timer",
+		"localAddr",
+		"pendingPackets",
 	}
 }
 
@@ -1033,6 +1118,8 @@ func (n *neighborEntryMu) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(0, &n.neigh)
 	stateSinkObject.Save(1, &n.isRouter)
 	stateSinkObject.Save(2, &n.timer)
+	stateSinkObject.Save(3, &n.localAddr)
+	stateSinkObject.Save(4, &n.pendingPackets)
 }
 
 func (n *neighborEntryMu) afterLoad(context.Context) {}
@@ -1042,6 +1129,8 @@ func (n *neighborEntryMu) StateLoad(ctx context.Context, stateSourceObject state
 	stateSourceObject.Load(0, &n.neigh)
 	stateSourceObject.Load(1, &n.isRouter)
 	stateSourceObject.Load(2, &n.timer)
+	stateSourceObject.Load(3, &n.localAddr)
+	stateSourceObject.Load(4, &n.pendingPackets)
 }
 
 func (e *neighborEntry) StateTypeName() string {
@@ -1227,7 +1316,7 @@ func (n *nic) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(4, &n.kind)
 	stateSourceObject.Load(5, &n.context)
 	stateSourceObject.Load(6, &n.stats)
-	stateSourceObject.Load(7, &n.networkEndpoints)
+	stateSourceObject.LoadWait(7, &n.networkEndpoints)
 	stateSourceObject.Load(8, &n.linkAddrResolvers)
 	stateSourceObject.Load(9, &n.duplicateAddressDetectors)
 	stateSourceObject.Load(10, &n.enabled)
@@ -1780,11 +1869,10 @@ func (f *packetsPendingLinkResolution) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(0, &f.nic)
 }
 
-func (f *packetsPendingLinkResolution) afterLoad(context.Context) {}
-
 // +checklocksignore
 func (f *packetsPendingLinkResolution) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &f.nic)
+	stateSourceObject.AfterLoad(func() { f.afterLoad(ctx) })
 }
 
 func (t *TransportEndpointID) StateTypeName() string {
@@ -2139,9 +2227,12 @@ func (s *Stack) StateFields() []string {
 		"demux",
 		"stats",
 		"defaultForwardingEnabled",
+		"preservedNICs",
+		"preservedRoutes",
 		"cleanupEndpoints",
 		"PortManager",
 		"clock",
+		"clockResolution",
 		"handleLocal",
 		"nftablesConfigured",
 		"restoredEndpoints",
@@ -2169,23 +2260,26 @@ func (s *Stack) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(4, &s.demux)
 	stateSinkObject.Save(5, &s.stats)
 	stateSinkObject.Save(6, &s.defaultForwardingEnabled)
-	stateSinkObject.Save(7, &s.cleanupEndpoints)
-	stateSinkObject.Save(8, &s.PortManager)
-	stateSinkObject.Save(9, &s.clock)
-	stateSinkObject.Save(10, &s.handleLocal)
-	stateSinkObject.Save(11, &s.nftablesConfigured)
-	stateSinkObject.Save(12, &s.restoredEndpoints)
-	stateSinkObject.Save(13, &s.resumableEndpoints)
-	stateSinkObject.Save(14, &s.icmpRateLimiter)
-	stateSinkObject.Save(15, &s.seed)
-	stateSinkObject.Save(16, &s.nudConfigs)
-	stateSinkObject.Save(17, &s.nudDisp)
-	stateSinkObject.Save(18, &s.sendBufferSize)
-	stateSinkObject.Save(19, &s.receiveBufferSize)
-	stateSinkObject.Save(20, &s.tcpInvalidRateLimit)
-	stateSinkObject.Save(21, &s.tsOffsetSecret)
-	stateSinkObject.Save(22, &s.externalNetworkingDisabled)
-	stateSinkObject.Save(23, &s.allowConnectedOnSave)
+	stateSinkObject.Save(7, &s.preservedNICs)
+	stateSinkObject.Save(8, &s.preservedRoutes)
+	stateSinkObject.Save(9, &s.cleanupEndpoints)
+	stateSinkObject.Save(10, &s.PortManager)
+	stateSinkObject.Save(11, &s.clock)
+	stateSinkObject.Save(12, &s.clockResolution)
+	stateSinkObject.Save(13, &s.handleLocal)
+	stateSinkObject.Save(14, &s.nftablesConfigured)
+	stateSinkObject.Save(15, &s.restoredEndpoints)
+	stateSinkObject.Save(16, &s.resumableEndpoints)
+	stateSinkObject.Save(17, &s.icmpRateLimiter)
+	stateSinkObject.Save(18, &s.seed)
+	stateSinkObject.Save(19, &s.nudConfigs)
+	stateSinkObject.Save(20, &s.nudDisp)
+	stateSinkObject.Save(21, &s.sendBufferSize)
+	stateSinkObject.Save(22, &s.receiveBufferSize)
+	stateSinkObject.Save(23, &s.tcpInvalidRateLimit)
+	stateSinkObject.Save(24, &s.tsOffsetSecret)
+	stateSinkObject.Save(25, &s.externalNetworkingDisabled)
+	stateSinkObject.Save(26, &s.allowConnectedOnSave)
 }
 
 // +checklocksignore
@@ -2197,23 +2291,26 @@ func (s *Stack) StateLoad(ctx context.Context, stateSourceObject state.Source) {
 	stateSourceObject.Load(4, &s.demux)
 	stateSourceObject.Load(5, &s.stats)
 	stateSourceObject.Load(6, &s.defaultForwardingEnabled)
-	stateSourceObject.Load(7, &s.cleanupEndpoints)
-	stateSourceObject.Load(8, &s.PortManager)
-	stateSourceObject.Load(9, &s.clock)
-	stateSourceObject.Load(10, &s.handleLocal)
-	stateSourceObject.Load(11, &s.nftablesConfigured)
-	stateSourceObject.Load(12, &s.restoredEndpoints)
-	stateSourceObject.Load(13, &s.resumableEndpoints)
-	stateSourceObject.Load(14, &s.icmpRateLimiter)
-	stateSourceObject.Load(15, &s.seed)
-	stateSourceObject.Load(16, &s.nudConfigs)
-	stateSourceObject.Load(17, &s.nudDisp)
-	stateSourceObject.Load(18, &s.sendBufferSize)
-	stateSourceObject.Load(19, &s.receiveBufferSize)
-	stateSourceObject.Load(20, &s.tcpInvalidRateLimit)
-	stateSourceObject.Load(21, &s.tsOffsetSecret)
-	stateSourceObject.Load(22, &s.externalNetworkingDisabled)
-	stateSourceObject.Load(23, &s.allowConnectedOnSave)
+	stateSourceObject.Load(7, &s.preservedNICs)
+	stateSourceObject.Load(8, &s.preservedRoutes)
+	stateSourceObject.Load(9, &s.cleanupEndpoints)
+	stateSourceObject.Load(10, &s.PortManager)
+	stateSourceObject.Load(11, &s.clock)
+	stateSourceObject.Load(12, &s.clockResolution)
+	stateSourceObject.Load(13, &s.handleLocal)
+	stateSourceObject.Load(14, &s.nftablesConfigured)
+	stateSourceObject.Load(15, &s.restoredEndpoints)
+	stateSourceObject.Load(16, &s.resumableEndpoints)
+	stateSourceObject.Load(17, &s.icmpRateLimiter)
+	stateSourceObject.Load(18, &s.seed)
+	stateSourceObject.Load(19, &s.nudConfigs)
+	stateSourceObject.Load(20, &s.nudDisp)
+	stateSourceObject.Load(21, &s.sendBufferSize)
+	stateSourceObject.Load(22, &s.receiveBufferSize)
+	stateSourceObject.Load(23, &s.tcpInvalidRateLimit)
+	stateSourceObject.Load(24, &s.tsOffsetSecret)
+	stateSourceObject.Load(25, &s.externalNetworkingDisabled)
+	stateSourceObject.Load(26, &s.allowConnectedOnSave)
 	stateSourceObject.AfterLoad(func() { s.afterLoad(ctx) })
 }
 
@@ -2469,6 +2566,7 @@ func init() {
 	state.Register((*addressStateRefs)(nil))
 	state.Register((*AddressableEndpointState)(nil))
 	state.Register((*AddressableEndpointStateOptions)(nil))
+	state.Register((*addressState)(nil))
 	state.Register((*bridgePort)(nil))
 	state.Register((*BridgeEndpoint)(nil))
 	state.Register((*tuple)(nil))
@@ -2493,6 +2591,7 @@ func init() {
 	state.Register((*Table)(nil))
 	state.Register((*Rule)(nil))
 	state.Register((*IPHeaderFilter)(nil))
+	state.Register((*PortOrIdentRange)(nil))
 	state.Register((*dynamicCacheEntry)(nil))
 	state.Register((*neighborCacheMu)(nil))
 	state.Register((*neighborCache)(nil))

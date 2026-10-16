@@ -922,6 +922,15 @@ type NetworkEndpoint interface {
 	Stats() NetworkEndpointStats
 }
 
+// RestorableNetworkEndpoint is a network endpoint that needs to restore state
+// after being loaded from a checkpoint.
+type RestorableNetworkEndpoint interface {
+	NetworkEndpoint
+
+	// Restore restores the network endpoint after a checkpoint load.
+	Restore()
+}
+
 // NetworkEndpointStats is the interface implemented by each network endpoint
 // stats struct.
 type NetworkEndpointStats interface {
@@ -1498,7 +1507,3 @@ type GSOEndpoint interface {
 	// SupportedGSO returns the supported segmentation offloading.
 	SupportedGSO() SupportedGSO
 }
-
-// GVisorGSOMaxSize is a maximum allowed size of a software GSO segment.
-// This isn't a hard limit, because it is never set into packet headers.
-const GVisorGSOMaxSize = 1 << 16

@@ -87,7 +87,9 @@ type Config struct {
 	EnabledAPISets     map[string]struct{}
 	Username           string
 	Password           string
-	ShutdownChan       chan struct{} // when closed, triggers daemon shutdown
+	// WebWallet, when set, is served at the site root in place of the GUI.
+	WebWallet    http.Handler
+	ShutdownChan chan struct{} // when closed, triggers daemon shutdown
 }
 
 // HealthConfig configuration data exposed in /health
@@ -116,6 +118,7 @@ type muxConfig struct {
 	password           string
 	health             HealthConfig
 	shutdownChan       chan struct{}
+	webWallet          http.Handler
 }
 
 // HTTPResponse represents the http response struct
@@ -192,6 +195,10 @@ func create(host string, c Config, gateway Gatewayer) (*Server, error) {
 		logger.Infof("Web resources directory: %s", appLoc)
 	}
 
+	if c.EnableGUI && c.WebWallet != nil {
+		return nil, errors.New("the GUI and the web wallet cannot both be served")
+	}
+
 	if c.DisableCSRF {
 		logger.Warning("CSRF check disabled")
 	}
@@ -223,6 +230,7 @@ func create(host string, c Config, gateway Gatewayer) (*Server, error) {
 		username:           c.Username,
 		password:           c.Password,
 		shutdownChan:       c.ShutdownChan,
+		webWallet:          c.WebWallet,
 	}
 
 	srvMux := newServerMux(mc, gateway)
@@ -481,6 +489,9 @@ func newServerMux(c muxConfig, gateway Gatewayer) *http.ServeMux {
 	}
 	if !c.disableCSP && indexHandler != nil {
 		indexHandler = CSPHandler(indexHandler, ContentSecurityPolicy)
+	}
+	if c.webWallet != nil {
+		mux.Handle("/", gzhttp.GzipHandler(c.webWallet))
 	}
 	if indexHandler != nil {
 		webHandler(apiVersion1, "/", indexHandler, nil)

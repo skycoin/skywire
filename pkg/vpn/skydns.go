@@ -6,7 +6,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skydns"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
@@ -31,5 +33,10 @@ type SkyDNSConfig struct {
 	// Upstream is the resolver for every other name, an IP. Empty means the
 	// phone's own, as the app reports them.
 	Upstream string
-	Log      logrus.FieldLogger
+	// Minter, when set, terminates HTTPS to mesh names with leaves from a
+	// local CA the device trusts. Without it only plain HTTP reaches them.
+	Minter skynetca.LeafMinter
+	// Aliases maps names such as "home" to the visors they stand for.
+	Aliases map[string]cipher.PubKey
+	Log     logrus.FieldLogger
 }

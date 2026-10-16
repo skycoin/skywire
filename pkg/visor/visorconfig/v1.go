@@ -20,7 +20,6 @@ type V1 struct {
 	Dmsg      *dmsgspec.DmsgConfig `json:"dmsg"`
 	Pty       *Pty                 `json:"pty,omitempty"`
 	Dmsgscp   *Dmsgscp             `json:"dmsgscp,omitempty"`
-	UIServer  *UIServer            `json:"ui_server,omitempty"`
 	LogServer *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb   *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb *SkynetWebConfig     `json:"skynet_web,omitempty"`
@@ -93,6 +92,7 @@ type V1 struct {
 	LogLevel             string                       `json:"log_level"`
 	LogHookLevel         string                       `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
 	LocalPath            string                       `json:"local_path"`
+	Skyenv               string                       `json:"skyenv,omitempty"` // the skywire.conf config gen read; live changes are written back there
 	StunServers          []string                     `json:"stun_servers"`
 	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
 	IsPublic             bool                         `json:"is_public"`
@@ -260,15 +260,6 @@ type Dmsgscp struct {
 	// Whitelist optionally overrides the dmsgpty whitelist. When
 	// nil or empty, init reuses Pty.Whitelist.
 	Whitelist []cipher.PubKey `json:"whitelist,omitempty"`
-}
-
-// UIServer configures the visor UI server (serves tp-viz and other UIs).
-type UIServer struct {
-	Enable        bool            `json:"enable"`         // Enable the UI server
-	LocalAddr     string          `json:"local_addr"`     // Local HTTP address (default: localhost:8081)
-	DmsgPort      uint16          `json:"dmsg_port"`      // DMSG port to serve on (default: 81, 0 to disable)
-	DmsgWhitelist []cipher.PubKey `json:"dmsg_whitelist"` // Keys allowed to access via DMSG
-	SurveyDir     string          `json:"survey_dir"`     // Directory with visor surveys for IP-based grouping
 }
 
 // Stats configures the visor-local telemetry store. Defaults are

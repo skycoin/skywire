@@ -199,7 +199,38 @@ func TestPullLocalResolversPicksUpALateResolver(t *testing.T) {
 	require.Equal(t, 2, calls)
 	require.NotNil(t, c.localResolvers())
 
-	// With a set in hand it stops asking: a change lands on the next cycle.
+	// With a set in hand it keeps asking, so a resolver that publishes later is
+	// picked up (see TestPullLocalResolversAddsALaterSuffix).
 	c.pullLocalResolvers(now.Add(10 * localResolverRefreshInterval))
-	require.Equal(t, 2, calls)
+	require.Equal(t, 3, calls)
+}
+
+// TestPullLocalResolversAddsALaterSuffix: the visor started dmsg_web before
+// skynet_web, so the first set had only .dmsg. Holding that set used to stop
+// the re-reads, and every .skynet name went to the exit until the next cycle.
+func TestPullLocalResolversAddsALaterSuffix(t *testing.T) {
+	dial := func(routing.Port) (net.Conn, error) { return nil, nil }
+	dmsgOnly := NewLocalResolvers([]appnet.LocalService{
+		{Port: routing.Port(4445), Label: "dmsg_web", Suffixes: []string{".dmsg"}},
+	}, dial)
+	full := resolverSet(t, dial)
+
+	c := &Client{}
+	answer := dmsgOnly
+	c.SetLocalResolverRefresh(func() *LocalResolvers { return answer })
+
+	now := time.Now()
+	c.pullLocalResolvers(now)
+	_, ok := c.localResolvers().PortFor("x.skynet")
+	require.False(t, ok)
+
+	answer = full
+	c.pullLocalResolvers(now.Add(time.Second))
+	_, ok = c.localResolvers().PortFor("x.skynet")
+	require.False(t, ok, "re-reads stay rate-limited")
+
+	c.pullLocalResolvers(now.Add(localResolverRefreshInterval))
+	port, ok := c.localResolvers().PortFor("x.skynet")
+	require.True(t, ok, "a resolver published later must be picked up")
+	require.Equal(t, routing.Port(4446), port)
 }

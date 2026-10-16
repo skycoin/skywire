@@ -231,7 +231,7 @@ curl https://api.ipify.org      # your public IP == the vpn-server's IP
 ## Mesh gateway — reach `.dmsg` / `.skynet` by name
 
 The router can also let downstream clients reach mesh services **by name** —
-`curl http://<pk>.dmsg`, or open `http://<pk>.skynet` in a browser — with no
+`curl http://<pk>.dmsg`, or open `http://<base32-pk>.skynet` in a browser — with no
 per-device setup and no SOCKS proxy. Enable it with `VPNROUTERMESHGW=true`
 (`--vpnrouter-mesh-gateway`).
 

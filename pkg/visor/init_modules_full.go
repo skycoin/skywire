@@ -123,13 +123,12 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.tc = maker("transportable", initEnsureVisorIsTransportable, &m.dmsgC, &m.tm, &m.stcprC)
 	m.tpdco = maker("tpd_concurrency", initEnsureTPDConcurrency, &m.dmsgC, &m.tm)
 	m.embTPS = maker("embedded_tps", initEmbeddedTPS, &m.dmsgC)
-	m.uiServer = maker("ui_server", initUIServer, &m.dmsgC, &m.tr, &m.embTPS)
 	m.nodeHealth = maker("node_health", initNodeHealth, &m.dmsgC)
 	m.selfProbe = maker("self_probe", initSelfProbe, &m.dmsgC, &m.dmsgHTTPLogServer, &m.rt)
 	// Register localhost ports for skynet forwarding AFTER all
 	// services are up (cli, ui, logserver) so the ports are
 	// actually listening when we probe them.
-	m.skynetPorts = maker("skynet_ports", initSkynetForwardPorts, &m.cli, &m.dmsgHTTPLogServer, &m.uiServer, &m.skyFwd)
+	m.skynetPorts = maker("skynet_ports", initSkynetForwardPorts, &m.cli, &m.dmsgHTTPLogServer, &m.skyFwd)
 	// Stats depends on tr (transport probe), dmsgC (dmsg-online probe),
 	// and launch (proc manager — service probe). The probes are
 	// pull-style and tolerate nil at probe time, so missing-but-still-
@@ -171,7 +170,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// transport). See init_sd_reg_cxo.go.
 	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
-		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.hostBridge, &m.uiServer, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices)
+		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

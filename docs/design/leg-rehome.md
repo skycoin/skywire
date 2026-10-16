@@ -1,5 +1,7 @@
 # Leg re-home: adopting a standby tunnel's chain as a mux leg
 
+> **Status:** implemented, see `pkg/router/leg_rehome.go`.
+
 An ACTIVE route group `G` takes over the already-built route chain of a STANDBY
 route group `S` and runs it as one of its own packet-level mux legs — in place,
 with no setup-node dial. The proxy's standby pool then serves both purposes at

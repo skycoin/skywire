@@ -8,6 +8,7 @@
 package proxyroute
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -23,12 +24,19 @@ import (
 // instead of through a SOCKS5 proxy.
 const Direct = "direct"
 
+// None is the upstream value that refuses the destination, for a resolver that
+// should reach only its own mesh names and never the clearnet.
+const None = "none"
+
+// ErrRefused is the error a dial to a host routed to None returns.
+var ErrRefused = errors.New("refused: the upstream for this host is none")
+
 // Rule sends hosts matching Suffix to Upstream.
 type Rule struct {
 	// Suffix is a domain: "example.com" matches example.com and every
 	// subdomain of it. A leading dot is ignored.
 	Suffix string `json:"suffix"`
-	// Upstream is a SOCKS5 host:port, or "direct".
+	// Upstream is a SOCKS5 host:port, "direct" or "none".
 	Upstream string `json:"upstream"`
 }
 
@@ -54,9 +62,9 @@ func (r Rule) normalized() (Rule, error) {
 	if r.Upstream == "" {
 		return Rule{}, fmt.Errorf("rule %q: empty upstream (use %q to dial directly)", r.String(), Direct)
 	}
-	if r.Upstream != Direct {
+	if r.Upstream != Direct && r.Upstream != None {
 		if _, _, err := net.SplitHostPort(r.Upstream); err != nil {
-			return Rule{}, fmt.Errorf("rule %q: upstream must be host:port or %q", r.String(), Direct)
+			return Rule{}, fmt.Errorf("rule %q: upstream must be host:port, %q or %q", r.String(), Direct, None)
 		}
 	}
 	return r, nil
@@ -129,8 +137,12 @@ type Forwarder struct {
 }
 
 // NewForwarder builds a Forwarder. def is the upstream for hosts no rule
-// matches; empty means direct. rules must already be Normalized.
+// matches; empty or Direct dials directly and None refuses. rules must
+// already be Normalized.
 func NewForwarder(def string, rules []Rule) *Forwarder {
+	if def == Direct {
+		def = ""
+	}
 	return &Forwarder{
 		def:      def,
 		rules:    rules,
@@ -148,6 +160,9 @@ func (f *Forwarder) Upstream(host string) string { return Pick(f.rules, f.def, h
 // Dial connects to addr (host:port) through the upstream its host picks.
 func (f *Forwarder) Dial(network, addr string) (net.Conn, error) {
 	up := f.Upstream(addr)
+	if up == None {
+		return nil, fmt.Errorf("%s: %w", addr, ErrRefused)
+	}
 	if up == "" {
 		return vnet.DialTimeout(network, addr, dialTimeout)
 	}

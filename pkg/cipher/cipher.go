@@ -178,14 +178,28 @@ func (pk PubKey) Big() *big.Int {
 	return new(big.Int).SetBytes(pk[:])
 }
 
-// Set implements pflag.Value for PubKey.
+// Set implements pflag.Value for PubKey. It takes either form of the key.
 func (pk *PubKey) Set(s string) error {
-	cPK, err := cipher.PubKeyFromHex(s)
+	p, err := parsePubKey(s)
 	if err != nil {
 		return err
 	}
-	*pk = PubKey(cPK)
+	*pk = p
 	return nil
+}
+
+// parsePubKey reads a key as 66 hex characters, or as the 53 character
+// base32 label mesh names use (DNSLabel).
+func parsePubKey(s string) (PubKey, error) {
+	if len(s) == PubKeyDNSLabelLen {
+		raw, err := dnsLabelEnc.DecodeString(strings.ToUpper(s))
+		if err != nil {
+			return PubKey{}, fmt.Errorf("cipher: decode base32 key: %w", err)
+		}
+		return NewPubKey(raw)
+	}
+	cPK, err := cipher.PubKeyFromHex(s)
+	return PubKey(cPK), err
 }
 
 // Type implements pflag.Value for PubKey.
@@ -250,6 +264,14 @@ func rememberVerifiedPubKey(pk PubKey) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (pk *PubKey) UnmarshalText(data []byte) error {
 	if bytes.Count(data, []byte("0")) == len(data) {
+		return nil
+	}
+	if len(data) == PubKeyDNSLabelLen {
+		p, err := parsePubKey(string(data))
+		if err != nil {
+			return err
+		}
+		*pk = p
 		return nil
 	}
 

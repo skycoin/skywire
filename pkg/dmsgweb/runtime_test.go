@@ -221,9 +221,9 @@ func TestSOCKS5Passthrough(t *testing.T) {
 		Transport: &http.Transport{Dial: dialer.Dial}, //nolint:staticcheck
 	}
 
-	// A non-.dmsg host on the backend's port → resolves to 127.0.0.1, no
-	// port key set → net.Dial("127.0.0.1:<backendPort>") reaches the backend.
-	resp, err := httpc.Get("http://plain.example:" + backendPort + "/")
+	// A non-.dmsg name on the backend's port is dialed by that name, so it
+	// has to be one that really resolves to the backend: localhost.
+	resp, err := httpc.Get("http://localhost:" + backendPort + "/")
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(resp.Body)
@@ -365,7 +365,7 @@ func TestSOCKS5Upstream(t *testing.T) {
 	require.NoError(t, err)
 	httpc := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Dial: dialer.Dial}} //nolint:staticcheck
 
-	resp, err := httpc.Get("http://plain.example:" + backendPort + "/")
+	resp, err := httpc.Get("http://localhost:" + backendPort + "/")
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
 	body, err := io.ReadAll(resp.Body)

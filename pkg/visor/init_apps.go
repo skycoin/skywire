@@ -5,6 +5,7 @@ package visor
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -504,6 +505,13 @@ func (v *Visor) verifyProxyExitErr(ctx context.Context, log *logging.Logger) (bo
 		n, rerr := io.ReadFull(conn, head)
 		_ = conn.Close() //nolint:errcheck
 		if n > 0 && relayedResponseOK(head[:n]) {
+			// An exit can relay plain HTTP by name and still fail HTTPS or a
+			// connection to an address, which is what browsers and guests use.
+			if err := tlsThroughExit(sd, proxyVerifyTLSAddr); err != nil {
+				lastErr = err
+				log.WithError(err).Debug("proxy verify: HTTP relayed but TLS to an address did not; retrying within window")
+				continue
+			}
 			return true, nil
 		}
 		lastErr = rerr
@@ -1575,4 +1583,25 @@ func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
 		l.log.WithField("remote_pk", pk).Debug("Accepted authorized gRPC connection")
 		return conn, nil
 	}
+}
+
+// proxyVerifyTLSAddr is an address, not a name, so the probe also covers an
+// exit that only relays connections it resolved itself.
+const proxyVerifyTLSAddr = "1.1.1.1:443"
+
+// tlsThroughExit completes a TLS handshake with addr through d. It proves the
+// exit relays both ways on 443; the certificate is not what is being tested.
+func tlsThroughExit(d proxy.Dialer, addr string) error {
+	conn, err := d.Dial("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", addr, err)
+	}
+	defer conn.Close()                                                                                            //nolint:errcheck
+	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))                                                        //nolint:errcheck
+	host, _, _ := net.SplitHostPort(addr)                                                                         //nolint:errcheck
+	tc := tls.Client(conn, &tls.Config{ServerName: host, InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}) //nolint:gosec
+	if err := tc.Handshake(); err != nil {
+		return fmt.Errorf("tls to %s: %w", addr, err)
+	}
+	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -45,6 +46,7 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 // Default timeouts
@@ -130,10 +132,10 @@ func init() {
 	}
 	skyenvStringVarP(genConfigCmd.Flags(), &output, "out", "o", "${OUTPUT}", msg+"")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
-	genConfigCmd.Flags().StringVar(&walletCustody, "wallet-custody", "", "where the skycoin-web wallet keeps keys: browser|disk|remote")
-	genConfigCmd.Flags().StringVar(&walletDir, "wallet-dir", "", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
-	genConfigCmd.Flags().StringVar(&walletRemotePK, "wallet-remote", "", "visor PK holding the wallets, for --wallet-custody=remote")
-	genConfigCmd.Flags().BoolVar(&noWallet, "no-wallet", false, "do not serve the skycoin-web wallet frontend")
+	skyenvStringVar(genConfigCmd.Flags(), &walletCustody, "wallet-custody", "${WALLETCUSTODY}", "where the skycoin-web wallet keeps keys: browser|disk|remote")
+	skyenvStringVar(genConfigCmd.Flags(), &walletDir, "wallet-dir", "${WALLETDIR}", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
+	skyenvStringVar(genConfigCmd.Flags(), &walletRemotePK, "wallet-remote", "${WALLETREMOTE}", "visor PK holding the wallets, for --wallet-custody=remote")
+	skyenvBoolVar(genConfigCmd.Flags(), &noWallet, "no-wallet", "${NOWALLET:-false}", "do not serve the skycoin-web wallet frontend")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
 	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
@@ -206,7 +208,7 @@ func init() {
 	}
 	skyenvArrayVar(genConfigCmd.Flags(), &transportSetupPKs, "tpsetup", "${TPSETUPPKS[@]}", msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
-	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
+	skyenvBoolVar(genConfigCmd.Flags(), &cascadeRouteSetup, "cascade", "${CASCADE:-false}", "opt into source-driven cascade route setup (default: legacy setup-node path)")
 	skyenvStringVar(genConfigCmd.Flags(), &policyPerDial, "policy", "${POLICYPERDIAL}", "per-dial routing policy: preset:<name> (e.g. preset:adaptive), @/path/policy.star, @/path/policy.wasm, inline Starlark, or empty for built-in defaults")
 	gHiddenFlags = append(gHiddenFlags, "policy")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
@@ -225,6 +227,28 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "rf")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableCalculateRoutes, "calculate-routes", "${CALCULATEROUTES:-false}", "enable local route calculation")
 	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableFlightRecorder, "flight-recorder", "${FLIGHTRECORDER:-false}", "keep a rolling execution trace for stall diagnosis")
+	gHiddenFlags = append(gHiddenFlags, "flight-recorder")
+	skyenvBoolVar(genConfigCmd.Flags(), &enableMuxFEC, "mux-fec", "${MUXFEC:-false}", "forward error correction on mux routes")
+	gHiddenFlags = append(gHiddenFlags, "mux-fec")
+	skyenvBoolVar(genConfigCmd.Flags(), &hvUIDisable, "hv-ui-disable", "${HVUIDISABLE:-false}", "run the hypervisor without its web UI")
+	gHiddenFlags = append(gHiddenFlags, "hv-ui-disable")
+	skyenvStringVar(genConfigCmd.Flags(), &logHookLevel, "log-hook-level", "${LOGHOOKLEVEL}", "most verbose level kept for /debug/log (info when empty)")
+	gHiddenFlags = append(gHiddenFlags, "log-hook-level")
+	skyenvStringVar(genConfigCmd.Flags(), &logServerAddr, "log-server-addr", "${LOGSERVERADDR}", "also serve the log server on this local address, without auth")
+	gHiddenFlags = append(gHiddenFlags, "log-server-addr")
+	skyenvStringVar(genConfigCmd.Flags(), &ptySSHListen, "pty-ssh-listen", "${PTYSSHLISTEN}", "direct TCP pty listener address")
+	gHiddenFlags = append(gHiddenFlags, "pty-ssh-listen")
+	skyenvBoolVar(genConfigCmd.Flags(), &ptyPersist, "pty-persist", "${PTYPERSIST:-false}", "keep pty sessions alive across a client disconnect")
+	gHiddenFlags = append(gHiddenFlags, "pty-persist")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgscp, "no-dmsgscp", "${NODMSGSCP:-false}", "do not serve files over dmsgscp")
+	gHiddenFlags = append(gHiddenFlags, "no-dmsgscp")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgscpRoot, "dmsgscp-root", "${DMSGSCPROOT}", "directory dmsgscp serves (local/scp-root when empty)")
+	gHiddenFlags = append(gHiddenFlags, "dmsgscp-root")
+	skyenvBoolVar(genConfigCmd.Flags(), &noStats, "no-stats", "${NOSTATS:-false}", "do not keep or publish local telemetry")
+	gHiddenFlags = append(gHiddenFlags, "no-stats")
+	skyenvIntVar(genConfigCmd.Flags(), &statsRetention, "stats-retention", "${STATSRETENTION:-0}", "days of local telemetry to keep (30 when 0)")
+	gHiddenFlags = append(gHiddenFlags, "stats-retention")
 
 	// Hypervisor and security flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
@@ -263,9 +287,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "publicip")
 	genConfigCmd.Flags().BoolVarP(&addExampleApps, "example-apps", "m", false, "add example apps to the config")
 	gHiddenFlags = append(gHiddenFlags, "example-apps")
-	genConfigCmd.Flags().BoolVar(&externalApps, "external-apps", false, "configure launcher apps as external processes")
+	skyenvBoolVar(genConfigCmd.Flags(), &externalApps, "external-apps", "${EXTERNALAPPS:-false}", "configure launcher apps as external processes")
 	gHiddenFlags = append(gHiddenFlags, "external-apps")
-	genConfigCmd.Flags().StringVarP(&disableApps, "disableapps", "g", "", "comma separated list of apps to disable")
+	skyenvStringVarP(genConfigCmd.Flags(), &disableApps, "disableapps", "g", "${DISABLEAPPS}", "comma separated list of apps to disable")
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	skyenvStringVar(genConfigCmd.Flags(), &binPath, "binpath", "${BINPATH}", "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
@@ -314,13 +338,15 @@ func init() {
 	skyenvBoolVar(genConfigCmd.Flags(), &enableSkynetWeb, "skynetweb", "${SKYNETWEB:-false}", "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
 	skyenvStringVar(genConfigCmd.Flags(), &wispUpstreamSOCKS, "wisp-socks", "${WISPSOCKS}", "SOCKS5 proxy the embedded Wisp server (browser visor only) carries streams over (default: the local skysocks-client)")
 	skyenvBoolVar(genConfigCmd.Flags(), &enableSkymailBridge, "skymail-bridge", "${SKYMAILBRIDGE:-false}", "enable SMTP to skywire bridge on 127.0.0.1:1025")
-	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebUpstreamSOCKS, "dmsgweb-upstream", "${DMSGWEBUPSTREAM}", "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
+	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebUpstreamSOCKS, "dmsgweb-upstream", "${DMSGWEBUPSTREAM}", "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb, direct dials it directly, none refuses it)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
-	skyenvStringVar(genConfigCmd.Flags(), &skynetWebUpstreamSOCKS, "skynetweb-upstream", "${SKYNETWEBUPSTREAM}", "upstream SOCKS5 for non .skynet traffic")
+	skyenvStringVar(genConfigCmd.Flags(), &skynetWebUpstreamSOCKS, "skynetweb-upstream", "${SKYNETWEBUPSTREAM}", "upstream SOCKS5 for non .skynet traffic (empty chains to skysocks-client when it autostarts, direct dials it directly, none refuses it)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-upstream")
 	skyenvStringVar(genConfigCmd.Flags(), &dmsgWebProxyAddr, "dmsgweb-addr", "${DMSGWEBADDR}", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
 	skyenvStringVar(genConfigCmd.Flags(), &skynetWebProxyAddr, "skynetweb-addr", "${SKYNETWEBADDR}", "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	skyenvStringVar(genConfigCmd.Flags(), &resolverCA, "resolver-ca", "${RESOLVERCA}", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)")
+	skyenvBoolVar(genConfigCmd.Flags(), &isSkyDNSEnable, "skydns", fmt.Sprintf("${SKYDNS:-%t}", skyDNSDefault()), "autostart skydns: .dmsg and .skynet names for every program on this host (on by default where systemd-resolved runs and the config is made as root; elsewhere it needs CAP_NET_ADMIN and edits /etc/resolv.conf)")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 	// Additional resolving proxies beyond the two above — each its own port,
 	// bind address and (for a dmsg one) its own dmsg identity. The two
@@ -537,11 +563,7 @@ var genConfigCmd = &cobra.Command{
 		skyenvfile = resolveSkyenvFile()
 		refreshSkyenvDefaults(cmd.Flags())
 		if isEnvs || envfileOut != "" {
-			if skyenv.OS == "windows" {
-				envfile = envfileWindows
-			} else {
-				envfile = envfileLinux
-			}
+			envfile = envfileTemplate
 			// Uncomment settings that match flags passed on the command line
 			envfile = applyFlagsToConf(envfile, cmd)
 
@@ -783,6 +805,7 @@ var genConfigCmd = &cobra.Command{
 		configureLauncher(log)
 
 		configureHypervisor(log)
+		keepPersistentTransports()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1115,6 +1138,16 @@ func mergeExistingApps(log *logging.Logger) {
 	if oldConfCache.DeploymentStatusAddr != "" {
 		conf.DeploymentStatusAddr = oldConfCache.DeploymentStatusAddr
 	}
+	// keyring is the visor's too: the keys it minted for labels and the next
+	// index. Dropping it re-issues an index already in use.
+	if oldConfCache.KeyRing != nil {
+		conf.KeyRing = oldConfCache.KeyRing
+	}
+	// rewards hosts a reward system UI on this visor. config gen has no flag for
+	// it, so a regen keeps it as it was.
+	if oldConfCache.Rewards != nil {
+		conf.Rewards = oldConfCache.Rewards
+	}
 	// host_bridge is written by the visor, when it connects to a host bridge.
 	if oldConfCache.HostBridge != nil {
 		conf.HostBridge = oldConfCache.HostBridge
@@ -1147,6 +1180,15 @@ func mergeExistingApps(log *logging.Logger) {
 			// reach a config that already has them.
 			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
 				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
+			}
+		}
+		// The same for skydns: its CA and autostart come from skywire.conf when set.
+		if name == skyenv.SkyDNSName {
+			if isSkyDNSEnable {
+				conf.Launcher.Apps[i].AutoStart = true
+			}
+			if resolverCA != "" {
+				conf.Launcher.Apps[i].Args = setFlag(conf.Launcher.Apps[i].Args, "--ca", resolverCA)
 			}
 		}
 		// Env belongs with the args it was written for: an old skycoin-web entry
@@ -1392,6 +1434,7 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
+		MuxFEC:             enableMuxFEC,
 		// Default routing policy: "none" (a single route, no mux). The adaptive
 		// composite preset is still maturing — it is not yet reliable under load —
 		// so it is NOT the shipped default. Operators opt in explicitly by setting
@@ -1480,6 +1523,8 @@ func configureLauncher(log *logging.Logger) {
 	}
 	conf.LogLevel = logLevel
 	conf.LocalPath = localPath
+	conf.FlightRecorder = enableFlightRecorder
+	conf.Skyenv = skyenvSource()
 	if stunServers != "" {
 		conf.StunServers = strings.Split(stunServers, ",")
 		for i := range conf.StunServers {
@@ -1528,10 +1573,12 @@ func configureLauncher(log *logging.Logger) {
 
 	dmsgptyAddr := pty.DefaultCLIAddr()
 	conf.Pty = &visorconfig.Pty{
-		DmsgPort:     skyenv.DmsgPtyPort,
-		CLINet:       skyenv.DmsgPtyCLINet,
-		CLIAddr:      dmsgptyAddr,
-		AllowRPCExec: ptyRPCExec,
+		DmsgPort:           skyenv.DmsgPtyPort,
+		CLINet:             skyenv.DmsgPtyCLINet,
+		CLIAddr:            dmsgptyAddr,
+		SshListen:          ptySSHListen,
+		PersistentSessions: ptyPersist,
+		AllowRPCExec:       ptyRPCExec,
 	}
 
 	conf.STCP = &network.STCPConfig{
@@ -1539,17 +1586,17 @@ func configureLauncher(log *logging.Logger) {
 		PKTable:          nil,
 	}
 
-	// UI Server configuration (disabled by default)
-	conf.UIServer = &visorconfig.UIServer{
-		Enable:    false,
-		LocalAddr: "localhost:8081",
-		DmsgPort:  81,
-	}
-
 	// Log Server configuration (localhost serving disabled by default)
 	// Set local_addr to e.g. "localhost:8002" to enable localhost serving without auth
 	conf.LogServer = &visorconfig.LogServer{
-		LocalAddr: "",
+		LocalAddr: logServerAddr,
+	}
+	conf.LogHookLevel = logHookLevel
+	if noDmsgscp || dmsgscpRoot != "" {
+		conf.Dmsgscp = &visorconfig.Dmsgscp{Disabled: noDmsgscp, RootDir: dmsgscpRoot}
+	}
+	if noStats || statsRetention != 0 {
+		conf.Stats = &visorconfig.Stats{Disabled: noStats, RetentionDays: statsRetention}
 	}
 
 	// Configure service URLs based on connection mode:
@@ -1680,6 +1727,19 @@ func configureLauncher(log *logging.Logger) {
 // the desk a hypervisor serves reaches that hypervisor at its own origin.
 var wsPeers string
 
+// keepPersistentTransports carries over on a regen the transports set from the
+// dashboard or "config set". WebSocket ones come from WSPEERS, so they are not kept.
+func keepPersistentTransports() {
+	if !isRegen || oldConfCache == nil {
+		return
+	}
+	for _, pt := range oldConfCache.PersistentTransports {
+		if pt.NetType != tptypes.WS {
+			conf.PersistentTransports = append(conf.PersistentTransports, pt)
+		}
+	}
+}
+
 // configureWSPeers pins each --ws-peer in transport.ws_table (the dialer
 // consults the table before the address resolver) and lists it as a persistent
 // transport, so the visor opens it at boot and re-dials it when it drops.
@@ -1711,7 +1771,10 @@ func configureWSPeers(log *logging.Logger) {
 			conf.Transport.WSTable = map[cipher.PubKey]string{}
 		}
 		conf.Transport.WSTable[pk] = url
-		conf.PersistentTransports = append(conf.PersistentTransports, tspec.PersistentTransports{PK: pk, NetType: tptypes.WS})
+		pt := tspec.PersistentTransports{PK: pk, NetType: tptypes.WS}
+		if !slices.Contains(conf.PersistentTransports, pt) {
+			conf.PersistentTransports = append(conf.PersistentTransports, pt)
+		}
 	}
 }
 
@@ -1779,6 +1842,7 @@ func configureHypervisor(log *logging.Logger) {
 				SK:            lanSK,
 			}
 		}
+		config.UIDisable = hvUIDisable
 		conf.Hypervisor = &config
 	}
 
@@ -2209,9 +2273,9 @@ func configureApps(log *logging.Logger) {
 				// default, since it takes a tun and a share of the host DNS.
 				Name:      skyenv.SkyDNSName,
 				Binary:    "skywire",
-				AutoStart: false,
+				AutoStart: isSkyDNSEnable,
 				Port:      routing.Port(skyenv.SkyDNSPort),
-				Args:      []string{"app", "skydns"},
+				Args:      skydnsArgs([]string{"app", "skydns"}),
 			},
 			{
 				Name:      skyenv.SkydexMarketName,
@@ -2313,8 +2377,8 @@ func configureApps(log *logging.Logger) {
 			},
 			{
 				Name:      skyenv.SkyDNSName,
-				AutoStart: false,
-				Args:      []string{},
+				AutoStart: isSkyDNSEnable,
+				Args:      skydnsArgs(nil),
 				Port:      routing.Port(skyenv.SkyDNSPort),
 			},
 			{
@@ -2553,6 +2617,26 @@ func configureResolvingProxies(log *logging.Logger) {
 			ProxyAddr:     skynetWebProxyAddr,
 		}
 	}
+	// Per-domain upstream rules are written by "skywire cli resolver route", not
+	// by config gen, so a regen keeps them.
+	if isRegen && oldConfCache != nil {
+		if conf.DmsgWeb != nil && oldConfCache.DmsgWeb != nil && len(conf.DmsgWeb.UpstreamRules) == 0 {
+			conf.DmsgWeb.UpstreamRules = oldConfCache.DmsgWeb.UpstreamRules
+		}
+		if conf.SkynetWeb != nil && oldConfCache.SkynetWeb != nil && len(conf.SkynetWeb.UpstreamRules) == 0 {
+			conf.SkynetWeb.UpstreamRules = oldConfCache.SkynetWeb.UpstreamRules
+		}
+	}
+	// Resolver HTTPS comes from the conf too, or the next autoconfig drops it.
+	if resolverCA != "" {
+		crt, key := filepath.Join(resolverCA, "ca.crt"), filepath.Join(resolverCA, "ca.key")
+		if conf.DmsgWeb != nil {
+			conf.DmsgWeb.TLSMITM, conf.DmsgWeb.TLSCAPath, conf.DmsgWeb.TLSCAKeyPath = true, crt, key
+		}
+		if conf.SkynetWeb != nil {
+			conf.SkynetWeb.TLSMITM, conf.SkynetWeb.TLSCAPath, conf.SkynetWeb.TLSCAKeyPath = true, crt, key
+		}
+	}
 	// The embedded Wisp server runs on every browser visor and no native one;
 	// the section only tunes it.
 	if wispUpstreamSOCKS != "" {
@@ -2777,8 +2861,18 @@ var (
 		// left DMSGWEB commented in the conf it emitted, so a later run from
 		// that conf produced a config with no dmsg_web block at all. The proxy
 		// chain was silently off; found live with nothing on 4445 or 4446.
-		"dmsgweb":   "DMSGWEB=true",
-		"skynetweb": "SKYNETWEB=true",
+		"dmsgweb":         "DMSGWEB=true",
+		"skynetweb":       "SKYNETWEB=true",
+		"skydns":          "SKYDNS=true",
+		"no-wallet":       "NOWALLET=true",
+		"cascade":         "CASCADE=true",
+		"external-apps":   "EXTERNALAPPS=true",
+		"flight-recorder": "FLIGHTRECORDER=true",
+		"mux-fec":         "MUXFEC=true",
+		"hv-ui-disable":   "HVUIDISABLE=true",
+		"pty-persist":     "PTYPERSIST=true",
+		"no-dmsgscp":      "NODMSGSCP=true",
+		"no-stats":        "NOSTATS=true",
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
@@ -2795,7 +2889,16 @@ var (
 		"dmsgweb-addr":       "DMSGWEBADDR",
 		"skynetweb-addr":     "SKYNETWEBADDR",
 		"dmsgweb-sk":         "DMSGWEBSK",
+		"resolver-ca":        "RESOLVERCA",
+		"wallet-custody":     "WALLETCUSTODY",
+		"wallet-dir":         "WALLETDIR",
+		"wallet-remote":      "WALLETREMOTE",
+		"disableapps":        "DISABLEAPPS",
 		"wisp-socks":         "WISPSOCKS",
+		"log-hook-level":     "LOGHOOKLEVEL",
+		"log-server-addr":    "LOGSERVERADDR",
+		"pty-ssh-listen":     "PTYSSHLISTEN",
+		"dmsgscp-root":       "DMSGSCPROOT",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
 	intFlagToEnv = map[string]string{
@@ -2804,6 +2907,7 @@ var (
 		"sudph":              "SUDPHPORT",
 		"min-hops":           "MINHOPS",
 		"ar-transport-limit": "ARTRANSPORTLIMIT",
+		"stats-retention":    "STATSRETENTION",
 	}
 	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
 	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties
@@ -2967,4 +3071,20 @@ func setFlag(args []string, flag, val string) []string {
 		}
 	}
 	return append(out, flag, val)
+}
+
+// skyDNSDefault turns skydns on where it only takes the mesh zones: Linux with
+// systemd-resolved, and a config made as root, as the packages run the visor.
+// Elsewhere it would rewrite /etc/resolv.conf, so SKYDNS=true opts in there.
+func skyDNSDefault() bool {
+	return runtime.GOOS == "linux" && os.Geteuid() == 0 && vpn.SkyDNSSplitDNS()
+}
+
+// skydnsArgs gives skydns the resolver CA when one is configured, so HTTPS to
+// mesh names works through it as it does through the resolving proxies.
+func skydnsArgs(base []string) []string {
+	if resolverCA == "" {
+		return base
+	}
+	return setFlag(base, "--ca", resolverCA)
 }

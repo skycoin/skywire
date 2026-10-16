@@ -18,11 +18,12 @@ name: Test
 permissions:
   contents: read
 
-# A newer push on the same branch or PR supersedes this run, and cancelling it
-# hands the runner straight to the head that matters.
+# A newer push to a PR supersedes this run, and cancelling it
+# hands the runner straight to the head that matters. A develop push always
+# finishes, so develop has a result for every commit and the badge shows it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   linux:

@@ -118,6 +118,10 @@ type Visor struct {
 	logstore logstore.Store
 	logBcast *logging.Broadcaster // fans entries out to gRPC StreamAppLogs subscribers
 
+	// skyenvSeen is each mirrored setting as skywire.conf last saw it.
+	skyenvMu   sync.Mutex
+	skyenvSeen map[string][2]string
+
 	startedAt       time.Time
 	startupComplete chan struct{}
 
@@ -217,6 +221,9 @@ type Visor struct {
 	arClient     addrresolver.APIClient
 	router       router.Router
 	rfClient     rfclient.Client
+
+	// homeVisors caches the visor list home.skynet shows.
+	homeVisors homeVisorCache
 
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
@@ -916,6 +923,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		// initSDRegCXO attaches a publisher.
 		sdEntryMirror: newSDEntryMirror(),
 	}
+	v.watchSkyenv()
 	v.isServicesHealthy.init()
 	v.isUptimeTrackerHealthy.init()
 	v.isAutoconnectHealthy.init()
@@ -961,6 +969,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 	v.logBcast = logBcast
 	v.logstore = logStore
 	v.services = NewServiceRegistry()
+	v.services.SetSelfDialFallback(v.selfDialForwarded)
 	// Constructed eagerly rather than as an init module: the hub has no
 	// dependencies and locks internally, and building it here removes any
 	// window where an app publishing early finds a nil hub.

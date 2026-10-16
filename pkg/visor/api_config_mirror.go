@@ -4,13 +4,14 @@ package visor
 import (
 	"os"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // On a package install, and in the browser visor, skywire.json is rebuilt by
@@ -26,6 +27,9 @@ var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
 	"pty.whitelist":             pkListFlag("dmsgpty-pks"),
 	"routing.min_hops":          uintFlag("min-hops"),
 	"routing.calculate_routes":  boolFlag("calculate-routes"),
+	"routing.mux_fec":           boolFlag("mux-fec"),
+	"flight_recorder":           boolFlag("flight-recorder"),
+	"hypervisor.ui_disable":     boolFlag("hv-ui-disable"),
 	"reward_address":            stringFlag("rewardaddr"),
 	"hypervisor.enable":         boolFlag("ishv"),
 	"hypervisor.enable_auth":    boolFlag("hv-auth"),
@@ -37,6 +41,16 @@ var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
 	"skynet_web.upstream_socks": stringFlag("skynetweb-upstream"),
 	"transport.public_autoconnect": func(nv reflect.Value) (string, string) {
 		return "disable-public-autoconn", strconv.FormatBool(!nv.Bool())
+	},
+}
+
+// mirrorGetters cover mirrored settings the json path walk cannot read.
+var mirrorGetters = map[string]func(c *visorconfig.V1) (flag, value string, ok bool){
+	"dmsg.sessions_count": func(c *visorconfig.V1) (string, string, bool) {
+		if c.Dmsg == nil {
+			return "", "", false
+		}
+		return "minsess", strconv.Itoa(c.Dmsg.Primary().SessionsCount), true
 	},
 }
 
@@ -67,20 +81,18 @@ func joinPKs(pks []cipher.PubKey) string {
 	return strings.Join(s, ",")
 }
 
-// skyenvPaths are the config autoconfig writes and the skywire.conf it reads.
-var skyenvPaths = func() (config, conf string) { return skyenv.SkywireConfig(), skyenvfile.DefaultPath() }
-
-// skyenvManaged reports the skywire.conf that autoconfig rebuilds this visor's
-// config from, or "" when the config is not autoconfig's.
+// skyenvManaged reports the skywire.conf this visor's config was generated
+// from, or "" when it was not generated from one.
 func (v *Visor) skyenvManaged() string {
-	config, path := skyenvPaths()
-	if v.conf == nil || v.conf.Path() == "" || v.conf.Path() != config {
+	if v.conf == nil || v.conf.Skyenv == "" {
 		return ""
 	}
-	if _, err := os.Stat(path); err != nil {
+	if _, err := os.Stat(v.conf.Skyenv); err != nil {
+		v.log.WithError(err).WithField("path", v.conf.Skyenv).
+			Warn("the skywire.conf this config was generated from is gone; live changes are not saved to it")
 		return ""
 	}
-	return path
+	return v.conf.Skyenv
 }
 
 // mirrorToSkyenv writes the given flag values into skywire.conf when autoconfig
@@ -101,7 +113,104 @@ func (v *Visor) mirrorToSkyenv(flags [][2]string) {
 		edits = append(edits, e)
 	}
 	if err := skyenvfile.Update(path, edits); err != nil {
-		v.log.WithError(err).WithField("path", path).
-			Warn("failed to mirror config fields into skywire.conf; the next autoconfig run will drop them")
+		names := make([]string, 0, len(edits))
+		for _, e := range edits {
+			names = append(names, e.Key)
+		}
+		v.log.WithError(err).WithField("path", path).WithField("settings", names).
+			Warn("could not save live changes to skywire.conf; the next autoconfig run will undo them")
 	}
+}
+
+// watchSkyenv records the mirrored settings as generated, then after each
+// config write saves the ones that changed to skywire.conf.
+func (v *Visor) watchSkyenv() {
+	if v.conf == nil {
+		return
+	}
+	v.skyenvSeen = v.mirroredValues()
+	v.conf.SetAfterFlush(v.mirrorChanges)
+}
+
+// mirrorChanges saves every mirrored setting that changed since the last save.
+func (v *Visor) mirrorChanges() {
+	v.skyenvMu.Lock()
+	defer v.skyenvMu.Unlock()
+	now := v.mirroredValues()
+	var flags [][2]string
+	for path, fv := range now {
+		if v.skyenvSeen[path] != fv {
+			flags = append(flags, fv)
+		}
+	}
+	v.skyenvSeen = now
+	sort.Slice(flags, func(i, j int) bool { return flags[i][0] < flags[j][0] })
+	v.mirrorToSkyenv(flags)
+}
+
+// mirroredValues is the autoconfig flag and value of every mirrored setting.
+// A setting whose block is absent counts as its zero value, so removing the
+// block is saved too.
+func (v *Visor) mirroredValues() map[string][2]string {
+	root := reflect.ValueOf(v.conf).Elem()
+	out := make(map[string][2]string, len(autoconfigFlagFor))
+	for path, flagFor := range autoconfigFlagFor {
+		var nv reflect.Value
+		if tgt, err := resolveConfigTarget(root, path); err == nil {
+			nv = tgt.get()
+		} else if t := configFieldType(root.Type(), path); t != nil {
+			nv = reflect.Zero(t)
+		} else {
+			continue
+		}
+		flag, val := flagFor(nv)
+		out[path] = [2]string{flag, val}
+	}
+	for path, get := range mirrorGetters {
+		if flag, val, ok := get(v.conf); ok {
+			out[path] = [2]string{flag, val}
+		}
+	}
+	return out
+}
+
+// configFieldType walks a dotted path of json names through struct types.
+func configFieldType(t reflect.Type, path string) reflect.Type {
+	for _, name := range strings.Split(path, ".") {
+		for t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct {
+			return nil
+		}
+		f, ok := structFieldByJSONName(t, name)
+		if !ok {
+			return nil
+		}
+		t = f.Type
+	}
+	return t
+}
+
+func structFieldByJSONName(t reflect.Type, name string) (reflect.StructField, bool) {
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Anonymous && f.Tag.Get("json") == "" {
+			et := f.Type
+			if et.Kind() == reflect.Pointer {
+				et = et.Elem()
+			}
+			if et.Kind() != reflect.Struct {
+				continue
+			}
+			if sf, ok := structFieldByJSONName(et, name); ok {
+				return sf, true
+			}
+			continue
+		}
+		if tag, _, _ := strings.Cut(f.Tag.Get("json"), ","); tag == name {
+			return f, true
+		}
+	}
+	return reflect.StructField{}, false
 }

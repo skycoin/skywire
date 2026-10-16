@@ -1,5 +1,7 @@
 # Standby tunnel pool — design + implementation plan
 
+> **Status:** implemented, see [warm_standby_legs_rfc.md](../warm_standby_legs_rfc.md) and `pkg/router/route_mux_standby_test.go`.
+
 Written 2026-09-17 against `develop` c4675c6d0, read-only. Supersedes criterion 8's "route ranking
 first" decision. User's direction, binding: *"route ranking before dialing isn't the best approach,
 just dial / set up the routes and hold them in standby … the only way to have routes that can be

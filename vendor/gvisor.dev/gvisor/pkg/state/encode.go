@@ -103,6 +103,10 @@ type encodeState struct {
 	// Sink.SaveValue() for a given field, resulting in object duplication.
 	encodedStructs map[reflect.Value]*wire.Struct
 
+	// binaryBuf holds temporary BinaryAppender output. Each saved value is
+	// copied into an immutable string before this buffer is reused.
+	binaryBuf []byte
+
 	// stats tracks time data.
 	stats Stats
 }
@@ -439,6 +443,20 @@ func traverse(rootType, targetType reflect.Type, rootAddr, targetAddr uintptr) [
 	panic("unreachable")
 }
 
+// mapScalarSlot allocates reusable iterator storage for values that encodeObject
+// copies directly into the wire representation. Composite values may retain
+// their reflect.Value for deferred encoding or struct identity tracking.
+func mapScalarSlot(typ reflect.Type) reflect.Value {
+	switch typ.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
+		return reflect.New(typ).Elem()
+	default:
+		return reflect.Value{}
+	}
+}
+
 // encodeMap encodes a map.
 func (es *encodeState) encodeMap(obj reflect.Value, dest *wire.Object) {
 	if obj.IsNil() {
@@ -453,8 +471,24 @@ func (es *encodeState) encodeMap(obj reflect.Value, dest *wire.Object) {
 		Values: make([]wire.Object, l),
 	}
 	*dest = m
-	for i, k := range obj.MapKeys() {
-		v := obj.MapIndex(k)
+	var keySlot, valueSlot reflect.Value
+	if l > 1 {
+		keySlot = mapScalarSlot(obj.Type().Key())
+		valueSlot = mapScalarSlot(obj.Type().Elem())
+	}
+	iter := obj.MapRange()
+	for i := 0; iter.Next(); i++ {
+		k, v := keySlot, valueSlot
+		if k.IsValid() {
+			k.SetIterKey(iter)
+		} else {
+			k = iter.Key()
+		}
+		if v.IsValid() {
+			v.SetIterValue(iter)
+		} else {
+			v = iter.Value()
+		}
 		// Map keys must be encoded using the full value because the
 		// type will be omitted after the first key.
 		es.encodeObject(k, encodeAsValue, &m.Keys[i])
@@ -530,10 +564,11 @@ func (es *encodeState) encodeStruct(obj reflect.Value, dest *wire.Object) {
 	}
 	es.stats.start(te.ID)
 	defer es.stats.done()
-	if sl, ok := obj.Addr().Interface().(SaverLoader); ok {
-		// Note: may be a registered empty struct which does not
-		// implement the saver/loader interfaces.
-		sl.StateSave(Sink{internal: oe})
+	switch value := obj.Addr().Interface().(type) {
+	case SaverLoader:
+		value.StateSave(Sink{internal: oe})
+	case binaryObject:
+		es.saveBinary(value, te.Name, Sink{internal: oe})
 	}
 }
 

@@ -1,8 +1,8 @@
 // Package cliconfig cmd/skywire-cli/commands/config/envfiles.go c4-vis-cli
 package cliconfig
 
-const envfileLinux = `#
-# /etc/skywire.conf
+const envfileTemplate = `#
+# skywire.conf: /etc/skywire.conf, or %ProgramData%\Skywire\skywire.conf on Windows
 #
 #########################################################################
 #	SKYWIRE CONFIG TEMPLATE
@@ -70,8 +70,29 @@ const envfileLinux = `#
 #-- Add route setup-node public keys
 #ROUTESETUPPKS=('')
 
+#--	Set up routes from the source (cascade) instead of through a route setup
+#--	node. A browser visor uses it by default; CASCADE=false turns it off there.
+#CASCADE=true
+
 #--	Enable local route calculation (instead of using route finder)
 #CALCULATEROUTES=true
+
+#--	Minimum route hops. 1 allows direct routes, 2 or more always goes through
+#	other visors, for sender privacy
+#MINHOPS=1
+
+#--	Never create direct transports. dmsg is still used
+#NODIRECTTRANSPORTS=true
+
+#--	Address resolver registration: 0 stays registered, N>0 leaves after N
+#	transports, a negative value never registers (no inbound transports)
+#ARTRANSPORTLIMIT=0
+
+#--	Forward error correction on mux routes. Both ends must enable it.
+#MUXFEC=true
+
+#--	Keep a rolling execution trace in local/log/flightrec for stall diagnosis
+#FLIGHTRECORDER=true
 
 ### Remote Access #######################################################
 
@@ -83,6 +104,21 @@ const envfileLinux = `#
 
 #--	Grant access to pseudoterminal (pty) for public keys
 #DMSGPTYPKS=('')
+
+#--	Let the visor RPC start pty commands (for a control or jump host only)
+#PTYRPCEXEC=true
+
+#--	Serve pty on a direct TCP listener too
+#PTYSSHLISTEN=':2022'
+
+#--	Keep pty sessions alive when the client disconnects
+#PTYPERSIST=true
+
+#--	Do not serve files over dmsgscp
+#NODMSGSCP=true
+
+#--	Directory dmsgscp serves. Default is local/scp-root
+#DMSGSCPROOT=''
 
 ### Survey Access #######################################################
 
@@ -131,6 +167,9 @@ const envfileLinux = `#
 #	to make the choice survive a config rebuild (autoconfig runs on every
 #	package update). Windows and macOS force the gate on regardless.
 #HVAUTH=false
+
+#--	Run the hypervisor without its web UI. The RPC and managed visors stay up.
+#HVUIDISABLE=true
 
 #--	Embedded LAN/WAN DMSG server is always on whenever ISHYPERVISOR=true.
 #	Managed visors relay through this hypervisor instead of public DMSG
@@ -198,6 +237,13 @@ const envfileLinux = `#
 #	front) already owns :443.
 #DMSGSERVERWSTLS=':443'
 
+#--	The local dmsg relay is served on a unix socket by default.
+#	NODMSGRELAY=true turns it off. DMSGRELAYADDR also serves it on a loopback
+#	address, for local services running as another user, and needs DMSGRELAYKEYS.
+#NODMSGRELAY=true
+#DMSGRELAYADDR='127.0.0.1:8083'
+#DMSGRELAYKEYS=''
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key
@@ -211,6 +257,12 @@ const envfileLinux = `#
 
 #--	Autostart vpn server for this visor
 #VPNSERVER=true
+
+#--	Apps to leave out of the launcher config, comma separated.
+#DISABLEAPPS='vpn-server,skychat'
+
+#--	Run the launcher apps as their own processes instead of inside the visor.
+#EXTERNALAPPS=true
 
 #--	Autostart the vpn-router: a LAN/WiFi gateway that NATs downstream
 #	clients into the vpn-client tunnel. Needs VPNROUTERLANIFC (the
@@ -297,9 +349,31 @@ const envfileLinux = `#
 
 #--	Upstream SOCKS5 server skynetweb forwards NON-.skynet traffic to.
 #--	127.0.0.1:1080 is the skysocks-client, i.e. the clearnet exit.
+#--	Unset, it is skysocks-client when that autostarts. 'direct' dials it
+#--	from this host, and 'none' refuses it so the proxy reaches only .dmsg and
+#--	.skynet names.
 #SKYNETWEBUPSTREAM='127.0.0.1:1080'
 #DMSGWEBADDR='0.0.0.0'
 #SKYNETWEBADDR='0.0.0.0'
+
+#--	Run the dmsg resolver under this secret key instead of the visor's
+#DMSGWEBSK=''
+
+#--	Do not serve the local real-origin browse proxy and status pages
+#NOBROWSEORIGIN=true
+
+#--	Serve HTTPS for .dmsg and .skynet from both resolvers, with the CA in this
+#--	directory (ca.crt and ca.key from 'skywire cli resolver ca gen'). Browsers
+#--	must trust ca.crt, and the URL needs the base32 key: 'skywire cli pk dnslabel'.
+#RESOLVERCA='/root/.skywire/resolver'
+
+#--	Autostart skydns: .dmsg and .skynet names for every program on this host,
+#--	with no proxy settings. It takes a tun, so it needs CAP_NET_ADMIN. It is on
+#--	by default where systemd-resolved runs and the config is made as root, and
+#--	then only answers the mesh names. Elsewhere it puts itself first in
+#--	/etc/resolv.conf, so it stays off unless set here. With RESOLVERCA set it
+#--	serves HTTPS too.
+#SKYDNS=true
 
 #--	Embedded Wisp server: the backend a browser-side Linux guest asks to open
 #--	its connections. Every browser visor runs it on virtual-loopback port
@@ -405,6 +479,15 @@ const envfileLinux = `#
 #	For multi-chain:
 #		SKYCOINWEBNODES=('http://127.0.0.1:6420' 'http://127.0.0.1:6421')
 #SKYCOINWEBNODES=('')
+
+#--	Where the skycoin-web wallet keeps its keys: browser, disk or remote.
+#--	disk uses WALLETDIR, remote uses the wallets on the visor WALLETREMOTE.
+#WALLETCUSTODY='browser'
+#WALLETDIR='/root/.skycoin/wallets'
+#WALLETREMOTE='<visor-pk>'
+
+#--	Do not serve the skycoin-web wallet frontend.
+#NOWALLET=true
 
 #--	Wallet directory override. Empty = upstream default at
 #	$HOME/.skycoin/wallets of whichever user the app runs as
@@ -513,217 +596,16 @@ const envfileLinux = `#
 #	Default is info ; uncomment for debug logging
 #LOGLVL=debug
 
-`
+#--	Most verbose level kept for /debug/log. Default is info
+#LOGHOOKLEVEL='debug'
 
-const envfileWindows = `#
-# C:\ProgramData\skywire.conf
-#
-#########################################################################
-#	SKYWIRE CONFIG TEMPLATE
-#		Defaults for booleans are false
-#		Uncomment to change default value
-#########################################################################
+#--	Also serve the log server on a local address, without auth
+#LOGSERVERADDR='localhost:8002'
 
-### Installation path ###################################################
+#--	Keep up to this many days of local telemetry (default 30)
+#STATSRETENTION=30
 
-#--	Default config paths for the installer or package (system paths)
-#$PKGENV=$true
+#--	Do not keep or publish local telemetry
+#NOSTATS=true
 
-#--	Default config paths for the current userspace
-#$USRENV=$true
-
-#--	service conf path override
-#$SVCCONF="services-config.json"
-
-#--	dmsghttp config path override
-#$DMSGCONF="dmsghttp-config.json"
-
-#--	Output path of the config file
-#$OUTPUT='C:\\ProgramData\\skywire-config.json'
-
-#--	Set app bin_path
-#$BINPATH='C:\\ProgramData\\apps'
-
-### Deployment ##########################################################
-
-#--	Set custom service conf URLs
-#$SVCCONFADDR=@('')
-
-#--	Use dmsghttp to connect to the production deployment
-#$DMSGHTTP=$true
-
-#--	Number of dmsg servers to connect to (0 unlimits)
-#$MINDMSGSESS=8
-
-### Transports ##########################################################
-
-#--	Other Visors will automatically establish transports to this visor
-#	requires port forwarding or public IP
-#$VISORISPUBLIC=$true
-
-#--	Disable auto-transports to public visors from this visor
-#$DISABLEPUBLICAUTOCONN=$true
-
-#--	Add transport setup public keys
-#$TPSETUPPKS=@('')
-
-### Ports ###############################################################
-
-#- set port for UDP connections / SUDPH transports
-#$SUDPHPORT=0
-
-#- set port for TCP connections / STCPR or STCP transports
-#$STCPRPORT=0
-
-#- set ONE shared master port for all transport types (stcpr+WS on <port>/tcp,
-#- quic+sudph+wt+webrtc on <port>/udp). Overrides SUDPHPORT/STCPRPORT unless those
-#- are set to break a type out onto its own port. 0 = per-type ports.
-#$TRANSPORTPORT=0
-
-### Routing #############################################################
-
-#--	Add route setup-node public keys
-#$ROUTESETUPPKS=@('')
-
-#--	Enable local route calculation (instead of using route finder)
-#$CALCULATEROUTES=$true
-
-### Remote Access #######################################################
-
-#--	Set remote hypervisor public keys
-#$HYPERVISORPKS=@('')
-
-#--	Peers held as WebSocket transports at a known address: <pk>@<ws(s)://host[:port]/path>
-#$WSPEERS=@('')
-
-#--	Grant access to pseudoterminal (pty) for public keys
-#$DMSGPTYPKS=@('')
-
-### Survey Access #######################################################
-
-#--	Grant access for survey collection to these public keys
-#$SURVEYPKS=@('')
-
-### Hypervisor UI #######################################################
-
-#--	Start the hypervisor interface for this visor
-#$ISHYPERVISOR=$true
-
-#--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
-#	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
-#	Use '127.0.0.1:8000' for localhost-only, or pin a LAN IP.
-#$HVHTTPADDR=':8000'
-
-#--	Desk (wasm-visor hypervisor UI) listen address. Default ':8010'.
-#$HVDESKADDR=':8010'
-
-### Rewards #############################################################
-
-#--	Skycoin reward address or xpub key
-#$REWARDSKYADDR=''
-
-### Apps ################################################################
-
-#--	Display the node IP in the service discovery
-#	for any public services this visor is running
-#$DISPLAYNODEIP=$true
-
-#--	Autostart vpn server for this visor
-#$VPNSERVER=$false
-
-#--	Set server public key for proxy client to connect to
-#$PROXYCLIENTPK=''
-
-#--	Enable autostart of the proxy client
-#$STARTPROXYCLIENT=$true
-
-#--	Autostart proxy server
-#$PROXYSERVER=$false
-
-#--	Autostart skychat
-#$SKYCHAT=$false
-
-#--	Skychat local address
-#$SKYCHATADDR='127.0.0.1:8001'
-
-#--	Run skychat with no TCP port at all: the UI is then reachable only
-#--	through the hypervisor. Default: false (skychat binds SKYCHATADDR).
-#$SKYCHATPORTLESS=$false
-
-#--	Skychat pair-RPC channel to visor (required for group chat).
-#--	Default: true. Set to false to disable group-chat plumbing.
-#$SKYCHATPAIR=$false
-
-#--	Whitelist public keys for the proxy server (empty = allow all)
-#$PROXYSERVERWL=@('')
-
-#--	Set VPN client killswitch
-#$VPNKS=$true
-
-#--	Set VPN server public key for the VPN client to use
-#$ADDVPNPK=''
-
-#--	Whitelist public keys for the vpn server (empty = allow all)
-#$VPNSERVERWL=@('')
-
-#--	Change secure mode status of VPN server
-#$VPNSEVERSECURE=''
-
-#--	Set VPN Server network interface, e.g., 'Ethernet'
-#$VPNSEVERNETIFC=''
-
-### Advanced Tuning #####################################################
-
-
-#--	STUN servers for NAT traversal
-#$STUNSERVERS=@('')
-
-#--	Graceful shutdown timeout (default 10s)
-#$SHUTDOWNTIMEOUT='10s'
-
-#--	Public visor registration timeout (default 10m)
-#$REGTIMEOUT='10m'
-
-#--	Public visor max transports (default 1000)
-#$MAXTRANSPORTS=2048
-
-#--	Number of parallel mux routes per connection (default 0)
-#$MUXROUTES=0
-
-#--	Per-dial routing policy: preset:<name> (e.g. preset:adaptive),
-#	@/path/policy.star, @/path/policy.wasm, inline Starlark, or empty
-#$POLICYPERDIAL=''
-
-### Auto-Update (skywire-autoupdate package) ############################
-#	These settings are only used by the skywire-update script
-#	installed by the skywire-autoupdate package.
-
-#--	Update channel:
-#	"develop"        = latest develop branch commit (default)
-#	"latest"         = latest tagged release version
-#	"<hash>"         = pin to a specific commit hash
-#	"binary"         = download the prebuilt linux binary (no compile) from the
-#	                   rolling <branch>-latest GitHub pre-release, SHA256-verified
-#	"binary-develop" / "binary-master" = force the develop / master prebuilt binary
-#$UPDATE_CHANNEL='develop'
-
-#--	Go module proxy mode for source builds. Unset (default): GOPROXY=direct
-#	first, then fall back to the default proxy if the direct git fetch fails.
-#	"direct" = direct-only (no fallback) ; "proxy" = proxy-only
-#$GOPROXY_MODE=''
-
-#--	Docker deployment directory (for skywire-docker-update)
-#$DEPLOY_DIR=''
-
-### Miscellaneous #######################################################
-
-#--	Set secret key
-#$SK=''
-
-#--	Custom config version override
-#$VERSION=''
-
-#--	Set visor runtime log level.
-#	Default is info ; uncomment for debug logging
-#$LOGLVL='debug'
 `

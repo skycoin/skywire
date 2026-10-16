@@ -13,7 +13,6 @@ import (
 	"errors"
 	"net"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -34,24 +33,9 @@ type HostNetwork interface {
 	DialTimeout(network, address string, timeout time.Duration) (net.Conn, error)
 }
 
-var (
-	hostMu  sync.RWMutex
-	hostNet HostNetwork
-)
-
 // SetHost installs the network host addresses use in a browser. Nil removes
 // it. Native builds reach the computer directly and ignore it.
-func SetHost(h HostNetwork) {
-	hostMu.Lock()
-	hostNet = h
-	hostMu.Unlock()
-}
-
-func currentHost() HostNetwork {
-	hostMu.RLock()
-	defer hostMu.RUnlock()
-	return hostNet
-}
+func SetHost(h HostNetwork) { setHost(h) }
 
 // Split returns address without its namespace and whether it names the
 // computer's own network.

@@ -4,22 +4,21 @@ package skysocksc
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // proxyArgsRestorer puts an app's argument list back the way the operator had
 // it. `proxy test --batch 1` borrows the DEFAULT skysocks-client rather than a
-// throwaway proxy-test-N app: it rewrites --srv for every candidate, and
-// DoCustomSetting deletes the whole existing arg set before applying the new
-// one. Those args are persisted, so a test run rewrote skywire-config.json —
+// throwaway proxy-test-N app and rewrites its whole arg list for every
+// candidate. Those args are persisted, so a test run rewrote skywire-config.json —
 // the last candidate tested became the configured exit, and flags the operator
 // had set (--reconnect, --direct, --tunnels, a non-default --addr) were gone
 // for good.
@@ -28,6 +27,7 @@ type proxyArgsRestorer struct {
 	rpc      visorapi.API
 	appName  string
 	args     []string
+	running  bool // the app ran before the test, so restore restarts it
 	once     sync.Once
 	finished chan struct{}
 }
@@ -44,6 +44,7 @@ func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visorapi.API, appName 
 	}
 	if st, err := rpcClient.App(appName); err == nil && st != nil && len(st.Args) > 0 {
 		r.args = append([]string(nil), st.Args...)
+		r.running = st.Status == appserver.AppStatusRunning
 	}
 	sigCtx, sigCancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
 	go func() {
@@ -72,48 +73,24 @@ func (r *proxyArgsRestorer) fatal(err error) {
 	internal.PrintFatalError(r.cmd.Flags(), err)
 }
 
-// restore writes the snapshot back through the same RPC the test used to
-// change it. It runs at most once.
+// restore writes the snapshot back exactly as it was, in order. It runs at most
+// once.
 func (r *proxyArgsRestorer) restore() {
 	r.once.Do(func() {
 		if len(r.args) == 0 {
 			return
 		}
-		if err := r.rpc.DoCustomSetting(r.appName, argsToCustomSetting(r.args)); err != nil {
+		if err := r.rpc.SetAppArgs(r.appName, r.args); err != nil {
 			internal.PrintOutput(r.cmd.Flags(), nil, fmt.Sprintf("Warning: could not restore %s arguments %v: %v\n", r.appName, r.args, err))
+			return
+		}
+		// The client the test left running is on the test's args; run the
+		// operator's again.
+		if r.running {
+			_ = r.rpc.StopApp(r.appName) //nolint:errcheck
+			if err := r.rpc.StartApp(r.appName); err != nil {
+				internal.PrintOutput(r.cmd.Flags(), nil, fmt.Sprintf("Warning: could not restart %s: %v\n", r.appName, err))
+			}
 		}
 	})
-}
-
-// argsToCustomSetting turns a persisted arg list back into the map shape
-// DoCustomSetting takes. Three token forms occur in a visor config: the leading
-// "app <name>" subcommand pair, "--flag <value>" string pairs, and bare
-// "--flag" booleans (the form updateBoolArg writes); the old single-dash
-// "-flag=value" bool form is still accepted on read.
-func argsToCustomSetting(args []string) map[string]any {
-	setting := make(map[string]any, len(args))
-	isFlag := func(s string) bool { return strings.HasPrefix(s, "-") }
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		if !isFlag(a) {
-			// Only the "app <name>" pair reaches here; a value token is
-			// always consumed with its flag below.
-			if i+1 < len(args) && !isFlag(args[i+1]) {
-				setting[a] = args[i+1]
-				i++
-			}
-			continue
-		}
-		if name, val, ok := strings.Cut(a, "="); ok {
-			setting[name] = val == "true"
-			continue
-		}
-		if i+1 < len(args) && !isFlag(args[i+1]) {
-			setting[a] = args[i+1]
-			i++
-			continue
-		}
-		setting[a] = true
-	}
-	return setting
 }

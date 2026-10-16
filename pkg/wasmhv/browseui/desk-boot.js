@@ -51,19 +51,39 @@
 	try { deskChannel = new BroadcastChannel('skywire-desk'); } catch (e) { /* no cross-tab channel */ }
 	var yielding = false; // this tab is handing the desk to another one
 
+	// labelToHex turns a key's 53 character base32 label (the form mesh names
+	// use) into hex, and returns anything else unchanged.
+	function labelToHex(s) {
+		if (!/^[a-z2-7]{53}$/i.test(s)) return s;
+		var alphabet = 'abcdefghijklmnopqrstuvwxyz234567', bits = 0, value = 0, out = '';
+		s = s.toLowerCase();
+		for (var i = 0; i < s.length; i++) {
+			value = (value << 5) | alphabet.indexOf(s[i]);
+			bits += 5;
+			if (bits >= 8) {
+				out += ('0' + ((value >>> (bits - 8)) & 255).toString(16)).slice(-2);
+				bits -= 8;
+			}
+		}
+		return out.length === 66 ? out : s;
+	}
+
 	// readDeepLink: what the page URL asks the desk to open, or null.
-	//   ?skydm=<pk>                  a skychat conversation with <pk>
+	//   ?skydm=<pk>                  a skychat conversation with <pk> (hex or base32)
 	//   ?skygroup=<invite>           the skychat join panel, filled in
 	//   ?skynet=<site>[&kiosk=1]     a mesh site, e.g. rewards.dmsg (?dmsg= too)
+	//   ?lot=1 (or ?lot=full)        LinuxOnTab, when this page serves it
 	// The same keys are read from a #k=v fragment.
 	function readDeepLink() {
 		var q = new URLSearchParams(location.search);
 		var h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
 		function get(k) { return q.get(k) || h.get(k) || ''; }
-		var pk = get('skydm');
+		var pk = labelToHex(get('skydm'));
 		if (/^[0-9a-fA-F]{66}$/.test(pk)) return { t: 'dm', pk: pk.toLowerCase() };
 		var invite = get('skygroup');
 		if (invite && invite.length <= 4096) return { t: 'group', invite: invite };
+		var lot = get('lot');
+		if (lot === '1' || lot === 'true' || lot === 'full') return { t: 'linux', disk: lot === 'full' ? 'full' : '' };
 		var site = get('skynet') || get('dmsg');
 		site = site.replace(/^https?:\/\//i, '');
 		if (site && /^[A-Za-z0-9.-]+(:[0-9]{1,5})?(\/\S*)?$/.test(site)) {
@@ -480,13 +500,24 @@
 		if (pendingDL) {
 			try {
 				var cleaned = new URL(location.href);
-				['skydm', 'skygroup', 'skynet', 'dmsg', 'kiosk'].forEach(function (k) { cleaned.searchParams.delete(k); });
-				if (/(^#|&)(skydm|skygroup|skynet|dmsg)=/.test(cleaned.hash)) cleaned.hash = '';
+				['skydm', 'skygroup', 'skynet', 'dmsg', 'kiosk', 'lot'].forEach(function (k) { cleaned.searchParams.delete(k); });
+				if (/(^#|&)(skydm|skygroup|skynet|dmsg|lot)=/.test(cleaned.hash)) cleaned.hash = '';
 				history.replaceState(history.state, '', cleaned.pathname + cleaned.search + cleaned.hash);
 			} catch (e) { /* keep the address */ }
 		}
+		// LinuxOnTab opens as a desk app as soon as the panel exists; it does not
+		// wait for the dashboard's browser window like the other links.
+		function openLinux(disk) {
+			waitFor(function () { var p = globalThis.__skywireDesk; return p && typeof p.launch === 'function' && p; }, 'the desk panel', 2400)
+				.then(function (p) { try { p.launch('linux', disk || ''); } catch (e) { console.warn('skywire desk: linux:', e); } })
+				.catch(function () {});
+		}
+		if (pendingDL && pendingDL.t === 'linux') { var ldl = pendingDL; pendingDL = null; openLinux(ldl.disk); }
+		// hv serve --lot-open starts LinuxOnTab when the page carries no link of its own.
+		else if (!pendingDL && globalThis.__SKYWIRE_LOT_OPEN__) openLinux('');
 		var deepWin = null;
 		function openDeepLink(dl) {
+			if (dl.t === 'linux') { openLinux(dl.disk); return; }
 			if (!deepWin || !deepWin.openTab) { pendingDL = dl; return; }
 			try {
 				if (dl.t === 'dm') {

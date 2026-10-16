@@ -2,8 +2,9 @@ package visor
 
 import (
 	"errors"
-	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // stubAPI is a complete API that answers ErrProxyNotSupported from every

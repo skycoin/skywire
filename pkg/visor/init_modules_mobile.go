@@ -115,7 +115,6 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.embResolvers = dropped("embedded_resolvers")
 	m.meshProxy = dropped("mesh_proxy")
 	m.embSkymailBridge = dropped("embedded_skymail_bridge")
-	m.uiServer = dropped("ui_server")
 	m.nodeHealth = dropped("node_health")
 	m.selfProbe = dropped("self_probe")
 	m.skynetPorts = dropped("skynet_ports")

@@ -6,6 +6,7 @@ package vpn
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -37,31 +38,51 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	if log == nil {
 		log = logrus.StandardLogger()
 	}
-	if _, err := setupClientSysPrivileges(); err != nil {
-		log.WithError(err).Debug("skydns: could not raise CAP_NET_ADMIN")
-	}
-	tun, err := newTUNDevice()
-	if err != nil {
-		return err
-	}
-	defer tun.Close() //nolint:errcheck
-	name := tun.Name()
-	if err := netctl.AddrAdd(name, skydns.LocalAddr+"/32"); err != nil {
-		return err
-	}
-	if err := netctl.SetMTU(name, TUNMTU); err != nil {
-		return err
-	}
-	if err := netctl.LinkUp(name); err != nil {
-		return err
-	}
-	if err := netctl.RouteReplaceDev(skydns.Range, name); err != nil {
-		return err
-	}
-
-	res, err := newSkyDNSResolver(name, cfg.Upstream)
-	if err != nil {
-		return err
+	var (
+		tun  TUNDevice
+		res  *skyDNSResolver
+		name string
+		err  error
+	)
+	if _, perr := setupClientSysPrivileges(); perr != nil {
+		// Without CAP_NET_ADMIN, ask for a password once to set up a tun this
+		// user owns, then run on it. It outlives this run, so later starts
+		// need no prompt.
+		log.WithError(perr).Debug("skydns: no CAP_NET_ADMIN, using the persistent " + SkyDNSTunName)
+		if err := ensureSkyDNSTun(); err != nil {
+			return fmt.Errorf("skydns: no CAP_NET_ADMIN, and setting up %s as root failed: %w", SkyDNSTunName, err)
+		}
+		if tun, err = openSkyDNSTun(); err != nil {
+			return err
+		}
+		defer tun.Close() //nolint:errcheck
+		name = SkyDNSTunName
+		upstream := cfg.Upstream
+		if upstream == "" {
+			upstream = shareDefaultDNS
+		}
+		res = &skyDNSResolver{mode: "systemd-resolved", upstream: upstream, keep: func() error { return nil }, undo: func() {}}
+	} else {
+		if tun, err = newTUNDevice(); err != nil {
+			return err
+		}
+		defer tun.Close() //nolint:errcheck
+		name = tun.Name()
+		if err := netctl.AddrAdd(name, skydns.LocalAddr+"/32"); err != nil {
+			return err
+		}
+		if err := netctl.SetMTU(name, TUNMTU); err != nil {
+			return err
+		}
+		if err := netctl.LinkUp(name); err != nil {
+			return err
+		}
+		if err := netctl.RouteReplaceDev(skydns.Range, name); err != nil {
+			return err
+		}
+		if res, err = newSkyDNSResolver(name, cfg.Upstream); err != nil {
+			return err
+		}
 	}
 	defer res.undo()
 
@@ -69,6 +90,8 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	sky, err := skydns.New(skydns.Config{
 		Dial:     cfg.Dial,
 		Upstream: skydns.NewUpstream(res.upstream, d.DialContext, false),
+		Minter:   cfg.Minter,
+		Aliases:  cfg.Aliases,
 		MTU:      TUNMTU,
 		Log:      log,
 	})
@@ -129,8 +152,15 @@ type skyDNSResolver struct {
 	undo     func()
 }
 
+// SkyDNSSplitDNS reports whether systemd-resolved runs here, so SkyDNS can
+// answer only the mesh zones and leave every other name to the host.
+func SkyDNSSplitDNS() bool {
+	_, err := os.Stat(resolvedSocket)
+	return err == nil
+}
+
 func newSkyDNSResolver(ifName, upstream string) (*skyDNSResolver, error) {
-	if _, err := os.Stat(resolvedSocket); err == nil {
+	if SkyDNSSplitDNS() {
 		return resolvedSplitDNS(ifName, upstream)
 	}
 	return resolvConfDNS(upstream)
@@ -147,6 +177,11 @@ func resolvedSplitDNS(ifName, upstream string) (*skyDNSResolver, error) {
 		if err := osutil.Run("resolvectl", args...); err != nil {
 			return nil, err
 		}
+	}
+	// The tunnel is not a local network, so no LLMNR or mDNS on it. Best effort:
+	// an old systemd without these settings still gets the split DNS.
+	for _, proto := range []string{"llmnr", "mdns"} {
+		_ = osutil.Run("resolvectl", proto, ifName, "no") //nolint:errcheck
 	}
 	if upstream == "" {
 		upstream = shareDefaultDNS

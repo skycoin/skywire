@@ -143,7 +143,6 @@ type modules struct {
 	embSkymailBridge vinit.Module
 	skymail          vinit.Module
 	// UI server module (serves tp-viz)
-	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
 	nodeHealth vinit.Module
 	// Auto-register localhost ports for skynet forwarding

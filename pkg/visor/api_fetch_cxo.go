@@ -16,9 +16,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // FetchCXO implements API.

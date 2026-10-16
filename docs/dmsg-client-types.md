@@ -4,7 +4,7 @@ Skywire components connect to the DMSG network using different client types depe
 
 ## Direct Client (`direct.NewClient`)
 
-**Used by:** All Skywire services (transport-discovery, route-finder, service-discovery, uptime-tracker, address-resolver, config-bootstrapper)
+**Used by:** All Skywire services (transport-discovery, route-finder, service-discovery, address-resolver, config-bootstrapper)
 
 The direct client is an in-memory implementation of `disc.APIClient` that does **not** communicate with the DMSG discovery service. Instead, it is pre-populated with DMSG server entries and uses them directly to establish connections.
 
