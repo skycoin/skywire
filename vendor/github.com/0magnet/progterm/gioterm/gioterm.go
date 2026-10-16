@@ -53,7 +53,7 @@ func Run(opt glterm.Options) error {
 		size := image.Pt(800, 500)
 		scr, scale := screen()
 		if g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(scale)); err == nil {
-			size = windowSize(g, opt.Cols, opt.Rows, scr)
+			size = glterm.WindowSize(g, opt.Cols, opt.Rows, scr)
 		}
 		w.Option(app.Title(title), app.Size(unit.Dp(float32(size.X)/scale), unit.Dp(float32(size.Y)/scale)))
 		if err := loop(w, opt, f); err != nil {
@@ -105,45 +105,24 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 		pxPerSp float32
 		buttons pointer.Buttons // held before the last pointer event
 		focused bool
-		ts      tabs
+		ts      glterm.Tabs
 		area    image.Point // the terminal's part of the window
 		bar     *image.RGBA
-		sized   bool // the window was made its size in cells
+		// Each frame draws into the other buffer, so the one Gio still reads
+		// is left alone.
+		bufs  [2]*image.RGBA
+		frame int
+		sized bool // the window was made its size in cells
 	)
 	pending := append([]glterm.Tab{{Shell: opt.Shell, Args: opt.Args, Run: opt.Run}}, opt.Tabs...)
-	defer func() {
-		for _, t := range ts.list {
-			t.term.Sess.Close() //nolint:errcheck,gosec // the window is going
-		}
-	}()
+	defer ts.CloseAll()
 
 	open := func(spec glterm.Tab, front bool) error {
-		shell, args := spec.Shell, spec.Args
-		if shell == "" {
-			shell = opt.Shell
-			if args == nil {
-				args = opt.Args
-			}
-		}
-		cols, rows := grid.Size(area.X, area.Y)
-		var s *glterm.Session
-		var err error
-		if spec.Run != nil {
-			s, err = glterm.StartFunc(spec.Run, cols, rows)
-		} else {
-			s, err = glterm.Start(shell, args, cols, rows)
-		}
+		t, err := glterm.OpenTab(opt, spec, grid, area.X, area.Y, cb, w.Invalidate)
 		if err != nil {
 			return err
 		}
-		t := &tab{term: &glterm.Terminal{Sess: s, Grid: grid, Clip: cb}, title: titleOf(spec, shell)}
-		t.term.Resize(area.X, area.Y)
-		s.OnChange = w.Invalidate
-		go func() {
-			<-s.Done()
-			w.Invalidate()
-		}()
-		ts.add(t, front)
+		ts.Add(t, front)
 		return nil
 	}
 
@@ -162,9 +141,6 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 					return err
 				}
 				grid, pxPerSp = g, e.Metric.PxPerSp
-				for _, t := range ts.list {
-					t.term.Grid = g
-				}
 				area = image.Point{} // lay the terminals out again at the new size
 			}
 			if !sized {
@@ -172,7 +148,7 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 				// resized under a prompt can lose track of its cursor.
 				sized = true
 				scr, _ := screen()
-				if want := windowSize(grid, opt.Cols, opt.Rows, scr); want != size {
+				if want := glterm.WindowSize(grid, opt.Cols, opt.Rows, scr); want != size {
 					dp := func(px int) unit.Dp { return unit.Dp(float32(px) / e.Metric.PxPerDp) }
 					w.Option(app.Size(dp(want.X), dp(want.Y)))
 					e.Frame(gtx.Ops)
@@ -180,16 +156,11 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 					continue
 				}
 			}
-			stripH := grid.CellH + grid.CellH/3
+			stripH := glterm.StripHeight(grid)
 			if a := image.Pt(size.X, max(1, size.Y-stripH)); a != area {
 				area = a
-				cols, rows := grid.Size(area.X, area.Y)
-				for _, t := range ts.list {
-					t.term.Sess.Resize(cols, rows, area.X, area.Y)
-					t.term.Resize(area.X, area.Y)
-					t.term.Menu.Close()
-					t.bufs = [2]*image.RGBA{}
-				}
+				ts.Resize(grid, area.X, area.Y)
+				bufs = [2]*image.RGBA{}
 			}
 
 			for i, spec := range pending {
@@ -201,18 +172,12 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 				}
 			}
 			pending = nil
-			for i := len(ts.list) - 1; i >= 0; i-- {
-				select {
-				case <-ts.list[i].term.Sess.Done():
-					ts.remove(i)
-				default:
-				}
-			}
-			if len(ts.list) == 0 {
+			ts.Prune()
+			if len(ts.List) == 0 {
 				return nil
 			}
 
-			s := layoutStrip(ts.labels(), grid.CellW, size.X, stripH)
+			s := glterm.LayoutStrip(ts.Labels(), grid.CellW, size.X, stripH)
 			newTab := func() {
 				if err := open(glterm.Tab{Run: opt.Run}, true); err != nil {
 					fmt.Fprintln(os.Stderr, "progterm: tab:", err)
@@ -239,20 +204,19 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 			}
 
 			// Input may have opened a tab, so lay the strip out again to draw it.
-			s = layoutStrip(ts.labels(), grid.CellW, size.X, stripH)
+			s = glterm.LayoutStrip(ts.Labels(), grid.CellW, size.X, stripH)
 			if bar == nil || bar.Bounds().Size() != image.Pt(size.X, stripH) {
 				bar = image.NewRGBA(image.Rect(0, 0, size.X, stripH))
 			}
-			drawStrip(bar, grid, &ts, s)
+			glterm.DrawStrip(bar, grid, &ts, s)
 			paintImage(gtx.Ops, bar, image.Point{})
 
-			t := ts.active()
-			if t.bufs[0] == nil {
-				t.bufs = [2]*image.RGBA{image.NewRGBA(image.Rectangle{Max: area}), image.NewRGBA(image.Rectangle{Max: area})}
+			if bufs[0] == nil {
+				bufs = [2]*image.RGBA{image.NewRGBA(image.Rectangle{Max: area}), image.NewRGBA(image.Rectangle{Max: area})}
 			}
-			img := t.bufs[t.frame%2]
-			t.frame++
-			t.term.Draw(img)
+			img := bufs[frame%2]
+			frame++
+			ts.Active().Term.Draw(img)
 			paintImage(gtx.Ops, img, image.Pt(0, stripH))
 			e.Frame(gtx.Ops)
 		}
@@ -270,7 +234,7 @@ func paintImage(ops *op.Ops, img *image.RGBA, at image.Point) {
 // handle reads the frame's input: tab shortcuts and the strip for the window,
 // the rest for the current tab's terminal, which sees the pointer relative to
 // its own top.
-func handle(src input.Source, tag *int, ts *tabs, s strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons) {
+func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons) {
 	filters := []event.Filter{
 		key.FocusFilter{Target: tag},
 		// Keys that are not text: named keys, and anything with Ctrl or Alt.
@@ -298,19 +262,16 @@ func handle(src input.Source, tag *int, ts *tabs, s strip, stripH int, newTab fu
 		if !ok {
 			return
 		}
-		t := ts.active()
+		t := ts.Active()
 		switch ev := ev.(type) {
 		case key.EditEvent:
-			t.term.Text(ev.Text)
+			t.Term.Text(ev.Text)
 		case key.Event:
 			if ev.State != key.Press {
 				continue
 			}
-			if tabKey(ev, ts, newTab) {
-				continue
-			}
-			if ke, ok := termKey(ev); ok {
-				t.term.Key(ke)
+			if ke, ok := termKey(ev); ok && !ts.Shortcut(ke, newTab) {
+				t.Term.Key(ke)
 			}
 		case pointer.Event:
 			if ev.Kind == pointer.Press {
@@ -319,14 +280,14 @@ func handle(src input.Source, tag *int, ts *tabs, s strip, stripH int, newTab fu
 			}
 			if int(ev.Position.Y) < stripH && *held == 0 {
 				if ev.Kind == pointer.Press {
-					stripPress(ev, ts, s, newTab)
+					ts.StripPress(s, int(ev.Position.X), ev.Buttons.Contain(pointer.ButtonTertiary), newTab)
 				}
 				*held = ev.Buttons
 				continue
 			}
 			ev.Position.Y -= float32(stripH)
 			for _, me := range termMouse(ev, held) {
-				t.term.Mouse(me)
+				t.Term.Mouse(me)
 			}
 		case transfer.DataEvent:
 			if paste := cb.read; paste != nil {
@@ -339,45 +300,6 @@ func handle(src input.Source, tag *int, ts *tabs, s strip, stripH int, newTab fu
 				}
 			}
 		}
-	}
-}
-
-// tabKey runs a tab shortcut and reports whether ev was one: Ctrl+Shift+T a
-// new tab, Ctrl+Shift+W closes this one, Ctrl+(Shift+)Tab and Ctrl+PageDown or
-// PageUp the next or previous, Alt+1 to Alt+9 a tab by number.
-func tabKey(ev key.Event, ts *tabs, newTab func()) bool {
-	m := ev.Modifiers
-	ctrl, shift, alt := m.Contain(key.ModCtrl), m.Contain(key.ModShift), m.Contain(key.ModAlt)
-	switch {
-	case ctrl && shift && ev.Name == "T":
-		newTab()
-	case ctrl && shift && ev.Name == "W":
-		ts.active().term.Sess.Close() //nolint:errcheck,gosec // its tab goes when it exits
-	case ctrl && ev.Name == key.NameTab:
-		ts.step(map[bool]int{false: 1, true: -1}[shift])
-	case ctrl && !shift && ev.Name == key.NamePageDown:
-		ts.step(1)
-	case ctrl && !shift && ev.Name == key.NamePageUp:
-		ts.step(-1)
-	case alt && !ctrl && len(ev.Name) == 1 && ev.Name[0] >= '1' && ev.Name[0] <= '9':
-		ts.pick(int(ev.Name[0] - '1'))
-	default:
-		return false
-	}
-	return true
-}
-
-// stripPress acts on a press on the strip: a tab is shown, or closed with
-// the middle button, and the new tab button opens one.
-func stripPress(ev pointer.Event, ts *tabs, s strip, newTab func()) {
-	i, plus := s.hit(int(ev.Position.X))
-	switch {
-	case plus:
-		newTab()
-	case i >= 0 && ev.Buttons.Contain(pointer.ButtonTertiary):
-		ts.list[i].term.Sess.Close() //nolint:errcheck,gosec // its tab goes when it exits
-	case i >= 0:
-		ts.pick(i)
 	}
 }
 
@@ -473,23 +395,4 @@ func termMouse(e pointer.Event, held *pointer.Buttons) []glterm.MouseEvent {
 	}
 	*held = e.Buttons
 	return out
-}
-
-// windowSize is the size in pixels of a window cols by rows cells of g, and
-// its tab strip. It is made smaller where screen, when known, has less room,
-// and kept wider than it is tall.
-func windowSize(g *glterm.Grid, cols, rows int, screen image.Point) image.Point {
-	stripH := g.CellH + g.CellH/3
-	if screen.X > 0 && screen.Y > 0 {
-		cols = min(cols, max(20, screen.X*9/10/g.CellW))
-		rows = min(rows, max(5, (screen.Y*85/100-stripH)/g.CellH))
-	}
-	for rows*g.CellH+stripH >= cols*g.CellW {
-		if rows > 5 {
-			rows--
-		} else {
-			cols++
-		}
-	}
-	return image.Pt(cols*g.CellW, rows*g.CellH+stripH)
 }

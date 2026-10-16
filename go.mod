@@ -27,7 +27,7 @@ require (
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 	github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
-	github.com/0magnet/progterm v0.0.0-20261016220245-12e47da1d129
+	github.com/0magnet/progterm v0.0.0-20261016222630-38e6bb2e54be
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -179,6 +179,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
+	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect

@@ -171,10 +171,11 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261016220245-12e47da1d129
+# github.com/0magnet/progterm v0.0.0-20261016222630-38e6bb2e54be
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
+github.com/0magnet/progterm/x11term
 # github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
@@ -654,6 +655,10 @@ github.com/jaypipes/ghw/pkg/watchdog
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
+# github.com/jezek/xgb v1.3.1
+## explicit; go 1.11
+github.com/jezek/xgb
+github.com/jezek/xgb/xproto
 # github.com/jfreymuth/pulse v0.1.3
 ## explicit; go 1.12
 github.com/jfreymuth/pulse

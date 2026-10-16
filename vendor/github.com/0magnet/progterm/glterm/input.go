@@ -113,7 +113,9 @@ func (t *Terminal) Mouse(e MouseEvent) bool {
 		return true
 
 	case e.Button == ButtonMiddle && e.Action == Press:
+		t.Sess.Unlock() // a paste the clipboard has at hand runs now, and takes the lock
 		t.paste(true)
+		t.Sess.Lock()
 
 	case e.Button == ButtonRight && e.Action == Press:
 		t.Sess.Unlock()
