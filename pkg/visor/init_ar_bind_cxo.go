@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -70,6 +71,19 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
+	if route, ok := v.systemFeedFor(sysfeed.AddressResolver, arPK, log); ok {
+		bp.SetBindPublishHook(v.bindPublishHook(route.sink, log))
+		go runReachDeclLoop(v.ctx, v, route.sink, log)
+		bp.SetCXOKeepaliveHealthyFunc(route.healthy)
+		v.pushCloseStack("ar_bind_cxo", func() error {
+			bp.SetCXOKeepaliveHealthyFunc(nil)
+			bp.SetBindPublishHook(v.noteReachBind)
+			return nil
+		})
+		log.WithField("ar_pk", arPK).Info("AR-bind-CXO: bindings ride the system feed")
+		return nil
+	}
+
 	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"), skyenv.DmsgVisorARBindCXOPort)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		Dial:        v.cxoDial,
@@ -95,17 +109,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// type (leaf name == the type's canonical wire string). The hook runs on
 	// the AR client's bind goroutine and must not block; Put coalesces into the
 	// next BatchWindow tick, so it returns at once.
-	bp.SetBindPublishHook(func(netType string, payload addrresolver.LocalAddresses) {
-		v.noteReachBind(netType, payload)
-		b, mErr := json.Marshal(payload)
-		if mErr != nil {
-			log.WithError(mErr).Debug("AR-bind-CXO: marshal bind payload failed")
-			return
-		}
-		if pErr := pub.Put(netType, b); pErr != nil {
-			log.WithError(pErr).Debug("AR-bind-CXO: CXO Put failed")
-		}
-	})
+	bp.SetBindPublishHook(v.bindPublishHook(pub, log))
 
 	// Dial the AR so its aggregator sees the inbound conn and subscribes to our
 	// feed (PK = our PK). ConnectPK is idempotent, so the same loop handles
@@ -170,6 +174,22 @@ func runARBindAnnounceLoop(ctx context.Context, pub *treestore.Publisher, arPK c
 			return
 		case <-t.C:
 			announce()
+		}
+	}
+}
+
+// bindPublishHook mirrors each AR bind onto sink, one leaf per transport type
+// named by the type's wire string.
+func (v *Visor) bindPublishHook(sink regLeafSink, log *logging.Logger) func(string, addrresolver.LocalAddresses) {
+	return func(netType string, payload addrresolver.LocalAddresses) {
+		v.noteReachBind(netType, payload)
+		b, err := json.Marshal(payload)
+		if err != nil {
+			log.WithError(err).Debug("AR-bind-CXO: marshal bind payload failed")
+			return
+		}
+		if err := sink.Put(netType, b); err != nil {
+			log.WithError(err).Debug("AR-bind-CXO: CXO Put failed")
 		}
 	}
 }

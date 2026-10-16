@@ -61,6 +61,9 @@ type CXOFeedState struct {
 	// under a CXO node key that differs from the transport_discovery_dmsg
 	// PK the visor allowlisted.
 	Denied []DeniedSubscriber `json:"denied,omitempty"`
+	// Registrations names the services whose registrations ride this feed
+	// (the system feed only, see docs/design/cxo-one-feed-per-visor.md).
+	Registrations []string `json:"registrations,omitempty"`
 }
 
 // DeniedSubscriber is one rejected-subscriber record for CXOFeedState.

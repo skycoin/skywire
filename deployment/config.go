@@ -245,6 +245,21 @@ type Services struct {
 	// Reward system
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
+	// FeedIngest names the services (dmsg_discovery, address_resolver,
+	// service_discovery) that run in the transport discovery's process, whose
+	// registrations visors then put on their system feed. See
+	// docs/design/cxo-one-feed-per-visor.md.
+	FeedIngest []string `json:"feed_ingest,omitempty"`
+}
+
+// RidesSystemFeed reports whether service is listed in FeedIngest.
+func (s *Services) RidesSystemFeed(service string) bool {
+	for _, name := range s.FeedIngest {
+		if name == service {
+			return true
+		}
+	}
+	return false
 }
 
 // BackfillClearnetFromDmsg copies each *_dmsg deployment-service URL into its
