@@ -45,6 +45,7 @@ var (
 	serveLanding      bool
 	servePreserveHost bool
 	serveInjectPK     bool
+	serveVisorPages   bool
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	servePortCmd.Flags().BoolVar(&serveSkynet, "skynet", true, "expose over skynet (sky-forwarding server)")
 	servePortCmd.Flags().BoolVar(&serveDmsg, "dmsg", true, "expose over DMSG")
 	servePortCmd.Flags().BoolVar(&serveLanding, "landing", true, "show on the visor landing page")
+	servePortCmd.Flags().BoolVar(&serveVisorPages, "visor-pages", false, "serve the visor's own pages, its landing page at /, on this port instead of --to")
 	servePortCmd.Flags().BoolVar(&servePreserveHost, "preserve-host", false,
 		"for port-80 HTTP reverse-proxy: keep the original Host header instead of rewriting "+
 			"to --to target. Use when the backend (Caddy / nginx / traefik) dispatches "+
@@ -126,7 +128,8 @@ Examples:
   serve add 80 --to 127.0.0.1:9883                # reverse-proxy port 80 to local HTTP service
   serve add 3000 --to 9000 --label "blog"
   serve add 5432 --to 192.168.1.20:5432           # forward to a LAN service
-  serve add 8443 --to nas.local:443 --landing=false`,
+  serve add 8443 --to nas.local:443 --landing=false
+  serve add 8000 --visor-pages                    # this visor's own page at <pk>.skynet:8000`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		port, err := strconv.Atoi(args[0])
@@ -143,6 +146,7 @@ Examples:
 			ShowOnLanding: serveLanding,
 			PreserveHost:  servePreserveHost,
 			InjectPK:      serveInjectPK,
+			VisorPages:    serveVisorPages,
 		}
 
 		// Resolve --to into the right field. The visor schema has two
@@ -152,6 +156,9 @@ Examples:
 		// --to accepts either "host:port" or just a port. We use
 		// ProxyAddr whenever the user specifies a host, and LocalPort
 		// when only a port is given.
+		if serveVisorPages && (serveTo != "" || port == 80) {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--visor-pages takes no --to, and port 80 has them already"))
+		}
 		if serveTo != "" {
 			host, p, err := splitTo(serveTo)
 			if err != nil {
@@ -391,6 +398,8 @@ func listForwardedPorts(cmd *cobra.Command) {
 	for _, p := range ports {
 		to := p.ProxyAddr
 		switch {
+		case p.VisorPages:
+			to = "visor pages"
 		case to == "" && p.Port == 80 && p.LocalPort == 0:
 			to = "landing page"
 		case to == "":

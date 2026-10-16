@@ -2,6 +2,7 @@
 package logserver
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -131,4 +132,47 @@ func TestVhostCatchAll(t *testing.T) {
 		require.Equal(t, "website "+own+" /", get(own, "/"), own)
 		require.NotContains(t, get(own, "/health"), "caddy", own)
 	}
+}
+
+// The visor's own pages stay reachable when a site takes its bare name: at
+// /.skywire/, under a name set to show them, and through OwnPages on a port.
+func TestVisorPagesAndSites(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	friend, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	api.SetVhosts([]Vhost{
+		{Name: "status", Names: []string{"status"}, Handler: site("status")},
+		{Name: "private", Names: []string{"private"}, Handler: site("private"), Whitelist: []cipher.PubKey{friend}},
+		{Name: AnyVhost, Names: []string{AnyVhost}, Handler: site("caddy"), Sites: func() []string { return []string{"skycoin.com", "status"} }},
+		{Name: "landing", Names: []string{"landing"}, VisorPages: true},
+	})
+	api.SetWebsiteHandler(site("website"))
+	label := visorPK.DNSLabel()
+	get := func(h http.Handler, host, path string) string {
+		req := httptest.NewRequest(http.MethodGet, "http://x"+path, nil)
+		req.Host = host
+		req.RemoteAddr = visorPK.String() + ":80"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+
+	require.Equal(t, "website /", get(api.Handler, label+".skynet", "/"))
+	for _, page := range []string{
+		get(api.Handler, label+".skynet", "/.skywire/"),
+		get(api.Handler, "landing."+label+".skynet", "/"),
+		get(api.OwnPages(), label+".skynet:8000", "/"),
+	} {
+		require.Contains(t, page, `href="/health"`)
+		require.Contains(t, page, "http://skycoin.com."+label+".skynet/")
+		require.Contains(t, page, "http://status."+label+".skynet/")
+		require.NotContains(t, page, "http://landing.")
+		require.NotContains(t, page, "http://private.")
+	}
+	require.Contains(t, get(api.Handler, "landing."+label+".skynet", "/health"), "{")
+
+	var list SiteList
+	require.NoError(t, json.Unmarshal([]byte(get(api.Handler, label+".skynet", "/.skywire/sites")), &list))
+	require.Equal(t, SiteList{PK: visorPK.Hex(), Sites: []string{"skycoin.com", "status"}}, list)
 }

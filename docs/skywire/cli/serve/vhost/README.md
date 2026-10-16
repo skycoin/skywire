@@ -28,6 +28,7 @@ skywire cli serve vhost
 serve vhost add status --to 8092
   serve vhost add '*' --to 80 --preserve-host   # every other name to Caddy
   serve add 80 --to 8080                         # the bare <pk>.skynet's own site
+  serve vhost add landing --visor-pages          # this visor's own page at landing.<pk>.skynet
 ```
 
 ## Global Flags

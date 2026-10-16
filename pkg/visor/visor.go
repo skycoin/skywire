@@ -225,6 +225,9 @@ type Visor struct {
 	// homeVisors caches the visor list home.skynet shows.
 	homeVisors homeVisorCache
 
+	// caddySites caches the site names a local Caddy reports.
+	caddySites siteCache
+
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
