@@ -67,8 +67,9 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -435,8 +436,14 @@ func encodeClientsBatch(clients map[cipher.PubKey][]byte) []byte {
 	for pk := range clients {
 		pks = append(pks, pk)
 	}
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
-	payload := make([]byte, 0, 2+len(pks)*256)
+	// Lowercase fixed-length hex sorts as the raw bytes do, so this is the
+	// order Hex() comparisons gave, without two string allocations per compare.
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int { return bytes.Compare(a[:], b[:]) })
+	size := 2 + len(pks)
+	for _, pk := range pks {
+		size += len(clients[pk])
+	}
+	payload := make([]byte, 0, size)
 	payload = append(payload, '[')
 	for i, pk := range pks {
 		if i > 0 {
