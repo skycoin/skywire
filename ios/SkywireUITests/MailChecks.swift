@@ -143,7 +143,8 @@ final class MailChecks: XCTestCase {
         bodyField.tap()
         bodyField.typeText(body)
         let sendButton = app.buttons["mail-send"]
-        scroll(to: sendButton, in: app)
+        // Under the on-screen keyboard the screen's middle is the Message box.
+        scroll(to: sendButton, in: app, from: subjectField)
         sendButton.tap()
         // A delivered send closes the draft.
         XCTAssertTrue(app.buttons["mail-write"].waitForExistence(timeout: 60), "the draft did not close: not delivered")

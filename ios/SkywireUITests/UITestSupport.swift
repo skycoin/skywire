@@ -61,10 +61,11 @@ extension XCTestCase {
         button.tap()
     }
 
-    /// Swipes up until `element` can be tapped, a few times at most.
-    func scroll(to element: XCUIElement, in app: XCUIApplication) {
+    /// Swipes up on `start`, the screen by default, until `element` can be tapped, a few times at
+    /// most. A swipe that starts in a focused text box does not move the page.
+    func scroll(to element: XCUIElement, in app: XCUIApplication, from start: XCUIElement? = nil) {
         for _ in 0..<6 where !element.isHittable {
-            app.swipeUp()
+            (start ?? app).swipeUp()
         }
         XCTAssertTrue(element.isHittable, "\(element) not reachable by scrolling")
     }
