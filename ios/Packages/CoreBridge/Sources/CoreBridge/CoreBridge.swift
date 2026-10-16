@@ -72,8 +72,11 @@ public struct CoreError: Error, LocalizedError, Sendable {
     public let message: String
     public var errorDescription: String? { message }
 
+    /// mobilecore.ErrStopped's text.
+    static let stoppedWhileStarting = "mobilecore: stopped while starting"
+
     /// A start that a stop ended before the core was up (mobilecore.ErrStopped).
-    public var isStoppedWhileStarting: Bool { message == "mobilecore: stopped while starting" }
+    public var isStoppedWhileStarting: Bool { message == Self.stoppedWhileStarting }
 }
 
 /// Overrides of the options the core generates its config with. The core
@@ -211,15 +214,19 @@ public actor CoreBridge {
     /// Runs a blocking C call on a GCD global queue (rule 4) and turns its
     /// return code into a throw. The reason is read on the same thread right
     /// after the call, so another call finishing in between rarely replaces
-    /// it; the fallback message covers the case where one did.
+    /// it; the fallback message covers the case where one did. A start that a
+    /// stop ended says so by its code (-2), since that stop clears the reason.
     private static func blocking(_ call: @escaping @Sendable () -> Int32) async throws {
         let failure: String? = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                guard call() != 0 else {
+                switch call() {
+                case 0:
                     continuation.resume(returning: nil)
-                    return
+                case -2:
+                    continuation.resume(returning: CoreError.stoppedWhileStarting)
+                default:
+                    continuation.resume(returning: takeLastError() ?? "the core reported a failure without a reason")
                 }
-                continuation.resume(returning: takeLastError() ?? "the core reported a failure without a reason")
             }
         }
         if let failure {
