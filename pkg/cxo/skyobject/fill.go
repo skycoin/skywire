@@ -92,6 +92,16 @@ func (f *Filler) get(
 			rc = obj.RC
 		}
 	case <-f.closeq:
+		// The object may have been stored for this want as the filler
+		// closed, which counted its inc. Record it so a reject gives it back.
+		f.c.Unwant(key, gc)
+		select {
+		case obj := <-gc:
+			if obj.Err == nil && inc > 0 {
+				f.inc(key, obj.RC)
+			}
+		default:
+		}
 		err = ErrTerminated
 	}
 
