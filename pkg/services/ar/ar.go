@@ -151,6 +151,7 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 	s.cxo.StartAggregator(ctx, host, logger, "ar-bind", skyenv.DmsgVisorARBindCXOPort, func(n *node.Node) (services.Aggregator, error) {
 		return regcxo.New(dmsgC, sk, b.api, regcxo.Config{Node: n, Logger: logger})
 	})
+	services.ConsumeSystemFeed(ctx, logger, regcxo.NewFeedConsumer(b.api, logger))
 	bindPub, err := api.StartBindingsCXOPublisher(dmsgC, sk, b.store, logger)
 	if err == nil {
 		b.api.SetBindingsCXOPublisher(bindPub)

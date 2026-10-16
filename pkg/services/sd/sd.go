@@ -164,6 +164,7 @@ func (s *service) startCXO(ctx context.Context, dmsgC *dmsg.Client, host service
 	s.cxo.StartAggregator(ctx, host, log, "sd-reg", skyenv.DmsgVisorSDRegCXOPort, func(n *node.Node) (services.Aggregator, error) {
 		return regcxo.New(dmsgC, sk, sdAPI, regcxo.Config{Node: n, Logger: log})
 	})
+	services.ConsumeSystemFeed(ctx, log, regcxo.NewFeedConsumer(sdAPI, log))
 }
 
 // Embed runs service-discovery inside a host process: the API is

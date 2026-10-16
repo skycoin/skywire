@@ -130,6 +130,7 @@ func (s *CXOSet) State(st *State) {
 		if a.agg != nil {
 			x := a.agg.Stats()
 			as.Conns, as.Subscribed, as.Feeds, as.LocalRoots = x.Conns, x.Subscribed, x.Feeds, x.LocalRoots
+			as.Consumers, as.Delivered = x.Consumers, x.Delivered
 		}
 		st.Aggregators = append(st.Aggregators, as)
 	}
@@ -150,4 +151,16 @@ func (s *CXOSet) State(st *State) {
 // and lends them to the service (see CXOHost).
 type CXOAggregating interface {
 	AggregatorPorts() []uint16
+}
+
+// ConsumeSystemFeed registers c to take its registrations off the visors'
+// system feeds that a transport discovery in this process aggregates, until
+// ctx ends. Outside such a process it receives nothing.
+func ConsumeSystemFeed(ctx context.Context, log *logging.Logger, c cxoaggregate.FeedConsumer) {
+	unregister := cxoaggregate.RegisterFeedConsumer(c)
+	go func() {
+		<-ctx.Done()
+		unregister()
+	}()
+	log.WithField("service", c.Service).Info("Taking registrations from the system feeds this process aggregates")
 }

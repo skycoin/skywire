@@ -308,6 +308,7 @@ func (s *service) runDMSG(
 	// the same aggregator pattern runs at fleet scale in TPD, so it needs no
 	// gate. Needs the dmsg client; the API is the Sink (IngestEntryFromCXO).
 	// Best-effort — HTTP registration is unaffected if it fails to start.
+	services.ConsumeSystemFeed(ctx, log, regcxo.NewFeedConsumer(a, log))
 	if dmsgDC != nil {
 		agg, aerr := regcxo.New(dmsgDC, sk, a, regcxo.Config{Logger: log})
 		if aerr != nil {
