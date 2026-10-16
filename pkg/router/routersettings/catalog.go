@@ -176,11 +176,10 @@ var (
 	// explicit value derives the widths instead, so pool.active_width and
 	// mux.app_width follow from n.
 	//
-	// ADVISORY as shipped: `visor state --select mux` reports it as a
-	// session's shape_target beside the shape it actually has, and nothing
-	// converges toward it yet (docs/design/mux-shape-axis.md step 5).
+	// The pool arbiter converges a session toward an explicit shape one move
+	// per tick (shapeStep, mux_shape_converge.go) and stands down under auto.
 	MuxShape = RegisterString("mux.shape", ShapeAuto,
-		"target multiplexing SHAPE of a session (one app, one exit): auto = as many tunnels as the app holds, each at pool.active_width legs; <k>x<n> = k tunnels of n legs (2x2, 4x1, 1x4); a comma list gives each tunnel its own leg count (2,1,1). ADVISORY: reported as shape_target, not yet converged toward",
+		"target multiplexing SHAPE of a session (one app, one exit): auto = as many tunnels as the app holds, each at pool.active_width legs; <k>x<n> = k tunnels of n legs (2x2, 4x1, 1x4); a comma list gives each tunnel its own leg count (2,1,1). An explicit shape is converged toward one move per tick; visor state reports it as shape_target",
 		ValidateShape)
 	// MuxShapeHold freezes the CONVERGER without changing the target: while it
 	// is set shapeStep declines every move and the session keeps the shape it

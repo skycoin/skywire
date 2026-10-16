@@ -128,10 +128,11 @@ codebase evolved; this is the reference for "what we mean when we say X."
 - **ephemeral key** — a key pair minted for one process and never persisted.
   What a client gets when `--sk` is not supplied. NOT what a desk tab has: a
   tab persists its key, which is why it can be paired once and stay paired.
-- **noise / XK** — the handshake every transport runs once its carrier is up:
-  Noise in XK mode, where the dialer already knows the responder's static PK
-  and the responder learns the dialer's. This is what makes a PK an address
-  rather than a claim. → `pkg/transport/network`
+- **noise / KK** — the handshake every transport runs once its carrier is up:
+  Noise in KK mode, where each side already knows the other's static PK and
+  proves it holds its own. Every handshake also runs an ML-KEM-768 exchange
+  (post-quantum hybrid). This is what makes a PK an address rather than a
+  claim. → `pkg/transport/network`
 - **whitelist** — the per-service allow-list of PKs permitted to do something
   privileged: run a command over dmsgpty, act as a route setup node, register
   a survey. Not one list — each subsystem keeps its own.
