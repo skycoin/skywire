@@ -5,6 +5,8 @@ package commands
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -16,7 +18,10 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
-var shCommand string
+var (
+	shCommand string
+	shWindow  bool
+)
 
 // shCmd is websh, the shell of the browser desk, on this machine's terminal.
 var shCmd = &cobra.Command{
@@ -26,11 +31,22 @@ var shCmd = &cobra.Command{
 		"shell, applets and line editor of the browser desk, on this machine's files\n" +
 		"and programs. skywire in it runs in this process, as it does in a desk, so it\n" +
 		"needs no binary of its own. With -c it runs a command line, with FILE a script,\n" +
-		"and with its input not a terminal, the script it reads.",
+		"and with its input not a terminal, the script it reads. With --window it opens a\n" +
+		"window of websh tabs instead, or stays on this terminal where none can open.",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	RunE: func(c *cobra.Command, args []string) error {
 		opt := console.Options{Host: "skywire", Exec: execSkywire}
+		if shWindow {
+			if c.Flags().Changed("command") || len(args) > 0 {
+				return errors.New("--window opens an interactive shell and takes no -c or FILE")
+			}
+			why := noWindow()
+			if why == "" {
+				return runWindow(opt)
+			}
+			fmt.Fprintf(os.Stderr, "skywire sh: no window (%s), websh runs on this terminal\n", why)
+		}
 		var code int
 		var err error
 		switch {
@@ -69,6 +85,7 @@ func execSkywire(ctx context.Context, args []string) (int, bool) {
 
 func init() {
 	shCmd.Flags().StringVarP(&shCommand, "command", "c", "", "run this command line, then exit")
+	shCmd.Flags().BoolVar(&shWindow, "window", false, "open websh in a window with tabs, falling back to this terminal")
 	// A terminal starts "the user's shell" as a login shell; websh reads no profile.
 	shCmd.Flags().BoolP("login", "l", false, "accepted for login shells; websh reads no profile")
 	// As in bash, flags end at the script: what follows it is its own.
