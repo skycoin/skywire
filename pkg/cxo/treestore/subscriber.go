@@ -18,6 +18,8 @@ package treestore
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,6 +100,11 @@ type Subscriber struct {
 	cache    map[string][]byte
 	prefixes []string // declared filter; empty = match all
 	callback UpdateCallback
+	// filled is set once a whole Root has been filled and walked. fillErr is
+	// the last fill or walk failure since then. Both are guarded by mu.
+	filled    bool
+	fillErr   error
+	onFillErr func(error)
 
 	// rootObservedMu guards rootObservedSignal so callers waiting on
 	// a Root observation see a consistent channel even when a fresh
@@ -730,6 +737,37 @@ func (s *Subscriber) CacheSizeAndSampleKeys(maxSample int) (int, []string) {
 	return size, out
 }
 
+// ErrIncompleteRoot is a Root CXO reported filled whose tree is missing
+// objects locally. Later fills of that tree skip them, so only a new store helps.
+var ErrIncompleteRoot = errors.New("treestore: filled Root is missing objects")
+
+// FillState reports whether a whole Root has been filled and walked since
+// this subscriber was created, and the last fill failure since then. A
+// cache built only from partial-fill salvage reports filled=false.
+func (s *Subscriber) FillState() (filled bool, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.filled, s.fillErr
+}
+
+func (s *Subscriber) setFillErr(err error) {
+	s.mu.Lock()
+	s.fillErr = err
+	fn := s.onFillErr
+	s.mu.Unlock()
+	if fn != nil {
+		fn(err)
+	}
+}
+
+// OnFillError registers a callback for each fill or walk failure. It runs
+// on the CXO filler goroutine, so it must not block.
+func (s *Subscriber) OnFillError(fn func(error)) {
+	s.mu.Lock()
+	s.onFillErr = fn
+	s.mu.Unlock()
+}
+
 // OnUpdate registers (or replaces) the change callback. Pass nil to
 // clear. The callback is invoked under the subscriber's lock — keep
 // it short or copy state out before blocking.
@@ -819,6 +857,11 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 		// block forever on a publisher whose tree is genuinely
 		// empty (the subscription IS live; there's just nothing
 		// to fill yet).
+		if r != nil && r.Pub == skycipher.PubKey(s.feedPK) {
+			s.mu.Lock()
+			s.filled, s.fillErr = true, nil
+			s.mu.Unlock()
+		}
 		s.applySnapshot(nil)
 		if r != nil && r.Pub == skycipher.PubKey(s.feedPK) {
 			s.signalRootObserved()
@@ -848,10 +891,15 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 
 	snap := make(map[string][]byte)
 	if err := walkTree(pack, &rootNode, "", snap); err != nil {
-		s.log.WithError(err).Warn("treestore-sub: walk tree failed")
+		s.log.WithError(err).WithField("feed", s.feedPK.Hex()).WithField("seq", r.Seq).
+			Warn("treestore-sub: walk tree failed")
+		s.setFillErr(fmt.Errorf("%w: Root %d: %w", ErrIncompleteRoot, r.Seq, err))
 		return
 	}
 
+	s.mu.Lock()
+	s.filled, s.fillErr = true, nil
+	s.mu.Unlock()
 	s.applySnapshot(snap)
 	// Mark "data flowed" for the reconnect watchdog (#2713). Bumped
 	// only on a feed-matching Root that walked successfully — non-
@@ -996,6 +1044,9 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	if r.Pub != skycipher.PubKey(s.feedPK) {
 		return
 	}
+	// Recorded before the salvage below fires the update callback, so a
+	// reader woken by it already sees that this fill did not complete.
+	s.setFillErr(fmt.Errorf("fill Root %d: %w", r.Seq, err))
 	// Best-effort partial-object salvage. CXO fills top-down and keeps
 	// whatever objects it fetched before the break (the filler doesn't roll
 	// the store back), so a truncated fill of a big/deep tree usually still
