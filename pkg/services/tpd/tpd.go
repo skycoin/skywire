@@ -187,6 +187,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if la, ok := st.(interface{ SetLeafArchive(string) }); ok {
 		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
 	}
+	if ua, ok := st.(interface{ SetUptimeArchive(string) }); ok {
+		ua.SetUptimeArchive(filepath.Join(storeDataPath, "tp-uptime"))
+	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	s.chartsAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())

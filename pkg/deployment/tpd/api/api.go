@@ -411,10 +411,12 @@ func (api *API) RunBackgroundTasks(ctx context.Context, logger logrus.FieldLogge
 			if err := api.store.BackupAndCleanOldBandwidth(ctx, api.backupPath); err != nil {
 				logger.WithError(err).Error("failed to backup old bandwidth data")
 			}
+			api.archiveTimelines(ctx, logger)
 		case <-backupTicker.C:
 			if err := api.store.BackupAndCleanOldBandwidth(ctx, api.backupPath); err != nil {
 				logger.WithError(err).Error("failed to backup old bandwidth data")
 			}
+			api.archiveTimelines(ctx, logger)
 		}
 	}
 }
@@ -621,5 +623,19 @@ func byKind(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 		}
 		r.SetPathValue(kind, value)
 		h(w, r)
+	}
+}
+
+// archiveTimelines writes settled days of per-transport uptime timelines to
+// disk before they leave redis, when the store keeps an archive.
+func (api *API) archiveTimelines(ctx context.Context, logger logrus.FieldLogger) {
+	ta, ok := api.store.(interface {
+		ArchiveTransportTimelines(context.Context, time.Time) error
+	})
+	if !ok {
+		return
+	}
+	if err := ta.ArchiveTransportTimelines(ctx, time.Now()); err != nil {
+		logger.WithError(err).Error("failed to archive per-transport uptime timelines")
 	}
 }

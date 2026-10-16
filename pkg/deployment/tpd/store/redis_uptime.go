@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"math/bits"
 	"strconv"
 	"time"
 
@@ -160,12 +161,23 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 }
 
 // A transport's day hash (type, last_seen) and the day's online set are only
-// ever read for today, so they outlive the day by half a day instead of
-// keeping eight. The timeline, read back a week, keeps eight.
+// ever read for today, so they outlive the day by half a day. The timeline
+// is read back a week. With the archive (tp_timeline_archive.go) days older
+// than yesterday are read from disk, so it leaves redis as soon; without it
+// it keeps eight days.
 const (
-	tpUptimeTodayTTL    = 36 * time.Hour
-	tpUptimeTimelineTTL = 8 * 24 * time.Hour
+	tpUptimeTodayTTL            = 36 * time.Hour
+	tpUptimeTimelineTTL         = 8 * 24 * time.Hour
+	tpUptimeTimelineArchivedTTL = 36 * time.Hour
 )
+
+// tpTimelineTTL is the life of a per-transport timeline key.
+func (s *redisStore) tpTimelineTTL() time.Duration {
+	if s.uptimeArchive == "" {
+		return tpUptimeTimelineTTL
+	}
+	return tpUptimeTimelineArchivedTTL
+}
 
 func tpUptimeKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s", serviceName, tpID, date)
@@ -210,7 +222,7 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
-	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
+	pipe.Expire(ctx, tlKey, s.tpTimelineTTL())
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		// Reward-critical (see RecordHeartbeat): surface store failures at Warn
@@ -242,6 +254,9 @@ func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID
 	if !validDateKey(date) {
 		return fmt.Errorf("transport timeline: invalid date %q", date)
 	}
+	if s.timelineDayArchived(date, time.Now()) {
+		return nil // read from the archive; a write would only bring the key back
+	}
 	idStr := tpID.String()
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	stagingKey := tlKey + ":ingest"
@@ -249,7 +264,7 @@ func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, stagingKey, string(bitmap), time.Minute)
 	pipe.BitOpOr(ctx, tlKey, tlKey, stagingKey)
-	pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
+	pipe.Expire(ctx, tlKey, s.tpTimelineTTL())
 	pipe.Del(ctx, stagingKey)
 	_, err := pipe.Exec(ctx)
 	return err
@@ -292,6 +307,11 @@ func (s *redisStore) GetTransportUptimeSummaries(ctx context.Context, tpIDs []uu
 		}
 	}
 
+	// Days older than yesterday come from the archive, read once for all ids.
+	var arch map[string]map[uuid.UUID][]byte
+	if v2 || timeline {
+		arch = s.archivedTimelines(tpIDs, now)
+	}
 	result := make([]TransportUptimeSummary, 0, len(tpIDs))
 	for _, id := range tpIDs {
 		idStr := id.String()
@@ -321,10 +341,10 @@ func (s *redisStore) GetTransportUptimeSummaries(ctx context.Context, tpIDs []uu
 		}
 
 		if v2 || timeline {
-			summary.Daily = s.getTransportDailyUptime(ctx, idStr, now)
-		}
-		if timeline {
-			summary.Timeline = s.GetTransportDailyTimeline(ctx, idStr, now)
+			summary.Daily, summary.Timeline = s.transportDays(ctx, idStr, now, arch, true, timeline)
+			if !timeline {
+				summary.Timeline = nil
+			}
 		}
 
 		result = append(result, summary)
@@ -350,35 +370,61 @@ func (s *redisStore) GetTransportUptimeByVisor(ctx context.Context, pk cipher.Pu
 	return s.GetTransportUptimeSummaries(ctx, ids, v2, timeline)
 }
 
-func (s *redisStore) getTransportDailyUptime(ctx context.Context, tpID string, now time.Time) map[string]string {
+// transportDays returns a transport's daily uptime percentages and rendered
+// timelines over the read window. Each day's bitmap is redis's, OR'd with the
+// archived one where the day is archived (arch, from archivedTimelines).
+func (s *redisStore) transportDays(ctx context.Context, tpID string, now time.Time,
+	arch map[string]map[uuid.UUID][]byte, wantDaily, wantTimeline bool) (daily, timelines map[string]string) {
+	id, _ := uuid.Parse(tpID) //nolint:errcheck // a bad ID only misses the archive
 	pipe := s.client.Pipeline()
-	cmds := make([]*redis.IntCmd, uptimeHistoryDays)
+	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
 	dates := make([]string, uptimeHistoryDays)
 	for i := 0; i < uptimeHistoryDays; i++ {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
-		cmds[i] = pipe.BitCount(ctx, tpUptimeTimelineKey(tpID, dates[i]), nil)
+		cmds[i] = pipe.Get(ctx, tpUptimeTimelineKey(tpID, dates[i]))
 	}
 	_, _ = pipe.Exec(ctx) //nolint:errcheck // per-command results below
-	daily := make(map[string]string)
+	daily, timelines = make(map[string]string), make(map[string]string)
 	for i, c := range cmds {
-		set, err := c.Result()
-		if err != nil || set == 0 {
+		raw, _ := c.Bytes() //nolint:errcheck // a missing day is empty
+		if old := arch[dates[i]][id]; len(old) > 0 {
+			raw = orBitmaps(raw, old)
+		}
+		set := 0
+		for _, b := range raw {
+			set += bits.OnesCount8(b)
+		}
+		if set == 0 {
 			continue
 		}
-		daily[dates[i]] = fmt.Sprintf("%.2f", float64(set)/timelineSlots*100)
+		if wantDaily {
+			daily[dates[i]] = fmt.Sprintf("%.2f", float64(set)/timelineSlots*100)
+		}
+		if wantTimeline {
+			timelines[dates[i]], _ = renderTimeline(raw)
+		}
 	}
-	return daily
+	return daily, timelines
+}
+
+// orBitmaps returns the union of two bitmaps of possibly different lengths.
+func orBitmaps(a, b []byte) []byte {
+	if len(a) < len(b) {
+		a, b = b, a
+	}
+	out := append([]byte(nil), a...)
+	for i := range b {
+		out[i] |= b[i]
+	}
+	return out
 }
 
 func (s *redisStore) GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string {
-	timelines := make(map[string]string)
-	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		tlKey := tpUptimeTimelineKey(tpID, date)
-		if line, ok := readTimelineLine(ctx, s.client, tlKey); ok {
-			timelines[date] = line
-		}
+	var arch map[string]map[uuid.UUID][]byte
+	if id, err := uuid.Parse(tpID); err == nil {
+		arch = s.archivedTimelines([]uuid.UUID{id}, now)
 	}
+	_, timelines := s.transportDays(ctx, tpID, now, arch, false, true)
 	return timelines
 }
 
@@ -399,6 +445,12 @@ func readTimelineLine(ctx context.Context, client redis.UniversalClient, tlKey s
 	if err != nil || len(raw) == 0 {
 		return "", false
 	}
+	return renderTimeline(raw)
+}
+
+// renderTimeline renders a day's bitmap as "." for up and " " for down,
+// false when no bit is set.
+func renderTimeline(raw []byte) (string, bool) {
 	var buf [timelineSlots]byte
 	hasAny := false
 	for slot := 0; slot < timelineSlots; slot++ {
