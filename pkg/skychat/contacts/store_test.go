@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 const (
@@ -165,5 +167,24 @@ func TestNilStoreIsInert(t *testing.T) {
 	}
 	if _, err := s.Set(alice, "Alice"); err == nil {
 		t.Fatal("Set on a nil store should report, not panic silently")
+	}
+}
+
+// TestABase32KeyIsStoredAsHex: a key typed as its base32 label is the same
+// contact as its hex form, and the file keeps hex.
+func TestABase32KeyIsStoredAsHex(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	s := openTemp(t)
+	if _, err := s.Set(pk.DNSLabel(), "Carol"); err != nil {
+		t.Fatalf("Set(label): %v", err)
+	}
+	if got := s.Name(pk.Hex()); got != "Carol" {
+		t.Fatalf("Name(hex) = %q, want Carol", got)
+	}
+	if got := s.Name(pk.DNSLabel()); got != "Carol" {
+		t.Fatalf("Name(label) = %q, want Carol", got)
+	}
+	if _, ok := s.All()[pk.Hex()]; !ok {
+		t.Fatalf("stored keys = %v, want the hex form", s.All())
 	}
 }

@@ -87,6 +87,9 @@ type EmbeddedDmsgWeb struct {
 	skynetDial      func(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error)
 	directServerPKs map[cipher.PubKey]struct{}
 
+	// homePage renders home.dmsg and home.skynet; nil keeps the alias list.
+	homePage func(suffix string) []byte
+
 	// statusProvider serves the reserved in-process status hosts through this
 	// proxy (http://status.dmsg/ etc.). Set by initEmbeddedDmsgWeb; nil disables
 	// the status hosts.
@@ -296,6 +299,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
 		cfg.Aliases[label] = pk
 	}
+	cfg.HomePage = e.homePage
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
 	cfg.DirectServerPKs = e.directServerPKs
@@ -358,7 +362,8 @@ func resolverAliasMap(alias string, localPK cipher.PubKey) map[string]cipher.Pub
 	if alias == "" {
 		alias = "skywire"
 	}
-	return map[string]cipher.PubKey{alias: localPK}
+	// "home" is the visor too, so home.skynet reaches its directory by any path.
+	return map[string]cipher.PubKey{alias: localPK, dmsgweb.HomeAlias: localPK}
 }
 
 // serviceAliasMap derives canonical short aliases for the deployment services
@@ -542,6 +547,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	runtime.statusProvider = v.proxyStatusProvider()
 	if resolverC == v.dmsgC {
 		runtime.skynetDial = v.dmsgWebSkynetDial
+		runtime.homePage = v.homePage
 	}
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime

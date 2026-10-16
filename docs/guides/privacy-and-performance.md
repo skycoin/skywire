@@ -48,9 +48,10 @@ double-encrypted carriers with `transport_preference` (below).
 
 ## The levers
 
-All of these live in the visor config (`skywire.json`). Knobs that also have a
-`config gen` / `autoconfig` flag are noted; the rest are set by editing the
-config JSON (or `skywire cli config gen` and hand-editing).
+All of these live in the visor config. Set one with its skywire.conf variable
+and `skywire autoconfig`, or with `skywire cli config set <path>=<value>` on a
+running visor, which also saves it to skywire.conf where it has a variable. Do
+not edit the generated json by hand: the next autoconfig rebuilds it.
 
 ### Being reachable — `public_autoconnect`, `--public`, `ar_transport_limit`
 
@@ -198,11 +199,13 @@ Most levers here are established and shipping:
   behavior before relying on them for a threat model.
 
 !!! info "Config vs. flags"
-    The privacy knobs (`ar_transport_limit`, `min_hops`, `no_direct_transports`,
-    `transport_create_deny`, `transport_preference`, `persistent_transports`) are
-    set today by editing `skywire.json`. `config gen` / `autoconfig` flags for
-    them are being added so the install-command generator and `skywire autoconfig`
-    can set them directly.
+    `min_hops`, `ar_transport_limit` and `no_direct_transports` are the
+    skywire.conf variables `MINHOPS`, `ARTRANSPORTLIMIT` and
+    `NODIRECTTRANSPORTS`. `transport_preference` and `persistent_transports` are
+    set on a running visor (`cli config set routing.transport_preference=...` and
+    `persistent_transports=...`, or the dashboard) and kept when the config is regenerated.
+    `transport_create_deny` has no variable yet. `cli config set
+    transport.transport_create_deny=...` sets it, but the next regenerate drops it.
 
 ## See also
 

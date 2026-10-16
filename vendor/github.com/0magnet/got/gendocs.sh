@@ -40,6 +40,8 @@ cloc=$(gocloc --not-match-d='(vendor|node_modules|\.git)' .)
 
 # Rewritten rather than patched, so the two sections cannot drift apart.
 awk '/^## Dependency Graph$/{exit} {print}' README.md > README.gendocs
+# A README that never had the section ends on prose; keep the heading off it.
+[ -z "$(tail -n 1 README.gendocs)" ] || echo >> README.gendocs
 
 {
 	printf '## Dependency Graph\n\nMade with [goda](https://github.com/loov/goda):\n\n```\n'

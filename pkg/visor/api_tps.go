@@ -255,7 +255,7 @@ func (v *Visor) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]visor
 }
 
 // StartUIServer starts the embedded UI server on the specified address.
-// If addr is empty, uses the configured LocalAddr or defaults to localhost:8081.
+// If addr is empty it uses 127.0.0.1:8080, the "skywire cli tp viz" default.
 func (v *Visor) StartUIServer(addr string) error {
 	v.ui.mu.Lock()
 	defer v.ui.mu.Unlock()
@@ -266,11 +266,7 @@ func (v *Visor) StartUIServer(addr string) error {
 
 	// Determine address
 	if addr == "" {
-		if v.conf.UIServer != nil && v.conf.UIServer.LocalAddr != "" {
-			addr = v.conf.UIServer.LocalAddr
-		} else {
-			addr = "localhost:8081"
-		}
+		addr = "127.0.0.1:8080"
 	}
 
 	// Create tpviz server
@@ -280,6 +276,9 @@ func (v *Visor) StartUIServer(addr string) error {
 	// Set visor API directly via adapter
 	adapter := &visorAPIAdapter{v: v}
 	tpvizServer.SetVisorAPI(adapter, v.conf.PK.Hex())
+	if v.embeddedTPS != nil {
+		tpvizServer.SetTPSAPI(&tpsAPIAdapter{v: v})
+	}
 
 	// Start cache refresh
 	tpvizServer.Start()
@@ -348,11 +347,6 @@ func (v *Visor) UIServerStatus() (*visorapi.UIServerStatus, error) {
 
 	if v.ui.running {
 		status.LocalAddr = v.ui.addr
-	}
-
-	// Include configured DMSG port if UI server config exists
-	if v.conf.UIServer != nil {
-		status.DmsgPort = v.conf.UIServer.DmsgPort
 	}
 
 	return status, nil

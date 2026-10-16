@@ -116,6 +116,7 @@ type Terminal struct {
 	allDirty             bool
 	dirtyStart, dirtyEnd int
 	syncingScroll        bool
+	scrollAreaQueued     bool // updateScrollArea due at the next render
 	blinkVisible         bool
 	opened               bool
 
@@ -307,7 +308,12 @@ func (t *Terminal) wireCoreEvents() {
 			t.sel.drop()
 		}
 		t.allDirty = true
-		t.updateScrollArea()
+		// The scroll area follows at the next frame, once however many lines
+		// scrolled: setting scrollTop lays the page out then and there, and
+		// done here it was a layout of the whole page for every line of
+		// output — and for the alternate screen a program switches to as it
+		// starts, while that program is still changing the page.
+		t.scrollAreaQueued = true
 		t.scheduleRender(false)
 		if t.a11y != nil {
 			t.a11y.refresh(0, t.Core.Rows()-1)
@@ -508,6 +514,12 @@ func (t *Terminal) wireDomEvents() {
 	// keyboard
 	t.textarea.Call("addEventListener", "keydown", t.fn(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
+		// The browser's hard reload is the browser's: a terminal program has
+		// no use for Ctrl+Shift+R that Ctrl+R does not already cover, and a
+		// page that took it could not be reloaded from the keyboard at all.
+		if browserKey(ev) {
+			return nil
+		}
 		// copy and select-all first: they act on the selection rather than
 		// on the program, and must not be forwarded as input
 		if t.selectionKeydown(ev) {
@@ -882,6 +894,10 @@ func (t *Terminal) scheduleRender(all bool) {
 }
 
 func (t *Terminal) render() {
+	if t.scrollAreaQueued {
+		t.scrollAreaQueued = false
+		t.updateScrollArea()
+	}
 	rows := t.Core.Rows()
 	start, end := t.dirtyStart, t.dirtyEnd
 	if t.allDirty {
@@ -1395,3 +1411,11 @@ func (t *Terminal) SetFont(family string, px float64) {
 
 // FontSize is the cell size the terminal is drawing at.
 func (t *Terminal) FontSize() float64 { return t.Core.Options.FontSize }
+
+// browserKey reports whether ev is a key the browser keeps: Ctrl+Shift+R (or
+// Cmd+Shift+R), the hard reload. It is left alone, neither sent to the program
+// nor prevented.
+func browserKey(ev js.Value) bool {
+	mod := ev.Get("ctrlKey").Bool() || ev.Get("metaKey").Bool()
+	return mod && ev.Get("shiftKey").Bool() && !ev.Get("altKey").Bool() && ev.Get("code").String() == "KeyR"
+}

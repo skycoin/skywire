@@ -42,7 +42,10 @@ sudo skywire autoconfig --dmsgweb --skynetweb
 
 A resolver hostname is `<public-key>.<suffix>:<port>/<path>`:
 
-- `<public-key>` — the 66-hex-char public key of the target visor or service.
+- `<public-key>` — the target visor or service: its 66-character hex key, or
+  the same key as a 53-character base32 label (`skywire cli pk dnslabel <hex>`).
+  Use the base32 form with SkyDNS, since a DNS label is at most 63 characters,
+  and for HTTPS in a browser, which refuses a certificate for the hex name.
 - `:<port>` — the **dmsg port** the target serves HTTP on. **Deployment services
   serve their API on dmsg port `80`.**
 - `.dmsg` addresses may carry routing prefixes, e.g. `<server-pk>.<dest-pk>.dmsg`
@@ -55,7 +58,7 @@ TpID-shaped becomes a **vhost** — the resolver rewrites the outgoing HTTP `Hos
 header to it. So:
 
 ```
-http://example.com.<visor-pk>.skynet/
+http://example.com.<base32-pk>.skynet/
 ```
 
 dials `<visor-pk>`'s port 80 and sends `Host: example.com`. If that visor forwards
@@ -65,7 +68,7 @@ sites** over skynet (or dmsg). The vhost may have dots (`a.b.example.com.<pk>.sk
 and combine with routing prefixes; it's purely shape-based.
 
 For this to do anything, the destination visor must actually **forward `:80` to the
-vhost server** (`skywire cli serve 80 --preserve-host --proxy-addr 127.0.0.1:8080`);
+vhost server** (`skywire cli serve add 80 --to 127.0.0.1:8080 --preserve-host`);
 if `:80` is just the default landing page, the rewritten Host is ignored.
 `--preserve-host` is what keeps the rewritten Host intact end-to-end. The rewrite
 is skipped on the TLS port when MITM is off (a raw-TLS stream isn't HTTP), but
@@ -120,7 +123,6 @@ service's HTTP API by name instead of its 66-char public key. They're
 | `ar` | address resolver |
 | `rf` | route finder |
 | `sd` | service discovery |
-| `ut` | uptime tracker |
 | `rewards` | reward system |
 | `rsn`, `rsn0`, `rsn1`, … | route setup nodes (bare label = the first) |
 | `tsn`, `tsn0`, `tsn1`, … | transport setup nodes (bare label = the first) |
@@ -180,7 +182,7 @@ Using the [service aliases](#service-aliases-configured-deployment-services)
 (or the raw `<service-pk>.dmsg` if you prefer):
 
 ```
-# uptime tracker (dmsg-discovery copy); v3 = with the daily timeline
+# uptime data (served by dmsg discovery); v3 = with the daily timeline
 curl -x socks5h://127.0.0.1:4445 'http://dmsgd.dmsg/uptimes?v=v3'
 # service discovery — list VPN servers
 curl -x socks5h://127.0.0.1:4445 'http://sd.dmsg/api/services?type=vpn'
@@ -194,20 +196,147 @@ The aliases are auto-derived from the visor config; the raw public keys also liv
 in the embedded deployment config, which `cli svc` and the per-command `--*url`
 flags surface.
 
+## One port for everything: skysocks-client on `:1080`
+
+The skysocks client hands `.dmsg` and `.skynet` names to the visor's
+resolvers in-process and sends everything else out through its exit. A
+program that already uses `127.0.0.1:1080` reaches the mesh with no other
+setting. It picks up a resolver that comes up later within a minute.
+
+```
+curl -x socks5h://127.0.0.1:1080 http://<visor-pk>.skynet/health
+```
+
+Use `:4445` when you want mesh names without a skysocks exit.
+
+## Where other traffic goes
+
+A name that is not `.dmsg` or `.skynet` goes to the resolver's upstream:
+
+| `DMSGWEBUPSTREAM` / `SKYNETWEBUPSTREAM` | other names |
+|---|---|
+| empty (default) | skysocks-client on `:1080` when it autostarts, else direct |
+| `127.0.0.1:1081` | that SOCKS5 proxy |
+| `direct` | dialed from this computer, no proxy |
+| `none` | refused |
+
+dmsgweb's upstream is skynetweb, so the setting that matters is
+`SKYNETWEBUPSTREAM`. Set it in `skywire.conf` and run `skywire autoconfig`.
+
+Per-domain rules override it. They apply live and survive a regenerate:
+
+```
+skywire cli resolver route add example.com 127.0.0.1:1081
+skywire cli resolver route add lan.example direct
+skywire cli resolver route add tracker.example none
+skywire cli resolver route          # list
+```
+
 ## From a browser
 
-Set the browser's SOCKS5 proxy to `127.0.0.1:4445` and enable "proxy DNS when
-using SOCKS v5" / "remote DNS" so the proxy (not your OS) resolves `.dmsg` /
-`.skynet` names. Then open `http://<pk>.dmsg:<port>/` directly. With `--upstream`
-configured, ordinary browsing still works through the same proxy entry.
+**Firefox, Waterfox, LibreWolf.** Settings, Network Settings, Manual proxy.
+Set SOCKS Host `127.0.0.1`, port `4445` (or `1080`), SOCKS v5, and tick
+"Proxy DNS when using SOCKS v5". Then open `http://<base32-pk>.dmsg/` directly.
 
-## HTTPS / TLS
+**Chromium, Brave, Chrome.** These have no proxy setting of their own. Either
+use [SkyDNS](#skydns-no-proxy-at-all) and no proxy, or start the browser with
+`--proxy-server="socks5://127.0.0.1:4445"`. For Brave that flag can go in
+`~/.config/brave-flags.conf`, one flag per line.
 
-A `.dmsg` / `.skynet` stream is already end-to-end encrypted and authenticated by
-the target's public key, so plain `http://` through the proxy is secure. To
-satisfy a browser's secure-context requirements (or reach a TLS backend), the
-resolver can terminate TLS locally with a per-host leaf certificate — see
-[../skynet-tls.md](../skynet-tls.md) and `skywire cli resolver ca`.
+## HTTPS
+
+A `.dmsg` / `.skynet` stream is already encrypted end to end and
+authenticated by the target's key, so `http://` through the proxy is secure.
+A browser still wants `https://` for some features, and some sites redirect
+to it. The resolver can terminate HTTPS locally with a certificate it mints
+per name from a CA on this computer. The CA is name constrained to `*.dmsg`
+and `*.skynet`, so it cannot vouch for any other site.
+
+1. Create the CA.
+
+   ```
+   skywire cli resolver ca gen
+   skywire cli resolver ca path          # where it went
+   skywire cli resolver ca fingerprint   # to check a browser's copy
+   ```
+
+2. Point both resolvers at it in `skywire.conf` and regenerate.
+
+   ```
+   RESOLVERCA='/home/<user>/.skywire/resolver'
+   ```
+
+   ```
+   skywire autoconfig
+   ```
+
+3. Trust it in each browser. `skywire cli resolver ca install` adds it to
+   the OS store, which Chromium-based browsers read through
+   `~/.pki/nssdb`. Firefox keeps a store per profile:
+
+   ```
+   certutil -A -n "Skynet Resolver Local CA" -t "C,," -i ~/.skywire/resolver/ca.crt -d sql:<profile-dir>
+   ```
+
+The decrypted request goes to the target's port 80, so a site published on
+port 80 is reachable over `https://` too.
+
+Use the base32 form of the key for HTTPS in a browser. Chromium-based browsers
+refuse a certificate for the 66-character hex name, though curl accepts it.
+
+```
+skywire cli pk dnslabel <hex-pk>
+https://<base32-label>.skynet/
+```
+
+## SkyDNS: no proxy at all
+
+The `skydns` app makes `.dmsg` and `.skynet` names work for every program on
+the computer, with no proxy setting. It answers DNS for the two zones with
+addresses in `198.18.0.0/15`, routes that range to a tun, and bridges each
+connection to the named peer through the visor's resolver. Routes are reused
+across connections and a slow first dial gets the resolver's interstitial page.
+
+Only base32 names work, since a DNS label cannot hold a hex key. Aliases such
+as `rewards.dmsg`, `home.dmsg` and `skywire.dmsg` are answered by the proxy and
+do not resolve through SkyDNS.
+
+Setup on a Linux desktop:
+
+1. Where systemd-resolved runs, SkyDNS hands it only the `dmsg` and `skynet`
+   zones, and a config made as root (as the packages make it) turns SkyDNS on
+   by default. Without systemd-resolved, SkyDNS puts itself first in
+   `/etc/resolv.conf` and passes every other name to the nameserver that was
+   first, so it stays off until you set `SKYDNS=true`. To use systemd-resolved
+   instead (with NetworkManager, also set `dns=systemd-resolved` in its
+   `[main]` section):
+
+   ```
+   sudo systemctl enable --now systemd-resolved
+   sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+   ```
+
+2. To set it either way, use `skywire.conf`, with the CA from [HTTPS](#https)
+   if you want `https://`, and regenerate.
+
+   ```
+   SKYDNS=true
+   RESOLVERCA='/home/<user>/.skywire/resolver'
+   ```
+
+3. The tun needs `CAP_NET_ADMIN`. A visor running as root has it. Otherwise
+   the first start asks for a password once, through pkexec, and creates a
+   persistent `skydns0` tun owned by your user. Later starts use it without
+   asking, until the next reboot. See [permissions](permissions.md#skydns).
+
+Check it:
+
+```
+resolvectl status skydns0
+curl http://<base32-label>.skynet/health
+```
+
+The Android app runs the same thing on the phone's VPN slot.
 
 ## Running the resolver on a remote visor
 
@@ -221,4 +350,5 @@ on demand and skips the route-finder).
 
 - [command reference: `skywire cli resolver`](../skywire/cli/resolver/README.md)
 - [skynet.md](skynet.md) — `.skynet` port forwarding that skynetweb builds on
-- [../skynet-tls.md](../skynet-tls.md) — resolver TLS MITM mode
+- [../skynet-tls.md](../skynet-tls.md) — how the resolver terminates TLS
+- [permissions.md](permissions.md#skydns) — what SkyDNS needs to create its tun

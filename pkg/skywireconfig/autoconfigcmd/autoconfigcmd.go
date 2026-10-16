@@ -200,6 +200,9 @@ type Values struct {
 
 	// --- Route calculation ---
 	CalculateRoutes bool // CALCULATEROUTES
+	FlightRecorder  bool // FLIGHTRECORDER
+	MuxFEC          bool // MUXFEC
+	HvUIDisable     bool // HVUIDISABLE
 
 	// --- VPN server feature ---
 	VpnServer           bool
@@ -391,6 +394,9 @@ func New(v *Values) *cobra.Command {
 
 	// --- Route calculation ---
 	cmd.Flags().BoolVar(&v.CalculateRoutes, "calculate-routes", false, "enable local route calculation — writes CALCULATEROUTES=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.FlightRecorder, "flight-recorder", false, "keep a rolling execution trace — writes FLIGHTRECORDER=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.MuxFEC, "mux-fec", false, "forward error correction on mux routes — writes MUXFEC=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.HvUIDisable, "hv-ui-disable", false, "run the hypervisor without its web UI — writes HVUIDISABLE=true in skywire.conf")
 
 	// --- VPN server ---
 	cmd.Flags().BoolVar(&v.VpnServer, "vpnserver", false, "autostart vpn-server — writes VPNSERVER=true in skywire.conf")
@@ -583,6 +589,9 @@ var envMap = map[string]EnvMapping{
 
 	// Route calculation
 	"calculate-routes": {Key: "CALCULATEROUTES", Format: EnvFormatBool},
+	"flight-recorder":  {Key: "FLIGHTRECORDER", Format: EnvFormatBool},
+	"mux-fec":          {Key: "MUXFEC", Format: EnvFormatBool},
+	"hv-ui-disable":    {Key: "HVUIDISABLE", Format: EnvFormatBool},
 
 	// VPN server
 	"vpnserver":                   {Key: "VPNSERVER", Format: EnvFormatBool},

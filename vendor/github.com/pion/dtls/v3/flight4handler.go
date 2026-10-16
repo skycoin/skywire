@@ -4,6 +4,7 @@
 package dtls
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/rand"
@@ -281,9 +282,13 @@ func flight4Generate(
 		})
 	}
 	if state.getSRTPProtectionProfile() != 0 {
+		var mki []byte
+		if bytes.Equal(state.remoteSRTPMasterKeyIdentifier, cfg.localSRTPMasterKeyIdentifier) {
+			mki = bytes.Clone(state.remoteSRTPMasterKeyIdentifier)
+		}
 		extensions = append(extensions, &extension.UseSRTP{
 			ProtectionProfiles:  []SRTPProtectionProfile{state.getSRTPProtectionProfile()},
-			MasterKeyIdentifier: cfg.localSRTPMasterKeyIdentifier,
+			MasterKeyIdentifier: mki,
 		})
 	}
 	if state.remoteSupportsRenegotiation {
@@ -472,6 +477,11 @@ func flight4Generate(
 			IdentityHint: cfg.localPSKIdentityHint,
 		}
 		if state.cipherSuite.KeyExchangeAlgorithm().Has(CipherSuiteKeyExchangeAlgorithmEcdhe) {
+			// ECDHE-PSK always encodes the hint length, including an empty hint.
+			if state.cipherSuite.AuthenticationType() == CipherSuiteAuthenticationTypePreSharedKey &&
+				srvExchange.IdentityHint == nil {
+				srvExchange.IdentityHint = []byte{}
+			}
 			srvExchange.EllipticCurveType = elliptic.CurveTypeNamedCurve
 			srvExchange.NamedCurve = state.namedCurve
 			srvExchange.PublicKey = state.localKeypair.PublicKey

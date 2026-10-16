@@ -142,6 +142,17 @@ var (
 	rfConfig                   bool
 	externalApps               bool
 	enableCalculateRoutes      bool
+	logHookLevel               string
+	logServerAddr              string
+	ptySSHListen               string
+	ptyPersist                 bool
+	noDmsgscp                  bool
+	dmsgscpRoot                string
+	noStats                    bool
+	statsRetention             int
+	enableFlightRecorder       bool
+	enableMuxFEC               bool
+	hvUIDisable                bool
 	isSkychatEnable            bool
 	skychatAddr                string
 	// isSkychatPairEnable adds --pair-enable to the skychat app args
@@ -216,6 +227,8 @@ var (
 	dmsgRelayAddr        string
 	dmsgRelayKeys        string
 	dmsgWebSecretKey     string
+	resolverCA           string
+	isSkyDNSEnable       bool
 	noDmsgRelay          bool
 )
 

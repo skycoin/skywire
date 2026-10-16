@@ -1,5 +1,7 @@
 # Emulated multipath testbed
 
+> **Status:** implemented, see `pkg/router/scenarios_*emu*_test.go`.
+
 Every mux failure of the 2026-09 campaign cost an hour of live rig time to
 reproduce once. The emulated testbed reproduces the same shapes in seconds,
 deterministically, under `go test` — no root, no rig, no deployment.

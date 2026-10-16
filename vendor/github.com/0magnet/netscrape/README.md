@@ -2,7 +2,7 @@
 
 A web browser written in Go/wasm.
 
-**[Live demo](https://0magnet.github.io/netscrape/)** — the browser, browsing a small site served beside it: stylesheet inlined, image relayed back as a `data:` URI, links and a GET form posted to the Go chrome.
+**[Live demo](https://netscrape.magnetosphere.net/)** — the browser, browsing a small site served beside it: stylesheet inlined, image relayed back as a `data:` URI, links and a GET form posted to the Go chrome.
 
 ![netscrape in the browser](docs/netscrape-demo.png "the Go chrome — tab strip, address bar, history — rendering a sample page with its stylesheet and image transcoded in")
 
@@ -52,6 +52,7 @@ import "github.com/0magnet/netscrape/dist"
 
 serveBytes("/netscrape.wasm", "application/wasm", dist.BrowserWasm())
 serveJS(dist.LoaderJS()) // defines globalThis.Netscrape.open
+// or dist.BrowserWasmGz(), to inline the compressed module into a page
 ```
 
 ```js
@@ -63,10 +64,15 @@ Netscrape.open(document.getElementById("browser"), {
 });
 ```
 
-Either way, mesh hosts (`*.dmsg`, `*.skysocks`, a 66-hex public key) route through
+Either way, mesh hosts (`*.dmsg`, `*.skysocks`, `*.skynet`, a 66-hex public key) route through
 `fetchDmsg`; everything else through `fetchClearnet`; absent either, a plain
 same-origin `fetch`. The browser reads `globalThis.__netscrapeMount` for its
 element and `globalThis.__netscrapeFetch(url)` for every request.
+
+Two optional host hooks: `globalThis.__netscrapeStart` (a URL string) is what a new
+tab opens instead of the built-in start page, and `globalThis.__netscrapeStartLinks`
+(an array of `{label, url}`) adds shortcuts to that page; the links are read each
+time it renders, so a host can set them after `Open`.
 
 `./build.sh` rebuilds `dist/browser.wasm.gz` (embedded by `dist`) from
 `cmd/browser`.
@@ -78,6 +84,12 @@ its own transcoder, a `SkywireBrowse` panel, address-bar channel dispatch, and
 window management, grown inside skywire. That version lives on the
 [`js` branch](https://github.com/0magnet/netscrape/tree/js). `main` is the Go
 rewrite; consumers move over as it reaches parity.
+
+## Related projects
+
+Another browser engine running inside a browser tab:
+
+- [Firefox in WebAssembly](https://developer.puter.com/labs/firefox-wasm/) — Puter's Gecko compiled to WebAssembly, a full browser engine inside a tab
 
 ## Dependency Graph
 
@@ -103,11 +115,17 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                               4             43             99            376
-Markdown                         1             18              0             52
-JavaScript                       1              0             14             42
-Bourne Shell                     1              0              4              6
+Go                               6            102            427           1260
+JavaScript                       2             61             50            520
+HTML                             4              1             16            124
+Makefile                         1             21             52            111
+Markdown                         1             33              0             98
+YAML                             1              0              7             98
+Bourne Shell                     2              9             25             40
+CSS                              1              0              0              6
+XML                              1              0              0              4
+Plain Text                       1              1              0              3
 -------------------------------------------------------------------------------
-TOTAL                            7             61            117            476
+TOTAL                           20            228            577           2264
 -------------------------------------------------------------------------------
 ```

@@ -148,6 +148,10 @@ type Config struct {
 	// "skywire.dmsg" resolves exactly like "<pk>.dmsg".
 	Aliases map[string]cipher.PubKey
 
+	// HomePage, when set, renders the home directory instead of the alias
+	// list alone, so the proxy shows the same page as the visor.
+	HomePage func(suffix string) []byte
+
 	// DirectClient is an optional dmsg client that reaches servers by their
 	// configured address rather than via discovery. A dest in DirectServerPKs
 	// is dialed through it by self-rendezvous (EnsureAndObtainSession(dest) +
@@ -468,6 +472,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				// before host resolution (which would fail closed on "home").
 				if isHomeHost(origHost, cfg.DomainSuffix) {
 					log.Debug("SOCKS5 → resolver home page (in-process)")
+					if cfg.HomePage != nil {
+						return &tcpAddrConn{Conn: serveHomeBody(cfg.HomePage(cfg.DomainSuffix))}, nil
+					}
 					return &tcpAddrConn{Conn: serveHomeInProcess(cfg.Aliases, cfg.DomainSuffix, cfg.LocalPK)}, nil
 				}
 
@@ -605,10 +612,12 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			// Not .dmsg — forward to upstream or direct.
+			// The resolved addr has 127.0.0.1 in place of the name, so both the
+			// upstream and a direct dial need the original host back.
+			if origHost != "" {
+				addr = net.JoinHostPort(origHost, origPort)
+			}
 			if upstream != nil {
-				if origHost != "" {
-					addr = net.JoinHostPort(origHost, origPort)
-				}
 				c, err := upstream.Dial(network, addr)
 				if err != nil {
 					return nil, err

@@ -27,10 +27,10 @@ skywire cli route policy test \
 sudo install -m 0644 docs/examples/routing-policies/app-mux.star \
   /etc/skywire/policies/
 
-# In skywire.json:
-#   "routing": {
-#     "policy_per_dial": "@/etc/skywire/policies/app-mux.star"
-#   }
+# In skywire.conf, then run `skywire autoconfig`:
+#   POLICYPERDIAL='@/etc/skywire/policies/app-mux.star'
+# Or on a running visor:
+#   skywire cli config set routing.policy_per_dial=@/etc/skywire/policies/app-mux.star
 #
 # Reload picks it up automatically — file watcher debounces 200ms.
 ```

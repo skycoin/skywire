@@ -69,5 +69,11 @@ func (c *Common) flush(v interface{}) (err error) {
 	// os.WriteFile only applies this mode when CREATING the file — pre-existing
 	// 0644 configs must be tightened out-of-band (package postinstall chmod).
 	const filePerm = 0640
-	return os.WriteFile(c.path, indented.Bytes(), filePerm)
+	if err = os.WriteFile(c.path, indented.Bytes(), filePerm); err != nil {
+		return err
+	}
+	if c.afterFlush != nil {
+		c.afterFlush()
+	}
+	return nil
 }

@@ -339,7 +339,7 @@ func (sq *sndQueueInfo) CloneState(other *TCPSndBufState) {
 // lock from say a syscall goroutine we can implement a bit of spinning if we
 // know that the lock is not held by another syscall goroutine. Background
 // processors should never hold the lock for long and we can avoid an expensive
-// sleep/wakeup by spinning for a shortwhile.
+// sleep/wakeup by spinning for a short while.
 //
 // For more details please see the detailed documentation on
 // e.LockUser/e.UnlockUser methods.
@@ -503,6 +503,10 @@ type Endpoint struct {
 	// cc stores the name of the Congestion Control algorithm to use for
 	// this endpoint.
 	cc tcpip.CongestionControlOption
+
+	// ccSetBySockOpt distinguishes an explicit selection from the stack
+	// default, which accepted endpoints should query when they are created.
+	ccSetBySockOpt bool
 
 	// keepalive manages TCP keepalive state. When the connection is idle
 	// (no data sent or received) for keepaliveIdle, we start sending
@@ -760,21 +764,6 @@ func (e *Endpoint) StopWork() {
 // +checklocksrelease:e.mu
 func (e *Endpoint) ResumeWork() {
 	e.mu.Unlock()
-}
-
-// AssertLockHeld forces the checklocks analyzer to consider e.mu held. This is
-// used in places where we know that e.mu is held, but checklocks does not,
-// which can happen when creating new locked objects. You must pass the known
-// locked endpoint to this function and it must be the same as the caller
-// endpoint.
-// TODO(b/226403629): Remove this function once checklocks understands local
-// variable locks.
-// +checklocks:locked.mu
-// +checklocksacquire:e.mu
-func (e *Endpoint) AssertLockHeld(locked *Endpoint) {
-	if e != locked {
-		panic("AssertLockHeld failed: locked endpoint != asserting endpoint")
-	}
 }
 
 // TryLock is a helper that calls TryLock on the endpoint's mutex and
@@ -2067,6 +2056,7 @@ func (e *Endpoint) SetSockOpt(opt tcpip.SettableSocketOption) tcpip.Error {
 				e.LockUser()
 				state := e.EndpointState()
 				e.cc = *v
+				e.ccSetBySockOpt = true
 				switch state {
 				case StateEstablished:
 					if e.EndpointState() == state {
@@ -2249,6 +2239,7 @@ func (e *Endpoint) getTCPInfo() tcpip.TCPInfoOption {
 		info.CcState = snd.state
 		info.SndSsthresh = uint32(snd.Ssthresh)
 		info.SndCwnd = uint32(snd.SndCwnd)
+		info.SndMss = uint32(snd.MaxPayloadSize)
 		info.ReorderSeen = snd.rc.Reord
 	}
 	e.UnlockUser()

@@ -6,10 +6,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // SkynetHTTP performs an HTTP request over skynet using the visor's router.

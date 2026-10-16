@@ -54,12 +54,6 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 		label string
 		addr  string
 	}{}
-	if ui := v.conf.UIServer; ui != nil && ui.Enable {
-		candidates = append(candidates, struct {
-			label string
-			addr  string
-		}{"ui_server", ui.LocalAddr})
-	}
 	// Skychat, skysocks, and other apps bind their own localhost
 	// ports dynamically. Those are registered separately by the app
 	// framework when they start — see appserver's port registration.

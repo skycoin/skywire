@@ -154,3 +154,47 @@ func TestTLSMITMEndToEnd(t *testing.T) {
 		t.Fatalf("leaf SAN = %v; want %s", peers, host)
 	}
 }
+
+// TestBridgeSendsTerminatedTLSToPort80: HTTPS terminated at the gateway is
+// plain HTTP by the time it reaches the peer, so it has to go to the peer's
+// HTTP port. Dialing the 443 the client asked for reaches nothing.
+func TestBridgeSendsTerminatedTLSToPort80(t *testing.T) {
+	ports := make(chan uint16, 2)
+	dial := func(_ context.Context, _ string, _ cipher.PubKey, port uint16) (net.Conn, error) {
+		ports <- port
+		a, b := net.Pipe()
+		go b.Close() //nolint:errcheck
+		return a, nil
+	}
+	g, err := New(dial, "100.64.0.0/16", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, _ := cipher.GenerateKeyPair()
+	ip, err := g.resolve("skynet", pk.DNSLabel()+".skynet")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bridge := func(port uint16) uint16 {
+		c, s := net.Pipe()
+		go c.Close() //nolint:errcheck
+		g.Bridge(context.Background(), s, ip, port)
+		return <-ports
+	}
+	if got := bridge(443); got != 443 {
+		t.Fatalf("without TLS termination 443 dials %d, want 443", got)
+	}
+
+	ca, caKey, err := skynetca.GenerateCA(skynetca.CAOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.EnableTLSMITM(skynetca.NewMinter(ca, caKey, skynetca.LeafOptions{}), 443)
+	if got := bridge(443); got != 80 {
+		t.Fatalf("terminated HTTPS dials %d, want 80", got)
+	}
+	if got := bridge(8080); got != 8080 {
+		t.Fatalf("a port other than 443 dials %d, want 8080", got)
+	}
+}

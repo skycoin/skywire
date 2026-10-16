@@ -29,6 +29,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -81,7 +82,9 @@ const (
 // are logged and skipped rather than failing visor startup — a relay acceptor
 // nobody has attached to yet is not worth refusing to boot over.
 func (v *Visor) initLocalDmsgRelay(ctx context.Context, dmsgC *dmsg.Client) {
-	if v.conf == nil || v.conf.Dmsg == nil {
+	// The relay serves dmsg clients running beside the visor on its host, and a
+	// browser tab has none. Its unix socket also leaves no file there to chmod.
+	if runtime.GOOS == "js" || v.conf == nil || v.conf.Dmsg == nil {
 		return
 	}
 	// No local_relay block at all is the common case and now means "defaults":

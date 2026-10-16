@@ -23,14 +23,14 @@ import (
 // `tcp://<pk>@<host>:<port>` form, identical to clissh's destination
 // shape. Kept as a separate copy here so cli ptyfs can stand alone if
 // cli pty shell is ever split out.
-var ptyfsDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66})@(.+:[^:]+)$`)
+var ptyfsDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66}|[a-z2-7]{53})@(.+:[^:]+)$`)
 
 // parsePTYFSDestination splits `<pk>@<host>:<port>` (with optional
 // `tcp://` prefix) into the remote PK and the dial-target address.
 func parsePTYFSDestination(dest string) (cipher.PubKey, string, error) {
 	m := ptyfsDestRE.FindStringSubmatch(dest)
 	if m == nil {
-		return cipher.PubKey{}, "", fmt.Errorf("ptyfs: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
+		return cipher.PubKey{}, "", fmt.Errorf("ptyfs: destination %q must be <pk>@<host:port> (optionally prefixed tcp://)", dest)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(m[1]); err != nil {

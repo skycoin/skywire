@@ -36,7 +36,7 @@ import (
 // `[v6]:port`, IPv4 with port). The address must contain a colon —
 // the default port belongs in the URL, not implicit in this layer,
 // to keep parsing unambiguous against IPv6 addresses.
-var sshDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66})@(.+:[^:]+)$`)
+var sshDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66}|[a-z2-7]{53})@(.+:[^:]+)$`)
 
 // Flags (package-level so cobra can wire them once).
 var (
@@ -204,7 +204,7 @@ ssh-shaped alias over that path.`,
 func parseSSHDestination(dest string) (cipher.PubKey, string, error) {
 	m := sshDestRE.FindStringSubmatch(dest)
 	if m == nil {
-		return cipher.PubKey{}, "", fmt.Errorf("pty shell: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
+		return cipher.PubKey{}, "", fmt.Errorf("pty shell: destination %q must be <pk>@<host:port> (optionally prefixed tcp://)", dest)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(m[1]); err != nil {

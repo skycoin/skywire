@@ -47,6 +47,7 @@ func TestFlagArgsForSkyenvResolvers(t *testing.T) {
 		{"SKYNETWEBUPSTREAM", "127.0.0.1:1080", []string{"--skynetweb-upstream", "127.0.0.1:1080"}},
 		{"DMSGWEBADDR", "0.0.0.0", []string{"--dmsgweb-addr", "0.0.0.0"}},
 		{"SKYNETWEBADDR", "0.0.0.0", []string{"--skynetweb-addr", "0.0.0.0"}},
+		{"RESOLVERCA", "/root/.skywire/resolver", []string{"--resolver-ca", "/root/.skywire/resolver"}},
 	} {
 		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
 		if !ok || !reflect.DeepEqual(got, tc.want) {
@@ -73,10 +74,32 @@ func TestEveryResolverFlagRoundTrips(t *testing.T) {
 	}
 	for _, flag := range []string{
 		"dmsgweb", "dmsgweb-upstream", "dmsgweb-addr", "dmsgweb-sk",
-		"skynetweb", "skynetweb-upstream", "skynetweb-addr",
+		"skynetweb", "skynetweb-upstream", "skynetweb-addr", "resolver-ca",
 	} {
 		if !mapped[flag] {
 			t.Errorf("--%s is in no flag↔SKYENV map, so it cannot round-trip through skywire.conf", flag)
+		}
+	}
+}
+
+// The variables for settings that used to exist only in the json.
+func TestFlagArgsForSkyenvVisorSettings(t *testing.T) {
+	for _, tc := range []struct {
+		key, value string
+		want       []string
+	}{
+		{"LOGHOOKLEVEL", "debug", []string{"--log-hook-level", "debug"}},
+		{"LOGSERVERADDR", "localhost:8002", []string{"--log-server-addr", "localhost:8002"}},
+		{"PTYSSHLISTEN", ":2022", []string{"--pty-ssh-listen", ":2022"}},
+		{"PTYPERSIST", "true", []string{"--pty-persist=true"}},
+		{"NODMSGSCP", "true", []string{"--no-dmsgscp=true"}},
+		{"DMSGSCPROOT", "/srv/scp", []string{"--dmsgscp-root", "/srv/scp"}},
+		{"NOSTATS", "true", []string{"--no-stats=true"}},
+		{"STATSRETENTION", "60", []string{"--stats-retention", "60"}},
+	} {
+		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
+		if !ok || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("FlagArgsForSkyenv(%s, %q) = %v, %v; want %v", tc.key, tc.value, got, ok, tc.want)
 		}
 	}
 }

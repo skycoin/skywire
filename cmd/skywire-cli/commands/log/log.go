@@ -55,6 +55,7 @@ func init() {
 	}
 	logCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	logCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "run cleanup after collection (remove old/invalid files)")
+	logCmd.Flags().BoolVar(&noFetch, "no-fetch", false, "fetch nothing; only clean the backup dir (for surveys visors push to the reward system)")
 	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
 	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
 	logCmd.Flags().StringVar(&pruneBelowVer, "prune-below-version", "", "during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43; \"auto\" = the dynamic 14-day reward floor)")
@@ -74,6 +75,14 @@ var logCmd = &cobra.Command{
 		}
 		if logOnly && surveyOnly {
 			log.Fatal("use of mutually exclusive flags --log and --survey")
+		}
+		if noFetch {
+			if pruneBelowVer == "auto" {
+				pruneBelowVer = minVersionFloor(log)
+				log.Infof("Reward min-version floor: %s (auto, 14-day)", pruneBelowVer)
+			}
+			cleanupDirectory(log, backupDir, maxAgeDays, pruneBelowVer)
+			return
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)

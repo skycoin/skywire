@@ -327,6 +327,7 @@ var ownedConfigPaths = map[string]string{
 	"routing.router_settings":        "skywire cli route settings",
 	"routing.router_app_settings":    "skywire cli route settings --app <app>",
 	"routing.router_app_settings[*]": "skywire cli route settings --app <app>",
+	"skyenv":                         "skywire autoconfig",
 }
 
 // SetConfigFields validates every requested field against the visorconfig.V1
@@ -369,7 +370,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 			return nil, err
 		}
 		if owner, owned := ownedConfigPaths[tgt.tmpl]; owned {
-			return nil, fmt.Errorf("%s is owned by the router/app settings catalogs; set it with `%s`", p, owner)
+			return nil, fmt.Errorf("%s is written by `%s`, not by config set", p, owner)
 		}
 		nv, err := decodeConfigValue(tgt.typ, fields[p])
 		if err != nil {
@@ -426,14 +427,9 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 		}
 		out = append(out, p.change)
 	}
-	var mirror [][2]string
-	for _, p := range plan {
-		if flagFor, ok := autoconfigFlagFor[p.target.tmpl]; ok {
-			flag, val := flagFor(p.newVal)
-			mirror = append(mirror, [2]string{flag, val})
-		}
-	}
-	v.mirrorToSkyenv(mirror)
+	// Most setters flush, which saves the change to skywire.conf. This catches
+	// one that does not.
+	v.mirrorChanges()
 	return out, nil
 }
 

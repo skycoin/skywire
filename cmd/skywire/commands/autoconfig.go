@@ -187,6 +187,9 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 
 	// Route calculation
 	addSoloBool("CALCULATEROUTES", "calculate-routes", autoconfigVals.CalculateRoutes)
+	addSoloBool("FLIGHTRECORDER", "flight-recorder", autoconfigVals.FlightRecorder)
+	addSoloBool("MUXFEC", "mux-fec", autoconfigVals.MuxFEC)
+	addSoloBool("HVUIDISABLE", "hv-ui-disable", autoconfigVals.HvUIDisable)
 
 	// VPN server
 	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)

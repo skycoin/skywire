@@ -16,6 +16,7 @@
 package ipv4
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -81,6 +82,7 @@ var _ stack.MulticastForwardingNetworkEndpoint = (*endpoint)(nil)
 var _ stack.GroupAddressableEndpoint = (*endpoint)(nil)
 var _ stack.AddressableEndpoint = (*endpoint)(nil)
 var _ stack.NetworkEndpoint = (*endpoint)(nil)
+var _ stack.RestorableNetworkEndpoint = (*endpoint)(nil)
 var _ IGMPEndpoint = (*endpoint)(nil)
 
 // +checklocksalias:igmp.ep.mu=mu
@@ -111,6 +113,17 @@ type endpoint struct {
 
 	// +checklocks:mu
 	igmp igmpState
+}
+
+// Restore implements stack.RestorableNetworkEndpoint.
+func (e *endpoint) Restore() {
+	e.mu.Lock()
+	e.igmp.restore()
+	e.mu.Unlock()
+
+	e.protocol.mu.Lock()
+	e.protocol.eps[e.nic.ID()] = e
+	e.protocol.mu.Unlock()
 }
 
 // SetIGMPVersion implements IGMPEndpoint.
@@ -960,7 +973,7 @@ func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
 	defer hView.Release()
 
 	if !e.nic.IsLoopback() {
-		if !e.protocol.options.AllowExternalLoopbackTraffic {
+		if !e.protocol.allowExternalLoopbackTraffic.Load() {
 			if header.IsV4LoopbackAddress(h.SourceAddress()) {
 				martianPacketLogger.Infof("Martian packet dropped with loopback source address. If your traffic is unexpectedly dropped, you may want to allow martian packets.")
 				stats.InvalidSourceAddressesReceived.Increment()
@@ -1418,7 +1431,13 @@ func (e *endpoint) deliverPacketLocally(h header.IPv4, pkt *stack.PacketBuffer, 
 
 		// The reassembler doesn't take care of fixing up the header, so we need
 		// to do it here.
-		h.SetTotalLength(uint16(pkt.Data().Size() + len(h)))
+		totalLength := pkt.Data().Size() + len(h)
+		if totalLength > math.MaxUint16 {
+			stats.ip.MalformedPacketsReceived.Increment()
+			stats.ip.MalformedFragmentsReceived.Increment()
+			return
+		}
+		h.SetTotalLength(uint16(totalLength))
 		h.SetFlagsFragmentOffset(0, 0)
 
 		e.protocol.parseTransport(pkt, tcpip.TransportProtocolNumber(transProtoNum))
@@ -1647,7 +1666,7 @@ type protocol struct {
 	// eps is keyed by NICID to allow protocol methods to retrieve an endpoint
 	// when handling a packet, by looking at which NIC handled the packet.
 	// +checklocks:mu
-	eps map[tcpip.NICID]*endpoint
+	eps map[tcpip.NICID]*endpoint `state:"nosave"`
 
 	// ICMP types for which the stack's global rate limiting must apply.
 	// +checklocks:mu
@@ -1666,12 +1685,26 @@ type protocol struct {
 
 	options Options
 
+	// allowExternalLoopbackTraffic mirrors options.AllowExternalLoopbackTraffic
+	// but is runtime-settable (via SetOption / the route_localnet sysctl). It is
+	// read lock-free on the packet path, so it is stored atomically.
+	allowExternalLoopbackTraffic atomicbitops.Bool
+
 	multicastRouteTable multicast.RouteTable
 	// multicastForwardingDisp is the multicast forwarding event dispatcher that
 	// an integrator can provide to receive multicast forwarding events. Note
 	// that multicast packets will only be forwarded if this is non-nil.
 	// +checklocks:mu
 	multicastForwardingDisp stack.MulticastForwardingEventDispatcher
+}
+
+// afterLoad is invoked by stateify.
+//
+// +checklocksexclude:p.mu
+func (p *protocol) afterLoad(context.Context) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.eps = make(map[tcpip.NICID]*endpoint)
 }
 
 // Number returns the ipv4 protocol number.
@@ -1696,6 +1729,9 @@ func (p *protocol) SetOption(option tcpip.SettableNetworkProtocolOption) tcpip.E
 	case *tcpip.DefaultTTLOption:
 		p.SetDefaultTTL(uint8(*v))
 		return nil
+	case *tcpip.AllowExternalLoopbackTrafficOption:
+		p.allowExternalLoopbackTraffic.Store(bool(*v))
+		return nil
 	default:
 		return &tcpip.ErrUnknownProtocolOption{}
 	}
@@ -1706,6 +1742,9 @@ func (p *protocol) Option(option tcpip.GettableNetworkProtocolOption) tcpip.Erro
 	switch v := option.(type) {
 	case *tcpip.DefaultTTLOption:
 		*v = tcpip.DefaultTTLOption(p.DefaultTTL())
+		return nil
+	case *tcpip.AllowExternalLoopbackTrafficOption:
+		*v = tcpip.AllowExternalLoopbackTrafficOption(p.allowExternalLoopbackTraffic.Load())
 		return nil
 	default:
 		return &tcpip.ErrUnknownProtocolOption{}
@@ -1976,7 +2015,8 @@ func (p *protocol) allowICMPReply(icmpType header.ICMPv4Type, code header.ICMPv4
 }
 
 // SendRejectionError implements stack.RejectIPv4WithHandler.
-func (p *protocol) SendRejectionError(pkt *stack.PacketBuffer, rejectWith stack.RejectIPv4WithICMPType, inputHook bool) tcpip.Error {
+func (p *protocol) SendRejectionError(pkt *stack.PacketBuffer, rejectWith stack.RejectIPv4WithICMPType, hook stack.Hook) tcpip.Error {
+	inputHook := hook == stack.Input
 	switch rejectWith {
 	case stack.RejectIPv4WithICMPNetUnreachable:
 		return p.returnError(&icmpReasonNetworkUnreachable{}, pkt, inputHook)
@@ -1991,7 +2031,7 @@ func (p *protocol) SendRejectionError(pkt *stack.PacketBuffer, rejectWith stack.
 	case stack.RejectIPv4WithICMPAdminProhibited:
 		return p.returnError(&icmpReasonAdministrativelyProhibited{}, pkt, inputHook)
 	case stack.RejectIPv4WithTCPReset:
-		return ip.RejectWithTCPReset(pkt, ProtocolNumber, p.stack, inputHook)
+		return ip.RejectWithTCPReset(pkt, ProtocolNumber, p.stack, hook)
 	default:
 		panic(fmt.Sprintf("unhandled %[1]T = %[1]d", rejectWith))
 	}
@@ -2077,6 +2117,7 @@ func NewProtocolWithOptions(opts Options) stack.NetworkProtocolFactory {
 			defaultTTL: atomicbitops.FromUint32(DefaultTTL),
 			options:    opts,
 		}
+		p.allowExternalLoopbackTraffic.Store(opts.AllowExternalLoopbackTraffic)
 		p.fragmentation = fragmentation.NewFragmentation(fragmentblockSize, fragmentation.HighFragThreshold, fragmentation.LowFragThreshold, ReassembleTimeout, s.Clock(), p)
 		p.eps = make(map[tcpip.NICID]*endpoint)
 		// Set ICMP rate limiting to Linux defaults.

@@ -148,8 +148,8 @@ go install github.com/skycoin/skywire@develop
 ```
 
 then either run the visor from the directory containing the binary, or set
-`"bin_path"` in `skywire-config.json` to the directory holding the app
-binaries. A custom app must have its binary present in `bin_path`.
+`BINPATH='<dir>'` in skywire.conf and run `skywire autoconfig`, so `bin_path`
+points at the directory holding the app binaries. A custom app must have its binary present in `bin_path`.
 
 ## Docker
 

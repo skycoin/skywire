@@ -18,6 +18,7 @@ package visorconfig
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -93,19 +94,10 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 
 	conf := v1.Launcher
 
-	var configChanged bool
-
-	for arg, value := range args {
-		switch val := value.(type) {
-		case string:
-			configChanged = updateStringArg(conf, appName, arg, val)
-		case bool:
-			configChanged = updateBoolArg(conf, appName, arg, val)
-		default:
-			return fmt.Errorf("invalid arg type %T", value)
-		}
+	configChanged, err := applyBatchArgs(conf, appName, args)
+	if err != nil {
+		return err
 	}
-
 	if !configChanged {
 		return nil
 	}
@@ -515,4 +507,31 @@ func deleteAppArg(conf *Launcher, appName string) bool {
 		break
 	}
 	return configChanged
+}
+
+// applyBatchArgs sets each of args on appName in a fixed order. Map order is
+// random, and the leading "app <name>" pair has to stay first.
+func applyBatchArgs(conf *Launcher, appName string, args map[string]any) (bool, error) {
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if (keys[i] == "app") != (keys[j] == "app") {
+			return keys[i] == "app"
+		}
+		return keys[i] < keys[j]
+	})
+	var changed bool
+	for _, arg := range keys {
+		switch val := args[arg].(type) {
+		case string:
+			changed = updateStringArg(conf, appName, arg, val)
+		case bool:
+			changed = updateBoolArg(conf, appName, arg, val)
+		default:
+			return false, fmt.Errorf("invalid arg type %T", args[arg])
+		}
+	}
+	return changed, nil
 }

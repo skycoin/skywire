@@ -405,10 +405,11 @@ func (ds *decodeState) decodeStruct(ods *objectDecodeState, obj reflect.Value, e
 	}
 	ds.stats.start(ods.typ)
 	defer ds.stats.done()
-	if sl, ok := obj.Addr().Interface().(SaverLoader); ok {
-		// Note: may be a registered empty struct which does not
-		// implement the saver/loader interfaces.
-		sl.StateLoad(ds.ctx, Source{internal: od})
+	switch value := obj.Addr().Interface().(type) {
+	case SaverLoader:
+		value.StateLoad(ds.ctx, Source{internal: od})
+	case binaryObject:
+		loadBinary(value, rte.Name, Source{internal: od})
 	}
 }
 
@@ -452,7 +453,7 @@ func (ds *decodeState) findType(t wire.TypeSpec) reflect.Type {
 		rte := ds.types.Lookup(typeID(x), typ)
 		return rte.LocalType
 	case *wire.TypeSpecPointer:
-		return reflect.PtrTo(ds.findType(x.Type))
+		return reflect.PointerTo(ds.findType(x.Type))
 	case *wire.TypeSpecArray:
 		return reflect.ArrayOf(int(x.Count), ds.findType(x.Type))
 	case *wire.TypeSpecSlice:
@@ -670,18 +671,13 @@ func (ds *decodeState) Load(obj reflect.Value) {
 	}
 
 	// Check if we have any deferred objects.
-	numDeferred := 0
 	for id, encoded := range ds.deferred {
-		numDeferred++
 		if s, ok := encoded.(*wire.Struct); ok && s.TypeID != 0 {
 			typ := ds.types.LookupType(typeID(s.TypeID))
 			Failf("unused deferred object: ID %d, type %v", id, typ)
 		} else {
 			Failf("unused deferred object: ID %d, %#v", id, encoded)
 		}
-	}
-	if numDeferred != 0 {
-		Failf("still had %d deferred objects", numDeferred)
 	}
 
 	// Scan and fire all callbacks. We iterate over the list of incomplete

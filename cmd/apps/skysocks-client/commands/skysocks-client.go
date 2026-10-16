@@ -421,8 +421,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		// reach them. nil = the visor published no resolver.
 		client.SetLocalResolvers(resolvers)
 		// The resolvers and this app are launcher apps in no fixed order, so an
-		// empty answer above may just be "not published yet": re-ask on the
-		// keepalive tick until there is something to use.
+		// answer above may still be missing one that has not published yet: re-ask on
+		// the keepalive tick.
 		client.SetLocalResolverRefresh(func() *skysocks.LocalResolvers {
 			return localResolvers(appCl, log)
 		})

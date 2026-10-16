@@ -20,13 +20,6 @@
     "servers_type": "all",
     "protocol": "yamux"
   },
-  "ui_server": {
-    "enable": false,
-    "local_addr": "localhost:8081",
-    "dmsg_port": 81,
-    "dmsg_whitelist": null,
-    "survey_dir": ""
-  },
   "log_server": {
     "local_addr": ""
   },

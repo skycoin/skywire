@@ -84,7 +84,14 @@ type WasmServeConfig struct {
 	// Links are shown under the boot message as plain anchors, so a crawler finds
 	// the deployment's other sites before any script runs.
 	Links []WasmLink
-	Log   *logging.Logger // nil → package default
+	// LinuxOnTab is served at /lot/ from a shell directory, or proxied from a
+	// site that publishes it. Setting it also makes the desk cross-origin
+	// isolated, which LinuxOnTab needs to run in it.
+	LinuxOnTab string
+	// LinuxOnTabOpen opens LinuxOnTab when the desk starts, unless the page
+	// link asks for something else. Needs LinuxOnTab.
+	LinuxOnTabOpen bool
+	Log            *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -176,13 +183,14 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		go func() {
 			if err := ServeBrowseOrigin(ctx, BrowseOriginConfig{
-				Addr:    cfg.BrowseOriginAddr,
-				VOrigin: vOrigin,
-				Suffix:  suffix,
-				TLS:     cfg.TLS,
-				TLSCert: cfg.TLSCert,
-				TLSKey:  cfg.TLSKey,
-				Log:     log,
+				Addr:     cfg.BrowseOriginAddr,
+				VOrigin:  vOrigin,
+				Suffix:   suffix,
+				TLS:      cfg.TLS,
+				TLSCert:  cfg.TLSCert,
+				TLSKey:   cfg.TLSKey,
+				Log:      log,
+				Isolated: cfg.LinuxOnTab != "",
 			}); err != nil {
 				log.WithError(err).Error("browse-origin bootstrap server failed")
 			}
@@ -246,6 +254,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		deskPage = bytes.Replace(deskPage,
 			[]byte(`<script src="/desk-boot.js"></script>`),
 			[]byte("<script src=\"/ctl-bridge.js\"></script>\n<script src=\"/desk-boot.js\"></script>"), 1)
+	}
+	// With LinuxOnTab served, the desk lists it as an app.
+	if cfg.LinuxOnTab != "" {
+		lotOpen := ""
+		if cfg.LinuxOnTabOpen {
+			lotOpen = "window.__SKYWIRE_LOT_OPEN__=true;"
+		}
+		deskPage = bytes.Replace(deskPage,
+			[]byte(`<script src="/desk-boot.js"></script>`),
+			[]byte("<script>window.__SKYWIRE_LOT_URL__=\"/lot/wasm.html?wisp=vnet:6001\";"+lotOpen+"</script>\n<script src=\"/desk-boot.js\"></script>"), 1)
 	}
 	// The desk IS the root here too, matching the visor-attached hypervisor
 	// (#4491). The old separate path redirects rather than serving a second
@@ -373,6 +391,13 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		fileServer.ServeHTTP(w, r)
 	})
 
+	if cfg.LinuxOnTab != "" {
+		lot, err := lotHandler(cfg.LinuxOnTab)
+		if err != nil {
+			return err
+		}
+		mux.Handle("/lot/", lot)
+	}
 	var handler http.Handler = mux
 	if cfg.Password != "" {
 		handler = wasmPasswordGate(mux, cfg.Password, cfg.TLS)
@@ -393,6 +418,10 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		}
 		base.ServeHTTP(w, r)
 	})
+	if cfg.LinuxOnTab != "" {
+		handler = crossOriginIsolated(handler)
+		log.WithField("source", cfg.LinuxOnTab).Info("Serving LinuxOnTab at /lot/, cross-origin isolated")
+	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,
@@ -419,7 +448,12 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 			return fmt.Errorf("tls cert: %w", err)
 		}
 		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		log.Infof("serving standalone wasm-visor over HTTPS (self-signed localhost cert) on %s — open https://localhost%s and accept the cert warning once", cfg.Addr, cfg.Addr)
+		open := "https://" + browserHostPort(cfg.Addr)
+		if cfg.TLSCert != "" {
+			log.Infof("serving standalone wasm-visor over HTTPS on %s — open %s", cfg.Addr, open)
+		} else {
+			log.Infof("serving standalone wasm-visor over HTTPS (self-signed localhost cert) on %s — open %s and accept the cert warning once", cfg.Addr, open)
+		}
 		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			return fmt.Errorf("serve: %w", err)
 		}
@@ -445,6 +479,9 @@ type BrowseOriginConfig struct {
 	TLSCert string          // optional PEM cert (paired with TLSKey)
 	TLSKey  string          // optional PEM key
 	Log     *logging.Logger // nil → package default
+	// Isolated sends the cross-origin isolation headers, so an isolated desk
+	// (hv serve --lot) can frame these origins. Only that desk should set it.
+	Isolated bool
 }
 
 // ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
@@ -487,6 +524,9 @@ func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
 	handler, err := realorigin.Handler(roCfg)
 	if err != nil {
 		return err
+	}
+	if cfg.Isolated {
+		handler = crossOriginIsolated(handler)
 	}
 
 	srv := &http.Server{
@@ -856,4 +896,28 @@ func withLinks(page []byte, links []WasmLink) []byte {
 	b.WriteString(`</nav>`)
 	const msg = `<div class="s" id="boot-msg">loading…</div>`
 	return []byte(strings.Replace(string(page), msg, msg+"\n  "+b.String(), 1))
+}
+
+// crossOriginIsolated sends the headers that give the page SharedArrayBuffer.
+// credentialless and CORP cross-origin keep other frames and resources loading.
+func crossOriginIsolated(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "credentialless")
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		h.ServeHTTP(w, r)
+	})
+}
+
+// browserHostPort is addr as a browser would open it: localhost when the
+// server listens on every interface.
+func browserHostPort(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, port)
 }

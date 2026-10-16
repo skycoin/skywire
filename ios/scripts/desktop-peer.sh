@@ -2,7 +2,7 @@
 # A second visor on the Mac for the iOS checks that need a peer: chat, calls,
 # Skymail, Fleet and remote management (ios/gates/regression.md). It is this
 # checkout's lite core with every local port moved off the Simulator app's
-# (API 18000, skychat 18001, launcher 15505, ui_server 18081, desk 18010,
+# (API 18000, skychat 18001, launcher 15505, desk 18010,
 # SkySOCKS client 11080, SkyDEX client 18051), its API answering on loopback
 # without a login, skychat keeping its history (the chat test reads it), and
 # its CLI RPC on localhost:13435 for `skywire-cli --via dmsg://<phone pk>`
@@ -45,7 +45,6 @@ hv = c["hypervisor"]
 hv.update(http_addr="127.0.0.1:18000", desk_addr="127.0.0.1:18010", enable_auth=False,
           db_path=f"{home}/users.db")
 hv.pop("lan_dmsg_server", None)
-c["ui_server"].update(enable=False, local_addr="localhost:18081")
 c["launcher"].update(server_addr="localhost:15505", bin_path=f"{home}/bin")
 c["local_path"] = f"{home}/local"
 c["cli_addr"] = "localhost:13435"

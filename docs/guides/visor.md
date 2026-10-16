@@ -97,7 +97,7 @@ Their creation is attempted in the following order:
 
 Transports can be manually created. Existing suitable transports will be automatically used by client applications when they are started.
 
-To create a transport, first copy the public key of an online visor from the uptime tracker:
+To create a transport, first copy the public key of an online visor from the uptime data:
 ```
 skywire cli ut -o
 ```

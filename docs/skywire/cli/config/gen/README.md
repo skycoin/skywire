@@ -60,6 +60,17 @@ skywire cli config gen
       --ar                                   generate config for address-resolver service
       --rf                                   generate config for route-finder service
       --calculate-routes                     enable local route calculation
+      --flight-recorder                      keep a rolling execution trace for stall diagnosis
+      --mux-fec                              forward error correction on mux routes
+      --hv-ui-disable                        run the hypervisor without its web UI
+      --log-hook-level string                most verbose level kept for /debug/log (info when empty)
+      --log-server-addr string               also serve the log server on this local address, without auth
+      --pty-ssh-listen string                direct TCP pty listener address
+      --pty-persist                          keep pty sessions alive across a client disconnect
+      --no-dmsgscp                           do not serve files over dmsgscp
+      --dmsgscp-root string                  directory dmsgscp serves (local/scp-root when empty)
+      --no-stats                             do not keep or publish local telemetry
+      --stats-retention int                  days of local telemetry to keep (30 when 0)
   -i, --ishv                                 local hypervisor configuration
       --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
   -j, --hvpks string                         list of public keys to add as hypervisor
@@ -92,7 +103,7 @@ skywire cli config gen
       --addvpn string                        set vpn server public key for vpn client
       --vpnwl string                         vpn server whitelist (comma separated; empty allows all)
       --secure string                        change secure mode status of vpn server
-      --netifc string                        VPN Server network interface (detected: eno1)
+      --netifc string                        VPN Server network interface (detected: eno1, skydns0)
       --proxyclientpk string                 set server public key for proxy client
       --startproxyclient                     autostart proxy client
       --serveproxy                           autostart proxy server (default true)
@@ -102,10 +113,12 @@ skywire cli config gen
       --skynetweb                            enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446
       --wisp-socks string                    SOCKS5 proxy the embedded Wisp server (browser visor only) carries streams over (default: the local skysocks-client)
       --skymail-bridge                       enable SMTP to skywire bridge on 127.0.0.1:1025
-      --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)
-      --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic
+      --dmsgweb-upstream string              upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb, direct dials it directly, none refuses it)
+      --skynetweb-upstream string            upstream SOCKS5 for non .skynet traffic (empty chains to skysocks-client when it autostarts, direct dials it directly, none refuses it)
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
+      --resolver-ca string                   directory with ca.crt and ca.key from "skywire cli resolver ca gen": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)
+      --skydns                               autostart skydns: .dmsg and .skynet names for every program on this host (needs CAP_NET_ADMIN, and root without systemd-resolved)
       --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
       --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".theskywirenetwork.net")

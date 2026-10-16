@@ -23,9 +23,15 @@ import (
 
 // MeshDialer adapts an app.Client to meshgw.MeshDial: scheme ("dmsg" / "skynet")
 // is the appnet network type; port is the mesh routing port (the client's
-// original destination port).
+// original destination port). Where the visor runs a resolving proxy for the
+// scheme, connections go through it (see resolverPorts); otherwise they are
+// dialed directly.
 func MeshDialer(appCl *app.Client) meshgw.MeshDial {
-	return func(_ context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+	resolvers := &resolverPorts{appCl: appCl}
+	return func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+		if rp, ok := resolvers.portFor(scheme); ok {
+			return dialViaResolver(ctx, appCl, rp, scheme, dest, port)
+		}
 		return appCl.Dial(appnet.Addr{
 			Net:    appnet.Type(scheme),
 			PubKey: dest,

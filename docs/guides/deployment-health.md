@@ -2,7 +2,7 @@
 
 The deployment services — transport discovery (TPD), dmsg discovery,
 service discovery (SD), route finder (RF), address resolver (AR),
-config bootstrap, uptime tracker — are reachable **over dmsg only**:
+config bootstrap — are reachable **over dmsg only**:
 each serves its HTTP API on dmsg port 80 under its own public key.
 Everything on this page therefore works from anywhere a dmsg client
 works, with no clearnet endpoint involved.

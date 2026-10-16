@@ -66,6 +66,20 @@ frame.src = 'https://' + id + '.browse.example/';
 
 That is the whole integration. The transport is the only part you write.
 
+### Other entry points
+
+- `realorigin.Handler(cfg)` returns the same server as an `http.Handler` and an
+  error, for mounting into your own mux or listener. `ListenAndServe` is that
+  handler on `cfg.Addr`.
+- `realorigin.ID(canonical)`, `Host(canonical, suffix)` and `IDFromHost(host,
+  suffix)` compute the label, the full hostname, and recover the label from a
+  hostname (reporting whether it was a browse origin at all).
+- `realorigin.ServiceWorkerJS()` returns the worker for an embedder that serves
+  the browse origin itself. Serve it at `Config.SWPath`, which defaults to
+  `/sw.js` and must stay at the root of the origin.
+- In JavaScript, `realOrigin.id(canonical)` returns a promise of the same label
+  `ID` gives, and `realOrigin.forget(id)` drops a registered target.
+
 ### Telling the visitor what is happening
 
 A transport that has to set up a route before it can fetch anything leaves the
@@ -106,7 +120,8 @@ own framing.
 go run ./cmd/realorigin-demo
 ```
 
-Then open <http://localhost:7999>. The demo's transport is plain HTTP through its
+Then open <http://localhost:7999>. The app listens on `127.0.0.1:7999` (`--app`) and the browse
+origins on `127.0.0.1:7998` (`--browse`). The demo's transport is plain HTTP through its
 own process, which makes it a real-origin proxy that sidesteps CORS. Swap that
 one function for a mesh, an onion route, a peer-to-peer fetch or a decrypted
 archive and nothing else changes.
@@ -186,13 +201,15 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                               8             80            211            741
-HTML                             2             24             35            221
-JavaScript                       2             21             71            165
-Markdown                         1             36              0            129
+Go                               8             84            211            771
+HTML                             2             26             61            265
+JavaScript                       2             21             78            178
+Markdown                         1             46              0            169
+Makefile                         1             22             52            113
 YAML                             1              0              7             98
-Makefile                         1             10              0             22
+Bourne Shell                     1              8             17             31
+JSON                             1              0              0              8
 -------------------------------------------------------------------------------
-TOTAL                           15            171            324           1376
+TOTAL                           17            207            426           1633
 -------------------------------------------------------------------------------
 ```

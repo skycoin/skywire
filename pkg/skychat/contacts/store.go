@@ -37,6 +37,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/profile"
 )
 
@@ -103,7 +104,7 @@ func (s *Store) Name(pk string) string {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.names[strings.ToLower(strings.TrimSpace(pk))]
+	return s.names[cipher.HexForm(strings.ToLower(strings.TrimSpace(pk)))]
 }
 
 // All returns a copy of the whole book.
@@ -126,6 +127,7 @@ func (s *Store) Set(pk, name string) (string, error) {
 		return "", errors.New("skychat contacts: no store")
 	}
 	key := strings.ToLower(strings.TrimSpace(pk))
+	key = cipher.HexForm(key)
 	if !pkPattern.MatchString(key) {
 		return "", fmt.Errorf("skychat contacts: %q is not a public key", pk)
 	}
@@ -217,6 +219,7 @@ func (s *Store) flushLocked() error {
 // storable at all.
 func normalize(pk, name string) (key, clean string, ok bool) {
 	key = strings.ToLower(strings.TrimSpace(pk))
+	key = cipher.HexForm(key)
 	if !pkPattern.MatchString(key) {
 		return "", "", false
 	}

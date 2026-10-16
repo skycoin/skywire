@@ -58,6 +58,7 @@ var (
 	showUT         bool
 	pubKeys        []cipher.PubKey
 	runCleanup     bool
+	noFetch        bool
 	backupDir      string
 	maxAgeDays     int
 	pruneBelowVer  string

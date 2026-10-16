@@ -431,6 +431,14 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
 
           return !wasmHiddenTabs.has(seg);
         });
+        // The host bridge page this visor serves beside the dashboard: it hands
+        // out the bridge for the user's computer and connects to it.
+        this.tabsData.push({
+          icon: 'settings_ethernet',
+          label: 'node.tabs.host-bridge',
+          linkParts: null,
+          externalUrl: 'hostbridge/',
+        });
       }
 
       // Pick the selected tab by matching the URL to a tab's route (its last

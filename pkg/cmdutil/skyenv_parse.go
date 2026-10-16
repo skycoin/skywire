@@ -119,12 +119,29 @@ func parseAssign(line string) (string, []string, bool) {
 	if trimmed[0] == '#' {
 		return "", nil, false
 	}
+	// Windows installs were given a PowerShell form of the template:
+	// $KEY=$true and $KEY=@('a','b'). Read those lines the same way.
+	ps := trimmed[0] == '$'
+	if ps {
+		trimmed = trimmed[1:]
+	}
 	eq := strings.IndexByte(trimmed, '=')
 	if eq <= 0 {
 		return "", nil, false
 	}
 	key := trimmed[:eq]
 	rhs := strings.TrimSpace(trimmed[eq+1:])
+	if ps {
+		if strings.HasPrefix(rhs, "@(") {
+			rhs = rhs[1:]
+		}
+		switch strings.ToLower(stripTrailingComment(rhs)) {
+		case "$true":
+			rhs = "true"
+		case "$false":
+			rhs = "false"
+		}
+	}
 	// Validate key shape — bash allows [a-zA-Z_][a-zA-Z0-9_]*.
 	// Reject anything else so we don't misinterpret URL-ish lines
 	// with `=` in them (e.g. a comment that contains "http://x?k=v").
@@ -142,6 +159,9 @@ func parseAssign(line string) (string, []string, bool) {
 			return key, []string{stripTrailingComment(rhs)}, true
 		}
 		inner := rhs[1:end]
+		if ps {
+			inner = commasOutsideQuotes(inner)
+		}
 		return key, tokenizeArray(inner), true
 	}
 	// Scalar — strip outer quotes and trailing inline comment.
@@ -357,4 +377,22 @@ func splitExprBody(body string) (name, defaultVal string, useDefault, arrayMode 
 		defaultVal = rest[1:]
 	}
 	return name, defaultVal, useDefault, arrayMode
+}
+
+// commasOutsideQuotes turns the commas separating PowerShell array elements
+// into spaces, leaving commas inside a quoted element alone.
+func commasOutsideQuotes(s string) string {
+	b := []byte(s)
+	inSingle, inDouble := false, false
+	for i, c := range b {
+		switch {
+		case c == '\'' && !inDouble:
+			inSingle = !inSingle
+		case c == '"' && !inSingle:
+			inDouble = !inDouble
+		case c == ',' && !inSingle && !inDouble:
+			b[i] = ' '
+		}
+	}
+	return string(b)
 }

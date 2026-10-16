@@ -3,12 +3,14 @@ package cliutil
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
 	"github.com/spf13/pflag"
@@ -46,12 +48,22 @@ func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 
 // PrintFatalRPCError prints fatal RPC errors for skywire-cli commands packages
 func PrintFatalRPCError(cmdFlags *pflag.FlagSet, err error) {
-	PrintFatalError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
+	PrintFatalError(cmdFlags, rpcError(err))
 }
 
 // PrintRPCError prints nonfatal RPC errors for skywire-cli commands packages
 func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
-	PrintError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
+	PrintError(cmdFlags, rpcError(err))
+}
+
+// rpcError keeps a refusal the visor sent as it is, and explains any other
+// failure as the visor being unreachable or too old for the call.
+func rpcError(err error) error {
+	var se rpc.ServerError
+	if errors.As(err, &se) && !strings.Contains(string(se), "can't find") {
+		return err
+	}
+	return fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err)
 }
 
 // PrintError prints errors for skywire-cli commands packages.

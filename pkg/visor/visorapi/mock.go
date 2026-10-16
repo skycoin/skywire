@@ -6,7 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -25,10 +31,6 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
-	"math/rand"
-	"net"
-	"sync"
-	"time"
 )
 
 // MockRPCClient mocks API.

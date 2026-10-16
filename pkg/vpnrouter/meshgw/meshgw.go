@@ -70,6 +70,10 @@ type Gateway struct {
 	minter  skynetca.LeafMinter
 	tlsPort uint16
 
+	// tlsUpstreamPort is the mesh port a TLS-terminated connection is sent to,
+	// the visor's plain-HTTP port. Nothing listens on the mesh's 443.
+	tlsUpstreamPort uint16
+
 	mu    sync.Mutex
 	pool  *ipPool
 	byIP  map[[4]byte]target // synthetic IP → mesh target
@@ -90,6 +94,7 @@ func (g *Gateway) EnableTLSMITM(minter skynetca.LeafMinter, tlsPort uint16) {
 	}
 	g.minter = minter
 	g.tlsPort = tlsPort
+	g.tlsUpstreamPort = 80
 }
 
 // New builds a Gateway that leases synthetic IPs from cidr (e.g.
@@ -171,6 +176,21 @@ func (g *Gateway) lookup(ip net.IP) (target, bool) {
 	return t, ok
 }
 
+// Resolve leases (or reuses) a synthetic IP for a .dmsg or .skynet name, as a
+// DNS answer from InstallDNS would.
+func (g *Gateway) Resolve(scheme, name string) (net.IP, error) {
+	return g.resolve(scheme, normalizeName(name))
+}
+
+// DialIP dials port on the mesh target leased for ip.
+func (g *Gateway) DialIP(ctx context.Context, ip net.IP, port uint16) (net.Conn, error) {
+	t, ok := g.lookup(ip)
+	if !ok {
+		return nil, fmt.Errorf("meshgw: no mesh name holds %s", ip)
+	}
+	return g.dial(ctx, t.scheme, t.dest, port)
+}
+
 // ServeTransparent accepts REDIRECT'd TCP connections on lis and bridges each to
 // its mesh target. Blocks until ctx is done or lis errors.
 func (g *Gateway) ServeTransparent(ctx context.Context, lis net.Listener) error {
@@ -214,9 +234,16 @@ func (g *Gateway) bridge(ctx context.Context, conn net.Conn, origIP net.IP, orig
 		g.log.WithField("ip", origIP.String()).Debug("mesh gateway: unknown synthetic IP")
 		return
 	}
-	mesh, err := g.dial(ctx, t.scheme, t.dest, origPort)
+	// HTTPS is terminated here and carried to the peer as plain HTTP, so it
+	// goes to the peer's HTTP port rather than the 443 it was asked for.
+	mitm := g.minter != nil && origPort == g.tlsPort
+	dialPort := origPort
+	if mitm {
+		dialPort = g.tlsUpstreamPort
+	}
+	mesh, err := g.dial(ctx, t.scheme, t.dest, dialPort)
 	if err != nil {
-		g.log.WithError(err).WithField("dest", t.dest.Hex()).WithField("port", origPort).
+		g.log.WithError(err).WithField("dest", t.dest.Hex()).WithField("port", dialPort).
 			Debug("mesh gateway: dial failed")
 		return
 	}
@@ -224,7 +251,7 @@ func (g *Gateway) bridge(ctx context.Context, conn net.Conn, origIP net.IP, orig
 
 	// HTTPS: terminate the client's TLS with a minted leaf and bridge plaintext
 	// to the plain-HTTP mesh upstream (same model as dmsgweb's browser MITM).
-	if g.minter != nil && origPort == g.tlsPort {
+	if mitm {
 		g.spliceTLS(conn, mesh, t)
 		return
 	}

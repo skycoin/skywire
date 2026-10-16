@@ -79,10 +79,10 @@ var (
 	ptyVisorKey bool
 )
 
-// ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
+// ptyTCPViaRE matches `tcp://<pk>@<host:port>` for the --via
 // flag. Anchored so a typo doesn't silently fall through to a
 // different scheme.
-var ptyTCPViaRE = regexp.MustCompile(`^tcp://([a-f0-9]{66})@(.+)$`)
+var ptyTCPViaRE = regexp.MustCompile(`^tcp://([a-f0-9]{66}|[a-z2-7]{53})@(.+)$`)
 
 func init() {
 	// pty command
@@ -515,14 +515,14 @@ func resolveVisorKeyBorrow(cmd *cobra.Command, visorKey, viaVisor bool) bool {
 }
 
 // parseTCPVia splits a `tcp://<pk>@<host:port>` URL into the pinned
-// remote PK and the dial-target address. The PK must be the
-// canonical 66-char-hex form; the address is passed through to
+// remote PK and the dial-target address. The PK is hex or the base32
+// label; the address is passed through to
 // net.Dial verbatim so any net.Dial-acceptable form (host:port,
 // [v6]:port, etc.) works.
 func parseTCPVia(via string) (cipher.PubKey, string, error) {
 	m := ptyTCPViaRE.FindStringSubmatch(via)
 	if m == nil {
-		return cipher.PubKey{}, "", fmt.Errorf("pty: --via %q must be tcp://<66-hex-pk>@<host:port>", via)
+		return cipher.PubKey{}, "", fmt.Errorf("pty: --via %q must be tcp://<pk>@<host:port>", via)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(m[1]); err != nil {

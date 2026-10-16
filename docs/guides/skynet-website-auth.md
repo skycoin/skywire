@@ -93,7 +93,7 @@ skywire cli serve 80 --inject-pk --preserve-host --proxy-addr 127.0.0.1:8080
 
 - `--preserve-host` passes the incoming `Host:` through so Caddy's vhost routing
   works — pair it with the resolver's subdomain form
-  (`http://example.com.<visor-pk>.skynet`, see
+  (`http://example.com.<base32-pk>.skynet`, see
   [resolving-proxy.md](resolving-proxy.md)).
 - The PK header propagates to every site behind Caddy for free — each app just
   reads `X-Skywire-Remote-PK`; no per-app visor config.

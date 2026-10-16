@@ -51,25 +51,17 @@ skywire cli resolver ca fingerprint
 
 ## Enable in the visor config
 
-Edit `skywire-config.json` and set `tls_mitm: true` plus the CA
-paths under one or both resolvers:
+Point both resolvers at the CA in skywire.conf and regenerate the config:
 
-```json
-"skynet_web": {
-  "enable": true,
-  "tls_mitm": true,
-  "tls_ca_path": "/home/USER/.skywire/resolver/ca.crt",
-  "tls_ca_key_path": "/home/USER/.skywire/resolver/ca.key"
-},
-"dmsg_web": {
-  "enable": true,
-  "tls_mitm": true,
-  "tls_ca_path": "/home/USER/.skywire/resolver/ca.crt",
-  "tls_ca_key_path": "/home/USER/.skywire/resolver/ca.key"
-}
+```
+RESOLVERCA='/home/USER/.skywire/resolver'
+```
+```
+skywire autoconfig
 ```
 
-Restart the visor. On startup it logs:
+This sets `tls_mitm` and the CA paths on `dmsg_web` and `skynet_web`, and
+restarts the visor. On startup it logs:
 
 ```
 INFO ... skynetweb TLS MITM enabled  ca_fingerprint=...

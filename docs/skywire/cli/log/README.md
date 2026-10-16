@@ -47,6 +47,7 @@ skywire cli log
   -s, --sk cipher.SecKey             a random key is generated if unspecified
                                       (default 0000000000000000000000000000000000000000000000000000000000000000)
       --cleanup                      run cleanup after collection (remove old/invalid files) (default true)
+      --no-fetch                     fetch nothing; only clean the backup dir (for surveys visors push to the reward system)
       --backup-dir string            backup directory to also clean (default "log_backups")
       --max-age int                  maximum age in days for files before deletion (default 7)
       --prune-below-version string   during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43; "auto" = the dynamic 14-day reward floor)

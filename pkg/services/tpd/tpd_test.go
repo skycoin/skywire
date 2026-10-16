@@ -8,11 +8,12 @@ package tpd
 import (
 	"context"
 	"encoding/json"
-	"github.com/skycoin/skywire/pkg/services"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/services"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

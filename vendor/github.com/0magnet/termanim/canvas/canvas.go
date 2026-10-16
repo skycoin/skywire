@@ -213,15 +213,27 @@ type CellAnimation interface {
 // It does not call Init or Fini: the screen belongs to the caller. That is what
 // lets the same animation run in a terminal, in a browser pane, and inside a
 // host application that owns the screen already.
+//
+// A screen that asks for it (see ShapeScreen) gets the animation drawn as
+// ASCII by shape instead of in half blocks.
 func Run(screen tcell.Screen, a Animation, opt Options) error {
+	if sh, ok := screen.(shaped); ok && sh.ShapeASCII() {
+		return RunShape(screen, a, opt)
+	}
+	return runPixels(screen, a, opt, 1, 2, (*Surface).flush)
+}
+
+// runPixels drives a pixel animation on a surface of sx by sy pixels per
+// terminal cell, drawn onto the screen by flush.
+func runPixels(screen tcell.Screen, a Animation, opt Options, sx, sy int, flush func(*Surface, tcell.Screen)) error {
 	var surf *Surface
 	// Resolved once here rather than asserted every frame, and nil unless
 	// there is both a source and something that wants one.
 	tap := audioTap(a, opt.Audio)
 	return run(screen, opt,
 		func(cols, rows int) {
-			surf = NewSurface(cols, rows*2)
-			a.Resize(cols, rows*2)
+			surf = NewSurface(cols*sx, rows*sy)
+			a.Resize(cols*sx, rows*sy)
 		},
 		func(cols, rows int, dt float64) {
 			// Before Frame, so the animation draws the sound of the frame it
@@ -233,7 +245,7 @@ func Run(screen tcell.Screen, a Animation, opt Options) error {
 				tap(dt)
 			}
 			a.Frame(surf, dt)
-			surf.flush(screen)
+			flush(surf, screen)
 		})
 }
 

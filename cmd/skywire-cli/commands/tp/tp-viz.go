@@ -71,6 +71,7 @@ Modes:
   Standalone (default): Runs a local HTTP server showing network-wide transport data.
   Visor-embedded (--visor): Requests the running visor to start its embedded UI server,
     which has direct access to local transport/route data without RPC overhead.
+    It runs until --stop or the next visor restart.
 
 Displays an interactive force-directed graph showing:
 - Visors as nodes (sized by connection count)

@@ -8,8 +8,8 @@ and is gated by the visor's whitelist
 where access control applies.
 
 Most apps come in a **server**/**client** pair: one visor hosts the service,
-another connects to it. They are configured in `skywire-config.json` under
-`apps` (start on boot with `auto_start`) and controlled at runtime through
+another connects to it. They are configured in the visor config under
+`launcher.apps` (start on boot with `auto_start`) and controlled at runtime through
 `skywire cli` or the hypervisor UI.
 
 ## Which app do I want?
@@ -43,11 +43,13 @@ be the same machine.
 | [VPN client](vpn/client.md) | VPN client | `skywire cli vpn` | `43` |
 
 Ports are the visor's internal app-routing ports (set per app in
-`skywire-config.json`), not host network ports.
+the visor config), not host network ports.
 
 ## Configuring an app
 
-Every app entry in `skywire-config.json` has the same shape:
+Every app entry in the visor config has the same shape. Change one on a running
+visor with `skywire cli config set 'launcher.apps[<name>].<field>=<value>'`;
+a regenerate keeps it. An edit to the generated json by hand does not last.
 
 ```json
 {

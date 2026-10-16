@@ -108,13 +108,16 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...st
 		interp.StatHandler(s.statHandler),
 		interp.ReadDirHandler2(s.readDirHandler),
 		interp.AccessHandler(s.accessHandler),
+		// The virtual cwd, set as the runner is made. interp.Dir validates
+		// against the OS filesystem, and a runner made with no Dir asks the
+		// OS for one: in a browser that is process.cwd(), which throws, and
+		// under TinyGo a throw out of a JS call is a panic, not an error —
+		// every TinyGo build with a shell stopped as it started.
+		virtualDir("/home/user"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	// interp.Dir validates against the OS filesystem, so set the
-	// virtual cwd directly instead
-	s.Runner.Dir = "/home/user"
 	if err := s.PopulateBin(); err != nil {
 		return nil, err
 	}
@@ -431,4 +434,13 @@ func (s *Shell) Source() string {
 func (s *Shell) WithSource(src string) (restore func()) {
 	old := s.source.Swap(&src)
 	return func() { s.source.Store(old) }
+}
+
+// virtualDir sets the runner's working directory without asking the OS
+// filesystem about it, as interp.Dir does.
+func virtualDir(dir string) interp.RunnerOption {
+	return func(r *interp.Runner) error {
+		r.Dir = dir
+		return nil
+	}
 }

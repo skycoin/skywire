@@ -21,10 +21,15 @@ func TestPathIn(t *testing.T) {
 	if writable(ro) {
 		t.Skip("running as a user who can write a 0555 directory")
 	}
-	if got, want := pathIn(ro, cache), filepath.Join(cache, "skywire", ModuleName); got != want {
+	if got, want := pathIn(ro, filepath.Join(cache, "skywire")), filepath.Join(cache, "skywire", ModuleName); got != want {
 		t.Fatalf("an unwritable binary directory uses the cache: got %s, want %s", got, want)
 	}
-	if got := pathIn(ro, ""); got != filepath.Join(ro, ModuleName) {
+	// A service with no $HOME has no user cache, but its unit's directory works.
+	state := t.TempDir()
+	if got, want := pathIn(ro, filepath.Join(ro, "cache"), state), filepath.Join(state, ModuleName); got != want {
+		t.Fatalf("an unwritable first cache falls through to the next: got %s, want %s", got, want)
+	}
+	if got := pathIn(ro); got != filepath.Join(ro, ModuleName) {
 		t.Fatalf("with no cache directory the binary's is kept: %s", got)
 	}
 

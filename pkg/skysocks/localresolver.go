@@ -187,8 +187,7 @@ const localResolverRefreshInterval = time.Minute
 type resolverRefresher struct{ fn func() *LocalResolvers }
 
 // SetLocalResolverRefresh installs the lookup that re-reads the visor's
-// published resolving proxies, consulted on the keepalive tick while this client
-// has none.
+// published resolving proxies, consulted on the keepalive tick.
 //
 // It exists because this app and the resolvers are all launcher apps started in
 // no fixed order: an empty answer at connect time often just means the resolver
@@ -202,15 +201,17 @@ func (c *Client) SetLocalResolverRefresh(refresh func() *LocalResolvers) {
 	c.resolverRefresh.Store(&resolverRefresher{fn: refresh})
 }
 
-// pullLocalResolvers re-reads the published resolvers while there are none, at
-// most once per localResolverRefreshInterval. Once a set is in hand nothing is
-// re-read: a change lands on the next connect cycle, which re-asks anyway.
+// pullLocalResolvers re-reads the published resolvers at most once per
+// localResolverRefreshInterval. It keeps reading after a set is in hand, since
+// the resolvers start in no fixed order: a set that has .dmsg but not yet
+// .skynet would otherwise send every .skynet name to the exit until the next
+// connect cycle, hours later. An empty answer keeps the set it has.
 //
 // Called only from the keepalive goroutine, which is what lets refreshedAt be a
 // plain field.
 func (c *Client) pullLocalResolvers(now time.Time) {
 	refresh := c.resolverRefresh.Load()
-	if refresh == nil || refresh.fn == nil || c.localResolvers() != nil {
+	if refresh == nil || refresh.fn == nil {
 		return
 	}
 	if !c.resolverRefreshedAt.IsZero() && now.Sub(c.resolverRefreshedAt) < localResolverRefreshInterval {

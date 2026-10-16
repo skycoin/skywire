@@ -29,8 +29,9 @@ var routeCmd = &cobra.Command{
 	Short: "Per-domain upstreams: send chosen domains through another exit",
 	Long: `List the per-domain upstream rules of the resolving proxies.
 
-A rule sends a domain and its subdomains to its own upstream SOCKS5 proxy, or
-"direct", instead of the default upstream. The longest matching suffix wins.
+A rule sends a domain and its subdomains to its own upstream SOCKS5 proxy,
+"direct", or "none" to refuse it, instead of the default upstream. The longest
+matching suffix wins.
 Rules apply live and are saved to the config.
 
 A second exit is a second skysocks-client instance on its own port:
@@ -41,6 +42,7 @@ A second exit is a second skysocks-client instance on its own port:
   skywire cli visor app start skysocks-client-2
   skywire cli resolver route add example.com 127.0.0.1:1081
   skywire cli resolver route add lan.example direct
+  skywire cli resolver route add tracker.example none
   skywire cli resolver route rm example.com
 
 http://status.skywire lists each skysocks-client instance and its route.`,

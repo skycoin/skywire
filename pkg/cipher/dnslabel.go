@@ -57,3 +57,16 @@ func ParseDNSLabel(label string) (PubKey, error) {
 	copy(pk[:], raw)
 	return pk, nil
 }
+
+// HexForm returns a base32 key label as its hex form, and any other string
+// unchanged, for stores that keep keys as hex text.
+func HexForm(s string) string {
+	if len(s) != PubKeyDNSLabelLen {
+		return s
+	}
+	var pk PubKey
+	if pk.Set(s) != nil {
+		return s
+	}
+	return pk.Hex()
+}

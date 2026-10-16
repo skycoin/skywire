@@ -1,5 +1,7 @@
 # Batched route setup
 
+> **Status:** implemented, see `pkg/router/setup_batch_client.go`.
+
 Serialized route setup does not make sense for multiplexed routes. A standby-pool
 fill, `--tunnels N` and the mux leg self-heal all mean "give me N routes to the
 same exit", and each of the N used to be its own route-finder/oracle query and

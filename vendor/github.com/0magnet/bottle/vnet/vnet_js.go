@@ -321,3 +321,20 @@ type timeoutError struct{}
 func (timeoutError) Error() string   { return "vnet: i/o timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
+
+var (
+	hostMu  sync.RWMutex
+	hostNet HostNetwork
+)
+
+func setHost(h HostNetwork) {
+	hostMu.Lock()
+	hostNet = h
+	hostMu.Unlock()
+}
+
+func currentHost() HostNetwork {
+	hostMu.RLock()
+	defer hostMu.RUnlock()
+	return hostNet
+}

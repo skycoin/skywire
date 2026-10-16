@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // MaxEntries bounds each list, since the file is rewritten whole on a change.
@@ -92,6 +94,7 @@ func (s *Store) Verdict(pk string, known bool) Verdict {
 		return Allow
 	}
 	key := strings.ToLower(strings.TrimSpace(pk))
+	key = cipher.HexForm(key)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	switch {
@@ -176,6 +179,7 @@ func (s *Store) has(set func() map[string]bool, pk string) bool {
 		return false
 	}
 	key := strings.ToLower(strings.TrimSpace(pk))
+	key = cipher.HexForm(key)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return set()[key]
@@ -239,5 +243,6 @@ func keys(m map[string]bool) []string {
 
 func normalize(pk string) (string, bool) {
 	key := strings.ToLower(strings.TrimSpace(pk))
+	key = cipher.HexForm(key)
 	return key, pkPattern.MatchString(key)
 }

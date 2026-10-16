@@ -23,6 +23,7 @@ cobra subcommand tree.
 - [network-visualizer.md](network-visualizer.md) — the transport-graph UI (`cli tp viz`), which is not the hypervisor interface
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
 - [public-visor.md](public-visor.md) — make a visor reachable from the internet: `is_public`, a stable `transport_port`, router port-forwarding and host firewall (TCP **and** UDP), transport-type → protocol map, and reachability troubleshooting
+- [browser-visor.md](browser-visor.md) — how a visor runs in a browser tab: the exec worker, vnet, the desk, deep links and where the module comes from
 - [host-bridge.md](host-bridge.md) — give a browser visor the sockets of its computer: transports at an address of its own, and ports of the computer forwarded to it, such as its SOCKS proxy
 
 ## Application usage
@@ -30,6 +31,9 @@ cobra subcommand tree.
 - [vpn.md](vpn.md) — Skywire VPN client/server with `skywire cli vpn`
 - [socks5.md](socks5.md) — Skywire SOCKS5 proxy client with `skywire cli proxy`
 - [skynet.md](skynet.md) — SkyNet P2P port forwarding with `skywire cli skynet`
+- [linuxontab.md](linuxontab.md) — run LinuxOnTab inside the desk with the tab visor as its network
+- [mesh-addresses.md](mesh-addresses.md) — every form of a mesh address: hex and base32 keys, ports, site names, short names and route prefixes
+- [publish-a-site.md](publish-a-site.md) — serve a site or a port to the network by your visor key, with no domain or open port
 - [resolving-proxy.md](resolving-proxy.md) — the `.dmsg` / `.skynet` resolving SOCKS5 proxies (`skywire cli resolver`): reach visors and deployment services by public key over dmsg/skynet from a browser or `curl` — the supported way to view deployment-service data now that the CLI has no plain-HTTP fallback
 - [dmsg-lan-gateway.md](dmsg-lan-gateway.md) — turn one board with a visor into a `.dmsg` / `.skynet` gateway for your whole LAN (OpenWRT / DD-WRT), so any device reaches dmsg-only deployment services with no per-device skywire install (via `skywire autoconfig --dmsgweb-addr`)
 - [standalone-skychat.md](standalone-skychat.md) — `skywire app skychat --standalone --tcp-listen :PORT` for visor-independent chat-app with direct-TCP entry point; port-forwarding caveats

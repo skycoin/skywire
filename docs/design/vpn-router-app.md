@@ -1,5 +1,7 @@
 # vpn-router — Skywire VPN gateway / WiFi-AP role
 
+> **Status:** implemented, see `pkg/vpnrouter`.
+
 `vpn-router` turns a visor into a **router**: downstream LAN/WiFi clients reach
 the internet through the Skywire mesh VPN without running any Skywire software
 themselves. A laptop or phone joins the router's WiFi (or plugs into its LAN

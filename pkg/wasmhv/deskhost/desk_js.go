@@ -138,6 +138,37 @@ func installDesk() {
 			return files.New(sharedShellFS(), dir), nil
 		},
 	})
+	// The dashboard's host bridge page: the bridge for this computer, the
+	// command to run it, and the form that connects the visor to it.
+	desk.Register(desk.App{
+		Name: "hostbridge", Title: "host bridge",
+		Help:  "give this visor its computer's ports (docs/guides/host-bridge.md)",
+		Width: 820, Height: 620,
+		Open: func(_ []string) (desk.Pane, error) {
+			return browserPane{url: hostBridgeURL}, nil
+		},
+	})
+	// LinuxOnTab, when the page serves it. A plain frame of this page, since it
+	// reaches the tab's network through window.parent.vnet.
+	if lot := js.Global().Get("__SKYWIRE_LOT_URL__"); lot.Type() == js.TypeString && lot.String() != "" {
+		desk.Register(desk.App{
+			Name: "linux", Title: "linux",
+			Help:  "LinuxOnTab, a Linux system online through this visor (docs/guides/linuxontab.md)",
+			Width: 960, Height: 600,
+			Open: func(args []string) (desk.Pane, error) {
+				// Without isolation LinuxOnTab reloads the whole page to get it,
+				// which restarts this tab's visor.
+				if !js.Global().Get("crossOriginIsolated").Truthy() {
+					return messagePane("LinuxOnTab needs a cross-origin isolated page, and this browser did not isolate it. Try a Chromium-based browser."), nil
+				}
+				u := lot.String()
+				if len(args) > 0 && args[0] == "full" {
+					u += "&disk=full" // the full image, an 800 MB download
+				}
+				return framePane(u), nil
+			},
+		})
+	}
 	registerPairingApps()
 	registerInstallApp()
 	registerMailApp()
@@ -409,6 +440,17 @@ func framePane(url string) desk.Pane {
 		f.Set("src", url)
 		f.Get("style").Set("cssText", "border:0;width:100%;height:100%;display:block;background:#000")
 		el.Call("appendChild", f)
+		return nil
+	}}
+}
+
+// messagePane is a pane that shows one line of text.
+func messagePane(text string) desk.Pane {
+	return funcPane{mount: func(el js.Value) error {
+		p := js.Global().Get("document").Call("createElement", "p")
+		p.Set("textContent", text)
+		p.Get("style").Set("cssText", "margin:0;padding:1.5em;font:14px/1.6 system-ui,sans-serif;color:#c7cbe6;background:#0b0d17;height:100%;box-sizing:border-box")
+		el.Call("appendChild", p)
 		return nil
 	}}
 }

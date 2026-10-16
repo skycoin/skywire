@@ -176,7 +176,7 @@ type Client struct {
 	// Written once before ListenAndServe and read by every connection, so an
 	// atomic keeps that honest under -race.
 	resolvers atomic.Pointer[LocalResolvers]
-	// resolverRefresh re-reads the published resolvers while there are none, and
+	// resolverRefresh re-reads the published resolvers on the keepalive tick, and
 	// resolverRefreshedAt bounds how often (see pullLocalResolvers).
 	resolverRefresh     atomic.Pointer[resolverRefresher]
 	resolverRefreshedAt time.Time

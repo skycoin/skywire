@@ -63,6 +63,11 @@ The legacy key `dmsgpty` is still accepted on load.
 | `ssh_listen` | optional direct-TCP entry point (`:2022`, `0.0.0.0:2022`, …). **Empty (default) = dmsg/skynet only.** |
 | `persistent_sessions` | keep an interactive shell running across a dropped stream instead of killing it, so a reconnecting client reattaches to the **same** shell and replays the output produced while disconnected. Default `false`. See below. |
 
+Set these in skywire.conf and run `skywire autoconfig`: `DMSGPTYPKS` for
+`whitelist`, `PTYSSHLISTEN` for `ssh_listen` and `PTYPERSIST` for
+`persistent_sessions`. The generated json above is rebuilt by each autoconfig,
+so an edit made there does not last.
+
 ### Persistent sessions (reconnect)
 
 With `persistent_sessions: true`, a dropped pty stream no longer kills the

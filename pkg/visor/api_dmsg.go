@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -638,7 +639,7 @@ func (v *Visor) SetDmsgSessionsCount(count int) (*visorapi.DmsgConnectAllResult,
 	if v.conf == nil || v.conf.Dmsg == nil {
 		return nil, errors.New("dmsg config not initialized")
 	}
-	v.conf.Dmsg.SessionsCount = count
+	setSessionsCount(v.conf.Dmsg, count)
 	if err := v.conf.Flush(); err != nil {
 		return nil, fmt.Errorf("failed to persist config: %w", err)
 	}
@@ -902,4 +903,13 @@ func (v *Visor) isDmsgServiceKey(pk cipher.PubKey) bool {
 func sortedPKs(pks []cipher.PubKey) []cipher.PubKey {
 	sort.Slice(pks, func(i, j int) bool { return pks[i].String() < pks[j].String() })
 	return pks
+}
+
+// setSessionsCount sets the primary deployment's sessions_count, which is what
+// the config writes, and the top-level copy readers use.
+func setSessionsCount(c *dmsgspec.DmsgConfig, n int) {
+	c.SessionsCount = n
+	if len(c.Deployments) > 0 {
+		c.Deployments[0].SessionsCount = n
+	}
 }

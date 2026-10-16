@@ -44,6 +44,8 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	sky, err := skydns.New(skydns.Config{
 		Dial:     cfg.Dial,
 		Upstream: up,
+		Minter:   cfg.Minter,
+		Aliases:  cfg.Aliases,
 		MTU:      TUNMTU,
 		Log:      log,
 	})
@@ -148,3 +150,6 @@ func followNetworkDNS(tun *androidTUN, up *skydns.Upstream, log logrus.FieldLogg
 	up.SetServer(server)
 	log.Infof("skydns: asking %s for other names", server)
 }
+
+// SkyDNSSplitDNS is false on Android, where the VPN service takes the DNS.
+func SkyDNSSplitDNS() bool { return false }

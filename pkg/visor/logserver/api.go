@@ -136,6 +136,8 @@ type API struct {
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
+	// homePage renders the mesh directory for home.skynet and home.dmsg.
+	homePage func(suffix string) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
 	vhosts atomic.Pointer[map[string]*Vhost]
 	// statusPage serves /status, the status of the deployment services the
@@ -393,6 +395,12 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// serves the root path too — replacing the default landing page
 	// rather than only catching unmatched routes.
 	r.HandleFunc("GET /{$}", func(w http.ResponseWriter, req *http.Request) {
+		if suffix, ok := homeSuffix(landingHost(req)); ok && api.homePage != nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(api.homePage(suffix)) //nolint:errcheck,gosec // rendered and escaped by dmsgweb
+			return
+		}
 		if api.websiteHandler != nil {
 			api.websiteHandler.ServeHTTP(w, req)
 			return
@@ -401,6 +409,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		var links []string
 		links = append(links, `<a href="/health">/health</a> - visor health status`)
+		if api.homePage != nil {
+			links = append(links, `<a href="http://home.skynet/">home.skynet</a> - the mesh directory`)
+		}
 		if api.statusPage != nil {
 			links = append(links, `<a href="/status">/status</a> - deployment services status`)
 		}
@@ -439,7 +450,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 					links = append(links, "")
 					links = append(links, "managed visors (this hypervisor):")
 					for _, pk := range managed {
-						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.skynet/">%s.skynet</a>`, pk.DNSLabel(), pk.DNSLabel()))
 					}
 				}
 				// Part 3: hypervisors this visor is configured to trust.
@@ -447,7 +458,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 					links = append(links, "")
 					links = append(links, "configured hypervisors:")
 					for _, pk := range hvs {
-						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.skynet/">%s.skynet</a>`, pk.DNSLabel(), pk.DNSLabel()))
 					}
 					links = append(links, `  <small>(an hv link resolves only through a proxy that can route to it)</small>`)
 				}
@@ -940,4 +951,21 @@ func (api *API) vhostList() []*Vhost {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// homeSuffix reports whether host is the mesh directory's name, home.skynet
+// or home.dmsg, and which suffix it was asked under.
+func homeSuffix(host string) (string, bool) {
+	switch strings.ToLower(strings.TrimSuffix(host, ".")) {
+	case "home.skynet":
+		return ".skynet", true
+	case "home.dmsg":
+		return ".dmsg", true
+	}
+	return "", false
+}
+
+// SetHomePage installs the renderer for the mesh directory at home.skynet.
+func (api *API) SetHomePage(render func(suffix string) []byte) {
+	api.homePage = render
 }

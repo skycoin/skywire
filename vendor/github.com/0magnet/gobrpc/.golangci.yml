@@ -1,0 +1,105 @@
+# Kept in step with 0pcom/skywire, which is the reference for these repos.
+# The linter set and their settings are copied from there unchanged; what is
+# dropped is only skywire's own path exclusions, which name files that do not
+# exist here.
+version: "2"
+run:
+  concurrency: 4
+  modules-download-mode: readonly
+  issues-exit-code: 1
+  tests: true
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosec
+    - ineffassign
+    - misspell
+    - nakedret
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+  settings:
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: false
+      check-blank: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocyclo:
+      min-complexity: 10
+    lll:
+      line-length: 120
+      tab-width: 1
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    unparam:
+      check-exported: false
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor/
+      - third_party/
+      - node_modules
+      - builtin$
+      - examples$
+    rules:
+      # The staticcheck suggestions skywire turns off. They are style
+      # preferences rather than defects, and the point of copying this file is
+      # that the same code passes in both places.
+      - linters:
+          - staticcheck
+        text: "QF1001:" # could apply De Morgan's law
+      - linters:
+          - staticcheck
+        text: "QF1002:" # could use tagged switch
+      - linters:
+          - staticcheck
+        text: "QF1003:" # could use tagged switch on error code
+      - linters:
+          - staticcheck
+        text: "QF1004:" # could use strings.ReplaceAll instead
+      - linters:
+          - staticcheck
+        text: "QF1006:" # could lift into loop condition
+      - linters:
+          - staticcheck
+        text: "QF1008:" # could remove embedded field from selector
+      - linters:
+          - staticcheck
+        text: "QF1010:" # could convert argument to string
+      - linters:
+          - staticcheck
+        text: "QF1012:" # could use fmt.Fprintf instead of WriteString(fmt.Sprintf)
+      - linters:
+          - staticcheck
+        text: "ST1005:" # error strings should not be capitalized
+issues:
+  new: false
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true

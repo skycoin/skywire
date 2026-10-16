@@ -25,7 +25,12 @@ var hostBridgeCmd = &cobra.Command{
 A visor in a browser tab cannot listen on a port of its host. A host bridge,
 started on that host with 'skywire hostbridge', listens for it. Connect the
 visor to the URL the bridge prints, then forward host ports to addresses
-the visor can dial, such as the local port of skysocks-client.`,
+the visor can dial, such as the local port of skysocks-client.
+
+A computer without skywire can get the bridge from a browser visor: open
+/hostbridge/ on its dashboard (the "host bridge" app in the desk). It offers
+the build for the computer and shows the command to run it. The guide is
+docs/guides/host-bridge.md.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		printHostBridgeStatus(cmd)

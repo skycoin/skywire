@@ -64,6 +64,10 @@ the proxy rather than looked up first. Under `socks5://`, an IP literal
 destination is passed straight through and only real hostnames take the
 resolver detour.
 
+The proxy itself is dialed through `bottle/vnet`: a real socket natively, and
+under js/wasm the page's virtual loopback, so a proxy on `127.0.0.1` in a
+browser tab is reachable.
+
 ## The rest of the API
 
 A downloader needs an HTTP request layer anyway, so the plain one is exported
@@ -100,6 +104,7 @@ from the original are about what happens concurrently:
 
 MIT — see [LICENSE](LICENSE). Copyright (c) 2019 Mohamed Elbahja for the
 original, (c) 2026 Moses Narrow for this fork.
+
 ## Dependency Graph
 
 Made with [goda](https://github.com/loov/goda):
@@ -122,12 +127,12 @@ gocloc --not-match-d='(vendor|node_modules|\.git)' .
 -------------------------------------------------------------------------------
 Language                     files          blank        comment           code
 -------------------------------------------------------------------------------
-Go                               8            217            174           1067
-Markdown                         1             31              0            104
+Go                               8            220            179           1073
+Makefile                         1             21             52            105
+Markdown                         1             32              0            105
 YAML                             1              0              7             98
-Makefile                         1             19             34             85
-Bourne Shell                     1              8             16             30
+Bourne Shell                     1              8             17             31
 -------------------------------------------------------------------------------
-TOTAL                           12            275            231           1384
+TOTAL                           12            281            255           1412
 -------------------------------------------------------------------------------
 ```

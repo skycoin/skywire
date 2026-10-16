@@ -100,7 +100,7 @@ func Init(cfg *Config) {
 	//
 	// Add extra line breaks for headings
 	//
-	if cfg.NoExtraNewlines == false {
+	if !cfg.NoExtraNewlines {
 		tpl = strings.NewReplacer(
 			"Usage:", "\nUsage:\n",
 			"Aliases:", "\nAliases:\n",
@@ -289,14 +289,14 @@ func Init(cfg *Config) {
 	}
 
 	// Apply patched template
-	cfg.RootCmd.SetUsageTemplate(tpl)
+	if templatedHelp {
+		cfg.RootCmd.SetUsageTemplate(tpl)
+	}
 	// Debug line, uncomment when needed
 	// fmt.Println(tpl)
 
-	// Under TinyGo, cobra cannot execute this templated help: text/template
-	// invokes template methods via reflect.Value.Call, which TinyGo does not
-	// implement. Install a template-free colored usage/help renderer instead,
-	// applying the same colors from cfg. This is a no-op on other toolchains.
+	// Under TinyGo and in js builds, a template-free colored renderer instead,
+	// with the same colors from cfg (manualhelp_tinygo.go). A no-op elsewhere.
 	installManualHelp(cfg)
 }
 

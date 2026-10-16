@@ -36,7 +36,7 @@ func TestRenderHomePage(t *testing.T) {
 		"dmsg0":   dmsg0PK,
 		"rsn":     rsnPK,
 	}
-	page := string(renderHomePage(aliases, ".dmsg", selfPK))
+	page := string(renderHomePage(aliases, ".dmsg", selfPK, nil))
 
 	// Grouped under the right headings. "tpd" has a manifest, so it renders as a
 	// "Service API endpoints" section; "other" has none, so it falls under the
@@ -72,7 +72,7 @@ func TestRenderHomePageServiceEndpoints(t *testing.T) {
 	// Only tpd + dmsgd configured → only those services get an endpoint
 	// directory; ar/rf/sd/ut/reward (no alias) are skipped.
 	aliases := map[string]cipher.PubKey{"tpd": tpdPK, "dmsgd": dmsgdPK}
-	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}))
+	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}, nil))
 
 	assert.Contains(t, page, "Service API endpoints")
 	// A no-param GET endpoint from the manifest stays a plain link, paired with
@@ -98,7 +98,7 @@ func TestRenderHomePageServiceEndpoints(t *testing.T) {
 
 func TestRenderHomePagePostEndpoint(t *testing.T) {
 	rfPK, _ := cipher.GenerateKeyPair()
-	page := string(renderHomePage(map[string]cipher.PubKey{"rf": rfPK}, ".dmsg", cipher.PubKey{}))
+	page := string(renderHomePage(map[string]cipher.PubKey{"rf": rfPK}, ".dmsg", cipher.PubKey{}, nil))
 
 	// route-finder POST /routes renders a body textarea + Send button (which
 	// fetches through the proxy) instead of a navigating link.
@@ -117,13 +117,13 @@ func TestRenderHomePagePostEndpoint(t *testing.T) {
 func TestRenderHomePageNatSort(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	aliases := map[string]cipher.PubKey{"dmsg0": pk, "dmsg2": pk, "dmsg10": pk}
-	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}))
+	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}, nil))
 	i0, i2, i10 := strings.Index(page, "dmsg0.dmsg"), strings.Index(page, "dmsg2.dmsg"), strings.Index(page, "dmsg10.dmsg")
 	assert.True(t, i0 < i2 && i2 < i10, "dmsg2 must sort before dmsg10 (numeric, not lexical)")
 }
 
 func TestRenderHomePageEmpty(t *testing.T) {
-	page := string(renderHomePage(nil, ".dmsg", cipher.PubKey{}))
+	page := string(renderHomePage(nil, ".dmsg", cipher.PubKey{}, nil))
 	assert.Contains(t, page, "No aliases configured")
 }
 
@@ -146,4 +146,18 @@ func TestServeHomeInProcess(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Contains(t, string(body), `href="http://tpd.dmsg/health"`)
+}
+
+func TestHomePageListsVisorsByBase32Name(t *testing.T) {
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	page := string(RenderHomePageWithVisors(nil, ".skynet", cipher.PubKey{}, []cipher.PubKey{a, b}))
+	if !strings.Contains(page, "Visors (2)") {
+		t.Fatal("no visors heading with the count")
+	}
+	for _, pk := range []cipher.PubKey{a, b} {
+		if !strings.Contains(page, `href="http://`+pk.DNSLabel()+`.skynet/"`) {
+			t.Fatalf("no .skynet link for %s", pk.Hex())
+		}
+	}
 }

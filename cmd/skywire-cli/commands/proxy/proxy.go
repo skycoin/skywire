@@ -1351,8 +1351,8 @@ Results show which proxies are reachable and their response latency.`,
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
 			}
 
-			// The test borrows the DEFAULT client — and DoCustomSetting
-			// replaces its whole arg set — so put the operator's args back
+			// The test borrows the DEFAULT client and replaces its whole arg
+			// set, so put the operator's args back
 			// afterwards. Without this a test left the tested key persisted
 			// as the configured exit in skywire-config.json.
 			restore := restoreProxyArgsOnExit(cmd, rpcClient, defaultClientName)
@@ -1362,14 +1362,9 @@ Results show which proxies are reachable and their response latency.`,
 			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 			time.Sleep(200 * time.Millisecond)
 
-			// Configure and start the existing skysocks-client
-			arguments := map[string]any{
-				"app":    "skysocks-client",
-				"--srv":  serverPK.String(),
-				"--addr": addr,
-			}
-
-			err = rpcClient.DoCustomSetting("skysocks-client", arguments)
+			// Configure and start the existing skysocks-client. An ordered list, not
+			// a map: map order is random, and a misplaced token stops the client.
+			err = rpcClient.SetAppArgs("skysocks-client", []string{"--srv", serverPK.String(), "--addr", addr})
 			if err != nil {
 				restore.fatal(fmt.Errorf("failed to configure proxy: %w", err))
 			}

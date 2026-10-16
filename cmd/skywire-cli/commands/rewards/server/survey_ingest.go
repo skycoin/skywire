@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 
@@ -123,11 +124,16 @@ func registerSurveyIngestRoutes(r1 *http.ServeMux, wd string) {
 			httputil.WriteJSON(w, r, http.StatusUnauthorized, map[string]any{"error": "unauthenticated"})
 			return
 		}
-		data, err := os.ReadFile(filepath.Join(surveyDir, remotePK.Hex(), "node-info.json")) //nolint:gosec
+		path := filepath.Join(surveyDir, remotePK.Hex(), "node-info.json")
+		data, err := os.ReadFile(path) //nolint:gosec
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"sha256": ""})
 			return
 		}
+		// The visor asks hourly and skips an unchanged push, so this request is
+		// what shows its survey is current. cli log --cleanup ages surveys by mtime.
+		now := time.Now()
+		os.Chtimes(path, now, now) //nolint:errcheck,gosec // best effort; a failure only ages the file
 		sum := sha256.Sum256(data)
 		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{"sha256": hex.EncodeToString(sum[:])})
 	})

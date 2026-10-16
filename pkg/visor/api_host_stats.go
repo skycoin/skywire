@@ -31,6 +31,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	gnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
+
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
