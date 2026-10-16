@@ -309,7 +309,11 @@ type Aggregator struct {
 	// paces uptime heartbeats (see telemetry_dedup.go).
 	tel telemetryState
 	// pace holds telemetry back to one apply per window (telemetry_pace.go).
-	pace    telemetryPacer
+	pace telemetryPacer
+	// ckPace holds checkpoint rows between open phases (checkpoints.go).
+	ckPace checkpointPacer
+	// ckClock replaces time.Now for the checkpoint phases in tests.
+	ckClock func() time.Time
 	runOnce sync.Once
 
 	// roots holds, per reporter, the tree hash of the last Root applied in
@@ -534,7 +538,10 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 // Run starts the reconcile + cleanup loops. Returns immediately; they
 // run until ctx is canceled or Close is called. Idempotent.
 func (a *Aggregator) Run(ctx context.Context) {
-	a.runOnce.Do(func() { go a.flushPaced(ctx) })
+	a.runOnce.Do(func() {
+		go a.flushPaced(ctx)
+		go a.runCheckpointFlush(ctx)
+	})
 	a.core.Run(ctx)
 }
 
