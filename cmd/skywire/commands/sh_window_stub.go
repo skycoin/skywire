@@ -8,4 +8,4 @@ func noWindow() string {
 	return "this build has none, it needs cgo and no withoutgio tag"
 }
 
-func runWindow(console.Options) error { return nil }
+func runWindow(console.Options, string) error { return nil }

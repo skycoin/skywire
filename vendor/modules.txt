@@ -171,7 +171,7 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261016204925-07b93e475ebd
+# github.com/0magnet/progterm v0.0.0-20261016220245-12e47da1d129
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
@@ -216,7 +216,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261016210301-1ad17a0f4604
+# github.com/0magnet/websh v0.0.1-0.20261016215005-dc700a0b0801
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console

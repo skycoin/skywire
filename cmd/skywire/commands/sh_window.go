@@ -24,7 +24,7 @@ func noWindow() string {
 
 // runWindow opens a Gio window whose tabs each run websh with opt, and ends
 // the process when the window closes.
-func runWindow(opt console.Options) error {
+func runWindow(opt console.Options, font string) error {
 	// A full-screen command draws on its tab, which is not the process's /dev/tty.
 	childtty.Terminal = func() *os.File {
 		if f, ok := cmdutil.Stdin().(*os.File); ok && f != os.Stdin {
@@ -32,7 +32,7 @@ func runWindow(opt console.Options) error {
 		}
 		return nil
 	}
-	return gioterm.Run(glterm.Options{Title: "skywire", Run: func(tty *os.File, sig <-chan os.Signal) int {
+	return gioterm.Run(glterm.Options{Title: "skywire", Font: font, Run: func(tty *os.File, sig <-chan os.Signal) int {
 		o := opt
 		o.In, o.Out, o.Signals = tty, tty, sig
 		o.Env = []string{"TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=skywire"}

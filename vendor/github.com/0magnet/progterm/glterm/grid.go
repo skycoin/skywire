@@ -7,6 +7,7 @@
 package glterm
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"image/draw"
@@ -15,10 +16,6 @@ import (
 	xterm "github.com/0magnet/xterm-go"
 	"github.com/0magnet/xterm-go/vt"
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gomono"
-	"golang.org/x/image/font/gofont/gomonobold"
-	"golang.org/x/image/font/gofont/gomonobolditalic"
-	"golang.org/x/image/font/gofont/gomonoitalic"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
@@ -47,15 +44,17 @@ type glyphKey struct {
 	face int
 }
 
-// NewGrid is a grid drawing at px pixels per em.
-func NewGrid(px float64) (*Grid, error) {
+// NewGrid is a grid drawing Go Mono at px pixels per em.
+func NewGrid(px float64) (*Grid, error) { return NewGridFont(GoMono(0), px) }
+
+// NewGridFont is a grid drawing f at px pixels per em; f.Pt is not used.
+func NewGridFont(f Font, px float64) (*Grid, error) {
 	g := &Grid{glyphs: map[glyphKey]*image.Alpha{}}
-	for i, ttf := range [][]byte{gomono.TTF, gomonobold.TTF, gomonoitalic.TTF, gomonobolditalic.TTF} {
-		f, err := opentype.Parse(ttf)
-		if err != nil {
-			return nil, err
+	for i, sf := range f.styles {
+		if sf == nil {
+			return nil, errors.New("glterm: a font with no faces")
 		}
-		face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: px, DPI: 72, Hinting: font.HintingFull})
+		face, err := opentype.NewFace(sf, &opentype.FaceOptions{Size: px, DPI: 72, Hinting: font.HintingFull})
 		if err != nil {
 			return nil, err
 		}

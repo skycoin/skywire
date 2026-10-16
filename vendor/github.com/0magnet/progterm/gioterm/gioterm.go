@@ -33,8 +33,15 @@ import (
 // shell exits or the window closes: Gio's app.Main owns the main goroutine
 // and never returns, so the window runs on another.
 func Run(opt glterm.Options) error {
-	if opt.FontPt == 0 {
-		opt.FontPt = 13
+	f, err := glterm.LoadFont(opt.Font)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "progterm: font: %v, using %s\n", err, f.Family)
+	}
+	if opt.FontPt > 0 {
+		f.Pt = opt.FontPt
+	}
+	if opt.Cols <= 0 || opt.Rows <= 0 {
+		opt.Cols, opt.Rows = 100, 30
 	}
 	go func() {
 		w := new(app.Window)
@@ -42,8 +49,14 @@ func Run(opt glterm.Options) error {
 		if title == "" {
 			title = "progterm"
 		}
-		w.Option(app.Title(title), app.Size(unit.Dp(600), unit.Dp(800)))
-		if err := loop(w, opt); err != nil {
+		// The size at the scale the screen asks for, checked at the first frame.
+		size := image.Pt(800, 500)
+		scr, scale := screen()
+		if g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(scale)); err == nil {
+			size = windowSize(g, opt.Cols, opt.Rows, scr)
+		}
+		w.Option(app.Title(title), app.Size(unit.Dp(float32(size.X)/scale), unit.Dp(float32(size.Y)/scale)))
+		if err := loop(w, opt, f); err != nil {
 			fmt.Fprintln(os.Stderr, "progterm:", err)
 			os.Exit(1)
 		}
@@ -83,7 +96,7 @@ func (c *clipboardBridge) Get(primary bool, paste func(string)) {
 	c.w.Invalidate()
 }
 
-func loop(w *app.Window, opt glterm.Options) error {
+func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 	var (
 		ops     op.Ops
 		tag     = new(int) // the window's input target
@@ -95,6 +108,7 @@ func loop(w *app.Window, opt glterm.Options) error {
 		ts      tabs
 		area    image.Point // the terminal's part of the window
 		bar     *image.RGBA
+		sized   bool // the window was made its size in cells
 	)
 	pending := append([]glterm.Tab{{Shell: opt.Shell, Args: opt.Args, Run: opt.Run}}, opt.Tabs...)
 	defer func() {
@@ -143,7 +157,7 @@ func loop(w *app.Window, opt glterm.Options) error {
 			size := e.Size
 
 			if grid == nil || e.Metric.PxPerSp != pxPerSp {
-				g, err := glterm.NewGrid(opt.FontPt * float64(e.Metric.PxPerSp))
+				g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(e.Metric.PxPerSp))
 				if err != nil {
 					return err
 				}
@@ -152,6 +166,19 @@ func loop(w *app.Window, opt glterm.Options) error {
 					t.term.Grid = g
 				}
 				area = image.Point{} // lay the terminals out again at the new size
+			}
+			if !sized {
+				// A wrong guess is put right before a tab opens: a terminal
+				// resized under a prompt can lose track of its cursor.
+				sized = true
+				scr, _ := screen()
+				if want := windowSize(grid, opt.Cols, opt.Rows, scr); want != size {
+					dp := func(px int) unit.Dp { return unit.Dp(float32(px) / e.Metric.PxPerDp) }
+					w.Option(app.Size(dp(want.X), dp(want.Y)))
+					e.Frame(gtx.Ops)
+					w.Invalidate()
+					continue
+				}
 			}
 			stripH := grid.CellH + grid.CellH/3
 			if a := image.Pt(size.X, max(1, size.Y-stripH)); a != area {
@@ -446,4 +473,23 @@ func termMouse(e pointer.Event, held *pointer.Buttons) []glterm.MouseEvent {
 	}
 	*held = e.Buttons
 	return out
+}
+
+// windowSize is the size in pixels of a window cols by rows cells of g, and
+// its tab strip. It is made smaller where screen, when known, has less room,
+// and kept wider than it is tall.
+func windowSize(g *glterm.Grid, cols, rows int, screen image.Point) image.Point {
+	stripH := g.CellH + g.CellH/3
+	if screen.X > 0 && screen.Y > 0 {
+		cols = min(cols, max(20, screen.X*9/10/g.CellW))
+		rows = min(rows, max(5, (screen.Y*85/100-stripH)/g.CellH))
+	}
+	for rows*g.CellH+stripH >= cols*g.CellW {
+		if rows > 5 {
+			rows--
+		} else {
+			cols++
+		}
+	}
+	return image.Pt(cols*g.CellW, rows*g.CellH+stripH)
 }

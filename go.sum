@@ -115,8 +115,8 @@ github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d h1:zLwPS+LqZKeKQ
 github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d/go.mod h1:SPdEIkbuE6PjbbCoCkX3gwYycrA+OZPrOfYFLUg6xss=
 github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887 h1:IgEkeXuI7nAQnuwDDVb/JdsV+QEnNPNHdcCZdH5dQbk=
 github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887/go.mod h1:Unl5uur51aOjJ+YeIy5DNGY36Rs62td5yG3pu7TKYuU=
-github.com/0magnet/progterm v0.0.0-20261016204925-07b93e475ebd h1:jXtybo3Kn8Z2qmNOUjZQBSxtHd7AnauVHOFRWYbgCDE=
-github.com/0magnet/progterm v0.0.0-20261016204925-07b93e475ebd/go.mod h1:76lkVi5I9i+YLJWiLvimwyo41Q8QHEtG/wdcspgzw3s=
+github.com/0magnet/progterm v0.0.0-20261016220245-12e47da1d129 h1:asmSUtlLHf6DCBdxxyxXKPDI6WQWyt3zQLMswMllIV0=
+github.com/0magnet/progterm v0.0.0-20261016220245-12e47da1d129/go.mod h1:bGg56mamD6lXuOpcO1mFFsld8wv3OW0uKu6rawPew3c=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585 h1:Izm48DGh4xsTTytTzTux1wLn2016Erqp4heOqLYJphM=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585/go.mod h1:WnuZAVQbE9SxpVgGrP7Xnrk2x+9T9o7GCRRpiB/hxhY=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=
@@ -133,8 +133,8 @@ github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 h1:wK2MncQOnEea7
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754/go.mod h1:9N1kqBjNdAUT/pfrWKyty4zS5ZQgG1OvsTmhdcpAWB0=
 github.com/0magnet/webrtc/v4 v4.2.24 h1:d2qdtJRYvjS730nfnT3ISK7S5DL3CoDClGb2Ohe9FGg=
 github.com/0magnet/webrtc/v4 v4.2.24/go.mod h1:EbAqt0EnBzEYIXysqLT6pm4tiQe4D56f7wEPX6/3KuE=
-github.com/0magnet/websh v0.0.1-0.20261016210301-1ad17a0f4604 h1:1uJuLCI3b9Q4/U325lHCP6RmzWt3toqdnm5S0p6/xSs=
-github.com/0magnet/websh v0.0.1-0.20261016210301-1ad17a0f4604/go.mod h1:BgWnYs0QTAECJKrwNVq41KFGbC7pTg8UyLhHk7cmpKU=
+github.com/0magnet/websh v0.0.1-0.20261016215005-dc700a0b0801 h1:V0XQ32jAFkXZQ5YMtNFcfAf8JjUtEwlxX1WBoWiCzIk=
+github.com/0magnet/websh v0.0.1-0.20261016215005-dc700a0b0801/go.mod h1:BgWnYs0QTAECJKrwNVq41KFGbC7pTg8UyLhHk7cmpKU=
 github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6 h1:BTRb2m334NAgm6Sp6l3FNoQ4LzPOf+oMSRU/XFnzF0k=
 github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6/go.mod h1:96VjVNvqxs7yCaVsSLjSTn8y1PrWsqNfMj9Jc+BhHaU=
 github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c h1:aYBYIo0pmbhjxO/2a6z9eIxlWtxdsWe+yzNI9Oep0gk=

@@ -21,6 +21,7 @@ import (
 var (
 	shCommand string
 	shWindow  bool
+	shFont    string
 )
 
 // shCmd is websh, the shell of the browser desk, on this machine's terminal.
@@ -32,7 +33,8 @@ var shCmd = &cobra.Command{
 		"and programs. skywire in it runs in this process, as it does in a desk, so it\n" +
 		"needs no binary of its own. With -c it runs a command line, with FILE a script,\n" +
 		"and with its input not a terminal, the script it reads. With --window it opens a\n" +
-		"window of websh tabs instead, or stays on this terminal where none can open.",
+		"window of websh tabs instead, or stays on this terminal where none can open.\n" +
+		"An interactive websh sources ~/.webshrc first, where PS1 sets the prompt.",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	RunE: func(c *cobra.Command, args []string) error {
@@ -43,7 +45,7 @@ var shCmd = &cobra.Command{
 			}
 			why := noWindow()
 			if why == "" {
-				return runWindow(opt)
+				return runWindow(opt, shFont)
 			}
 			fmt.Fprintf(os.Stderr, "skywire sh: no window (%s), websh runs on this terminal\n", why)
 		}
@@ -86,8 +88,9 @@ func execSkywire(ctx context.Context, args []string) (int, bool) {
 func init() {
 	shCmd.Flags().StringVarP(&shCommand, "command", "c", "", "run this command line, then exit")
 	shCmd.Flags().BoolVar(&shWindow, "window", false, "open websh in a window with tabs, falling back to this terminal")
-	// A terminal starts "the user's shell" as a login shell; websh reads no profile.
-	shCmd.Flags().BoolP("login", "l", false, "accepted for login shells; websh reads no profile")
+	shCmd.Flags().StringVar(&shFont, "font", "", "the window's font, \"Family Size\" (default: the desktop terminal's, else Go Mono)")
+	// A terminal starts "the user's shell" as a login shell.
+	shCmd.Flags().BoolP("login", "l", false, "accepted for login shells; websh reads no profile, only ~/.webshrc")
 	// As in bash, flags end at the script: what follows it is its own.
 	shCmd.Flags().SetInterspersed(false)
 	RootCmd.AddCommand(shCmd)
