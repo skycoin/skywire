@@ -63,6 +63,10 @@ type Conn struct {
 	// ConnectPK, fresh dial replaces the dead Conn.
 	lastActivityNs atomic.Int64
 
+	// str caches String: the remote address and direction never change, and
+	// debug lines format it on every message whether or not they print.
+	str atomic.Pointer[string]
+
 	sendq chan<- transport.Frame // channel from transport.Connection
 
 	// # stat
@@ -297,8 +301,13 @@ func connString(isIncoming, isTCP bool, addr string) (s string) {
 // for example: "-> tcp://127.0.0.1:8887". Where the
 // arrow is "->" for incoming connections and is "<-"
 // for outgoing
-func (c *Conn) String() (s string) {
-	return connString(c.incoming, c.IsTCP(), c.Address())
+func (c *Conn) String() string {
+	if s := c.str.Load(); s != nil {
+		return *s
+	}
+	s := connString(c.incoming, c.IsTCP(), c.Address())
+	c.str.Store(&s)
+	return s
 }
 
 //
