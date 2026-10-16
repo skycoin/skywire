@@ -365,8 +365,9 @@ func (s *service) startCXO(
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
 	s.cxo.StartAggregator(ctx, host, logger, "telemetry", skyenv.DmsgCXOPort, func(n *node.Node) (services.Aggregator, error) {
 		return cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
-			Node:   n,
-			Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+			Node:                n,
+			Logger:              logging.MustGetLogger("tpd-cxo-aggregator"),
+			TelemetryApplyEvery: time.Duration(s.cfg.TelemetryApplyEvery),
 		})
 	})
 	// The visors' DEDICATED tp-list feed (opt-in on the visor side): its
