@@ -36,3 +36,23 @@ func TestFallbackDisc_SelfSeedSurvivesEditAfterLiveFailure(t *testing.T) {
 	require.Zero(t, again.Sequence)
 	require.Equal(t, 2, live.entryHits, "the live discovery must be asked again")
 }
+
+// A config saved while the bug above was live keeps a self seed carrying both
+// halves and no version. A seed with a server half must still ask the live
+// discovery, or that saved seed shadows the discovery after every restart.
+func TestFallbackDisc_DualSeedPrefersLiveEntry(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	seed := &disc.Entry{
+		Static: pk,
+		Server: &disc.Server{Address: "127.0.0.1:1"},
+		Client: &disc.Client{DelegatedServers: []cipher.PubKey{pk}},
+	}
+	liveEntry := &disc.Entry{Version: "v1", Static: pk, Server: &disc.Server{Address: "127.0.0.1:1"}}
+	live := &stubDisc{entry: liveEntry}
+	f := NewRegisteringFallbackDiscClient(&stubDisc{entry: seed}, live, logging.MustGetLogger("test"))
+
+	got, err := f.Entry(context.Background(), pk)
+	require.NoError(t, err)
+	require.Same(t, liveEntry, got)
+	require.Equal(t, 1, live.entryHits)
+}
