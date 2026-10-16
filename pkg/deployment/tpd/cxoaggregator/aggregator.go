@@ -262,6 +262,10 @@ type Config struct {
 	// (hence separate ports) so the same visor PK doesn't deliver two
 	// different Roots to one node and flap its head.
 	DmsgPort uint16
+	// TelemetryApplyEvery is how often one edge's report of one transport is
+	// applied to the store (see telemetry_pace.go). Zero means 15 min. It can
+	// be changed later with SetTelemetryApplyEvery.
+	TelemetryApplyEvery time.Duration
 }
 
 // Aggregator is the CXO subscriber side of the visor-stats data path.
@@ -425,6 +429,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		lastList: make(map[skycipher.PubKey]cachedList),
 		ingest:   make(chan struct{}, maxConcurrentIngest),
 	}
+	a.pace.setWindow(conf.TelemetryApplyEvery)
 
 	core, err := cxoaggregate.New(dmsgC, sk, dmsgPort, cxoaggregate.Options{
 		ReconcileInterval: conf.ReconcileInterval,
@@ -1117,8 +1122,8 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		}
 		k := telKey{id: e.ID, reporter: reporter}
 		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
-			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type)}
-		if s, ok := a.pace.offer(k, snap, now); ok {
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type), at: now}
+		for _, s := range a.pace.offer(k, snap, now) {
 			due = append(due, heldSnap{k: k, s: s})
 		}
 	}
@@ -1140,7 +1145,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	k := telKey{id: id, reporter: reporter}
 	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
 		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
-	if s, ok := a.pace.offer(k, s, time.Now()); ok {
+	for _, s := range a.pace.offer(k, s, time.Now()) {
 		a.applySnap(ctx, k, s)
 	}
 }

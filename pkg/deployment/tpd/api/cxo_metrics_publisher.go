@@ -80,7 +80,7 @@ const (
 
 	// metricsTick is the cadence of the current day's leaf. Each tick
 	// re-encodes and re-gzips the whole day (~2.8 CPU-s on prod01), but a
-	// transport's telemetry reaches the store at most once per 5 minutes
+	// transport's telemetry reaches the store at most once per 15 minutes
 	// (cxoaggregator telemetryApplyEvery), so a faster tick mostly
 	// republishes the same numbers.
 	metricsTick = 5 * time.Minute

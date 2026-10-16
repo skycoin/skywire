@@ -34,6 +34,10 @@ type Config struct {
 	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
 	ChartsAddr string `json:"charts_addr,omitempty"`
 
+	// TelemetryApplyEvery is how often one edge's report of one transport is
+	// written to redis. Empty means 15m, and it is capped at 30m.
+	TelemetryApplyEvery services.Duration `json:"telemetry_apply_every,omitempty"`
+
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
