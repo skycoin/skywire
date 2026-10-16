@@ -297,3 +297,33 @@ func TestAssembleStitchesASplitDayLeaf(t *testing.T) {
 		t.Errorf("y = %+v, want the record that only existed in the second part", got[1])
 	}
 }
+
+// A snapshot that stopped at an old day must not answer for today. On
+// 2026-10-16 a visor held only empty September leaves and served "[]" as
+// the one-day window, which bw-collect read as a day with no bandwidth.
+func TestMetricsSnapshotStale(t *testing.T) {
+	now := time.Date(2026, 10, 16, 16, 0, 0, 0, time.UTC)
+	snap := func(newest time.Time, n int) *fakeSnapshot {
+		f := &fakeSnapshot{leaves: map[string][]byte{}}
+		for _, d := range tpdstore.MetricsWindowDates(newest, n) {
+			f.leaves[tpdstore.MetricsDayPartPath(d, 0)] = cxoutils.Gzip([]byte(`[]`))
+		}
+		return f
+	}
+	cases := []struct {
+		name string
+		snap *fakeSnapshot
+		want bool
+	}{
+		{"september leaves only", snap(time.Date(2026, 9, 27, 0, 0, 0, 0, time.UTC), 14), true},
+		{"newest is two days old", snap(now.AddDate(0, 0, -2), 3), true},
+		{"newest is yesterday", snap(now.AddDate(0, 0, -1), 30), false},
+		{"newest is today", snap(now, 30), false},
+		{"no day leaves", &fakeSnapshot{leaves: map[string][]byte{}}, false},
+	}
+	for _, c := range cases {
+		if got := metricsSnapshotStale(c.snap, now); got != c.want {
+			t.Errorf("%s: stale = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

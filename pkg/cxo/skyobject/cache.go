@@ -945,9 +945,16 @@ func (c *Cache) setWanted(
 		wincs += winc
 	}
 
+	// A prerequested Get waits with inc 0, its reference already counted.
+	// Store that reference; the in-memory CXDS panics on a Set with 0.
+	n := inc + wincs
+	if n <= 0 {
+		n = 1
+	}
+
 	// save
 	var urc uint32
-	urc, err = c.db().Set(key, val, inc+wincs)
+	urc, err = c.db().Set(key, val, n)
 	c.stat.addWritingDBRequest()
 
 	if err != nil {
@@ -1450,12 +1457,13 @@ func (c *Cache) Finc(
 
 	var it, ok = c.is[key]
 
-	if ok == false { //nolint:staticcheck
+	if !ok || it.fc == 0 {
+		// A plain reference to an object the filler found stored. A reject
+		// gives it back, or the next fill skips the subtree as held.
+		if inc < 0 {
+			_, err = c.inc(key, inc)
+		}
 		return err
-	}
-
-	if it.fc == 0 {
-		return err // not a filling item
 	}
 
 	// apply
