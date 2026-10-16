@@ -21,7 +21,7 @@ skywire cli proxy list
 ```
 This will query the service discovery for a list of visor public keys
 which are running the proxy server.
-[sd.skycoin.com/api/services?type=proxy](https://sd.skycoin.com/api/services?type=proxy)
+`dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=proxy`
 
 Sample output:
 ```
