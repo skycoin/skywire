@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	"github.com/bitfield/script"
-	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
 	"github.com/skycoin/skywire/deployment"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -324,11 +323,11 @@ func generateAndCacheCountryStats() error {
 	// (avoids spawning a subprocess per IP)
 	ipCache := make(map[string]geoIPResult)
 
-	db, dbErr := geoip2.OpenBytes(geoip.EmbeddedDB())
+	// The shared reader is memory-mapped and never closed.
+	db, dbErr := geoip.Shared()
 	if dbErr != nil {
 		cmdutil.Printf("Warning: failed to open embedded GeoIP database: %v\n", dbErr)
 	} else {
-		defer db.Close() //nolint:errcheck,gosec
 		for ip := range ipToVisors {
 			res, err := geoip.Lookup(db, ip)
 			if err != nil {
