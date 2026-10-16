@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -92,6 +93,11 @@ type redisStore struct {
 	live liveSet
 	// leafArchive keeps settled metrics leaves on disk (leaf_archive.go).
 	leafArchive string
+	// uptimeArchive keeps settled per-transport uptime timelines on disk
+	// (tp_timeline_archive.go).
+	uptimeArchive string
+	// archivedTimelineDays caches the dates known to be archived.
+	archivedTimelineDays sync.Map
 	// archived caches decoded archived days for older bandwidth (bw_archive.go).
 	archived archivedDayCache
 }
