@@ -110,3 +110,24 @@ func TestArbiterDialsWhenThePoolIsEmpty(t *testing.T) {
 	poolArbiterStep(rig.active, rig.pool, now.Add(time.Millisecond), grow)
 	require.Equal(t, 1, calls, "the retry is paced by pool.leg_interval")
 }
+
+// TestArbiterDialsWhenThePoolCannotSpareAStandby: a pool smaller than
+// pool.min_standby + 1 keeps its standby, and the active tunnel still gets its
+// spare leg by dialing one. Live, a 2-hop tunnel whose leg was cut stayed on
+// one leg next to a one-tunnel pool.
+func TestArbiterDialsWhenThePoolCannotSpareAStandby(t *testing.T) {
+	rig := newComposeRig(t, "skysocks-client-small-pool-test", 1)
+	require.Len(t, poolCandidates(rig.active, rig.pool, nil), 1)
+
+	calls := 0
+	inner := rig.grow(t)
+	grow := func(s *RouteGroup) error {
+		calls++
+		require.Nil(t, s, "the standby the pool must keep is not taken")
+		return inner(nil)
+	}
+	poolArbiterStep(rig.active, rig.pool, time.Now(), grow)
+	require.Equal(t, 1, calls)
+	require.Equal(t, 2, rig.active.aliveLegCount())
+	require.Equal(t, tunnelRoleStandby, rig.pool[0].TunnelRole())
+}
