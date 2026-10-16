@@ -305,7 +305,8 @@ final class ChatChecks: XCTestCase {
     /// The page's web view, once it has drawn something.
     private func chatPage(_ app: XCUIApplication) -> XCUIElement {
         let page = app.webViews["chat-webview"]
-        XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
+        // As long as connectedApp gives a start: app.open relaunches the app and its core.
+        XCTAssertTrue(page.waitForExistence(timeout: 180), "the chat page never came up")
         XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
         return page
     }
