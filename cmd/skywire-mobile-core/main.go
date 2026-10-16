@@ -46,6 +46,7 @@ import "C"
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -54,10 +55,12 @@ import (
 )
 
 // Return codes of the int32_t functions: 0 is success, -1 a failure whose
-// reason skywire_last_error returns.
+// reason skywire_last_error returns. skywire_start returns -2 when a stop
+// ended it, because the stop's own success clears that reason.
 const (
-	codeOK   = 0
-	codeFail = -1
+	codeOK      = 0
+	codeFail    = -1
+	codeStopped = -2
 )
 
 // lastCallErr is the reason the last failing call gave, for skywire_last_error
@@ -88,6 +91,10 @@ func skywire_start(configPath, dataDir *C.char) C.int32_t {
 		opts.DataDir = C.GoString(dataDir)
 	}
 	if err := mobilecore.Start(context.Background(), opts); err != nil {
+		if errors.Is(err, mobilecore.ErrStopped) {
+			fail(err)
+			return codeStopped
+		}
 		return fail(err)
 	}
 	return succeed()
