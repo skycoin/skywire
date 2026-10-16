@@ -1337,6 +1337,9 @@ type ForwardedPort struct {
 	// header is only trustworthy if the backend is reachable ONLY through
 	// the visor (bind it to loopback); see docs/guides/skynet-website-auth.md.
 	InjectPK bool `json:"inject_pk,omitempty"`
+	// VisorPages serves the visor's own pages on this port instead of a local
+	// service.
+	VisorPages bool `json:"visor_pages,omitempty"`
 	// Vhosts are sites on port 80 chosen by the request's Host, each a local
 	// service reverse-proxied without Caddy. Set on the port 80 entry.
 	Vhosts []Vhost `json:"vhosts,omitempty"`
@@ -1353,6 +1356,11 @@ type Vhost struct {
 	// PreserveHost passes the request's Host to the backend, as for a port 80
 	// forward; by default the backend sees its own address.
 	PreserveHost bool `json:"preserve_host,omitempty"`
+	// VisorPages serves the visor's own pages under this name, without a backend.
+	VisorPages bool `json:"visor_pages,omitempty"`
+	// Sites are names the backend serves, linked from the landing page. A
+	// catch-all to a local Caddy adds the ones Caddy reports.
+	Sites []string `json:"sites,omitempty"`
 }
 
 // Names are the Host names v answers to, lower case.

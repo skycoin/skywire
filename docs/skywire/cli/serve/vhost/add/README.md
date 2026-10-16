@@ -15,7 +15,9 @@ skywire cli serve vhost add <name|*>
 ```
       --alias strings      another Host name for the site, e.g. status.skywire.dev (repeatable)
       --preserve-host      send the name the site was asked by (e.g. status.skywire.dev) as the Host, not the service's address
+      --site strings       a name the service serves, linked from the landing page (repeatable; a * vhost to a local Caddy lists its own)
       --to string          local service: host:port, or a port on 127.0.0.1
+      --visor-pages        serve the visor's own pages, its landing page at /, under this name instead of --to
       --whitelist string   comma-separated PKs allowed to reach the site (empty = everyone)
 ```
 
