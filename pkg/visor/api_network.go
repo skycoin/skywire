@@ -164,7 +164,8 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 	}
 	lsAPI.SetVhosts(v.vhostSites(log))
 
-	// Rewards UI wins when configured — it's a global on/off switch.
+	// Rewards UI wins when configured — it's a global on/off switch. A build
+	// without it (mobile, a browser) falls through to the other modes.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
 		if h := rewardsUIHandler(log, rw); h != nil {
 			log.Info("Mounting reward system UI on port 80")

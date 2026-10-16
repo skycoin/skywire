@@ -62,6 +62,7 @@ const (
 //  3. Hands the listener to `serve`, which is expected to block
 //     while running an accept loop (http.Server.Serve, gRPC
 //     server.Serve, dmsgctrl.ServeListener, or a hand-rolled loop).
+//     The listener is closed when ctx ends.
 //
 // If ctx is canceled before the networker registers, the goroutine
 // exits without binding. If the listen itself fails, logs at Warn
@@ -97,6 +98,13 @@ func goServeSkynetMirror(
 		log.WithField("port", port).
 			WithField("label", label).
 			Debug("Skynet mirror listener bound (dmsg + skynet parity)")
+		// A skynet listener closes only when told to, and not every serve
+		// func closes the listener it was handed (a hand-rolled accept loop
+		// does not), so close it when ctx ends; Close is idempotent for the
+		// servers that also close it. Without this the mirror's accept loop
+		// outlived its visor.
+		stop := context.AfterFunc(ctx, func() { _ = lis.Close() }) //nolint:errcheck
+		defer stop()
 		serve(lis)
 	}()
 }

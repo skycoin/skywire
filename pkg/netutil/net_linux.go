@@ -7,10 +7,7 @@ package netutil
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os/exec"
-
-	"github.com/wlynxg/anet"
 )
 
 const (
@@ -36,36 +33,4 @@ func DefaultNetworkInterface() (string, error) {
 	// return "" without error — the historical contract of this function,
 	// which callers handle as "unknown" — rather than failing summaries.
 	return firstRoutableInterface()
-}
-
-func firstRoutableInterface() (string, error) {
-	ifaces, err := anet.Interfaces()
-	if err != nil {
-		return "", fmt.Errorf("error getting network interfaces: %w", err)
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		if IsVirtualInterface(iface.Name) {
-			continue
-		}
-		addrs, err := anet.InterfaceAddrsByInterface(&iface)
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip != nil && ip.To4() != nil && ip.IsGlobalUnicast() {
-				return iface.Name, nil
-			}
-		}
-	}
-	return "", nil
 }

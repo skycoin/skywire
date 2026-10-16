@@ -1,0 +1,16 @@
+# xcodebuild -scheme SkywireTour test (SkywireUITests: FlowChecks + ScreenTour), iPhone 18 Pro (iOS 27.0), 2026-09-30T00:30Z
+# live network; Face ID enrolled, prompts answered by ios/scripts/faceid-matcher.sh on request
+  SkywireUITests.FlowChecks testAppLockRoundTrip passed (75.069 seconds).
+  SkywireUITests.FlowChecks testFleetOff passed (32.541 seconds).
+  SkywireUITests.FlowChecks testFleetOn passed (44.062 seconds).
+  SkywireUITests.FlowChecks testLogLevelReachesTheCore passed (93.484 seconds).
+  SkywireUITests.FlowChecks testRestartFromHomeComesBackLoggedIn passed (36.389 seconds).
+  SkywireUITests.ScreenTour testTourEnglish passed (54.519 seconds).
+  SkywireUITests.ScreenTour testTourSimplifiedChinese passed (52.438 seconds).
+  SkywireUITests.ScreenTour testTourSpanish passed (75.456 seconds).
+** TEST SUCCEEDED **
+
+# the Fleet switch, config read between single runs (same session):
+#   testFleetOn  -> jq .hypervisor.dmsg_ingest skywire-config.json -> true
+#   testFleetOff -> false (twice)
+# the log level: after testLogLevelReachesTheCore, jq .log_level -> "info" (restored)

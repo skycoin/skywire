@@ -1,0 +1,104 @@
+# swift test in ios/Packages/CoreClient, 2026-09-29T23:19Z, swift-driver version: 1.168.6 Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)
+  CoreClientTests testAbout passed (0.039 seconds).
+  CoreClientTests testAppConnectionsOfAStoppedAppAreEmpty passed (0.006 seconds).
+  CoreClientTests testAppConnections passed (0.006 seconds).
+  CoreClientTests testAppLogsOfAStoppedAppAreEmpty passed (0.006 seconds).
+  CoreClientTests testAppLogs passed (0.006 seconds).
+  CoreClientTests testAppLogsWithNothingNewAreEmpty passed (0.006 seconds).
+  CoreClientTests testAppStatsOfAStoppedAppAreEmpty passed (0.006 seconds).
+  CoreClientTests testAppStats passed (0.008 seconds).
+  CoreClientTests testApp passed (0.006 seconds).
+  CoreClientTests testConcurrentCallersShareOneLogin passed (0.004 seconds).
+  CoreClientTests testDmsgReconnect passed (0.008 seconds).
+  CoreClientTests testErrorsCarryTheServersMessage passed (0.006 seconds).
+  CoreClientTests testEveryRecordedRouteIsExercised passed (0.040 seconds).
+  CoreClientTests testFirstRunCreatesTheAccountThenLogsIn passed (0.006 seconds).
+  CoreClientTests testLaterRunLogsInWithoutCreating passed (0.004 seconds).
+  CoreClientTests testLiveSessionSkipsTheLogin passed (0.005 seconds).
+  CoreClientTests testLocalPKIsFetchedOnceAndForgotten passed (0.008 seconds).
+  CoreClientTests testMutationsCarryAFreshCSRFToken passed (0.009 seconds).
+  CoreClientTests testPingIsFalseWhenNothingListens passed (0.004 seconds).
+  CoreClientTests testPingNeedsNoSession passed (0.002 seconds).
+  CoreClientTests testPublicIPOrNilRejectsTheNATWord passed (0.000 seconds).
+  CoreClientTests testRejectedPasswordIsAuthFailed passed (0.004 seconds).
+  CoreClientTests testRestartVisorGivesUpAfterFourAttempts passed (0.054 seconds).
+  CoreClientTests testRestartVisorRetriesWhileReconnecting passed (0.037 seconds).
+  CoreClientTests testRestartVisor passed (0.009 seconds).
+  CoreClientTests testRouterSettings passed (0.007 seconds).
+  CoreClientTests testRuntimeLogsCaughtUpIsEmpty passed (0.007 seconds).
+  CoreClientTests testRuntimeLogs passed (0.006 seconds).
+  CoreClientTests testServiceHealth passed (0.006 seconds).
+  CoreClientTests testServicesNullIsEmpty passed (0.007 seconds).
+  CoreClientTests testServices passed (0.006 seconds).
+  CoreClientTests testSetMinHopsSendsOnlyTheFourFields passed (0.009 seconds).
+  CoreClientTests testSetTransportPreferenceKeepsMinHops passed (0.009 seconds).
+  CoreClientTests testSummary passed (0.006 seconds).
+  CoreClientTests testUnauthorizedTriggersOneReloginAndRetry passed (0.010 seconds).
+  CoreClientTests testUpdateAppSendsOnlyTheGivenFields passed (0.007 seconds).
+  CoreClientTests testVisorsSummaryListsThisVisorFirst passed (0.006 seconds).
+	 Executed 37 tests, with 0 failures (0 unexpected) in 0.373 (0.376) seconds
+  LogParserTests testAppLinesFromTheRecording passed (0.001 seconds).
+  LogParserTests testColourAndCallerTokensAreDropped passed (0.000 seconds).
+  LogParserTests testRuntimeEntriesFromTheRecording passed (0.001 seconds).
+  LogParserTests testStructuredFieldsRenderAsJSON passed (0.000 seconds).
+  LogParserTests testUnparsedLinesKeepTheirText passed (0.001 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+  LoopbackTransportTests testCancellingTheReaderClosesTheConnection passed (0.263 seconds).
+  LoopbackTransportTests testRefusedConnectionThrows passed (0.003 seconds).
+  LoopbackTransportTests testSendCarriesMethodHeadersAndBody passed (0.005 seconds).
+  LoopbackTransportTests testSendGivesUpAfterItsTimeout passed (0.512 seconds).
+  LoopbackTransportTests testSendIgnoresCookies passed (0.008 seconds).
+  LoopbackTransportTests testStreamDeliversTheBodyAsItArrives passed (0.479 seconds).
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.270 (1.271) seconds
+  PhoneProfileTests testAFreshConfigGetsKotlinsPins passed (0.007 seconds).
+  PhoneProfileTests testAMalformedSectionIsAnError passed (0.001 seconds).
+  PhoneProfileTests testApplyRewritesTheFileInPlace passed (0.011 seconds).
+  PhoneProfileTests testArgsQuoteAsTheVisorDoes passed (0.001 seconds).
+  PhoneProfileTests testEnsureRewritesOnlyAStaleFile passed (0.005 seconds).
+  PhoneProfileTests testKotlinsOutputIsAFixpoint passed (0.002 seconds).
+  PhoneProfileTests testPasswordFileMatchesAnIndependentHash passed (0.001 seconds).
+  PhoneProfileTests testPathsWithASpaceAreQuotedAsTheVisorQuotes passed (0.001 seconds).
+  PhoneProfileTests testPinValue passed (0.000 seconds).
+  PhoneProfileTests testSettingsLandWhereKotlinPutsThem passed (0.001 seconds).
+  PhoneProfileTests testSkychatDropsPortlessAndKeepsTheRest passed (0.000 seconds).
+  PhoneProfileTests testSocksPins passed (0.000 seconds).
+  PhoneProfileTests testTheProfileIsIdempotent passed (0.002 seconds).
+  PhoneProfileTests testUnusableSettingsFallBackToTheDefaults passed (0.001 seconds).
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.035 (0.037) seconds
+  SecretStorePolicyTests testGeneratedPasswordsMeetTheAPIsPolicy passed (0.007 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+	 Executed 63 tests, with 0 failures (0 unexpected) in 1.687 (1.695) seconds
+	 Executed 63 tests, with 0 failures (0 unexpected) in 1.687 (1.698) seconds
+Routes exercised against the recordings (32):
+200 GET /api/about  [about]
+401 GET /api/about  [about-unauthorized]
+500 GET /api/visors/{pk}/apps/skysocks-client/connections  [app-connections-not-running]
+200 GET /api/visors/{pk}/apps/skychat/connections  [app-connections-skychat]
+500 GET /api/visors/{pk}/apps/skychat/logs?since=2026-09-30T06%3A07%3A11.3261%2B08%3A00  [app-logs-no-new]
+500 GET /api/visors/{pk}/apps/skysocks-client/logs  [app-logs-not-running]
+200 GET /api/visors/{pk}/apps/skychat/logs  [app-logs-skychat]
+200 GET /api/visors/{pk}/apps/skysocks-client  [app-skysocks-client]
+500 GET /api/visors/{pk}/apps/skysocks-client/stats  [app-stats-not-running]
+200 GET /api/visors/{pk}/apps/skychat/stats  [app-stats-skychat]
+200 POST /api/create-account  [create-account]
+200 GET /api/csrf  [csrf]
+200 POST /api/dmsg/reconnect  [dmsg-reconnect]
+200 POST /api/login  [login]
+403 POST /api/login  [login-already]
+401 POST /api/login  [login-wrong-password]
+200 GET /api/ping  [ping]
+200 PUT /api/visors/{pk}/apps/skysocks-client  [put-app]
+403 PUT /api/visors/{pk}/apps/skysocks-client  [put-app-without-csrf]
+200 PUT /api/visors/{pk}/router-settings  [put-router-settings]
+202 POST /api/visors/{pk}/restart  [restart]
+200 GET /api/visors/{pk}/router-settings  [router-settings]
+200 GET /api/visors/{pk}/runtime-logs?since=0  [runtime-logs]
+200 GET /api/visors/{pk}/runtime-logs?since=1000038  [runtime-logs-caught-up]
+200 GET /api/service-health  [service-health]
+200 GET /api/visors/{pk}/summary  [summary]
+200 GET /api/svc-fetch?service=sd&path=%2Fapi%2Fservices%3Ftype%3Dproxy  [svc-fetch-proxy]
+200 GET /api/user  [user]
+200 GET /api/user-exists  [user-exists-false]
+200 GET /api/user-exists  [user-exists-true]
+401 GET /api/user  [user-unauthorized]
+200 GET /api/visors-summary  [visors-summary]

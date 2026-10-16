@@ -241,22 +241,26 @@ func (c *wtClient) advertise(addr net.Addr, cert *skyquic.RotatingWebTransportCe
 // with backoff, then re-registers periodically to keep the entry alive, and
 // whenever the certificate rotates.
 func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyquic.RotatingWebTransportCert, rotated <-chan struct{}) {
+	ctx, cancel := c.closeContext()
+	defer cancel()
 	bind := func() error {
 		h, next := cert.Hash(), cert.NextHash()
-		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
+		return ar.BindWT(ctx, port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
 	}
 	delay := wtBindRetryDelay
 	for {
-		if err := bind(); err == nil {
+		err := bind()
+		if err == nil {
 			c.log.Debugf("Successfully bound WT to AR (port %s)", port)
 			break
-		} else {
-			c.log.WithError(err).Warnf("Failed to bind WT, retrying in %v", delay)
 		}
 		if c.isClosed() {
 			return
 		}
-		time.Sleep(delay)
+		c.log.WithError(err).Warnf("Failed to bind WT, retrying in %v", delay)
+		if !c.sleepUnlessClosed(delay) {
+			return
+		}
 		if delay *= 2; delay > wtBindMaxRetryDelay {
 			delay = wtBindMaxRetryDelay
 		}
@@ -270,7 +274,7 @@ func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyq
 		case <-ticker.C:
 		case <-rotated:
 		}
-		if err := bind(); err != nil {
+		if err := bind(); err != nil && !c.isClosed() {
 			c.log.WithError(err).Warn("Failed to re-register WT")
 		}
 	}

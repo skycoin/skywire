@@ -1,0 +1,9 @@
+4.1 SkySOCKS on the Simulator, 2026-09-30T09:21Z, SocksChecks/testConnectsToAProxy holding the connection:
+curl -s --socks5-hostname 127.0.0.1:1080 https://api.ipify.org  -> 119.235.212.131 (the exit)
+curl -s https://api.ipify.org                                    -> <the Mac's public IP> (the Mac)
+lsof -iTCP:1080 -sTCP:LISTEN                                    -> Skywire 127.0.0.1:1080 (the Simulator app)
+
+Port change (SocksChecks/testPortMoves, 2026-09-30 17:36 local):
+lsof -iTCP:1090 -sTCP:LISTEN  -> Skywire 127.0.0.1:1090; 1080 no longer listening
+curl --socks5-hostname 127.0.0.1:1090 https://api.ipify.org -> 119.235.212.131
+then back to 1080; test passed (64 s)

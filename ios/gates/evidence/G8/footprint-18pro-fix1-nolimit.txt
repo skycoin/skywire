@@ -1,0 +1,30 @@
+nolimit: PONG after 33 s
+nolimit +  30s phys  53.3 MiB go  28.0 MiB
+nolimit +  60s phys  56.6 MiB go  31.2 MiB
+nolimit +  90s phys  57.5 MiB go  32.1 MiB
+nolimit + 121s phys  60.2 MiB go  34.7 MiB
+nolimit + 151s phys  63.0 MiB go  37.6 MiB
+nolimit + 181s phys  63.4 MiB go  37.9 MiB
+nolimit + 211s phys  63.6 MiB go  38.2 MiB
+nolimit + 241s phys  63.7 MiB go  38.2 MiB
+nolimit + 271s phys  65.0 MiB go  39.4 MiB
+nolimit + 301s phys  67.8 MiB go  42.3 MiB
+nolimit + 331s phys  66.9 MiB go  41.4 MiB
+nolimit + 361s phys  67.4 MiB go  41.9 MiB
+nolimit + 392s phys  69.1 MiB go  43.7 MiB
+nolimit + 422s phys  69.2 MiB go  43.7 MiB
+nolimit + 452s phys  69.4 MiB go  43.9 MiB
+nolimit + 482s phys  70.8 MiB go  45.3 MiB
+nolimit + 512s phys  71.0 MiB go  45.4 MiB
+nolimit + 542s phys  71.2 MiB go  45.6 MiB
+nolimit + 572s phys  71.2 MiB go  45.6 MiB
+nolimit + 602s phys  71.7 MiB go  46.1 MiB
+nolimit + 632s phys  71.7 MiB go  46.1 MiB
+nolimit SUMMARY 5-10 min: phys median 70.1 max 71.7; go median 44.6 max 46.1; at 10 min phys 71.7 go 46.1
+{
+  "go_version": "go1.27.2",
+  "goroutines": 200,
+  "heap_alloc_mb": 27.30542755126953,
+  "num_gc": 15,
+  "sys_mb": 53.91625213623047
+}

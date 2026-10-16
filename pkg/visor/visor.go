@@ -463,6 +463,7 @@ type Visor struct {
 	tpdAnnounce           tpdAnnounceStats           // announces of the transport-list feed, for visor state
 	tpdFeed               atomic.Pointer[tpdFeedRef] // the transport-list feed, for tpdFeedHealthy
 	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
+	serviceHealth         healthCache                // the last service-health probe (service_health_cache.go)
 	autoTpCooldown        autoTpCooldown             // automatic transports that failed recently, by peer and type
 	mail                  skymailHost
 	embeddedWisp          *EmbeddedWisp
@@ -684,30 +685,9 @@ func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error
 		"run `skywire cli visor halt` first, or give this visor its own cli_addr", addr, ov.PubKey)
 }
 
-// run is the implementation for both the standalone cobra entry point
-// and the multi-service supervisor. parentCtx is the parent of the
-// SignalContext built around it.
-func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
-	// The runtime-log hook JSON-encodes every entry it accepts under a
-	// process-wide mutex, so it captures info and above by default rather than
-	// every level (see logstore.DefaultHookLevel). log_hook_level puts debug
-	// back in the buffer for a debugging session.
-	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(conf.LogHookLevel, logstore.DefaultHookLevel))
-	mLog.AddHook(hook)
-
-	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs
-	// subscribers. Attached to both the package-default mLog and the
-	// config's MasterLogger so PackageLogger entries from anywhere in
-	// the visor end up visible.
-	logBroadcaster := logging.NewBroadcaster()
-	mLog.AddHook(logBroadcaster)
-
-	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
-	defer stopPProf()
-
-	conf.MasterLogger().AddHook(hook)
-	conf.MasterLogger().AddHook(logBroadcaster)
-
+// applyStartOptions applies the start options that override the config:
+// remote hypervisors and the log level. Shared by run and StartInProcess.
+func applyStartOptions(conf *visorconfig.V1, opts Options) {
 	if opts.NoHypervisors {
 		conf.Hypervisors = []cipher.PubKey{}
 	}
@@ -733,6 +713,45 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 			mLog.Info("setting log level to: ", opts.LogLevel)
 		}
 	}
+}
+
+// attachUIAssets hands the embedded hypervisor UI to a config that has a
+// hypervisor section. Shared by run and StartInProcess.
+func attachUIAssets(conf *visorconfig.V1) error {
+	if conf.Hypervisor != nil {
+		if *uiAssets == nil {
+			return errors.New("missing embedded assets for hypervisor ui")
+		}
+		conf.Hypervisor.UIAssets = *uiAssets
+	}
+	return nil
+}
+
+// run is the implementation for both the standalone cobra entry point
+// and the multi-service supervisor. parentCtx is the parent of the
+// SignalContext built around it.
+func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
+	// The runtime-log hook JSON-encodes every entry it accepts under a
+	// process-wide mutex, so it captures info and above by default rather than
+	// every level (see logstore.DefaultHookLevel). log_hook_level puts debug
+	// back in the buffer for a debugging session.
+	store, hook := logstore.MakeStoreLevel(runtimeLogMaxEntries, logging.HookLevel(conf.LogHookLevel, logstore.DefaultHookLevel))
+	mLog.AddHook(hook)
+
+	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs
+	// subscribers. Attached to both the package-default mLog and the
+	// config's MasterLogger so PackageLogger entries from anywhere in
+	// the visor end up visible.
+	logBroadcaster := logging.NewBroadcaster()
+	mLog.AddHook(logBroadcaster)
+
+	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
+	defer stopPProf()
+
+	conf.MasterLogger().AddHook(hook)
+	conf.MasterLogger().AddHook(logBroadcaster)
+
+	applyStartOptions(conf, opts)
 
 	// Fail fast if another visor is already up on our cli_addr, before we race
 	// it for the transport UDP socket and hypervisor HTTP port.
@@ -741,11 +760,8 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 		return err
 	}
 
-	if conf.Hypervisor != nil {
-		if *uiAssets == nil {
-			return errors.New("missing embedded assets for hypervisor ui")
-		}
-		conf.Hypervisor.UIAssets = *uiAssets
+	if err := attachUIAssets(conf); err != nil {
+		return err
 	}
 
 	// hypervisor.wasm_serve: serve the standalone wasm-visor PWA / testing

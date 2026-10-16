@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package visor pkg/visor/embedded_services_cxo.go c3-vis-core
 //
 // The visor as CXO host for the services it embeds. Visors publish their

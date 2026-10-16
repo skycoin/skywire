@@ -1,0 +1,9 @@
+{
+  "body": "{\"error\":\"proc of app name 'skysocks-client' is not found\"}\n",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "method": "GET",
+  "path": "/api/visors/02bdad9b58ec30b90eb27e65530bf1159b8019c1fe70f5e0da24e51718c4c53f2f/apps/skysocks-client/logs",
+  "status": 500
+}

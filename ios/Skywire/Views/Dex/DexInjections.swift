@@ -1,0 +1,627 @@
+import Foundation
+
+// SkyDEX page injections, verbatim from Android (ui/dex/DexWebView.kt: THEME_CSS,
+// PHONE_CSS, TABLE_CARDS). Change them there first.
+enum DexInjections {
+    static let themeCSS = #"""
+        html.sky-dark {
+          --sky-navy: #0A101C;
+        }
+
+        html.sky-light {
+          color-scheme: light;
+          --sky-navy: #FFFFFF;
+          --sky-white: #0B1526;
+          --sky-blue: #0F7BF4;
+          --panel: #FAFCFF;
+          --border: rgba(15, 123, 244, .28);
+          --muted: #44536B;
+          --bs-emphasis-color: #0B1526;
+          --bs-emphasis-color-rgb: 11, 21, 38;
+        }
+
+        /* Inputs: the page fills them with translucent black over navy. */
+        html.sky-light .form-control,
+        html.sky-light .form-select { background-color: #FFFFFF; }
+        html.sky-light .form-control:focus,
+        html.sky-light .form-select:focus { background-color: #FFFFFF; }
+        html.sky-light .form-control::placeholder { color: rgba(11, 21, 38, .4); }
+        /* — except the trade builder's amount, which the page deliberately
+           leaves transparent so it reads as a figure sitting on the leg panel
+           rather than a field. Re-stating it keeps the rule above from
+           printing a white box inside a tinted one. */
+        html.sky-light .trade-leg .leg-amount,
+        html.sky-light .trade-leg .leg-amount:focus { background-color: transparent; }
+
+        /* The one place re-pointing --sky-white is wrong: it is the *ink* token,
+           and the primary button uses it on a fill of brand blue. Ink on blue
+           is what the dark page means by it; on light it has to stay white. */
+        html.sky-light .btn-primary,
+        html.sky-light .btn-connect,
+        html.sky-light .btn-primary:hover,
+        html.sky-light .btn-connect:hover:not(:disabled) { color: #FFFFFF; }
+
+        /* The other translucent darks, each re-based on ink or the brand. */
+        html.sky-light .trade-builder .trade-leg { background: #F6F9FD; }
+        html.sky-light .addr-box { background: #F0F5FC; }
+        html.sky-light .recent-connect { background: #F6F9FD; }
+        html.sky-light .card.product-card:hover { background-color: rgba(15, 123, 244, .06); }
+        html.sky-light .progress { background-color: rgba(11, 21, 38, .1); }
+        html.sky-light .deposit-close:hover { background: rgba(11, 21, 38, .08); }
+
+        /* A red readable on white, not the page's salmon-on-navy. */
+        html.sky-light .req,
+        html.sky-light .recent-del:hover:not(:disabled) { color: #C62828; }
+
+        /* Shadows tuned for a dark ground read as smears on a light one. */
+        html.sky-light .qr-modal { box-shadow: 0 12px 40px rgba(11, 21, 38, .2); }
+        html.sky-light .connect-card { box-shadow: 0 8px 30px rgba(15, 123, 244, .12); }
+
+        /* The card each table row becomes on a phone is this side's own
+           translucent black (PHONE_CSS) — same scope, light fill. */
+        @media (max-width: 600px) {
+          html.sky-light .table tbody tr.sky-card { background: #FAFCFF; }
+        }
+        """#
+
+    static let phoneCSS = #"""
+        /* The native row above this page already says all of this. */
+        .app-container > header.header { display: none !important; }
+
+        /* The Cards/List switch only means something where the phone layout
+           below applies; on wider screens it stays out of the way — and so
+           does the Settings panel that takes over Clear history, which is the
+           same trade: on a desktop the page's own heading row has the room. */
+        .sky-viewbar { display: none; }
+        .sky-history-panel { display: none; }
+
+        @media (max-width: 600px) {
+          /* Cards or a compact list — the reader's choice, page-wide. It sits
+             in the heading row it belongs to, pushed to the right of the
+             title; .page-head is already such a row, .section-title is made
+             into one. */
+          .sky-viewbar { display: flex; margin-left: auto; }
+          .section-title.sky-titlerow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+          }
+
+          /* Clear history moves out of History's heading row and into
+             Settings, where the rest of the once-and-done lives. Hiding the
+             original in CSS rather than script keeps it from flashing in on
+             every one of the page's 8-second re-renders. Only History puts a
+             link-button in its page-head. */
+          .page-head .link-btn { display: none; }
+          .sky-history-panel { display: block; }
+          .sky-history-panel .text-muted { font-size: 0.85rem; }
+          .sky-viewbar button {
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.78rem;
+            padding: 0.3rem 0.85rem;
+            min-height: 34px;
+          }
+          .sky-viewbar button:first-child { border-radius: 8px 0 0 8px; }
+          .sky-viewbar button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+          .sky-viewbar button.on {
+            background: var(--sky-blue);
+            border-color: var(--sky-blue);
+            color: #fff;
+          }
+          .content { padding: 0.9rem 0.85rem 1.5rem; }
+          .panel, .card { padding: 0.9rem; margin-bottom: 0.9rem; }
+          .content h2 { font-size: 1.2rem; }
+
+          /* Five tabs do not fit on one line, and a strip that scrolls hides
+             the one holding the wallet addresses. Wrap instead. */
+          .tabbar { padding: 0 0.35rem; overflow-x: visible; }
+          .tabbar-inner { flex-wrap: wrap; }
+          .tab-link { padding: 0.65rem 0.6rem; font-size: 0.85rem; }
+
+          /* auto-fit at a 240px minimum is one column here anyway; saying so
+             stops the last row stretching a lone card across the screen. */
+          .field-grid, .card-grid { grid-template-columns: 1fr; }
+
+          /* 84px label + 140px amount + 140px unit cannot sit on one line. */
+          .trade-builder .trade-leg { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+          .trade-leg .leg-label { flex: none; }
+          .trade-leg .leg-amount { flex: none; width: 100%; font-size: 1.15rem; }
+          .trade-leg .leg-coin { flex: none; width: 100%; }
+
+          /* Tables become cards. Ten columns of listing cannot be read on a
+             phone at any font size, and sideways scrolling puts the Actions
+             column — the one holding Cancel — off the edge where nobody finds
+             it. Each row becomes a labelled card instead: the four fields that
+             identify it plus its buttons, and the rest a tap away. Which cells
+             those are is decided in script, by column name. */
+          /* The table's box is one element carrying both classes
+             (`<div class="panel table-wrap">`) — a rounded panel around what
+             are now rounded cards. Let the cards be the only boxes. */
+          .panel.table-wrap {
+            background: transparent;
+            border: 0;
+            padding: 0;
+          }
+          .table-wrap { overflow-x: visible; }
+          .table, .table tbody, .table tr, .table td { display: block; }
+          .table thead { display: none; }
+
+          .table tbody tr.sky-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: #00000038;
+            padding: 0.85rem 0.9rem 0.15rem;
+            margin-bottom: 0.7rem;
+          }
+          .table tbody tr.sky-card > td {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.75rem;
+            border: 0;
+            padding: 0.25rem 0;
+            white-space: normal;
+            /* Bootstrap paints cell backgrounds with an inset shadow, which
+               inside a card reads as a second panel behind the fields. */
+            box-shadow: none;
+            background: transparent;
+          }
+          .table tbody tr.sky-card > td::before {
+            content: attr(data-label);
+            color: var(--muted);
+            font-size: 0.78rem;
+            flex: 0 0 auto;
+          }
+
+          /* The two numbers that say what a row IS, weighted the way the
+             market's own product card weights them: the amount plain, the
+             price in the accent. */
+          .table tbody tr.sky-card > td[data-label="Amount"] {
+            font-size: 1.3rem;
+            font-weight: 700;
+          }
+          .table tbody tr.sky-card > td[data-label="Price"] {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--sky-blue);
+          }
+
+          /* A badge chain, an address or a hash gets the whole width rather
+             than the sliver left over beside its label. */
+          .table tbody tr.sky-card > td.sky-wide {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+            word-break: break-all;
+          }
+
+          /* A closed card shows where the listing IS, not the three steps it
+             took to get there. The completed and future badges — and the
+             arrows between them — come back when the card is opened, which is
+             where "why is my deposit still pending" gets answered. */
+          .table tbody tr.sky-card:not(.sky-open) > td.sky-chain .sky-past { display: none; }
+
+          /* "Actions" is not a word anyone needs above a button. */
+          .table tbody tr.sky-card > td.sky-actions {
+            display: block;
+            padding: 0.6rem 0 0.15rem;
+          }
+          .table tbody tr.sky-card > td.sky-actions::before { content: none; }
+          .table tbody tr.sky-card > td.sky-actions .btn { width: 100%; }
+          .table tbody tr.sky-card > td.sky-hide { display: none; }
+
+          .table tbody tr.sky-card:not(.sky-open) > td.sky-detail { display: none; }
+          .table tbody tr.sky-card::after {
+            content: 'Details';
+            display: block;
+            text-align: center;
+            color: var(--sky-blue);
+            font-size: 0.78rem;
+            padding: 0.55rem 0 0.5rem;
+            border-top: 1px solid var(--border);
+            margin-top: 0.5rem;
+          }
+          .table tbody tr.sky-card.sky-open::after { content: 'Hide details'; }
+
+          /* A banner's action reads as an action, not a word in a corner. */
+          .banner { align-items: flex-start; }
+          .banner .btn { width: 100%; }
+
+          /* 0.3rem of padding is a 28px target; a fingertip is 40. */
+          .btn, .btn-sm, .link-btn { min-height: 40px; }
+          .btn.btn-sm.qr-btn { min-width: 40px; }
+
+          /* Long hex breaks rather than pushing the page sideways. */
+          .addr-box.addr-sm { max-width: 100%; }
+          .qr-modal { max-height: 85vh; }
+
+          /* ---- List mode. Same DOM the card rules build on, read tighter:
+             a row is its primary pair on one line, everything else arrives
+             when the row is opened. */
+          html.sky-list .table tbody tr.sky-card {
+            border: 0;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+            background: transparent;
+            padding: 0.55rem 1.4rem 0.5rem 0.1rem;
+            margin-bottom: 0;
+            position: relative;
+          }
+          html.sky-list .table tbody tr.sky-card:not(.sky-open) > td:not(.sky-primary) {
+            display: none;
+          }
+          html.sky-list .table tbody tr.sky-card:not(.sky-open) > td.sky-primary {
+            display: inline-flex;
+            width: auto;
+            font-size: 1rem;
+            gap: 0.4rem;
+            margin-right: 1.1rem;
+          }
+          /* The chevron replaces the Details footer: the row itself is the
+             tap target either way, and a footer per row defeats a list. */
+          html.sky-list .table tbody tr.sky-card::after {
+            content: '\25BE';
+            position: absolute;
+            right: 0.35rem;
+            top: 0.55rem;
+            border: 0;
+            margin: 0;
+            padding: 0;
+            color: var(--muted);
+          }
+          html.sky-list .table tbody tr.sky-card.sky-open::after { content: '\25B4'; }
+
+          /* The market grid, as the same list: amount and price on the line,
+             seller and Buy behind the tap. */
+          html.sky-list .card-grid { display: block; }
+          html.sky-list .card.product-card {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.6rem;
+            border: 0;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+            background: transparent;
+            padding: 0.55rem 0.1rem 0.5rem;
+            margin-bottom: 0;
+          }
+          html.sky-list .card.product-card .product-price { color: var(--sky-blue); font-weight: 700; }
+          html.sky-list .card.product-card:not(.sky-open) .product-seller { display: none; }
+          html.sky-list .card.product-card:not(.sky-open) .btn { display: none; }
+          html.sky-list .card.product-card:not(.sky-open)::after {
+            content: '\25BE';
+            margin-left: auto;
+            color: var(--muted);
+          }
+          html.sky-list .card.product-card.sky-open { padding-bottom: 0.75rem; }
+          html.sky-list .card.product-card.sky-open .product-seller { flex-basis: 100%; }
+          html.sky-list .card.product-card.sky-open .btn { flex-basis: 100%; margin-top: 0.2rem; }
+        }
+        """#
+
+    static let tableCards = #"""
+        (function () {
+          if (window.__skywirePhoneTables) return;
+          window.__skywirePhoneTables = true;
+
+          var KEEP = ['type', 'amount', 'price', 'status', 'lifecycle'];
+          var MAX_VISIBLE = 4;
+          var open = {};
+
+          /* Two ways to read every section: the labelled cards, or a compact
+             list whose rows hold only the primary pair until tapped open.
+             One choice for the whole page, kept across visits — a reader who
+             prefers the list prefers it on every tab. */
+          var mode = 'card';
+          try { mode = localStorage.getItem('skywire-dex-view') || 'card'; } catch (e) {}
+
+          function setMode(m) {
+            mode = m === 'list' ? 'list' : 'card';
+            try { localStorage.setItem('skywire-dex-view', mode); } catch (e) {}
+            document.documentElement.classList.toggle('sky-list', mode === 'list');
+            syncViewbar();
+          }
+
+          function syncViewbar() {
+            var btns = document.querySelectorAll('.sky-viewbar button');
+            for (var i = 0; i < btns.length; i++) {
+              btns[i].classList.toggle('on', btns[i].dataset.view === mode);
+            }
+          }
+
+          /* The switch rides in the heading of whatever it switches, which
+             React rebuilds on every tab change — so it is (re)inserted from
+             enhance(), the same way the data-labels are re-applied.
+             It only appears where it does something: Settings is a form, and a
+             Cards/List choice above a form is a control with nothing to act on.
+             The test is the DOM's, not a list of tab names — whatever the page
+             adds later, the switch follows the rows.
+
+             Which heading: the market names its grid ("Available products",
+             an .section-title) and its .page-head already carries New Sell
+             Order; every other tab's rows ARE the tab, so the page title is
+             the heading. Both are one line with the switch on the right —
+             a bar of its own above the rows is a row of chrome that says
+             nothing. */
+          function ensureViewbar(applies) {
+            var content = document.querySelector('.content');
+            if (!content) return;
+            var existing = content.querySelector('.sky-viewbar');
+            if (!applies) {
+              if (existing) existing.remove();
+              return;
+            }
+            var host = content.querySelector('.section-title') ||
+              content.querySelector('.page-head');
+            if (!host) return;
+            if (existing && existing.parentNode === host) { syncViewbar(); return; }
+            if (existing) existing.remove();
+            var bar = document.createElement('div');
+            bar.className = 'sky-viewbar';
+            bar.innerHTML =
+              '<button type="button" data-view="card">Cards</button>' +
+              '<button type="button" data-view="list">List</button>';
+            bar.addEventListener('click', function (e) {
+              var b = e.target.closest('button[data-view]');
+              if (b) setMode(b.dataset.view);
+            });
+            if (host.classList.contains('page-head')) {
+              // Straight after the title rather than at the end, so when the
+              // row is too narrow for three items it is the page's own button
+              // (Clear history) that wraps and never the switch.
+              var title = host.querySelector('h2');
+              host.insertBefore(bar, title ? title.nextSibling : host.firstChild);
+            } else {
+              host.classList.add('sky-titlerow');
+              host.appendChild(bar);
+            }
+            syncViewbar();
+          }
+
+          /* "Clear history" belongs with the other things you set once, not
+             beside the list it wipes — a destructive control in a heading row
+             is one mis-tap from the tab you just opened. The page's own button
+             is hidden in CSS (no flash) and re-offered here.
+
+             It is re-implemented rather than moved because the two tabs are
+             separate React screens: History's button does not exist in the DOM
+             while Settings is on screen. What it does is entirely local —
+             `localStorage.removeItem('exchange:history')` — so the same key,
+             behind the same confirm, is the same action. Like the page's own,
+             a later poll can re-save trades the market still reports as
+             finished; that is the page's behaviour, not a difference. */
+          var HISTORY_KEY = 'exchange:history';
+
+          function historyCount() {
+            try {
+              var raw = JSON.parse(localStorage.getItem(HISTORY_KEY));
+              return Array.isArray(raw) ? raw.length : 0;
+            } catch (e) { return 0; }
+          }
+
+          function ensureHistoryClear() {
+            var content = document.querySelector('.content');
+            if (!content) return;
+            var head = content.querySelector('.page-head h2');
+            var onSettings = !!head && head.textContent.trim() === 'Settings';
+            var panel = content.querySelector('.sky-history-panel');
+            // Nothing saved is nothing to clear — the same condition the
+            // History tab put on the button.
+            if (!onSettings || historyCount() === 0) {
+              if (panel) panel.remove();
+              return;
+            }
+            if (panel) return;
+            panel = document.createElement('div');
+            panel.className = 'panel sky-history-panel';
+            panel.innerHTML =
+              '<h4 class="panel-title">Trade history</h4>' +
+              '<p class="text-muted">Completed, cancelled and expired trades are ' +
+              'kept on this device so History can show them after the market ' +
+              'forgets. Clearing removes that local copy.</p>' +
+              '<button type="button" class="btn btn-connect mt-3 sky-clear-history">' +
+              'Clear history</button>';
+            panel.querySelector('.sky-clear-history').addEventListener('click', function (e) {
+              var btn = e.currentTarget;
+              if (!window.confirm(
+                'Clear all locally saved trade history on this device?'
+              )) return;
+              try { localStorage.removeItem(HISTORY_KEY); } catch (err) {}
+              btn.textContent = 'History cleared';
+              btn.disabled = true;
+            });
+            content.appendChild(panel);
+          }
+
+          function keyOf(tr) {
+            var first = tr.cells[0];
+            return (first ? first.textContent.trim() : '') + '#' + tr.rowIndex;
+          }
+
+          /* A product card has no row index; its own text identifies it well
+             enough to keep it open across the page's 8-second re-renders. */
+          function productKey(card) {
+            return 'p#' + card.textContent.trim().slice(0, 80);
+          }
+
+          function visibleColumns(heads) {
+            var picked = [];
+            for (var k = 0; k < KEEP.length && picked.length < MAX_VISIBLE; k++) {
+              for (var i = 0; i < heads.length && picked.length < MAX_VISIBLE; i++) {
+                var head = heads[i].toLowerCase();
+                if (picked.indexOf(i) < 0 && head.indexOf(KEEP[k]) === 0) picked.push(i);
+              }
+            }
+            return picked;
+          }
+
+          /**
+           * A lifecycle cell is a chain of badges: the completed steps, the
+           * one it is on, and the ones ahead, with arrows between. Everything
+           * that is not the current step is marked so the closed card can drop
+           * it. Returns whether this cell is such a chain.
+           *
+           * The current step is the one the page paints `bg-info`; the last
+           * badge is the fallback, for a chain that has run to its end.
+           */
+          function markChain(td) {
+            var badges = td.querySelectorAll('.badge');
+            if (badges.length < 2) return false;
+            td.classList.add('sky-chain');
+            var current = td.querySelector('.badge.bg-info') || badges[badges.length - 1];
+            var parts = td.querySelectorAll('span, div');
+            for (var i = 0; i < parts.length; i++) {
+              var part = parts[i];
+              if (part === current || part.contains(current)) {
+                part.classList.remove('sky-past');
+              } else {
+                part.classList.add('sky-past');
+              }
+            }
+            // The arrow trailing the current badge is inside its own step.
+            var siblings = current.parentNode ? current.parentNode.children : [];
+            for (var s = 0; s < siblings.length; s++) {
+              if (siblings[s] !== current) siblings[s].classList.add('sky-past');
+            }
+            return true;
+          }
+
+          function enhance() {
+            // Rows to read either way — a table with a header, or the market's
+            // product grid. Neither means this section is a form.
+            ensureViewbar(!!(
+              document.querySelector('table.table thead th') ||
+              document.querySelector('.card.product-card')
+            ));
+            ensureHistoryClear();
+            var tables = document.querySelectorAll('table.table');
+            for (var t = 0; t < tables.length; t++) {
+              var table = tables[t];
+              var ths = table.querySelectorAll('thead th');
+              if (!ths.length) continue;
+              var heads = [];
+              for (var h = 0; h < ths.length; h++) heads.push(ths[h].textContent.trim());
+              var keep = visibleColumns(heads);
+              // The list's closed row shows only the first two kept columns —
+              // the pair that identifies the row (Amount and Price wherever
+              // the table has them).
+              var primary = keep.slice(0, 2);
+
+              var rows = table.querySelectorAll('tbody tr');
+              for (var r = 0; r < rows.length; r++) {
+                var tr = rows[r];
+                // A one-cell row is the table's own "nothing here yet" line.
+                if (tr.cells.length < 2) continue;
+                tr.classList.add('sky-card');
+                tr.classList.toggle('sky-open', open[keyOf(tr)] === true);
+                for (var c = 0; c < tr.cells.length; c++) {
+                  var td = tr.cells[c];
+                  var head = heads[c] || '';
+                  // The Actions column is named, not guessed at: every other
+                  // column can hold a link-styled button too (the id copier),
+                  // and those are reference data, not actions.
+                  // An Actions cell on a finished row holds a placeholder dash
+                  // and nothing else. Its label is suppressed, so left in it
+                  // is a bare "—" on a line of its own.
+                  var action = head.toLowerCase() === 'actions';
+                  var control = td.querySelector('button, input, select');
+                  td.classList.toggle('sky-hide', action && !control);
+                  var chain = markChain(td);
+                  // A lifecycle chain shows one badge when closed, so it is
+                  // "Status" then — which is also what it reads as.
+                  td.setAttribute('data-label', chain ? 'Status' : head);
+                  td.classList.toggle('sky-actions', action && !!control);
+                  td.classList.toggle('sky-detail', !action && keep.indexOf(c) < 0);
+                  td.classList.toggle('sky-primary', primary.indexOf(c) >= 0);
+                  // A hash or an address needs the full width; a number, a
+                  // single badge and a button do not.
+                  td.classList.toggle(
+                    'sky-wide',
+                    !action && !chain &&
+                      (td.children.length > 1 || td.textContent.trim().length > 24)
+                  );
+                }
+              }
+            }
+            // The market's product grid gets the same two readings: its cards
+            // are already cards, and the list rows open on tap for the seller
+            // and the Buy button.
+            var cards = document.querySelectorAll('.card.product-card');
+            for (var p = 0; p < cards.length; p++) {
+              cards[p].classList.toggle('sky-open', open[productKey(cards[p])] === true);
+            }
+          }
+
+          document.addEventListener('click', function (e) {
+            if (!e.target || !e.target.closest) return;
+            // A control inside the card is the control, not the card.
+            if (e.target.closest('button, a, input, select, label')) return;
+            var tr = e.target.closest('tr.sky-card');
+            if (tr) {
+              var key = keyOf(tr);
+              open[key] = !open[key];
+              tr.classList.toggle('sky-open', open[key]);
+              return;
+            }
+            // Product rows expand only in list mode — the card shows
+            // everything already.
+            var pc = e.target.closest('.card.product-card');
+            if (pc && document.documentElement.classList.contains('sky-list')) {
+              var pk = productKey(pc);
+              open[pk] = !open[pk];
+              pc.classList.toggle('sky-open', open[pk]);
+            }
+          });
+
+          var queued = false;
+          new MutationObserver(function () {
+            if (queued) return;
+            queued = true;
+            requestAnimationFrame(function () { queued = false; enhance(); });
+          }).observe(document.body, { childList: true, subtree: true });
+
+          document.documentElement.classList.toggle('sky-list', mode === 'list');
+          enhance();
+        })();
+        """#
+
+    /// applyTheme: the stylesheet once per document, the class toggled live.
+    static func theme(dark: Bool) -> String {
+        """
+        (function () {
+          var root = document.documentElement;
+          root.classList.toggle('sky-light', \(!dark));
+          root.classList.toggle('sky-dark', \(dark));
+          var id = 'skywire-theme-styles';
+          if (document.getElementById(id)) return;
+          var style = document.createElement('style');
+          style.id = id;
+          style.textContent = \(quoted(themeCSS));
+          (document.head || root).appendChild(style);
+        })();
+        """
+    }
+
+    /// applyPhoneStyles: the phone stylesheet once per document, then the table cards.
+    static let phone = """
+        (function () {
+          var id = 'skywire-phone-styles';
+          if (document.getElementById(id)) return;
+          var style = document.createElement('style');
+          style.id = id;
+          style.textContent = \(quoted(phoneCSS));
+          document.head.appendChild(style);
+        })();
+        """
+
+    /// A JavaScript string literal (Android's JSONObject.quote).
+    private static func quoted(_ text: String) -> String {
+        let data = try! JSONSerialization.data(withJSONObject: [text], options: [.fragmentsAllowed])
+        let array = String(decoding: data, as: UTF8.self)
+        return String(array.dropFirst().dropLast())
+    }
+}

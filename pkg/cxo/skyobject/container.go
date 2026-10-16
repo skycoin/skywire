@@ -2,7 +2,6 @@
 package skyobject
 
 import (
-	"log"
 	"path/filepath"
 
 	"github.com/skycoin/skycoin/src/cipher"
@@ -386,12 +385,4 @@ func (c *Container) Close() (err error) {
 
 	return
 
-}
-
-func fatal(args ...interface{}) {
-	log.Fatalln(args...)
-}
-
-func fatalf(format string, args ...interface{}) { //nolint:unused
-	log.Fatalf(format, args...)
 }
