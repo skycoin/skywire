@@ -104,10 +104,18 @@ func RenderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	return renderHomePage(aliases, suffix, localPK, nil)
 }
 
-// RenderHomePageWithVisors is RenderHomePage with a list of visors to link,
-// each by its base32 name.
-func RenderHomePageWithVisors(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, visors []cipher.PubKey) []byte {
-	return renderHomePage(aliases, suffix, localPK, visors)
+// RenderHomePageWith is RenderHomePage with the visor lists of its other tabs.
+func RenderHomePageWith(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, lists *HomeLists) []byte {
+	return renderHomePage(aliases, suffix, localPK, lists)
+}
+
+// HomeLists are the visors the directory links besides the resolver's names.
+type HomeLists struct {
+	// Managed are the visors this one manages as a hypervisor, shown with
+	// their sites only to the visor's own user.
+	Managed []cipher.PubKey
+	// Visors are every visor the deployment knows.
+	Visors []cipher.PubKey
 }
 
 type homeEntry struct {
@@ -115,11 +123,17 @@ type homeEntry struct {
 	pk    cipher.PubKey
 }
 
+// homeTabs are the directory's tabs, in order.
+var homeTabs = [][2]string{{"dep", "Deployment services"}, {"hv", "This visor"}, {"all", "All visors"}}
+
 // renderHomePage builds the self-contained HTML directory from the resolver's
 // alias map. Links use the resolver's own suffix so they resolve back through
 // the same proxy. Aliases are grouped (this visor / deployment services / setup
 // nodes / dmsg servers) and naturally sorted so dmsg2 precedes dmsg10.
-func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, visors []cipher.PubKey) []byte {
+func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey, lists *HomeLists) []byte {
+	if lists == nil {
+		lists = &HomeLists{}
+	}
 	var self, services, setup, servers []homeEntry
 	for label, pk := range aliases {
 		e := homeEntry{label, pk}
@@ -146,8 +160,14 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	b.WriteString("h1{font-size:1.4rem}h2{font-size:1rem;margin:1.5rem 0 .3rem;color:#555}")
 	b.WriteString("h3{font-size:.9rem;margin:.8rem 0 .2rem;color:#444}")
 	b.WriteString("ul{list-style:none;padding:0;margin:0}li{padding:.15rem 0}")
-	b.WriteString("a{text-decoration:none;font-weight:600}code{color:#999;font-size:11px;word-break:break-all}")
+	b.WriteString("a{text-decoration:none;font-weight:600;color:#0b5cad}code{color:#999;font-size:11px;word-break:break-all}")
 	b.WriteString("small{color:#888;font-size:10px;font-weight:600;text-transform:uppercase}")
+	// Tabs, and the per-visor site lists of the second one.
+	b.WriteString("nav.tabs{display:flex;flex-wrap:wrap;gap:.3rem;border-bottom:1px solid #ccc;margin:1rem 0}")
+	b.WriteString("nav.tabs button{font:inherit;font-weight:600;padding:.3rem .7rem;border:1px solid transparent;border-bottom:0;border-radius:4px 4px 0 0;background:none;color:inherit;cursor:pointer}")
+	b.WriteString("nav.tabs button.on{border-color:#ccc;background:#f4f4f4}")
+	b.WriteString(".vrow button{font:inherit;font-size:11px;padding:0 .4rem;cursor:pointer;border:1px solid #888;border-radius:3px;background:#f4f4f4;color:#222}")
+	b.WriteString("ul.sites{margin:.1rem 0 .3rem 1.2rem;font-size:13px;color:#888}")
 	// Explorer rows: a flex line per endpoint, with inline param inputs and a
 	// response area for POST.
 	b.WriteString(".ep{padding:.25rem 0;border-top:1px solid #eee}")
@@ -157,7 +177,8 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	b.WriteString(".ep input{width:9rem}.ep textarea{width:100%;min-height:3rem;font-family:ui-monospace,monospace}")
 	b.WriteString(".ep button{font:inherit;font-size:12px;padding:.1rem .5rem;cursor:pointer;border:1px solid #888;border-radius:3px;background:#f4f4f4;color:#222}")
 	b.WriteString(".ep pre{margin:.3rem 0 0;padding:.3rem;background:#f6f6f6;border:1px solid #ddd;border-radius:3px;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:14rem;overflow:auto}")
-	b.WriteString("@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#ddd}h2{color:#aaa}h3{color:#bbb}code{color:#777}")
+	b.WriteString("@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#ddd}a{color:#7cb8f5}h2{color:#aaa}h3{color:#bbb}code{color:#777}")
+	b.WriteString("nav.tabs{border-color:#444}nav.tabs button.on{border-color:#444;background:#2a2a2a}.vrow button{background:#2a2a2a;color:#ddd;border-color:#555}")
 	b.WriteString(".ep{border-color:#333}.ep input,.ep textarea{background:#222;color:#ddd;border-color:#444}.ep button{background:#2a2a2a;color:#ddd;border-color:#555}.ep pre{background:#222;border-color:#333}}")
 	b.WriteString(".ipcheck{margin:.3rem 0 1rem}")
 	b.WriteString("</style></head><body>")
@@ -169,13 +190,25 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	b.WriteString(`<p class="ipcheck">Check your exit IP: `)
 	b.WriteString(`<a href="https://ip.skycoin.com">ip.skycoin.com</a> &middot; `)
 	b.WriteString(`<a href="https://ip.skywire.dev">ip.skywire.dev</a></p>`)
-	// The visor serves a real landing page at "/"; the deployment services,
-	// setup nodes and dmsg servers don't, but they all answer "/health". A
-	// service that has a manifest section below is omitted from the flat
-	// "Deployment services" index so its /health renders exactly once (from the
-	// manifest); the rest still get a plain /health link here.
+
+	b.WriteString(`<nav class="tabs">`)
+	for _, t := range homeTabs {
+		title := t[1]
+		switch {
+		case t[0] == "hv" && len(lists.Managed) > 0:
+			title = fmt.Sprintf("This hypervisor (%d)", len(lists.Managed)+1)
+		case t[0] == "all" && len(lists.Visors) > 0:
+			title = fmt.Sprintf("All visors (%d)", len(lists.Visors))
+		}
+		fmt.Fprintf(&b, `<button type="button" data-tab="%s" onclick="skyTab('%s')">%s</button>`, t[0], t[0], html.EscapeString(title))
+	}
+	b.WriteString("</nav>")
+
+	// The deployment's services. They don't serve a page at "/", but they all
+	// answer "/health". A service that has a manifest section below is omitted
+	// from the flat index so its /health renders exactly once.
+	b.WriteString(`<section class="tab" id="tab-dep">`)
 	manifested := manifestedLabels(aliases)
-	writeHomeGroup(&b, "This visor", self, suffix, "/")
 	var plainServices []homeEntry
 	for _, e := range services {
 		if !manifested[e.label] {
@@ -186,14 +219,75 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	writeServiceEndpoints(&b, aliases, suffix)
 	writeHomeGroup(&b, "Setup nodes", setup, suffix, "/health")
 	writeHomeGroup(&b, "dmsg servers", servers, suffix, "/health")
-	writeVisors(&b, visors, suffix)
-	if len(self)+len(services)+len(setup)+len(servers) == 0 {
+	if len(services)+len(setup)+len(servers) == 0 {
 		b.WriteString("<p><em>No aliases configured.</em></p>")
 	}
+	b.WriteString("</section>")
+
+	b.WriteString(`<section class="tab" id="tab-hv">`)
+	writeHomeGroup(&b, "This visor", self, suffix, "/")
+	writeSiteRows(&b, localPK, lists.Managed, suffix)
+	b.WriteString("</section>")
+
+	b.WriteString(`<section class="tab" id="tab-all">`)
+	if len(lists.Visors) == 0 {
+		b.WriteString("<p><em>No visor list yet.</em></p>")
+	}
+	writeVisors(&b, lists.Visors, suffix)
+	b.WriteString("</section>")
+
 	b.WriteString(explorerScript)
+	b.WriteString(tabScript)
 	b.WriteString("</body></html>")
 	return []byte(b.String())
 }
+
+// writeSiteRows lists this visor and those it manages, each with its own pages
+// and a button that fetches the sites it serves (GET /.skywire/sites).
+func writeSiteRows(b *strings.Builder, localPK cipher.PubKey, managed []cipher.PubKey, suffix string) {
+	row := func(pk cipher.PubKey, class string) {
+		host := html.EscapeString(pk.DNSLabel() + suffix)
+		fmt.Fprintf(b, `<li class="vrow %s" data-host="%s"><a href="http://%s/">%s</a> · <a href="http://%s/.skywire/">visor page</a> <button type="button" onclick="skySites(this)">sites</button> <code>%s</code><ul class="sites"></ul></li>`,
+			class, host, host, host, host, pk.Hex())
+	}
+	if localPK != (cipher.PubKey{}) {
+		b.WriteString("<h2>Sites</h2><ul>")
+		row(localPK, "self")
+		b.WriteString("</ul>")
+	}
+	if len(managed) > 0 {
+		fmt.Fprintf(b, "<h2>Managed visors (%d)</h2><ul>", len(managed))
+		for _, pk := range managed {
+			row(pk, "")
+		}
+		b.WriteString("</ul>")
+	}
+}
+
+// tabScript switches tabs, keeping the choice in the URL, and fills a visor's
+// site list from its /.skywire/sites. Without JS every tab shows.
+const tabScript = `<script>
+function skyTab(id){
+  if(!document.getElementById('tab-'+id))id='dep';
+  document.querySelectorAll('section.tab').forEach(function(s){s.hidden=s.id!=='tab-'+id;});
+  document.querySelectorAll('nav.tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===id);});
+  history.replaceState(null,'','#'+id);
+  var own=document.querySelector('#tab-hv li.self button');
+  if(id==='hv'&&own&&!own.disabled)skySites(own);
+}
+function skySites(btn){
+  var li=btn.closest('li'),ul=li.querySelector('ul.sites'),host=li.getAttribute('data-host');
+  btn.disabled=true;ul.textContent='loading…';
+  fetch(location.protocol+'//'+host+'/.skywire/sites').then(function(r){return r.json();}).then(function(j){
+    var sites=j.sites||[];ul.textContent=sites.length?'':'no sites';
+    sites.forEach(function(s){
+      var a=document.createElement('a'),i=document.createElement('li');
+      a.href=location.protocol+'//'+s+'.'+host+'/';a.textContent=s;i.appendChild(a);ul.appendChild(i);
+    });
+  }).catch(function(){ul.textContent='no site list';btn.disabled=false;});
+}
+skyTab(location.hash.slice(1));
+</script>`
 
 // manifestedLabels returns the set of resolver labels that will be rendered as
 // a full manifest section (i.e. the service has manifest endpoints AND a

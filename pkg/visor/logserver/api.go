@@ -137,7 +137,7 @@ type API struct {
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	// homePage renders the mesh directory for home.skynet and home.dmsg.
-	homePage func(suffix string) []byte
+	homePage func(suffix string, ownUser bool) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
 	vhosts atomic.Pointer[map[string]*Vhost]
 	// ownPages serves the visor's own pages, its landing page at /.
@@ -384,6 +384,19 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		return false
 	}
 
+	// isOwnUser is a request from this visor itself, as the resolving proxy,
+	// SkyDNS and the tab's guest make, or from a key the survey whitelist names.
+	isOwnUser := func(req *http.Request) bool {
+		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
+		if err != nil {
+			return false
+		}
+		if api.publicKey != "" && remotePK == api.publicKey {
+			return true
+		}
+		return len(whitelistedPKs) > 0 && isWhitelisted(req)
+	}
+
 	r.HandleFunc("GET /status", func(w http.ResponseWriter, req *http.Request) {
 		if api.statusPage == nil {
 			http.NotFound(w, req)
@@ -496,7 +509,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		if suffix, ok := homeSuffix(landingHost(req)); ok && api.homePage != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(api.homePage(suffix)) //nolint:errcheck,gosec // rendered and escaped by dmsgweb
+			_, _ = w.Write(api.homePage(suffix, isOwnUser(req))) //nolint:errcheck,gosec // rendered and escaped by dmsgweb
 			return
 		}
 		if api.websiteHandler != nil {
@@ -1028,6 +1041,6 @@ func homeSuffix(host string) (string, bool) {
 }
 
 // SetHomePage installs the renderer for the mesh directory at home.skynet.
-func (api *API) SetHomePage(render func(suffix string) []byte) {
+func (api *API) SetHomePage(render func(suffix string, ownUser bool) []byte) {
 	api.homePage = render
 }
