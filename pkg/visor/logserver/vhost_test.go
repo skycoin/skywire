@@ -176,3 +176,26 @@ func TestVisorPagesAndSites(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(get(api.Handler, label+".skynet", "/.skywire/sites")), &list))
 	require.Equal(t, SiteList{PK: visorPK.Hex(), Sites: []string{"skycoin.com", "status"}}, list)
 }
+
+// home.skynet shows what only the visor's user should see to the visor itself.
+func TestHomePageOwnUser(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	stranger, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	api.SetHomePage(func(suffix string, ownUser bool) []byte {
+		if ownUser {
+			return []byte("private" + suffix)
+		}
+		return []byte("public" + suffix)
+	})
+	get := func(from cipher.PubKey) string {
+		req := httptest.NewRequest(http.MethodGet, "http://home.skynet/", nil)
+		req.RemoteAddr = from.String() + ":80"
+		rec := httptest.NewRecorder()
+		api.Handler.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+	require.Equal(t, "private.skynet", get(visorPK))
+	require.Equal(t, "public.skynet", get(stranger))
+}

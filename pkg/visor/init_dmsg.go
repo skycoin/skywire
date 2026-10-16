@@ -720,7 +720,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
-	lsAPI.SetHomePage(v.homePage)
+	lsAPI.SetHomePage(v.homePageFor)
 	// Related nodes (managed visors + configured hypervisors) — shown as
 	// links to authenticated callers on the landing page.
 	lsAPI.SetRelatedNodesProvider(v)
