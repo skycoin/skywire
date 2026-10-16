@@ -1077,7 +1077,7 @@ func (rg *RouteGroup) resendOnAnotherLeg(failed *transport.ManagedTransport, seq
 		return false
 	}
 	rg.mu.Lock()
-	if len(rg.tps) < 2 || len(rg.tps) != len(rg.fwd) {
+	if len(rg.tps) == 0 || len(rg.tps) != len(rg.fwd) {
 		rg.mu.Unlock()
 		return false
 	}
