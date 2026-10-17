@@ -938,6 +938,7 @@
     <string name="mail_selected_count">%1$d selected</string>
     <string name="mail_select_all">Select all</string>
     <string name="mail_deselect_all">Deselect all</string>
+    <string name="mail_invert_selection">Invert</string>
     <string name="mail_delete_selected">Delete %1$d</string>
     <string name="mail_batch_delete_confirm">Delete %1$d messages?</string>
     <string name="mail_batch_deleted">%1$d messages deleted</string>
