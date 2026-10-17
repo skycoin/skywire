@@ -994,6 +994,7 @@
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
+    <string name="mail_via_hint">Una dirección completa se envía tal cual; esto elige la red para un contacto o una clave. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
     <string name="mail_add_cc">Añadir Cc</string>
     <string name="mail_subject">Asunto</string>

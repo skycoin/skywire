@@ -71,11 +71,12 @@ object SkymailAddress {
 
     /**
      * What a typed recipient means: an address as given, or a bare public key
-     * (hex or skychat://) turned into its dmsg address. Null when it is neither.
+     * (hex or skychat://) turned into an address over [suffix]. Null when it
+     * is neither.
      */
-    fun recipient(input: String): String? {
+    fun recipient(input: String, suffix: String = DMSG): String? {
         val text = input.trim().removePrefix("skychat://").trimEnd('/')
         if ('@' in text) return text.takeIf { pkOfAddress(it) != null }
-        return of(text)
+        return of(text, suffix = suffix)
     }
 }
