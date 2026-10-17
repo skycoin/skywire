@@ -72,6 +72,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	allow := composeFeedAllowlist(v, dmsgdPK, true)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		Dial:                v.cxoDial,
+		Redial:              v.cxoRedial,
 		DmsgPort:            skyenv.DmsgDMSGDRegistrationCXOPort,
 		BatchWindow:         registrationBatchWindow,
 		Logger:              log,
