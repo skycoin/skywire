@@ -10,6 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Every visor republishes its whole transport list with every CXO
@@ -84,6 +85,11 @@ func entryFingerprint(e *transport.Entry) uint64 {
 	h.Write(e.Edges[0][:])  //nolint:errcheck,gosec
 	h.Write(e.Edges[1][:])  //nolint:errcheck,gosec
 	h.Write([]byte(e.Type)) //nolint:errcheck,gosec
+	// A local link has one reporter, its host, whose label says whether the
+	// service reads the system feed, so a new label must be written.
+	if types.IsLocal(e.Type) {
+		h.Write([]byte(e.Label)) //nolint:errcheck,gosec
+	}
 	return h.Sum64()
 }
 
