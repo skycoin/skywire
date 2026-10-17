@@ -513,7 +513,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 			return
 		}
 		if api.websiteHandler != nil {
-			api.websiteHandler.ServeHTTP(w, req)
+			api.serveWebsite(w, req)
 			return
 		}
 		landing(w, req)
@@ -535,12 +535,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   everything else (website) — forwarded port whitelist (if set)
 	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		if api.websiteHandler != nil {
-			// Enforce the forwarded port's PK whitelist on the website.
-			if api.forwardedPortLister != nil && !callerAllowed(req, api.forwardedPortLister.PortWhitelist(80)) {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			api.websiteHandler.ServeHTTP(w, req)
+			api.serveWebsite(w, req)
 			return
 		}
 		writeString(w, http.StatusNotFound, "404 not found")
@@ -565,6 +560,15 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 // OwnPages serves the visor's own pages, with its landing page at /, for a
 // port or a name other than its bare one.
 func (api *API) OwnPages() http.Handler { return api.ownPages }
+
+// serveWebsite serves the port 80 site to the keys its forwarded port allows.
+func (api *API) serveWebsite(w http.ResponseWriter, req *http.Request) {
+	if api.forwardedPortLister != nil && !callerAllowed(req, api.forwardedPortLister.PortWhitelist(80)) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	api.websiteHandler.ServeHTTP(w, req)
+}
 
 // SetWebsiteHandler sets a custom HTTP handler for serving unmatched
 // routes on the visor's DMSG/skynet port 80. Visor system endpoints
