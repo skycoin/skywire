@@ -40,6 +40,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -550,10 +551,21 @@ type VStream struct {
 	closed    chan struct{}
 	once      sync.Once
 	mux       *VStreamMux
+	// e2e is set on a relayed stream once its Noise handshake is done.
+	e2e *noise.ReadWriter
 }
 
-// Read implements io.Reader. Handles partial reads correctly.
+// Read implements io.Reader. A relayed stream is read through its end to end
+// Noise session, see secure.
 func (s *VStream) Read(p []byte) (int, error) {
+	if s.e2e != nil {
+		return s.e2e.Read(p)
+	}
+	return s.readRaw(p)
+}
+
+// readRaw reads the frames as they arrived. Handles partial reads correctly.
+func (s *VStream) readRaw(p []byte) (int, error) {
 	// Return leftover data from previous read first.
 	if len(s.readLeft) > 0 {
 		n := copy(p, s.readLeft)
@@ -609,6 +621,13 @@ const vstreamMaxData = math.MaxUint16 - VStreamHeaderSize
 // with ASCII payload bytes as the type) and the session on top died with
 // "invalid protocol version".
 func (s *VStream) Write(p []byte) (int, error) {
+	if s.e2e != nil {
+		return s.e2e.Write(p)
+	}
+	return s.writeRaw(p)
+}
+
+func (s *VStream) writeRaw(p []byte) (int, error) {
 	n := 0
 	for len(p) > 0 {
 		chunk := p
@@ -825,7 +844,7 @@ func nonNegativeCount(n int64) uint64 {
 
 // Direct reports whether the stream arrived over a transport to its own remote
 // peer. A relayed stream arrives over the relay's transport, which splices its
-// bytes between two legs, so nothing after the signed SYN is end to end.
+// bytes between two legs, and is encrypted end to end by its own Noise session.
 func (s *VStream) Direct() bool {
 	if s.mux == nil || s.mux.tm == nil {
 		return false
