@@ -477,7 +477,9 @@ type Visor struct {
 	// the service's signature naming this visor as its host.
 	hostedKeys sync.Map
 	// svcHosts caches the host visor of each deployment service it dials.
-	svcHosts     serviceHosts
+	svcHosts serviceHosts
+	// feedRedials spaces the moves of feed conns off dmsg (cxoRedial).
+	feedRedials  feedRedials
 	appDirectMux *transport.VStreamMux // direct skywire-network app dials (route ID 0); diag only
 	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
 	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
