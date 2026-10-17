@@ -814,6 +814,7 @@ private fun languageLabel(language: AppLanguage): Int = when (language) {
     AppLanguage.ENGLISH -> R.string.settings_language_en
     AppLanguage.CHINESE_SIMPLIFIED -> R.string.settings_language_zh_cn
     AppLanguage.SPANISH -> R.string.settings_language_es
+    AppLanguage.FRENCH -> R.string.settings_language_fr
 }
 
 @Composable
