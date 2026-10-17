@@ -40,10 +40,16 @@ func NewFullGraph(ctx context.Context, s store.Store) (*Graph, error) {
 // allTransportsForGraph does the single bulk read the full graph is built from,
 // preferring the latency-overlaid variant when the store supports it.
 func allTransportsForGraph(ctx context.Context, s store.Store) ([]*transport.Entry, error) {
+	var (
+		entries []*transport.Entry
+		err     error
+	)
 	if lb, ok := s.(latencyBulkStore); ok {
-		return lb.GetAllTransportsWithLatency(ctx, false)
+		entries, err = lb.GetAllTransportsWithLatency(ctx, false)
+	} else {
+		entries, err = s.GetAllTransports(ctx, false)
 	}
-	return s.GetAllTransports(ctx, false)
+	return transport.Routable(entries), err
 }
 
 // graphFromEntries builds the complete graph from a transport-entry slice — the
