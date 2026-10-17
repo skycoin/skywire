@@ -80,20 +80,25 @@ class BtcWalletCore(
         var confirmed = 0uL
         var all = 0uL
         var outputs = 0
+        val per = HashMap<String, ULong>()
         for (addr in book.all()) {
+            var addrConfirmed = 0uL
             for (u in api.utxos(addr)) {
                 all += u.value
                 if (u.status.confirmed) {
                     confirmed += u.value
+                    addrConfirmed += u.value
                     outputs++
                 }
             }
+            per[addr] = addrConfirmed
         }
         return WalletBalance(
             confirmed = confirmed,
             predicted = all,
             hours = null,
             spendableOutputs = outputs,
+            perAddress = per,
         )
     }
 

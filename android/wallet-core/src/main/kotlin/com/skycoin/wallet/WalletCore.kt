@@ -74,6 +74,9 @@ class WalletBalance(
     val hours: ULong?,
     /** Confirmed spendable outputs backing the balance. */
     val spendableOutputs: Int,
+    /** Confirmed coins held by each single address — the addresses sheet's
+     *  numbers. Empty when a chain reports only the total. */
+    val perAddress: Map<String, ULong> = emptyMap(),
 )
 
 class TxRecord(
