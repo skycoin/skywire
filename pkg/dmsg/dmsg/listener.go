@@ -19,7 +19,10 @@ type Listener struct {
 	addr   Addr // local listening address
 
 	accept chan *Stream
-	mx     sync.Mutex // protects 'accept'
+	// handed holds connections handed over in process (see Hand). Accept
+	// returns them with the dmsg streams.
+	handed chan net.Conn
+	mx     sync.Mutex // protects 'accept' and 'handed'
 
 	doneFunc atomic.Value // callback when done, type: func()
 	done     chan struct{}
@@ -40,6 +43,7 @@ func newListener(porter *netutil.Porter, addr Addr, onInbound func()) *Listener 
 		porter:    porter,
 		addr:      addr,
 		accept:    make(chan *Stream, AcceptBufferSize),
+		handed:    make(chan net.Conn, AcceptBufferSize),
 		done:      make(chan struct{}),
 		onInbound: onInbound,
 	}
@@ -90,28 +94,55 @@ func (l *Listener) introduceStream(tp *Stream) error {
 	}
 }
 
-// Accept accepts a connection.
+// Accept accepts a connection: a dmsg stream, or one handed over in process.
 func (l *Listener) Accept() (net.Conn, error) {
-	return l.AcceptStream()
+	select {
+	case tp, ok := <-l.accept:
+		return l.accepted(tp, ok)
+	case c, ok := <-l.handed:
+		if !ok {
+			return nil, ErrEntityClosed
+		}
+		return c, nil
+	case <-l.done:
+		return nil, ErrEntityClosed
+	}
 }
 
 // AcceptStream accepts a stream connection.
 func (l *Listener) AcceptStream() (*Stream, error) {
 	select {
 	case tp, ok := <-l.accept:
-		if !ok {
-			return nil, ErrEntityClosed
-		}
-
-		if ok, closeFn := l.porter.ReserveChild(tp.lAddr.Port, tp.rAddr.Port, tp); ok {
-			tp.close = closeFn
-		}
-		tp.census.Load().set(0, "accepted")
-
-		return tp, nil
-
+		return l.accepted(tp, ok)
 	case <-l.done:
 		return nil, ErrEntityClosed
+	}
+}
+
+func (l *Listener) accepted(tp *Stream, ok bool) (*Stream, error) {
+	if !ok {
+		return nil, ErrEntityClosed
+	}
+	if ok, closeFn := l.porter.ReserveChild(tp.lAddr.Port, tp.rAddr.Port, tp); ok {
+		tp.close = closeFn
+	}
+	tp.census.Load().set(0, "accepted")
+	return tp, nil
+}
+
+// Hand queues conn for Accept as a connection from remote, for a host visor
+// that took it in over a skywire transport for a service it runs.
+func (l *Listener) Hand(conn net.Conn, remote Addr) error {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	if l.isClosed() {
+		return ErrEntityClosed
+	}
+	select {
+	case l.handed <- &handedConn{Conn: conn, local: l.addr, remote: remote}:
+		return nil
+	default:
+		return ErrAcceptChanMaxed
 	}
 }
 
@@ -138,10 +169,17 @@ func (l *Listener) close() (closed bool) {
 		close(l.done)
 		for {
 			select {
+			case c := <-l.handed:
+				c.Close() //nolint:errcheck,gosec
+				continue
+			default:
+			}
+			select {
 			case stream := <-l.accept:
 				stream.Close() //nolint:errcheck,gosec
 			default:
 				close(l.accept)
+				close(l.handed)
 				return
 			}
 		}
@@ -166,3 +204,13 @@ func (l *Listener) DmsgAddr() Addr { return l.addr }
 
 // Type returns the stream type.
 func (l *Listener) Type() string { return Type }
+
+// handedConn reports the listener's address and the caller's, as a dmsg
+// stream would, so a service reads the caller's key the same way.
+type handedConn struct {
+	net.Conn
+	local, remote Addr
+}
+
+func (c *handedConn) LocalAddr() net.Addr  { return c.local }
+func (c *handedConn) RemoteAddr() net.Addr { return c.remote }
