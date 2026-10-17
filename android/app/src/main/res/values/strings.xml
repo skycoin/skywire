@@ -523,6 +523,8 @@
     <string name="wallet_restore_wordlist_note">Suggestions come from the BIP39 wordlist held on the device. Nothing you type is sent anywhere.</string>
     <string name="wallet_restore_action">Restore wallet</string>
     <string name="wallet_restore_checksum">This phrase fails its checksum. One of the twelve words is wrong or out of order.</string>
+    <string name="wallet_restore_legacy">This phrase carries no checksum — the older wallets wrote their seeds that way, so it may still be a good one. Check every word, then press again to restore anyway.</string>
+    <string name="wallet_restore_anyway">Restore anyway</string>
     <string name="wallet_restore_short">Only %1$d of 12 words entered. A seed is restored in full or not at all.</string>
     <string name="wallet_restore_done">Wallet restored. Scanning for balances.</string>
     <string name="wallet_restore_scanning">Restoring and scanning for balances…</string>

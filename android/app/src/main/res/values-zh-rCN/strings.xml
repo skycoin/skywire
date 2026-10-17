@@ -517,6 +517,8 @@
     <string name="wallet_restore_wordlist_note">候选词来自设备上的 BIP39 词表。你输入的内容不会发送到任何地方。</string>
     <string name="wallet_restore_action">恢复钱包</string>
     <string name="wallet_restore_checksum">这组助记词校验不通过。十二个词中有一个写错了，或者顺序不对。</string>
+    <string name="wallet_restore_legacy">这组助记词没有校验和——旧版钱包的助记词就是这样，因此它仍可能是有效的。请逐词核对后，再按一次以仍然恢复。</string>
+    <string name="wallet_restore_anyway">仍然恢复</string>
     <string name="wallet_restore_short">12 个词只输入了 %1$d 个。助记词必须完整输入，否则无法恢复。</string>
     <string name="wallet_restore_done">钱包已恢复，正在扫描余额。</string>
     <string name="wallet_restore_scanning">正在恢复并扫描余额…</string>

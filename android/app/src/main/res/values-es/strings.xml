@@ -567,6 +567,8 @@
     <string name="wallet_restore_wordlist_note">Las sugerencias salen de la lista de palabras BIP39 guardada en el dispositivo. Nada de lo que escribes se envía a ningún sitio.</string>
     <string name="wallet_restore_action">Restaurar la billetera</string>
     <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las doce palabras está mal o fuera de orden.</string>
+    <string name="wallet_restore_legacy">Esta frase no lleva suma de verificación — las carteras antiguas escribían sus semillas así, así que puede seguir siendo válida. Revisa cada palabra y pulsa de nuevo para restaurar de todos modos.</string>
+    <string name="wallet_restore_anyway">Restaurar de todos modos</string>
     <string name="wallet_restore_short">Solo has introducido %1$d de 12 palabras. Una semilla se restaura entera o no se restaura.</string>
     <string name="wallet_restore_done">Billetera restaurada. Buscando saldos.</string>
     <string name="wallet_restore_scanning">Restaurando y buscando saldos…</string>
