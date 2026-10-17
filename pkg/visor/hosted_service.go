@@ -9,6 +9,9 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skynet"
+	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // handOffHosted serves a skynet port request naming a service this visor runs
@@ -24,7 +27,8 @@ func handOffHosted(log *logging.Logger, conn net.Conn, v *Visor, msg clientMsg) 
 	if pk == v.conf.PK {
 		return false
 	}
-	if _, ok := v.hostedKeys.Load(pk); !ok {
+	attest, ok := v.hostedKeys.Load(pk)
+	if !ok {
 		sendError(log, conn, fmt.Errorf("service %s is not hosted here", pk))
 		return true
 	}
@@ -42,7 +46,7 @@ func handOffHosted(log *logging.Logger, conn net.Conn, v *Visor, msg clientMsg) 
 		sendError(log, conn, fmt.Errorf("cannot identify the caller of service %s", pk))
 		return true
 	}
-	reply, err := json.Marshal(serverReply{PK: msg.PK})
+	reply, err := json.Marshal(serverReply{PK: msg.PK, Sig: attest.(cipher.Sig).Hex()})
 	if err != nil {
 		closeConn(log, conn)
 		return true
@@ -59,4 +63,53 @@ func handOffHosted(log *logging.Logger, conn net.Conn, v *Visor, msg clientMsg) 
 	log.WithField("service", pk.String()).WithField("port", msg.Port).WithField("caller", origin.String()).
 		Debug("Handed a skynet stream to a hosted service")
 	return true
+}
+
+// hostService records an own-key service as hosted here, signing with its key
+// that this visor is its host, and republishes the transport list so TPD
+// shows the local link visors find it by.
+func (v *Visor) hostService(es *embeddedService) {
+	if es.ownPK.Null() {
+		return
+	}
+	var probe struct {
+		SecKey cipher.SecKey `json:"secret_key"`
+	}
+	if err := json.Unmarshal(es.ownRaw, &probe); err != nil || probe.SecKey.Null() {
+		es.log.WithError(err).Warn("Hosted service has no secret key here; it stays reachable over dmsg only")
+		return
+	}
+	sig, err := skynet.SignHosted(es.ownPK, probe.SecKey, v.conf.PK)
+	if err != nil {
+		es.log.WithError(err).Warn("Could not sign the hosting of this service; it stays reachable over dmsg only")
+		return
+	}
+	v.hostedKeys.Store(es.ownPK, sig)
+	v.republishHosted()
+}
+
+// unhostService drops a stopped service from the hosted set.
+func (v *Visor) unhostService(pk cipher.PubKey) {
+	if _, had := v.hostedKeys.LoadAndDelete(pk); had {
+		v.republishHosted()
+	}
+}
+
+func (v *Visor) republishHosted() {
+	if v.tpM == nil {
+		return
+	}
+	v.tpM.SetHostedEntries(v.hostedEntries)
+	v.tpM.RepublishTPDList()
+}
+
+// hostedEntries is the local link from this visor to each service it hosts.
+func (v *Visor) hostedEntries() []*transport.Entry {
+	var out []*transport.Entry
+	v.hostedKeys.Range(func(k, _ any) bool {
+		e := transport.MakeEntry(v.conf.PK, k.(cipher.PubKey), tptypes.LOCAL, transport.LabelAutomatic)
+		out = append(out, &e)
+		return true
+	})
+	return out
 }

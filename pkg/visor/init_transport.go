@@ -719,6 +719,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.initLock.Lock()
 	v.tpM = tpM
+	tpM.SetHostedEntries(v.hostedEntries)
 	v.initLock.Unlock()
 
 	// AR self-refresh: polls AR for our own STCPR / SUDPH bind state and

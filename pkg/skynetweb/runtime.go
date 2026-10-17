@@ -651,3 +651,43 @@ func parsePKLabel(label string) (cipher.PubKey, error) {
 		return pk, nil
 	}
 }
+
+// PerformServiceHandshake is PerformHandshake for a service that host runs
+// under the service's own key. It names the service, and accepts the stream
+// only when host echoes it and shows the service's signature naming host.
+func PerformServiceHandshake(conn net.Conn, port uint16, service, host cipher.PubKey) error {
+	readyBuf := make([]byte, 1)
+	if _, err := conn.Read(readyBuf); err != nil {
+		return fmt.Errorf("skynet handshake: read ready byte: %w", err)
+	}
+	req, err := json.Marshal(skynet.ClientMsg{Port: int(port), PK: service.String()})
+	if err != nil {
+		return fmt.Errorf("skynet handshake: marshal request: %w", err)
+	}
+	if _, err := conn.Write(req); err != nil {
+		return fmt.Errorf("skynet handshake: send request: %w", err)
+	}
+	respBuf := make([]byte, 32*1024)
+	n, err := conn.Read(respBuf)
+	if err != nil {
+		return fmt.Errorf("skynet handshake: read reply: %w", err)
+	}
+	var reply skynet.ServerReply
+	if err := json.Unmarshal(respBuf[:n], &reply); err != nil {
+		return fmt.Errorf("skynet handshake: parse reply: %w", err)
+	}
+	if reply.Error != nil {
+		return fmt.Errorf("skynet server error: %s", *reply.Error)
+	}
+	if reply.PK != service.String() {
+		return fmt.Errorf("skynet handshake: %s does not host %s", host, service)
+	}
+	var sig cipher.Sig
+	if err := sig.UnmarshalText([]byte(reply.Sig)); err != nil {
+		return fmt.Errorf("skynet handshake: %s sent no proof it hosts %s: %w", host, service, err)
+	}
+	if err := skynet.VerifyHosted(service, host, sig); err != nil {
+		return fmt.Errorf("skynet handshake: %s is not attested as host of %s: %w", host, service, err)
+	}
+	return nil
+}

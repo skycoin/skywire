@@ -19,6 +19,9 @@ type ServerReply struct {
 	Error *string `json:"error,omitempty"`
 	// PK echoes ClientMsg.PK once the stream is handed to that service.
 	PK string `json:"pk,omitempty"`
+	// Sig is the service key's signature naming this visor as its host, see
+	// SignHosted. A caller checks it against the key its stream reached.
+	Sig string `json:"sig,omitempty"`
 }
 
 // Exported aliases keep the existing internal call sites working.
