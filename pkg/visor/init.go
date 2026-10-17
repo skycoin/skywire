@@ -312,21 +312,21 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// Registration-over-CXO publisher: runs whenever a dmsg-discovery PK
 	// resolves (no opt-in flag exists, despite older comments). Mirrors this visor's signed discovery entry onto a CXO feed that
 	// dmsg-discovery aggregates, off the timer-driven HTTP re-PUT. Depends on
-	// dmsgC (the entry it publishes + the feed's transport). See
-	// init_registration_cxo.go.
-	m.regCXOMod = maker("registration_cxo", initRegistrationCXO, &m.dmsgC)
+	// dmsgC (the entry it publishes + the feed's transport), and on stats when
+	// the entry rides the system feed. See init_registration_cxo.go.
+	m.regCXOMod = maker("registration_cxo", initRegistrationCXO, &m.dmsgC, &m.statsMod)
 	// AR-bind-over-CXO publisher: mirror this visor's address-resolver
 	// bindings onto a CXO feed the AR aggregates, off the timer-driven
 	// re-registration (each a fresh dmsg Noise handshake). Depends on the AR
 	// client (the bind hook it publishes from) and dmsgC (the feed transport).
 	// See init_ar_bind_cxo.go.
-	m.arBindCXOMod = maker("ar_bind_cxo", initARBindCXO, &m.ar, &m.dmsgC)
+	m.arBindCXOMod = maker("ar_bind_cxo", initARBindCXO, &m.ar, &m.dmsgC, &m.statsMod)
 	// SD-registration-over-CXO publisher: mirror this visor's live
 	// service-discovery entry set onto a CXO feed the SD aggregates, off the
 	// 90s HTTP re-POST (each a fresh dmsg Noise handshake). Depends on disc
 	// (the SD clients whose entries it mirrors) and dmsgC (the feed
 	// transport). See init_sd_reg_cxo.go.
-	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC)
+	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC, &m.statsMod)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.skymail, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices)
 

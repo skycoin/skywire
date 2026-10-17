@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynet"
@@ -108,7 +109,11 @@ func (v *Visor) republishHosted() {
 func (v *Visor) hostedEntries() []*transport.Entry {
 	var out []*transport.Entry
 	v.hostedKeys.Range(func(k, _ any) bool {
-		e := transport.MakeEntry(v.conf.PK, k.(cipher.PubKey), tptypes.LOCAL, transport.LabelAutomatic)
+		label := transport.LabelAutomatic
+		if cxoaggregate.ConsumesSystemFeed(k.(cipher.PubKey)) {
+			label = transport.LabelSysFeed
+		}
+		e := transport.MakeEntry(v.conf.PK, k.(cipher.PubKey), tptypes.LOCAL, label)
 		out = append(out, &e)
 		return true
 	})

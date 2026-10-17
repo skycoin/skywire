@@ -31,6 +31,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -61,6 +62,18 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	dmsgdPK, ok := dmsgdCXOPeer(v)
 	if !ok {
 		log.Warn("Registration-CXO: no dmsg.discovery_dmsg PK; cannot announce to dmsg-discovery; skipping")
+		return nil
+	}
+
+	if route, ok := v.systemFeedFor(sysfeed.DmsgDiscovery, dmsgdPK, log); ok {
+		v.dmsgC.SetEntryPublishHook(entryPublishHook(route.sink, log))
+		v.dmsgC.SetCXOKeepaliveHealthyFunc(route.healthy)
+		v.pushCloseStack("registration_cxo", func() error {
+			v.dmsgC.SetCXOKeepaliveHealthyFunc(nil)
+			v.dmsgC.SetEntryPublishHook(nil)
+			return nil
+		})
+		log.WithField("dmsgd_pk", dmsgdPK).Info("Registration-CXO: entry rides the system feed")
 		return nil
 	}
 
@@ -101,16 +114,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	// Mirror every successful primary-discovery registration onto the feed.
 	// The hook runs on the dmsg entry-update goroutine and must not block;
 	// Put coalesces into the next BatchWindow tick, so it returns at once.
-	v.dmsgC.SetEntryPublishHook(func(entry *dmsgdisc.Entry) {
-		b, mErr := json.Marshal(entry)
-		if mErr != nil {
-			log.WithError(mErr).Debug("Registration-CXO: marshal entry failed")
-			return
-		}
-		if pErr := pub.Put(registrationEntryPath, b); pErr != nil {
-			log.WithError(pErr).Debug("Registration-CXO: CXO Put failed")
-		}
-	})
+	v.dmsgC.SetEntryPublishHook(entryPublishHook(pub, log))
 
 	// Dial dmsg-discovery so its aggregator sees the inbound conn and
 	// subscribes to our feed (PK = our PK). ConnectPK is idempotent, so the
@@ -218,6 +222,20 @@ func runRegistrationAnnounceLoop(ctx context.Context, pub *treestore.Publisher, 
 			return
 		case <-t.C:
 			announce()
+		}
+	}
+}
+
+// entryPublishHook mirrors each registered discovery entry onto sink.
+func entryPublishHook(sink regLeafSink, log *logging.Logger) func(*dmsgdisc.Entry) {
+	return func(entry *dmsgdisc.Entry) {
+		b, err := json.Marshal(entry)
+		if err != nil {
+			log.WithError(err).Debug("Registration-CXO: marshal entry failed")
+			return
+		}
+		if err := sink.Put(registrationEntryPath, b); err != nil {
+			log.WithError(err).Debug("Registration-CXO: CXO Put failed")
 		}
 	}
 }

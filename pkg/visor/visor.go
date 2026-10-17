@@ -400,6 +400,12 @@ type Visor struct {
 	// refused is invisible from both ends. Guarded by cxoUserFeedsMu.
 	sdRegCXOPub *treestore.Publisher
 
+	// systemFeedServices are the services whose registrations ride the system
+	// feed (system_feed_registrations.go). Guarded by cxoUserFeedsMu.
+	systemFeedServices []string
+	// sysFeedAnnounceOK is when the system feed last reached TPD, in Unix ns.
+	sysFeedAnnounceOK atomic.Int64
+
 	// sdEntryMirror holds the visor's live service-discovery entry set and
 	// mirrors it onto the SD-registration CXO feed. Constructed in NewVisor
 	// (never nil) and handed to every servicedisc client the visor builds,
