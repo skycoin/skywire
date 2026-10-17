@@ -1005,9 +1005,10 @@
     <string name="mail_sending">Enviando…</string>
     <string name="mail_sent">Enviado</string>
     <string name="mail_send_failed">No se pudo enviar: %1$s</string>
+    <string name="mail_send_unknown">Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar.</string>
     <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
-    <string name="mail_attachments_too_big">Demasiado grande: un mensaje puede ocupar unos %1$s, adjuntos incluidos.</string>
+    <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>

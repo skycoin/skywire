@@ -958,9 +958,10 @@
     <string name="mail_sending">Sending…</string>
     <string name="mail_sent">Sent</string>
     <string name="mail_send_failed">Could not send: %1$s</string>
+    <string name="mail_send_unknown">Still delivering: the visor has not answered yet. Check Sent in a few minutes before sending it again.</string>
     <string name="mail_bad_address">Not a SkyMail address: %1$s</string>
     <string name="mail_no_recipient">Add a recipient.</string>
-    <string name="mail_attachments_too_big">Too large: a message can be about %1$s, attachments included.</string>
+    <string name="mail_attachments_too_big">These attachments become %1$s in transit — a message can be about %2$s.</string>
     <string name="mail_result_title">Not everyone got it</string>
     <string name="mail_result_delivered">Delivered over %1$s</string>
     <string name="mail_result_failed">Not delivered: %1$s</string>
