@@ -45,6 +45,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppVisibility
+import com.skycoin.skywire.core.AppLocale
 import com.skycoin.skywire.core.ChatMedia
 import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.CoreState
@@ -327,7 +328,13 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                             // app's theme never looks like a new URL and
                             // never reloads the conversation out from under
                             // the reader. Live changes go through applyTheme.
-                            view.loadUrl(target + ChatWebView.themeQuery(darkTheme))
+                            // The language rides with it: the page translates
+                            // itself from this hint, and a language change
+                            // recreates the activity, which reloads anyway.
+                            view.loadUrl(
+                                target + ChatWebView.themeQuery(darkTheme) +
+                                    ChatWebView.langQuery(AppLocale.current(context)),
+                            )
                         }
                     },
                     onRelease = { view ->
