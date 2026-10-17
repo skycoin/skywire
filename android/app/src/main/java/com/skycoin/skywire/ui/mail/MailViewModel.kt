@@ -34,6 +34,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.InterruptedIOException
 import java.util.Base64
 
 /** A file picked for the draft, read in full: a Skymail message is 1 MiB by default. */
@@ -244,9 +245,11 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update { s ->
                 val draft = s.draft ?: return@update s
                 val all = draft.attachments + picked
-                // Base64 grows a file by a third, and the text and headers ride along.
-                if (all.sumOf { it.bytes.size.toLong() } * 4 / 3 + ENVELOPE_BYTES > limit) {
-                    s.copy(notice = string(R.string.mail_attachments_too_big, formatBytes(limit)))
+                // Base64 grows a file by a third, and the text and headers
+                // ride along. The wire size is what the receiver enforces.
+                val encoded = all.sumOf { it.bytes.size.toLong() } * 4 / 3 + ENVELOPE_BYTES
+                if (encoded > limit) {
+                    s.copy(notice = string(R.string.mail_attachments_too_big, formatBytes(encoded), formatBytes(limit)))
                 } else {
                     s.copy(draft = draft.copy(attachments = all))
                 }
@@ -301,7 +304,15 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
                     refreshNow()
                 }
                 .onFailure { e ->
-                    mutable.update { it.copy(sending = false, notice = string(R.string.mail_send_failed, e.message.orEmpty())) }
+                    // A timeout is not a verdict: the visor answers only
+                    // after delivering and keeps going without us, so the
+                    // mail may still arrive.
+                    val notice = if (e is InterruptedIOException) {
+                        string(R.string.mail_send_unknown)
+                    } else {
+                        string(R.string.mail_send_failed, e.message.orEmpty())
+                    }
+                    mutable.update { it.copy(sending = false, notice = notice) }
                 }
         }
     }

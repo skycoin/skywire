@@ -910,9 +910,10 @@
     <string name="mail_sending">正在发送…</string>
     <string name="mail_sent">已发送</string>
     <string name="mail_send_failed">无法发送：%1$s</string>
+    <string name="mail_send_unknown">仍在发送：节点还没有应答。请过几分钟查看已发送，再决定是否重发。</string>
     <string name="mail_bad_address">不是 SkyMail 地址：%1$s</string>
     <string name="mail_no_recipient">请添加收件人。</string>
-    <string name="mail_attachments_too_big">太大了：一封邮件连同附件大约只能有 %1$s。</string>
+    <string name="mail_attachments_too_big">这些附件在传输时会膨胀到 %1$s，而一封邮件大约只能有 %2$s。</string>
     <string name="mail_result_title">没有全部送达</string>
     <string name="mail_result_delivered">已通过 %1$s 送达</string>
     <string name="mail_result_failed">未送达：%1$s</string>
