@@ -68,7 +68,8 @@ func TestServiceOverSkynetHandshake(t *testing.T) {
 	require.NoError(t, skynetweb.PerformServiceHandshake(caller, 80, svcPK, v.conf.PK))
 	conn, err := lis.Accept()
 	require.NoError(t, err)
-	require.Equal(t, dmsg.Addr{PK: origin}, conn.RemoteAddr())
+	require.Equal(t, origin, conn.RemoteAddr().(dmsg.Addr).PK)
+	require.NotZero(t, conn.RemoteAddr().(dmsg.Addr).Port, "each handed stream gets its own port")
 	go func() { _, _ = caller.Write([]byte("GET")) }() //nolint:errcheck
 	buf := make([]byte, 3)
 	_, err = conn.Read(buf)

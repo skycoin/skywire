@@ -87,6 +87,7 @@ var CXOFeedFromString = cxosub.FeedFromString
 func NewCXOSubscriptionManager(v *Visor, interval time.Duration, log *logging.Logger) *CXOSubscriptionManager {
 	return cxosub.NewManager(cxosub.Deps{
 		Dmsg:     func() *dmsg.Client { return v.dmsgC },
+		Dial:     v.cxoDial,
 		FeedSpec: v.cxoFeedSpec,
 		Log:      log,
 	}, interval)

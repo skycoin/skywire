@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -149,4 +150,22 @@ func (s *serviceHosts) failed(service cipher.PubKey) {
 		h.failUntil = time.Now().Add(serviceSkynetBackoff)
 		s.hosts[service] = h
 	}
+}
+
+// cxoDial is how the visor's CXO feeds dial their consumers: a deployment
+// service through its host over skynet when it can, else dmsg.
+func (v *Visor) cxoDial(ctx context.Context, addr dmsg.Addr) (net.Conn, error) {
+	if v.isDmsgServiceKey(addr.PK) {
+		// Leave dmsg at least half of the caller's time.
+		sctx, cancel := ctx, context.CancelFunc(func() {})
+		if dl, ok := ctx.Deadline(); ok {
+			sctx, cancel = context.WithTimeout(ctx, time.Until(dl)/2)
+		}
+		conn, err := v.dialServiceOverSkynet(sctx, addr.PK, addr.Port)
+		cancel()
+		if err == nil {
+			return conn, nil
+		}
+	}
+	return v.dmsgC.Dial(ctx, addr)
 }

@@ -71,6 +71,7 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 	// dmsgdPK is always known here (we returned early above otherwise).
 	allow := composeFeedAllowlist(v, dmsgdPK, true)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		Dial:                v.cxoDial,
 		DmsgPort:            skyenv.DmsgDMSGDRegistrationCXOPort,
 		BatchWindow:         registrationBatchWindow,
 		Logger:              log,
