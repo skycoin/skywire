@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // GetAllVisorSummaries returns uptime summaries for all visors with active transports.
@@ -196,7 +197,9 @@ func tpUptimeOnlineKey(date string) string {
 
 // tracksUptime reports whether a transport type gets an uptime timeline:
 // every type but dmsg, as for a visor's online count.
-func tracksUptime(tpType string) bool { return tpType != "" && tpType != "dmsg" }
+func tracksUptime(tpType string) bool {
+	return tpType != "" && tpType != "dmsg" && tpType != string(tptypes.LOCAL)
+}
 
 func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
