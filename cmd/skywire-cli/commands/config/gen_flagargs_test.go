@@ -19,7 +19,7 @@ func TestFlagArgsForSkyenv(t *testing.T) {
 		{"WSPEERS", "pk@ws://node.local:8000/tp/ws", []string{"--ws-peer", "pk@ws://node.local:8000/tp/ws"}, true},
 		{"HYPERVISORPKS", "a,b", []string{"--hvpks", "a,b"}, true},
 		{"TRANSPORTPORT", "7777", []string{"--transport-port", "7777"}, true},
-		{"REWARDSKYADDR", "2jBbGxZ", []string{"--reward", "2jBbGxZ"}, true},
+		{"REWARDSKYADDR", "2jBbGxZ", []string{"--rewardaddr", "2jBbGxZ"}, true},
 		{"LOGLVL", "debug", []string{"--loglvl", "debug"}, true},
 		{"NOSUCHKEY", "x", nil, false},
 	} {
@@ -100,6 +100,19 @@ func TestFlagArgsForSkyenvVisorSettings(t *testing.T) {
 		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
 		if !ok || !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("FlagArgsForSkyenv(%s, %q) = %v, %v; want %v", tc.key, tc.value, got, ok, tc.want)
+		}
+	}
+}
+
+// Every flag the SKYENV maps name must be a gen flag. A wrong name made
+// autoconfig pass --reward, which gen rejects, so setting a reward address
+// failed the whole run.
+func TestSkyenvMapsNameGenFlags(t *testing.T) {
+	for _, m := range []map[string]string{flagToEnv, valueFlagToEnv, intFlagToEnv, arrayFlagToEnv} {
+		for flag := range m {
+			if genConfigCmd.Flags().Lookup(flag) == nil {
+				t.Errorf("--%s is not a config gen flag", flag)
+			}
 		}
 	}
 }
