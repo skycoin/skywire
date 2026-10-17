@@ -96,10 +96,12 @@ class EthWalletCore(
     override suspend fun balance(book: AddressBook): WalletBalance {
         var total = BigInteger.ZERO
         var funded = 0
+        val per = HashMap<String, ULong>()
         for (addr in book.receive) {
             val value = if (token == null) api.balanceWei(addr) else tokenBalanceRaw(addr)
             if (value.signum() > 0) funded++
             total += value
+            per[addr] = toBase(value)
         }
         val base = toBase(total)
         return WalletBalance(
@@ -109,6 +111,7 @@ class EthWalletCore(
             predicted = base,
             hours = null,
             spendableOutputs = funded,
+            perAddress = per,
         )
     }
 

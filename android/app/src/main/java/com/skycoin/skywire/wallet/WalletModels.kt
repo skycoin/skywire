@@ -221,6 +221,8 @@ data class WalletSnapshot(
     val hours: ULong? = null,
     val spendableOutputs: Int = 0,
     val txs: List<CachedTx> = emptyList(),
+    /** Confirmed coins held by each single address — the addresses sheet. */
+    val perAddress: Map<String, ULong> = emptyMap(),
     val fetchedAtMs: Long = 0,
     /**
      * When [txs] was last actually fetched, which can lag [fetchedAtMs]: the
@@ -258,6 +260,7 @@ fun mergeSnapshot(
     predicted = balance.predicted,
     hours = balance.hours,
     spendableOutputs = balance.spendableOutputs,
+    perAddress = balance.perAddress,
     txs = history?.map {
         CachedTx(
             txid = it.txid,

@@ -73,11 +73,19 @@ class SkyFiberWalletCore(
 
     override suspend fun balance(book: AddressBook): WalletBalance {
         val b = node.balance(book.all())
+        // The per-address split: head outputs are the confirmed unspent
+        // ones, which is exactly what the node's confirmed balance sums.
+        val per = HashMap<String, ULong>()
+        for (o in node.outputs(book.all()).headOutputs) {
+            val coins = Amounts.parse(o.coins, DROPLET_EXPONENT) ?: 0uL
+            per[o.address] = (per[o.address] ?: 0uL) + coins
+        }
         return WalletBalance(
             confirmed = b.confirmed.coins,
             predicted = b.predicted.coins,
             hours = b.confirmed.hours,
             spendableOutputs = 0,
+            perAddress = per,
         )
     }
 
