@@ -3,10 +3,8 @@ package commands
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 
 	"github.com/skycoin/skywire/pkg/skychat/privacy"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var privacyStore *privacy.Store
@@ -18,14 +16,7 @@ func registerPrivacyHandlers(mux *http.ServeMux) {
 }
 
 func privacyStorePath() string {
-	workDir := ""
-	if appCl != nil {
-		workDir = appCl.Config().ProcWorkDir
-	}
-	if workDir == "" {
-		workDir = skyenv.LocalPath
-	}
-	return filepath.Join(workDir, "skychat-privacy.json")
+	return identityStatePath(stateDir(), identityScope(), "skychat-privacy.json")
 }
 
 func openPrivacyStore(path string) {

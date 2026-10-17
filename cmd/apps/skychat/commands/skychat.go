@@ -1901,17 +1901,11 @@ func persistMessage(msg history.Message) {
 func openHistoryStore() error {
 	dbPath := persistDBPath
 	if dbPath == "" {
-		// In --standalone mode appCl is nil and ProcWorkDir is
-		// unavailable; fall back to skyenv.LocalPath which is the
-		// same default the visor-launcher would have set anyway.
-		var workDir string
-		if appCl != nil {
-			workDir = appCl.Config().ProcWorkDir
-		}
-		if workDir == "" {
-			workDir = skyenv.LocalPath
-		}
-		dbPath = filepath.Join(workDir, "skychat-history.db")
+		// An operator-named --persist-db is taken verbatim; the derived
+		// default is named for the identity, like every other state file
+		// (identity.go). In --standalone mode there is no identity and the
+		// shared name stands.
+		dbPath = identityStatePath(stateDir(), identityScope(), "skychat-history.db")
 	}
 
 	limits := history.Limits{
