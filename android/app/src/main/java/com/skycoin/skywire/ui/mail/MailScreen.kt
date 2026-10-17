@@ -13,6 +13,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -234,29 +236,39 @@ private fun FolderView(state: MailUiState, viewModel: MailViewModel) {
 }
 
 /** The batch actions, shown while messages are picked. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SelectionBar(state: MailUiState, viewModel: MailViewModel) {
     var confirmDelete by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         HorizontalDivider()
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // The verbs wrap rather than truncate: in Spanish the three of them
+        // outrun a phone's width in one row.
+        val listed = state.messages?.size ?: 0
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
         ) {
-            val listed = state.messages?.size ?: 0
             TextButton(onClick = viewModel::selectAll, enabled = state.selection.size < listed) {
                 Text(stringResource(R.string.mail_select_all))
+            }
+            TextButton(onClick = viewModel::invertSelection) {
+                Text(stringResource(R.string.mail_invert_selection))
             }
             TextButton(onClick = viewModel::clearSelection, enabled = state.selection.isNotEmpty()) {
                 Text(stringResource(R.string.mail_deselect_all))
             }
-            Spacer(Modifier.weight(1f))
-            Button(onClick = { confirmDelete = true }, enabled = !state.busy) {
-                Text(stringResource(R.string.mail_delete_selected, state.selection.size))
-            }
+        }
+        Button(
+            onClick = { confirmDelete = true },
+            enabled = !state.busy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Text(stringResource(R.string.mail_delete_selected, state.selection.size))
         }
     }
     if (confirmDelete) {

@@ -319,6 +319,12 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { it.copy(selection = ids.toSet()) }
     }
 
+    /** Flips the picks within the folder shown. */
+    fun invertSelection() {
+        val ids = mutable.value.messages?.map { it.id }?.toSet() ?: return
+        mutable.update { s -> s.copy(selection = ids - s.selection) }
+    }
+
     fun clearSelection() = mutable.update { it.copy(selection = emptySet()) }
 
     /** Deletes every picked message in the folder shown, one call each. */

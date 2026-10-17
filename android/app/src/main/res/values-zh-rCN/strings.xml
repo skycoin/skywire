@@ -890,6 +890,7 @@
     <string name="mail_selected_count">已选择 %1$d 封</string>
     <string name="mail_select_all">全选</string>
     <string name="mail_deselect_all">取消全选</string>
+    <string name="mail_invert_selection">反选</string>
     <string name="mail_delete_selected">删除 %1$d 封</string>
     <string name="mail_batch_delete_confirm">删除 %1$d 封邮件？</string>
     <string name="mail_batch_deleted">已删除 %1$d 封邮件</string>
