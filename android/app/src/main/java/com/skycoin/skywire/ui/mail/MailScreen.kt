@@ -763,7 +763,7 @@ private fun shortDate(rfc3339: String): String = runCatching {
 
 private fun copy(context: Context, text: String) {
     val clipboard = context.getSystemService(ClipboardManager::class.java)
-    clipboard?.setPrimaryClip(ClipData.newPlainText("Skymail", text))
+    clipboard?.setPrimaryClip(ClipData.newPlainText("SkyMail", text))
 }
 
 private fun share(context: Context, text: String) {
