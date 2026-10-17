@@ -2876,11 +2876,11 @@ var (
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
-		"cliaddr": "CLIADDR",
-		"loglvl":  "LOGLVL",
-		"hvaddr":  "HVHTTPADDR",
-		"timeout": "SHUTDOWNTIMEOUT",
-		"reward":  "REWARDSKYADDR",
+		"cliaddr":    "CLIADDR",
+		"loglvl":     "LOGLVL",
+		"hvaddr":     "HVHTTPADDR",
+		"timeout":    "SHUTDOWNTIMEOUT",
+		"rewardaddr": "REWARDSKYADDR",
 		// The resolvers' string knobs, for the same reason as the two bools
 		// above: an upstream or a bind address that cannot round-trip is a
 		// chain that comes back up pointing somewhere else, or nowhere.
