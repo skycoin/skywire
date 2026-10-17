@@ -152,3 +152,22 @@ func TestTelemetryPacerForgetsIdleEntries(t *testing.T) {
 	p.due(t0.Add(telemetryStateSweepAfter + time.Minute))
 	require.Empty(t, p.m)
 }
+
+// A write that failed is retried at the next flush, and an identical report
+// after it is not skipped as already written.
+func TestTelemetryPacerRetriesFailedWrites(t *testing.T) {
+	var p telemetryPacer
+	k := newTelKey(t)
+	t0 := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+
+	out := p.offer(k, telSnap{sent: 10}, t0)
+	require.Len(t, out, 1)
+	p.retry([]heldSnap{{k, out[0]}})
+
+	held := p.due(t0.Add(telemetryFlushEvery))
+	require.Len(t, held, 1, "the failed row is due again")
+	require.EqualValues(t, 10, held[0].s.sent)
+
+	p.retry(held)
+	require.Len(t, p.offer(k, telSnap{sent: 10}, t0.Add(2*telemetryFlushEvery)), 1, "not skipped as unchanged")
+}
