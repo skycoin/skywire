@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skydns"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpn"
@@ -31,7 +32,7 @@ var upstream, caDir, setupTun string
 
 func init() {
 	RootCmd.Flags().StringVar(&upstream, "dns", "", "resolver for names that are not mesh names (empty means the phone's own DNS)")
-	RootCmd.Flags().StringVar(&caDir, "ca", "", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": terminate HTTPS to mesh names with it")
+	RootCmd.Flags().StringVar(&caDir, "ca", "", "directory with ca.crt and ca.key from \"skywire cli resolver ca gen\": terminate HTTPS to mesh names with it, and serve DNS over HTTPS at "+skydns.DoHURL)
 	// --setup-tun is what an unprivileged skydns runs through pkexec: the one
 	// root step, not something to call by hand.
 	RootCmd.Flags().StringVar(&setupTun, "setup-tun", "", "set up the persistent tun for uid:gid as root, then exit")
