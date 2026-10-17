@@ -134,3 +134,10 @@ func TestNoDoHWithoutACA(t *testing.T) {
 		t.Fatal("port 443 accepted a connection with no CA configured")
 	}
 }
+
+// The CA's IP constraint must cover the resolver's DoH address.
+func TestCARangeIsSkyDNSRange(t *testing.T) {
+	if skynetca.PermittedIPRange != Range {
+		t.Fatalf("skynetca.PermittedIPRange %s, skydns.Range %s", skynetca.PermittedIPRange, Range)
+	}
+}

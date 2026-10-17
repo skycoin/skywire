@@ -3,6 +3,8 @@ package skynetca
 import (
 	"bytes"
 	"crypto/x509"
+	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -110,5 +112,40 @@ func TestFingerprint_StableFormat(t *testing.T) {
 	}
 	if strings.Count(fp, ":") != 31 {
 		t.Errorf("colons = %d, want 31", strings.Count(fp, ":"))
+	}
+}
+
+// A constrained CA can name only SkyDNS's range by IP, so its key cannot sign
+// for a LAN or internet address even outside the minter.
+func TestCAConstrainsIPAddresses(t *testing.T) {
+	ca, key, err := GenerateCA(CAOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMinter(ca, key, LeafOptions{})
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	verify := func(ip string) error {
+		c, err := m.mint(&x509.Certificate{IPAddresses: []net.IP{net.ParseIP(ip)}})
+		if err != nil {
+			return err
+		}
+		leaf, err := x509.ParseCertificate(c.Certificate[0])
+		if err != nil {
+			return err
+		}
+		_, err = leaf.Verify(x509.VerifyOptions{Roots: roots})
+		return err
+	}
+	if err := verify("198.19.0.53"); err != nil {
+		t.Fatalf("resolver address: %v", err)
+	}
+	for _, ip := range []string{"192.168.1.1", "1.1.1.1"} {
+		if verify(ip) == nil {
+			t.Fatalf("%s verified under the constrained CA", ip)
+		}
+		if _, err := m.ForIP(netip.MustParseAddr(ip)); err == nil {
+			t.Fatalf("ForIP minted a leaf for %s", ip)
+		}
 	}
 }

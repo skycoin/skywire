@@ -120,9 +120,12 @@ type IPMinter interface {
 	ForIP(ip netip.Addr) (*tls.Certificate, error)
 }
 
-// ForIP returns a leaf whose only name is ip. The CA's DNS name constraints
-// do not cover IP addresses (RFC 5280 section 4.2.1.10), so browsers accept it.
+// ForIP returns a leaf whose only name is ip, which must be in the CA's
+// permitted IP ranges (RFC 5280 section 4.2.1.10).
 func (m *CachedMinter) ForIP(ip netip.Addr) (*tls.Certificate, error) {
+	if !m.permittedIP(ip) {
+		return nil, fmt.Errorf("skynetca: ip %s is outside the CA's permitted ranges", ip)
+	}
 	key := "ip:" + ip.String()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -157,6 +160,20 @@ func (m *CachedMinter) permitted(host string) bool {
 		// Subdomain semantics: the suffix matches when host ends
 		// with it AND has at least one label before it.
 		if strings.HasSuffix(host, suf) && len(host) > len(suf) {
+			return true
+		}
+	}
+	return false
+}
+
+// permittedIP mirrors the CA's IP constraints. A CA minted before they
+// existed has none and permits any IP, as it did then.
+func (m *CachedMinter) permittedIP(ip netip.Addr) bool {
+	if len(m.ca.PermittedIPRanges) == 0 {
+		return true
+	}
+	for _, r := range m.ca.PermittedIPRanges {
+		if r.Contains(ip.AsSlice()) {
 			return true
 		}
 	}
