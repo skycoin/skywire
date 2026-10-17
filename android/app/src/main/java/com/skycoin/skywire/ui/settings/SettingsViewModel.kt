@@ -492,12 +492,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Derive [secretKey]'s public key, for the confirmation dialog. Returns
      * null with the failure in [SettingsUiState.message] when the core will
-     * not read it.
+     * not read it. Cannot throw: the dialog's submit runs it in a bare
+     * coroutine, and anything escaping there is a process crash.
      */
-    suspend fun publicKeyOf(secretKey: String): String? =
-        config.derivePublicKey(secretKey)
-            .onFailure { e -> mutable.update { it.copy(message = e.message) } }
-            .getOrNull()
+    suspend fun publicKeyOf(secretKey: String): String? = runCatching {
+        config.derivePublicKey(secretKey).getOrNull()
+    }.onFailure { e ->
+        mutable.update { it.copy(message = e.message ?: e::class.java.simpleName) }
+    }.getOrNull()
 
     /** The pasted key is the one already installed — nothing to do. */
     fun isCurrentKey(publicKey: String): Boolean =
