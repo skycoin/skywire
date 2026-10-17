@@ -596,6 +596,14 @@
     <string name="wallet_node_field">节点地址</string>
     <string name="wallet_node_save">使用该节点</string>
     <string name="wallet_node_default">恢复为 %1$s</string>
+    <string name="wallet_node_list_hint">请求会按顺序尝试这些地址——排在最前的优先级最高，内置节点作为兜底。</string>
+    <string name="wallet_node_add">添加节点</string>
+    <string name="wallet_node_shipped">内置 · 兜底</string>
+    <string name="wallet_node_duplicate">该地址已在列表中。</string>
+    <string name="wallet_node_invalid">不是 http(s) 地址。</string>
+    <string name="wallet_node_remove">移除此节点</string>
+    <string name="wallet_node_up">前移，提高优先级</string>
+    <string name="wallet_node_down">后移，降低优先级</string>
     <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
     <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
     <string name="wallet_node_body_indexer">%1$s 的余额、手续费和广播都通过节点收发，交易记录则从索引服务读取。如果应用自带的地址在你所在的网络无法访问，或你有自建服务，可在此更改。</string>

@@ -674,6 +674,14 @@
     <string name="wallet_node_field">Dirección del nodo</string>
     <string name="wallet_node_save">Usar este nodo</string>
     <string name="wallet_node_default">Volver a %1$s</string>
+    <string name="wallet_node_list_hint">Las peticiones prueban estas direcciones en orden: la primera es la de mayor prioridad, y el nodo de fábrica es el último recurso.</string>
+    <string name="wallet_node_add">Añadir nodo</string>
+    <string name="wallet_node_shipped">De fábrica · último recurso</string>
+    <string name="wallet_node_duplicate">Esa dirección ya está en la lista.</string>
+    <string name="wallet_node_invalid">No es una dirección http(s).</string>
+    <string name="wallet_node_remove">Quitar este nodo</string>
+    <string name="wallet_node_up">Adelantar, más prioridad</string>
+    <string name="wallet_node_down">Atrasar, menos prioridad</string>
     <string name="wallet_node_encrypted">Cifrado en tránsito. El nodo sigue viendo qué direcciones consultas juntas, pero nadie más por el camino.</string>
     <string name="wallet_node_cleartext">Sin cifrar. Todo el mundo entre este teléfono y esa dirección ve tu lista de direcciones entera y sus saldos. Tus monedas siguen a salvo —las claves nunca salen del dispositivo—, pero las direcciones quedan ligadas entre sí para cualquiera que esté mirando.</string>
     <string name="wallet_node_body_indexer">Los saldos, las comisiones y los envíos de %1$s van al nodo, y su historial de transacciones se lee del indexador. Cámbialos si los que vienen con la app no se pueden alcanzar desde donde estás, o si tienes los tuyos.</string>

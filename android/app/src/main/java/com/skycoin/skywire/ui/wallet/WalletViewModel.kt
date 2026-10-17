@@ -89,6 +89,8 @@ data class WalletUiState(
      * whether the address on screen is the user's or the shipped one.
      */
     val defaultNodeUrl: String = "",
+    /** The user's node addresses for this coin, in priority order. */
+    val nodeUrls: List<String> = emptyList(),
     /** The same for the Ethereum family's history indexer; null for coins without one. */
     val defaultIndexerUrl: String? = null,
     val message: String? = null,
@@ -127,6 +129,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         coins = coins,
                         coin = coin,
                         defaultNodeUrl = defaults[coin.id]?.nodeUrl ?: coin.nodeUrl,
+                        nodeUrls = coin.nodeUrls.filterNot { it == defaults[coin.id]?.nodeUrl },
                         defaultIndexerUrl = defaults[coin.id]?.indexerUrl ?: coin.indexerUrl,
                         allWallets = wallets,
                         coinWallets = coinWallets,
@@ -203,15 +206,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Point the selected coin at a different node, or hand it back to the
-     * shipped one with a blank [url]; [indexerUrl] likewise, for coins that
-     * have one. The wallet re-reads immediately: the coin flow carries the
+     * Save the selected coin's node list — every add, remove and move lands
+     * here at once, so the order on screen is the order the wallet asks in.
+     * An empty list hands the coin back to its shipped address;
+     * [indexerUrl] moves the Ethereum family's history indexer, null leaving
+     * it as it is. The wallet re-reads immediately: the coin flow carries the
      * new addresses, which rebuilds the client under them.
      */
-    fun setNodeUrl(url: String, indexerUrl: String?, onDone: () -> Unit) = action {
-        repo.setNodeUrl(mutable.value.coin.id, url, indexerUrl)
+    fun saveNodeUrls(urls: List<String>, indexerUrl: String? = null) = action {
+        repo.setNodeUrls(mutable.value.coin.id, urls, indexerUrl)
         mutable.update { it.copy(stale = false) }
-        onDone()
         refreshNow()
     }
 
