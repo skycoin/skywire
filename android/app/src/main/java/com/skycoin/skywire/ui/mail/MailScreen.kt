@@ -612,7 +612,8 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                                 text = { Text(name) },
                                 onClick = {
                                     pickContact = false
-                                    val addr = SkymailAddress.of(pk) ?: return@DropdownMenuItem
+                                    val suffix = if (draft.skynet) SkymailAddress.SKYNET else SkymailAddress.DMSG
+                                    val addr = SkymailAddress.of(pk, suffix = suffix) ?: return@DropdownMenuItem
                                     viewModel.updateDraft { d ->
                                         d.copy(to = listOf(d.to.trim().trimEnd(','), addr).filter { it.isNotEmpty() }.joinToString(", "))
                                     }
@@ -632,6 +633,28 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
             )
         } else {
             TextButton(onClick = { showCc = true }) { Text(stringResource(R.string.mail_add_cc)) }
+        }
+        // The suffix is the sender's choice of network, and they differ in
+        // more than name: dmsg needs no route but relays through a dmsg
+        // server; skynet is a direct route when one exists.
+        Column {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = !draft.skynet,
+                    onClick = { viewModel.setViaSkynet(false) },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                ) { Text("dmsg") }
+                SegmentedButton(
+                    selected = draft.skynet,
+                    onClick = { viewModel.setViaSkynet(true) },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                ) { Text("skynet") }
+            }
+            Text(
+                stringResource(R.string.mail_via_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         OutlinedTextField(
             value = draft.subject,

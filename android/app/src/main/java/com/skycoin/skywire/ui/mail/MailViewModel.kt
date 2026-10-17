@@ -47,6 +47,9 @@ data class MailDraft(
     val body: String = "",
     val inReplyTo: String = "",
     val attachments: List<DraftAttachment> = emptyList(),
+    /** The network a contact or a bare key is addressed over. A typed
+     * address keeps the suffix it was given. */
+    val skynet: Boolean = false,
 )
 
 data class OpenMail(
@@ -233,6 +236,8 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { s -> s.copy(draft = s.draft?.let(change)) }
     }
 
+    fun setViaSkynet(on: Boolean) = updateDraft { it.copy(skynet = on) }
+
     fun discardDraft() {
         mutable.update { it.copy(draft = null, lastSend = null) }
     }
@@ -267,8 +272,9 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         // The button's enabled state lags this update by a frame; a second
         // tap in that window would send the mail twice.
         if (s.sending) return
-        val to = parseRecipients(draft.to)
-        val cc = parseRecipients(draft.cc)
+        val suffix = if (draft.skynet) SkymailAddress.SKYNET else SkymailAddress.DMSG
+        val to = parseRecipients(draft.to, suffix)
+        val cc = parseRecipients(draft.cc, suffix)
         val bad = (to + cc).filter { it.second == null }.map { it.first }
         when {
             bad.isNotEmpty() -> {
@@ -424,9 +430,9 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- helpers ---
 
-    private fun parseRecipients(text: String): List<Pair<String, String?>> =
+    private fun parseRecipients(text: String, suffix: String): List<Pair<String, String?>> =
         text.split(',', ';', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }
-            .map { it to SkymailAddress.recipient(it) }
+            .map { it to SkymailAddress.recipient(it, suffix) }
 
     private fun readAttachment(uri: Uri): DraftAttachment? = runCatching {
         val resolver = getApplication<Application>().contentResolver

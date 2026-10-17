@@ -899,6 +899,7 @@
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
+    <string name="mail_via_hint">完整地址按原样发送；这里为联系人和公钥选择网络。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_add_cc">添加抄送</string>
     <string name="mail_subject">主题</string>
