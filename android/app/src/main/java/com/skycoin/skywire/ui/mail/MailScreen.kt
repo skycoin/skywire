@@ -7,8 +7,9 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -117,15 +119,17 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
     LaunchedEffect(pending) { if (pending != null) viewModel.onPendingLink() }
 
     val inner = state.draft != null || state.open != null || state.settingsOpen
+    val selecting = state.selection.isNotEmpty()
     val stepBack: () -> Unit = {
         when {
             state.draft != null -> viewModel.discardDraft()
             state.settingsOpen -> viewModel.closeSettings()
             state.open != null -> viewModel.closeMessage()
+            selecting -> viewModel.clearSelection()
             else -> onBack()
         }
     }
-    BackHandler(enabled = inner) { stepBack() }
+    BackHandler(enabled = inner || selecting) { stepBack() }
 
     val listView = !inner && state.coreReady
     Scaffold(
@@ -134,12 +138,13 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
                 title = when {
                     state.draft != null -> stringResource(R.string.mail_compose_title)
                     state.settingsOpen -> stringResource(R.string.mail_settings_title)
+                    selecting -> stringResource(R.string.mail_selected_count, state.selection.size)
                     else -> stringResource(R.string.app_skymail)
                 },
                 onBack = stepBack,
                 help = HelpTopic(R.string.help_mail_title, R.string.help_mail_body),
                 actions = {
-                    if (listView) {
+                    if (listView && !selecting) {
                         IconButton(onClick = viewModel::openSettings) {
                             Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.mail_settings_title))
                         }
@@ -148,8 +153,9 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = { if (selecting) SelectionBar(state, viewModel) },
         floatingActionButton = {
-            if (listView && state.status?.running == true) {
+            if (listView && !selecting && state.status?.running == true) {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.compose() },
                     icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
@@ -213,10 +219,60 @@ private fun FolderView(state: MailUiState, viewModel: MailViewModel) {
                     )
                 }
                 else -> items(messages, key = { it.id }) { m ->
-                    MailRow(m, sent = state.folder == MailFolder.SENT) { viewModel.open(state.folder, m) }
+                    MailRow(
+                        m,
+                        sent = state.folder == MailFolder.SENT,
+                        selecting = state.selection.isNotEmpty(),
+                        selected = m.id in state.selection,
+                        onOpen = { viewModel.open(state.folder, m) },
+                        onToggle = { viewModel.toggleSelect(m.id) },
+                    )
                 }
             }
         }
+    }
+}
+
+/** The batch actions, shown while messages are picked. */
+@Composable
+private fun SelectionBar(state: MailUiState, viewModel: MailViewModel) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+        HorizontalDivider()
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            val listed = state.messages?.size ?: 0
+            TextButton(onClick = viewModel::selectAll, enabled = state.selection.size < listed) {
+                Text(stringResource(R.string.mail_select_all))
+            }
+            TextButton(onClick = viewModel::clearSelection, enabled = state.selection.isNotEmpty()) {
+                Text(stringResource(R.string.mail_deselect_all))
+            }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = { confirmDelete = true }, enabled = !state.busy) {
+                Text(stringResource(R.string.mail_delete_selected, state.selection.size))
+            }
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            text = { Text(stringResource(R.string.mail_batch_delete_confirm, state.selection.size)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    viewModel.deleteSelected()
+                }) { Text(stringResource(R.string.mail_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(android.R.string.cancel)) }
+            },
+        )
     }
 }
 
@@ -299,24 +355,41 @@ private fun FolderTabs(folder: String, unread: Int, onSelect: (String) -> Unit) 
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MailRow(m: MailSummary, sent: Boolean, onClick: () -> Unit) {
+private fun MailRow(
+    m: MailSummary,
+    sent: Boolean,
+    selecting: Boolean,
+    selected: Boolean,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+) {
     val unread = !sent && !m.seen
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            // A long press starts a batch and picks this message; taps pick
+            // too while a batch is open.
+            .combinedClickable(
+                onClick = { if (selecting) onToggle() else onOpen() },
+                onLongClick = onToggle,
+            )
             .padding(vertical = 8.dp, horizontal = 4.dp),
     ) {
-        Box(
-            Modifier
-                .size(8.dp)
-                .background(
-                    if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                    CircleShape,
-                ),
-        )
+        if (selecting) {
+            Checkbox(checked = selected, onCheckedChange = null)
+        } else {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .background(
+                        if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        CircleShape,
+                    ),
+            )
+        }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

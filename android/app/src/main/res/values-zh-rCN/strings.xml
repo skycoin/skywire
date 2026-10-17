@@ -887,6 +887,13 @@
     <string name="mail_delete">删除</string>
     <string name="mail_delete_confirm">删除这封邮件？</string>
     <string name="mail_deleted">邮件已删除</string>
+    <string name="mail_selected_count">已选择 %1$d 封</string>
+    <string name="mail_select_all">全选</string>
+    <string name="mail_deselect_all">取消全选</string>
+    <string name="mail_delete_selected">删除 %1$d 封</string>
+    <string name="mail_batch_delete_confirm">删除 %1$d 封邮件？</string>
+    <string name="mail_batch_deleted">已删除 %1$d 封邮件</string>
+    <string name="mail_batch_delete_failed">%2$d 封中有 %1$d 封未能删除</string>
     <string name="mail_attachment_saved">已把 %1$s 保存到“下载”</string>
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
