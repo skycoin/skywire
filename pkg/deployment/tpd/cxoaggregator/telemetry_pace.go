@@ -191,6 +191,31 @@ func (p *telemetryPacer) offer(k telKey, s telSnap, now time.Time) []telSnap {
 	return out
 }
 
+// retry puts back snapshots whose write failed, so the next flush writes them
+// again and an identical report is not taken for one already written.
+func (p *telemetryPacer) retry(failed []heldSnap) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.m == nil {
+		p.m = make(map[telKey]*pacedTel)
+	}
+	for _, h := range failed {
+		e := p.m[h.k]
+		if e == nil {
+			e = &pacedTel{}
+			p.m[h.k] = e
+		}
+		e.wrote, e.applied = time.Time{}, time.Time{}
+		switch s := h.s; {
+		case e.pending == nil:
+			e.pending = &s
+		case utcDay(e.pending.at) == utcDay(s.at):
+			m := e.pending.merge(s)
+			e.pending = &m
+		}
+	}
+}
+
 type heldSnap struct {
 	k telKey
 	s telSnap
