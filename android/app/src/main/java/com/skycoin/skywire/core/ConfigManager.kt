@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -627,11 +628,24 @@ class ConfigManager(
 
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(argv)
-                .directory(paths.dataDir)
-                .redirectErrorStream(true)
-                .apply { environment().putAll(coreEnv(paths)) }
-                .start()
+            // A spawn that cannot happen is an answer, not a crash. The first
+            // exec of a just-installed binary can fail transiently — the
+            // platform is still labeling and optimizing it — and that failure
+            // has to reach the Result plumbing like any other, or the first
+            // "Replace secret key" takes the whole app down.
+            val process = try {
+                ProcessBuilder(argv)
+                    .directory(paths.dataDir)
+                    .redirectErrorStream(true)
+                    .apply { environment().putAll(coreEnv(paths)) }
+                    .start()
+            } catch (e: IOException) {
+                return@withContext CommandResult(
+                    exitCode = -1,
+                    output = "${argv.lastOrNull().orEmpty()}: ${e.message}",
+                    timedOut = false,
+                )
+            }
             supervisorScope {
                 val output = StringBuilder()
                 val reader = launch {
