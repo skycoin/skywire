@@ -716,6 +716,8 @@
 
     <string name="wallet_send_title">Enviar</string>
     <string name="wallet_send_to">Para</string>
+    <string name="wallet_send_from">De</string>
+    <string name="wallet_send_from_wallet">Toda la cartera</string>
     <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
     <string name="wallet_send_to_hint_btc">dirección bc1… o 1…</string>
     <string name="wallet_send_to_hint_eth">dirección 0x…</string>

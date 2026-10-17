@@ -36,6 +36,8 @@ data class SendState(
     val to: String = "",
     val amountText: String = "",
     val sendMax: Boolean = false,
+    /** The one address the send spends from; null = the whole wallet. */
+    val fromAddress: String? = null,
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -362,11 +364,15 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun sendMaxAmount(): ULong {
         val st = mutable.value
         val snapshot = st.snapshot ?: return 0uL
+        // With a from-address chosen, Max is what that address holds. The
+        // output count is an estimate on Bitcoin — the plan recomputes the
+        // true fee from the real inputs either way.
+        val from = st.send.fromAddress
         val balance = com.skycoin.wallet.WalletBalance(
-            confirmed = snapshot.confirmed,
-            predicted = snapshot.predicted,
+            confirmed = from?.let { snapshot.perAddress[it] } ?: snapshot.confirmed,
+            predicted = from?.let { snapshot.perAddress[it] } ?: snapshot.predicted,
             hours = snapshot.hours,
-            spendableOutputs = snapshot.spendableOutputs,
+            spendableOutputs = if (from == null) snapshot.spendableOutputs else 1,
         )
         return repo.coreFor(st.coin).estimateMax(balance, st.send.feeRate)
     }
@@ -394,6 +400,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     amount = amount,
                     feeRate = if (coin.kind == CoinKind.BTC) send.feeRate else null,
                     sendMax = send.sendMax,
+                    fromAddress = send.fromAddress,
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()

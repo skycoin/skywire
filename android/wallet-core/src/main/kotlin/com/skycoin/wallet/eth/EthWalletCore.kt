@@ -177,6 +177,8 @@ class EthWalletCore(
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        // One account per wallet: there is no second address to choose.
+        fromAddress: String?,
     ): TxPlan {
         val dest = EthCrypto.parseAddress(toAddress.trim()) ?: throw WalletException.InvalidAddress()
         if (!sendMax && amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
