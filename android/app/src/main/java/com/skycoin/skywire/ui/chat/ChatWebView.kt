@@ -269,6 +269,7 @@ internal object ChatWebView {
     fun langQuery(language: AppLanguage): String = when (language) {
         AppLanguage.CHINESE_SIMPLIFIED -> "&lang=zh"
         AppLanguage.SPANISH -> "&lang=es"
+        AppLanguage.FRENCH -> "&lang=fr"
         AppLanguage.ENGLISH, AppLanguage.SYSTEM -> ""
     }
 
