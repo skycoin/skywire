@@ -718,6 +718,15 @@
     <string name="wallet_send_to">Para</string>
     <string name="wallet_send_from">De</string>
     <string name="wallet_send_from_wallet">Toda la cartera</string>
+    <string name="wallet_send_coins">Monedas</string>
+    <string name="wallet_send_coins_auto">Automático</string>
+    <string name="wallet_send_coins_picked">%1$d de %2$d salidas · %3$s</string>
+    <string name="wallet_send_coins_none">No hay salidas sin gastar para elegir.</string>
+    <string name="wallet_utxo_line">%1$s horas · %2$s</string>
+    <string name="wallet_send_hours">Horas de moneda a enviar</string>
+    <string name="wallet_send_hours_hint">Vacío envía la mitad de las horas restantes tras la quema</string>
+    <string name="wallet_send_invalid_hours">No es una cantidad de horas válida.</string>
+    <string name="wallet_done">Hecho</string>
     <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
     <string name="wallet_send_to_hint_btc">dirección bc1… o 1…</string>
     <string name="wallet_send_to_hint_eth">dirección 0x…</string>

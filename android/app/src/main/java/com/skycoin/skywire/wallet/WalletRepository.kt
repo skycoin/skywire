@@ -9,6 +9,7 @@ import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
+import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.btc.BtcWalletCore
 import com.skycoin.wallet.eth.EthCrypto
@@ -626,6 +627,8 @@ class WalletRepository private constructor(private val context: Context) {
         feeRate: Int?,
         sendMax: Boolean,
         fromAddress: String? = null,
+        inputs: Set<String> = emptySet(),
+        hoursTo: ULong? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
@@ -638,7 +641,16 @@ class WalletRepository private constructor(private val context: Context) {
             feeRate = feeRate,
             sendMax = sendMax,
             fromAddress = fromAddress?.trim()?.takeIf { it.isNotEmpty() },
+            inputs = inputs.takeIf { it.isNotEmpty() },
+            hoursTo = hoursTo,
         )
+    }
+
+    /** The wallet's unspent outputs for a coin picker. Fiber chains only. */
+    suspend fun utxos(walletId: String): List<UtxoRecord> = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        coreFor(spec).utxos(AddressBook(meta.receiveAddresses, meta.changeAddresses))
     }
 
     /** Sign locally and broadcast; returns the network's txid. */

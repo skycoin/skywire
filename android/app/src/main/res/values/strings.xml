@@ -672,6 +672,15 @@
     <string name="wallet_send_to">To</string>
     <string name="wallet_send_from">From</string>
     <string name="wallet_send_from_wallet">Whole wallet</string>
+    <string name="wallet_send_coins">Coins</string>
+    <string name="wallet_send_coins_auto">Automatic</string>
+    <string name="wallet_send_coins_picked">%1$d of %2$d outputs · %3$s</string>
+    <string name="wallet_send_coins_none">No unspent outputs to pick from.</string>
+    <string name="wallet_utxo_line">%1$s hours · %2$s</string>
+    <string name="wallet_send_hours">Coin hours to send</string>
+    <string name="wallet_send_hours_hint">Empty sends half the hours left after the burn</string>
+    <string name="wallet_send_invalid_hours">Not a number of hours.</string>
+    <string name="wallet_done">Done</string>
     <string name="wallet_send_to_hint_fiber">%1$s address</string>
     <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>
     <string name="wallet_send_to_hint_eth">0x… address</string>
