@@ -395,7 +395,7 @@ private fun MailRow(
         } else {
             Box(
                 Modifier
-                    .size(8.dp)
+                    .size(10.dp)
                     .background(
                         if (unread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                         CircleShape,
@@ -409,6 +409,9 @@ private fun MailRow(
                     displayAddress(if (sent) m.to else m.from),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
+                    // Read mail steps back in color as well as weight: weight
+                    // alone reads as no difference at all on a phone.
+                    color = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -427,6 +430,7 @@ private fun MailRow(
                 m.subject.ifEmpty { stringResource(R.string.mail_no_subject) },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
