@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -55,7 +56,7 @@ func handOffHosted(log *logging.Logger, conn net.Conn, v *Visor, msg clientMsg) 
 		closeConn(log, conn)
 		return true
 	}
-	if err := ln.Hand(conn, dmsg.Addr{PK: origin}); err != nil {
+	if err := ln.Hand(conn, dmsg.Addr{PK: origin, Port: nextHandedPort()}); err != nil {
 		log.WithError(err).WithField("service", pk.String()).Warn("Hosted service did not take the stream")
 		closeConn(log, conn)
 		return true
@@ -112,4 +113,12 @@ func (v *Visor) hostedEntries() []*transport.Entry {
 		return true
 	})
 	return out
+}
+
+// handedPorts numbers handed-over streams the way a dmsg client numbers its
+// ephemeral ports, so two streams from one caller keep distinct addresses.
+var handedPorts atomic.Uint32
+
+func nextHandedPort() uint16 {
+	return uint16(49152 + handedPorts.Add(1)%16384) //nolint:gosec
 }

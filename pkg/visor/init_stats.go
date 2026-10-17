@@ -325,6 +325,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 	// datastore by an order of magnitude — meaningful for visors
 	// running on microSD or other write-sensitive media.
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		Dial:                v.cxoDial,
 		BatchWindow:         10 * time.Second,
 		Logger:              log,
 		DataDir:             dataDir,
@@ -365,6 +366,7 @@ func buildTPListPublisher(v *Visor, log *logging.Logger) *treestore.Publisher {
 	tpdPK, tpdOK := tpdCXOPeer(v)
 	allow := composeFeedAllowlist(v, tpdPK, tpdOK)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		Dial: v.cxoDial,
 		// The tp-list changes only on transport churn; a short window keeps
 		// discovery prompt. Each republish is a single small leaf, so the
 		// fill/eviction churn that plagues the big telemetry Root does not

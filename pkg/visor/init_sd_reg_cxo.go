@@ -244,6 +244,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// known here (we returned early above otherwise).
 	allow := composeFeedAllowlist(v, sdPK, true)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		Dial:                v.cxoDial,
 		DmsgPort:            skyenv.DmsgVisorSDRegCXOPort,
 		BatchWindow:         sdRegBatchWindow,
 		Logger:              log,

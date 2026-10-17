@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -234,6 +235,10 @@ type PubConfig struct {
 
 	// DropPublishedLeaves, see Config.DropPublishedLeaves.
 	DropPublishedLeaves bool
+
+	// Dial, when set, is how the node dials peers instead of a plain dmsg
+	// dial (cxotransport.DMSGFactory.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -281,6 +286,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		port = cxotransport.DefaultCXOPort
 	}
 	factory := cxotransport.NewDMSGFactory(dmsgC, port)
+	factory.Dial = conf.Dial
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err

@@ -38,6 +38,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -228,6 +229,9 @@ type Deps struct {
 	// startup or when DMSG is disabled). Called fresh on each sync so
 	// the manager always uses the current client.
 	Dmsg func() *dmsg.Client
+	// Dial, when set, is how subscribers reach publishers instead of a plain
+	// dmsg dial (treestore.SubConfig.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
 	// FeedSpec resolves a feed to its (publisher PK, CXO dmsg port,
 	// TreeStore path prefix). Returns an error when the publisher
 	// isn't configured — meaning the feed can never sync until the
@@ -1036,6 +1040,7 @@ func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error 
 	sub, err := treestore.NewSubscriber(dmsgC, peerPK, treestore.SubConfig{
 		InMemoryDB: true,
 		DmsgPort:   port,
+		Dial:       m.deps.Dial,
 	})
 	if err != nil {
 		return fmt.Errorf("create subscriber: %w", err)
@@ -1158,6 +1163,7 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	sub, err := treestore.NewSubscriber(dmsgC, peerPK, treestore.SubConfig{
 		InMemoryDB: true,
 		DmsgPort:   port,
+		Dial:       m.deps.Dial,
 	})
 	if err != nil {
 		f.recordErr(fmt.Errorf("create subscriber: %w", err))
