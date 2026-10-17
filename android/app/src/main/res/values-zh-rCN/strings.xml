@@ -912,6 +912,11 @@
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
     <string name="mail_via_hint">完整地址按原样发送；这里为联系人和公钥选择网络。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
+    <string name="mail_no_contacts">还没有联系人。打开一封邮件，保存发件人。</string>
+    <string name="mail_save_contact">保存联系人</string>
+    <string name="mail_contact_name">名称</string>
+    <string name="mail_contact_saved">联系人已保存</string>
+    <string name="mail_contact_failed">无法保存联系人：%1$s</string>
     <string name="mail_add_cc">添加抄送</string>
     <string name="mail_subject">主题</string>
     <string name="mail_body">正文</string>

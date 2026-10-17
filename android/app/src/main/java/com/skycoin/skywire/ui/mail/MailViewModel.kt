@@ -96,6 +96,7 @@ data class MailUiState(
 class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
+    private val skychat = com.skycoin.skywire.api.SkychatApi.get(app)
     private val mutable = MutableStateFlow(MailUiState())
     val uiState: StateFlow<MailUiState> = mutable.asStateFlow()
 
@@ -368,6 +369,33 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             refreshNow()
+        }
+    }
+
+    // --- contacts ---
+
+    /**
+     * Names a public key in the address book every surface shares — compose's
+     * picker, the call screens, chat itself. The book is written through
+     * skychat, so it keeps working there; the in-memory copy moves at once
+     * rather than at the watcher's next rare refresh.
+     */
+    fun saveContact(pk: String, name: String, onDone: () -> Unit = {}) {
+        if (pk.isBlank() || name.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                skychat.setContact(com.skycoin.skywire.core.SkychatProfile.baseUrl(
+                    com.skycoin.skywire.core.SkychatProfile.DEFAULT_PORT,
+                ), pk, name.trim())
+            }.onSuccess {
+                com.skycoin.skywire.core.VoiceCalls.setNames(
+                    com.skycoin.skywire.core.VoiceCalls.addressBook.value + (pk to name.trim()),
+                )
+                mutable.update { it.copy(notice = string(R.string.mail_contact_saved)) }
+                onDone()
+            }.onFailure { e ->
+                mutable.update { it.copy(notice = string(R.string.mail_contact_failed, e.message.orEmpty())) }
+            }
         }
     }
 

@@ -8,8 +8,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -100,6 +103,31 @@ class SkychatApi private constructor(context: Context) {
             }
         }.getOrNull()
     }
+
+    /**
+     * Name a public key in the address book — the same book every surface
+     * reads. An empty name forgets the entry. Throws when the book cannot be
+     * reached, which for a writer is the fact worth reporting rather than
+     * papering over: chat not running is a state the user can fix.
+     */
+    suspend fun setContact(baseUrl: String, pk: String, name: String): Unit = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(
+            ContactUpdate.serializer(),
+            ContactUpdate(pk, name),
+        )
+        client.newCall(
+            Request.Builder()
+                .url(baseUrl.trimEnd('/') + "/contacts")
+                .header("Authorization", authorization())
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build(),
+        ).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("save contact failed (${resp.code})")
+        }
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class ContactUpdate(val pk: String, val name: String)
 
     @kotlinx.serialization.Serializable
     private data class UnreadCount(val unread: Int = 0)

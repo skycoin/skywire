@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Warning
@@ -515,6 +516,30 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
                             Text(stringResource(R.string.mail_reply))
                         }
                     }
+                    // The sender's key came authenticated with the message, so
+                    // saving needs no typing: name them once and every picker,
+                    // call screen and chat shows the name.
+                    val contactPk = m.peerPk.ifEmpty {
+                        SkymailAddress.pkOfAddress(m.from.substringAfter('<').substringBefore('>')) ?: ""
+                    }
+                    if (open.folder == MailFolder.INBOX && contactPk.isNotEmpty()) {
+                        var saveContact by remember { mutableStateOf(false) }
+                        OutlinedButton(onClick = { saveContact = true }) {
+                            Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.mail_save_contact))
+                        }
+                        if (saveContact) {
+                            SaveContactDialog(
+                                preset = displayAddress(m.from).takeIf { '<' in m.from } ?: "",
+                                onSave = { name ->
+                                    saveContact = false
+                                    viewModel.saveContact(contactPk, name)
+                                },
+                                onDismiss = { saveContact = false },
+                            )
+                        }
+                    }
                     OutlinedButton(onClick = { confirmDelete = true }, enabled = !state.busy) {
                         Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -556,10 +581,36 @@ private fun HeaderLine(label: Int, value: String) {
     }
 }
 
+/** Names a key for the shared address book; a blank name never saves. */
+@Composable
+private fun SaveContactDialog(preset: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(preset) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.mail_save_contact)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.mail_contact_name)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.mail_save_contact))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
+}
+
 /** What the transport proved about the sender: the From line can be typed by anyone. */
 @Composable
-private fun VerifiedLine(verified: Boolean, peerPk: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 56.dp, bottom = 4.dp)) {
+private fun VerifiedLine(verified: Boolean, peerPk: String) {    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 56.dp, bottom = 4.dp)) {
         Icon(
             if (verified) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
             contentDescription = null,
@@ -605,12 +656,26 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                 supportingText = { Text(stringResource(R.string.mail_to_hint)) },
                 modifier = Modifier.weight(1f),
             )
-            if (book.isNotEmpty()) {
-                Box {
-                    IconButton(onClick = { pickContact = true }) {
-                        Icon(Icons.Rounded.Contacts, contentDescription = stringResource(R.string.mail_contacts))
-                    }
-                    DropdownMenu(expanded = pickContact, onDismissRequest = { pickContact = false }) {
+            // The picker is the way out of copy-paste, so it stays reachable
+            // even with nothing to pick yet.
+            Box {
+                IconButton(onClick = { pickContact = true }) {
+                    Icon(Icons.Rounded.Contacts, contentDescription = stringResource(R.string.mail_contacts))
+                }
+                DropdownMenu(expanded = pickContact, onDismissRequest = { pickContact = false }) {
+                    if (book.isEmpty()) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.mail_no_contacts),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            enabled = false,
+                            onClick = {},
+                        )
+                    } else {
                         book.entries.sortedBy { it.value.lowercase() }.forEach { (pk, name) ->
                             DropdownMenuItem(
                                 text = { Text(name) },
