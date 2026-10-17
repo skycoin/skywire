@@ -158,11 +158,9 @@ func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
 			es.running, es.startErr, es.current, es.cancel = true, nil, svc, cancel
 			es.mu.Unlock()
 			es.log.WithField("pk", es.ownPK).Info("Embedded service started on its own")
-			if !es.ownPK.Null() {
-				v.hostedKeys.Store(es.ownPK, struct{}{})
-			}
+			v.hostService(es)
 			err = svc.Run(runCtx)
-			v.hostedKeys.Delete(es.ownPK)
+			v.unhostService(es.ownPK)
 		}
 		cancel()
 		es.mu.Lock()

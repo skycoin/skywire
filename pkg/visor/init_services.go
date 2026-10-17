@@ -841,6 +841,8 @@ type serverReply struct {
 	// PK echoes clientMsg.PK once its stream is handed to that service, so
 	// a caller can tell a host that understood the request from an older one.
 	PK string `json:"pk,omitempty"`
+	// Sig is the service's signature naming this visor as its host.
+	Sig string `json:"sig,omitempty"`
 }
 
 func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {
