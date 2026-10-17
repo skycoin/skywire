@@ -149,3 +149,48 @@ func TestPrivacy_CallsFromBlockedPeersAreDeclined(t *testing.T) {
 		t.Errorf("declined = %v, want [c1]", fake.declined)
 	}
 }
+
+func TestPrivacy_ForgetRevokesAcceptance(t *testing.T) {
+	withPrivacyStore(t)
+	withContactStore(t)
+	if err := privacyStore.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
+	peer, _ := cipher.GenerateKeyPair()
+
+	// The once-agreed state: named and accepted, so messages are allowed.
+	if _, err := contactStore.Set(peer.Hex(), "Named"); err != nil {
+		t.Fatal(err)
+	}
+	if err := privacyStore.Accept(peer.Hex()); err != nil {
+		t.Fatal(err)
+	}
+	if got := inboundVerdict(peer.Hex()); got != privacy.Allow {
+		t.Fatalf("named and accepted: %v, want Allow", got)
+	}
+
+	// Forgetting the contact ends the consent: the next message prompts.
+	rr := httptest.NewRecorder()
+	contactsHandler(rr, httptest.NewRequest(http.MethodPost, "/contacts",
+		strings.NewReader(`{"pk":"`+peer.Hex()+`","name":""}`)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("forget: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := inboundVerdict(peer.Hex()); got != privacy.Request {
+		t.Fatalf("after forget: %v, want Request", got)
+	}
+
+	// A block is not softened by forgetting.
+	if err := privacyStore.SetBlocked(peer.Hex(), true); err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	contactsHandler(rr, httptest.NewRequest(http.MethodPost, "/contacts",
+		strings.NewReader(`{"pk":"`+peer.Hex()+`","name":""}`)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("forget again: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := inboundVerdict(peer.Hex()); got != privacy.Reject {
+		t.Fatalf("blocked stays blocked: %v, want Reject", got)
+	}
+}

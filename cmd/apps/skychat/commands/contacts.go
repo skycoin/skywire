@@ -85,6 +85,14 @@ func contactsHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		// Forgetting someone ends the standing consent too: without this the
+		// acceptance outlives the contact, and a later first message is let
+		// in without ever prompting again — the blacklist the only lever left.
+		if stored == "" && privacyStore != nil {
+			if err := privacyStore.Unaccept(body.PK); err != nil {
+				appLog("Privacy: unaccept %s: %v", body.PK, err)
+			}
+		}
 		writeJSON(w, map[string]string{"pk": body.PK, "name": stored})
 	default:
 		http.Error(w, "GET or POST only", http.StatusMethodNotAllowed)
