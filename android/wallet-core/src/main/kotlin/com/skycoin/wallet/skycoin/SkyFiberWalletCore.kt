@@ -7,6 +7,7 @@ import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.TxRecord
+import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletBalance
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.WalletException
@@ -89,6 +90,23 @@ class SkyFiberWalletCore(
         )
     }
 
+    /** The confirmed unspent outputs a coin picker can offer. */
+    override suspend fun utxos(book: AddressBook): List<UtxoRecord> {
+        val outputs = node.outputs(book.all())
+        val outgoing = outputs.outgoingOutputs.map { it.hash }.toHashSet()
+        return outputs.headOutputs
+            .filter { it.hash !in outgoing }
+            .map {
+                UtxoRecord(
+                    uxid = it.hash,
+                    address = it.address,
+                    coins = Amounts.parse(it.coins, DROPLET_EXPONENT) ?: 0uL,
+                    hours = it.calculatedHours,
+                )
+            }
+            .sortedByDescending { it.coins }
+    }
+
     override suspend fun history(book: AddressBook): List<TxRecord> {
         val ours = book.all().toHashSet()
         return node.transactions(book.all()).mapNotNull { entry ->
@@ -136,6 +154,8 @@ class SkyFiberWalletCore(
         feeRate: Int?,
         sendMax: Boolean,
         fromAddress: String?,
+        inputs: Set<String>?,
+        hoursTo: ULong?,
     ): TxPlan {
         if (!validateAddress(toAddress)) throw WalletException.InvalidAddress()
 
@@ -145,9 +165,14 @@ class SkyFiberWalletCore(
         val outputs = node.outputs(book.all())
         val outgoing = outputs.outgoingOutputs.map { it.hash }.toHashSet()
         val spendable = outputs.headOutputs
-            // A chosen from-address spends only what it holds; the other
-            // addresses' outputs never enter the selection.
-            .filter { it.hash !in outgoing && (fromAddress == null || it.address == fromAddress) }
+            // A chosen from-address spends only what it holds, and picked
+            // outputs crowd out the automatic choice; the rest never enter
+            // the selection.
+            .filter {
+                it.hash !in outgoing &&
+                    (fromAddress == null || it.address == fromAddress) &&
+                    (inputs == null || it.hash in inputs)
+            }
             .map {
             SkycoinCreate.UxBalance(
                 hash = it.hash.hexToBytes(),
@@ -182,7 +207,7 @@ class SkyFiberWalletCore(
         val created = try {
             SkycoinCreate.create(
                 unspents = spendable,
-                to = listOf(SkycoinCreate.Destination(toAddress, sendAmount)),
+                to = listOf(SkycoinCreate.Destination(toAddress, sendAmount, hoursTo)),
                 changeAddress = book.receive.first(),
                 burnFactor = params.burnFactor,
             )

@@ -14,6 +14,7 @@ import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.TxPlan
+import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,12 @@ data class SendState(
     val sendMax: Boolean = false,
     /** The one address the send spends from; null = the whole wallet. */
     val fromAddress: String? = null,
+    /** Unspent outputs picked to fund the send; empty = automatic. */
+    val inputs: Set<String> = emptySet(),
+    /** The unspent outputs as last loaded for the picker. */
+    val utxos: List<UtxoRecord> = emptyList(),
+    /** Hours for the recipient, digits only; blank = automatic split. */
+    val hoursText: String = "",
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -348,6 +355,28 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetSend() = mutable.update { it.copy(send = SendState()) }
 
+    // --- coin control (fiber) ---
+
+    /** Loads the unspent outputs for the picker; keeps the last list on failure. */
+    fun loadUtxos() {
+        val active = mutable.value.active ?: return
+        if (mutable.value.coin.kind != CoinKind.SKY_FIBER) return
+        action {
+            val list = runCatching { repo.utxos(active.id) }
+                .getOrDefault(mutable.value.send.utxos)
+            mutable.update { it.copy(send = it.send.copy(utxos = list)) }
+        }
+    }
+
+    fun toggleInput(uxid: String) = updateSend { s ->
+        s.copy(
+            inputs = if (uxid in s.inputs) s.inputs - uxid else s.inputs + uxid,
+            plan = null,
+        )
+    }
+
+    fun clearInputs() = updateSend { it.copy(inputs = emptySet(), plan = null) }
+
     fun loadFeePresets() {
         val coin = mutable.value.coin
         if (coin.kind != CoinKind.BTC) return
@@ -364,6 +393,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun sendMaxAmount(): ULong {
         val st = mutable.value
         val snapshot = st.snapshot ?: return 0uL
+        // Picked outputs cap the send at what they hold; a fiber fee burns
+        // hours, not coins.
+        if (st.send.inputs.isNotEmpty()) {
+            return st.send.utxos.filter { it.uxid in st.send.inputs }.sumOf { it.coins }
+        }
         // With a from-address chosen, Max is what that address holds. The
         // output count is an estimate on Bitcoin — the plan recomputes the
         // true fee from the real inputs either way.
@@ -391,6 +425,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         }
+        val hoursTo = send.hoursText.trim().takeIf { it.isNotEmpty() }?.let { text ->
+            text.toULongOrNull() ?: run {
+                mutable.update {
+                    it.copy(send = send.copy(planError = app.getString(R.string.wallet_send_invalid_hours)))
+                }
+                return
+            }
+        }
         mutable.update { it.copy(send = send.copy(planning = true, planError = null)) }
         action {
             try {
@@ -401,6 +443,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     feeRate = if (coin.kind == CoinKind.BTC) send.feeRate else null,
                     sendMax = send.sendMax,
                     fromAddress = send.fromAddress,
+                    inputs = send.inputs,
+                    hoursTo = hoursTo,
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()

@@ -640,6 +640,15 @@
     <string name="wallet_send_to">收款方</string>
     <string name="wallet_send_from">付款地址</string>
     <string name="wallet_send_from_wallet">整个钱包</string>
+    <string name="wallet_send_coins">未花费输出</string>
+    <string name="wallet_send_coins_auto">自动</string>
+    <string name="wallet_send_coins_picked">已选 %1$d / %2$d 个输出 · %3$s</string>
+    <string name="wallet_send_coins_none">没有可选的未花费输出。</string>
+    <string name="wallet_utxo_line">%1$s 币时 · %2$s</string>
+    <string name="wallet_send_hours">发送的币时</string>
+    <string name="wallet_send_hours_hint">留空时自动：燃烧后剩余币时的一半随币发送</string>
+    <string name="wallet_send_invalid_hours">币时数值无效。</string>
+    <string name="wallet_done">完成</string>
     <string name="wallet_send_to_hint_fiber">%1$s 地址</string>
     <string name="wallet_send_to_hint_btc">bc1… 或 1… 开头的地址</string>
     <string name="wallet_send_to_hint_eth">0x… 开头的地址</string>

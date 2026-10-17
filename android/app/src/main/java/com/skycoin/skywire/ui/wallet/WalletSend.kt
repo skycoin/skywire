@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -85,6 +89,7 @@ fun WalletSendScreen(
     val context = LocalContext.current
     var reviewSheet by remember { mutableStateOf(false) }
     var fromSheet by remember { mutableStateOf(false) }
+    var coinsSheet by remember { mutableStateOf(false) }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { raw ->
@@ -202,6 +207,50 @@ fun WalletSendScreen(
                 }
             }
 
+            // Coin control, fiber only: which unspent outputs fund the send.
+            if (coin.kind == CoinKind.SKY_FIBER) {
+                SectionLabel(
+                    stringResource(R.string.wallet_send_coins),
+                    modifier = Modifier.padding(top = 26.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 9.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable {
+                            viewModel.loadUtxos()
+                            coinsSheet = true
+                        }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        if (send.inputs.isEmpty()) {
+                            stringResource(R.string.wallet_send_coins_auto)
+                        } else {
+                            stringResource(
+                                R.string.wallet_send_coins_picked,
+                                send.inputs.size,
+                                send.utxos.size,
+                                coin.amountText(send.utxos.filter { it.uxid in send.inputs }.sumOf { it.coins }),
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 26.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -283,6 +332,38 @@ fun WalletSendScreen(
                 else -> FiberFeeCard(viewModel)
             }
 
+            // Coin hours to the recipient: blank keeps the automatic split,
+            // a number sends exactly that many.
+            if (coin.kind == CoinKind.SKY_FIBER) {
+                SectionLabel(
+                    stringResource(R.string.wallet_send_hours),
+                    modifier = Modifier.padding(top = 26.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 9.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextField(
+                        value = send.hoursText,
+                        onValueChange = { v ->
+                            viewModel.updateSend {
+                                it.copy(hoursText = v.filter { c -> c.isDigit() }.take(18), plan = null)
+                            }
+                        },
+                        placeholder = { Text(stringResource(R.string.wallet_send_hours_hint)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = transparentFieldColors(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
             send.planError?.let { err ->
                 Text(
                     err,
@@ -313,6 +394,13 @@ fun WalletSendScreen(
         FromSheet(
             viewModel = viewModel,
             onDismiss = { fromSheet = false },
+        )
+    }
+
+    if (coinsSheet) {
+        UtxoSheet(
+            viewModel = viewModel,
+            onDismiss = { coinsSheet = false },
         )
     }
 
@@ -407,6 +495,85 @@ private fun FromSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UtxoSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+    val send = state.send
+    val coin = state.coin
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                stringResource(R.string.wallet_send_coins),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            if (send.utxos.isEmpty()) {
+                Text(
+                    stringResource(R.string.wallet_send_coins_none),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                )
+            } else {
+                LazyColumn(
+                    Modifier
+                        .heightIn(max = 420.dp)
+                        .padding(top = 4.dp)
+                ) {
+                    items(send.utxos, key = { it.uxid }) { u ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.toggleInput(u.uxid) }
+                                .padding(horizontal = 20.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = u.uxid in send.inputs, onCheckedChange = null)
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .padding(start = 6.dp)
+                            ) {
+                                Text(
+                                    coin.amountText(u.coins),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    stringResource(R.string.wallet_utxo_line, u.hours.toString(), shortAddress(u.address)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = viewModel::clearInputs,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                ) {
+                    Text(stringResource(R.string.wallet_send_coins_auto), fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                ) {
+                    Text(stringResource(R.string.wallet_done), fontWeight = FontWeight.Bold)
                 }
             }
         }

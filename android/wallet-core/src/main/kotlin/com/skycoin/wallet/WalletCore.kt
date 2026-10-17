@@ -32,6 +32,9 @@ interface WalletCore {
 
     suspend fun balance(book: AddressBook): WalletBalance
 
+    /** The wallet's unspent outputs; empty where a chain has no coin control. */
+    suspend fun utxos(book: AddressBook): List<UtxoRecord> = emptyList()
+
     suspend fun history(book: AddressBook): List<TxRecord>
 
     /** Bitcoin fee-rate presets in sat/vB; null on chains that burn hours instead. */
@@ -47,6 +50,10 @@ interface WalletCore {
      *
      * @param fromAddress spends only outputs held by this one address; null
      * spends from the whole wallet. Ignored where a wallet is one address.
+     * @param inputs hashes of the unspent outputs to spend; null chooses
+     * them automatically. Fiber chains only.
+     * @param hoursTo hours the destination receives; null splits them
+     * automatically. Fiber chains only.
      */
     suspend fun buildTx(
         seed: String,
@@ -56,6 +63,8 @@ interface WalletCore {
         feeRate: Int?,
         sendMax: Boolean,
         fromAddress: String? = null,
+        inputs: Set<String>? = null,
+        hoursTo: ULong? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
@@ -68,6 +77,15 @@ interface WalletCore {
 class AddressBook(val receive: List<String>, val change: List<String>) {
     fun all(): List<String> = receive + change
 }
+
+/** One unspent output, as a coin picker shows it. Fiber chains only. */
+class UtxoRecord(
+    val uxid: String,
+    val address: String,
+    val coins: ULong,
+    /** Calculated hours at the chain head. */
+    val hours: ULong,
+)
 
 class WalletBalance(
     /** Spendable now (confirmed, minus outputs already spent by pending txns). */
