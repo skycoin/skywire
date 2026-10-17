@@ -965,3 +965,49 @@ func TestRegisterPairHTTPHandlers_DisabledRegistersNothing(t *testing.T) {
 		})
 	}
 }
+
+func TestPairing_MakesTheContactMutual(t *testing.T) {
+	withContactStore(t)
+	peer := mustPK(t)
+
+	// The initiator's book: pairing with a key is naming it.
+	withPairHandlerEnv(t, &pairHandlersAPI{})
+	rr := httptest.NewRecorder()
+	pairRootHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost, "/pair",
+		strings.NewReader(`{"peer_pk":"`+peer.Hex()+`"}`)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("post /pair: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := contactStore.Name(peer.Hex()); got != shortHexPK(peer.Hex()) {
+		t.Fatalf("initiator's book has %q, want the short key", got)
+	}
+
+	// The accepter's book: consent to pair is naming too.
+	other := mustPK(t)
+	if _, err := contactStore.Set(other.Hex(), "Already Named"); err != nil {
+		t.Fatal(err)
+	}
+	pendingPut(other)
+	rr = httptest.NewRecorder()
+	pairInvitesItemHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost,
+		"/pair/invites/"+other.Hex()+"/accept", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("accept: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := contactStore.Name(other.Hex()); got != "Already Named" {
+		t.Fatalf("an existing name was overwritten: %q", got)
+	}
+
+	// A decline adds nothing.
+	stranger := mustPK(t)
+	pendingPut(stranger)
+	rr = httptest.NewRecorder()
+	pairInvitesItemHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost,
+		"/pair/invites/"+stranger.Hex()+"/decline", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("decline: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := contactStore.Name(stranger.Hex()); got != "" {
+		t.Fatalf("a declined peer entered the book as %q", got)
+	}
+}
