@@ -31,6 +31,10 @@ const (
 	// These transports carry only control-plane traffic and are excluded
 	// from data route path calculations by the route finder.
 	LabelSetup Label = "setup"
+
+	// LabelSysFeed marks a local link to a service that takes its registrations
+	// off the system feed of the transport discovery on the same host.
+	LabelSysFeed Label = "sysfeed"
 )
 
 // Entry is the unsigned representation of a Transport.

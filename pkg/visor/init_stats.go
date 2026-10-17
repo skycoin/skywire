@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -198,7 +199,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 			} else {
 				pubStats = &v.tpdAnnounce
 			}
-			go runAnnounceLoop(v.ctx, pub, tpdPK, log, pubStats)
+			go runAnnounceLoop(v.ctx, pub, tpdPK, log, pubStats, &v.sysFeedAnnounceOK)
 			listPub := pub
 			if tplistPub != nil {
 				listPub = tplistPub
@@ -208,7 +209,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 			// port (DmsgVisorTPListCXOPort) — this is the conn TPD's second
 			// aggregator accepts and fills the tiny discovery Root over.
 			if tplistPub != nil {
-				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log, tplistStats)
+				go runAnnounceLoop(v.ctx, tplistPub, tpdPK, log, tplistStats, nil)
 			}
 		} else {
 			log.Debug("Stats: no Transport.DiscoveryDmsg PK; skipping CXO announce loop")
@@ -225,21 +226,22 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 // negligible overhead.
 const announceInterval = 30 * time.Second
 
-func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats) {
+// lastOK, when set, takes the time of each successful announce in Unix ns.
+func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats, lastOK *atomic.Int64) {
 	t := time.NewTicker(announceInterval)
 	defer t.Stop()
-	announceOnce(ctx, pub, tpdPK, log, stats)
+	announceOnce(ctx, pub, tpdPK, log, stats, lastOK)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			announceOnce(ctx, pub, tpdPK, log, stats)
+			announceOnce(ctx, pub, tpdPK, log, stats, lastOK)
 		}
 	}
 }
 
-func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats) {
+func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger, stats *tpdAnnounceStats, lastOK *atomic.Int64) {
 	// Per-attempt deadline bounds the dmsg dial: announceInterval is
 	// 30s, but the publisher's CXO ConnectPK can block on a half-dead
 	// transport much longer than that. Cap each attempt at half the
@@ -248,6 +250,9 @@ func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.Pu
 	defer cancel()
 	err := pub.AnnounceTo(dctx, tpdPK)
 	stats.record(tpdPK, err)
+	if err == nil && lastOK != nil {
+		lastOK.Store(time.Now().UnixNano())
+	}
 	if err != nil {
 		// Trace-level: this races with TPD start-up and DMSG
 		// readiness; transient failures are normal.
