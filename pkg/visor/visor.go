@@ -472,6 +472,9 @@ type Visor struct {
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux
+	// hostedKeys holds the keys of the own-key services running in this visor,
+	// which handleServerConn hands streams to. cipher.PubKey -> struct{}.
+	hostedKeys   sync.Map
 	appDirectMux *transport.VStreamMux // direct skywire-network app dials (route ID 0); diag only
 	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
 	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
