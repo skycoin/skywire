@@ -34,6 +34,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -43,6 +44,10 @@ import (
 // allowed to issue leaf certs for. The leading dot means "any
 // subdomain of"; bare TLDs themselves are not matched.
 var DefaultPermittedDomains = []string{".skynet", ".dmsg", ".skysocks"}
+
+// PermittedIPRange is the only range a constrained CA may name by IP. It is
+// SkyDNS's range (skydns.Range), which holds the resolver's DoH address.
+const PermittedIPRange = "198.18.0.0/15"
 
 // CAOptions configures GenerateCA.
 type CAOptions struct {
@@ -106,6 +111,11 @@ func GenerateCA(opts CAOptions) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	if !o.Unconstrained {
 		tmpl.PermittedDNSDomains = o.PermittedDomains
 		tmpl.PermittedDNSDomainsCritical = true
+		_, ipRange, err := net.ParseCIDR(PermittedIPRange)
+		if err != nil {
+			return nil, nil, err
+		}
+		tmpl.PermittedIPRanges = []*net.IPNet{ipRange}
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
