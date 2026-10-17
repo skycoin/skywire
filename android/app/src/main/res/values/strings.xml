@@ -628,6 +628,14 @@
     <string name="wallet_node_field">Node address</string>
     <string name="wallet_node_save">Use this node</string>
     <string name="wallet_node_default">Go back to %1$s</string>
+    <string name="wallet_node_list_hint">Requests try these addresses in order — the first is the highest priority, and the shipped node is the fallback.</string>
+    <string name="wallet_node_add">Add node</string>
+    <string name="wallet_node_shipped">Shipped · fallback</string>
+    <string name="wallet_node_duplicate">That address is already in the list.</string>
+    <string name="wallet_node_invalid">Not an http(s) address.</string>
+    <string name="wallet_node_remove">Remove this node</string>
+    <string name="wallet_node_up">Move earlier, higher priority</string>
+    <string name="wallet_node_down">Move later, lower priority</string>
     <string name="wallet_node_encrypted">Encrypted in transit. A node still sees which addresses you ask about together, but nobody else on the way does.</string>
     <string name="wallet_node_cleartext">Not encrypted. Everyone between this phone and that address sees your whole address list and its balances. Your coins stay safe — keys never leave the device — but the addresses are linked to each other for anyone watching.</string>
     <string name="wallet_node_body_indexer">Balances, fees and broadcasts for %1$s go to the node, and its transaction history is read from the indexer. Change them if the ones shipped with the app cannot be reached from where you are, or if you run your own.</string>

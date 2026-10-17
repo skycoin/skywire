@@ -27,6 +27,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -81,7 +82,7 @@ class WalletRepository private constructor(private val context: Context) {
      * value the network calls use.
      */
     fun coins(): Flow<List<CoinSpec>> = seeds.store.data.map { prefs ->
-        val nodes = urlsOf(prefs, KEY_NODE_URLS)
+        val nodes = nodeListsOf(prefs, KEY_NODE_URLS)
         val indexers = urlsOf(prefs, KEY_INDEXER_URLS)
         shippedCoins(prefs).map { it.withNodeOverride(nodes, indexers) }
     }
@@ -91,8 +92,20 @@ class WalletRepository private constructor(private val context: Context) {
         shippedCoins(prefs).associateBy { it.id }
     }
 
-    /** The node addresses the user has set, by coin id. */
-    fun nodeUrls(): Flow<Map<String, String>> = seeds.store.data.map { urlsOf(it, KEY_NODE_URLS) }
+    /** The user's node addresses, by coin id, in their priority order. */
+    fun nodeUrls(): Flow<Map<String, List<String>>> =
+        seeds.store.data.map { nodeListsOf(it, KEY_NODE_URLS) }
+
+    /** A stored list: newline-joined, so a value from the single-node era is a
+     *  list of one and no migration is owed. */
+    private fun nodeListsOf(prefs: Preferences, key: Preferences.Key<String>): Map<String, List<String>> =
+        prefs[key]?.let {
+            runCatching {
+                json.decodeFromString(MapSerializer(String.serializer(), String.serializer()), it)
+            }.getOrNull()
+        }?.mapValues { (_, joined) ->
+            joined.split('\n').map(String::trim).filter(String::isNotEmpty)
+        } ?: emptyMap()
 
     private fun urlsOf(prefs: Preferences, key: Preferences.Key<String>): Map<String, String> =
         prefs[key]?.let {
@@ -131,14 +144,30 @@ class WalletRepository private constructor(private val context: Context) {
      * someone wait out a timer set against it would be answering the wrong
      * question.
      */
-    suspend fun setNodeUrl(coinId: String, url: String, indexerUrl: String? = null) {
-        val node = checkedUrl(url)
+    /**
+     * Set a coin's node addresses, in priority order — the first is asked
+     * first. An empty list hands the coin back to its shipped address.
+     * [indexerUrl] does the same for the Ethereum family's history indexer;
+     * null leaves it as it is.
+     *
+     * Any address scan waiting on a back-off is released: the whole point of
+     * changing the node is that the old one was not answering, and making
+     * someone wait out a timer set against it would be answering the wrong
+     * question.
+     */
+    suspend fun setNodeUrls(coinId: String, urls: List<String>, indexerUrl: String? = null) {
+        val cleaned = urls.map(::checkedUrl)
         val indexer = indexerUrl?.let(::checkedUrl)
         seeds.store.edit { prefs ->
             // The shipped address is stored as nothing, so a later release that
             // ships another one is not held to this one.
             val shipped = shippedCoins(prefs).firstOrNull { it.id == coinId }
-            putUrl(prefs, KEY_NODE_URLS, coinId, node.takeUnless { it == shipped?.nodeUrl }.orEmpty())
+            putNodeList(
+                prefs,
+                KEY_NODE_URLS,
+                coinId,
+                cleaned.filterNot { it == shipped?.nodeUrl || it.isEmpty() },
+            )
             if (indexer != null) {
                 putUrl(prefs, KEY_INDEXER_URLS, coinId, indexer.takeUnless { it == shipped?.indexerUrl }.orEmpty())
             }
@@ -159,6 +188,20 @@ class WalletRepository private constructor(private val context: Context) {
         val next = urlsOf(prefs, key).toMutableMap()
         if (url.isEmpty()) next.remove(coinId) else next[coinId] = url
         prefs[key] = json.encodeToString(MapSerializer(String.serializer(), String.serializer()), next)
+    }
+
+    /** Stores a coin's ordered list, newline-joined inside the same map. */
+    private fun putNodeList(prefs: MutablePreferences, key: Preferences.Key<String>, coinId: String, urls: List<String>) {
+        val next = nodeListsOf(prefs, key).toMutableMap()
+        if (urls.isEmpty()) next.remove(coinId) else next[coinId] = urls
+        if (next.isEmpty()) {
+            prefs.remove(key)
+        } else {
+            prefs[key] = json.encodeToString(
+                MapSerializer(String.serializer(), String.serializer()),
+                next.mapValues { (_, v) -> v.joinToString("\n") },
+            )
+        }
     }
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
@@ -265,19 +308,29 @@ class WalletRepository private constructor(private val context: Context) {
         }
     }
 
-    fun coreFor(spec: CoinSpec): WalletCore = when (spec.kind) {
-        CoinKind.SKY_FIBER -> SkyFiberWalletCore(spec.nodeUrl, client)
-        CoinKind.BTC -> BtcWalletCore(spec.nodeUrl, client)
-        CoinKind.ETH -> EthWalletCore(spec.nodeUrl, spec.indexerUrl, client)
-        CoinKind.ERC20 -> EthWalletCore(
-            spec.nodeUrl,
-            spec.indexerUrl,
-            client,
-            EthWalletCore.Erc20Token(
-                contract = spec.contract ?: error("token ${spec.id} has no contract address"),
-                decimals = spec.tokenDecimals ?: CoinSpec.DEFAULT_TOKEN_DECIMALS,
-            ),
-        )
+    fun coreFor(spec: CoinSpec): WalletCore {
+        // More than one address to ask: the client walks them in the stored
+        // order, which is what the screen means by priority.
+        val nodes = spec.tryNodes
+        val http = if (nodes.size > 1) {
+            client.newBuilder().addInterceptor(NodeFailover(nodes)).build()
+        } else {
+            client
+        }
+        return when (spec.kind) {
+            CoinKind.SKY_FIBER -> SkyFiberWalletCore(spec.nodeUrl, http)
+            CoinKind.BTC -> BtcWalletCore(spec.nodeUrl, http)
+            CoinKind.ETH -> EthWalletCore(spec.nodeUrl, spec.indexerUrl, http)
+            CoinKind.ERC20 -> EthWalletCore(
+                spec.nodeUrl,
+                spec.indexerUrl,
+                http,
+                EthWalletCore.Erc20Token(
+                    contract = spec.contract ?: error("token ${spec.id} has no contract address"),
+                    decimals = spec.tokenDecimals ?: CoinSpec.DEFAULT_TOKEN_DECIMALS,
+                ),
+            )
+        }
     }
 
     // --- selection ---
@@ -700,5 +753,61 @@ class WalletRepository private constructor(private val context: Context) {
             instance ?: synchronized(this) {
                 instance ?: WalletRepository(context.applicationContext).also { instance = it }
             }
+    }
+}
+
+/**
+ * Walks a coin's node addresses in their stored order: earlier is higher
+ * priority, and a transport failure hands the request to the next one. A node
+ * that just failed is skipped for [SKIP_MS] — a dead first choice costs one
+ * connect timeout, not one per request — and a success puts it back in
+ * rotation.
+ *
+ * Only requests addressed to the first node are moved: the Ethereum family's
+ * indexer rides the same client at its own address and must stay there.
+ */
+private class NodeFailover(bases: List<String>) : okhttp3.Interceptor {
+
+    private val parsed = bases.mapNotNull { it.toHttpUrlOrNull() }
+    private val primaryHost = parsed.firstOrNull()?.host
+
+    override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
+        val request = chain.request()
+        if (parsed.size < 2 || request.url.host != primaryHost) {
+            return chain.proceed(request)
+        }
+        val now = System.currentTimeMillis()
+        val live = parsed.filter { (now - failures.getOrDefault(it.toString(), 0L)) > SKIP_MS }
+            .ifEmpty { parsed }
+        var last: IOException? = null
+        for (base in live) {
+            val shifted = request.newBuilder()
+                .url(
+                    request.url.newBuilder()
+                        .scheme(base.scheme)
+                        .host(base.host)
+                        .port(base.port)
+                        .build(),
+                )
+                .build()
+            try {
+                val response = chain.proceed(shifted)
+                failures.remove(base.toString())
+                return response
+            } catch (e: IOException) {
+                failures[base.toString()] = System.currentTimeMillis()
+                last = e
+            }
+        }
+        throw last ?: IOException("no node of the ${parsed.size} answered")
+    }
+
+    private companion object {
+        /** How long a node that just failed is skipped for. */
+        const val SKIP_MS = 30_000L
+
+        /** Shared across interceptor instances: [WalletRepository.coreFor]
+         *  builds one per call, and a node's death should outlive that. */
+        val failures = java.util.concurrent.ConcurrentHashMap<String, Long>()
     }
 }
