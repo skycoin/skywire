@@ -102,3 +102,20 @@ func TestRegisterFeedConsumerReplace(t *testing.T) {
 	second()
 	require.NotContains(t, FeedConsumerServices(), sysfeed.AddressResolver)
 }
+
+// A service reads the system feed only while an aggregator in the process
+// delivers to it and it is registered under its key.
+func TestConsumesSystemFeed(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	require.False(t, ConsumesSystemFeed(pk))
+	unregister := RegisterFeedConsumer(FeedConsumer{Service: "test-svc", PK: pk, Consume: func(cipher.PubKey, Leaves) {}})
+	defer unregister()
+	require.False(t, ConsumesSystemFeed(pk), "no aggregator delivers to it")
+	stopped := AggregatorRunning()
+	require.True(t, ConsumesSystemFeed(pk))
+	other, _ := cipher.GenerateKeyPair()
+	require.False(t, ConsumesSystemFeed(other))
+	stopped()
+	stopped()
+	require.False(t, ConsumesSystemFeed(pk), "stopping twice counts once")
+}

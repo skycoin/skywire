@@ -1,7 +1,7 @@
 # One CXO feed per visor
 
-Status: implemented on `perf/cxo-one-feed-per-visor`, off until the deployment
-sets `feed_ingest`.
+Status: implemented. A visor moves a registration onto the system feed when
+TPD's transport data shows the service running in TPD's process.
 
 ## Problem
 
@@ -77,18 +77,20 @@ TPD's telemetry aggregator.
 
 ## Visors
 
-`deployment.Services` gains `feed_ingest`, a list of the services that run in
-TPD's process (`dmsg_discovery`, `address_resolver`, `service_discovery`). It
-travels with the rest of the services config (embedded default, conf service
-feed, hourly refresh, `deployment_services.json`).
+A host visor publishes a `local` transport to each service it runs under the
+service's own key (see #5715). While a TPD aggregator in its process delivers
+to a service, the host labels that link `sysfeed`
+(`cxoaggregate.ConsumesSystemFeed`). A visor reads those links from TPD, so it
+needs no configuration to tell which services share TPD's process.
 
 At startup each registration module asks `systemFeedFor`. The registration
 rides the system feed only when all of these hold.
 
 1. The system feed runs (stats enabled and the publisher started).
-2. The visor's TPD and the service are the ones in the deployment doc, so a
-   visor pointed at its own SD keeps the SD feed.
-3. The doc lists the service in `feed_ingest`.
+2. TPD shows a `local` link to the service labeled `sysfeed`, and a `local`
+   link to TPD itself, both from the same host. A visor pointed at its own SD,
+   or at a service in a separate process, keeps that service's own feed, as
+   does a visor that cannot reach TPD at startup.
 
 Then the module writes its leaves through a prefixed sink on the system
 publisher, starts no CXO node, and runs no announce loop. Its keepalive
@@ -124,25 +126,24 @@ through whichever dmsg server it shares with them.
 ## Transition
 
 Old visors keep their per-service feeds whatever the deployment says. New
-visors keep them until the deployment lists the service. New services accept
+visors keep them until TPD shows the service labeled `sysfeed`. New services accept
 both. Nothing on the old path changes, so every mixed state works.
 
 1. Merge. prod01 runs the new services, TPD delivers to consumers, and nothing
    uses that yet. Check `consumers` on TPD's telemetry aggregator in the
    embedded service state.
-2. Set `"feed_ingest": ["dmsg_discovery", "address_resolver",
-   "service_discovery"]` in the conf service's services config on prod01. The
-   conf service must run this code first, or it drops the field. Visors read
-   the field at startup, so develop visors switch on their next restart and apt
-   boards when they take the release that carries this.
+2. prod01 labels its links as soon as it runs this code. Visors check at
+   startup, so develop visors switch on their next restart and apt boards when
+   they take the release that carries this.
 3. Watch the conn counts on the 67, 71 and 72 aggregators fall, the hub's
    delivery count rise, and SD, AR and dmsg discovery entry counts stay level.
-   Rollback is removing the field, which takes effect as visors restart.
+   Rollback is a host that stops labeling, which takes effect as visors
+   restart.
 4. Remove the old path in the second release after the one that ships this,
    or 30 days after it, whichever is later, provided the legacy aggregators
    then hold under 2% of the fleet. That removes the visor's per-service
    publishers, the three regcxo aggregators' own nodes and ports 67, 71 and 72,
-   the `feed_ingest` gate (the visor always uses the system feed), and the
+   the `sysfeed` check (the visor always uses the system feed), and the
    dedicated tp-list feed on 69, which is the same kind of leftover.
 
 ## Expected savings

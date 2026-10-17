@@ -1,11 +1,10 @@
 // Package sysfeed pkg/cxo/sysfeed/sysfeed.go c2-net-cxo
 //
 // Leaf names a visor uses for the registrations it carries on its system feed
-// (dmsg port 50, the telemetry feed TPD aggregates). A deployment that runs
-// dmsg discovery, the address resolver or service discovery in the same
-// process as the transport discovery lists them in Services.FeedIngest, and
-// the visor then publishes their registrations here instead of on a CXO feed
-// of their own. See docs/design/cxo-one-feed-per-visor.md.
+// (dmsg port 50, the telemetry feed TPD aggregates). When dmsg discovery, the address
+// resolver or service discovery runs in the transport discovery's process,
+// its host labels the local link to it transport.LabelSysFeed, and visors
+// then publish its registrations here instead of on a CXO feed of its own. See docs/design/cxo-one-feed-per-visor.md.
 //
 // The leaves sit at the top of the Root, next to "tp-list", so the transport
 // discovery's targeted fetch reads them from the same few objects.
@@ -25,8 +24,8 @@ const (
 	SDPrefix    = Prefix + "sd."
 )
 
-// Names of the services in deployment.Services.FeedIngest, the JSON names of
-// the services' own fields.
+// Names of the services, the JSON names of their fields in the deployment's
+// services config.
 const (
 	DmsgDiscovery    = "dmsg_discovery"
 	AddressResolver  = "address_resolver"

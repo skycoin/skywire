@@ -47,6 +47,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -329,6 +330,8 @@ type Aggregator struct {
 	// hub hands the registration leaves on visors' system feeds to the
 	// services registered in this process (cxoaggregate.RegisterFeedConsumer).
 	hub cxoaggregate.Hub
+	// stopRunning ends this aggregator's count in cxoaggregate.AggregatorRunning.
+	stopRunning atomic.Pointer[func()]
 }
 
 // maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
@@ -548,6 +551,8 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 // run until ctx is canceled or Close is called. Idempotent.
 func (a *Aggregator) Run(ctx context.Context) {
 	a.runOnce.Do(func() {
+		stopped := cxoaggregate.AggregatorRunning()
+		a.stopRunning.Store(&stopped)
 		go a.flushPaced(ctx)
 		go a.runCheckpointFlush(ctx)
 	})
@@ -555,7 +560,12 @@ func (a *Aggregator) Run(ctx context.Context) {
 }
 
 // Close stops the loops and tears down the CXO node. Idempotent.
-func (a *Aggregator) Close() error { return a.core.Close() }
+func (a *Aggregator) Close() error {
+	if f := a.stopRunning.Load(); f != nil {
+		(*f)()
+	}
+	return a.core.Close()
+}
 
 // FeedPK returns the aggregator's own PK — the value visors should
 // dial via dmsgT.ConnectPK to put a conn on this aggregator. By

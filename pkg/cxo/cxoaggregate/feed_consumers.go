@@ -34,6 +34,9 @@ func PackLeaves(pack registry.Pack, n *treestore.TreeNode) Leaves {
 type FeedConsumer struct {
 	// Service is the sysfeed name of the service (sysfeed.DmsgDiscovery, ...).
 	Service string
+	// PK is the service's own key, which its host labels the local link to
+	// it by (see ConsumesSystemFeed).
+	PK cipher.PubKey
 	// Consume takes one visor's leaves for this service, looked up by the
 	// names the service uses on its own feed. reporter is the visor.
 	Consume func(reporter cipher.PubKey, leaf Leaves)
@@ -215,4 +218,32 @@ func RegistrationLeaves(pack registry.Pack, n *treestore.TreeNode) map[string][]
 		out[entry.Name] = entry.Leaf
 	}
 	return out
+}
+
+// aggregators counts the transport discovery aggregators running in this
+// process, the ones that deliver to the registered consumers.
+var aggregators atomic.Int32
+
+// AggregatorRunning records that an aggregator delivering to the consumers
+// runs in this process. The returned func records that it stopped.
+func AggregatorRunning() (stopped func()) {
+	aggregators.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { aggregators.Add(-1) }) }
+}
+
+// ConsumesSystemFeed reports whether the service with key pk takes its
+// registrations off the system feeds an aggregator in this process reads.
+func ConsumesSystemFeed(pk cipher.PubKey) bool {
+	if aggregators.Load() == 0 || pk.Null() {
+		return false
+	}
+	consumers.mu.RLock()
+	defer consumers.mu.RUnlock()
+	for _, e := range consumers.m {
+		if e.c.PK == pk {
+			return true
+		}
+	}
+	return false
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -38,6 +39,7 @@ type serviceHosts struct {
 
 type serviceHost struct {
 	host      cipher.PubKey // null when TPD shows none
+	sysFeed   bool          // the host labels the link LabelSysFeed
 	checked   time.Time
 	failUntil time.Time
 }
@@ -101,21 +103,36 @@ func (v *Visor) serviceHost(ctx context.Context, service cipher.PubKey) (cipher.
 	defer cancel()
 	entries, err := dc.GetTransportsByEdge(lctx, service)
 	if err != nil {
-		v.svcHosts.set(service, cipher.PubKey{})
+		v.svcHosts.set(service, cipher.PubKey{}, false)
 		return cipher.PubKey{}, fmt.Errorf("find the host of %s: %w", service, err)
 	}
-	var host cipher.PubKey
+	var (
+		host    cipher.PubKey
+		sysFeed bool
+	)
 	for _, e := range entries {
 		if e != nil && tptypes.IsLocal(e.Type) {
-			host = e.RemoteEdge(service)
+			host, sysFeed = e.RemoteEdge(service), e.Label == transport.LabelSysFeed
 			break
 		}
 	}
-	v.svcHosts.set(service, host)
+	v.svcHosts.set(service, host, sysFeed)
 	if host.Null() {
 		return cipher.PubKey{}, errNoServiceHost
 	}
 	return host, nil
+}
+
+// serviceFeedHost returns service's host and whether the host labels the link
+// to it LabelSysFeed, meaning the service reads the system feed of the
+// transport discovery in the host's process.
+func (v *Visor) serviceFeedHost(ctx context.Context, service cipher.PubKey) (cipher.PubKey, bool, error) {
+	host, err := v.serviceHost(ctx, service)
+	if err != nil {
+		return host, false, err
+	}
+	h, _ := v.svcHosts.get(service)
+	return host, h.sysFeed, nil
 }
 
 func (s *serviceHosts) get(service cipher.PubKey) (serviceHost, bool) {
@@ -132,14 +149,14 @@ func (s *serviceHosts) get(service cipher.PubKey) (serviceHost, bool) {
 	return h, true
 }
 
-func (s *serviceHosts) set(service, host cipher.PubKey) {
+func (s *serviceHosts) set(service, host cipher.PubKey, sysFeed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.hosts == nil {
 		s.hosts = make(map[cipher.PubKey]serviceHost)
 	}
 	h := s.hosts[service]
-	h.host, h.checked = host, time.Now()
+	h.host, h.sysFeed, h.checked = host, sysFeed, time.Now()
 	s.hosts[service] = h
 }
 

@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,37 +15,43 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// A new visor moves a registration onto the system feed only when the
-// deployment says that service runs in TPD's process and the visor uses the
-// deployment's own TPD and service. Against an older deployment, one with no
-// feed_ingest, it keeps every service's own feed.
-func TestSystemFeedCarries(t *testing.T) {
+// feedVisor is a visor whose TPD is a mock holding the given transports.
+func feedVisor(t *testing.T, entries ...transport.Entry) *Visor {
+	t.Helper()
+	dc := transport.NewDiscoveryMock()
+	for i := range entries {
+		require.NoError(t, dc.RegisterTransportsV3(context.Background(), "", &entries[i]))
+	}
+	tm, err := transport.NewManager(nil, nil, nil, &transport.ManagerConfig{DiscoveryClient: dc}, network.ClientFactory{})
+	require.NoError(t, err)
+	return &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{}}, tpM: tm}
+}
+
+func localLink(host, svc cipher.PubKey, label transport.Label) transport.Entry {
+	return transport.MakeEntry(host, svc, tptypes.LOCAL, label)
+}
+
+// A registration rides the system feed only when TPD shows the service and
+// TPD itself on one host, with the service's link labeled LabelSysFeed.
+func TestReadsSystemFeed(t *testing.T) {
+	host, _ := cipher.GenerateKeyPair()
+	other, _ := cipher.GenerateKeyPair()
 	tpd, _ := cipher.GenerateKeyPair()
 	sd, _ := cipher.GenerateKeyPair()
-	other, _ := cipher.GenerateKeyPair()
-	doc := func(ingest ...string) *visorconfig.Services {
-		return &visorconfig.Services{
-			TransportDiscoveryDmsg: "dmsg://" + tpd.Hex() + ":80",
-			ServiceDiscoveryDmsg:   "dmsg://" + sd.Hex() + ":80",
-			FeedIngest:             ingest,
-		}
-	}
 
-	require.False(t, systemFeedCarries(nil, sysfeed.ServiceDiscovery, tpd, sd))
-	require.False(t, systemFeedCarries(doc(), sysfeed.ServiceDiscovery, tpd, sd), "older deployment")
-	require.True(t, systemFeedCarries(doc(sysfeed.ServiceDiscovery), sysfeed.ServiceDiscovery, tpd, sd))
-	require.False(t, systemFeedCarries(doc(sysfeed.DmsgDiscovery), sysfeed.ServiceDiscovery, tpd, sd), "not listed")
-	require.False(t, systemFeedCarries(doc(sysfeed.ServiceDiscovery), sysfeed.ServiceDiscovery, tpd, other), "own SD")
-	require.False(t, systemFeedCarries(doc(sysfeed.ServiceDiscovery), sysfeed.ServiceDiscovery, other, sd), "own TPD")
-	require.False(t, systemFeedCarries(doc("route_finder"), "route_finder", tpd, sd), "unknown service")
-
-	// Only the clearnet-named field set, as an older services file has it.
-	d := doc(sysfeed.ServiceDiscovery)
-	d.ServiceDiscovery, d.ServiceDiscoveryDmsg = d.ServiceDiscoveryDmsg, ""
-	require.True(t, systemFeedCarries(d, sysfeed.ServiceDiscovery, tpd, sd))
+	require.False(t, feedVisor(t).readsSystemFeed(tpd, sd), "no host in TPD")
+	require.False(t, feedVisor(t, localLink(host, tpd, transport.LabelAutomatic),
+		localLink(host, sd, transport.LabelAutomatic)).readsSystemFeed(tpd, sd), "the host does not deliver to it")
+	require.False(t, feedVisor(t, localLink(host, tpd, transport.LabelAutomatic),
+		localLink(other, sd, transport.LabelSysFeed)).readsSystemFeed(tpd, sd), "not in TPD's process")
+	require.True(t, feedVisor(t, localLink(host, tpd, transport.LabelAutomatic),
+		localLink(host, sd, transport.LabelSysFeed)).readsSystemFeed(tpd, sd))
 }
 
 type recordedLeaves map[string][]byte
@@ -76,7 +83,7 @@ type prefixLeaves struct {
 func (p prefixLeaves) Put(path string, value []byte) error { return p.r.Put(p.prefix+path, value) }
 func (p prefixLeaves) Delete(path string) error            { return p.r.Delete(p.prefix + path) }
 
-// With feed_ingest set, the dmsg discovery entry goes onto the visor's system
+// With a labeled link, the dmsg discovery entry goes onto the visor's system
 // feed under the dmsgd prefix, and the keepalive is unhealthy until TPD has
 // answered an announce and subscribed.
 func TestSystemFeedForDmsgdEntry(t *testing.T) {
@@ -93,19 +100,17 @@ func TestSystemFeedForDmsgdEntry(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
 
-	v := &Visor{conf: &visorconfig.V1{
-		Transport: &visorconfig.Transport{DiscoveryDmsg: "dmsg://" + tpd.Hex() + ":80"},
-	}}
-	v.setSystemCXOPub(pub)
-	v.deploySvcLast = &visorconfig.Services{
-		TransportDiscoveryDmsg: "dmsg://" + tpd.Hex() + ":80",
-		DmsgDiscoveryDmsg:      "dmsg://" + dmsgd.Hex() + ":80",
-	}
+	host, _ := cipher.GenerateKeyPair()
 	log := logging.MustGetLogger("test")
-	_, ok := v.systemFeedFor(sysfeed.DmsgDiscovery, dmsgd, log)
-	require.False(t, ok, "no feed_ingest: the entry keeps its own feed")
+	unlabeled := feedVisor(t, localLink(host, tpd, transport.LabelAutomatic), localLink(host, dmsgd, transport.LabelAutomatic))
+	unlabeled.conf.Transport = &visorconfig.Transport{DiscoveryDmsg: "dmsg://" + tpd.Hex() + ":80"}
+	unlabeled.setSystemCXOPub(pub)
+	_, ok := unlabeled.systemFeedFor(sysfeed.DmsgDiscovery, dmsgd, log)
+	require.False(t, ok, "an unlabeled link: the entry keeps its own feed")
 
-	v.deploySvcLast.FeedIngest = []string{sysfeed.DmsgDiscovery}
+	v := feedVisor(t, localLink(host, tpd, transport.LabelAutomatic), localLink(host, dmsgd, transport.LabelSysFeed))
+	v.conf.Transport = &visorconfig.Transport{DiscoveryDmsg: "dmsg://" + tpd.Hex() + ":80"}
+	v.setSystemCXOPub(pub)
 	route, ok := v.systemFeedFor(sysfeed.DmsgDiscovery, dmsgd, log)
 	require.True(t, ok)
 	entryPublishHook(route.sink, log)(&dmsgdisc.Entry{Static: pk, Version: "0.0.1"})

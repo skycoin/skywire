@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxoregistry "github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
@@ -156,7 +157,8 @@ type CXOAggregating interface {
 // ConsumeSystemFeed registers c to take its registrations off the visors'
 // system feeds that a transport discovery in this process aggregates, until
 // ctx ends. Outside such a process it receives nothing.
-func ConsumeSystemFeed(ctx context.Context, log *logging.Logger, c cxoaggregate.FeedConsumer) {
+func ConsumeSystemFeed(ctx context.Context, log *logging.Logger, pk cipher.PubKey, c cxoaggregate.FeedConsumer) {
+	c.PK = pk
 	unregister := cxoaggregate.RegisterFeedConsumer(c)
 	go func() {
 		<-ctx.Done()
