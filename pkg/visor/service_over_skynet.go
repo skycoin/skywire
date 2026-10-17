@@ -169,3 +169,39 @@ func (v *Visor) cxoDial(ctx context.Context, addr dmsg.Addr) (net.Conn, error) {
 	}
 	return v.dmsgC.Dial(ctx, addr)
 }
+
+// feedRedialEvery spaces the attempts to move one feed's conn off dmsg.
+const feedRedialEvery = 10 * time.Minute
+
+// cxoRedial moves a feed's conn to a deployment service off dmsg once the
+// visor has a skynet path to the service's host. Feeds connect at startup,
+// often before that path exists, and a live conn is otherwise kept for good.
+func (v *Visor) cxoRedial(ctx context.Context, peer cipher.PubKey, addr net.Addr) bool {
+	if _, overDmsg := addr.(dmsg.Addr); !overDmsg || !v.isDmsgServiceKey(peer) {
+		return false
+	}
+	host, err := v.serviceHost(ctx, peer)
+	if err != nil || host == v.conf.PK {
+		return false
+	}
+	return v.feedRedials.due(addr.String())
+}
+
+// feedRedials remembers when each feed conn last tried leaving dmsg.
+type feedRedials struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+func (f *feedRedials) due(key string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if t, ok := f.last[key]; ok && time.Since(t) < feedRedialEvery {
+		return false
+	}
+	if f.last == nil {
+		f.last = make(map[string]time.Time)
+	}
+	f.last[key] = time.Now()
+	return true
+}

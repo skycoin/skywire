@@ -149,3 +149,14 @@ func TestServiceHostLookup(t *testing.T) {
 	_, err = v.dialServiceOverSkynet(context.WithValue(ctx, lookupSkipsSkynet{}, true), svc, 80)
 	require.ErrorIs(t, err, errNoRelay)
 }
+
+func TestFeedRedialsSpaced(t *testing.T) {
+	var f feedRedials
+	require.True(t, f.due("a"))
+	require.False(t, f.due("a"), "one try per feed per interval")
+	require.True(t, f.due("b"), "feeds are spaced separately")
+
+	v := &Visor{}
+	pk, _ := cipher.GenerateKeyPair()
+	require.False(t, v.cxoRedial(context.Background(), pk, &net.TCPAddr{}), "a conn already off dmsg stays")
+}

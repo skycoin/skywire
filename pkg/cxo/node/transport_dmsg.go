@@ -6,6 +6,7 @@ package node
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
@@ -323,4 +324,20 @@ func (d *DMSG) Connections() []cipher.PubKey {
 		pks = append(pks, pk)
 	}
 	return pks
+}
+
+// PeerAddr returns the remote address of the live conn to pk, if there is one.
+func (d *DMSG) PeerAddr(pk cipher.PubKey) (net.Addr, bool) {
+	c := d.getConn(pk)
+	if c == nil || !connIsAlive(c) {
+		return nil, false
+	}
+	return c.GetRemoteAddr(), true
+}
+
+// Drop closes the conn to pk, so the next ConnectPK dials again.
+func (d *DMSG) Drop(pk cipher.PubKey) {
+	if c := d.getConn(pk); c != nil {
+		d.closeConn(c)
+	}
 }

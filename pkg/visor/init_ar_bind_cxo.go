@@ -73,6 +73,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-ar-bind"), skyenv.DmsgVisorARBindCXOPort)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
 		Dial:        v.cxoDial,
+		Redial:      v.cxoRedial,
 		DmsgPort:    skyenv.DmsgVisorARBindCXOPort,
 		BatchWindow: arBindBatchWindow,
 		Logger:      log,
