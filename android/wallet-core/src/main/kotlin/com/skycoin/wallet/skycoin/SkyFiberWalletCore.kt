@@ -135,6 +135,7 @@ class SkyFiberWalletCore(
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String?,
     ): TxPlan {
         if (!validateAddress(toAddress)) throw WalletException.InvalidAddress()
 
@@ -143,7 +144,11 @@ class SkyFiberWalletCore(
 
         val outputs = node.outputs(book.all())
         val outgoing = outputs.outgoingOutputs.map { it.hash }.toHashSet()
-        val spendable = outputs.headOutputs.filter { it.hash !in outgoing }.map {
+        val spendable = outputs.headOutputs
+            // A chosen from-address spends only what it holds; the other
+            // addresses' outputs never enter the selection.
+            .filter { it.hash !in outgoing && (fromAddress == null || it.address == fromAddress) }
+            .map {
             SkycoinCreate.UxBalance(
                 hash = it.hash.hexToBytes(),
                 hashHex = it.hash,

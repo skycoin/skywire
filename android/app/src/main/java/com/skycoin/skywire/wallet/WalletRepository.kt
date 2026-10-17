@@ -625,6 +625,7 @@ class WalletRepository private constructor(private val context: Context) {
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
@@ -636,6 +637,7 @@ class WalletRepository private constructor(private val context: Context) {
             amount = amount,
             feeRate = feeRate,
             sendMax = sendMax,
+            fromAddress = fromAddress?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 

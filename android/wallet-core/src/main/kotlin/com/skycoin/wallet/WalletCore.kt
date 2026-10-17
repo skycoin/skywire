@@ -44,6 +44,9 @@ interface WalletCore {
      * Build and fully price an unsigned transaction. Throws
      * WalletException subtypes on validation problems, IOException when the
      * node cannot be reached.
+     *
+     * @param fromAddress spends only outputs held by this one address; null
+     * spends from the whole wallet. Ignored where a wallet is one address.
      */
     suspend fun buildTx(
         seed: String,
@@ -52,6 +55,7 @@ interface WalletCore {
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */

@@ -670,6 +670,8 @@
 
     <string name="wallet_send_title">Send</string>
     <string name="wallet_send_to">To</string>
+    <string name="wallet_send_from">From</string>
+    <string name="wallet_send_from_wallet">Whole wallet</string>
     <string name="wallet_send_to_hint_fiber">%1$s address</string>
     <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>
     <string name="wallet_send_to_hint_eth">0x… address</string>

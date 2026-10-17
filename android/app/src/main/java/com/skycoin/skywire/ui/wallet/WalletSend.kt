@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -83,6 +84,7 @@ fun WalletSendScreen(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     var reviewSheet by remember { mutableStateOf(false) }
+    var fromSheet by remember { mutableStateOf(false) }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { raw ->
@@ -158,6 +160,48 @@ fun WalletSendScreen(
                 }
             }
 
+            // One account per wallet on the ETH family: there is no second
+            // address a send could leave from.
+            if (!coin.isEthFamily) {
+                SectionLabel(
+                    stringResource(R.string.wallet_send_from),
+                    modifier = Modifier.padding(top = 26.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 9.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { fromSheet = true }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        send.fromAddress?.let(::shortAddress)
+                            ?: stringResource(R.string.wallet_send_from_wallet),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        coin.amountText(
+                            send.fromAddress?.let { state.snapshot?.perAddress?.get(it) }
+                                ?: state.snapshot?.confirmed ?: 0uL,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 26.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -167,7 +211,10 @@ fun WalletSendScreen(
                 Text(
                     stringResource(
                         R.string.wallet_send_available,
-                        coin.amountText(state.snapshot?.confirmed ?: 0uL),
+                        coin.amountText(
+                            send.fromAddress?.let { state.snapshot?.perAddress?.get(it) }
+                                ?: state.snapshot?.confirmed ?: 0uL,
+                        ),
                         coin.ticker,
                     ),
                     style = MaterialTheme.typography.bodySmall,
@@ -262,6 +309,13 @@ fun WalletSendScreen(
         }
     }
 
+    if (fromSheet) {
+        FromSheet(
+            viewModel = viewModel,
+            onDismiss = { fromSheet = false },
+        )
+    }
+
     if (reviewSheet && send.plan != null) {
         ReviewSheet(
             viewModel = viewModel,
@@ -277,6 +331,85 @@ fun WalletSendScreen(
                 }
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FromSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+    val coin = state.coin
+    val wallet = state.active ?: return
+    val per = state.snapshot?.perAddress.orEmpty()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                stringResource(R.string.wallet_send_from),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        viewModel.updateSend { it.copy(fromAddress = null, sendMax = false, planError = null) }
+                        onDismiss()
+                    }
+                    .padding(horizontal = 20.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.wallet_send_from_wallet),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    coin.amountText(state.snapshot?.confirmed ?: 0uL),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            wallet.receiveAddresses.forEachIndexed { i, addr ->
+                val held = per[addr] ?: 0uL
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.updateSend { it.copy(fromAddress = addr, sendMax = false, planError = null) }
+                            onDismiss()
+                        }
+                        .padding(horizontal = 20.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "${i + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(16.dp),
+                    )
+                    Text(
+                        shortAddress(addr),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        coin.amountText(held),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (held > 0uL) FontWeight.Bold else FontWeight.Normal,
+                        color = if (held > 0uL) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

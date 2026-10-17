@@ -160,6 +160,7 @@ class BtcWalletCore(
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String?,
     ): TxPlan {
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
@@ -170,9 +171,11 @@ class BtcWalletCore(
         book.change.forEachIndexed { i, a -> programOf[a] = Triple(1, i, Hashes.hash160(Bip84.key(account, 1, i).pubKey())) }
 
         // Confirmed outputs only — the design promise is that pending funds
-        // cannot be respent from this wallet.
+        // cannot be respent from this wallet. A chosen from-address spends
+        // only what it holds.
         val utxos = ArrayList<Pair<String, BtcEsploraClient.Utxo>>()
         for (addr in book.all()) {
+            if (fromAddress != null && addr != fromAddress) continue
             for (u in api.utxos(addr)) if (u.status.confirmed) utxos.add(addr to u)
         }
         if (utxos.isEmpty()) throw WalletException.InsufficientBalance()
