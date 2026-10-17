@@ -1007,6 +1007,11 @@
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
     <string name="mail_via_hint">Una dirección completa se envía tal cual; esto elige la red para un contacto o una clave. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
+    <string name="mail_no_contacts">Aún no hay contactos. Guarda un remitente desde un mensaje.</string>
+    <string name="mail_save_contact">Guardar contacto</string>
+    <string name="mail_contact_name">Nombre</string>
+    <string name="mail_contact_saved">Contacto guardado</string>
+    <string name="mail_contact_failed">No se pudo guardar el contacto: %1$s</string>
     <string name="mail_add_cc">Añadir Cc</string>
     <string name="mail_subject">Asunto</string>
     <string name="mail_body">Mensaje</string>
