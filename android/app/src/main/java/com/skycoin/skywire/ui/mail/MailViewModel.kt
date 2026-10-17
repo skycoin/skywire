@@ -72,6 +72,8 @@ data class MailUiState(
     val settingsOpen: Boolean = false,
     /** A settings change or a delete is in flight. */
     val busy: Boolean = false,
+    /** Message ids picked in the folder shown, for a batch delete. */
+    val selection: Set<String> = emptySet(),
     /** A one-off line for the snackbar, then cleared. */
     val notice: String? = null,
 ) {
@@ -113,7 +115,8 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectFolder(folder: String) {
-        mutable.update { it.copy(folder = folder) }
+        // A selection belongs to the folder it was made in.
+        mutable.update { it.copy(folder = folder, selection = emptySet()) }
         refresh()
     }
 
@@ -303,6 +306,48 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --- batch selection ---
+
+    fun toggleSelect(id: String) {
+        mutable.update { s ->
+            s.copy(selection = if (id in s.selection) s.selection - id else s.selection + id)
+        }
+    }
+
+    fun selectAll() {
+        val ids = mutable.value.messages?.map { it.id } ?: return
+        mutable.update { it.copy(selection = ids.toSet()) }
+    }
+
+    fun clearSelection() = mutable.update { it.copy(selection = emptySet()) }
+
+    /** Deletes every picked message in the folder shown, one call each. */
+    fun deleteSelected() {
+        val s = mutable.value
+        if (s.busy || s.selection.isEmpty()) return
+        val folder = s.folder
+        val ids = s.selection.toList()
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            val failed = ids.count { id -> runCatching { api.mailDelete(folder, id) }.isFailure }
+            val gone = ids.toSet()
+            mutable.update { st ->
+                st.copy(
+                    busy = false,
+                    selection = emptySet(),
+                    inbox = if (folder == MailFolder.INBOX) st.inbox?.filterNot { it.id in gone } else st.inbox,
+                    sent = if (folder == MailFolder.SENT) st.sent?.filterNot { it.id in gone } else st.sent,
+                    notice = if (failed == 0) {
+                        string(R.string.mail_batch_deleted, ids.size)
+                    } else {
+                        string(R.string.mail_batch_delete_failed, failed, ids.size)
+                    },
+                )
+            }
+            refreshNow()
+        }
+    }
+
     // --- settings ---
 
     fun openSettings() = mutable.update { it.copy(settingsOpen = true) }
@@ -346,7 +391,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         val link = DeepLinks.pendingMail.value ?: return
         val summary = mutable.value.inbox?.firstOrNull { it.id == link.id }
         if (summary != null) {
-            mutable.update { it.copy(folder = MailFolder.INBOX, draft = null, settingsOpen = false) }
+            mutable.update { it.copy(folder = MailFolder.INBOX, draft = null, settingsOpen = false, selection = emptySet()) }
             open(MailFolder.INBOX, summary)
         }
         if (summary != null || mutable.value.inbox != null) DeepLinks.mailLinkHandled(link)

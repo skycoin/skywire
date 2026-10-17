@@ -982,6 +982,13 @@
     <string name="mail_delete">Eliminar</string>
     <string name="mail_delete_confirm">¿Eliminar este mensaje?</string>
     <string name="mail_deleted">Mensaje eliminado</string>
+    <string name="mail_selected_count">%1$d seleccionados</string>
+    <string name="mail_select_all">Seleccionar todo</string>
+    <string name="mail_deselect_all">Deseleccionar todo</string>
+    <string name="mail_delete_selected">Eliminar %1$d</string>
+    <string name="mail_batch_delete_confirm">¿Eliminar %1$d mensajes?</string>
+    <string name="mail_batch_deleted">%1$d mensajes eliminados</string>
+    <string name="mail_batch_delete_failed">No se pudieron eliminar %1$d de %2$d mensajes</string>
     <string name="mail_attachment_saved">%1$s guardado en Descargas</string>
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
