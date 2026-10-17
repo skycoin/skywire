@@ -256,7 +256,11 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun send() {
-        val draft = mutable.value.draft ?: return
+        val s = mutable.value
+        val draft = s.draft ?: return
+        // The button's enabled state lags this update by a frame; a second
+        // tap in that window would send the mail twice.
+        if (s.sending) return
         val to = parseRecipients(draft.to)
         val cc = parseRecipients(draft.cc)
         val bad = (to + cc).filter { it.second == null }.map { it.first }
