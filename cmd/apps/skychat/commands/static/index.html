@@ -11439,6 +11439,22 @@
           : 'offline';
       }
 
+      // _adoptOwner drops the chats and contacts stored for another key, and is true when it reloads.
+      // Keyed by path: the hypervisor serves every visor's page on one origin.
+      _adoptOwner(pk) {
+        const ownerKey = `skychat_owner:${location.pathname}`;
+        let owner = null;
+        try { owner = localStorage.getItem(ownerKey); } catch (e) { return false; }
+        if (owner === pk) return false;
+        if (owner) {
+          const mine = /^(s|r|[ci]_.+|skychat_(contacts|names|pinned|hidden_group|pair_contacts))$/;
+          Object.keys(localStorage).filter(k => mine.test(k)).forEach(k => localStorage.removeItem(k));
+        }
+        if (!this._store(ownerKey, pk) || !owner) return false;
+        location.reload();
+        return true;
+      }
+
       // syncMyPK records this visor's PK (from /status) so group messages
       // echoed back from our own sends can be de-duplicated.
       syncMyPK() {
@@ -11447,6 +11463,7 @@
           .then(s => {
             if (s && s.visor_pk) {
               this.myPK = String(s.visor_pk).toLowerCase();
+              if (this._adoptOwner(this.myPK)) return;
               this._purgeSelfThread(); // one-time cleanup of the old self-mirror bug
               // /status usually beats /profile home, and it already knows the
               // key — so the address in the sidebar appears immediately
