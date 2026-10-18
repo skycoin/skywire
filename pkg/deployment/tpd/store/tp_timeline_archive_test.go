@@ -153,7 +153,7 @@ func TestArchiveTransportTimelinesWaitsForTheDayToSettle(t *testing.T) {
 	require.Equal(t, 1, a.Records)
 }
 
-// With the archive the timeline lives 36 h, and a visor's bitmap for an
+// With the archive the timeline lives 36 h past its day, and a visor's bitmap for an
 // archived day no longer brings its key back; without it nothing changes.
 func TestTimelineTTLAndArchivedIngest(t *testing.T) {
 	s := newTestRedisStore(t)
@@ -176,7 +176,8 @@ func TestTimelineTTLAndArchivedIngest(t *testing.T) {
 	s.SetUptimeArchive(dir)
 	require.NoError(t, s.client.FlushDB(ctx).Err())
 	require.NoError(t, s.RecordTransportHeartbeat(ctx, id, "stcpr", now))
-	require.InDelta(t, tpUptimeTimelineArchivedTTL, ttl(now.Format(MetricsDateFormat)), float64(time.Minute))
+	today := now.Truncate(24 * time.Hour)
+	require.InDelta(t, time.Until(today.Add(24*time.Hour+tpUptimeTimelineArchivedTTL)), ttl(now.Format(MetricsDateFormat)), float64(time.Minute))
 
 	// Not archived yet: the ingest is kept.
 	require.NoError(t, s.IngestTransportTimeline(ctx, id, old, bm))
@@ -197,4 +198,31 @@ func TestTimelineTTLAndArchivedIngest(t *testing.T) {
 	yesterday := now.AddDate(0, 0, -1).Format(MetricsDateFormat)
 	require.NoError(t, s.IngestTransportTimeline(ctx, id, yesterday, bm))
 	require.Positive(t, ttl(yesterday))
+}
+
+// With the archive a timeline key lives until 36 h after its day ends, however
+// early in the day it was last written, so the archive pass always finds it.
+func TestTimelineExpiresAfterItsDay(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	s.SetUptimeArchive(t.TempDir())
+	now := time.Now().UTC()
+	id := uuid.New()
+	require.NoError(t, s.RecordTransportHeartbeat(ctx, id, "stcpr", now))
+	yesterday := now.AddDate(0, 0, -1).Format(MetricsDateFormat)
+	require.NoError(t, s.IngestTransportTimeline(ctx, id, yesterday, make([]byte, transportTimelineBitmapBytes)))
+
+	for _, date := range []string{now.Format(MetricsDateFormat), yesterday} {
+		day, err := time.Parse(MetricsDateFormat, date)
+		require.NoError(t, err)
+		ttl, err := s.client.TTL(ctx, tpUptimeTimelineKey(id.String(), date)).Result()
+		require.NoError(t, err)
+		at := time.Now().Add(ttl).Unix()
+		want := day.Add(24 * time.Hour).Add(tpUptimeTimelineArchivedTTL)
+		if late := time.Now().Add(tpUptimeTimelineArchivedTTL); late.After(want) {
+			want = late
+		}
+		require.InDelta(t, want.Unix(), at, 60, date)
+		require.Greater(t, at, day.Add(24*time.Hour+timelineArchiveAfter).Unix(), date)
+	}
 }

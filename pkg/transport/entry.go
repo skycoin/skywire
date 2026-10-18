@@ -31,6 +31,10 @@ const (
 	// These transports carry only control-plane traffic and are excluded
 	// from data route path calculations by the route finder.
 	LabelSetup Label = "setup"
+
+	// LabelSysFeed marks a local link to a service that takes its registrations
+	// off the system feed of the transport discovery on the same host.
+	LabelSysFeed Label = "sysfeed"
 )
 
 // Entry is the unsigned representation of a Transport.
@@ -237,4 +241,21 @@ func (se *SignedEntry) Signature(pk cipher.PubKey) (cipher.Sig, error) {
 func NewSignedEntry(entry *Entry, pk cipher.PubKey, secKey cipher.SecKey) (*SignedEntry, error) {
 	se := &SignedEntry{Entry: entry}
 	return se, se.Sign(pk, secKey)
+}
+
+// Routable returns entries without the local links a host visor publishes to
+// the services it runs, which no route may use. It copies only when it drops one.
+func Routable(entries []*Entry) []*Entry {
+	for i, e := range entries {
+		if e != nil && types.IsLocal(e.Type) {
+			out := append(make([]*Entry, 0, len(entries)-1), entries[:i]...)
+			for _, e := range entries[i+1:] {
+				if e == nil || !types.IsLocal(e.Type) {
+					out = append(out, e)
+				}
+			}
+			return out
+		}
+	}
+	return entries
 }

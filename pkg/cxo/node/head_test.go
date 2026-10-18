@@ -57,3 +57,28 @@ func TestFillHead_maxParallel_NegativeFallsBack(t *testing.T) {
 		}
 	}
 }
+
+// TestKnownRoots_moveForward_KeepsNewerRoots pins the bookkeeping after a
+// fill: the Roots up to the filled one are forgotten, and a newer Root that
+// arrived meanwhile must still name the connection that has it. Dropping it
+// left the next fill with no connection ("no connections to fill from").
+func TestKnownRoots_moveForward_KeepsNewerRoots(t *testing.T) {
+	a, b := &Conn{}, &Conn{}
+	k := knownRoots{}
+	for _, seq := range []uint64{2, 0, 1} {
+		k.addKnown(a, seq)
+	}
+	k.addKnown(b, 0)
+
+	k.moveForward(1) // Root 0 filled
+
+	if got := k[a]; len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Fatalf("known of a = %v, want [1 2]", got)
+	}
+	if got := k[b]; len(got) != 0 {
+		t.Fatalf("known of b = %v, want none", got)
+	}
+	if l := k.buildConnsList(1); l.Len() != 1 || l.Front().Value.(*Conn) != a {
+		t.Fatalf("connections to fill Root 1 from = %d, want only a", l.Len())
+	}
+}

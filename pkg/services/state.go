@@ -40,6 +40,10 @@ type AggregatorState struct {
 	Feeds int `json:"feeds"`
 	// LocalRoots counts Roots taken from the host's own publisher.
 	LocalRoots uint64 `json:"local_roots,omitempty"`
+	// Consumers are the services in this process taking registrations off the
+	// visors' system feeds through this aggregator; Delivered counts handoffs.
+	Consumers []string `json:"consumers,omitempty"`
+	Delivered uint64   `json:"delivered,omitempty"`
 	// Error is why the aggregator is not running, if it is not.
 	Error string `json:"error,omitempty"`
 }

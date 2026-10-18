@@ -56,7 +56,8 @@ func (a *Aggregator) applyDue(ctx context.Context, due []heldSnap) {
 		}
 	}
 	if err := bs.ApplyTelemetry(ctx, updates); err != nil {
-		a.log.WithError(err).WithField("transports", len(updates)).Debug("CXO aggregator: batched telemetry apply failed")
+		a.log.WithError(err).WithField("transports", len(updates)).Warn("CXO aggregator: batched telemetry apply failed, retrying at the next flush")
+		a.pace.retry(due)
 	}
 }
 

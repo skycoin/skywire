@@ -210,7 +210,7 @@ func (rw *ReadWriter) Handshake(hsTimeout time.Duration) error {
 			conn.SetDeadline(time.Now()) //nolint:errcheck,gosec
 		}
 		// Drain the goroutine result to avoid a leak.
-		<-errCh
+		<-errCh //nolint:errcheck
 		return timeoutError{}
 	}
 }

@@ -400,6 +400,12 @@ type Visor struct {
 	// refused is invisible from both ends. Guarded by cxoUserFeedsMu.
 	sdRegCXOPub *treestore.Publisher
 
+	// systemFeedServices are the services whose registrations ride the system
+	// feed (system_feed_registrations.go). Guarded by cxoUserFeedsMu.
+	systemFeedServices []string
+	// sysFeedAnnounceOK is when the system feed last reached TPD, in Unix ns.
+	sysFeedAnnounceOK atomic.Int64
+
 	// sdEntryMirror holds the visor's live service-discovery entry set and
 	// mirrors it onto the SD-registration CXO feed. Constructed in NewVisor
 	// (never nil) and handed to every servicedisc client the visor builds,
@@ -472,6 +478,14 @@ type Visor struct {
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux
+	// hostedKeys holds the keys of the own-key services running in this visor,
+	// which handleServerConn hands streams to. cipher.PubKey -> cipher.Sig,
+	// the service's signature naming this visor as its host.
+	hostedKeys sync.Map
+	// svcHosts caches the host visor of each deployment service it dials.
+	svcHosts serviceHosts
+	// feedRedials spaces the moves of feed conns off dmsg (cxoRedial).
+	feedRedials  feedRedials
 	appDirectMux *transport.VStreamMux // direct skywire-network app dials (route ID 0); diag only
 	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
 	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +84,9 @@ type RouteChecker func(tpID uuid.UUID) bool
 type Manager struct {
 	Logger *logging.Logger
 	Conf   *ManagerConfig
-	tps    map[uuid.UUID]*ManagedTransport
+	// hostedEntries returns the local links to the services this visor hosts.
+	hostedEntries atomic.Pointer[func() []*Entry]
+	tps           map[uuid.UUID]*ManagedTransport
 	// dials runs one outbound dial per transport ID at a time.
 	dials  dialFlights
 	events tpEventRing
@@ -716,6 +719,9 @@ func (tm *Manager) publishTPDList(entries []*Entry) {
 	}
 	if entries == nil {
 		entries = []*Entry{} // publish an explicit empty list (last transport gone)
+	} else if hosted := tm.hostedEntries.Load(); hosted != nil {
+		// A nil list is the shutdown publish, which withdraws these too.
+		entries = append(entries[:len(entries):len(entries)], (*hosted)()...)
 	}
 	// Publish the COMPACT form: every entry's Edges repeats this visor's own
 	// PK (TPD knows it as the reporter) and carries a derivable transport ID,
@@ -2017,3 +2023,10 @@ func (tm *Manager) pingSUDPHTransports() {
 		mt.tickPing()
 	}
 }
+
+// SetHostedEntries sets what returns the local links from this visor to the
+// services it hosts, which every transport list publish carries.
+func (tm *Manager) SetHostedEntries(f func() []*Entry) { tm.hostedEntries.Store(&f) }
+
+// RepublishTPDList publishes the transport list now, as after a change.
+func (tm *Manager) RepublishTPDList() { tm.publishTPDList(tm.currentBareEntries()) }
