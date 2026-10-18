@@ -46,6 +46,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -88,7 +89,7 @@ const sdRegAnnounceInterval = 30 * time.Second
 type sdEntryMirror struct {
 	mu      sync.Mutex
 	entries map[string]servicedisc.Service
-	pub     *treestore.Publisher
+	pub     regLeafSink
 	log     *logging.Logger
 	// healthy reports whether the SD is keeping the entries alive over CXO
 	// (see cxoKeepaliveHealthy); nil until the feed runs.
@@ -164,7 +165,7 @@ func (m *sdEntryMirror) setKeepalive(fn func() (bool, uint64)) {
 // setPublisher attaches (or, with nil, detaches) the CXO publisher and
 // immediately flushes the current set, so a feed that starts after the
 // first registrations still carries them.
-func (m *sdEntryMirror) setPublisher(pub *treestore.Publisher, log *logging.Logger) {
+func (m *sdEntryMirror) setPublisher(pub regLeafSink, log *logging.Logger) {
 	if m == nil {
 		return
 	}
@@ -237,6 +238,18 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
+	if route, ok := v.systemFeedFor(sysfeed.ServiceDiscovery, sdPK, log); ok {
+		v.sdEntryMirror.setPublisher(route.sink, log)
+		v.sdEntryMirror.setKeepalive(route.healthy)
+		v.pushCloseStack("sd_reg_cxo", func() error {
+			v.sdEntryMirror.setKeepalive(nil)
+			v.sdEntryMirror.setPublisher(nil, nil)
+			return nil
+		})
+		log.WithField("sd_pk", sdPK).Info("SD-reg-CXO: service entries ride the system feed")
+		return nil
+	}
+
 	dataDir, inMemDB := v.hostCXOPubStorage(filepath.Join(v.conf.LocalPath, "cxo-sd-reg"), skyenv.DmsgVisorSDRegCXOPort)
 	// Gate the feed: peer whitelist (hypervisors + dmsgpty whitelist + own
 	// PK) plus the consuming SD. The SD MUST be allowed or its announce-conn
@@ -244,6 +257,8 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// known here (we returned early above otherwise).
 	allow := composeFeedAllowlist(v, sdPK, true)
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		Dial:                v.cxoDial,
+		Redial:              v.cxoRedial,
 		DmsgPort:            skyenv.DmsgVisorSDRegCXOPort,
 		BatchWindow:         sdRegBatchWindow,
 		Logger:              log,

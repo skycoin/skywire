@@ -568,7 +568,7 @@ func vpnDirectDmsgAddr(ses interface {
 	Carrier() string
 	RemoteTCPAddr() net.Addr
 }) (string, bool) {
-	if ses.Carrier() == dmsg.CarrierSkynet {
+	if c := ses.Carrier(); c == dmsg.CarrierSkynet || c == dmsg.CarrierInProcess {
 		return "", false
 	}
 	return ses.RemoteTCPAddr().String(), true

@@ -199,3 +199,30 @@ func TestHomePageOwnUser(t *testing.T) {
 	require.Equal(t, "private.skynet", get(visorPK))
 	require.Equal(t, "public.skynet", get(stranger))
 }
+
+type portWhitelist []cipher.PubKey
+
+func (portWhitelist) LandingPageEntries() []ForwardedPortEntry { return nil }
+func (p portWhitelist) PortWhitelist(int) []cipher.PubKey      { return p }
+
+// A site on port 80 with a whitelist is closed to other keys at every path.
+func TestWebsiteWhitelist(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	friend, _ := cipher.GenerateKeyPair()
+	stranger, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	api.SetForwardedPortLister(portWhitelist{friend})
+	api.SetWebsiteHandler(site("site"))
+	get := func(path string, from cipher.PubKey) int {
+		req := httptest.NewRequest(http.MethodGet, "http://"+visorPK.DNSLabel()+".skynet"+path, nil)
+		req.RemoteAddr = from.String() + ":80"
+		rec := httptest.NewRecorder()
+		api.Handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for _, path := range []string{"/", "/page"} {
+		require.Equal(t, http.StatusOK, get(path, friend), path)
+		require.Equal(t, http.StatusForbidden, get(path, stranger), path)
+	}
+}

@@ -52,7 +52,7 @@ func MITMTerminate(upstream net.Conn, leaf *tls.Certificate) net.Conn {
 			_, e := io.Copy(tlsConn, upstream)
 			errC <- e
 		}()
-		<-errC
+		<-errC //nolint:errcheck
 	}()
 	return a
 }

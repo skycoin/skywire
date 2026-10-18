@@ -10,10 +10,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"net"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -111,7 +114,14 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 		m.streamsMu.Lock()
 		m.streams[streamKey{mt.Entry.ID, wireID}] = stream
 		m.streamsMu.Unlock()
-		m.offerIncoming(stream, "incoming (relayed) stream")
+		// The handshake waits on the origin, so it must not hold the read loop.
+		go func() {
+			if err := stream.secure(false); err != nil {
+				m.log.WithError(err).Debug("vstream relay: dropping relayed stream")
+				return
+			}
+			m.offerIncoming(stream, "incoming (relayed) stream")
+		}()
 		return
 	}
 
@@ -156,8 +166,8 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 
 // DialThroughRelay opens a virtual stream to dstPK via a relay visor
 // (relayPK) that this node has a direct transport to. The SYN is signed so
-// the relay and the destination can verify the origin. Reads/writes on the
-// returned stream are spliced through the relay to dstPK.
+// the relay and the destination can verify the origin, and the stream is
+// encrypted end to end with dstPK before it is returned.
 func (m *VStreamMux) DialThroughRelay(relayPK, dstPK cipher.PubKey, appName string) (*VStream, error) {
 	relayTp := m.findDirectTransport(relayPK)
 	if relayTp == nil {
@@ -192,6 +202,9 @@ func (m *VStreamMux) DialThroughRelay(relayPK, dstPK cipher.PubKey, appName stri
 	if err := m.sendRelaySyn(relayTp, id, m.localPK(), dstPK, id, sig, false); err != nil {
 		stream.Close() //nolint:errcheck,gosec
 		return nil, fmt.Errorf("vstream: send relay SYN: %w", err)
+	}
+	if err := stream.secure(true); err != nil {
+		return nil, err
 	}
 	return stream, nil
 }
@@ -253,3 +266,54 @@ func relaySigPayload(originID uint64, sender, dst cipher.PubKey) []byte {
 func (m *VStreamMux) refuseRelaySyn(mt *ManagedTransport, wireID uint64) {
 	m.forwardRelayFrame(relayKey{tp: mt.Entry.ID, streamID: wireID}, VStreamFlagFin, nil)
 }
+
+// relayE2ETimeout bounds the Noise handshake on a relayed stream. It matches
+// the skynet handshake timeout the callers already apply.
+var relayE2ETimeout = 8 * time.Second
+
+// secure runs a Noise KK handshake with the ML-KEM hybrid over a relayed
+// stream, so the relay that splices it sees only ciphertext. Both static keys
+// are known: the origin signed the SYN, and it named the destination.
+func (s *VStream) secure(initiator bool) error {
+	ns, err := noise.KKAndSecp256k1(noise.Config{
+		LocalPK:   s.mux.localPK(),
+		LocalSK:   s.mux.tm.Conf.SecKey,
+		RemotePK:  s.remotePK,
+		Initiator: initiator,
+	})
+	if err != nil {
+		s.Close() //nolint:errcheck,gosec
+		return fmt.Errorf("vstream relay: prepare noise: %w", err)
+	}
+	rw := noise.NewReadWriter(rawVStream{s}, ns)
+	if err := rw.Handshake(relayE2ETimeout); err != nil {
+		s.Close() //nolint:errcheck,gosec
+		return fmt.Errorf("vstream relay: noise handshake with %s: %w", s.remotePK, err)
+	}
+	s.e2e = rw
+	return nil
+}
+
+// rawVStream is a stream's unencrypted frames as a net.Conn, the carrier for
+// its Noise session. A deadline that has passed closes the stream, which is
+// how a timed-out handshake unblocks.
+type rawVStream struct{ s *VStream }
+
+func (c rawVStream) Read(p []byte) (int, error)  { return c.s.readRaw(p) }
+func (c rawVStream) Write(p []byte) (int, error) { return c.s.writeRaw(p) }
+func (c rawVStream) Close() error                { return c.s.Close() }
+func (c rawVStream) LocalAddr() net.Addr         { return vstreamAddr(c.s.mux.localPK()) }
+func (c rawVStream) RemoteAddr() net.Addr        { return vstreamAddr(c.s.remotePK) }
+func (c rawVStream) SetDeadline(t time.Time) error {
+	if !t.After(time.Now()) {
+		return c.s.Close()
+	}
+	return nil
+}
+func (c rawVStream) SetReadDeadline(t time.Time) error  { return c.SetDeadline(t) }
+func (c rawVStream) SetWriteDeadline(t time.Time) error { return c.SetDeadline(t) }
+
+type vstreamAddr cipher.PubKey
+
+func (a vstreamAddr) Network() string { return "vstream" }
+func (a vstreamAddr) String() string  { return cipher.PubKey(a).String() }

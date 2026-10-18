@@ -244,9 +244,9 @@ func (p *visorStatusProvider) chainTargetState(addr string) string {
 			return "dmsg_web resolving proxy · " + runLabel(rt.IsRunning())
 		}
 	}
-	// skysocks-client binds SkysocksClientAddr (":1080"), so its port alone
+	// skysocks-client binds SkysocksClientAddr, so its port alone
 	// identifies it; the client is a managed app, so procM knows its liveness.
-	if _, p2, e := net.SplitHostPort("0.0.0.0" + skyenv.SkysocksClientAddr); e == nil && p2 == port {
+	if _, p2, e := net.SplitHostPort(skyenv.SkysocksClientAddr); e == nil && p2 == port {
 		running := false
 		if p.v.procM != nil {
 			proc, ok := p.v.procM.ProcByName(skyenv.SkysocksClientName)

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // GetAllVisorSummaries returns uptime summaries for all visors with active transports.
@@ -171,12 +172,19 @@ const (
 	tpUptimeTimelineArchivedTTL = 36 * time.Hour
 )
 
-// tpTimelineTTL is the life of a per-transport timeline key.
-func (s *redisStore) tpTimelineTTL() time.Duration {
-	if s.uptimeArchive == "" {
-		return tpUptimeTimelineTTL
+// expireTimeline sets the life of the timeline key for date. With the archive it
+// counts from the day's end, so the archive pass finds the key however early it was written.
+func (s *redisStore) expireTimeline(ctx context.Context, pipe redis.Pipeliner, key, date string) {
+	day, err := time.Parse("2006-01-02", date)
+	if s.uptimeArchive == "" || err != nil {
+		pipe.Expire(ctx, key, tpUptimeTimelineTTL)
+		return
 	}
-	return tpUptimeTimelineArchivedTTL
+	at := day.Add(24*time.Hour + tpUptimeTimelineArchivedTTL)
+	if late := time.Now().Add(tpUptimeTimelineArchivedTTL); late.After(at) {
+		at = late // a day still waiting for its archive keeps 36 h from this write
+	}
+	pipe.ExpireAt(ctx, key, at)
 }
 
 func tpUptimeKey(tpID string, date string) string {
@@ -189,7 +197,9 @@ func tpUptimeOnlineKey(date string) string {
 
 // tracksUptime reports whether a transport type gets an uptime timeline:
 // every type but dmsg, as for a visor's online count.
-func tracksUptime(tpType string) bool { return tpType != "" && tpType != "dmsg" }
+func tracksUptime(tpType string) bool {
+	return tpType != "" && tpType != "dmsg" && tpType != string(tptypes.LOCAL)
+}
 
 func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
@@ -222,7 +232,7 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
-	pipe.Expire(ctx, tlKey, s.tpTimelineTTL())
+	s.expireTimeline(ctx, pipe, tlKey, date)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		// Reward-critical (see RecordHeartbeat): surface store failures at Warn
@@ -264,7 +274,7 @@ func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, stagingKey, string(bitmap), time.Minute)
 	pipe.BitOpOr(ctx, tlKey, tlKey, stagingKey)
-	pipe.Expire(ctx, tlKey, s.tpTimelineTTL())
+	s.expireTimeline(ctx, pipe, tlKey, date)
 	pipe.Del(ctx, stagingKey)
 	_, err := pipe.Exec(ctx)
 	return err

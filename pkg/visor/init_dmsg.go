@@ -1186,6 +1186,9 @@ func initDmsgServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	srvConf.Version = dmsgsrv.EntryVersion()
 	srv := dmsg.NewServer(v.conf.PK, v.conf.SK, dmsgOnlyDisc(dmsgC, discPK, log), srvConf, dmsgmetrics.NewEmpty())
 	srv.SetLogger(log)
+	// Services embedded under their own keys reach this server over a pipe
+	// instead of a loopback socket (dmsg/server_inproc.go).
+	srv.ServeInProcess()
 
 	if !shared {
 		var err error

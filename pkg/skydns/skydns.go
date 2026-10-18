@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"sync"
 	"time"
@@ -85,6 +86,7 @@ type Engine struct {
 	ep    *channel.Endpoint
 	udp   net.PacketConn
 	tcp   net.Listener
+	doh   *http.Server
 
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -138,7 +140,7 @@ func New(cfg Config) (*Engine, error) {
 		cancel: cancel,
 		closed: make(chan struct{}),
 	}
-	if err := e.configure(); err != nil {
+	if err := e.configure(cfg.Minter); err != nil {
 		e.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
@@ -147,7 +149,7 @@ func New(cfg Config) (*Engine, error) {
 
 // configure brings up the NIC and the resolver on it. Promiscuous mode with
 // spoofing lets the stack accept, and answer from, every synthetic IP.
-func (e *Engine) configure() error {
+func (e *Engine) configure(minter skynetca.LeafMinter) error {
 	if err := e.stack.CreateNIC(nicID, e.ep); err != nil {
 		return fmt.Errorf("skydns: CreateNIC: %s", err)
 	}
@@ -189,6 +191,12 @@ func (e *Engine) configure() error {
 	mux := dns.NewServeMux()
 	e.gw.InstallDNS(mux)
 	mux.HandleFunc(".", e.forward)
+	if m, ok := minter.(skynetca.IPMinter); ok {
+		if err := e.serveDoH(mux, m); err != nil {
+			return err
+		}
+		e.log.Info("skydns: DNS over HTTPS at " + DoHURL)
+	}
 	for _, srv := range []*dns.Server{{PacketConn: pc, Handler: mux}, {Listener: ln, Handler: mux}} {
 		go func(srv *dns.Server) {
 			if err := srv.ActivateAndServe(); err != nil && e.ctx.Err() == nil {
@@ -283,6 +291,9 @@ func (e *Engine) Close() error {
 		}
 		if e.tcp != nil {
 			_ = e.tcp.Close() //nolint:errcheck
+		}
+		if e.doh != nil {
+			_ = e.doh.Close() //nolint:errcheck
 		}
 		e.stack.Destroy()
 	})

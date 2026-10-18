@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -156,7 +157,23 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		return
 	}
 
-	leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, servicesLeafPath)
+	consume(a.sink, a.log, reporter, cxoaggregate.PackLeaves(pack, &rootNode))
+}
+
+// NewFeedConsumer returns the consumer that ingests service entries a visor
+// carries on its system feed, for a service discovery in the same process as
+// the transport discovery (see cxoaggregate.RegisterFeedConsumer).
+func NewFeedConsumer(sink Sink, log *logging.Logger) cxoaggregate.FeedConsumer {
+	return cxoaggregate.FeedConsumer{
+		Service: sysfeed.ServiceDiscovery,
+		Consume: func(reporter cipher.PubKey, leaf cxoaggregate.Leaves) { consume(sink, log, reporter, leaf) },
+	}
+}
+
+// consume decodes the batched services leaf and ingests every entry under
+// reporter, the visor whose feed carried it.
+func consume(sink Sink, log *logging.Logger, reporter cipher.PubKey, get cxoaggregate.Leaves) {
+	leaf, ok := get(servicesLeafPath)
 	if !ok || len(leaf) == 0 {
 		// A visor with no live services publishes no leaf at all — its
 		// entries are meant to lapse on the store TTL. Nothing to do.
@@ -164,12 +181,12 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 	}
 	entries, ok := decodeServicesBatch(leaf)
 	if !ok {
-		a.log.WithField("visor", reporter).Debug(logTag + ": services leaf decode failed")
+		log.WithField("visor", reporter).Debug(logTag + ": services leaf decode failed")
 		return
 	}
 	for i := range entries {
 		ctx, cancel := context.WithTimeout(context.Background(), ingestTimeout)
-		a.sink.IngestServiceFromCXO(ctx, reporter, entries[i])
+		sink.IngestServiceFromCXO(ctx, reporter, entries[i])
 		cancel()
 	}
 }

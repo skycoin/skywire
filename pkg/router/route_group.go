@@ -1041,7 +1041,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 		errCh := rg.writePacketAsync(ctx, tp, pkt, rule.KeyRouteID())
 		select {
 		case <-rg.writeDeadline.Wait():
-		case <-errCh:
+		case <-errCh: //nolint:errcheck
 		}
 		cancel()
 	}

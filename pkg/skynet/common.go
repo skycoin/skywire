@@ -9,11 +9,19 @@ const MaxRequestSize = 10 * 1024 * 1024 // 10 MB
 // without redefining the wire format.
 type ClientMsg struct {
 	Port int `json:"port"`
+	// PK names a service the visor hosts under its own key. Empty means the
+	// visor itself.
+	PK string `json:"pk,omitempty"`
 }
 
 // ServerReply is the server's JSON response to ClientMsg.
 type ServerReply struct {
 	Error *string `json:"error,omitempty"`
+	// PK echoes ClientMsg.PK once the stream is handed to that service.
+	PK string `json:"pk,omitempty"`
+	// Sig is the service key's signature naming this visor as its host, see
+	// SignHosted. A caller checks it against the key its stream reached.
+	Sig string `json:"sig,omitempty"`
 }
 
 // Exported aliases keep the existing internal call sites working.
