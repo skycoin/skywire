@@ -91,8 +91,8 @@ func testSkysocksOverStcpr(t *testing.T, env *TestEnv) {
 	// proxy's route group is up. mux defaults to 1 (disabled) — a plain
 	// single-route proxy.
 	startCmd := fmt.Sprintf(
-		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --internal --timeout %d",
-		visorC, serverPK, skysocksClientStartTimeoutSec,
+		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --addr %s --internal --timeout %d",
+		visorC, serverPK, proxyListenAddr, skysocksClientStartTimeoutSec,
 	)
 	startOut, startErr := env.Exec(startCmd)
 	require.NoErrorf(t, startErr, "proxy start failed: %s", startOut)
