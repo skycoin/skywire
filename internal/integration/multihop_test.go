@@ -131,8 +131,8 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 	// so with no direct c↔a transport the only route the proxy can use is the
 	// 2-hop c→b→a path.
 	startCmd := fmt.Sprintf(
-		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --internal --existing-tp --timeout %d",
-		visorC, serverPK, multiHopClientStartTimeoutSec,
+		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --addr %s --internal --existing-tp --timeout %d",
+		visorC, serverPK, proxyListenAddr, multiHopClientStartTimeoutSec,
 	)
 	startOut, startErr := env.Exec(startCmd)
 	require.NoErrorf(t, startErr, "proxy start failed: %s", startOut)
