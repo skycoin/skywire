@@ -349,7 +349,7 @@ func spliceStdio(conn net.Conn) error {
 	}()
 	first := <-done
 	// Drain the second goroutine.
-	<-done
+	<-done //nolint:errcheck
 	if first == nil || errors.Is(first, io.EOF) || errors.Is(first, net.ErrClosed) {
 		return nil
 	}
