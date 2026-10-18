@@ -164,7 +164,7 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 
 	cancel()
 	select {
-	case <-done:
+	case <-done: //nolint:errcheck
 	// Shutdown is prompt (closing the UDP socket + flow conns unblocks serveUDP);
 	// the generous wait only guards against a slow/loaded CI runner.
 	case <-time.After(10 * time.Second):

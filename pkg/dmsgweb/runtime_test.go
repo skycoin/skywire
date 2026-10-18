@@ -231,7 +231,7 @@ func TestSOCKS5Passthrough(t *testing.T) {
 	require.Equal(t, "hello-from-backend", string(body))
 
 	cancel()
-	<-errCh
+	<-errCh //nolint:errcheck
 }
 
 func TestServeTCPListenError(t *testing.T) {
