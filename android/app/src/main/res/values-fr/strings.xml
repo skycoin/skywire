@@ -1015,11 +1015,16 @@
     <string name="mail_to_hint">Une adresse SkyMail, ou la clé publique d’un visor</string>
     <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
     <string name="mail_contacts">Contacts</string>
-    <string name="mail_no_contacts">Pas encore de contacts. Enregistrez un expéditeur depuis un message.</string>
+    <string name="mail_no_contacts">Pas encore de contacts. Ajoutez-en un, ou enregistrez un expéditeur depuis un message.</string>
     <string name="mail_save_contact">Enregistrer le contact</string>
     <string name="mail_contact_name">Nom</string>
     <string name="mail_contact_saved">Contact enregistré</string>
     <string name="mail_contact_failed">Impossible d’enregistrer le contact : %1$s</string>
+    <string name="mail_contacts_manage">Gérer les contacts</string>
+    <string name="mail_contacts_from_skychat">Depuis SkyChat</string>
+    <string name="mail_contact_delete_confirm">Supprimer %1$s de vos contacts ?</string>
+    <string name="mail_contact_edit">Modifier le contact</string>
+    <string name="mail_contact_add">Ajouter un contact</string>
     <string name="mail_add_cc">Ajouter Cc</string>
     <string name="mail_subject">Objet</string>
     <string name="mail_body">Message</string>

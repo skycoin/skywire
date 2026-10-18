@@ -21,7 +21,10 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
+import com.skycoin.skywire.core.MailContact
+import com.skycoin.skywire.core.MailContacts
 import com.skycoin.skywire.core.SkymailAddress
+import com.skycoin.skywire.core.SkywirePaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,6 +80,9 @@ data class MailUiState(
     val busy: Boolean = false,
     /** Message ids picked in the folder shown, for a batch delete. */
     val selection: Set<String> = emptySet(),
+    /** SkyMail's own address book, sorted by name. */
+    val contacts: List<MailContact> = emptyList(),
+    val contactsOpen: Boolean = false,
     /** A one-off line for the snackbar, then cleared. */
     val notice: String? = null,
 ) {
@@ -95,7 +101,7 @@ data class MailUiState(
 class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
-    private val skychat = com.skycoin.skywire.api.SkychatApi.get(app)
+    private val contactBook = MailContacts(File(SkywirePaths(app).localDir, "skymail-contacts.json"))
     private val mutable = MutableStateFlow(MailUiState())
     val uiState: StateFlow<MailUiState> = mutable.asStateFlow()
 
@@ -106,6 +112,8 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
             CoreServiceState.state.collectLatest { core ->
                 mutable.update { it.copy(coreState = core, apiUp = false) }
                 if (core is CoreState.Running) {
+                    // A replaced identity cleared the book with the rest of local/.
+                    loadContacts()
                     while (!api.ping()) delay(PING_INTERVAL_MS)
                     mutable.update { it.copy(apiUp = true) }
                     while (isActive) {
@@ -381,28 +389,35 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- contacts ---
 
-    /**
-     * Names a public key in the address book every surface shares — compose's
-     * picker, the call screens, chat itself. The book is written through
-     * skychat, so it keeps working there; the in-memory copy moves at once
-     * rather than at the watcher's next rare refresh.
-     */
-    fun saveContact(pk: String, name: String, onDone: () -> Unit = {}) {
-        if (pk.isBlank() || name.isBlank()) return
+    fun openContacts() = mutable.update { it.copy(contactsOpen = true) }
+
+    fun closeContacts() = mutable.update { it.copy(contactsOpen = false) }
+
+    /** Saves a contact, or edits the one at [replacing]: an address or a bare key. */
+    fun saveContact(name: String, address: String, replacing: String? = null) {
+        val clean = SkymailAddress.recipient(address)
+        if (clean == null) {
+            mutable.update { it.copy(notice = string(R.string.mail_bad_address, address.trim())) }
+            return
+        }
+        if (name.isBlank()) return
+        changeContacts(string(R.string.mail_contact_saved)) { contactBook.put(MailContact(name.trim(), clean), replacing) }
+    }
+
+    fun deleteContact(address: String) = changeContacts(null) { contactBook.remove(address) }
+
+    private suspend fun loadContacts() {
+        val list = withContext(Dispatchers.IO) { contactBook.load() }
+        mutable.update { it.copy(contacts = list) }
+    }
+
+    private fun changeContacts(done: String?, change: () -> List<MailContact>) {
         viewModelScope.launch {
-            runCatching {
-                skychat.setContact(com.skycoin.skywire.core.SkychatProfile.baseUrl(
-                    com.skycoin.skywire.core.SkychatProfile.DEFAULT_PORT,
-                ), pk, name.trim())
-            }.onSuccess {
-                com.skycoin.skywire.core.VoiceCalls.setNames(
-                    com.skycoin.skywire.core.VoiceCalls.addressBook.value + (pk to name.trim()),
-                )
-                mutable.update { it.copy(notice = string(R.string.mail_contact_saved)) }
-                onDone()
-            }.onFailure { e ->
-                mutable.update { it.copy(notice = string(R.string.mail_contact_failed, e.message.orEmpty())) }
-            }
+            runCatching { withContext(Dispatchers.IO) { change() } }
+                .onSuccess { list -> mutable.update { it.copy(contacts = list, notice = done ?: it.notice) } }
+                .onFailure { e ->
+                    mutable.update { it.copy(notice = string(R.string.mail_contact_failed, e.message.orEmpty())) }
+                }
         }
     }
 
