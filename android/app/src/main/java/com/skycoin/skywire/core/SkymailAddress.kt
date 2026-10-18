@@ -79,4 +79,11 @@ object SkymailAddress {
         if ('@' in text) return text.takeIf { pkOfAddress(it) != null }
         return of(text, suffix = suffix)
     }
+
+    /** [text] with every Skymail address in it moved onto the [suffix] network. */
+    fun withNetwork(text: String, suffix: String): String =
+        addressHost.replace(text) { it.groupValues[1] + suffix }
+
+    private val addressHost =
+        Regex("""(@(?:[a-z0-9-]+\.)*[a-z2-7]{53})(?:\.dmsg|\.skynet)\b""", RegexOption.IGNORE_CASE)
 }
