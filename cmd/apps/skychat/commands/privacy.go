@@ -115,15 +115,21 @@ func privacyBlockHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, currentPrivacy())
 }
 
-// privacyAcceptHandler: POST {"pk": "..."} lets a requesting peer in.
+// privacyAcceptHandler: POST {"pk": "..."} lets a requesting peer in, and
+// {"pk": "...", "accepted": false} ends that consent when the chat or contact goes.
 func privacyAcceptHandler(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PK string `json:"pk"`
+		PK       string `json:"pk"`
+		Accepted *bool  `json:"accepted"`
 	}
 	if !decodePrivacyPost(w, r, &body) {
 		return
 	}
-	if err := privacyStore.Accept(body.PK); err != nil {
+	set := privacyStore.Accept
+	if body.Accepted != nil && !*body.Accepted {
+		set = privacyStore.Unaccept
+	}
+	if err := set(body.PK); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

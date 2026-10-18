@@ -150,46 +150,49 @@ func TestPrivacy_CallsFromBlockedPeersAreDeclined(t *testing.T) {
 	}
 }
 
-func TestPrivacy_ForgetRevokesAcceptance(t *testing.T) {
+func TestPrivacy_UnacceptEndsConsent(t *testing.T) {
 	withPrivacyStore(t)
 	withContactStore(t)
 	if err := privacyStore.SetApproval(true, nil); err != nil {
 		t.Fatal(err)
 	}
 	peer, _ := cipher.GenerateKeyPair()
+	post := func(body string) {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		privacyAcceptHandler(rr, httptest.NewRequest(http.MethodPost, "/privacy/accept", strings.NewReader(body)))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", body, rr.Code, rr.Body.String())
+		}
+	}
 
-	// The once-agreed state: named and accepted, so messages are allowed.
-	if _, err := contactStore.Set(peer.Hex(), "Named"); err != nil {
-		t.Fatal(err)
-	}
-	if err := privacyStore.Accept(peer.Hex()); err != nil {
-		t.Fatal(err)
-	}
+	post(`{"pk":"` + peer.Hex() + `"}`)
 	if got := inboundVerdict(peer.Hex()); got != privacy.Allow {
-		t.Fatalf("named and accepted: %v, want Allow", got)
+		t.Fatalf("accepted: %v, want Allow", got)
 	}
 
-	// Forgetting the contact ends the consent: the next message prompts.
+	// Saving an empty name is not deleting the contact, and keeps the consent.
 	rr := httptest.NewRecorder()
 	contactsHandler(rr, httptest.NewRequest(http.MethodPost, "/contacts",
 		strings.NewReader(`{"pk":"`+peer.Hex()+`","name":""}`)))
 	if rr.Code != http.StatusOK {
-		t.Fatalf("forget: code=%d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("empty name: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if got := inboundVerdict(peer.Hex()); got != privacy.Request {
-		t.Fatalf("after forget: %v, want Request", got)
+	if got := inboundVerdict(peer.Hex()); got != privacy.Allow {
+		t.Fatalf("after an empty name: %v, want Allow", got)
 	}
 
-	// A block is not softened by forgetting.
+	// Deleting the chat or the contact ends it: the next message prompts.
+	post(`{"pk":"` + peer.Hex() + `","accepted":false}`)
+	if got := inboundVerdict(peer.Hex()); got != privacy.Request {
+		t.Fatalf("after unaccept: %v, want Request", got)
+	}
+
+	// A block is not softened by it.
 	if err := privacyStore.SetBlocked(peer.Hex(), true); err != nil {
 		t.Fatal(err)
 	}
-	rr = httptest.NewRecorder()
-	contactsHandler(rr, httptest.NewRequest(http.MethodPost, "/contacts",
-		strings.NewReader(`{"pk":"`+peer.Hex()+`","name":""}`)))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("forget again: code=%d body=%s", rr.Code, rr.Body.String())
-	}
+	post(`{"pk":"` + peer.Hex() + `","accepted":false}`)
 	if got := inboundVerdict(peer.Hex()); got != privacy.Reject {
 		t.Fatalf("blocked stays blocked: %v, want Reject", got)
 	}
