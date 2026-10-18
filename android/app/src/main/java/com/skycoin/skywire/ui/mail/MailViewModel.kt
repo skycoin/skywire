@@ -47,8 +47,7 @@ data class MailDraft(
     val body: String = "",
     val inReplyTo: String = "",
     val attachments: List<DraftAttachment> = emptyList(),
-    /** The network a contact or a bare key is addressed over. A typed
-     * address keeps the suffix it was given. */
+    /** The network every address in the draft goes over. */
     val skynet: Boolean = false,
 )
 
@@ -225,6 +224,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
                 lastSend = null,
                 draft = MailDraft(
                     to = to,
+                    skynet = to.trimEnd().trimEnd('>').endsWith(SkymailAddress.SKYNET, ignoreCase = true),
                     subject = subject,
                     body = "\n\n" + string(R.string.mail_reply_header, m.date, m.from) + "\n" + quoted,
                     inReplyTo = m.messageId,
@@ -237,7 +237,11 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { s -> s.copy(draft = s.draft?.let(change)) }
     }
 
-    fun setViaSkynet(on: Boolean) = updateDraft { it.copy(skynet = on) }
+    // The network is the message's: the addresses already written move with it.
+    fun setViaSkynet(on: Boolean) = updateDraft {
+        val suffix = if (on) SkymailAddress.SKYNET else SkymailAddress.DMSG
+        it.copy(skynet = on, to = SkymailAddress.withNetwork(it.to, suffix), cc = SkymailAddress.withNetwork(it.cc, suffix))
+    }
 
     fun discardDraft() {
         mutable.update { it.copy(draft = null, lastSend = null) }

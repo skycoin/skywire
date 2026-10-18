@@ -1013,7 +1013,7 @@
     <string name="mail_attachment_failed">Impossible d’enregistrer la pièce jointe : %1$s</string>
     <string name="mail_compose_title">Nouveau message</string>
     <string name="mail_to_hint">Une adresse SkyMail, ou la clé publique d’un visor</string>
-    <string name="mail_via_hint">Une adresse complète part telle quelle ; ceci choisit le réseau pour un contact ou une clé seule. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
+    <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">Pas encore de contacts. Enregistrez un expéditeur depuis un message.</string>
     <string name="mail_save_contact">Enregistrer le contact</string>

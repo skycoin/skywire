@@ -920,7 +920,7 @@
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
-    <string name="mail_via_hint">完整地址按原样发送；这里为联系人和公钥选择网络。dmsg 无需路由；有路由时 skynet 更快。</string>
+    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_no_contacts">还没有联系人。打开一封邮件，保存发件人。</string>
     <string name="mail_save_contact">保存联系人</string>
