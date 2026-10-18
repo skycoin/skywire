@@ -49,3 +49,18 @@ func TestAcceptedPairIsAContact(t *testing.T) {
 		}
 	}
 }
+
+// TestNewIdentityStartsEmpty pins that the page drops the chats and contacts
+// it stored for another key, as "Replace secret key" promises.
+func TestNewIdentityStartsEmpty(t *testing.T) {
+	page := embeddedPage(t)
+	if !strings.Contains(pageMethod(t, page, "syncMyPK"), "this._adoptOwner(this.myPK)") {
+		t.Error("syncMyPK does not check who owns the stored state")
+	}
+	b := pageMethod(t, page, "_adoptOwner")
+	for _, want := range []string{"skychat_(contacts", "location.pathname", "location.reload()"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("_adoptOwner lacks %s", want)
+		}
+	}
+}
