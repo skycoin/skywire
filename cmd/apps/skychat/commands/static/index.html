@@ -10173,6 +10173,9 @@
         if (!confirm('Remove this contact from your address book?\n\nThe conversation and its messages are kept.')) return;
         this.contacts = this.contacts.filter(v => v !== key);
         this._saveContacts();
+        // A name lets a peer past approval too, so both go with the contact.
+        if (this.peerName(key)) this.setPeerName(key, '');
+        this._unaccept(key);
         this.renderContacts();
         this._updateContactButton();
         this.showToast('Contact removed.');
@@ -12571,6 +12574,12 @@
           .catch(e => this.showToast(`Accept failed: ${e.message}`, 'error'));
       }
 
+      // _unaccept ends an earlier acceptance, so the peer's next message asks
+      // again. Best effort: with approval off or unavailable it changes nothing.
+      _unaccept(pk) {
+        this._privacyPost('/privacy/accept', { pk, accepted: false }).catch(() => {});
+      }
+
       // blockRequest blocks the open request's sender and drops the chat.
       blockRequest() {
         const pk = this.recipient;
@@ -14122,6 +14131,7 @@
 
       // _removeConversation drops the open DM with pk here and on the visor.
       _removeConversation(pk) {
+        this._unaccept(pk);
         this.recipients = this.recipients.filter(v => v !== pk);
         this._unpinIf('dm:' + pk);
         delete this.messages[pk];
