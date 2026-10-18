@@ -303,6 +303,9 @@
     <!-- SkyChat (embedded web UI) -->
     <string name="chat_menu">Chat actions</string>
     <string name="chat_reload">Reload</string>
+    <!-- The chat page's ?lang= code. Empty here means English; each translation
+         names its own, so "System" shows the page in the language the app shows. -->
+    <string name="chat_page_lang"></string>
     <string name="chat_starting">Starting SkyChat…</string>
     <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
