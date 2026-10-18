@@ -122,6 +122,8 @@ type Session struct {
 	Term   *xterm.Terminal
 	Shell  *shell.Shell
 	Editor *shell.LineEditor
+	// shownPrompt is the prompt WritePrompt drew last, which the editor draws again.
+	shownPrompt string
 
 	host  string
 	lines chan string
@@ -253,21 +255,16 @@ func NewSession(el js.Value, opt Options) (*Session, error) {
 	}
 
 	s.Editor = &shell.LineEditor{
-		Echo: func(str string) { s.Term.WriteString(str) },
-		Redraw: func(content string, back int) {
-			line := "\r\x1b[2K" + s.Prompt() + content
-			if back > 0 {
-				line += fmt.Sprintf("\x1b[%dD", back)
-			}
-			s.Term.WriteString(line)
-		},
+		Echo:      func(str string) { s.Term.WriteString(str) },
+		Prompt:    func() string { return s.shownPrompt },
+		Cols:      s.Term.Core.Cols,
 		Submit:    func(l string) { s.lines <- l },
 		Interrupt: func() { s.Shell.CancelPending(); s.WritePrompt() },
 		EOF:       func() { s.Term.WriteString("\r\n"); s.WritePrompt() },
 		ClearScreen: func() {
 			s.Term.WriteString("\x1b[2J\x1b[H")
 			s.WritePrompt()
-			s.Term.WriteString(s.Editor.Line())
+			s.Editor.Redisplay()
 		},
 		Complete: s.complete,
 	}
@@ -312,7 +309,6 @@ func NewSession(el js.Value, opt Options) (*Session, error) {
 	if opt.Greeting != "" {
 		s.Term.WriteString(opt.Greeting)
 	}
-	s.WritePrompt()
 	return s, nil
 }
 
@@ -344,6 +340,9 @@ func (s *Session) Prompt() string {
 	if s.Shell.Pending() {
 		return "\x1b[1;33m>\x1b[0m "
 	}
+	if p, ok := s.Shell.PS1(); ok {
+		return p
+	}
 	dir := s.Shell.Dir()
 	if strings.HasPrefix(dir, "/home/user") {
 		dir = "~" + dir[len("/home/user"):]
@@ -354,7 +353,8 @@ func (s *Session) Prompt() string {
 // WritePrompt draws the prompt.
 func (s *Session) WritePrompt() {
 	s.osc133("A") // a prompt starts (a11y.go)
-	s.Term.WriteString(s.Prompt())
+	s.shownPrompt = s.Prompt()
+	s.Term.WriteString(shell.PromptText(s.shownPrompt))
 	s.osc133("B") // and the command line after it
 }
 
@@ -415,6 +415,7 @@ func (s *Session) writeStdin(b []byte) {
 // run is the command loop. It is a goroutine so the JS event loop — and so the
 // terminal — stays responsive while a command runs.
 func (s *Session) run() {
+	s.sourceRC()
 	for line := range s.lines {
 		if s.closed {
 			return
@@ -616,4 +617,18 @@ func (s *Session) cookedInput(data string) {
 		}
 	}
 	s.Term.WriteString(echo.String())
+}
+
+// sourceRC runs ~/.webshrc as a command line runs, so Ctrl+C ends it, and
+// then draws the first prompt.
+func (s *Session) sourceRC() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancelRun, s.running = cancel, true
+	err := s.Shell.SourceRC(ctx)
+	s.running, s.cancelRun = false, nil
+	cancel()
+	if err != nil && ctx.Err() == nil {
+		s.Term.WriteString("websh: " + shell.RCFile + ": " + strings.ReplaceAll(err.Error(), "\n", "\r\n") + "\r\n")
+	}
+	s.WritePrompt()
 }

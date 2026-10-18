@@ -76,6 +76,9 @@ type Shell struct {
 	// it was given, non-blocking so that a read of it can be ended. A program
 	// whose input is TTY is handed the terminal itself, blocking (exec_other.go).
 	TTY *os.File
+
+	// ps1Start is PS1 as the shell started with it; see PS1.
+	ps1Start string
 }
 
 // New creates a shell over the given filesystem (nil = fresh in-memory
@@ -142,6 +145,7 @@ func (s *Shell) start(env []string, stdin io.Reader, stdout, stderr io.Writer, o
 		return err
 	}
 	s.Runner = runner
+	s.ps1Start = s.Var("PS1")
 	return nil
 }
 
