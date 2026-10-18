@@ -448,6 +448,7 @@ private fun MailRow(
 
 // --- a message ---
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
     val open = state.open ?: return
@@ -508,7 +509,8 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
                     }
                 }
                 Spacer(Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Wraps: Reply, Save contact and Delete do not fit one line on a narrow phone.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (open.folder == MailFolder.INBOX) {
                         Button(onClick = viewModel::reply) {
                             Icon(Icons.AutoMirrored.Rounded.Reply, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -610,7 +612,8 @@ private fun SaveContactDialog(preset: String, onSave: (String) -> Unit, onDismis
 
 /** What the transport proved about the sender: the From line can be typed by anyone. */
 @Composable
-private fun VerifiedLine(verified: Boolean, peerPk: String) {    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 56.dp, bottom = 4.dp)) {
+private fun VerifiedLine(verified: Boolean, peerPk: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 56.dp, bottom = 4.dp)) {
         Icon(
             if (verified) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
             contentDescription = null,
