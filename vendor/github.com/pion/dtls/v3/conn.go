@@ -170,13 +170,6 @@ func createConn(
 		workerInterval = config.FlightInterval
 	}
 
-	serverName := config.ServerName
-	// Do not allow the use of an IP address literal as an SNI value.
-	// See RFC 6066, Section 3.
-	if net.ParseIP(serverName) != nil {
-		serverName = ""
-	}
-
 	curves := config.EllipticCurves
 	if len(curves) == 0 {
 		curves = defaultCurves
@@ -212,7 +205,7 @@ func createConn(
 		extendedMasterSecret:          config.ExtendedMasterSecret,
 		localSRTPProtectionProfiles:   config.SRTPProtectionProfiles,
 		localSRTPMasterKeyIdentifier:  config.SRTPMasterKeyIdentifier,
-		serverName:                    serverName,
+		serverName:                    config.ServerName,
 		supportedProtocols:            config.SupportedProtocols,
 		clientAuth:                    config.ClientAuth,
 		localCertificates:             config.Certificates,
@@ -266,7 +259,8 @@ func createConn(
 		replayProtectionWindow: uint(replayProtectionWindow), //nolint:gosec // G115
 
 		state: State{
-			isClient: isClient,
+			isClient:             isClient,
+			remoteSequenceNumber: &atomic.Uint64{},
 		},
 	}
 
@@ -311,17 +305,6 @@ func (c *Conn) HandshakeContext(ctx context.Context) error {
 	c.closeLock.Lock()
 	c.handshakeDone = handshakeDone
 	c.closeLock.Unlock()
-
-	// rfc5246#section-7.4.3
-	// In addition, the hash and signature algorithms MUST be compatible
-	// with the key in the server's end-entity certificate.
-	if !c.state.isClient {
-		cert, err := c.handshakeConfig.getCertificate(&ClientHelloInfo{})
-		if err != nil && !errors.Is(err, errNoCertificates) {
-			return err
-		}
-		c.handshakeConfig.localCipherSuites = filterCipherSuitesForCertificate(cert, c.handshakeConfig.localCipherSuites)
-	}
 
 	var initialFlight flightVal
 	var initialFSMState handshakeState
@@ -634,15 +617,13 @@ func (c *Conn) cacheHandshakePacket(pkt *packet, dtlsHandshake *handshake.Handsh
 		srvCliStr(c.state.isClient), dtlsHandshake.Header.Type.String(),
 		pkt.record.Header.Epoch, dtlsHandshake.Header.MessageSequence)
 
-	c.handshakeCache.push(
+	return c.handshakeCache.push(
 		handshakeRaw[recordlayer.FixedHeaderSize:],
 		pkt.record.Header.Epoch,
 		dtlsHandshake.Header.MessageSequence,
 		dtlsHandshake.Header.Type,
 		c.state.isClient,
 	)
-
-	return nil
 }
 
 type closeContext struct {
@@ -1044,6 +1025,19 @@ func (c *Conn) handleIncomingPacket(
 	}
 	// Validate epoch
 	remoteEpoch := c.state.getRemoteEpoch()
+	// DTLS 1.2 accepts old epochs until the handshake completes (RFC 6347, Section 4.1).
+	if header.Epoch == 0 && header.ContentType == protocol.ContentTypeAlert && remoteEpoch != 0 &&
+		c.isHandshakeCompletedSuccessfully() {
+		c.log.Debug("discarded alert from the old plaintext epoch")
+
+		return false, false, nil, nil
+	}
+	if header.Epoch > 1 {
+		return false, false, nil, nil
+	}
+	if header.Epoch > 0 && header.SequenceNumber < c.state.remoteReplayCutoff {
+		return false, false, nil, nil
+	}
 	if header.Epoch > remoteEpoch {
 		if header.Epoch > remoteEpoch+1 {
 			c.log.Debugf("discarded future packet (epoch: %d, seq: %d)",
@@ -1074,6 +1068,22 @@ func (c *Conn) handleIncomingPacket(
 		)
 
 		return false, false, nil, nil
+	}
+
+	markReplay := markPacketAsValid
+	markPacketAsValid = func() bool {
+		latest := markReplay()
+		if header.Epoch > 0 {
+			next := header.SequenceNumber + 1
+			for previous := c.state.remoteSequenceNumber.Load(); next > previous; {
+				if c.state.remoteSequenceNumber.CompareAndSwap(previous, next) {
+					break
+				}
+				previous = c.state.remoteSequenceNumber.Load()
+			}
+		}
+
+		return latest
 	}
 
 	// originalCID indicates whether the original record had content type
@@ -1162,7 +1172,9 @@ func (c *Conn) handleIncomingPacket(
 
 				continue
 			}
-			c.handshakeCache.push(out, epoch, header.MessageSequence, header.Type, !c.state.isClient)
+			if err := c.handshakeCache.push(out, epoch, header.MessageSequence, header.Type, !c.state.isClient); err != nil {
+				return false, false, &alert.Alert{Level: alert.Fatal, Description: alert.InternalError}, err
+			}
 		}
 
 		return true, isRetransmit, nil, nil
@@ -1186,6 +1198,9 @@ func (c *Conn) handleIncomingPacket(
 
 		return false, false, a, &alertError{content}
 	case *protocol.ChangeCipherSpec:
+		if header.Epoch != 0 {
+			return false, false, nil, nil
+		}
 		if c.state.cipherSuite == nil || !c.state.cipherSuite.IsInitialized() {
 			if enqueue {
 				if ok := c.enqueueEncryptedPackets(addrPkt{rAddr, buf}); ok {
@@ -1212,10 +1227,19 @@ func (c *Conn) handleIncomingPacket(
 
 		isLatestSeqNum = markPacketAsValid()
 
-		select {
-		case c.decrypted <- content.Data:
-		case <-c.closed.Done():
-		case <-ctx.Done():
+		if !c.isHandshakeCompletedSuccessfully() {
+			// Read waits for the handshake to complete. Never block its packet
+			// reader on early application data: Finished may still be pending.
+			select {
+			case c.decrypted <- content.Data:
+			default:
+			}
+		} else {
+			select {
+			case c.decrypted <- content.Data:
+			case <-c.closed.Done():
+			case <-ctx.Done():
+			}
 		}
 
 	default:
@@ -1273,7 +1297,18 @@ func (c *Conn) notify(ctx context.Context, level alert.Level, desc alert.Descrip
 }
 
 func (c *Conn) setHandshakeCompletedSuccessfully() bool {
-	return c.handshakeCompletedSuccessfully.CompareAndSwap(false, true)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	if c.isHandshakeCompletedSuccessfully() {
+		return false
+	}
+	c.state.handshakeComplete = true
+	if !c.handshakeCompletedSuccessfully.CompareAndSwap(false, true) {
+		return false
+	}
+	c.handshakeCache.finish()
+
+	return true
 }
 
 func (c *Conn) isHandshakeCompletedSuccessfully() bool {
