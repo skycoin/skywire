@@ -322,13 +322,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         return wrong
     }
 
-    /** The phrase is validated by the restore screen before this is called. */
-    fun restoreWallet(seedText: String, onDone: () -> Unit) {
+    /**
+     * The phrase is validated by the restore screen before this is called.
+     * [legacy] is a checksum-less phrase the user chose to restore anyway.
+     */
+    fun restoreWallet(seedText: String, legacy: Boolean = false, onDone: () -> Unit) {
         val draft = mutable.value.draft
         action {
             mutable.update { it.copy(restoring = true) }
             val name = defaultWalletName(draft.coin)
-            repo.addWallet(draft.coin, name, seedText, restored = true)
+            repo.addWallet(draft.coin, name, seedText, restored = true, legacy = legacy)
             mutable.update { it.copy(draft = DraftState(), restoring = false) }
             onDone()
         }
