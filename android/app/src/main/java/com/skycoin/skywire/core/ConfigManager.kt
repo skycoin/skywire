@@ -628,11 +628,9 @@ class ConfigManager(
 
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
-            // A spawn that cannot happen is an answer, not a crash. The first
-            // exec of a just-installed binary can fail transiently — the
-            // platform is still labeling and optimizing it — and that failure
-            // has to reach the Result plumbing like any other, or the first
-            // "Replace secret key" takes the whole app down.
+            // The command runs in dataDir, which a fresh install has not made
+            // until Connect, so "Replace secret key" before it could not spawn.
+            paths.ensureDirs()
             val process = try {
                 ProcessBuilder(argv)
                     .directory(paths.dataDir)
@@ -640,9 +638,10 @@ class ConfigManager(
                     .apply { environment().putAll(coreEnv(paths)) }
                     .start()
             } catch (e: IOException) {
+                // Named by the binary: the last argument of `config pk` is the secret key.
                 return@withContext CommandResult(
                     exitCode = -1,
-                    output = "${argv.lastOrNull().orEmpty()}: ${e.message}",
+                    output = "${File(argv.first()).name}: ${e.message}",
                     timedOut = false,
                 )
             }

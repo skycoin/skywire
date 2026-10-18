@@ -495,11 +495,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      * not read it. Cannot throw: the dialog's submit runs it in a bare
      * coroutine, and anything escaping there is a process crash.
      */
-    suspend fun publicKeyOf(secretKey: String): String? = runCatching {
-        config.derivePublicKey(secretKey).getOrNull()
-    }.onFailure { e ->
-        mutable.update { it.copy(message = e.message ?: e::class.java.simpleName) }
-    }.getOrNull()
+    suspend fun publicKeyOf(secretKey: String): String? {
+        val result = try {
+            config.derivePublicKey(secretKey)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+        return result
+            .onFailure { e -> mutable.update { it.copy(message = e.message ?: e::class.java.simpleName) } }
+            .getOrNull()
+    }
 
     /** The pasted key is the one already installed — nothing to do. */
     fun isCurrentKey(publicKey: String): Boolean =
