@@ -766,40 +766,47 @@ class WalletRepository private constructor(private val context: Context) {
 
 /**
  * Walks a coin's node addresses in their stored order: earlier is higher
- * priority, and a transport failure hands the request to the next one. A node
- * that just failed is skipped for [SKIP_MS] — a dead first choice costs one
- * connect timeout, not one per request — and a success puts it back in
- * rotation.
+ * priority, and a transport failure, a 429 or a 5xx hands the request to the
+ * next one. A node that just failed is skipped for [SKIP_MS] — a dead first
+ * choice costs one connect timeout, not one per request — and a success puts
+ * it back in rotation.
  *
  * Only requests addressed to the first node are moved: the Ethereum family's
  * indexer rides the same client at its own address and must stay there.
  */
-private class NodeFailover(bases: List<String>) : okhttp3.Interceptor {
+internal class NodeFailover(bases: List<String>) : okhttp3.Interceptor {
 
     private val parsed = bases.mapNotNull { it.toHttpUrlOrNull() }
-    private val primaryHost = parsed.firstOrNull()?.host
+    private val primary = parsed.firstOrNull()
 
     override fun intercept(chain: okhttp3.Interceptor.Chain): okhttp3.Response {
         val request = chain.request()
-        if (parsed.size < 2 || request.url.host != primaryHost) {
+        val primary = primary
+        if (parsed.size < 2 || primary == null || request.url.host != primary.host) {
             return chain.proceed(request)
         }
+        // The request was built on the first node's base path; each node gets its own.
+        val segments = request.url.encodedPathSegments
+        val prefix = primary.baseSegments()
+        val tail = if (segments.take(prefix.size) == prefix) segments.drop(prefix.size) else segments
         val now = System.currentTimeMillis()
         val live = parsed.filter { (now - failures.getOrDefault(it.toString(), 0L)) > SKIP_MS }
             .ifEmpty { parsed }
         var last: IOException? = null
-        for (base in live) {
-            val shifted = request.newBuilder()
-                .url(
-                    request.url.newBuilder()
-                        .scheme(base.scheme)
-                        .host(base.host)
-                        .port(base.port)
-                        .build(),
-                )
+        live.forEachIndexed { i, base ->
+            val url = base.newBuilder()
+                .encodedPath("/")
+                .apply { (base.baseSegments() + tail).forEach { addEncodedPathSegment(it) } }
+                .encodedQuery(request.url.encodedQuery)
                 .build()
             try {
-                val response = chain.proceed(shifted)
+                val response = chain.proceed(request.newBuilder().url(url).build())
+                // A throttled or failing node is as unusable as a dead one, unless it is the last.
+                if ((response.code == 429 || response.code >= 500) && i < live.lastIndex) {
+                    response.close()
+                    failures[base.toString()] = System.currentTimeMillis()
+                    return@forEachIndexed
+                }
                 failures.remove(base.toString())
                 return response
             } catch (e: IOException) {
@@ -809,6 +816,8 @@ private class NodeFailover(bases: List<String>) : okhttp3.Interceptor {
         }
         throw last ?: IOException("no node of the ${parsed.size} answered")
     }
+
+    private fun okhttp3.HttpUrl.baseSegments() = encodedPathSegments.filter { it.isNotEmpty() }
 
     private companion object {
         /** How long a node that just failed is skipped for. */
