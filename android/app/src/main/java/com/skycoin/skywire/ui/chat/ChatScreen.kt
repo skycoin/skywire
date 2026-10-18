@@ -333,7 +333,10 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
                             // recreates the activity, which reloads anyway.
                             view.loadUrl(
                                 target + ChatWebView.themeQuery(darkTheme) +
-                                    ChatWebView.langQuery(AppLocale.current(context)),
+                                    ChatWebView.langQuery(
+                                        AppLocale.current(context),
+                                        context.getString(R.string.chat_page_lang),
+                                    ),
                             )
                         }
                     },

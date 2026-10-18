@@ -259,19 +259,18 @@ internal object ChatWebView {
     fun themeQuery(dark: Boolean): String = if (dark) "?theme=dark" else "?theme=light"
 
     /**
-     * The language the same way: the chat is a web page and knows nothing of
-     * Android's locale, so the app's own language setting is named in the URL
-     * and the page carries its own translations for it. English and "whatever
-     * the phone says" ship nothing — the page is English and a system
-     * language the app doesn't translate is not made Chinese by pretending.
-     * Appends with "&" because the theme query is always first.
+     * The language the same way, appended with "&" after the theme query. [resolved] is
+     * R.string.chat_page_lang, so "System" gives the page the language the app resolved.
      */
-    fun langQuery(language: AppLanguage): String = when (language) {
+    fun langQuery(language: AppLanguage, resolved: String): String = when (language) {
         AppLanguage.CHINESE_SIMPLIFIED -> "&lang=zh"
         AppLanguage.SPANISH -> "&lang=es"
         AppLanguage.FRENCH -> "&lang=fr"
-        AppLanguage.ENGLISH, AppLanguage.SYSTEM -> ""
+        AppLanguage.ENGLISH -> ""
+        AppLanguage.SYSTEM -> if (resolved in PAGE_LANGS) "&lang=$resolved" else ""
     }
+
+    private val PAGE_LANGS = setOf("zh", "es", "fr")
 
     /**
      * Move the open page to the other theme, for when the app's own setting

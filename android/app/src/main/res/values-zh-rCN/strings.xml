@@ -305,6 +305,7 @@
     <!-- SkyChat -->
     <string name="chat_menu">聊天操作</string>
     <string name="chat_reload">重新加载</string>
+    <string name="chat_page_lang">zh</string>
     <string name="chat_starting">正在启动 SkyChat…</string>
     <string name="chat_core_starting">正在等待 Skywire 核心启动…</string>
     <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
