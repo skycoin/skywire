@@ -741,21 +741,14 @@ func (k knownRoots) removeKnown(c *Conn, seq uint64) {
 // Root objects of all peers
 func (k knownRoots) moveForward(seq uint64) {
 
-	var (
-		ks uint64
-		i  int
-	)
-
 	for c, known := range k {
 
-		for i, ks = range known {
-
-			if ks >= seq {
-				k[c] = append(known[:i], known[i+1:]...)
-				break
-			}
-
+		var i int
+		for i < len(known) && known[i] < seq {
+			i++
 		}
+
+		k[c] = known[i:] // addKnown keeps known sorted
 
 	}
 
