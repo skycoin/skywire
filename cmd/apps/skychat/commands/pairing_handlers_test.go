@@ -966,11 +966,15 @@ func TestRegisterPairHTTPHandlers_DisabledRegistersNothing(t *testing.T) {
 	}
 }
 
-func TestPairing_MakesTheContactMutual(t *testing.T) {
+func TestPairing_IsConsentNotAName(t *testing.T) {
+	withPrivacyStore(t)
 	withContactStore(t)
+	if err := privacyStore.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
 	peer := mustPK(t)
 
-	// The initiator's book: pairing with a key is naming it.
+	// The initiator chose the peer: their messages need no approval.
 	withPairHandlerEnv(t, &pairHandlersAPI{})
 	rr := httptest.NewRecorder()
 	pairRootHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost, "/pair",
@@ -978,15 +982,12 @@ func TestPairing_MakesTheContactMutual(t *testing.T) {
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("post /pair: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if got := contactStore.Name(peer.Hex()); got != shortHexPK(peer.Hex()) {
-		t.Fatalf("initiator's book has %q, want the short key", got)
+	if !privacyStore.Accepted(peer.Hex()) {
+		t.Fatal("the initiator did not accept the peer")
 	}
 
-	// The accepter's book: consent to pair is naming too.
+	// The accepter consented too, and a name would outlive deleting the chat.
 	other := mustPK(t)
-	if _, err := contactStore.Set(other.Hex(), "Already Named"); err != nil {
-		t.Fatal(err)
-	}
 	pendingPut(other)
 	rr = httptest.NewRecorder()
 	pairInvitesItemHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost,
@@ -994,11 +995,16 @@ func TestPairing_MakesTheContactMutual(t *testing.T) {
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("accept: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if got := contactStore.Name(other.Hex()); got != "Already Named" {
-		t.Fatalf("an existing name was overwritten: %q", got)
+	if !privacyStore.Accepted(other.Hex()) {
+		t.Fatal("the accepter did not accept the peer")
+	}
+	for _, pk := range []string{peer.Hex(), other.Hex()} {
+		if got := contactStore.Name(pk); got != "" {
+			t.Fatalf("pairing named %s %q", pk, got)
+		}
 	}
 
-	// A decline adds nothing.
+	// A decline lets nobody in.
 	stranger := mustPK(t)
 	pendingPut(stranger)
 	rr = httptest.NewRecorder()
@@ -1007,7 +1013,7 @@ func TestPairing_MakesTheContactMutual(t *testing.T) {
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("decline: code=%d body=%s", rr.Code, rr.Body.String())
 	}
-	if got := contactStore.Name(stranger.Hex()); got != "" {
-		t.Fatalf("a declined peer entered the book as %q", got)
+	if privacyStore.Accepted(stranger.Hex()) {
+		t.Fatal("a declined peer was accepted")
 	}
 }

@@ -8025,6 +8025,8 @@
             this.pairEpochs = this.pairEpochs || {};
             pairs.forEach(p => {
               if (!p || !p.peer_pk) return;
+              // The initiator learns of the accept here, with no reload.
+              if (p.status === 'active') this._contactFromPair(this.processPk(p.peer_pk), p.established_at);
               this.pairEpochs[this.processPk(p.peer_pk)] = {
                 epoch: p.epoch || '',
                 forwardSecret: !!p.forward_secret,
@@ -8121,6 +8123,17 @@
           .catch(e => this.showToast(e.message, 'error'));
       }
 
+      // _contactFromPair adds a peer to the address book once per accepted
+      // pairing, so removing them sticks until they pair again.
+      _contactFromPair(pk, since) {
+        const done = this._cached('skychat_pair_contacts') || [];
+        const mark = `${pk} ${since || ''}`;
+        if (!Array.isArray(done) || done.includes(mark)) return;
+        done.push(mark);
+        this._store('skychat_pair_contacts', JSON.stringify(done));
+        this.addContact(pk);
+      }
+
       _updatePairBadge(pk, isPaired) {
         document.querySelectorAll('.recipient-item').forEach(item => {
           if (item.dataset.pk !== pk) return;
@@ -8159,6 +8172,7 @@
                 if (p.status === 'revoked') return;
                 const pk = this.processPk(p.peer_pk);
                 this.pairedSet.add(pk);
+                if (p.status === 'active') this._contactFromPair(pk, p.established_at);
                 // Remember the forward-secrecy state per peer so the
                 // header can render it without another round trip when
                 // the user switches chats.
@@ -8235,6 +8249,7 @@
             if (res.ok) {
               this.pendingInvites.delete(pk);
               this.pairedSet.add(pk);
+              this.addContact(pk);
               if (!this.recipients.includes(pk)) {
                 this._addRecipient(pk);
               } else {

@@ -34,3 +34,18 @@ func TestDeletingEndsConsent(t *testing.T) {
 		t.Error("removing a contact keeps the peer accepted or named")
 	}
 }
+
+// TestAcceptedPairIsAContact pins that an accepted pairing puts the peer in
+// the address book on both sides: the accepter on accept, the initiator
+// when its pair poll first sees the pair active.
+func TestAcceptedPairIsAContact(t *testing.T) {
+	page := embeddedPage(t)
+	if !strings.Contains(pageMethod(t, page, "acceptInvite"), "this.addContact(pk)") {
+		t.Error("accepting an invite does not add the peer to the address book")
+	}
+	for _, name := range []string{"syncPairedFromVisor", "_pollPairEpochs"} {
+		if !strings.Contains(pageMethod(t, page, name), "this._contactFromPair(") {
+			t.Errorf("%s does not add the paired peer to the address book", name)
+		}
+	}
+}
