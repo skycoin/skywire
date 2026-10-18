@@ -459,9 +459,7 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 				appLog("Pairing: PairMarkActive after accept failed: %v", err)
 			}
 			pendingDelete(peer)
-			// The accepter just consented to the peer: they belong in the
-			// book here too, or the pairing stays one-sided forever.
-			pairContact(peer)
+			acceptPairPeer(peer)
 			// Best-effort ack to the initiator. If the legacy
 			// connection has dropped, the pair record is still
 			// good and the initiator can converge on next contact.
@@ -483,20 +481,14 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 	}
 }
 
-// pairContact records the peer in the address book if they are not named
-// yet. A pairing is a mutual handshake, and without this the two contact
-// books end up one-sided — whoever typed the key first has the peer and the
-// other side has nothing. The short key stands in as the name until the
-// operator renames it, and an existing name is never overwritten.
-func pairContact(peer cipher.PubKey) {
-	if contactStore == nil {
+// acceptPairPeer records a pairing as consent to message. The page adds the
+// peer to its address book; a name here would let them past approval for good.
+func acceptPairPeer(peer cipher.PubKey) {
+	if privacyStore == nil {
 		return
 	}
-	if contactStore.Name(peer.Hex()) != "" {
-		return
-	}
-	if _, err := contactStore.Set(peer.Hex(), shortHexPK(peer.Hex())); err != nil {
-		appLog("Pairing: contact for %s: %v", peer.Hex(), err)
+	if err := privacyStore.Accept(peer.Hex()); err != nil {
+		appLog("Pairing: accept %s: %v", peer.Hex(), err)
 	}
 }
 
@@ -539,9 +531,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			// The initiator's own book: pairing with a key says the same
-			// thing typing it into the address book does.
-			pairContact(peer)
+			acceptPairPeer(peer)
 			// Best-effort send pair-invite via legacy direct path.
 			// Failure isn't fatal: if the peer is offline, both sides
 			// can converge later with each calling PairAdd manually.
