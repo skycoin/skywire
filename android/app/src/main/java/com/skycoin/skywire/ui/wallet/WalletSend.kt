@@ -441,7 +441,7 @@ private fun FromSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        viewModel.updateSend { it.copy(fromAddress = null, sendMax = false, planError = null) }
+                        viewModel.updateSend { it.copy(fromAddress = null, inputs = emptySet(), sendMax = false, planError = null) }
                         onDismiss()
                     }
                     .padding(horizontal = 20.dp, vertical = 13.dp),
@@ -466,7 +466,7 @@ private fun FromSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            viewModel.updateSend { it.copy(fromAddress = addr, sendMax = false, planError = null) }
+                            viewModel.updateSend { it.copy(fromAddress = addr, inputs = emptySet(), sendMax = false, planError = null) }
                             onDismiss()
                         }
                         .padding(horizontal = 20.dp, vertical = 13.dp),
@@ -514,7 +514,9 @@ private fun UtxoSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
-            if (send.utxos.isEmpty()) {
+            // A chosen from-address spends only its own outputs, so only those are offered.
+            val offered = send.utxos.filter { send.fromAddress == null || it.address == send.fromAddress }
+            if (offered.isEmpty()) {
                 Text(
                     stringResource(R.string.wallet_send_coins_none),
                     style = MaterialTheme.typography.bodyMedium,
@@ -527,7 +529,7 @@ private fun UtxoSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                         .heightIn(max = 420.dp)
                         .padding(top = 4.dp)
                 ) {
-                    items(send.utxos, key = { it.uxid }) { u ->
+                    items(offered, key = { it.uxid }) { u ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

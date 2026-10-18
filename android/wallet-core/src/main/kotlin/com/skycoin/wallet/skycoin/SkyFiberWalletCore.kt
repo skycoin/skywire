@@ -211,7 +211,8 @@ class SkyFiberWalletCore(
             SkycoinCreate.create(
                 unspents = spendable,
                 to = listOf(SkycoinCreate.Destination(toAddress, sendAmount, hoursTo)),
-                changeAddress = book.receive.first(),
+                // Change goes back where it came from, or a send from #2 moves #2's rest to #1.
+                changeAddress = fromAddress ?: book.receive.first(),
                 burnFactor = params.burnFactor,
             )
         } catch (e: SkycoinCreate.InsufficientBalance) {
