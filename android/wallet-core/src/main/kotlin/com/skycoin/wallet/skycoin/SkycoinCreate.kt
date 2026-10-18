@@ -226,10 +226,9 @@ object SkycoinCreate {
         var changeHours = remaining - totalOutHours
 
         // No coin change but hour change: force one more input when the extra
-        // burn it causes costs less than the hours it saves. Automatic
-        // selection only — with manual hours the user chose what leaves, and
-        // leftover hours with no change output to carry them burn.
-        if (!isManual && changeCoins == 0uL && changeHours > 0uL) {
+        // burn it causes costs less than the hours it saves. Manual hours too,
+        // as transaction/create.go in the Skycoin Go module does.
+        if (changeCoins == 0uL && changeHours > 0uL) {
             val leftovers = unspents.filter { u -> spends.none { it.hash.contentEquals(u.hash) } }.toMutableList()
             sortHoursLowToHigh(leftovers)
             if (leftovers.isNotEmpty()) {
@@ -257,6 +256,12 @@ object SkycoinCreate {
             return create(unspents, to, changeAddress, burnFactor, shareFull = true, callCount = 1)
         }
 
+        // Hours no change output carries are burned, so they count in the fee:
+        // the chain's fee is the input hours less the output hours.
+        if (changeCoins == 0uL) {
+            feeHours = addOrThrow(feeHours, changeHours)
+            changeHours = 0uL
+        }
         if (changeCoins > 0uL) {
             txn.pushOutput(changeAddress, changeCoins, changeHours)
         }
