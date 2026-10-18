@@ -34,7 +34,12 @@ data class CoinSpec(
      *  the wallet UI's symbol set. Built-ins carry bundled logos instead;
      *  null falls back to ticker letters. */
     val icon: String? = null,
+    /** The node addresses requests try, in order. Empty until the user
+     *  names their own; [nodeUrl] is always the first of them. */
+    val nodeUrls: List<String> = emptyList(),
 ) {
+    /** The addresses a request walks before it gives up: the list, else the one. */
+    val tryNodes: List<String> get() = nodeUrls.ifEmpty { listOf(nodeUrl) }
     /**
      * Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH
      * family, whatever fits the app's 64-bit amounts: gwei (10⁻⁹) for the
@@ -158,21 +163,28 @@ data class WalletMeta(
 )
 
 /**
- * This coin as it is actually reached, once the user's own addresses are applied.
+ * This coin as it is actually reached, once the user's own addresses are
+ * applied.
  *
- * Every coin's node can be moved. The Ethereum family also reads its history
- * from a separate indexer, which moves on its own, so a node alone never
- * leaves half of it behind unannounced. A blank entry means the shipped one.
+ * The user's nodes come first, in their order — earlier is higher priority —
+ * and the shipped address rides behind them as the fallback, so a coin is
+ * never left with nothing to ask. The Ethereum family also reads its history
+ * from a separate indexer, which moves on its own, so it keeps its single
+ * address.
  */
 fun CoinSpec.withNodeOverride(
-    overrides: Map<String, String>,
+    overrides: Map<String, List<String>>,
     indexerOverrides: Map<String, String> = emptyMap(),
 ): CoinSpec {
-    val url = overrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: nodeUrl
+    // The shipped address is the fallback and stays last; naming it in the
+    // list is just spelling that out.
+    val mine = overrides[id]?.filter { it.isNotBlank() && it != nodeUrl }.orEmpty()
     val indexer = indexerUrl?.let { shipped ->
         indexerOverrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: shipped
     }
-    return if (url == nodeUrl && indexer == indexerUrl) this else copy(nodeUrl = url, indexerUrl = indexer)
+    if (mine.isEmpty() && indexer == indexerUrl) return this
+    val ordered = (mine + nodeUrl).distinct()
+    return copy(nodeUrl = ordered.first(), nodeUrls = ordered, indexerUrl = indexer)
 }
 
 /** True while this wallet's address list has never been confirmed against the chain. */
@@ -221,6 +233,8 @@ data class WalletSnapshot(
     val hours: ULong? = null,
     val spendableOutputs: Int = 0,
     val txs: List<CachedTx> = emptyList(),
+    /** Confirmed coins held by each single address — the addresses sheet. */
+    val perAddress: Map<String, ULong> = emptyMap(),
     val fetchedAtMs: Long = 0,
     /**
      * When [txs] was last actually fetched, which can lag [fetchedAtMs]: the
@@ -258,6 +272,7 @@ fun mergeSnapshot(
     predicted = balance.predicted,
     hours = balance.hours,
     spendableOutputs = balance.spendableOutputs,
+    perAddress = balance.perAddress,
     txs = history?.map {
         CachedTx(
             txid = it.txid,

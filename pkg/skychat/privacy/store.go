@@ -141,6 +141,12 @@ func (s *Store) Accept(pk string) error {
 	return s.setIn(s.acceptedMap, pk, true)
 }
 
+// Unaccept revokes an earlier Accept: the peer's next message is a request
+// again. Blocking is untouched — it is a stronger, separate decision.
+func (s *Store) Unaccept(pk string) error {
+	return s.setIn(s.acceptedMap, pk, false)
+}
+
 // SetBlocked blocks or unblocks pk.
 func (s *Store) SetBlocked(pk string, blocked bool) error {
 	return s.setIn(s.blockedMap, pk, blocked)

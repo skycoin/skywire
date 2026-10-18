@@ -71,11 +71,19 @@ object SkymailAddress {
 
     /**
      * What a typed recipient means: an address as given, or a bare public key
-     * (hex or skychat://) turned into its dmsg address. Null when it is neither.
+     * (hex or skychat://) turned into an address over [suffix]. Null when it
+     * is neither.
      */
-    fun recipient(input: String): String? {
+    fun recipient(input: String, suffix: String = DMSG): String? {
         val text = input.trim().removePrefix("skychat://").trimEnd('/')
         if ('@' in text) return text.takeIf { pkOfAddress(it) != null }
-        return of(text)
+        return of(text, suffix = suffix)
     }
+
+    /** [text] with every Skymail address in it moved onto the [suffix] network. */
+    fun withNetwork(text: String, suffix: String): String =
+        addressHost.replace(text) { it.groupValues[1] + suffix }
+
+    private val addressHost =
+        Regex("""(@(?:[a-z0-9-]+\.)*[a-z2-7]{53})(?:\.dmsg|\.skynet)\b""", RegexOption.IGNORE_CASE)
 }
