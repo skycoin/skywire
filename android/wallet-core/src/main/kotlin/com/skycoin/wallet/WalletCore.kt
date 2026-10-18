@@ -19,6 +19,12 @@ interface WalletCore {
     fun validateSeed(mnemonic: String): Boolean
 
     /**
+     * A phrase restored although its checksum fails, after the user confirmed
+     * it. The older Skycoin wallets wrote 24 list words with no checksum.
+     */
+    fun acceptsLegacySeed(mnemonic: String): Boolean = false
+
+    /**
      * Deterministic addresses for this seed. Skycoin-family wallets have a
      * single chain (change returns to the first address, change list stays
      * empty); Bitcoin derives a separate change chain the UI never shows.

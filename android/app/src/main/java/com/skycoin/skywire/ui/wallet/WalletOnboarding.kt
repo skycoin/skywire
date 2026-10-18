@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.wallet.Bip39
 
 /** Seed backup: the numbered grid, screenshots off, no copy anywhere. */
@@ -294,7 +295,15 @@ fun WalletRestoreScreen(
             // and refusing them strands those wallets. Offer the restore with
             // the typo risk said plainly; 12-word phrases are our own format
             // and always checksummed, so for them the checksum is the check.
-            if (!force && words.size == 24 && Bip39.legacyWords(phrase)) {
+            // Only the fiber chains derive from the phrase itself.
+            val legacy = words.size == 24 && Bip39.legacyWords(phrase) &&
+                state.draft.coin.kind == CoinKind.SKY_FIBER
+            if (legacy && force) {
+                legacyOffer = false
+                viewModel.restoreWallet(phrase, legacy = true, onDone = onRestored)
+                return
+            }
+            if (legacy) {
                 error = context.getString(R.string.wallet_restore_legacy)
                 legacyOffer = true
                 return

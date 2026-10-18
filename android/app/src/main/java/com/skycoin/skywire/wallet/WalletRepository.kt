@@ -372,11 +372,19 @@ class WalletRepository private constructor(private val context: Context) {
      * [WalletMeta.addressScanAtMs], so the probe is retried until it lands
      * instead of leaving the wallet permanently short of its own addresses.
      */
-    suspend fun addWallet(spec: CoinSpec, name: String, mnemonic: String, restored: Boolean): WalletMeta =
+    suspend fun addWallet(
+        spec: CoinSpec,
+        name: String,
+        mnemonic: String,
+        restored: Boolean,
+        legacy: Boolean = false,
+    ): WalletMeta =
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
             val seed = normalizeSeed(mnemonic)
-            require(core.validateSeed(seed)) { context.getString(R.string.wallet_seed_invalid) }
+            require(core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed))) {
+                context.getString(R.string.wallet_seed_invalid)
+            }
 
             // null means the question could not be put, which is different
             // from "the answer is one address" — a fresh phrase genuinely has
