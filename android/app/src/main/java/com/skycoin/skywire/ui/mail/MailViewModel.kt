@@ -251,11 +251,14 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update { s ->
                 val draft = s.draft ?: return@update s
                 val all = draft.attachments + picked
-                // Base64 grows a file by a third, and the text and headers
-                // ride along. The wire size is what the receiver enforces.
-                val encoded = all.sumOf { it.bytes.size.toLong() } * 4 / 3 + ENVELOPE_BYTES
+                // The wire size is what the receiver enforces. The text and
+                // headers ride along in the envelope allowance.
+                val encoded = all.sumOf { attachmentWireSize(it.bytes.size.toLong()) } + ENVELOPE_BYTES
                 if (encoded > limit) {
-                    s.copy(notice = string(R.string.mail_attachments_too_big, formatBytes(encoded), formatBytes(limit)))
+                    // Whole KB on both sides: in MB a mail just over 1 MB and the
+                    // 1 MB limit both read "1.0 MB".
+                    val kb = { n: Long -> "%,d KB".format((n + 1023) / 1024) }
+                    s.copy(notice = string(R.string.mail_attachments_too_big, kb(encoded), kb(limit)))
                 } else {
                     s.copy(draft = draft.copy(attachments = all))
                 }
@@ -498,6 +501,15 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         const val DEFAULT_MAX_MESSAGE = 1L shl 20
         const val ENVELOPE_BYTES = 16 * 1024L
     }
+}
+
+/**
+ * The bytes an attachment of [n] bytes takes in the sent mail: base64 in
+ * 76-column lines, each ending CRLF, as compose in pkg/skymail/send.go writes it.
+ */
+fun attachmentWireSize(n: Long): Long {
+    val encoded = (n + 2) / 3 * 4
+    return encoded + 2 * maxOf(1L, (encoded + 75) / 76)
 }
 
 /** A byte count as a person reads it. */
