@@ -922,11 +922,16 @@
     <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
     <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
-    <string name="mail_no_contacts">还没有联系人。打开一封邮件，保存发件人。</string>
+    <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
     <string name="mail_save_contact">保存联系人</string>
     <string name="mail_contact_name">名称</string>
     <string name="mail_contact_saved">联系人已保存</string>
     <string name="mail_contact_failed">无法保存联系人：%1$s</string>
+    <string name="mail_contacts_manage">管理联系人</string>
+    <string name="mail_contacts_from_skychat">来自 SkyChat</string>
+    <string name="mail_contact_delete_confirm">要从联系人中删除 %1$s 吗？</string>
+    <string name="mail_contact_edit">编辑联系人</string>
+    <string name="mail_contact_add">添加联系人</string>
     <string name="mail_add_cc">添加抄送</string>
     <string name="mail_subject">主题</string>
     <string name="mail_body">正文</string>

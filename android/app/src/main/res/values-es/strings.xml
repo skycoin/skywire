@@ -1017,11 +1017,16 @@
     <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
     <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
-    <string name="mail_no_contacts">Aún no hay contactos. Guarda un remitente desde un mensaje.</string>
+    <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
     <string name="mail_save_contact">Guardar contacto</string>
     <string name="mail_contact_name">Nombre</string>
     <string name="mail_contact_saved">Contacto guardado</string>
     <string name="mail_contact_failed">No se pudo guardar el contacto: %1$s</string>
+    <string name="mail_contacts_manage">Gestionar contactos</string>
+    <string name="mail_contacts_from_skychat">De SkyChat</string>
+    <string name="mail_contact_delete_confirm">¿Eliminar a %1$s de tus contactos?</string>
+    <string name="mail_contact_edit">Editar contacto</string>
+    <string name="mail_contact_add">Añadir contacto</string>
     <string name="mail_add_cc">Añadir Cc</string>
     <string name="mail_subject">Asunto</string>
     <string name="mail_body">Mensaje</string>

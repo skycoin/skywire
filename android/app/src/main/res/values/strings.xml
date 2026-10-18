@@ -971,11 +971,16 @@
     <string name="mail_to_hint">A SkyMail address, or a visor’s public key</string>
     <string name="mail_via_hint">Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists.</string>
     <string name="mail_contacts">Contacts</string>
-    <string name="mail_no_contacts">No contacts yet. Save a sender from a message.</string>
+    <string name="mail_no_contacts">No contacts yet. Add one, or save a sender from a message.</string>
     <string name="mail_save_contact">Save contact</string>
     <string name="mail_contact_name">Name</string>
     <string name="mail_contact_saved">Contact saved</string>
     <string name="mail_contact_failed">Could not save the contact: %1$s</string>
+    <string name="mail_contacts_manage">Manage contacts</string>
+    <string name="mail_contacts_from_skychat">From SkyChat</string>
+    <string name="mail_contact_delete_confirm">Delete %1$s from your contacts?</string>
+    <string name="mail_contact_edit">Edit contact</string>
+    <string name="mail_contact_add">Add contact</string>
     <string name="mail_add_cc">Add Cc</string>
     <string name="mail_subject">Subject</string>
     <string name="mail_body">Message</string>

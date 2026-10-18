@@ -93,6 +93,7 @@ import com.skycoin.skywire.api.MailStatus
 import com.skycoin.skywire.api.MailSummary
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
+import com.skycoin.skywire.core.MailContact
 import com.skycoin.skywire.core.SkymailAddress
 import com.skycoin.skywire.core.VoiceCallWatcher
 import com.skycoin.skywire.core.VoiceCalls
@@ -121,10 +122,11 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
     val pending by DeepLinks.pendingMail.collectAsState()
     LaunchedEffect(pending) { if (pending != null) viewModel.onPendingLink() }
 
-    val inner = state.draft != null || state.open != null || state.settingsOpen
+    val inner = state.draft != null || state.open != null || state.settingsOpen || state.contactsOpen
     val selecting = state.selection.isNotEmpty()
     val stepBack: () -> Unit = {
         when {
+            state.contactsOpen -> viewModel.closeContacts()
             state.draft != null -> viewModel.discardDraft()
             state.settingsOpen -> viewModel.closeSettings()
             state.open != null -> viewModel.closeMessage()
@@ -139,6 +141,7 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
         topBar = {
             SkyTopBar(
                 title = when {
+                    state.contactsOpen -> stringResource(R.string.mail_contacts)
                     state.draft != null -> stringResource(R.string.mail_compose_title)
                     state.settingsOpen -> stringResource(R.string.mail_settings_title)
                     selecting -> stringResource(R.string.mail_selected_count, state.selection.size)
@@ -148,6 +151,9 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
                 help = HelpTopic(R.string.help_mail_title, R.string.help_mail_body),
                 actions = {
                     if (listView && !selecting) {
+                        IconButton(onClick = viewModel::openContacts) {
+                            Icon(Icons.Rounded.Contacts, contentDescription = stringResource(R.string.mail_contacts))
+                        }
                         IconButton(onClick = viewModel::openSettings) {
                             Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.mail_settings_title))
                         }
@@ -170,6 +176,7 @@ fun MailScreen(onBack: () -> Unit, viewModel: MailViewModel = viewModel()) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 !state.coreReady -> CoreNotReady(state.coreState)
+                state.contactsOpen -> ContactsView(state, viewModel)
                 state.draft != null -> ComposeView(state, viewModel)
                 state.settingsOpen -> SettingsView(state, viewModel)
                 state.open != null -> MessageView(state, viewModel)
@@ -224,6 +231,7 @@ private fun FolderView(state: MailUiState, viewModel: MailViewModel) {
                 else -> items(messages, key = { it.id }) { m ->
                     MailRow(
                         m,
+                        contacts = state.contacts,
                         sent = state.folder == MailFolder.SENT,
                         selecting = state.selection.isNotEmpty(),
                         selected = m.id in state.selection,
@@ -372,6 +380,7 @@ private fun FolderTabs(folder: String, unread: Int, onSelect: (String) -> Unit) 
 @Composable
 private fun MailRow(
     m: MailSummary,
+    contacts: List<MailContact>,
     sent: Boolean,
     selecting: Boolean,
     selected: Boolean,
@@ -407,7 +416,7 @@ private fun MailRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    displayAddress(if (sent) m.to else m.from),
+                    displayAddress(if (sent) m.to else m.from, contacts),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
                     // Read mail steps back in color as well as weight: weight
@@ -518,13 +527,15 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
                             Text(stringResource(R.string.mail_reply))
                         }
                     }
-                    // The sender's key came authenticated with the message, so
-                    // saving needs no typing: name them once and every picker,
-                    // call screen and chat shows the name.
-                    val contactPk = m.peerPk.ifEmpty {
-                        SkymailAddress.pkOfAddress(m.from.substringAfter('<').substringBefore('>')) ?: ""
+                    // Inbox saves the sender, Sent the first recipient. An unverified
+                    // From line names whoever typed it, so the transport's key wins.
+                    val raw = if (open.folder == MailFolder.SENT) m.to.split(',').first() else m.from
+                    val written = raw.substringAfter('<').substringBefore('>').trim()
+                    val contactAddress = when {
+                        open.folder == MailFolder.SENT || m.fromVerified -> written
+                        else -> SkymailAddress.of(m.peerPk) ?: ""
                     }
-                    if (open.folder == MailFolder.INBOX && contactPk.isNotEmpty()) {
+                    if (SkymailAddress.pkOfAddress(contactAddress) != null) {
                         var saveContact by remember { mutableStateOf(false) }
                         OutlinedButton(onClick = { saveContact = true }) {
                             Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -532,11 +543,13 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
                             Text(stringResource(R.string.mail_save_contact))
                         }
                         if (saveContact) {
-                            SaveContactDialog(
-                                preset = displayAddress(m.from).takeIf { '<' in m.from } ?: "",
-                                onSave = { name ->
+                            ContactDialog(
+                                title = stringResource(R.string.mail_save_contact),
+                                name = raw.substringBefore('<', "").trim().trim('"'),
+                                address = contactAddress,
+                                onSave = { name, address ->
                                     saveContact = false
-                                    viewModel.saveContact(contactPk, name)
+                                    viewModel.saveContact(name, address)
                                 },
                                 onDismiss = { saveContact = false },
                             )
@@ -583,31 +596,136 @@ private fun HeaderLine(label: Int, value: String) {
     }
 }
 
-/** Names a key for the shared address book; a blank name never saves. */
+/** A contact's name and address, new or edited. */
 @Composable
-private fun SaveContactDialog(preset: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf(preset) }
+private fun ContactDialog(
+    title: String,
+    name: String,
+    address: String,
+    onSave: (name: String, address: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var nameText by remember { mutableStateOf(name) }
+    var addressText by remember { mutableStateOf(address) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.mail_save_contact)) },
+        title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.mail_contact_name)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = nameText,
+                    onValueChange = { nameText = it },
+                    label = { Text(stringResource(R.string.mail_contact_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = addressText,
+                    onValueChange = { addressText = it },
+                    label = { Text(stringResource(R.string.mail_to_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) {
-                Text(stringResource(R.string.mail_save_contact))
-            }
+            TextButton(
+                onClick = { onSave(nameText, addressText) },
+                enabled = nameText.isNotBlank() && addressText.isNotBlank(),
+            ) { Text(stringResource(R.string.mail_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
         },
     )
+}
+
+/** SkyMail's own contacts: add, edit and delete without a message to start from. */
+@Composable
+private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
+    var editing by remember { mutableStateOf<MailContact?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<MailContact?>(null) }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        item {
+            FilledTonalButton(onClick = { adding = true }) {
+                Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.mail_contact_add))
+            }
+        }
+        if (state.contacts.isEmpty()) {
+            item {
+                Text(
+                    stringResource(R.string.mail_no_contacts),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+        }
+        items(state.contacts, key = { it.address }) { c ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(c.name, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        displayAddress(c.address),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { editing = c }) {
+                    Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.mail_contact_edit))
+                }
+                IconButton(onClick = { deleting = c }) {
+                    Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.mail_delete))
+                }
+            }
+            HorizontalDivider()
+        }
+    }
+    if (adding) {
+        ContactDialog(
+            title = stringResource(R.string.mail_contact_add),
+            name = "",
+            address = "",
+            onSave = { name, address ->
+                adding = false
+                viewModel.saveContact(name, address)
+            },
+            onDismiss = { adding = false },
+        )
+    }
+    editing?.let { c ->
+        ContactDialog(
+            title = stringResource(R.string.mail_contact_edit),
+            name = c.name,
+            address = c.address,
+            onSave = { name, address ->
+                editing = null
+                viewModel.saveContact(name, address, replacing = c.address)
+            },
+            onDismiss = { editing = null },
+        )
+    }
+    deleting?.let { c ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            text = { Text(stringResource(R.string.mail_contact_delete_confirm, c.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    viewModel.deleteContact(c.address)
+                }) { Text(stringResource(R.string.mail_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text(stringResource(android.R.string.cancel)) }
+            },
+        )
+    }
 }
 
 /** What the transport proved about the sender: the From line can be typed by anyone. */
@@ -666,7 +784,37 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                     Icon(Icons.Rounded.Contacts, contentDescription = stringResource(R.string.mail_contacts))
                 }
                 DropdownMenu(expanded = pickContact, onDismissRequest = { pickContact = false }) {
-                    if (book.isEmpty()) {
+                    val add = { address: String ->
+                        pickContact = false
+                        val addr = SkymailAddress.withNetwork(address, if (draft.skynet) SkymailAddress.SKYNET else SkymailAddress.DMSG)
+                        viewModel.updateDraft { d ->
+                            d.copy(to = listOf(d.to.trim().trimEnd(','), addr).filter { it.isNotEmpty() }.joinToString(", "))
+                        }
+                    }
+                    state.contacts.forEach { c ->
+                        DropdownMenuItem(text = { Text(c.name) }, onClick = { add(c.address) })
+                    }
+                    // SkyChat's names too, when it runs, for keys not saved here.
+                    val saved = state.contacts.mapNotNull { SkymailAddress.pkOfAddress(it.address) }.toSet()
+                    val chat = book.entries.filter { it.key !in saved }.sortedBy { it.value.lowercase() }
+                    if (chat.isNotEmpty()) {
+                        if (state.contacts.isNotEmpty()) HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.mail_contacts_from_skychat),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            enabled = false,
+                            onClick = {},
+                        )
+                        chat.forEach { (pk, name) ->
+                            DropdownMenuItem(text = { Text(name) }, onClick = { SkymailAddress.of(pk)?.let(add) })
+                        }
+                    }
+                    if (state.contacts.isEmpty() && chat.isEmpty()) {
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -678,21 +826,15 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                             enabled = false,
                             onClick = {},
                         )
-                    } else {
-                        book.entries.sortedBy { it.value.lowercase() }.forEach { (pk, name) ->
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    pickContact = false
-                                    val suffix = if (draft.skynet) SkymailAddress.SKYNET else SkymailAddress.DMSG
-                                    val addr = SkymailAddress.of(pk, suffix = suffix) ?: return@DropdownMenuItem
-                                    viewModel.updateDraft { d ->
-                                        d.copy(to = listOf(d.to.trim().trimEnd(','), addr).filter { it.isNotEmpty() }.joinToString(", "))
-                                    }
-                                },
-                            )
-                        }
                     }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mail_contacts_manage)) },
+                        onClick = {
+                            pickContact = false
+                            viewModel.openContacts()
+                        },
+                    )
                 }
             }
         }
@@ -763,7 +905,7 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
             Spacer(Modifier.width(6.dp))
             Text(stringResource(R.string.mail_attach))
         }
-        state.lastSend?.let { SendResultCard(it) }
+        state.lastSend?.let { SendResultCard(it, state.contacts) }
         Text(
             stringResource(R.string.mail_send_note),
             style = MaterialTheme.typography.bodySmall,
@@ -784,12 +926,12 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
 }
 
 @Composable
-private fun SendResultCard(result: MailSendResult) {
+private fun SendResultCard(result: MailSendResult, contacts: List<MailContact>) {
     SectionCard {
         Text(stringResource(R.string.mail_result_title), style = MaterialTheme.typography.titleSmall)
         result.recipients.forEach { r ->
             Spacer(Modifier.height(6.dp))
-            Text(displayAddress(r.rcpt), style = MaterialTheme.typography.bodyMedium)
+            Text(displayAddress(r.rcpt, contacts), style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (r.error.isEmpty()) {
                     stringResource(R.string.mail_result_delivered, r.via)
@@ -920,12 +1062,13 @@ private fun SettingsView(state: MailUiState, viewModel: MailViewModel) {
  * An address short enough to read: the display name when there is one, a
  * SkyChat contact's name for the key, or the address with its key cut.
  */
-private fun displayAddress(raw: String): String {
+private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList()): String {
     val text = raw.trim()
     val name = text.substringBefore('<', "").trim().trim('"')
     if (name.isNotEmpty() && '<' in text) return name
     val addr = text.substringAfter('<').substringBefore('>').trim()
     SkymailAddress.pkOfAddress(addr)?.let { pk ->
+        contacts.firstOrNull { SkymailAddress.pkOfAddress(it.address) == pk }?.let { return it.name }
         val named = VoiceCalls.displayName(pk)
         if (named != VoiceCallWatcher.shortPk(pk)) return named
     }
