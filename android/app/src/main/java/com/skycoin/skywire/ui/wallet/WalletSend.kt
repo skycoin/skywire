@@ -351,9 +351,9 @@ fun WalletSendScreen(
                     TextField(
                         value = send.hoursText,
                         onValueChange = { v ->
-                            viewModel.updateSend {
-                                it.copy(hoursText = v.filter { c -> c.isDigit() }.take(18), plan = null)
-                            }
+                            // Kept as typed: stripping turned "12.5" into 125, and the plan
+                            // names anything that is not a whole number.
+                            viewModel.updateSend { it.copy(hoursText = v.take(18), plan = null) }
                         },
                         placeholder = { Text(stringResource(R.string.wallet_send_hours_hint)) },
                         singleLine = true,
