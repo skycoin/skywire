@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -627,11 +628,23 @@ class ConfigManager(
 
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(argv)
-                .directory(paths.dataDir)
-                .redirectErrorStream(true)
-                .apply { environment().putAll(coreEnv(paths)) }
-                .start()
+            // The command runs in dataDir, which a fresh install has not made
+            // until Connect, so "Replace secret key" before it could not spawn.
+            paths.ensureDirs()
+            val process = try {
+                ProcessBuilder(argv)
+                    .directory(paths.dataDir)
+                    .redirectErrorStream(true)
+                    .apply { environment().putAll(coreEnv(paths)) }
+                    .start()
+            } catch (e: IOException) {
+                // Named by the binary: the last argument of `config pk` is the secret key.
+                return@withContext CommandResult(
+                    exitCode = -1,
+                    output = "${File(argv.first()).name}: ${e.message}",
+                    timedOut = false,
+                )
+            }
             supervisorScope {
                 val output = StringBuilder()
                 val reader = launch {

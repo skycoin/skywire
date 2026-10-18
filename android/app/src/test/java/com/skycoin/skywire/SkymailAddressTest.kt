@@ -36,4 +36,14 @@ class SkymailAddressTest {
         assertNull(SkymailAddress.recipient("not a key"))
         assertNull(SkymailAddress.label(pc.dropLast(2)))
     }
+
+    @Test
+    fun theNetworkMovesEveryAddress() {
+        val written = "mail@$pcLabel.dmsg, Bob <bob@host.$phoneLabel.DMSG>; bob@example.com"
+        assertEquals(
+            "mail@$pcLabel.skynet, Bob <bob@host.$phoneLabel.skynet>; bob@example.com",
+            SkymailAddress.withNetwork(written, SkymailAddress.SKYNET),
+        )
+        assertEquals("mail@$pcLabel.dmsg", SkymailAddress.withNetwork("mail@$pcLabel.skynet", SkymailAddress.DMSG))
+    }
 }

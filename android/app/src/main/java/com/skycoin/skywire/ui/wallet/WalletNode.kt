@@ -14,10 +14,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -35,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,18 +48,19 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
- * Which node this coin's wallet talks to.
+ * Which nodes this coin's wallet talks to, and in what order.
  *
- * Every balance, every transaction list and every broadcast for a fiber coin
- * goes to one daemon, and the app ships with an address for it. That address
- * is reachable from most places and not from all: it can be blocked, or
+ * Every balance, every transaction list and every broadcast for a coin goes
+ * to a daemon, and the app ships with an address for it. That address is
+ * reachable from most places and not from all: it can be blocked, or
  * throttled to the point where a wallet with real history cannot finish
  * reading it. The escape is to say where else to look — a mirror, a node the
- * user runs, a plain-http one on their own network — and it is also the only
- * way to correct the address of a coin they added themselves, which used to
- * be fixed at the moment it was created.
+ * user runs, a plain-http one on their own network — and more than one can
+ * be named, ordered: the first is asked first, and the shipped address rides
+ * behind the list as the fallback.
  *
  * Nothing secret is being handed to whoever is named here. Keys never leave
  * the device and signing is local, so a hostile node can refuse to answer or
@@ -63,7 +69,7 @@ import com.skycoin.skywire.wallet.CoinKind
  * https and why saying so on this screen is worth the line.
  *
  * The Ethereum family reads history from an indexer apart from its node, so
- * there the screen holds both, saved and reset together.
+ * there the screen holds that address too, saved on its own.
  */
 @Composable
 fun WalletNodeScreen(
@@ -73,18 +79,45 @@ fun WalletNodeScreen(
     val state by viewModel.uiState.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val coin = state.coin
-    // Seeded from the address in force, so the field opens on what is
-    // actually being used rather than on an empty box the user has to guess
-    // the shape of.
-    var url by remember(coin.id, coin.nodeUrl) { mutableStateOf(coin.nodeUrl) }
+    val context = LocalContext.current
+    val shipped = state.defaultNodeUrl
     val shippedIndexer = state.defaultIndexerUrl
     var indexer by remember(coin.id, coin.indexerUrl) { mutableStateOf(coin.indexerUrl.orEmpty()) }
     val hasIndexer = shippedIndexer != null
-    // As the repository stores them, so a trailing slash is not a change.
+    var add by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
     fun typed(value: String) = value.trim().removeSuffix("/")
-    val changed = typed(url) != coin.nodeUrl || (hasIndexer && typed(indexer) != coin.indexerUrl)
-    val shipped = coin.nodeUrl == state.defaultNodeUrl && typed(url) == state.defaultNodeUrl &&
-        (!hasIndexer || (coin.indexerUrl == shippedIndexer && typed(indexer) == shippedIndexer))
+
+    // Every mutation saves at once: the order on screen is the order the
+    // wallet asks in, with nothing waiting on a save button.
+    fun apply(urls: List<String>, indexerUrl: String? = null) {
+        viewModel.saveNodeUrls(urls, indexerUrl)
+    }
+
+    fun addNode() {
+        val url = typed(add)
+        when {
+            url.isEmpty() -> Unit
+            url.toHttpUrlOrNull() == null -> error = context.getString(R.string.wallet_node_invalid)
+            url == shipped || url in state.nodeUrls ->
+                error = context.getString(R.string.wallet_node_duplicate)
+            else -> {
+                error = null
+                add = ""
+                apply(state.nodeUrls + url)
+            }
+        }
+    }
+
+    fun move(index: Int, up: Boolean) {
+        val to = if (up) index - 1 else index + 1
+        if (to !in state.nodeUrls.indices) return
+        val next = state.nodeUrls.toMutableList()
+        java.util.Collections.swap(next, index, to)
+        apply(next)
+    }
+
+    val indexerChanged = hasIndexer && typed(indexer) != coin.indexerUrl
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
@@ -107,23 +140,55 @@ fun WalletNodeScreen(
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+            )
+            Text(
+                stringResource(R.string.wallet_node_list_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 14.dp),
             )
 
-            // Said where the choice is made, not in a settings page nobody
-            // opens: an address typed here decides whether the address book
-            // travels in the clear, and that is not recoverable afterwards.
-            UrlField(
-                label = stringResource(R.string.wallet_node_field),
-                hint = when (coin.kind) {
-                    CoinKind.BTC -> stringResource(R.string.wallet_node_hint_btc)
-                    CoinKind.ETH, CoinKind.ERC20 -> stringResource(R.string.wallet_node_hint_eth)
-                    CoinKind.SKY_FIBER -> null
-                },
-                value = url,
-                placeholder = state.defaultNodeUrl,
-                onChange = { url = it },
+            state.nodeUrls.forEachIndexed { i, url ->
+                NodeRow(
+                    position = i + 1,
+                    url = url,
+                    onUp = { move(i, up = true) },
+                    onDown = { move(i, up = false) },
+                    onRemove = { apply(state.nodeUrls.filterIndexed { j, _ -> j != i }) },
+                )
+            }
+            // The fallback: fixed at the end, always there, not removable —
+            // a coin is never left with nothing to ask.
+            ShippedRow(shipped)
+
+            Spacer(Modifier.height(18.dp))
+            OutlinedTextField(
+                value = add,
+                onValueChange = { add = it; error = null },
+                placeholder = { Text(stringResource(R.string.wallet_node_field)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
             )
+            error?.let { err ->
+                Text(
+                    err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            Button(
+                onClick = { addNode() },
+                enabled = typed(add).isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(50.dp),
+            ) {
+                Text(stringResource(R.string.wallet_node_add), fontWeight = FontWeight.Bold)
+            }
+            TransportNote(typed(add))
+
             if (shippedIndexer != null) {
                 Spacer(Modifier.height(20.dp))
                 UrlField(
@@ -133,31 +198,108 @@ fun WalletNodeScreen(
                     placeholder = shippedIndexer,
                     onChange = { indexer = it },
                 )
-            }
-
-            Spacer(Modifier.height(20.dp))
-            Button(
-                onClick = { viewModel.setNodeUrl(url, indexer.takeIf { hasIndexer }, onBack) },
-                enabled = url.isNotBlank() && (!hasIndexer || indexer.isNotBlank()) && changed,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-            ) {
-                Text(
-                    stringResource(if (hasIndexer) R.string.wallet_node_save_all else R.string.wallet_node_save),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            if (!shipped) {
-                TextButton(
-                    onClick = { viewModel.setNodeUrl("", "".takeIf { hasIndexer }, onBack) },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                Button(
+                    onClick = { apply(state.nodeUrls, typed(indexer)) },
+                    enabled = indexerChanged,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(50.dp),
                 ) {
-                    Text(
-                        if (hasIndexer) stringResource(R.string.wallet_node_default_all)
-                        else stringResource(R.string.wallet_node_default, state.defaultNodeUrl),
-                    )
+                    Text(stringResource(R.string.wallet_node_save), fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+/** One of the user's nodes: its priority, its address, and the reorder and
+ *  remove controls. Position 1 is asked first. */
+@Composable
+private fun NodeRow(position: Int, url: String, onUp: () -> Unit, onDown: () -> Unit, onRemove: () -> Unit) {
+    val cleartext = url.startsWith("http://", ignoreCase = true)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(start = 14.dp, end = 2.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            position.toString(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            url,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 10.dp),
+        )
+        Icon(
+            if (cleartext) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = if (cleartext) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        IconButton(onClick = onUp, enabled = position > 1) {
+            Icon(
+                Icons.Outlined.KeyboardArrowUp,
+                contentDescription = stringResource(R.string.wallet_node_up),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onDown) {
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.wallet_node_down),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.wallet_node_remove),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/** The shipped address, fixed as the last resort. */
+@Composable
+private fun ShippedRow(url: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Lock,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            url,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            stringResource(R.string.wallet_node_shipped),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -193,7 +335,6 @@ private fun UrlField(
             modifier = Modifier.padding(top = 6.dp),
         )
     }
-    TransportNote(value)
 }
 
 /** Whether what is typed will be encrypted on the wire, said plainly. */
@@ -206,7 +347,7 @@ private fun TransportNote(url: String) {
             .padding(top = 14.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(
-                if (cleartext) PENDING_AMBER.copy(alpha = 0.12f)
+                if (cleartext && url.isNotBlank()) PENDING_AMBER.copy(alpha = 0.12f)
                 else MaterialTheme.colorScheme.surfaceVariant,
             )
             .padding(horizontal = 14.dp, vertical = 13.dp),
@@ -214,17 +355,17 @@ private fun TransportNote(url: String) {
         verticalAlignment = Alignment.Top,
     ) {
         Icon(
-            if (cleartext) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
+            if (cleartext && url.isNotBlank()) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
             null,
             Modifier.size(16.dp),
-            tint = if (cleartext) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (cleartext && url.isNotBlank()) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             stringResource(
-                if (cleartext) R.string.wallet_node_cleartext else R.string.wallet_node_encrypted,
+                if (cleartext && url.isNotBlank()) R.string.wallet_node_cleartext else R.string.wallet_node_encrypted,
             ),
             style = MaterialTheme.typography.bodySmall,
-            color = if (cleartext) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (cleartext && url.isNotBlank()) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

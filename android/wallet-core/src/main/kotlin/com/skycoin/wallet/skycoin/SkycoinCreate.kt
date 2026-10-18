@@ -24,7 +24,12 @@ object SkycoinCreate {
         val hours: ULong,           // calculated (accumulated) hours
     )
 
-    class Destination(val address: String, val coins: ULong)
+    /**
+     * A destination. Hours null means automatic: half the post-burn hours
+     * travel with the coins. A number means exactly that many hours reach
+     * this destination.
+     */
+    class Destination(val address: String, val coins: ULong, val hours: ULong? = null)
 
     class Created(
         val txn: SkycoinTxn,
@@ -177,12 +182,18 @@ object SkycoinCreate {
     ): Created {
         require(to.isNotEmpty()) { "no destinations" }
         require(to.all { it.coins != 0uL }) { "zero-coin destination" }
+        // Hours are all-automatic or all-manual in one call, never mixed.
+        val manualHours = to.map { it.hours }
+        require(manualHours.all { it == null } || manualHours.all { it != null }) { "mixed hours selection" }
+        val isManual = manualHours.all { it != null }
+        var needHours = 0uL
+        if (isManual) for (h in manualHours) needHours = addOrThrow(needHours, h!!)
 
         val txn = SkycoinTxn()
         var totalOutCoins = 0uL
         for (d in to) totalOutCoins = addOrThrow(totalOutCoins, d.coins)
 
-        var spends = chooseSpends(unspents, totalOutCoins, 0uL, burnFactor)
+        var spends = chooseSpends(unspents, totalOutCoins, needHours, burnFactor)
 
         var totalInputCoins = 0uL
         var totalInputHours = 0uL
@@ -196,8 +207,12 @@ object SkycoinCreate {
         if (feeHours == 0uL) throw NoFee()
         var remaining = totalInputHours - feeHours
 
-        val allocatedHours = if (shareFull) remaining else remaining / 2uL
-        val addrHours = distributeCoinHoursProportional(to.map { it.coins }, allocatedHours)
+        val addrHours = if (isManual) {
+            manualHours.map { it!! }
+        } else {
+            val allocatedHours = if (shareFull) remaining else remaining / 2uL
+            distributeCoinHoursProportional(to.map { it.coins }, allocatedHours)
+        }
         for ((i, d) in to.withIndex()) {
             txn.pushOutput(d.address, d.coins, addrHours[i])
         }
@@ -211,7 +226,8 @@ object SkycoinCreate {
         var changeHours = remaining - totalOutHours
 
         // No coin change but hour change: force one more input when the extra
-        // burn it causes costs less than the hours it saves.
+        // burn it causes costs less than the hours it saves. Manual hours too,
+        // as transaction/create.go in the Skycoin Go module does.
         if (changeCoins == 0uL && changeHours > 0uL) {
             val leftovers = unspents.filter { u -> spends.none { it.hash.contentEquals(u.hash) } }.toMutableList()
             sortHoursLowToHigh(leftovers)
@@ -235,11 +251,17 @@ object SkycoinCreate {
         }
 
         // Still hours with nowhere to go: retry once sending the full share onward.
-        if (changeCoins == 0uL && changeHours > 0uL && !shareFull) {
+        if (!isManual && changeCoins == 0uL && changeHours > 0uL && !shareFull) {
             if (callCount > 0) error("create already retried at full share")
             return create(unspents, to, changeAddress, burnFactor, shareFull = true, callCount = 1)
         }
 
+        // Hours no change output carries are burned, so they count in the fee:
+        // the chain's fee is the input hours less the output hours.
+        if (changeCoins == 0uL) {
+            feeHours = addOrThrow(feeHours, changeHours)
+            changeHours = 0uL
+        }
         if (changeCoins > 0uL) {
             txn.pushOutput(changeAddress, changeCoins, changeHours)
         }

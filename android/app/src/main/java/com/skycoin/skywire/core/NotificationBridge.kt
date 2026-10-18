@@ -214,7 +214,7 @@ internal class NotificationBridge(context: Context) {
             ),
             "skymail" to Channel(
                 id = "app_skymail",
-                label = "Skymail",
+                label = "SkyMail",
                 importance = NotificationManager.IMPORTANCE_DEFAULT,
                 category = NotificationCompat.CATEGORY_EMAIL,
             ),
