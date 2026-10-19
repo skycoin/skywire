@@ -335,7 +335,7 @@ func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 	for _, ni := range nodes {
 		c := ni.Country
 		if c == "" {
-			c = "XX"
+			c = unknownCountry
 		}
 		if countryIPs[c] == nil {
 			countryIPs[c] = make(map[string]struct{})
@@ -351,7 +351,7 @@ func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 	for i := range nodes {
 		c := nodes[i].Country
 		if c == "" {
-			c = "XX"
+			c = unknownCountry
 		}
 		if scale, ok := countryScale[c]; ok {
 			nodes[i].Share *= scale
@@ -553,7 +553,7 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 	for _, ni := range nodes {
 		c := ni.Country
 		if c == "" {
-			c = "XX"
+			c = unknownCountry
 		}
 		if cIPs[c] == nil {
 			cIPs[c] = make(map[string]struct{})
@@ -1047,7 +1047,7 @@ Architectures:
 				if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
 					ni.Country = geoRes.CountryCode
 				} else {
-					ni.Country = "XX"
+					ni.Country = unknownCountry
 				}
 			}
 
@@ -1518,3 +1518,8 @@ func defaultSkycoinNode() string {
 	}
 	return "http://127.0.0.1:6420"
 }
+
+// unknownCountry is the country for a visor IP the GeoIP database has no country for.
+// Those seen so far were all Indonesian IPs newer than the database, and a bucket of
+// their own gave them a much larger regional share than the rest of Indonesia.
+const unknownCountry = "ID"
