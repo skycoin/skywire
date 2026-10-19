@@ -58,6 +58,7 @@ var defaultPrefixes = map[string]string{
 	"route-finder":        "/rf",
 	"service-discovery":   "/sd",
 	"dmsg-discovery":      "/dmsgd",
+	"geoip":               "/geoip",
 }
 
 // Prefix returns the path prefix the block is mounted under: its
