@@ -7,8 +7,9 @@ package visor
 // phone never runs them, so the mobile build leaves them, and the redis
 // client they bring, out of the binary.
 import (
-	_ "github.com/skycoin/skywire/pkg/services/ar"  // address resolver
-	_ "github.com/skycoin/skywire/pkg/services/rf"  // route finder
-	_ "github.com/skycoin/skywire/pkg/services/sd"  // service discovery
-	_ "github.com/skycoin/skywire/pkg/services/tpd" // transport discovery
+	_ "github.com/skycoin/skywire/pkg/services/ar"    // address resolver
+	_ "github.com/skycoin/skywire/pkg/services/geoip" // GeoIP lookup API
+	_ "github.com/skycoin/skywire/pkg/services/rf"    // route finder
+	_ "github.com/skycoin/skywire/pkg/services/sd"    // service discovery
+	_ "github.com/skycoin/skywire/pkg/services/tpd"   // transport discovery
 )
