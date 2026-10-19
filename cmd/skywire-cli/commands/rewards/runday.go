@@ -419,7 +419,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 			if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
 				ni.Country = geoRes.CountryCode
 			} else {
-				ni.Country = "XX"
+				ni.Country = unknownCountry
 			}
 		}
 
