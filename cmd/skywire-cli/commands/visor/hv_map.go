@@ -97,27 +97,33 @@ branch lists the published keys none of them embeds.`,
 // hvMap is a hypervisor and what every visor attached to it runs.
 type hvMap struct {
 	Hypervisor cipher.PubKey `json:"hypervisor"`
-	Visors     []mapVisor    `json:"visors"`
+	// HypervisorIP and HypervisorVersion describe the hypervisor's own visor,
+	// even when the map is limited to other visors.
+	HypervisorIP      string     `json:"hypervisor_ip,omitempty"`
+	HypervisorVersion string     `json:"hypervisor_version,omitempty"`
+	Visors            []mapVisor `json:"visors"`
 	// Unplaced are keys the deployment publishes that no visor here runs.
 	Unplaced []mapKey `json:"unplaced,omitempty"`
 }
 
 type mapVisor struct {
-	PK          cipher.PubKey            `json:"pk"`
-	Hypervisor  cipher.PubKey            `json:"hypervisor"`
-	Local       bool                     `json:"local,omitempty"`
-	Online      bool                     `json:"online"`
-	Hostname    string                   `json:"hostname,omitempty"`
-	Version     string                   `json:"version,omitempty"`
-	PublicIP    string                   `json:"public_ip,omitempty"`
-	CountryCode string                   `json:"country_code,omitempty"`
-	Role        string                   `json:"role,omitempty"`
-	DmsgServer  bool                     `json:"dmsg_server,omitempty"`
-	Linode      *mapLinode               `json:"linode,omitempty"`
-	Services    []mapService             `json:"services,omitempty"`
-	Apps        []mapApp                 `json:"apps,omitempty"`
-	Forwards    []visorapi.ForwardedPort `json:"forwards,omitempty"`
-	Error       string                   `json:"error,omitempty"`
+	PK             cipher.PubKey            `json:"pk"`
+	Hypervisor     cipher.PubKey            `json:"hypervisor"`
+	Local          bool                     `json:"local,omitempty"`
+	Online         bool                     `json:"online"`
+	Hostname       string                   `json:"hostname,omitempty"`
+	Version        string                   `json:"version,omitempty"`
+	PublicIP       string                   `json:"public_ip,omitempty"`
+	CountryCode    string                   `json:"country_code,omitempty"`
+	Role           string                   `json:"role,omitempty"`
+	DmsgServer     bool                     `json:"dmsg_server,omitempty"`
+	DmsgServerPK   cipher.PubKey            `json:"dmsg_server_pk,omitempty"`
+	DmsgServerAddr string                   `json:"dmsg_server_addr,omitempty"`
+	Linode         *mapLinode               `json:"linode,omitempty"`
+	Services       []mapService             `json:"services,omitempty"`
+	Apps           []mapApp                 `json:"apps,omitempty"`
+	Forwards       []visorapi.ForwardedPort `json:"forwards,omitempty"`
+	Error          string                   `json:"error,omitempty"`
 }
 
 type mapService struct {
@@ -127,12 +133,17 @@ type mapService struct {
 	OwnKey bool   `json:"own_key,omitempty"`
 	State  string `json:"state"`
 	Role   string `json:"role,omitempty"`
+	Listen string `json:"listen,omitempty"`
 }
 
 type mapApp struct {
 	Name   string       `json:"name"`
 	Port   routing.Port `json:"port"`
 	Status string       `json:"status"`
+	Listen string       `json:"listen,omitempty"`
+	// Whitelist is the number of keys the app lets connect, "open" when it
+	// takes a whitelist but has none, or "N/A" when it takes none.
+	Whitelist string `json:"whitelist"`
 }
 
 type mapLinode struct {
@@ -157,6 +168,9 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 	seen := map[cipher.PubKey]bool{}
 	for _, s := range tree.Sections {
 		for _, e := range s.Visors {
+			if e.PK == m.Hypervisor {
+				m.HypervisorIP, m.HypervisorVersion = e.PublicIP, e.Version
+			}
 			if seen[e.PK] || len(only) > 0 && !only[e.PK] {
 				continue
 			}
@@ -211,7 +225,7 @@ func (v *mapVisor) fill(c visorapi.API) {
 		case !s.Running:
 			st = "down"
 		}
-		ms := mapService{Name: s.Name, Type: s.Type, OwnKey: s.OwnKey, State: st}
+		ms := mapService{Name: s.Name, Type: s.Type, OwnKey: s.OwnKey, State: st, Listen: s.PlainHTTP}
 		if pk, ok := dmsgURLKey(s.URL); ok {
 			ms.PK = pk.Hex()
 		}
@@ -221,10 +235,14 @@ func (v *mapVisor) fill(c visorapi.API) {
 		if !hvMapAllApps && a.Status == appserver.AppStatusStopped {
 			continue
 		}
-		v.Apps = append(v.Apps, mapApp{Name: a.Name, Port: a.Port, Status: a.Status.String()})
+		v.Apps = append(v.Apps, mapApp{Name: a.Name, Port: a.Port, Status: a.Status.String(),
+			Listen: appListen(a.Name, a.Args), Whitelist: appWhitelist(a.Name, a.Args)})
 	}
 	if snap.Roles != nil {
 		v.DmsgServer = snap.Roles.DmsgServer.Running
+		if v.DmsgServer {
+			v.DmsgServerPK, v.DmsgServerAddr = snap.Roles.DmsgServer.PK, snap.Roles.DmsgServer.LocalAddress
+		}
 	}
 	if v.Forwards, err = c.ListForwardedPorts(); err != nil {
 		v.Error = err.Error()
@@ -324,11 +342,19 @@ func (m *hvMap) applyLinodes() error {
 	return nil
 }
 
-// renderHVMap draws the map with the visor's name left of its key.
+// renderHVMap draws the map. Each visor's address and version sit on a line
+// above its key, and each group under a visor starts with its column names.
 func renderHVMap(m hvMap) string {
-	root := &bitree.Node{Label: m.Hypervisor.Hex()}
+	// The root's address and version follow its key as text, not columns, so a
+	// long local version does not widen every column below.
+	root := &bitree.Node{Label: joinNonEmpty("  ", m.Hypervisor.Hex(), m.HypervisorIP, shortVersion(m.HypervisorVersion)),
+		Left: []*bitree.Node{{Label: "hypervisor"}}}
 	nodes := map[cipher.PubKey]*bitree.Node{m.Hypervisor: root}
+	nameCol := "hostname"
 	for _, v := range m.Visors {
+		if v.Linode != nil {
+			nameCol = "linode"
+		}
 		if v.PK == m.Hypervisor {
 			root.Right = append(root.Right, visorBranches(v)...)
 			continue
@@ -346,13 +372,13 @@ func renderHVMap(m hvMap) string {
 		parent.Right = append(parent.Right, nodes[v.PK])
 	}
 	if len(m.Unplaced) > 0 {
-		g := &bitree.Node{Label: "published by the deployment, not embedded in any visor here"}
+		g := &bitree.Node{Label: "in services-config.json, run by no visor here", Cols: []string{"role"}}
 		for _, k := range m.Unplaced {
 			g.Right = append(g.Right, &bitree.Node{Label: k.PK.Hex(), Cols: []string{k.Role}})
 		}
 		root.Right = append(root.Right, g)
 	}
-	return bitree.Render(root, bitree.Options{})
+	return bitree.Render(root, bitree.Options{SpineLeft: nameCol, SpineLabel: "visor key", SpineCols: []string{"roles"}})
 }
 
 // visorNode puts the name left of the key, or after it when nested, as the
@@ -362,13 +388,13 @@ func visorNode(v mapVisor, nested bool) *bitree.Node {
 	if v.Linode != nil {
 		name = v.Linode.Label
 	}
-	state := shortVersion(v.Version)
+	version := shortVersion(v.Version)
 	if !v.Online {
-		state = "offline"
+		version = "offline"
 	}
-	where := strings.TrimSpace(v.PublicIP + " " + v.CountryCode)
+	where := v.CountryCode
 	if v.Linode != nil {
-		where += " " + v.Linode.Region
+		where = strings.TrimSpace(where + " " + v.Linode.Region)
 	}
 	var roles []string
 	if v.DmsgServer {
@@ -377,7 +403,7 @@ func visorNode(v mapVisor, nested bool) *bitree.Node {
 	if v.Role != "" && v.Role != "dmsg-server" {
 		roles = append(roles, v.Role)
 	}
-	n := &bitree.Node{Label: v.PK.Hex(), Cols: []string{state, where, strings.Join(roles, ", ")}}
+	n := &bitree.Node{Label: v.PK.Hex(), Above: joinNonEmpty("  ", v.PublicIP, version, where), Cols: []string{strings.Join(roles, ", ")}}
 	switch {
 	case name != "" && nested:
 		n.Label += "  " + name
@@ -393,8 +419,19 @@ func visorBranches(v mapVisor) []*bitree.Node {
 	if v.Error != "" {
 		out = append(out, &bitree.Node{Label: "error: " + v.Error})
 	}
-	if len(v.Services) > 0 {
-		g := &bitree.Node{Label: "services"}
+	if len(v.Services) > 0 || v.DmsgServer {
+		g := &bitree.Node{Label: "services", Cols: []string{"name", "listens", "services-config.json"}}
+		if v.DmsgServer {
+			listed := ""
+			if v.Role == "dmsg-server" {
+				listed = "listed"
+			}
+			label := v.DmsgServerPK.Hex()
+			if v.DmsgServerPK == v.PK {
+				label += " (visor key)"
+			}
+			g.Right = append(g.Right, &bitree.Node{Label: label, Cols: []string{"dmsg-server", shortAddr(v.DmsgServerAddr), listed}})
+		}
 		for _, s := range v.Services {
 			label := s.PK
 			switch {
@@ -403,27 +440,35 @@ func visorBranches(v mapVisor) []*bitree.Node {
 			case !s.OwnKey:
 				label += " (visor key)"
 			}
-			pub := ""
+			listed := ""
 			switch {
 			case s.Role == "":
 			case strings.HasPrefix(s.Name, s.Role) || s.Role == s.Type:
-				pub = "published"
+				listed = "listed"
 			default:
-				pub = "published as " + s.Role
+				listed = "listed as " + s.Role
 			}
-			g.Right = append(g.Right, &bitree.Node{Label: label, Cols: []string{s.Name, s.State, pub}})
+			name := s.Name
+			if s.State != "running" {
+				name += " (" + s.State + ")"
+			}
+			g.Right = append(g.Right, &bitree.Node{Label: label, Cols: []string{name, shortAddr(s.Listen), listed}})
 		}
 		out = append(out, g)
 	}
 	if len(v.Apps) > 0 {
-		g := &bitree.Node{Label: "apps"}
+		g := &bitree.Node{Label: "apps", Cols: []string{"skynet port", "listens", "whitelist"}}
 		for _, a := range v.Apps {
-			g.Right = append(g.Right, &bitree.Node{Label: a.Name, Cols: []string{a.Status, fmt.Sprintf("port %d", a.Port)}})
+			name := a.Name
+			if a.Status != "running" {
+				name += " (" + a.Status + ")"
+			}
+			g.Right = append(g.Right, &bitree.Node{Label: name, Cols: []string{fmt.Sprintf("%d", a.Port), shortAddr(a.Listen), a.Whitelist}})
 		}
 		out = append(out, g)
 	}
 	if len(v.Forwards) > 0 {
-		g := &bitree.Node{Label: "forwarded ports"}
+		g := &bitree.Node{Label: "forwarded ports", Cols: []string{"to", "over", "label"}}
 		for _, f := range v.Forwards {
 			to := f.ProxyAddr
 			if to == "" && f.LocalPort > 0 {
@@ -451,6 +496,99 @@ func visorBranches(v mapVisor) []*bitree.Node {
 		out = append(out, g)
 	}
 	return out
+}
+
+// appListen is where an app serves directly, read from its arguments, or the
+// app's default address when it takes one and none is given.
+func appListen(name string, args []string) string {
+	addr := argValue(args, "addr")
+	if p := argValue(args, "port"); addr == "" && p != "" {
+		addr = argValue(args, "host") + ":" + p
+	}
+	if addr == "" {
+		switch name {
+		case "skychat":
+			if !hasArg(args, "portless") {
+				addr = skyenv.SkychatAddr
+			}
+		case "skysocks-client":
+			addr = skyenv.SkysocksClientAddr
+		case "skydex-client":
+			addr = skyenv.SkydexClientAddr
+		case "skydex-market":
+			addr = skyenv.SkydexMarketAddr
+		}
+	}
+	if h := argValue(args, "http"); h != "" {
+		addr = joinNonEmpty(" ", addr, h)
+	}
+	return addr
+}
+
+// appWhitelist counts the keys in --whitelist for the apps that take one.
+// An empty whitelist lets anyone connect.
+func appWhitelist(name string, args []string) string {
+	switch name {
+	case "skysocks", "vpn-server":
+	default:
+		return "N/A"
+	}
+	n := 0
+	for _, k := range strings.Split(argValue(args, "whitelist"), ",") {
+		if strings.TrimSpace(k) != "" {
+			n++
+		}
+	}
+	if n == 0 {
+		return "open"
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// argValue is the value of --name or -name in args, given as "--name v" or "--name=v".
+func argValue(args []string, name string) string {
+	for i, a := range args {
+		f := strings.TrimLeft(a, "-")
+		if f == a {
+			continue
+		}
+		if k, v, ok := strings.Cut(f, "="); ok && k == name {
+			return v
+		}
+		if f == name && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func hasArg(args []string, name string) bool {
+	for _, a := range args {
+		if f := strings.TrimLeft(a, "-"); f != a && (f == name || strings.HasPrefix(f, name+"=")) {
+			return true
+		}
+	}
+	return false
+}
+
+// shortAddr drops the any-address host, so "[::]:30086" reads ":30086".
+func shortAddr(a string) string {
+	for _, p := range []string{"[::]", "0.0.0.0"} {
+		if strings.HasPrefix(a, p+":") {
+			return strings.TrimPrefix(a, p)
+		}
+	}
+	return a
+}
+
+func joinNonEmpty(sep string, parts ...string) string {
+	var out []string
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, sep)
 }
 
 // shortVersion drops the full commit a version repeats after its short one.

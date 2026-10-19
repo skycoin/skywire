@@ -64,8 +64,8 @@ github.com/0magnet/audioprism-go v0.0.1-0.20261013224747-ec31c7141340 h1:2SUn8uy
 github.com/0magnet/audioprism-go v0.0.1-0.20261013224747-ec31c7141340/go.mod h1:UtesDqbC8/2xkzf5OXxX/xfjSG7h6aCeZVrm23V1PHo=
 github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d h1:8n17udyGHo7y+/mzsz1CO+LOC+2tLTzltaAOaZuFlWs=
 github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d/go.mod h1:CpOPhNXerCJIq3QRpKIhrkJdweQF45+mDJuSpWaGwSc=
-github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf h1:ZoAjwuCVI6wCj1R0mfs/qVMIaVJcxjI50AzJMUNAqVw=
-github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
+github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89 h1:IivTLMqDb3/EvVUiCstYev99VEUtPWuk1i6ClemfU4U=
+github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89/go.mod h1:fXaS+dltJcAnMAHKz1LR5X4/hE+S3QoxlMgni9wlVhw=
 github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20 h1:7zyrT1tt9BG9njqreGNJNwuuhd1pXr09xwLMDG+uEB4=
 github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20/go.mod h1:02z8sWzqF3QH4SjMxnx5bnysFUqsw9CdUTtIj+CIxkw=
 github.com/0magnet/calvin v0.0.1-0.20261013221715-da6581155df3 h1:9H++x4esxGkKAnqqZhAadZgvgg7tIvP2mKwaX+/NvE0=
