@@ -966,6 +966,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
+				r.Get("/visors/{pk}/reward/exposure", hv.getRewardAddressExposure())
 				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
 				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())
 				r.Put("/visors/{pk}/public", hv.putIsPublic())

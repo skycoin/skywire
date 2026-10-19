@@ -221,6 +221,25 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		header["X-CSRF-Token"] = csrf
 	}
 
+	resp, err := hv.visor.coinNodeFetch(backend, r.Method, path, header, body)
+	if err != nil {
+		hv.logger.WithError(err).Warnf("[wallet] node unreachable: %s", backend)
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
+	walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
+}
+
+// coinNodeResp is a skycoin node API reply from coinNodeFetch.
+type coinNodeResp struct {
+	StatusCode int
+	Header     map[string]string
+	Body       []byte
+}
+
+// coinNodeFetch calls a skycoin node API path on backend, a clearnet URL or a mesh host.
+func (v *Visor) coinNodeFetch(backend, method, path string, header map[string]string, body []byte) (*coinNodeResp, error) {
 	if walletBackendIsClearnet(backend) {
 		// Clearnet → BrowseClearnet with the self exit: the visor does the
 		// egress itself (the parity path the native browser already uses).
@@ -228,20 +247,16 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		if l := strings.ToLower(u); !strings.HasPrefix(l, "http://") && !strings.HasPrefix(l, "https://") {
 			u = "http://" + u
 		}
-		resp, err := hv.visor.BrowseClearnet(BrowseClearnetRequest{
-			ExitPK: hv.visor.conf.PK,
-			Method: r.Method,
+		resp, err := v.BrowseClearnet(BrowseClearnetRequest{
+			ExitPK: v.conf.PK,
+			Method: method,
 			URL:    strings.TrimRight(u, "/") + path,
 			Body:   body,
 		})
 		if err != nil {
-			hv.logger.WithError(err).Warnf("[wallet] node clearnet unreachable: %s", backend)
-			http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
-			return
+			return nil, fmt.Errorf("node unreachable: %w", err)
 		}
-		hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
-		walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
-		return
+		return &coinNodeResp{resp.StatusCode, resp.Header, resp.Body}, nil
 	}
 
 	// Mesh coin node: resolve the host with the SAME resolver the iframe browser
@@ -249,31 +264,30 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	// "alias.dmsg", …) via resolveBrowseHost, then dmsg-HTTP over the
 	// visor's dmsg client or its skynet transports (Visor.DmsgHTTP), which
 	// keeps its connections to the node open between requests.
-	pk, port, vhost, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
-	if rerr != nil {
-		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)
-		return
+	pk, port, vhost, err := v.resolveBrowseHost(walletBackendStrip(backend), 0)
+	if err != nil {
+		return nil, fmt.Errorf("coin node resolve failed: %w", err)
 	}
 	// A "<name>.<pk>.dmsg" backend (e.g. node.skycoin.com.<pk>.dmsg) resolves to a
 	// vhost; send it as Host so the destination visor's port-80 forward (Caddy,
 	// --preserve-host) vhost-routes /api to the skycoin node — the same Host the
 	// wasm wallet's fetchDmsg sets, and what clearnet uses.
 	if vhost != "" {
+		if header == nil {
+			header = map[string]string{}
+		}
 		header["Host"] = vhost
 	}
-	resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
+	resp, err := v.DmsgHTTP(visorapi.DmsgHTTPRequest{
 		URL:    fmt.Sprintf("dmsg://%s:%d%s", pk.Hex(), port, path),
-		Method: r.Method,
+		Method: method,
 		Header: header,
 		Body:   body,
 	})
 	if err != nil {
-		hv.logger.WithError(err).Warnf("[wallet] node dmsg unreachable: %s", backend)
-		http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
-		return
+		return nil, fmt.Errorf("node unreachable over dmsg: %w", err)
 	}
-	hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
-	walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
+	return &coinNodeResp{resp.StatusCode, resp.Header, resp.Body}, nil
 }
 
 // walletWriteResp writes a proxied backend response (shared by the dmsg and

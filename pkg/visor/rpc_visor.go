@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -573,4 +574,12 @@ func (r *RPC) UIServerStatus(_ *struct{}, out *visorapi.UIServerStatus) (err err
 	}
 	*out = *status
 	return nil
+}
+
+// RewardAddressExposure reports whether a skycoin address has ever spent.
+func (r *RPC) RewardAddressExposure(addr *string, out *rewardconfig.AddressExposure) (err error) {
+	defer rpcutil.LogCall(r.log, "RewardAddressExposure", addr)(out, &err)
+	e, err := r.visor.RewardAddressExposure(*addr)
+	*out = e
+	return err
 }

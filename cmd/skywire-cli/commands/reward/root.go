@@ -250,6 +250,7 @@ var rewardCmd = &cobra.Command{
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
 					internal.PrintOutput(cmd.Flags(), out, out)
+					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
 			}
@@ -277,6 +278,7 @@ var rewardCmd = &cobra.Command{
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
 					internal.PrintOutput(cmd.Flags(), out, out)
+					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
 			}
@@ -323,6 +325,7 @@ var rewardCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(),
 					fmt.Errorf("bulk reward: no target PKs (check --pks list / --all-visors hypervisor state)"))
 			}
+			warnIfExposed(client, canonical)
 			applyBulkRewardAddress(cmd.Flags(), client, pks, canonical)
 			return
 		}
@@ -344,6 +347,7 @@ var rewardCmd = &cobra.Command{
 			os.WriteFile(output, []byte(rwdAdd), 0600) //nolint:errcheck,gosec
 			out := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
 			internal.PrintOutput(cmd.Flags(), out, out)
+			warnIfExposed(client, rwdAdd)
 		} else {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
 			readRewardFile(cmd.Flags())
@@ -432,4 +436,27 @@ func readRewardFile(cmdFlags *pflag.FlagSet) {
 	}
 	output := fmt.Sprintf("Reward address file:\n  %s\nreward address:\n  %s\n", output, dat)
 	internal.PrintOutput(cmdFlags, output, output)
+}
+
+// warnIfExposed prints a warning when addr has spent, which put its public key on chain.
+func warnIfExposed(client visorapi.API, addr string) {
+	addr = strings.TrimSpace(addr)
+	if _, isXpub, err := rewardconfig.ValidateRewardAddress(addr); err != nil || isXpub {
+		return
+	}
+	e, err := client.RewardAddressExposure(addr)
+	if err != nil {
+		// A remote visor on an older build lacks the call. The chain is the same from here, so ask the local visor.
+		if conn, dialErr := vnet.DialTimeout("tcp", clirpc.Addr, 2*time.Second); dialErr == nil {
+			defer conn.Close() //nolint:errcheck
+			e, err = visorapi.NewRPCClient(logging.MustGetLogger("rpc-reward"), conn, visorapi.RPCPrefix, 0).RewardAddressExposure(addr)
+		}
+	}
+	if err != nil {
+		cmdutil.Eprintf("could not check whether the reward address has sent coins: %v\n", err)
+		return
+	}
+	if w := e.Warning(); w != "" {
+		cmdutil.Eprintf("\n%s\n\n", w)
+	}
 }
