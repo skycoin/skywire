@@ -30,6 +30,7 @@ import (
 	_ "github.com/skycoin/skywire/pkg/services/confbs"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgsrv"
+	_ "github.com/skycoin/skywire/pkg/services/geoip"
 	_ "github.com/skycoin/skywire/pkg/services/noop"
 	_ "github.com/skycoin/skywire/pkg/services/rf"
 	_ "github.com/skycoin/skywire/pkg/services/sd"

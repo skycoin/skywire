@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -160,33 +159,8 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 	srv := &http.Server{
 		Addr:              addr,
 		ReadHeaderTimeout: 10 * time.Second,
+		Handler:           geoip.Handler(db),
 	}
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		queryIP := strings.TrimSpace(r.URL.Query().Get("ip"))
-		if queryIP == "" {
-			queryIP = ipFromRequest(r)
-		}
-
-		if queryIP == "" {
-			http.Error(w, "could not determine client IP", http.StatusBadRequest)
-			return
-		}
-
-		res, err := geoip.Lookup(db, queryIP)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("lookup failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		if err = enc.Encode(res); err != nil {
-			http.Error(w, fmt.Sprintf("failed to encode response: %v", err), http.StatusInternalServerError)
-			return
-		}
-	})
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -209,25 +183,4 @@ func startAPIServer(db *geoip2.Reader, addr string, logger *logging.Logger) {
 	}
 
 	logger.Println("Server stopped")
-}
-
-func ipFromRequest(r *http.Request) string {
-	realIP := strings.TrimSpace(r.Header.Get("X-Real-Ip"))
-	if realIP != "" {
-		return realIP
-	}
-	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	remote := r.RemoteAddr
-	if remote != "" {
-		host, _, err := net.SplitHostPort(remote)
-		if err == nil {
-			return host
-		}
-		return remote
-	}
-	return ""
 }
