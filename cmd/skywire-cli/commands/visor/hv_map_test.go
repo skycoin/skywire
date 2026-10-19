@@ -31,10 +31,14 @@ func TestHVMap(t *testing.T) {
 	require.Equal(t, "dmsg-server", roles[srv])
 
 	m := hvMap{Hypervisor: hv, Visors: []mapVisor{
-		{PK: hv, Hypervisor: hv, Local: true, Online: true, Apps: []mapApp{{Name: "skysocks-client", Port: 13, Status: "running"}}},
+		{PK: hv, Hypervisor: hv, Local: true, Online: true, Apps: []mapApp{
+			{Name: "skysocks-client", Port: 13, Status: "running", Listen: "127.0.0.1:1080", Whitelist: "N/A"},
+			{Name: "skysocks", Port: 3, Status: "stopped", Whitelist: "2"},
+		}},
 		{PK: srv, Hypervisor: hv, Online: true, Hostname: "prod1", Version: "v1.3.100-129-g430687a40-430687a40cdb", DmsgServer: true,
+			DmsgServerPK: srv, DmsgServerAddr: "[::]:30086", PublicIP: "139.162.160.227", Role: "dmsg-server",
 			Services: []mapService{
-				{Name: "transport-discovery", Type: "transport-discovery", PK: tpd.Hex(), OwnKey: true, State: "running"},
+				{Name: "transport-discovery", Type: "transport-discovery", PK: tpd.Hex(), OwnKey: true, State: "running", Listen: ":9094"},
 				{Name: "transport-setup-1", Type: "transport-setup", PK: ts.Hex(), OwnKey: true, State: "running"},
 			},
 			Forwards: []visorapi.ForwardedPort{{Port: 80, Skynet: true, DMSG: true, Vhosts: []visorapi.Vhost{{Name: "*", ProxyAddr: "127.0.0.1:80"}}}}},
@@ -46,7 +50,7 @@ func TestHVMap(t *testing.T) {
 
 	out := renderHVMap(m)
 	lines := strings.Split(out, "\n")
-	require.Equal(t, hv.Hex(), strings.TrimSpace(lines[0]))
+	require.Equal(t, "hypervisor ──"+hv.Hex(), strings.TrimSpace(lines[0]))
 	line := func(parts ...string) {
 		t.Helper()
 		for _, l := range lines {
@@ -60,12 +64,20 @@ func TestHVMap(t *testing.T) {
 		}
 		t.Fatalf("no line has %q in\n%s", parts, out)
 	}
-	line("prod1 ──┼── "+srv.Hex(), "v1.3.100-129-g430687a40 ", "dmsg server")
-	line(tpd.Hex(), "transport-discovery", "running", "published")
+	line("hostname", "│", "visor key", "roles")
+	line("prod1 ──┼── "+srv.Hex(), "dmsg server")
+	line("│", "139.162.160.227  v1.3.100-129-g430687a40")
+	line("services", "name", "listens", "services-config.json")
+	line(srv.Hex()+" (visor key)", "dmsg-server", ":30086", "listed")
+	line(tpd.Hex(), "transport-discovery", ":9094", "listed")
+	line("apps", "skynet port", "listens", "whitelist")
+	line("forwarded ports", "to", "over", "label")
 	line(":80", "landing page", "skynet dmsg")
 	line("vhost *", "127.0.0.1:80")
-	line("skysocks-client", "running", "port 13")
-	line(leaf.Hex()+"  sbc", "offline")
+	line("skysocks-client", "13", "127.0.0.1:1080", "N/A")
+	line("skysocks (stopped)", "3", "2")
+	require.NotContains(t, out, " running")
+	line(leaf.Hex() + "  sbc")
 	line(idle.Hex(), "transport-setup")
 	require.NotContains(t, out, "430687a40cdb")
 	// A visor of a sub-hypervisor hangs under that hypervisor, one level down.
@@ -79,6 +91,14 @@ func TestHVMap(t *testing.T) {
 		}
 	}
 	require.Greater(t, leafCol, subCol)
+	for i, l := range lines {
+		if strings.Contains(l, srv.Hex()+" ") && strings.Contains(l, "prod1") {
+			require.Contains(t, lines[i-1], "v1.3.100-129-g430687a40")
+		}
+		if strings.Contains(l, leaf.Hex()+"  sbc") {
+			require.Contains(t, lines[i-1], "offline")
+		}
+	}
 	require.Contains(t, out, "offline")
 }
 
@@ -94,4 +114,20 @@ func TestHVMapOnly(t *testing.T) {
 	require.Len(t, m.Visors, 1)
 	require.Equal(t, a, m.Visors[0].PK)
 	require.Len(t, collectHVMap(nil, tree, nil).Visors, 3)
+}
+
+func TestAppListenAndWhitelist(t *testing.T) {
+	require.Equal(t, ":8051", appListen("skydex-client", []string{"--addr", ":8051", "--market-port", "8050"}))
+	require.Equal(t, "127.0.0.1:8002", appListen("skycoin-web", []string{"--host", "127.0.0.1", "--port", "8002"}))
+	require.Equal(t, ":1080", appListen("skysocks-client", []string{"--addr=:1080"}))
+	require.Equal(t, "127.0.0.1:1080", appListen("skysocks-client", nil))
+	require.Equal(t, "", appListen("skychat", []string{"--portless", "--pair-enable"}))
+	require.Equal(t, "", appListen("vpn-client", []string{"--dns", "1.1.1.1"}))
+
+	k1, _ := cipher.GenerateKeyPair()
+	k2, _ := cipher.GenerateKeyPair()
+	require.Equal(t, "2", appWhitelist("skysocks", []string{"--whitelist", k1.Hex() + "," + k2.Hex()}))
+	require.Equal(t, "open", appWhitelist("vpn-server", nil))
+	require.Equal(t, "N/A", appWhitelist("skychat", nil))
+	require.Equal(t, ":30086", shortAddr("[::]:30086"))
 }

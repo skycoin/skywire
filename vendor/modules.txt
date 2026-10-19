@@ -20,7 +20,7 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf
+# github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
 # github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20

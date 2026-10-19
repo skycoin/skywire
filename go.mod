@@ -8,7 +8,7 @@ require (
 	github.com/0magnet/ansifilter-go v0.0.1-0.20261014103223-d1dc4f19777e
 	github.com/0magnet/audioprism-go v0.0.1-0.20261013224747-ec31c7141340
 	github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d
-	github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf
+	github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 	github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20
 	github.com/0magnet/calvin v0.0.1-0.20261013221715-da6581155df3
 	github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
