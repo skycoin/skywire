@@ -23,6 +23,18 @@
         <mat-icon [inline]="true">{{ showRewardForm ? 'close' : 'edit' }}</mat-icon>
       </button>
     </span>
+    @if (exposure?.spent) {
+      <div class="exposure-warning" [class.has-balance]="exposure!.balance !== '0'">
+        <mat-icon [inline]="true">warning</mat-icon>
+        <span>
+          {{ 'node.details.rewards-info.exposed' | translate }}
+          @if (exposure!.balance !== '0') {
+            <strong>{{ 'node.details.rewards-info.exposed-balance' | translate: { balance: exposure!.balance } }}</strong>
+          }
+          {{ 'node.details.rewards-info.exposed-action' | translate }}
+        </span>
+      </div>
+    }
     @if (showRewardForm) {
       <form [formGroup]="rewardForm" (ngSubmit)="submitRewardAddress()" class="inline-form">
         <mat-form-field appearance="outline" class="inline-form-field">

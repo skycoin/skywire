@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/netview"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // API is everything a visor answers over RPC. Callers that need one part of
@@ -83,6 +84,7 @@ type Node interface {
 	Ports() (map[string]PortDetail, error)
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error)
 	DeleteRewardAddress() error
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
