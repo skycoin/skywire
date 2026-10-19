@@ -26,6 +26,7 @@ import (
 	tgbot "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/tgbot"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -53,15 +54,19 @@ var (
 	logLvl                string
 	processRewards        bool
 	log                   = logging.MustGetLogger("rewards")
-	nodeInfoSvc           []byte
-	requireTransports     bool
-	transportHistPath     string
-	requireBandwidth      bool
-	noBWPool              bool
-	bwSkipReason          string // why pool 2 repeats pool 1, for stats.txt
-	minBWThreshold        uint64
-	saturationExponent    float64
-	bwSaturationExponent  float64
+	// skycoinNodeURL is the node used to check which xpub addresses were already used.
+	skycoinNodeURL       = defaultSkycoinNode()
+	xpubIndexPath        = deprewards.XpubIndexFile
+	xpubIndex            *deprewards.XpubIndex
+	nodeInfoSvc          []byte
+	requireTransports    bool
+	transportHistPath    string
+	requireBandwidth     bool
+	noBWPool             bool
+	bwSkipReason         string // why pool 2 repeats pool 1, for stats.txt
+	minBWThreshold       uint64
+	saturationExponent   float64
+	bwSaturationExponent float64
 )
 
 type nodeinfo struct {
@@ -439,7 +444,7 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 			return err
 		}
 		for _, ni := range nodes {
-			resolved := resolveRewardAddress(ni.SkyAddr)
+			resolved := resolveRewardAddress(ni.SkyAddr, wdate)
 			xpub := ""
 			if strings.HasPrefix(ni.SkyAddr, "xpub") {
 				xpub = ni.SkyAddr
@@ -477,7 +482,7 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 			if ni.Bandwidth == 0 || ni.Bandwidth < minBW {
 				continue
 			}
-			resolved := resolveRewardAddress(ni.SkyAddr)
+			resolved := resolveRewardAddress(ni.SkyAddr, wdate)
 			xpub := ""
 			if strings.HasPrefix(ni.SkyAddr, "xpub") {
 				xpub = ni.SkyAddr
@@ -500,7 +505,7 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 			return err
 		}
 		for _, a := range aggregateBy(nodes, func(ni nodeinfo) float64 { return ni.PresenceReward }) {
-			if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward); err != nil {
+			if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(a.SkyAddr, wdate), a.Reward); err != nil {
 				return err
 			}
 		}
@@ -515,7 +520,7 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 			return err
 		}
 		for _, a := range aggregateBy(nodes, func(ni nodeinfo) float64 { return ni.BandwidthReward }) {
-			if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward); err != nil {
+			if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(a.SkyAddr, wdate), a.Reward); err != nil {
 				return err
 			}
 		}
@@ -681,6 +686,7 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "s", "info", "[ debug | warn | error | fatal | panic | trace ]")
 	RootCmd.Flags().StringVarP(&wdate, "date", "d", wdate, "date for which to calculate reward")
+	RootCmd.Flags().StringVar(&skycoinNodeURL, "skycoin-node", skycoinNodeURL, "skycoin node API used to find unused xpub reward addresses")
 	RootCmd.Flags().StringVarP(&pubkey, "pk", "k", pubkey, "check reward for pubkey")
 	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures1, "a1", "w", func(all []string, dis []string) (res []string) {
@@ -1253,7 +1259,7 @@ Architectures:
 		if !h1 {
 			cmdutil.Println("Skycoin Address, Skywire Public Key, Presence Share, Bandwidth (bytes), Total Reward SKY, IP, Architecture, UUID, Interfaces, Country, XPub")
 			for _, ni := range nodesInfos1 {
-				resolved := resolveRewardAddress(ni.SkyAddr)
+				resolved := resolveRewardAddress(ni.SkyAddr, wdate)
 				xpub := ""
 				if strings.HasPrefix(ni.SkyAddr, "xpub") {
 					xpub = ni.SkyAddr
@@ -1273,7 +1279,7 @@ Architectures:
 		if !h2 {
 			cmdutil.Println("Skycoin Address, Reward Amount")
 			for _, a := range sortedAddrs {
-				cmdutil.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr), a.Reward)
+				cmdutil.Printf("%s, %.6f\n", resolveRewardAddress(a.SkyAddr, wdate), a.Reward)
 			}
 		}
 
@@ -1297,54 +1303,33 @@ Architectures:
 	},
 }
 
-// countUndistributedDays counts consecutive days before wdate (inclusive) that
-// lack a transaction marker file (hist/{date}.txt). This tells us how many
-// reward calculations are pending distribution, so we can offset the address
-// index to avoid reuse.
-func countUndistributedDays(forDate string) int {
-	d, err := time.Parse("2006-01-02", forDate)
-	if err != nil {
-		return 0
-	}
-	count := 0
-	for i := 0; i < 365; i++ { // look back up to a year
-		checkDate := d.AddDate(0, 0, -i)
-		markerFile := fmt.Sprintf("hist/%s.txt", checkDate.Format("2006-01-02"))
-		if _, err := os.Stat(markerFile); err == nil {
-			break // found a distributed day — stop counting
-		}
-		count++
-	}
-	return count
-}
-
-// resolveRewardAddress resolves an xpub key to the next unused external chain
-// address using BIP44 derivation. The address index is offset by the number of
-// undistributed reward days to prevent address reuse when distribution is delayed.
-// Regular addresses are returned as-is.
+// resolveRewardAddress resolves an xpub key to an external chain address that has
+// never been used, recorded per reward date so every file for date gets the same
+// one and no address is paid twice. Regular addresses are returned as-is.
 // The xpub key should NEVER appear in public output — it is treated as private.
-func resolveRewardAddress(addr string) string {
+func resolveRewardAddress(addr, date string) string {
 	if !strings.HasPrefix(addr, "xpub") {
 		return addr
 	}
-
-	// Index 0 = first empty address for this xpub.
-	// Offset by the number of consecutive undistributed days before the
-	// current calculation date, so each pending day gets a distinct address.
-	offset := countUndistributedDays(wdate)
-	if offset > 0 {
-		offset-- // current day is index 0; prior undistributed days offset from there
+	if xpubIndex == nil {
+		x, err := deprewards.LoadXpubIndex(xpubIndexPath)
+		if err != nil {
+			log.Fatal("Failed to read the xpub index record: ", err)
+		}
+		xpubIndex = x
 	}
-	index := uint32(offset) //nolint:gosec
-
+	index, err := xpubIndex.Assign(addr, date, deprewards.NodeAddressUsed(skycoinNodeURL))
+	if err != nil {
+		// Paying without the chain check could reuse an address, so stop instead.
+		log.Fatalf("Cannot pick an unused address for xpub %s... on %s: %v (set SKYCOINNODE or --skycoin-node to a reachable skycoin node)", addr[:20], date, err)
+	}
 	resolved, err := rewardconfig.DeriveExternalAddressFromXpub(addr, index)
 	if err != nil {
 		log.Warnf("Failed to derive address from xpub %s... at index %d: %v", addr[:20], index, err)
 		// NEVER fall back to the raw xpub — it must stay private
 		return "INVALID_XPUB_DERIVATION"
 	}
-
-	log.Infof("Resolved xpub %s... → %s (index %d, undistributed offset %d)", addr[:20], resolved, index, offset)
+	log.Infof("Resolved xpub %s... → %s (index %d, date %s)", addr[:20], resolved, index, date)
 	return resolved
 }
 
@@ -1524,4 +1509,12 @@ func toJSON(value interface{}) string {
 func printDifference(key string, value1, value2 interface{}) {
 	red := color.New(color.FgRed).SprintFunc()
 	cmdutil.Eprintf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
+}
+
+// defaultSkycoinNode is SKYCOINNODE, the variable the reward server also broadcasts with.
+func defaultSkycoinNode() string {
+	if n := strings.TrimSpace(os.Getenv("SKYCOINNODE")); n != "" {
+		return n
+	}
+	return "http://127.0.0.1:6420"
 }
