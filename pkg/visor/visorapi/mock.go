@@ -31,6 +31,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // MockRPCClient mocks API.
@@ -1931,3 +1932,8 @@ func (mc *mockRPCClient) HostBridgeForward(host, local string) (HostBridgeForwar
 
 // HostBridgeUnforward implements API.
 func (mc *mockRPCClient) HostBridgeUnforward(string) error { return nil }
+
+// RewardAddressExposure implements API.
+func (mc *mockRPCClient) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
+	return rewardconfig.AddressExposure{Address: addr, Balance: "0"}, nil
+}

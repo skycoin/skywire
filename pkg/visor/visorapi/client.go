@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // closeOnConsecTimeouts is how many CONSECUTIVE per-call deadline
@@ -2627,4 +2628,10 @@ func (rc *rpcClient) HostBridgeForward(host, local string) (HostBridgeForward, e
 // HostBridgeUnforward implements API.
 func (rc *rpcClient) HostBridgeUnforward(host string) error {
 	return rc.Call("HostBridgeUnforward", &host, &struct{}{})
+}
+
+// RewardAddressExposure implements API.
+func (rc *rpcClient) RewardAddressExposure(addr string) (e rewardconfig.AddressExposure, err error) {
+	err = rc.Call("RewardAddressExposure", &addr, &e)
+	return e, err
 }
