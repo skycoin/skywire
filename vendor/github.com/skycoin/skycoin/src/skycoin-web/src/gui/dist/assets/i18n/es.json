@@ -21,6 +21,7 @@
   },
 
   "title": {
+    "coins": "Monedas",
     "hardware-wallet": "Billetera de Hardware",
     "change-coin": "Cambiar la moneda activa",
     "language": "Seleccionar Lenguaje",
@@ -213,6 +214,13 @@
   },
 
   "send": {
+    "gateway-confirm-eth": "¿Enviar {{ amount }} {{ symbol }} a {{ to }}? La comisión de la red es como máximo {{ fee }} ETH.",
+    "gateway-confirm-btc": "¿Enviar {{ amount }} {{ symbol }} a {{ to }}? La comisión de la red es {{ rate }} satoshis por byte.",
+    "gateway-sent": "Enviado. Transacción {{ txid }}",
+    "fee-label": "Comisión de red",
+    "fee-slow": "Lenta",
+    "fee-normal": "Normal",
+    "fee-fast": "Rápida",
     "bulk-send-button": "Envío masivo",
     "bulk-send": {
       "title": "Envío Masivo",
@@ -264,6 +272,7 @@
   },
 
   "tx": {
+    "fee": "Comisión",
     "transaction": "Transacción",
     "confirm-transaction": "Confirmar Transacción",
     "from": "Desde",
@@ -326,7 +335,39 @@
     "delete-confirm": "¿Estás seguro de que quieres eliminar esta transacción pendiente del pool local? Esta acción no se puede deshacer."
   },
 
+  "coins": {
+    "unavailable": "Agregar monedas requiere un servicio de billetera iniciado con --wallet-dir.",
+    "added-coins": "Monedas agregadas",
+    "remove": "Quitar",
+    "add-title": "Agregar una moneda",
+    "kind": "Tipo",
+    "kind-fiber": "Moneda fiber (con su propio nodo)",
+    "kind-erc20": "Token ERC-20 en Ethereum",
+    "name": "Nombre",
+    "ticker": "Símbolo",
+    "from-node": "Del nodo si se deja vacío",
+    "optional": "El símbolo si se deja vacío",
+    "node-url": "URL del nodo",
+    "contract": "Dirección del contrato",
+    "decimals": "Decimales",
+    "icon": "Icono (opcional)",
+    "icon-too-big": "El icono debe pesar menos de 72 KB.",
+    "fiber-hint": "El nodo se comprueba antes de agregar la moneda. Las monedas fiber usan las mismas billeteras que la primera moneda.",
+    "erc20-hint": "Los tokens usan las billeteras y servidores de Ethereum. Los decimales deben coincidir con el contrato, o los montos serán incorrectos.",
+    "add-button": "Agregar",
+    "added": "La moneda se ha agregado. La billetera se está recargando.",
+    "removed": "La moneda se ha quitado. La billetera se está recargando."
+  },
   "nodes" : {
+    "eth": {
+      "title": "Servidores de Ethereum",
+      "help": "Ether y todos los tokens los usan. Los servidores RPC se prueban en orden, uno por línea. El indexador es una API al estilo de Etherscan que lista el historial de transacciones.",
+      "rpc-label": "Servidores RPC",
+      "indexer-label": "Indexador del historial",
+      "save-button": "Guardar",
+      "defaults-button": "Usar valores predeterminados",
+      "saved": "Los servidores de Ethereum se han guardado."
+    },
     "coin": "Moneda",
     "url": "URL del nodo",
     "custom-label": "URL personalizada",
@@ -370,6 +411,7 @@
     "pending": "Pendiente",
     "price-tooltip": "Calculado a la tasa actual",
     "no-txs": "Usted no tiene historial de transacciones",
+    "cached": "No se pudo actualizar el historial. Se muestra la copia guardada el {{ time }}.",
     "no-txs-filter": "No hay transacciones que coincidan con los criterios de filtro actuales",
     "no-filter": "Sin filtros activos (Presione para seleccionar billeteras/direcciones)",
     "filter": "Filtro activo: ",
@@ -401,6 +443,13 @@
     }
   },
 
+  "qr-scan": {
+    "title": "Escanear un código QR",
+    "image-label": "O leerlo de una imagen",
+    "no-code": "No se encontró ningún código QR en esa imagen.",
+    "insecure": "La cámara solo funciona en páginas https o en 127.0.0.1. Aún puede leer un código de una imagen.",
+    "no-camera": "No se pudo abrir la cámara. Aún puede leer un código de una imagen."
+  },
   "qr-code" : {
     "copy-address": "Copiar la dirección al portapapeles"
   },
