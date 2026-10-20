@@ -929,7 +929,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261020162418-6ca3ef79044b
+# github.com/skycoin/skycoin v0.28.7-0.20261020183833-448b2c23eecd
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -967,6 +967,7 @@ github.com/skycoin/skycoin/src/daemon/gnet
 github.com/skycoin/skycoin/src/daemon/pex
 github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/electrum
+github.com/skycoin/skycoin/src/eth
 github.com/skycoin/skycoin/src/fiber
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params

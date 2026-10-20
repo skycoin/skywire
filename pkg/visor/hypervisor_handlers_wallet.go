@@ -102,6 +102,9 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			case rest == "coins":
 				serveAt(app, w, r, "/api/v1/coins")
 				return
+			case rest == "coins/custom":
+				serveAt(app, w, r, "/api/v1/coins/custom")
+				return
 			case strings.HasPrefix(rest, "coin/"):
 				serveAt(app, w, r, "/"+rest)
 				return
