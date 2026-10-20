@@ -13,7 +13,7 @@ require (
 	github.com/0magnet/calvin v0.0.1-0.20261013221715-da6581155df3
 	github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
-	github.com/0magnet/desk v0.0.3-0.20261014102802-0dc854720e7a
+	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
 	github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
@@ -36,7 +36,7 @@ require (
 	github.com/0magnet/webrtc/v4 v4.2.24
 	github.com/0magnet/websh v0.0.1-0.20261017094725-521a340b022b
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
-	github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c
+	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
 	github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
 	github.com/ActiveState/termtest/conpty v0.5.0
