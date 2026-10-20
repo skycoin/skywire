@@ -37,7 +37,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 ## explicit; go 1.26.0
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.3-0.20261014102802-0dc854720e7a
+# github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 ## explicit; go 1.26.6
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
@@ -175,7 +175,7 @@ github.com/0magnet/websh/widget
 # github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 ## explicit; go 1.26.0
 github.com/0magnet/wfdrive/bidi
-# github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c
+# github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 ## explicit; go 1.26.0
 github.com/0magnet/winbox-go
 # github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
