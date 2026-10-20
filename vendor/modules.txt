@@ -162,7 +162,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261017094725-521a340b022b
+# github.com/0magnet/websh v0.0.1-0.20261020221255-e851bfeabe30
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -170,6 +170,7 @@ github.com/0magnet/websh/progressive
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
 github.com/0magnet/websh/shell/sed
+github.com/0magnet/websh/term
 github.com/0magnet/websh/web
 github.com/0magnet/websh/widget
 # github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
