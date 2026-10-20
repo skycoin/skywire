@@ -93,6 +93,8 @@ type Manager struct {
 	// lastCloses is the last close event per transport id, which — unlike the
 	// ring — open churn cannot evict.
 	lastCloses tpLastCloseMap
+	// dials counts outbound dials per type and keeps the recent failures.
+	dialLog dialRecorder
 	// lastInbound is when this visor last accepted an inbound transport of
 	// each type — its evidence that others can reach it by that type.
 	lastInbound inboundTimes
@@ -1568,9 +1570,11 @@ func (tm *Manager) dialAndSave(ctx context.Context, remote cipher.PubKey, netTyp
 	})
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
+	dialStart := time.Now()
 	errCh := make(chan error)
 	go mTp.DialAsync(ctx, errCh)
 	err := <-errCh
+	tm.dialLog.record(string(mTp.client.Type()), remote, label, dialStart, err)
 	if err != nil {
 		tm.Logger.Debugf("Error dialing transport to %v via %v: %v", mTp.Remote(), mTp.client.Type(), err)
 		// Use closeWithoutDeregister since the transport was never registered with TPD

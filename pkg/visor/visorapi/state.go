@@ -427,6 +427,12 @@ type DiagSnapshot struct {
 	// survives any amount of open churn: look up the transport id here to get
 	// the reason it died and how old it was.
 	TransportLastClose map[uuid.UUID]transport.TransportEvent `json:"transport_last_close,omitempty"`
+	// DialStats counts outbound transport dials per type: attempts, successes,
+	// failures and the last error. DialFailures is the last
+	// transport.DialFailureRingSize failed dials, oldest first, which the event
+	// ring cannot show because those transports never opened.
+	DialStats    map[string]transport.DialStat `json:"dial_stats,omitempty"`
+	DialFailures []transport.DialFailure       `json:"dial_failures,omitempty"`
 	// MuxEvents is the last router.MuxEventRingSize route-group and mux-leg
 	// changes, oldest first, each with the reason the code gave and who
 	// initiated it (local/remote/operator/adaptive/policy). This is where to
