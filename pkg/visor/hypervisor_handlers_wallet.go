@@ -17,6 +17,7 @@
 package visor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
@@ -378,4 +380,23 @@ func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
 func toDashboardWallet(w http.ResponseWriter) {
 	w.Header().Set("Location", "../#/wallet")
 	w.WriteHeader(http.StatusSeeOther)
+}
+
+// RewardAddressExposure implements API. It asks the default skycoin node whether addr has ever spent.
+func (v *Visor) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
+	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(strings.TrimSpace(addr))
+	if err != nil {
+		return rewardconfig.AddressExposure{}, err
+	}
+	if isXpub {
+		return rewardconfig.AddressExposure{}, errors.New("an xpub has no single address to check")
+	}
+	resp, err := v.coinNodeFetch(walletNodeDefault(), http.MethodGet, rewardconfig.AddressUxoutsPath(canonical), nil, nil)
+	if err != nil {
+		return rewardconfig.AddressExposure{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return rewardconfig.AddressExposure{}, fmt.Errorf("skycoin node returned %d: %s", resp.StatusCode, strings.TrimSpace(string(resp.Body)))
+	}
+	return rewardconfig.ParseAddressUxouts(canonical, resp.Body)
 }
