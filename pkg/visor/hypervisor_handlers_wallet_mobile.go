@@ -7,7 +7,10 @@
 package visor
 
 import (
+	"errors"
 	"net/http"
+
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // walletHandler answers 404 for the whole /wallet/* mount on the mobile build.
@@ -23,4 +26,10 @@ func (hv *Hypervisor) walletCipherHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "wallet cipher not embedded in this build", http.StatusNotFound)
 	}
+}
+
+// RewardAddressExposure implements API. The mobile build has no coin node
+// client, so it cannot check.
+func (v *Visor) RewardAddressExposure(string) (rewardconfig.AddressExposure, error) {
+	return rewardconfig.AddressExposure{}, errors.New("checking a reward address is not part of the mobile build")
 }
