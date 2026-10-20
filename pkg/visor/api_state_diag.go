@@ -47,6 +47,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		d.TransportReadQueue = &visorapi.DiagQueue{Depth: depth, Capacity: capacity}
 		d.TransportEvents = v.tpM.Events()
 		d.TransportLastClose = v.tpM.LastCloses()
+		d.DialStats, d.DialFailures = v.tpM.DialStats()
 		now := time.Now()
 		v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
 			if mt.IsClosed() {
