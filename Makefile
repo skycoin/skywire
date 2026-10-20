@@ -2,7 +2,7 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
-.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-mobile-x86_64 android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
@@ -280,6 +280,18 @@ android-mobile: check-mobile-version ## Build libskywire-mobile.so (android/arm6
 	mkdir -p $(ANDROID_JNILIBS)
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
 	@ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
+
+ANDROID_JNILIBS_X86_64 := android/app/src/main/jniLibs/x86_64
+
+# Go links android/amd64 only through cgo, so this lane needs the NDK too.
+android-mobile-x86_64: check-mobile-version ## Debug lane: NDK/cgo android/amd64 build into jniLibs/x86_64, for an x86_64 emulator; requires ANDROID_NDK_HOME
+	@set -e; \
+	test -n "$(ANDROID_NDK_HOME)" || { echo "ANDROID_NDK_HOME is not set"; exit 1; }; \
+	CC_BIN=$$(ls $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin/x86_64-linux-android26-clang 2>/dev/null | head -n1); \
+	test -n "$$CC_BIN" || { echo "x86_64-linux-android26-clang not found under ANDROID_NDK_HOME"; exit 1; }; \
+	mkdir -p $(ANDROID_JNILIBS_X86_64); \
+	GOOS=android GOARCH=amd64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS_X86_64)/libskywire-mobile.so ./cmd/skywire-mobile; \
+	ls -la $(ANDROID_JNILIBS_X86_64)/libskywire-mobile.so
 
 android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the size budget
 	@size=$$(wc -c < $(ANDROID_JNILIBS)/libskywire-mobile.so | tr -d '[:space:]'); \
