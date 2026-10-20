@@ -21,6 +21,7 @@
   },
 
   "title": {
+    "hardware-wallet": "Billetera de Hardware",
     "change-coin": "Cambiar la moneda activa",
     "language": "Seleccionar Lenguaje",
     "wallets": "Billeteras",
@@ -73,7 +74,10 @@
     "title": "Introduzca Su Contraseña",
     "label": "Contraseña",
     "confirm-label": "Confirmar contraseña",
-    "button": "Continuar"
+    "button": "Continuar",
+    "cancel-button": "Cancelar",
+    "mismatch": "Las contraseñas no coinciden",
+    "save-seed-text": "Establezca una contraseña para desbloquear esta billetera sin su semilla la próxima vez. Déjela vacía para omitirla."
   },
 
   "buy": {
@@ -209,6 +213,16 @@
   },
 
   "send": {
+    "bulk-send-button": "Envío masivo",
+    "bulk-send": {
+      "title": "Envío Masivo",
+      "indications": "Para enviar a varios destinos a la vez, escriba cada dirección, cantidad de monedas y cantidad de horas (opcional) en una línea, separadas por comas. Por ejemplo, escriba \"xyz,10,5\" para enviar 10 monedas y 5 horas a la dirección \"xyz\", o \"xyz,10\" para que las horas se calculen automáticamente. Use un punto para los decimales.",
+      "no-data-error": "No hay texto para procesar.",
+      "invalid-data-error": "Cada línea debe ser una dirección y una cantidad de monedas, y opcionalmente una cantidad de horas, separadas por comas.",
+      "inconsistent-data-error": "Si establece las horas de un destino, debe hacerlo para todos.",
+      "process-button": "Procesar",
+      "cancel-button": "Cancelar"
+    },
     "synchronizing-warning": "El nodo todavía está sincronizando los datos, por lo que el saldo que se muestra puede ser incorrecto. ¿Seguro de que desea continuar?",
     "from-label": "Enviar desde",
     "to-label": "Enviar a",
@@ -410,5 +424,30 @@
       "wrong-seed": "Semilla incorrecta",
       "invalid-wallet": "Billetera inválida"
     }
+  },
+  "offline-tx": {
+    "unsigned-button": "Sin firmar",
+    "show-raw-button": "Transacción en bruto",
+    "sign-link": "Firmar una transacción",
+    "broadcast-link": "Transmitir una transacción",
+    "unsigned-title": "Transacción Sin Firmar",
+    "unsigned-text": "Copie esta transacción a la computadora que tiene la billetera, fírmela allí y transmita la transacción firmada desde cualquier billetera en línea.",
+    "signed-title": "Transacción Firmada",
+    "signed-text": "Esta transacción está firmada y no ha sido enviada. Transmítala desde cualquier billetera en línea.",
+    "sign-title": "Firmar Transacción",
+    "sign-text": "Pegue una transacción sin firmar. La billetera debe ser dueña de todas las entradas.",
+    "broadcast-title": "Transmitir Transacción",
+    "broadcast-text": "Pegue una transacción firmada para enviarla a la red.",
+    "wallet-label": "Billetera",
+    "select-wallet": "Seleccione una billetera",
+    "tx-label": "Transacción",
+    "copy-button": "Copiar",
+    "copied": "Copiado",
+    "sign-button": "Firmar",
+    "broadcast-button": "Transmitir",
+    "close-button": "Cerrar",
+    "broadcast-done": "La transacción fue enviada.",
+    "not-in-wallet": "Esta billetera no tiene las claves de todas las entradas de la transacción.",
+    "node-too-old": "Este nodo es demasiado antiguo para crear transacciones sin firmar."
   }
 }
