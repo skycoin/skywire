@@ -20,9 +20,9 @@ rebuilt, never committed).
 |---|---|
 | Go (see repo `go.mod`) | builds the core payload |
 | Android SDK | platform + build-tools; Android Studio installs these |
-| Android NDK | only for the **release** payload lane (`android-mobile-ndk`) |
+| Android NDK | for the **release** payload lane (`android-mobile-ndk`) and the x86_64 emulator lane (`android-mobile-x86_64`) |
 | Android Studio (or any JDK 17+) | Gradle needs JDK 17+; Studio's bundled JDK works. The Makefile defaults to it via `ANDROID_JAVA_HOME` |
-| A device or AVD | **arm64 only** — the payload has no x86_64 build, never pick an x86_64 emulator image |
+| A device or AVD | arm64, or an x86_64 emulator image with `make android-mobile-x86_64` (debug builds only; release stays arm64) |
 
 `android/local.properties` (gitignored) must point at your SDK:
 
@@ -42,6 +42,8 @@ make android-mobile        # pure-Go lane: CI + emulator work
 make android-mobile-ndk    # NDK/cgo lane: RELEASE builds (fixes Android DNS via
                            #   bionic getaddrinfo); needs ANDROID_NDK_HOME set
 make android-mobile-check  # pure-Go build + the CI size budget (fails > 80 MB)
+make android-mobile-x86_64 # NDK/cgo android/amd64 core for an x86_64 emulator; debug
+                           #   APKs carry it, release APKs do not
 
 # 2. The APK
 make android-apk           # release (unsigned until release signing lands)
