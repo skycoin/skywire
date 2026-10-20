@@ -121,10 +121,7 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 
 		// serve web page
 		if !isWebsocket(r.Header) {
-			n, err := writeTermHTML(w)
-			logrus.WithError(err).
-				WithField("bytes", n).
-				Debug("Served web page.")
+			termPage.ServeHTTP(w, r)
 			return
 		}
 
@@ -172,7 +169,16 @@ func (ui *UI) serveTerminal(r *http.Request, log logrus.FieldLogger, ws *uiSocke
 			writeWSError(log, wsConn, err)
 			return
 		}
-		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
+		// A persistent session outlives this websocket, so a dropped page can
+		// reattach it by id; stopping it here would kill the shell it wants.
+		persistent := false
+		defer func() {
+			if persistent {
+				log.WithError(ptyC.Detach()).Debug("Detached ptyC.")
+				return
+			}
+			log.WithError(ptyC.Close()).Debug("Closed ptyC.")
+		}()
 
 		// Resolve to a pty session: reattach when the browser passed a ?sid=
 		// (reconnect), else start fresh. A fresh persistent session yields an id
@@ -183,6 +189,7 @@ func (ui *UI) serveTerminal(r *http.Request, log logrus.FieldLogger, ws *uiSocke
 			writeWSError(log, wsConn, err)
 			return
 		}
+		persistent = newSID != "" || reattached
 		if newSID != "" {
 			sendSessionID(r.Context(), ws, newSID)
 			log.WithField("session", newSID).Debug("Started persistent pty session.")
@@ -285,19 +292,46 @@ func (ui *UI) serveTerminal(r *http.Request, log logrus.FieldLogger, ws *uiSocke
 			_, _ = io.Copy(bw, ptyC) //nolint:errcheck
 			closeDone()
 		}()
+		// Keystrokes reach the pty through one writer, in order. Writes in
+		// flight at once could be reordered: the host serves RPC calls
+		// concurrently. What arrives during a write goes in the next, so a
+		// paste costs fewer round trips rather than one per key.
+		var (
+			inMu  sync.Mutex
+			inBuf []byte
+			inSig = make(chan struct{}, 1)
+		)
 		go func() {
 			defer closeDone()
-			// Pipeline keystrokes: fire each write without blocking a full RPC
-			// round-trip per keystroke (the old io.Copy used the synchronous
-			// Write, so fast typing / paste queued behind per-key acks). Order
-			// is preserved; a broken conn surfaces on the output path above and
-			// closes the session.
+			for {
+				select {
+				case <-done:
+					return
+				case <-inSig:
+				}
+				inMu.Lock()
+				b := inBuf
+				inBuf = nil
+				inMu.Unlock()
+				if len(b) > 0 {
+					if _, err := ptyC.Write(b); err != nil {
+						return
+					}
+				}
+			}
+		}()
+		go func() {
+			defer closeDone()
 			buf := make([]byte, 4096)
 			for {
 				n, rerr := wsReader.Read(buf)
 				if n > 0 {
-					if werr := ptyC.WriteAsync(buf[:n]); werr != nil {
-						return
+					inMu.Lock()
+					inBuf = append(inBuf, buf[:n]...)
+					inMu.Unlock()
+					select {
+					case inSig <- struct{}{}:
+					default:
 					}
 				}
 				if rerr != nil {

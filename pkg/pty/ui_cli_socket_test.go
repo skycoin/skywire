@@ -4,6 +4,7 @@ package pty
 
 import (
 	"context"
+	stdjson "encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -114,4 +115,80 @@ func testUIOverDmsgHTTPServer(t *testing.T, writeTimeout, typeAfter time.Duratio
 	defer ws.CloseNow() //nolint:errcheck
 
 	typeAndExpect(ctx, t, ws, typeAfter)
+}
+
+// TestUIReattachesAfterDrop drops the websocket and reconnects with the
+// session id the server sent: the same shell must answer, not a new one.
+func TestUIReattachesAfterDrop(t *testing.T) {
+	env := dmsgtest.NewEnv(t, dmsgtest.DefaultTimeout)
+	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 1, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sock := serveCLI(ctx, t, env.AllClients()[0])
+	srv := httptest.NewServer(NewUI(NetUIDialer("unix", sock), DefaultUIConfig()).Handler(nil))
+	defer srv.Close()
+	addr := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	ws, _, err := websocket.Dial(ctx, addr, nil)
+	require.NoError(t, err)
+	require.NoError(t, ws.Write(ctx, websocket.MessageBinary, []byte("KEEP=same-shell; echo SET-$KEEP\n")))
+	readCtx, readCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer readCancel()
+	var sid string
+	var first strings.Builder
+	for sid == "" || !strings.Contains(first.String(), "SET-same-shell") {
+		typ, b, err := ws.Read(readCtx)
+		require.NoError(t, err, "output before the drop: %q", first.String())
+		first.Write(b)
+		if typ == websocket.MessageText {
+			var c struct{ Type, ID string }
+			if stdjson.Unmarshal(b, &c) == nil && c.Type == "session" {
+				sid = c.ID
+			}
+		}
+	}
+	ws.CloseNow() //nolint:errcheck,gosec
+
+	ws2, _, err := websocket.Dial(ctx, addr+"?sid="+sid, nil)
+	require.NoError(t, err)
+	defer ws2.CloseNow() //nolint:errcheck
+	require.NoError(t, ws2.Write(ctx, websocket.MessageBinary, []byte("echo GOT-$KEEP\n")))
+	var out strings.Builder
+	for !strings.Contains(out.String(), "GOT-same-shell") {
+		_, b, err := ws2.Read(readCtx)
+		require.NoError(t, err, "output after reattach: %q", out.String())
+		out.Write(b)
+	}
+}
+
+// TestUIKeepsKeyOrder sends a line one key per message, as fast as a paste or
+// a reconnect's held keys arrive: the shell must get them in order.
+func TestUIKeepsKeyOrder(t *testing.T) {
+	env := dmsgtest.NewEnv(t, dmsgtest.DefaultTimeout)
+	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 1, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sock := serveCLI(ctx, t, env.AllClients()[0])
+	srv := httptest.NewServer(NewUI(NetUIDialer("unix", sock), DefaultUIConfig()).Handler(nil))
+	defer srv.Close()
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	require.NoError(t, err)
+	defer ws.CloseNow() //nolint:errcheck
+
+	const want = "ORDER-0123456789abcdefghijklmnopqrstuvwxyz"
+	for _, c := range []byte("echo " + want + "-END\n") {
+		require.NoError(t, ws.Write(ctx, websocket.MessageBinary, []byte{c}))
+	}
+	readCtx, readCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer readCancel()
+	var out strings.Builder
+	for !strings.Contains(out.String(), want+"-END\r\n") {
+		_, b, err := ws.Read(readCtx)
+		require.NoError(t, err, "output: %q", out.String())
+		out.Write(b)
+	}
 }
