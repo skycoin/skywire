@@ -120,9 +120,10 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 // processReadError processes error before returning.
 // * Ensure error implements net.Error
 // * If error is non-temporary, save error in state so further reads will fail.
+// A timeout is never saved: net.Conn lets a read follow a reset deadline.
 func (rw *ReadWriter) processReadError(err error) error {
 	if nErr, ok := err.(net.Error); ok {
-		if !nErr.Temporary() { //nolint
+		if !nErr.Timeout() && !nErr.Temporary() { //nolint
 			rw.rErr = err
 		}
 		return err
