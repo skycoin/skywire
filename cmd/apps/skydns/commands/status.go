@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 
@@ -18,19 +19,28 @@ import (
 )
 
 // statusDialer reaches the visor's status pages through its own resolving
-// proxy, as a browser pointed at the proxy's SOCKS5 port does. Nil when the
-// visor runs no resolver, and then the status names are not answered.
+// proxy, as a browser pointed at the proxy's SOCKS5 port does. The resolvers
+// are looked up on each page fetch: this app can start before the visor has
+// published them, and asking once at start left the names unanswered.
 func statusDialer(appCl *app.Client, log logrus.FieldLogger) meshgw.LocalDial {
-	svcs, err := appCl.LocalServices()
-	if err != nil || len(svcs) == 0 {
-		log.WithError(err).Debug("skydns: no resolving proxy on this visor, status pages not served")
+	if appCl == nil {
 		return nil
 	}
 	visorPK := appCl.Config().VisorPK
-	res := skysocks.NewLocalResolvers(svcs, func(port routing.Port) (net.Conn, error) {
-		return appCl.Dial(appnet.Addr{Net: appnet.TypeSkynet, PubKey: visorPK, Port: port})
-	})
-	return resolverStatusDial(res, svcs[0].Port)
+	return func(ctx context.Context, host string, port uint16) (net.Conn, error) {
+		svcs, err := appCl.LocalServices()
+		if err != nil {
+			return nil, fmt.Errorf("skydns: list the visor's resolving proxies: %w", err)
+		}
+		if len(svcs) == 0 {
+			log.Debug("skydns: no resolving proxy on this visor, status page not served")
+			return nil, errors.New("skydns: this visor runs no resolving proxy")
+		}
+		res := skysocks.NewLocalResolvers(svcs, func(port routing.Port) (net.Conn, error) {
+			return appCl.Dial(appnet.Addr{Net: appnet.TypeSkynet, PubKey: visorPK, Port: port})
+		})
+		return resolverStatusDial(res, svcs[0].Port)(ctx, host, port)
+	}
 }
 
 // resolverStatusDial reaches host:port through the resolver that answers host,
