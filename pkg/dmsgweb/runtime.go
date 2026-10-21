@@ -522,6 +522,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					return &tcpAddrConn{Conn: c}, nil
 				}
 
+				done := cfg.Stats.RecordRequest()
+				defer func() { done(dialErr) }()
+
 				dstAddr := dmsg.Addr{PK: dest, Port: dialPort}
 				var stream net.Conn
 				_, isDirectServer := cfg.DirectServerPKs[dest]
