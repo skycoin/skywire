@@ -64,8 +64,13 @@ fun WalletSeedScreen(
     SecureWindow()
     val state by viewModel.uiState.collectAsState()
     val words = state.draft.seed?.split(" ") ?: emptyList()
+    val screenLock = rememberScreenLock()
 
     Scaffold(topBar = { SkyTopBar(stringResource(R.string.wallet_seed_title), onBack = onBack) }) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -265,12 +270,15 @@ fun WalletRestoreScreen(
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val screenLock = rememberScreenLock()
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
     }
 
     val target = if (words.size > 12) 24 else 12
+    // Until a 13th word settles it, the phrase may be either length.
+    val targetLabel = if (target == 24) "24" else "12/24"
 
     fun addWord(word: String) {
         val w = word.trim().lowercase()
@@ -320,6 +328,10 @@ fun WalletRestoreScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { SkyTopBar(stringResource(R.string.wallet_restore_title), onBack = onBack) },
     ) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
@@ -327,7 +339,7 @@ fun WalletRestoreScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), target),
+                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), targetLabel),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -1039,6 +1039,9 @@ func (proxyDefaultAPI) VoiceSetRingback(_ visorapi.VoiceRingback) error {
 	return ErrProxyNotSupported
 }
 
+// VoiceSetBlocked implements API (not proxied).
+func (proxyDefaultAPI) VoiceSetBlocked(_ []cipher.PubKey) error { return ErrProxyNotSupported }
+
 // VoiceRingback implements API (not proxied).
 func (proxyDefaultAPI) VoiceRingback() (visorapi.VoiceRingback, error) {
 	return visorapi.VoiceRingback{}, ErrProxyNotSupported

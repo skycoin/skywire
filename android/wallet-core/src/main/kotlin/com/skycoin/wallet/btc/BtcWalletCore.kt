@@ -122,6 +122,11 @@ class BtcWalletCore(
                 } else {
                     tx.vout.firstOrNull { it.address != null && it.address !in ours }?.address
                 }
+                val own = if (incoming) {
+                    tx.vout.mapNotNull { it.address }.filter { it in ours }
+                } else {
+                    tx.vin.mapNotNull { it.prevout?.address }.filter { it in ours }
+                }.distinct()
                 val confirmations = if (tx.status.confirmed && tip >= tx.status.blockHeight) {
                     tip - tx.status.blockHeight + 1
                 } else 0L
@@ -134,6 +139,7 @@ class BtcWalletCore(
                     confirmed = tx.status.confirmed,
                     confirmations = confirmations,
                     fee = tx.fee,
+                    own = own,
                 )
             }
         }

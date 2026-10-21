@@ -502,7 +502,7 @@
     <string name="wallet_intro_create">Create a new wallet</string>
     <string name="wallet_intro_create_sub">Generate a new recovery phrase</string>
     <string name="wallet_intro_restore">Restore from seed</string>
-    <string name="wallet_intro_restore_sub">Enter an existing 12 word phrase</string>
+    <string name="wallet_intro_restore_sub">Enter an existing 12 or 24 word phrase</string>
 
     <string name="wallet_seed_title">Recovery phrase</string>
     <string name="wallet_seed_body">Write these twelve words down in order and keep them offline. Anyone who has them can spend your coins.</string>
@@ -520,18 +520,20 @@
     <string name="wallet_verify_done">Wallet activated</string>
 
     <string name="wallet_restore_title">Restore wallet</string>
-    <string name="wallet_restore_progress">Word %1$d of %2$d</string>
+    <string name="wallet_restore_progress">Word %1$d of %2$s</string>
     <string name="wallet_restore_paste">Paste whole seed</string>
     <string name="wallet_restore_pasted">Twelve words read from the clipboard</string>
     <string name="wallet_restore_hint">Next word</string>
     <string name="wallet_restore_wordlist_note">Suggestions come from the BIP39 wordlist held on the device. Nothing you type is sent anywhere.</string>
     <string name="wallet_restore_action">Restore wallet</string>
-    <string name="wallet_restore_checksum">This phrase fails its checksum. One of the twelve words is wrong or out of order.</string>
+    <string name="wallet_restore_checksum">This phrase fails its checksum. One of the words is wrong or out of order.</string>
     <string name="wallet_restore_legacy">This phrase carries no checksum — the older wallets wrote their seeds that way, so it may still be a good one. Check every word, then press again to restore anyway.</string>
     <string name="wallet_restore_anyway">Restore anyway</string>
-    <string name="wallet_restore_short">Only %1$d of 12 words entered. A seed is restored in full or not at all.</string>
+    <string name="wallet_restore_short">A seed has 12 or 24 words, and this one has %1$d. It is restored in full or not at all.</string>
     <string name="wallet_restore_done">Wallet restored. Scanning for balances.</string>
     <string name="wallet_restore_scanning">Restoring and scanning for balances…</string>
+    <string name="wallet_lock_required_body">This wallet is guarded by your phone\'s screen lock. Without one, anyone holding the phone could see your recovery phrase and send your coins. Set a PIN, pattern or password, then come back.</string>
+    <string name="wallet_lock_required_title">Set a screen lock first</string>
 
     <string name="wallet_coin_chip_description">Choose a coin</string>
     <string name="wallet_coins_title">Choose a coin</string>
@@ -666,6 +668,8 @@
     <string name="wallet_from_line">from %1$s · %2$s</string>
     <string name="wallet_to_line">to %1$s · %2$s</string>
     <string name="wallet_self_line">within this wallet · %1$s</string>
+    <string name="wallet_own_sent_line">sent from %1$s</string>
+    <string name="wallet_own_received_line">received at %1$s</string>
 
     <string name="wallet_receive_title">Receive</string>
     <string name="wallet_receive_only">Send only %1$s to this address.</string>
@@ -772,6 +776,8 @@
     <string name="wallet_tx_from">From</string>
     <string name="wallet_tx_to">To</string>
     <string name="wallet_tx_wallet">Wallet</string>
+    <string name="wallet_tx_sent_from">Sent from</string>
+    <string name="wallet_tx_received_at">Received at</string>
     <string name="wallet_tx_date">Date</string>
     <string name="wallet_tx_fee">Fee</string>
     <string name="wallet_tx_confirmations">Confirmations</string>

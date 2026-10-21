@@ -150,6 +150,8 @@ class EthWalletCore(
                     // Always the ETH gas, in gwei — a token has no fee of its
                     // own, and the UI labels this line ETH on both cores.
                     fee = feeWei.takeIf { it.signum() > 0 }?.let(::weiToGwei),
+                    // The wallet's one account, whichever side of the transfer it is.
+                    own = listOf(addr),
                 )
             }
         }
