@@ -34,7 +34,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261020221255-e851bfeabe30
+	github.com/0magnet/websh v0.0.1-0.20261021174048-11d97ed1a6d9
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
