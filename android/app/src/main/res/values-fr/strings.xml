@@ -709,6 +709,8 @@
     <string name="wallet_from_line">de %1$s · %2$s</string>
     <string name="wallet_to_line">vers %1$s · %2$s</string>
     <string name="wallet_self_line">dans ce portefeuille · %1$s</string>
+    <string name="wallet_own_sent_line">envoyé depuis %1$s</string>
+    <string name="wallet_own_received_line">reçu sur %1$s</string>
 
     <string name="wallet_receive_title">Recevoir</string>
     <string name="wallet_receive_only">Envoyez seulement %1$s à cette adresse.</string>
@@ -815,6 +817,8 @@
     <string name="wallet_tx_from">De</string>
     <string name="wallet_tx_to">À</string>
     <string name="wallet_tx_wallet">Portefeuille</string>
+    <string name="wallet_tx_sent_from">Envoyé depuis</string>
+    <string name="wallet_tx_received_at">Reçu sur</string>
     <string name="wallet_tx_date">Date</string>
     <string name="wallet_tx_fee">Frais</string>
     <string name="wallet_tx_confirmations">Confirmations</string>

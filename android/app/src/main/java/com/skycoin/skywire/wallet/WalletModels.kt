@@ -219,6 +219,8 @@ data class CachedTx(
     val confirmed: Boolean,
     val confirmations: Long,
     val fee: ULong? = null,
+    /** This wallet's addresses the transaction used, see TxRecord.own. */
+    val own: List<String> = emptyList(),
 )
 
 /**
@@ -283,6 +285,7 @@ fun mergeSnapshot(
             confirmed = it.confirmed,
             confirmations = it.confirmations,
             fee = it.fee,
+            own = it.own,
         )
     } ?: previous?.txs.orEmpty(),
     fetchedAtMs = nowMs,
