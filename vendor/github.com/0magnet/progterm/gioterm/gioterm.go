@@ -8,6 +8,7 @@ package gioterm
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"os"
 	"strings"
@@ -52,10 +53,15 @@ func Run(opt glterm.Options) error {
 		// The size at the scale the screen asks for, checked at the first frame.
 		size := image.Pt(800, 500)
 		scr, scale := screen()
+		opts := []app.Option{app.Title(title)}
 		if g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(scale)); err == nil {
 			size = glterm.WindowSize(g, opt.Cols, opt.Rows, scr)
+			// A phone's status and navigation bars sit on the window's edges.
+			_, bg := g.Colors()
+			c := color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff}
+			opts = append(opts, app.StatusColor(c), app.NavigationColor(c))
 		}
-		w.Option(app.Title(title), app.Size(unit.Dp(float32(size.X)/scale), unit.Dp(float32(size.Y)/scale)))
+		w.Option(append(opts, app.Size(unit.Dp(float32(size.X)/scale), unit.Dp(float32(size.Y)/scale)))...)
 		if err := loop(w, opt, f); err != nil {
 			fmt.Fprintln(os.Stderr, "progterm:", err)
 			os.Exit(1)
@@ -113,6 +119,7 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 		bufs  [2]*image.RGBA
 		frame int
 		sized bool // the window was made its size in cells
+		ime   imeMirror
 	)
 	pending := append([]glterm.Tab{{Shell: opt.Shell, Args: opt.Args, Run: opt.Run}}, opt.Tabs...)
 	defer ts.CloseAll()
@@ -133,7 +140,8 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
-			size := e.Size
+			// The window less its insets: system bars, and an on-screen keyboard.
+			size := gtx.Constraints.Max
 
 			if grid == nil || e.Metric.PxPerSp != pxPerSp {
 				g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(e.Metric.PxPerSp))
@@ -188,11 +196,13 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 			// pointer above the terminal.
 			whole := clip.Rect(image.Rectangle{Max: size}).Push(gtx.Ops)
 			event.Op(gtx.Ops, tag)
+			// No autocorrect or learning: a terminal is typed commands and passwords.
+			key.InputHintOp{Tag: tag, Hint: key.HintPassword}.Add(gtx.Ops)
 			if !focused {
 				gtx.Execute(key.FocusCmd{Tag: tag})
 				focused = true
 			}
-			handle(gtx.Source, tag, &ts, s, stripH, newTab, cb, &buttons)
+			handle(gtx.Source, tag, &ts, s, stripH, newTab, cb, &buttons, &ime)
 			whole.Pop()
 
 			if cb.write != nil {
@@ -234,7 +244,7 @@ func paintImage(ops *op.Ops, img *image.RGBA, at image.Point) {
 // handle reads the frame's input: tab shortcuts and the strip for the window,
 // the rest for the current tab's terminal, which sees the pointer relative to
 // its own top.
-func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons) {
+func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons, ime *imeMirror) {
 	filters := []event.Filter{
 		key.FocusFilter{Target: tag},
 		// Keys that are not text: named keys, and anything with Ctrl or Alt.
@@ -265,11 +275,24 @@ func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH 
 		t := ts.Active()
 		switch ev := ev.(type) {
 		case key.EditEvent:
-			t.Term.Text(ev.Text)
+			erase, typed := ime.edit(ev)
+			for range erase {
+				t.Term.Key(glterm.KeyEvent{Key: glterm.KeyBackspace})
+			}
+			t.Term.Text(typed)
+			ime.report(src.Execute, tag)
+		case key.SnippetEvent, key.SelectionEvent:
+			ime.report(src.Execute, tag)
 		case key.Event:
 			if ev.State != key.Press {
 				continue
 			}
+			if ev.Name == key.NameDeleteBackward {
+				ime.backspace()
+			} else {
+				ime.reset()
+			}
+			ime.report(src.Execute, tag)
 			if ke, ok := termKey(ev); ok && !ts.Shortcut(ke, newTab) {
 				t.Term.Key(ke)
 			}

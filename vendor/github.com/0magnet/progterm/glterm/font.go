@@ -67,7 +67,7 @@ func LoadFont(spec string) (Font, error) {
 		spec = DesktopFont()
 	}
 	if spec == "" {
-		return GoMono(DefaultPt), nil
+		return GoMono(defaultPt()), nil
 	}
 	family, pt := ParseFont(spec)
 	if strings.EqualFold(family, "Go Mono") || family == "" {
@@ -186,6 +186,15 @@ func parseMatch(out, family string, bold, italic bool) (*opentype.Font, error) {
 		index = 0
 	}
 	return c.Font(index)
+}
+
+// defaultPt is DefaultPt, or on a phone, which is held closer than a desktop's
+// screen, 6 pt: about the 14 sp of Android's body text.
+func defaultPt() float64 {
+	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+		return 6
+	}
+	return DefaultPt
 }
 
 // DpPerPt is how many of Gio's device independent pixels a point is: dp are
