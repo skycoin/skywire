@@ -199,3 +199,20 @@ func TestHelpWidthFitsANarrowTerminal(t *testing.T) {
 		}
 	}
 }
+
+// TestNothingExceedsANarrowTerminal: on a terminal too narrow for a column of
+// descriptions beside the flags, a phone's, they go under them and still fit.
+func TestNothingExceedsANarrowTerminal(t *testing.T) {
+	const cols = 51
+	asTerminal(t, cols)
+	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
+	fs.String("via", "", "remote visor target — dmsg://<pk> or `skynet://<pk>`")
+	fs.String("jq", "", "filter JSON output through a jq/gojq expression (implies --json)")
+	fs.BoolP("bv", "b", false, "print runtime/debug.BuildInfo.Main.Version")
+
+	for _, l := range strings.Split(FlagBlock(fs), "\n") {
+		if len(l) > cols {
+			t.Errorf("line is %d wide on a %d column terminal: %q", len(l), cols, l)
+		}
+	}
+}

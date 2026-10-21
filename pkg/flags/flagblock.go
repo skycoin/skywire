@@ -69,6 +69,10 @@ const descCap = 34
 // worse than an over-long line.
 const descFloor = 24
 
+// narrowDescCol is the description column where the terminal is too narrow
+// for one beside the flags, every description then on the lines under its flag.
+const narrowDescCol = 6
+
 // specGap is the gap between the longest flag spec and the description column.
 const specGap = 2
 
@@ -94,11 +98,14 @@ func FlagBlock(fs *pflag.FlagSet) string {
 		return ""
 	}
 
+	width := helpWidth()
 	descCol := descColumn(rows)
-	descWidth := helpWidth() - descCol
-	if descWidth < descFloor {
-		descWidth = descFloor
+	if width-descCol < max(descFloor, longestWord(rows)) {
+		// Too narrow for two columns, as on a phone: every description goes
+		// under its flag, as a long spec's does, so no word is broken.
+		descCol = narrowDescCol
 	}
+	descWidth := max(width-descCol, descFloor)
 
 	var b strings.Builder
 	for _, r := range rows {
@@ -320,4 +327,18 @@ func isAllZeros(s string) bool {
 		return false
 	}
 	return strings.Trim(s, "0") == ""
+}
+
+// longestWord is the widest word in any description, which a column narrower
+// than it could only break.
+func longestWord(rows []row) int {
+	n := 0
+	for _, r := range rows {
+		for _, s := range append([]string{r.usage}, r.extras...) {
+			for _, w := range strings.Fields(s) {
+				n = max(n, len(w))
+			}
+		}
+	}
+	return n
 }
