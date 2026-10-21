@@ -23,6 +23,7 @@ var (
 	shCommand string
 	shWindow  bool
 	shFont    string
+	shTabs    []string
 )
 
 // shCmd is websh, the shell of the browser desk, on this machine's terminal.
@@ -50,13 +51,16 @@ var shCmd = &cobra.Command{
 			}
 		}
 		opt := console.Options{Host: "skywire", Exec: execSkywire}
+		if len(shTabs) > 0 {
+			opt.Run = shTabs[0] // in a window, its first tab's
+		}
 		if shWindow {
 			if c.Flags().Changed("command") || len(args) > 0 {
 				return errors.New("--window opens an interactive shell and takes no -c or FILE")
 			}
 			why := noWindow()
 			if why == "" {
-				return runWindow(opt, shFont)
+				return runWindow(opt, shFont, shTabs)
 			}
 			fmt.Fprintf(os.Stderr, "skywire sh: no window (%s), websh runs on this terminal\n", why)
 		}
@@ -105,6 +109,7 @@ func init() {
 	shCmd.Flags().StringVarP(&shCommand, "command", "c", "", "run this command line, then exit")
 	shCmd.Flags().BoolVar(&shWindow, "window", false, "open websh in a window with tabs, falling back to this terminal")
 	shCmd.Flags().StringVar(&shFont, "font", "", "the window's font, \"Family Size\" (default: the desktop terminal's, else Go Mono)")
+	shCmd.Flags().StringArrayVar(&shTabs, "tab", nil, "start by running this command line; with --window each opens a tab, the first in front")
 	// A terminal starts "the user's shell" as a login shell.
 	shCmd.Flags().BoolP("login", "l", false, "accepted for login shells; websh reads no profile, only ~/.webshrc")
 	// As in bash, flags end at the script: what follows it is its own.

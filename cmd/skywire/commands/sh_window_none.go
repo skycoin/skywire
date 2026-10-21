@@ -6,4 +6,4 @@ import "github.com/0magnet/websh/console"
 
 func noWindow() string { return "this build has none" }
 
-func runWindow(console.Options, string) error { return nil }
+func runWindow(console.Options, string, []string) error { return nil }
