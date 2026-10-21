@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"runtime"
 
 	"github.com/wlynxg/anet"
 )
@@ -19,6 +20,10 @@ const (
 
 // DefaultNetworkInterface fetches default network interface name.
 func DefaultNetworkInterface() (string, error) {
+	// An Android app has no routing table to read, and may have no sh to run.
+	if runtime.GOOS == "android" {
+		return firstRoutableInterface()
+	}
 	outputBytes, err := exec.Command("sh", "-c", defaultNetworkInterfaceCMD).Output()
 	if err != nil {
 		return "", fmt.Errorf("error running command %s: %w", defaultNetworkInterfaceCMD, err)
