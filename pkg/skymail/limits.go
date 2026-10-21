@@ -15,8 +15,8 @@ import (
 // they are low enough that nobody can fill a browser's storage with it:
 // a full mailbox refuses mail until expiry or a delete frees room.
 const (
-	DefaultMaxMessageSize int64 = 1 << 20  // 1 MiB
-	DefaultMaxTotalSize   int64 = 16 << 20 // 16 MiB, Inbox and Sent together
+	DefaultMaxMessageSize int64 = 10 << 20 // 10 MiB, room for a few phone photos
+	DefaultMaxTotalSize   int64 = 64 << 20 // 64 MiB, Inbox and Sent together
 	DefaultMaxAge               = 7 * 24 * time.Hour
 )
 

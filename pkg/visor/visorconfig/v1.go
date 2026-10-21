@@ -630,8 +630,8 @@ type SkymailConfig struct {
 	// (outside it, because the wasm visor never persists local/).
 	Dir string `json:"dir,omitempty"`
 	// MaxMessageSize, MaxTotalSize (bytes, Inbox and Sent together) and
-	// MaxAge bound what the mailbox keeps: 0 means the default (1 MiB,
-	// 16 MiB, 7 days), a negative value no bound.
+	// MaxAge bound what the mailbox keeps: 0 means the default (10 MiB,
+	// 64 MiB, 7 days), a negative value no bound.
 	MaxMessageSize int64    `json:"max_message_size,omitempty"`
 	MaxTotalSize   int64    `json:"max_total_size,omitempty"`
 	MaxAge         Duration `json:"max_age,omitempty"`
