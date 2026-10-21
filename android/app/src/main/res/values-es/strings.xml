@@ -543,7 +543,7 @@
     <string name="wallet_intro_create">Crear una billetera nueva</string>
     <string name="wallet_intro_create_sub">Generar una frase de recuperación nueva</string>
     <string name="wallet_intro_restore">Restaurar desde la semilla</string>
-    <string name="wallet_intro_restore_sub">Introduce una frase de 12 palabras que ya tengas</string>
+    <string name="wallet_intro_restore_sub">Introduce una frase de 12 o 24 palabras que ya tengas</string>
 
     <string name="wallet_seed_title">Frase de recuperación</string>
     <string name="wallet_seed_body">Apunta estas doce palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas.</string>
@@ -561,16 +561,16 @@
     <string name="wallet_verify_done">Billetera activada</string>
 
     <string name="wallet_restore_title">Restaurar la billetera</string>
-    <string name="wallet_restore_progress">Palabra %1$d de %2$d</string>
+    <string name="wallet_restore_progress">Palabra %1$d de %2$s</string>
     <string name="wallet_restore_paste">Pegar la semilla entera</string>
     <string name="wallet_restore_pasted">Doce palabras leídas del portapapeles</string>
     <string name="wallet_restore_hint">Siguiente palabra</string>
     <string name="wallet_restore_wordlist_note">Las sugerencias salen de la lista de palabras BIP39 guardada en el dispositivo. Nada de lo que escribes se envía a ningún sitio.</string>
     <string name="wallet_restore_action">Restaurar la billetera</string>
-    <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las doce palabras está mal o fuera de orden.</string>
+    <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las palabras está mal o fuera de orden.</string>
     <string name="wallet_restore_legacy">Esta frase no lleva suma de verificación — las carteras antiguas escribían sus semillas así, así que puede seguir siendo válida. Revisa cada palabra y pulsa de nuevo para restaurar de todos modos.</string>
     <string name="wallet_restore_anyway">Restaurar de todos modos</string>
-    <string name="wallet_restore_short">Solo has introducido %1$d de 12 palabras. Una semilla se restaura entera o no se restaura.</string>
+    <string name="wallet_restore_short">Una semilla tiene 12 o 24 palabras, y esta tiene %1$d. Se restaura entera o no se restaura.</string>
     <string name="wallet_restore_done">Billetera restaurada. Buscando saldos.</string>
     <string name="wallet_restore_scanning">Restaurando y buscando saldos…</string>
     <string name="wallet_lock_required_body">Esta billetera está protegida por el bloqueo de pantalla del teléfono. Sin él, cualquiera que tenga el teléfono podría ver tu frase de recuperación y enviar tus monedas. Configura un PIN, un patrón o una contraseña y vuelve.</string>
