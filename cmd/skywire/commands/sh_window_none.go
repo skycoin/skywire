@@ -1,4 +1,4 @@
-//go:build unix && (android || ios || tinygo)
+//go:build unix && (ios || tinygo || (android && !cgo))
 
 package commands
 

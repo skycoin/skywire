@@ -1,4 +1,4 @@
-//go:build unix && !android && !ios && !tinygo && withgio && cgo
+//go:build unix && !ios && !tinygo && cgo && (withgio || android)
 
 package commands
 
@@ -11,7 +11,7 @@ import (
 
 // noWindow says why a window cannot open here, or is empty when one can.
 func noWindow() string {
-	if runtime.GOOS != "darwin" && os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("DISPLAY") == "" {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "android" && os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("DISPLAY") == "" {
 		return "neither WAYLAND_DISPLAY nor DISPLAY is set"
 	}
 	return ""

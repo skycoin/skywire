@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/0magnet/sh/v3/interp"
@@ -38,6 +39,16 @@ var shCmd = &cobra.Command{
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	RunE: func(c *cobra.Command, args []string) error {
+		// An Android app starts in /, which it cannot write. Its HOME is its own,
+		// and its temporary files go in its cache, not the shell user's /data/local/tmp.
+		if runtime.GOOS == "android" {
+			if home, err := os.UserHomeDir(); err == nil {
+				_ = os.Chdir(home) //nolint:errcheck // the shell then starts in /, as before
+			}
+			if cache, err := os.UserCacheDir(); err == nil && os.Getenv("TMPDIR") == "" {
+				_ = os.Setenv("TMPDIR", cache) //nolint:errcheck // os.TempDir then stays /data/local/tmp
+			}
+		}
 		opt := console.Options{Host: "skywire", Exec: execSkywire}
 		if shWindow {
 			if c.Flags().Changed("command") || len(args) > 0 {
@@ -82,6 +93,11 @@ func execSkywire(ctx context.Context, args []string) (int, bool) {
 		return 0, false
 	}
 	hc := interp.HandlerCtx(ctx)
+	// Run in-process, skywire resolves relative paths against the process's
+	// directory, so make it the shell's, as a child process would inherit it.
+	if hc.Dir != "" {
+		_ = os.Chdir(hc.Dir) //nolint:errcheck // a directory gone since the shell left it is the command's to report
+	}
 	return cmdutil.Run(ctx, RootCmd, args[1:], hc.Stdin, hc.Stdout, hc.Stderr), true
 }
 
