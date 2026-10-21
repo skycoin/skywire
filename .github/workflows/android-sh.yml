@@ -51,7 +51,9 @@ jobs:
           platform=$(grep -oE 'platforms[;/]android-[0-9]+(\.[0-9]+)? ' <<<"$list" | tr -d ' ' | tr / ';' | sort -u -t- -k2 -V | tail -1)
           tools=$(grep -oE 'build-tools[;/][0-9]+\.[0-9]+\.[0-9]+ ' <<<"$list" | tr -d ' ' | tr / ';' | sort -u -t';' -k2 -V | tail -1)
           echo "installing $platform $tools"
-          yes | "$sdk" --install "$platform" "$tools" >/dev/null
+          # yes answers the licence prompts and dies of SIGPIPE when the install
+          # is done, which pipefail would count as the step failing.
+          (yes || true) | "$sdk" --install "$platform" "$tools" >/dev/null
 
       - name: Decode the signing key
         env:
