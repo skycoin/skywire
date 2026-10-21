@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The visor talks to dmsg/transports; the app talks to its local API. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -217,6 +218,12 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+        <!-- The wallet's QR scanner. The library declares it sensorLandscape;
+             it now opens the way the phone is held, portrait when upright. -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="fullUser"
+            tools:replace="screenOrientation" />
     </application>
 
 </manifest>
