@@ -15,6 +15,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
+	github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399
 	github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a
@@ -129,7 +130,6 @@ require (
 require (
 	gioui.org/shader v1.0.9 // indirect
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
-	github.com/0magnet/gio v0.10.4-0.20261021191625-2885f59ca910 // indirect
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect
