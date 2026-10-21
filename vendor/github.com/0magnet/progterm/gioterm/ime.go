@@ -1,9 +1,13 @@
 package gioterm
 
 import (
-	"gioui.org/io/input"
-	"gioui.org/io/key"
+	"github.com/0magnet/gio/io/input"
+	"github.com/0magnet/gio/io/key"
 )
+
+// imeMax is how long the mirrored text grows before it is let go, which
+// restarts the input method once.
+const imeMax = 4096
 
 // imeMirror is the text an input method believes it is editing. A terminal
 // has no text field, but Gio restarts the input method whenever the app's
@@ -12,6 +16,10 @@ import (
 // already sent becomes backspaces and retyping.
 type imeMirror struct {
 	text []rune
+	// base is where the line being typed starts. A key such as Enter moves
+	// it to the end, leaving the text as it is, so the input method is not
+	// restarted; an edit never erases before it.
+	base int
 }
 
 // edit applies e, and returns how many runes to erase from the end of what
@@ -19,19 +27,24 @@ type imeMirror struct {
 func (m *imeMirror) edit(e key.EditEvent) (erase int, typed string) {
 	n := len(m.text)
 	start, end := min(e.Range.Start, e.Range.End), max(e.Range.Start, e.Range.End)
-	start, end = max(0, min(start, n)), max(0, min(end, n))
+	start, end = max(m.base, min(start, n)), max(m.base, min(end, n))
 	tail := string(m.text[end:])
 	m.text = append(append([]rune(string(m.text[:start])), []rune(e.Text)...), m.text[end:]...)
 	return n - start, e.Text + tail
 }
 
-// reset forgets the text, after a key that moves the terminal's cursor or
-// ends the line.
-func (m *imeMirror) reset() { m.text = m.text[:0] }
+// newLine starts a line after a key that ends it or moves the terminal's
+// cursor, and lets the text go once it is long.
+func (m *imeMirror) newLine() {
+	if len(m.text) > imeMax {
+		m.text = m.text[:0]
+	}
+	m.base = len(m.text)
+}
 
-// backspace forgets the last rune, which a Backspace key erased.
+// backspace forgets the last rune of the line, which a Backspace key erased.
 func (m *imeMirror) backspace() {
-	if len(m.text) > 0 {
+	if len(m.text) > m.base {
 		m.text = m.text[:len(m.text)-1]
 	}
 }

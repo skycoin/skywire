@@ -58,8 +58,6 @@ eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d h1:ARo7NCVvN2NdhLlJE9xAbKw
 eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d/go.mod h1:OYVuxibdk9OSLX8vAqydtRPP87PyTFcT9uH3MlEGBQA=
 fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 h1:149/+Wa5EsLLXfyj2pdTmvnQf2VIlgCIwSjcCTHYhIo=
 fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4/go.mod h1:RVwqP9nYMo7h5zViCBHri2FgjXF7H2cub7MAq4NSoLs=
-gioui.org v0.10.3 h1:ZiJ4CRvmPQEl2Ee0lK6JQ9WepiA628YmbjibiBVnBTw=
-gioui.org v0.10.3/go.mod h1:x8MAOooc/v4UUaB5o6BS/FpYdxnzh3LBvZlTBmYpnlQ=
 gioui.org/cpu v0.0.0-20210808092351-bfe733dd3334/go.mod h1:A8M0Cn5o+vY5LTMlnRoK3O5kG+rH0kWfJjeKd9QpBmQ=
 gioui.org/shader v1.0.9 h1:XxnqIfmClWpN49kizxH2W0JcCFrrEP4q3jZmNYaltbs=
 gioui.org/shader v1.0.9/go.mod h1:mWdiME581d/kV7/iEhLmUgUK5iZ09XR5XpduXzbePVM=
@@ -87,6 +85,8 @@ github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a h1:W8l2XyZb6O
 github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a/go.mod h1:rKx0iuYFns6ZS0Ud33Sn4KC4C0jHAZDHy1I39R9Xn3c=
 github.com/0magnet/dtls/v3 v3.1.11 h1:QmTZt2VFfYa16Q/0UpJcdJNgx4gCh2td9ii/Hx0pnQU=
 github.com/0magnet/dtls/v3 v3.1.11/go.mod h1:4+o81WGOMZF/3pUtI9ICKb3Ns1VBtREBJdtzkt8a8F0=
+github.com/0magnet/gio v0.10.4-0.20261021161935-ee4944b41af4 h1:lcCukqxoP5caTM96HsgGHZcK1IiJoYnRaMGYzJ0vv1M=
+github.com/0magnet/gio v0.10.4-0.20261021161935-ee4944b41af4/go.mod h1:s6Jv+G7IJtoOBtTnLLxtwyECQne5UPUCgu194IcM9L4=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb h1:JAp38Yr7DXoyTVko9hDhBIJDpNZWRiVkp66vGLbYHCI=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb/go.mod h1:ThqukkPy/kmN6c6cyboZYESC9qdJKfYgHTMVp0iW7T0=
 github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba h1:boyLKdsynFPzjQ5fFh7RpvuudRbb6yuqlXquDIt6lic=
@@ -115,8 +115,8 @@ github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d h1:zLwPS+LqZKeKQ
 github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d/go.mod h1:SPdEIkbuE6PjbbCoCkX3gwYycrA+OZPrOfYFLUg6xss=
 github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029 h1:vN5+KmlqBDUrn8gdBHk/XOplNcLhydPqfj1tr9Emz/M=
 github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029/go.mod h1:bJZTb79j5rnUPAnUgNjTFM+jH2BVKhkq8stefBySk+E=
-github.com/0magnet/progterm v0.0.0-20261021155211-aa10a2ab2d2e h1:n4EAt8klGVye2VGPocbgjg/nuboUonk6mTHpkrC/uu4=
-github.com/0magnet/progterm v0.0.0-20261021155211-aa10a2ab2d2e/go.mod h1:0CZEtPjPp/tLnylX26GM3o/wcB3uj2Ruz2ODlpYxNWY=
+github.com/0magnet/progterm v0.0.0-20261021162138-c071448a457a h1:81Xjfb9Q9nVdzrkaIGytXmvvG7cBGdT7Jng4mlfVDzI=
+github.com/0magnet/progterm v0.0.0-20261021162138-c071448a457a/go.mod h1:HgUWJmvpwGC3eD/kxRFKYZWeGgMzdZIcX389kyLG4yU=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585 h1:Izm48DGh4xsTTytTzTux1wLn2016Erqp4heOqLYJphM=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585/go.mod h1:WnuZAVQbE9SxpVgGrP7Xnrk2x+9T9o7GCRRpiB/hxhY=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=

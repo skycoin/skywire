@@ -27,7 +27,7 @@ require (
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 	github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
-	github.com/0magnet/progterm v0.0.0-20261021155211-aa10a2ab2d2e
+	github.com/0magnet/progterm v0.0.0-20261021162138-c071448a457a
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -127,9 +127,9 @@ require (
 )
 
 require (
-	gioui.org v0.10.3 // indirect
 	gioui.org/shader v1.0.9 // indirect
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
+	github.com/0magnet/gio v0.10.4-0.20261021161935-ee4944b41af4 // indirect
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect

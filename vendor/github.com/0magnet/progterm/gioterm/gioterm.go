@@ -12,20 +12,21 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
-	"gioui.org/app"
-	"gioui.org/f32"
-	"gioui.org/io/clipboard"
-	"gioui.org/io/event"
-	"gioui.org/io/input"
-	"gioui.org/io/key"
-	"gioui.org/io/pointer"
-	"gioui.org/io/transfer"
-	"gioui.org/op"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
-	"gioui.org/unit"
+	"github.com/0magnet/gio/app"
+	"github.com/0magnet/gio/f32"
+	"github.com/0magnet/gio/io/clipboard"
+	"github.com/0magnet/gio/io/event"
+	"github.com/0magnet/gio/io/input"
+	"github.com/0magnet/gio/io/key"
+	"github.com/0magnet/gio/io/pointer"
+	"github.com/0magnet/gio/io/transfer"
+	"github.com/0magnet/gio/op"
+	"github.com/0magnet/gio/op/clip"
+	"github.com/0magnet/gio/op/paint"
+	"github.com/0magnet/gio/unit"
 
 	"github.com/0magnet/progterm/glterm"
 )
@@ -72,6 +73,11 @@ func Run(opt glterm.Options) error {
 	return nil
 }
 
+// resizeSettle is how long a window size holds before the terminal takes it:
+// the terminal reflows for each size, and a passing size narrower than the
+// prompt leaves the cursor where the prompt was cut.
+const resizeSettle = 150 * time.Millisecond
+
 // clipboardBridge is glterm's Clipboard on Gio: reads and writes are commands
 // a frame executes, so they are queued here and run at the next one. Gio has
 // no primary selection; it is kept in the process.
@@ -113,7 +119,11 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 		focused bool
 		ts      glterm.Tabs
 		area    image.Point // the terminal's part of the window
-		bar     *image.RGBA
+		// A new area is taken once it has held for resizeSettle, as a phone turning
+		// over can pass a frame with the old size and the new insets.
+		resizeTo image.Point
+		resizeAt time.Time
+		bar      *image.RGBA
 		// Each frame draws into the other buffer, so the one Gio still reads
 		// is left alone.
 		bufs  [2]*image.RGBA
@@ -166,9 +176,17 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 			}
 			stripH := glterm.StripHeight(grid)
 			if a := image.Pt(size.X, max(1, size.Y-stripH)); a != area {
-				area = a
-				ts.Resize(grid, area.X, area.Y)
-				bufs = [2]*image.RGBA{}
+				if a != resizeTo {
+					resizeTo, resizeAt = a, e.Now.Add(resizeSettle)
+				}
+				// The first layout, or one for a new font, is taken at once.
+				if area == (image.Point{}) || !e.Now.Before(resizeAt) {
+					area = a
+					ts.Resize(grid, area.X, area.Y)
+					bufs = [2]*image.RGBA{}
+				} else {
+					gtx.Execute(op.InvalidateCmd{At: resizeAt})
+				}
 			}
 
 			for i, spec := range pending {
@@ -218,6 +236,9 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 			if bar == nil || bar.Bounds().Size() != image.Pt(size.X, stripH) {
 				bar = image.NewRGBA(image.Rect(0, 0, size.X, stripH))
 			}
+			// Unclipped, so it is also what shows under the system bars, edge to edge.
+			_, bg := grid.Colors()
+			paint.Fill(gtx.Ops, color.NRGBA{R: bg.R, G: bg.G, B: bg.B, A: 0xff})
 			glterm.DrawStrip(bar, grid, &ts, s)
 			paintImage(gtx.Ops, bar, image.Point{})
 
@@ -290,7 +311,7 @@ func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH 
 			if ev.Name == key.NameDeleteBackward {
 				ime.backspace()
 			} else {
-				ime.reset()
+				ime.newLine()
 			}
 			ime.report(src.Execute, tag)
 			if ke, ok := termKey(ev); ok && !ts.Shortcut(ke, newTab) {

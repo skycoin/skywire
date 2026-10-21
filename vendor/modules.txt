@@ -3,52 +3,6 @@
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
 fyne.io/systray/internal/generated/notifier
-# gioui.org v0.10.3
-## explicit; go 1.24.0
-gioui.org/app
-gioui.org/app/internal/ibus
-gioui.org/app/internal/windows
-gioui.org/app/internal/xkb
-gioui.org/f32
-gioui.org/font
-gioui.org/font/gofont
-gioui.org/font/opentype
-gioui.org/gesture
-gioui.org/gpu
-gioui.org/gpu/internal/d3d11
-gioui.org/gpu/internal/driver
-gioui.org/gpu/internal/metal
-gioui.org/gpu/internal/opengl
-gioui.org/gpu/internal/vulkan
-gioui.org/internal/byteslice
-gioui.org/internal/cocoainit
-gioui.org/internal/d3d11
-gioui.org/internal/debug
-gioui.org/internal/egl
-gioui.org/internal/f32
-gioui.org/internal/f32color
-gioui.org/internal/fling
-gioui.org/internal/gl
-gioui.org/internal/ops
-gioui.org/internal/scene
-gioui.org/internal/stroke
-gioui.org/internal/vk
-gioui.org/io/clipboard
-gioui.org/io/event
-gioui.org/io/input
-gioui.org/io/key
-gioui.org/io/pointer
-gioui.org/io/semantic
-gioui.org/io/system
-gioui.org/io/transfer
-gioui.org/layout
-gioui.org/op
-gioui.org/op/clip
-gioui.org/op/paint
-gioui.org/text
-gioui.org/unit
-gioui.org/widget
-gioui.org/widget/material
 # gioui.org/shader v1.0.9
 ## explicit; go 1.16
 gioui.org/shader
@@ -119,6 +73,52 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
+# github.com/0magnet/gio v0.10.4-0.20261021161935-ee4944b41af4
+## explicit; go 1.24.0
+github.com/0magnet/gio/app
+github.com/0magnet/gio/app/internal/ibus
+github.com/0magnet/gio/app/internal/windows
+github.com/0magnet/gio/app/internal/xkb
+github.com/0magnet/gio/f32
+github.com/0magnet/gio/font
+github.com/0magnet/gio/font/gofont
+github.com/0magnet/gio/font/opentype
+github.com/0magnet/gio/gesture
+github.com/0magnet/gio/gpu
+github.com/0magnet/gio/gpu/internal/d3d11
+github.com/0magnet/gio/gpu/internal/driver
+github.com/0magnet/gio/gpu/internal/metal
+github.com/0magnet/gio/gpu/internal/opengl
+github.com/0magnet/gio/gpu/internal/vulkan
+github.com/0magnet/gio/internal/byteslice
+github.com/0magnet/gio/internal/cocoainit
+github.com/0magnet/gio/internal/d3d11
+github.com/0magnet/gio/internal/debug
+github.com/0magnet/gio/internal/egl
+github.com/0magnet/gio/internal/f32
+github.com/0magnet/gio/internal/f32color
+github.com/0magnet/gio/internal/fling
+github.com/0magnet/gio/internal/gl
+github.com/0magnet/gio/internal/ops
+github.com/0magnet/gio/internal/scene
+github.com/0magnet/gio/internal/stroke
+github.com/0magnet/gio/internal/vk
+github.com/0magnet/gio/io/clipboard
+github.com/0magnet/gio/io/event
+github.com/0magnet/gio/io/input
+github.com/0magnet/gio/io/key
+github.com/0magnet/gio/io/pointer
+github.com/0magnet/gio/io/semantic
+github.com/0magnet/gio/io/system
+github.com/0magnet/gio/io/transfer
+github.com/0magnet/gio/layout
+github.com/0magnet/gio/op
+github.com/0magnet/gio/op/clip
+github.com/0magnet/gio/op/paint
+github.com/0magnet/gio/text
+github.com/0magnet/gio/unit
+github.com/0magnet/gio/widget
+github.com/0magnet/gio/widget/material
 # github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb
 ## explicit; go 1.23.0
 github.com/0magnet/go-dsp/dsputils
@@ -171,7 +171,7 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261021155211-aa10a2ab2d2e
+# github.com/0magnet/progterm v0.0.0-20261021162138-c071448a457a
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
