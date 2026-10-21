@@ -483,6 +483,11 @@ func (s *Session) Close() {
 		s.in.close()
 	}
 	close(s.lines)
+	// Jobs outlive the line that started them, so they have to be ended with
+	// the shell. StopJobs waits for them, and Close runs on a JS callback.
+	if s.Shell != nil && s.Shell.Runner != nil {
+		go s.Shell.Runner.StopJobs(context.Background())
+	}
 	if s.Term != nil {
 		s.Term.Dispose()
 	}

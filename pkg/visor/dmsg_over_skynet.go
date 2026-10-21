@@ -64,10 +64,12 @@ func (v *Visor) dialDmsgHTTP(ctx context.Context, _, addr string) (net.Conn, err
 	if err != nil {
 		return nil, fmt.Errorf("invalid port in %q: %w", addr, err)
 	}
-	if !v.isDmsgServiceKey(pk) {
-		if conn, err := v.dialDmsgOverSkynet(ctx, pk, uint16(port)); err == nil {
+	if v.isDmsgServiceKey(pk) {
+		if conn, err := v.dialServiceOverSkynet(ctx, pk, uint16(port)); err == nil {
 			return conn, nil
 		}
+	} else if conn, err := v.dialDmsgOverSkynet(ctx, pk, uint16(port)); err == nil {
+		return conn, nil
 	}
 	dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

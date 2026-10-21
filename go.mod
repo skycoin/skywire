@@ -8,12 +8,12 @@ require (
 	github.com/0magnet/ansifilter-go v0.0.1-0.20261014103223-d1dc4f19777e
 	github.com/0magnet/audioprism-go v0.0.1-0.20261013224747-ec31c7141340
 	github.com/0magnet/bbolt v1.5.1-0.20261004204806-45fff0d5382d
-	github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf
+	github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 	github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20
 	github.com/0magnet/calvin v0.0.1-0.20261013221715-da6581155df3
 	github.com/0magnet/coloredcobra v1.0.4-0.20261012213101-faa6bd8f94c5
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
-	github.com/0magnet/desk v0.0.3-0.20261014102802-0dc854720e7a
+	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
 	github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
@@ -26,8 +26,8 @@ require (
 	github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
-	github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
-	github.com/0magnet/progterm v0.0.0-20261016222630-38e6bb2e54be
+	github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
+	github.com/0magnet/progterm v0.0.0-20261021102511-cee18024143b
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -35,9 +35,9 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261016215005-dc700a0b0801
+	github.com/0magnet/websh v0.0.1-0.20261021102026-4397eb6f191c
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
-	github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c
+	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
 	github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
 	github.com/ActiveState/termtest/conpty v0.5.0
@@ -90,13 +90,13 @@ require (
 	github.com/pion/rtp v1.10.5
 	github.com/pires/go-proxyproto v0.15.0
 	github.com/pkg/sftp v1.13.11
-	github.com/quic-go/quic-go v0.63.0
+	github.com/quic-go/quic-go v0.64.0
 	github.com/quic-go/webtransport-go v0.13.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.7-0.20261015015950-aaca77af9c9c
+	github.com/skycoin/skycoin v0.28.7-0.20261020183833-448b2c23eecd
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
@@ -112,7 +112,7 @@ require (
 	github.com/xtaci/smux v1.5.57
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	github.com/yuin/goldmark v1.8.6
-	go.starlark.net v0.0.0-20261012215802-edf86ebe07b2
+	go.starlark.net v0.0.0-20261016124120-4811d7e34ea3
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
 	golang.org/x/sync v0.24.0
@@ -123,7 +123,7 @@ require (
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/telebot.v3 v3.3.8
-	gvisor.dev/gvisor v0.0.0-20261014212059-ddc37c698141
+	gvisor.dev/gvisor v0.0.0-20261017122056-1b7906fdee8c
 )
 
 require (
@@ -161,7 +161,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -181,7 +181,7 @@ require (
 	github.com/jaypipes/pcidb v1.1.1 // indirect
 	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
-	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -210,7 +210,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/oschwald/maxminddb-golang/v2 v2.8.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/pion/dtls/v3 v3.1.12 // indirect
+	github.com/pion/dtls/v3 v3.1.14 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.2.2 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
@@ -267,7 +267,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
-	modernc.org/libc v1.78.0 // indirect
+	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.60.1 // indirect

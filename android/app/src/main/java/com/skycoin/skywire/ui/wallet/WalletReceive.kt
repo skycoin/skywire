@@ -222,7 +222,9 @@ private fun AddressSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
             )
             Spacer(Modifier.height(8.dp))
+            val perAddress = state.snapshot?.perAddress.orEmpty()
             wallet.receiveAddresses.forEachIndexed { i, addr ->
+                val held = perAddress[addr]
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -246,14 +248,34 @@ private fun AddressSheet(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                         )
+                        if (i == 0) {
+                            Text(
+                                stringResource(R.string.wallet_address_default),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        } else if (held == null || held == 0uL) {
+                            // With coins on it the balance line says more
+                            // than "never used" ever could.
+                            Text(
+                                stringResource(R.string.wallet_address_unused),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    if (held != null) {
                         Text(
-                            stringResource(
-                                if (i == 0) R.string.wallet_address_default
-                                else R.string.wallet_address_unused,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp),
+                            state.coin.amountText(held),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (held > 0uL) FontWeight.Bold else FontWeight.Normal,
+                            color = if (held > 0uL) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     }
                     if (i == state.receiveIndex) {

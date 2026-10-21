@@ -59,7 +59,7 @@
     <string name="app_wallet">Billetera</string>
     <string name="app_fleet">Flota</string>
     <string name="app_skymeet">SkyMeet</string>
-    <string name="app_skymail">Skymail</string>
+    <string name="app_skymail">SkyMail</string>
 
     <!-- Apps hub -->
     <string name="hub_subtitle">%1$d instaladas · %2$d en marcha</string>
@@ -350,6 +350,7 @@
     <!-- SkyChat (embedded web UI) -->
     <string name="chat_menu">Acciones del chat</string>
     <string name="chat_reload">Recargar</string>
+    <string name="chat_page_lang">es</string>
     <string name="chat_starting">Iniciando SkyChat…</string>
     <string name="chat_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
     <string name="chat_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
@@ -542,7 +543,7 @@
     <string name="wallet_intro_create">Crear una billetera nueva</string>
     <string name="wallet_intro_create_sub">Generar una frase de recuperación nueva</string>
     <string name="wallet_intro_restore">Restaurar desde la semilla</string>
-    <string name="wallet_intro_restore_sub">Introduce una frase de 12 palabras que ya tengas</string>
+    <string name="wallet_intro_restore_sub">Introduce una frase de 12 o 24 palabras que ya tengas</string>
 
     <string name="wallet_seed_title">Frase de recuperación</string>
     <string name="wallet_seed_body">Apunta estas doce palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas.</string>
@@ -560,16 +561,20 @@
     <string name="wallet_verify_done">Billetera activada</string>
 
     <string name="wallet_restore_title">Restaurar la billetera</string>
-    <string name="wallet_restore_progress">Palabra %1$d de %2$d</string>
+    <string name="wallet_restore_progress">Palabra %1$d de %2$s</string>
     <string name="wallet_restore_paste">Pegar la semilla entera</string>
     <string name="wallet_restore_pasted">Doce palabras leídas del portapapeles</string>
     <string name="wallet_restore_hint">Siguiente palabra</string>
     <string name="wallet_restore_wordlist_note">Las sugerencias salen de la lista de palabras BIP39 guardada en el dispositivo. Nada de lo que escribes se envía a ningún sitio.</string>
     <string name="wallet_restore_action">Restaurar la billetera</string>
-    <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las doce palabras está mal o fuera de orden.</string>
-    <string name="wallet_restore_short">Solo has introducido %1$d de 12 palabras. Una semilla se restaura entera o no se restaura.</string>
+    <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las palabras está mal o fuera de orden.</string>
+    <string name="wallet_restore_legacy">Esta frase no lleva suma de verificación — las carteras antiguas escribían sus semillas así, así que puede seguir siendo válida. Revisa cada palabra y pulsa de nuevo para restaurar de todos modos.</string>
+    <string name="wallet_restore_anyway">Restaurar de todos modos</string>
+    <string name="wallet_restore_short">Una semilla tiene 12 o 24 palabras, y esta tiene %1$d. Se restaura entera o no se restaura.</string>
     <string name="wallet_restore_done">Billetera restaurada. Buscando saldos.</string>
     <string name="wallet_restore_scanning">Restaurando y buscando saldos…</string>
+    <string name="wallet_lock_required_body">Esta billetera está protegida por el bloqueo de pantalla del teléfono. Sin él, cualquiera que tenga el teléfono podría ver tu frase de recuperación y enviar tus monedas. Configura un PIN, un patrón o una contraseña y vuelve.</string>
+    <string name="wallet_lock_required_title">Primero configura un bloqueo de pantalla</string>
 
     <string name="wallet_coin_chip_description">Elige una moneda</string>
     <string name="wallet_coins_title">Elige una moneda</string>
@@ -672,6 +677,14 @@
     <string name="wallet_node_field">Dirección del nodo</string>
     <string name="wallet_node_save">Usar este nodo</string>
     <string name="wallet_node_default">Volver a %1$s</string>
+    <string name="wallet_node_list_hint">Las peticiones prueban estas direcciones en orden: la primera es la de mayor prioridad, y el nodo de fábrica es el último recurso.</string>
+    <string name="wallet_node_add">Añadir nodo</string>
+    <string name="wallet_node_shipped">De fábrica · último recurso</string>
+    <string name="wallet_node_duplicate">Esa dirección ya está en la lista.</string>
+    <string name="wallet_node_invalid">No es una dirección http(s).</string>
+    <string name="wallet_node_remove">Quitar este nodo</string>
+    <string name="wallet_node_up">Adelantar, más prioridad</string>
+    <string name="wallet_node_down">Atrasar, menos prioridad</string>
     <string name="wallet_node_encrypted">Cifrado en tránsito. El nodo sigue viendo qué direcciones consultas juntas, pero nadie más por el camino.</string>
     <string name="wallet_node_cleartext">Sin cifrar. Todo el mundo entre este teléfono y esa dirección ve tu lista de direcciones entera y sus saldos. Tus monedas siguen a salvo —las claves nunca salen del dispositivo—, pero las direcciones quedan ligadas entre sí para cualquiera que esté mirando.</string>
     <string name="wallet_node_body_indexer">Los saldos, las comisiones y los envíos de %1$s van al nodo, y su historial de transacciones se lee del indexador. Cámbialos si los que vienen con la app no se pueden alcanzar desde donde estás, o si tienes los tuyos.</string>
@@ -698,6 +711,8 @@
     <string name="wallet_from_line">de %1$s · %2$s</string>
     <string name="wallet_to_line">a %1$s · %2$s</string>
     <string name="wallet_self_line">dentro de esta billetera · %1$s</string>
+    <string name="wallet_own_sent_line">enviado desde %1$s</string>
+    <string name="wallet_own_received_line">recibido en %1$s</string>
 
     <string name="wallet_receive_title">Recibir</string>
     <string name="wallet_receive_only">Envía solo %1$s a esta dirección.</string>
@@ -716,6 +731,17 @@
 
     <string name="wallet_send_title">Enviar</string>
     <string name="wallet_send_to">Para</string>
+    <string name="wallet_send_from">De</string>
+    <string name="wallet_send_from_wallet">Toda la cartera</string>
+    <string name="wallet_send_coins">Monedas</string>
+    <string name="wallet_send_coins_auto">Automático</string>
+    <string name="wallet_send_coins_picked">%1$d de %2$d salidas · %3$s</string>
+    <string name="wallet_send_coins_none">No hay salidas sin gastar para elegir.</string>
+    <string name="wallet_utxo_line">%1$s horas · %2$s</string>
+    <string name="wallet_send_hours">Horas de moneda a enviar</string>
+    <string name="wallet_send_hours_hint">Vacío envía la mitad de las horas restantes tras la quema</string>
+    <string name="wallet_send_invalid_hours">No es una cantidad de horas válida.</string>
+    <string name="wallet_done">Hecho</string>
     <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
     <string name="wallet_send_to_hint_btc">dirección bc1… o 1…</string>
     <string name="wallet_send_to_hint_eth">dirección 0x…</string>
@@ -793,6 +819,8 @@
     <string name="wallet_tx_from">De</string>
     <string name="wallet_tx_to">Para</string>
     <string name="wallet_tx_wallet">Billetera</string>
+    <string name="wallet_tx_sent_from">Enviado desde</string>
+    <string name="wallet_tx_received_at">Recibido en</string>
     <string name="wallet_tx_date">Fecha</string>
     <string name="wallet_tx_fee">Comisión</string>
     <string name="wallet_tx_confirmations">Confirmaciones</string>
@@ -873,8 +901,11 @@
     <string name="help_chat_body">Mensajes, llamadas, grupos y canales que viajan por Skywire en vez de por los servidores de una empresa. Tu identidad aquí es la clave pública de este nodo: repártela con el botón QR y cualquiera que la tenga podrá alcanzarte.\n\nEste es el mismo chat que corre en el escritorio, dispuesto para un teléfono. Guarda su propio historial en este dispositivo; no hay cuenta y nada se sincroniza solo, así que pasar a otro teléfono significa exportar desde los ajustes dentro del chat e importar allí.\n\nLos registros de SkyChat están en Ajustes ▸ Diagnóstico, junto con todos los demás registros que guarda esta app.</string>
 
     <string name="help_hub_title">Sobre Apps</string>
-    <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, Skymail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
+    <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, SkyMail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
 
+    <string name="wallet_web_unreachable">La billetera aún no está en marcha. Se inicia con Skywire.</string>
+    <string name="wallet_previous">Billetera anterior</string>
+    <string name="wallet_web_retry">Reintentar</string>
     <string name="help_wallet_title">Sobre la Billetera</string>
     <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
 
@@ -947,14 +978,14 @@
     <string name="settings_encrypt_on_pending">La configuración se cifrará cuando te desconectes.</string>
     <string name="settings_encrypt_off_done">La configuración ya no está cifrada.</string>
 
-    <!-- Skymail -->
+    <!-- SkyMail -->
     <plurals name="hub_mail_unread">
         <item quantity="one">%d sin leer</item>
         <item quantity="many">%d sin leer</item>
         <item quantity="other">%d sin leer</item>
     </plurals>
     <string name="mail_your_address">Tu dirección</string>
-    <string name="mail_address_hint">Cualquiera en Skywire puede escribirte a esta dirección, y cualquier nombre antes de la @ te llega. Skymail viaja solo por la red Skywire: no llega al correo electrónico común.</string>
+    <string name="mail_address_hint">Cualquiera en Skywire puede escribirte a esta dirección, y cualquier nombre antes de la @ te llega. SkyMail viaja solo por la red Skywire: no llega al correo electrónico común.</string>
     <string name="mail_copy">Copiar</string>
     <string name="mail_share">Compartir</string>
     <string name="mail_off_title">Tu buzón está apagado</string>
@@ -982,11 +1013,30 @@
     <string name="mail_delete">Eliminar</string>
     <string name="mail_delete_confirm">¿Eliminar este mensaje?</string>
     <string name="mail_deleted">Mensaje eliminado</string>
+    <string name="mail_selected_count">%1$d seleccionados</string>
+    <string name="mail_select_all">Seleccionar todo</string>
+    <string name="mail_deselect_all">Deseleccionar todo</string>
+    <string name="mail_invert_selection">Invertir</string>
+    <string name="mail_delete_selected">Eliminar %1$d</string>
+    <string name="mail_batch_delete_confirm">¿Eliminar %1$d mensajes?</string>
+    <string name="mail_batch_deleted">%1$d mensajes eliminados</string>
+    <string name="mail_batch_delete_failed">No se pudieron eliminar %1$d de %2$d mensajes</string>
     <string name="mail_attachment_saved">%1$s guardado en Descargas</string>
     <string name="mail_attachment_failed">No se pudo guardar el adjunto: %1$s</string>
     <string name="mail_compose_title">Mensaje nuevo</string>
-    <string name="mail_to_hint">Una dirección de Skymail o la clave pública de un nodo</string>
+    <string name="mail_to_hint">Una dirección de SkyMail o la clave pública de un nodo</string>
+    <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
+    <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
+    <string name="mail_save_contact">Guardar contacto</string>
+    <string name="mail_contact_name">Nombre</string>
+    <string name="mail_contact_saved">Contacto guardado</string>
+    <string name="mail_contact_failed">No se pudo guardar el contacto: %1$s</string>
+    <string name="mail_contacts_manage">Gestionar contactos</string>
+    <string name="mail_contacts_from_skychat">De SkyChat</string>
+    <string name="mail_contact_delete_confirm">¿Eliminar a %1$s de tus contactos?</string>
+    <string name="mail_contact_edit">Editar contacto</string>
+    <string name="mail_contact_add">Añadir contacto</string>
     <string name="mail_add_cc">Añadir Cc</string>
     <string name="mail_subject">Asunto</string>
     <string name="mail_body">Mensaje</string>
@@ -997,9 +1047,10 @@
     <string name="mail_sending">Enviando…</string>
     <string name="mail_sent">Enviado</string>
     <string name="mail_send_failed">No se pudo enviar: %1$s</string>
-    <string name="mail_bad_address">No es una dirección de Skymail: %1$s</string>
+    <string name="mail_send_unknown">Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar.</string>
+    <string name="mail_bad_address">No es una dirección de SkyMail: %1$s</string>
     <string name="mail_no_recipient">Añade un destinatario.</string>
-    <string name="mail_attachments_too_big">Demasiado grande: un mensaje puede ocupar unos %1$s, adjuntos incluidos.</string>
+    <string name="mail_attachments_too_big">Estos adjuntos ocupan %1$s en tránsito; un mensaje puede ser de unos %2$s.</string>
     <string name="mail_result_title">No llegó a todos</string>
     <string name="mail_result_delivered">Entregado por %1$s</string>
     <string name="mail_result_failed">No entregado: %1$s</string>
@@ -1012,9 +1063,9 @@
     <string name="mail_allowed_title">Quién puede escribirte</string>
     <string name="mail_allowed_everyone">Todos. Añade una clave para aceptar correo solo de las claves de tu lista.</string>
     <string name="mail_allowed_only">Solo estos:</string>
-    <string name="mail_allow_hint">Una clave pública o una dirección de Skymail</string>
+    <string name="mail_allow_hint">Una clave pública o una dirección de SkyMail</string>
     <string name="mail_allow_add">Añadir</string>
-    <string name="mail_allow_bad">No es una clave pública ni una dirección de Skymail.</string>
-    <string name="help_mail_title">Skymail</string>
-    <string name="help_mail_body">Skymail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón.</string>
+    <string name="mail_allow_bad">No es una clave pública ni una dirección de SkyMail.</string>
+    <string name="help_mail_title">SkyMail</string>
+    <string name="help_mail_body">SkyMail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón.</string>
 </resources>

@@ -96,10 +96,12 @@ class EthWalletCore(
     override suspend fun balance(book: AddressBook): WalletBalance {
         var total = BigInteger.ZERO
         var funded = 0
+        val per = HashMap<String, ULong>()
         for (addr in book.receive) {
             val value = if (token == null) api.balanceWei(addr) else tokenBalanceRaw(addr)
             if (value.signum() > 0) funded++
             total += value
+            per[addr] = toBase(value)
         }
         val base = toBase(total)
         return WalletBalance(
@@ -109,6 +111,7 @@ class EthWalletCore(
             predicted = base,
             hours = null,
             spendableOutputs = funded,
+            perAddress = per,
         )
     }
 
@@ -147,6 +150,8 @@ class EthWalletCore(
                     // Always the ETH gas, in gwei — a token has no fee of its
                     // own, and the UI labels this line ETH on both cores.
                     fee = feeWei.takeIf { it.signum() > 0 }?.let(::weiToGwei),
+                    // The wallet's one account, whichever side of the transfer it is.
+                    own = listOf(addr),
                 )
             }
         }
@@ -174,6 +179,10 @@ class EthWalletCore(
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        // One account per wallet: there is no second address to choose.
+        fromAddress: String?,
+        @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
+        @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
     ): TxPlan {
         val dest = EthCrypto.parseAddress(toAddress.trim()) ?: throw WalletException.InvalidAddress()
         if (!sendMax && amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")

@@ -459,6 +459,7 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 				appLog("Pairing: PairMarkActive after accept failed: %v", err)
 			}
 			pendingDelete(peer)
+			acceptPairPeer(peer)
 			// Best-effort ack to the initiator. If the legacy
 			// connection has dropped, the pair record is still
 			// good and the initiator can converge on next contact.
@@ -477,6 +478,17 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 		default:
 			http.Error(w, "expected /pair/invites/<pk>/{accept,decline}", http.StatusBadRequest)
 		}
+	}
+}
+
+// acceptPairPeer records a pairing as consent to message. The page adds the
+// peer to its address book; a name here would let them past approval for good.
+func acceptPairPeer(peer cipher.PubKey) {
+	if privacyStore == nil {
+		return
+	}
+	if err := privacyStore.Accept(peer.Hex()); err != nil {
+		appLog("Pairing: accept %s: %v", peer.Hex(), err)
 	}
 }
 
@@ -519,6 +531,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			acceptPairPeer(peer)
 			// Best-effort send pair-invite via legacy direct path.
 			// Failure isn't fatal: if the peer is offline, both sides
 			// can converge later with each calling PairAdd manually.

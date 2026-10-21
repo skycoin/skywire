@@ -187,6 +187,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if la, ok := st.(interface{ SetLeafArchive(string) }); ok {
 		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
 	}
+	if ua, ok := st.(interface{ SetUptimeArchive(string) }); ok {
+		ua.SetUptimeArchive(filepath.Join(storeDataPath, "tp-uptime"))
+	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	s.chartsAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
@@ -365,8 +368,9 @@ func (s *service) startCXO(
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
 	s.cxo.StartAggregator(ctx, host, logger, "telemetry", skyenv.DmsgCXOPort, func(n *node.Node) (services.Aggregator, error) {
 		return cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
-			Node:   n,
-			Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+			Node:                n,
+			Logger:              logging.MustGetLogger("tpd-cxo-aggregator"),
+			TelemetryApplyEvery: time.Duration(s.cfg.TelemetryApplyEvery),
 		})
 	})
 	// The visors' DEDICATED tp-list feed (opt-in on the visor side): its

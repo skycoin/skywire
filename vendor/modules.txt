@@ -70,7 +70,7 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf
+# github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
 # github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20
@@ -87,7 +87,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 ## explicit; go 1.26.0
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.3-0.20261014102802-0dc854720e7a
+# github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 ## explicit; go 1.26.6
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
@@ -168,10 +168,10 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
+# github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261016222630-38e6bb2e54be
+# github.com/0magnet/progterm v0.0.0-20261021102511-cee18024143b
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
@@ -217,7 +217,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261016215005-dc700a0b0801
+# github.com/0magnet/websh v0.0.1-0.20261021102026-4397eb6f191c
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -225,12 +225,13 @@ github.com/0magnet/websh/progressive
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
 github.com/0magnet/websh/shell/sed
+github.com/0magnet/websh/term
 github.com/0magnet/websh/web
 github.com/0magnet/websh/widget
 # github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 ## explicit; go 1.26.0
 github.com/0magnet/wfdrive/bidi
-# github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c
+# github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 ## explicit; go 1.26.0
 github.com/0magnet/winbox-go
 # github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
@@ -454,8 +455,8 @@ github.com/flynn/noise
 ## explicit; go 1.23
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/gabriel-vasile/mimetype v1.4.15
-## explicit; go 1.21
+# github.com/gabriel-vasile/mimetype v1.4.16
+## explicit; go 1.24
 github.com/gabriel-vasile/mimetype
 github.com/gabriel-vasile/mimetype/internal/cdf
 github.com/gabriel-vasile/mimetype/internal/charset
@@ -683,9 +684,10 @@ github.com/klauspost/compress/internal/regmask
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/cpuid/v2 v2.4.0
+# github.com/klauspost/cpuid/v2 v2.4.1
 ## explicit; go 1.24.0
 github.com/klauspost/cpuid/v2
+github.com/klauspost/cpuid/v2/topology
 # github.com/klauspost/reedsolomon v1.14.2
 ## explicit; go 1.24
 github.com/klauspost/reedsolomon
@@ -802,7 +804,7 @@ github.com/peterh/liner
 # github.com/pion/datachannel v1.6.3
 ## explicit; go 1.24.0
 github.com/pion/datachannel
-# github.com/pion/dtls/v3 v3.1.12
+# github.com/pion/dtls/v3 v3.1.14
 ## explicit; go 1.24.0
 github.com/pion/dtls/v3
 github.com/pion/dtls/v3/internal/ciphersuite
@@ -935,7 +937,7 @@ github.com/prometheus/procfs/internal/parsers
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.63.0
+# github.com/quic-go/quic-go v0.64.0
 ## explicit; go 1.26.0
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -1002,7 +1004,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261015015950-aaca77af9c9c
+# github.com/skycoin/skycoin v0.28.7-0.20261020183833-448b2c23eecd
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -1040,8 +1042,8 @@ github.com/skycoin/skycoin/src/daemon/gnet
 github.com/skycoin/skycoin/src/daemon/pex
 github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/electrum
+github.com/skycoin/skycoin/src/eth
 github.com/skycoin/skycoin/src/fiber
-github.com/skycoin/skycoin/src/gui
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
@@ -1284,7 +1286,7 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.starlark.net v0.0.0-20261012215802-edf86ebe07b2
+# go.starlark.net v0.0.0-20261016124120-4811d7e34ea3
 ## explicit; go 1.25.0
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
@@ -1541,7 +1543,7 @@ gopkg.in/telebot.v3
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# gvisor.dev/gvisor v0.0.0-20261014212059-ddc37c698141
+# gvisor.dev/gvisor v0.0.0-20261017122056-1b7906fdee8c
 ## explicit; go 1.27.2
 gvisor.dev/gvisor/pkg/atomicbitops
 gvisor.dev/gvisor/pkg/bits
@@ -1588,7 +1590,7 @@ gvisor.dev/gvisor/pkg/waiter
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
-# modernc.org/libc v1.78.0
+# modernc.org/libc v1.79.0
 ## explicit; go 1.26.0
 modernc.org/libc
 modernc.org/libc/errno

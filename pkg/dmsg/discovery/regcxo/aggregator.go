@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -145,20 +146,35 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		a.log.WithError(err).Debug(logTag + ": decode root TreeNode failed")
 		return
 	}
+	consume(a.sink, a.log, reporter, cxoaggregate.PackLeaves(pack, &rootNode))
+}
 
-	leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, registrationEntryPath)
+// NewFeedConsumer returns the consumer that ingests entries a visor carries on
+// its system feed, for a dmsg discovery in the same process as the transport
+// discovery (see cxoaggregate.RegisterFeedConsumer).
+func NewFeedConsumer(sink Sink, log *logging.Logger) cxoaggregate.FeedConsumer {
+	return cxoaggregate.FeedConsumer{
+		Service: sysfeed.DmsgDiscovery,
+		Consume: func(reporter cipher.PubKey, leaf cxoaggregate.Leaves) { consume(sink, log, reporter, leaf) },
+	}
+}
+
+// consume decodes the "entry" leaf and ingests it. reporter is the visor
+// whose feed carried it, which the ingest checks against entry.Static.
+func consume(sink Sink, log *logging.Logger, reporter cipher.PubKey, get cxoaggregate.Leaves) {
+	leaf, ok := get(registrationEntryPath)
 	if !ok || len(leaf) == 0 {
 		return
 	}
 	entry := new(disc.Entry)
 	if err := json.Unmarshal(leaf, entry); err != nil {
-		a.log.WithError(err).WithField("visor", reporter).
+		log.WithError(err).WithField("visor", reporter).
 			Debug(logTag + ": entry leaf decode failed")
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	a.sink.IngestEntryFromCXO(ctx, entry, reporter)
+	sink.IngestEntryFromCXO(ctx, entry, reporter)
 }
 
 // Ingest applies a Root the host published itself, on the node it lent this

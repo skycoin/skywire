@@ -155,11 +155,16 @@ func (m *Manager) announceRinging(conn net.Conn, inv Sig) <-chan struct{} {
 		sig.Tone, sig.ToneMime, sig.ToneSize = t.hash, t.mime, len(t.data)
 	}
 	m.mu.Unlock()
+	return m.sendRinging(conn, sig)
+}
+
+// sendRinging writes sig in the background; the channel closes when it is done.
+func (m *Manager) sendRinging(conn net.Conn, sig Sig) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		if err := writeSig(conn, sig); err != nil {
-			m.log.WithError(err).WithField("call", inv.CallID).Debug("voice: could not tell the caller we are ringing")
+			m.log.WithError(err).WithField("call", sig.CallID).Debug("voice: could not tell the caller we are ringing")
 		}
 	}()
 	return done

@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/netview"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // API is everything a visor answers over RPC. Callers that need one part of
@@ -83,6 +84,7 @@ type Node interface {
 	Ports() (map[string]PortDetail, error)
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error)
 	DeleteRewardAddress() error
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
@@ -246,6 +248,9 @@ type Chat interface {
 	VoiceSetRingback(tone VoiceRingback) error
 	// VoiceRingback returns this visor's own ringback tone.
 	VoiceRingback() (VoiceRingback, error)
+	// VoiceSetBlocked replaces the callers whose calls never ring here. Skychat
+	// owns the block list and hands it over.
+	VoiceSetBlocked(peers []cipher.PubKey) error
 	// VoiceDialRingback returns the ringback tone the peer of an outbound
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)

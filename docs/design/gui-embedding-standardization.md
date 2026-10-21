@@ -28,7 +28,7 @@ Grouped by stack:
 - **Vanilla TS/JS bundles**: **tpviz-legacy** (`pkg/tpviz/legacy/bundle.js`,
   three.js), **skychat standalone** (`cmd/apps/skychat/.../static/index.html`,
   fetch+SSE), **browse.js + WinBox** (`pkg/wasmhv/browseui`, the in-SPA virtual
-  browser / mini-desktop), **pty terminal** (`pkg/pty/term.html.gz`, xterm.js).
+  browser / mini-desktop), **pty terminal** (websh's terminal page, `github.com/0magnet/websh/term`).
 - **Go server-rendered HTML** (`html/template` on `net/http`): the **reward system UI**
   (`cmd/skywire-cli/commands/rewards/server`), proxied into the SPA at
   `/api/rewards/*`.
@@ -105,7 +105,7 @@ An Angular side hosts it with one generic wrapper: load the bundle script once,
 | network visualizer | **mount** (tpviz) | pilot; retire the Angular reimplementation |
 | skychat | **mount** | standalone HTML → `mount()`; Angular tab hosts it |
 | wallet-config | **mount** | already a vanilla page |
-| pty terminal | **mount** | xterm.js into the tab/window |
+| pty terminal | **mount** | websh (xterm-go) into the tab/window |
 | browse.js / WinBox | already mount | the host itself |
 | resolving-proxy browser | **iframe** (keep) | untrusted foreign content |
 | reward server UI | **iframe** | server-rendered; or convert later |

@@ -100,7 +100,7 @@ func TestIPFromRequest(t *testing.T) {
 			if c.xff != "" {
 				r.Header.Set("X-Forwarded-For", c.xff)
 			}
-			require.Equal(t, c.want, ipFromRequest(r))
+			require.Equal(t, c.want, geoip.ClientIP(r))
 		})
 	}
 }

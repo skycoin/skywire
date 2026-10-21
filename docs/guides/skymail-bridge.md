@@ -18,12 +18,12 @@ skywire cli mail send bob@<base32-pk>.skynet -s hello -m "hi"
 skywire cli mail send bob@<base32-pk>.skynet -s file --attach ./notes.pdf
 skywire cli mail attachment <id> 0      # save attachment 0
 skywire cli mail whitelist add <pk>     # empty whitelist = accept anyone
-skywire cli mail settings max_total_size=64MiB max_age=30d
+skywire cli mail settings max_total_size=128MiB max_age=30d
 skywire cli mail settings enable=false  # stop receiving
 ```
 
 Because it is open to every PK by default, the mailbox keeps little: a
-message over 1 MiB is refused, a mailbox holding 16 MiB (Inbox and Sent
+message over 10 MiB is refused, a mailbox holding 64 MiB (Inbox and Sent
 together) refuses mail until some is deleted or expires, and mail older
 than 7 days is deleted. `mail settings` changes any of these live and
 keeps the change in `settings.json` beside the mail (`none` removes a

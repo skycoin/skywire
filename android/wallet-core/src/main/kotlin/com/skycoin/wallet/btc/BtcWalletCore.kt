@@ -80,20 +80,25 @@ class BtcWalletCore(
         var confirmed = 0uL
         var all = 0uL
         var outputs = 0
+        val per = HashMap<String, ULong>()
         for (addr in book.all()) {
+            var addrConfirmed = 0uL
             for (u in api.utxos(addr)) {
                 all += u.value
                 if (u.status.confirmed) {
                     confirmed += u.value
+                    addrConfirmed += u.value
                     outputs++
                 }
             }
+            per[addr] = addrConfirmed
         }
         return WalletBalance(
             confirmed = confirmed,
             predicted = all,
             hours = null,
             spendableOutputs = outputs,
+            perAddress = per,
         )
     }
 
@@ -117,6 +122,11 @@ class BtcWalletCore(
                 } else {
                     tx.vout.firstOrNull { it.address != null && it.address !in ours }?.address
                 }
+                val own = if (incoming) {
+                    tx.vout.mapNotNull { it.address }.filter { it in ours }
+                } else {
+                    tx.vin.mapNotNull { it.prevout?.address }.filter { it in ours }
+                }.distinct()
                 val confirmations = if (tx.status.confirmed && tip >= tx.status.blockHeight) {
                     tip - tx.status.blockHeight + 1
                 } else 0L
@@ -129,6 +139,7 @@ class BtcWalletCore(
                     confirmed = tx.status.confirmed,
                     confirmations = confirmations,
                     fee = tx.fee,
+                    own = own,
                 )
             }
         }
@@ -155,6 +166,9 @@ class BtcWalletCore(
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String?,
+        @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
+        @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
     ): TxPlan {
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
@@ -165,9 +179,11 @@ class BtcWalletCore(
         book.change.forEachIndexed { i, a -> programOf[a] = Triple(1, i, Hashes.hash160(Bip84.key(account, 1, i).pubKey())) }
 
         // Confirmed outputs only — the design promise is that pending funds
-        // cannot be respent from this wallet.
+        // cannot be respent from this wallet. A chosen from-address spends
+        // only what it holds.
         val utxos = ArrayList<Pair<String, BtcEsploraClient.Utxo>>()
         for (addr in book.all()) {
+            if (fromAddress != null && addr != fromAddress) continue
             for (u in api.utxos(addr)) if (u.status.confirmed) utxos.add(addr to u)
         }
         if (utxos.isEmpty()) throw WalletException.InsufficientBalance()

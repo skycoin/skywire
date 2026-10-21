@@ -228,3 +228,36 @@ func TestManagedTransportSameNetwork(t *testing.T) {
 	}
 	require.True(t, at("10.0.0.2", types.STCPR).SameNetwork(nil, nil), "a private endpoint needs no public IP to judge")
 }
+
+// TestManagerPublishTPDListHosted: the transport list carries the local links
+// to hosted services, which TPD reads back as entries this visor is an edge
+// of, and the shutdown publish withdraws them with the rest.
+func TestManagerPublishTPDListHosted(t *testing.T) {
+	tm := newTestManager(t)
+	self := tm.Conf.PubKey
+	svc := mustPK(t)
+	cap := &captureLeafPub{}
+	tm.SetTPDLeafPublisher(cap)
+	tm.SetHostedEntries(func() []*Entry {
+		e := MakeEntry(self, svc, types.LOCAL, LabelAutomatic)
+		return []*Entry{&e}
+	})
+	real := MakeEntry(self, mustPK(t), types.STCPR, LabelAutomatic)
+	in := []*Entry{&real}
+
+	var got struct {
+		Compact []CompactEntry `json:"c"`
+	}
+	tm.publishTPDList(in)
+	require.Len(t, in, 1, "the caller's slice is not appended to")
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
+	require.Len(t, got.Compact, 2)
+	back := EntryFromCompact(self, got.Compact[1])
+	require.Equal(t, types.LOCAL, back.Type)
+	require.Equal(t, MakeTransportID(self, svc, types.LOCAL), back.ID)
+	require.GreaterOrEqual(t, back.EdgeIndex(self), 0)
+
+	tm.publishTPDList(nil)
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
+	require.Empty(t, got.Compact)
+}

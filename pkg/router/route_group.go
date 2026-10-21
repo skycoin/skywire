@@ -953,6 +953,7 @@ func (rg *RouteGroup) readData(data []byte, ok bool, p []byte) (int, error) {
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule, leg int) (int, error) {
 	var packet routing.Packet
+	var seq uint32
 	var err error
 	if rg.mux != nil {
 		// Tag the retx entry with the transport's stable UUID (leg indices
@@ -961,7 +962,7 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 		if tp != nil {
 			tpID = tp.Entry.ID
 		}
-		packet, _, err = rg.mux.wrapPayload(rule.NextRouteID(), data, tpID)
+		packet, seq, err = rg.mux.wrapPayload(rule.NextRouteID(), data, tpID)
 	} else {
 		packet, err = routing.MakeDataPacket(rule.NextRouteID(), data)
 	}
@@ -985,6 +986,9 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 		}
 	}
 	if err != nil {
+		if rg.resendOnAnotherLeg(tp, seq) {
+			return len(data), nil
+		}
 		return 0, err
 	}
 
@@ -1037,7 +1041,7 @@ func (rg *RouteGroup) flushFECRepairs() {
 		errCh := rg.writePacketAsync(ctx, tp, pkt, rule.KeyRouteID())
 		select {
 		case <-rg.writeDeadline.Wait():
-		case <-errCh:
+		case <-errCh: //nolint:errcheck
 		}
 		cancel()
 	}
@@ -1058,6 +1062,46 @@ func (rg *RouteGroup) writePaddingFrame() error {
 	}
 	_, err = rg.write(empty, tp, rule, leg)
 	return err
+}
+
+// resendOnAnotherLeg sends a frame whose leg failed under it again on another
+// live leg, from the retx buffer, so one dead leg does not fail the app's write.
+// Directional confinement is not honored here, since the confined leg may be
+// the one that failed.
+func (rg *RouteGroup) resendOnAnotherLeg(failed *transport.ManagedTransport, seq uint32) bool {
+	if rg.mux == nil || !rg.mux.sackEnabled || failed == nil || rg.isClosed() {
+		return false
+	}
+	data := rg.mux.getRetxPayload(seq)
+	if data == nil {
+		return false
+	}
+	rg.mu.Lock()
+	if len(rg.tps) == 0 || len(rg.tps) != len(rg.fwd) {
+		rg.mu.Unlock()
+		return false
+	}
+	tp, rule, leg, err := rg.mux.selectRetxTransport(rg.tps, rg.fwd, failed.Entry.ID)
+	rg.mu.Unlock()
+	if err != nil || tp == nil || tp == failed {
+		return false
+	}
+	packet, err := routing.MakeSequencedDataPacket(rule.NextRouteID(), seq, data)
+	if err != nil {
+		return false
+	}
+	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
+		return false
+	}
+	rg.mux.retxSetTp(seq, tp.Entry.ID)
+	rg.lastSent.Store(time.Now().UnixNano())
+	if leg >= 0 {
+		rg.mux.recordSent(leg, uint64(packet.Size()))
+		rg.mux.recordRetransmit(leg)
+	}
+	rg.logger.WithField("failed_tp", failed.Entry.ID).WithField("tp", tp.Entry.ID).
+		Debugf("Leg write failed; sent seq %d on another leg", seq)
+	return true
 }
 
 func (rg *RouteGroup) writePacketAsync(ctx context.Context, tp *transport.ManagedTransport, packet routing.Packet,

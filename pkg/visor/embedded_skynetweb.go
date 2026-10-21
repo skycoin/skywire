@@ -307,6 +307,9 @@ type routerSkynetDialer struct {
 	routeTimeout time.Duration          // 0 = use DefaultRouteKeepAlive
 	nextPort     uint32                 // ephemeral port counter for route fallback
 	pool         *skyroute.Pool         // holds+reuses multihop routes per dest (nil = disabled)
+	// service, when set, is a service the dialed visor hosts under the
+	// service's own key: the handshake names it and checks the host's proof.
+	service cipher.PubKey
 }
 
 // dialRouteForPool dials the destination's mux forwarding port over a route, for

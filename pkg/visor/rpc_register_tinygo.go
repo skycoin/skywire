@@ -26,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -2221,6 +2222,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.Resume(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".RewardAddressExposure", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(rewardconfig.AddressExposure)
+			return rpcReply, rpcRcvr.RewardAddressExposure(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".RouteGroupMuxInfo", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -3379,6 +3390,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.VoiceRingback)
 			return rpcReply, rpcRcvr.VoiceRingback(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".VoiceSetBlocked", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]cipher.PubKey)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.VoiceSetBlocked(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".VoiceSetRingback", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

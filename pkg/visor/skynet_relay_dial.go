@@ -76,7 +76,7 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 				return
 			}
 			conn := &vstreamConn{VStream: stream}
-			if herr := performHandshakeWithTimeout(conn, port, relayHandshakeTimeout); herr != nil {
+			if herr := d.handshake(conn, remote, port); herr != nil {
 				conn.Close() //nolint:errcheck,gosec
 				d.log.WithField("relay", relay.String()).WithField("remote", remote.String()).
 					WithError(herr).Debug("Skynet relay: handshake over relayed stream failed")
@@ -222,7 +222,7 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 	if mux != nil {
 		if stream, err := mux.Dial(remote, ""); err == nil {
 			conn := &vstreamConn{VStream: stream}
-			if herr := performHandshakeWithTimeout(conn, port, relayHandshakeTimeout); herr == nil {
+			if herr := d.handshake(conn, remote, port); herr == nil {
 				d.log.WithField("remote", remote.String()).Debug("dmsg-over-skynet: direct transport")
 				return conn, nil
 			}
@@ -230,4 +230,21 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 		}
 	}
 	return d.dialViaRelay(ctx, remote, port)
+}
+
+// handshake runs the skynet handshake with host on a fresh stream: the plain
+// one, or for d.service the one that names it and checks host's proof.
+func (d *routerSkynetDialer) handshake(conn net.Conn, host cipher.PubKey, port uint16) error {
+	if d.service.Null() {
+		return performHandshakeWithTimeout(conn, port, relayHandshakeTimeout)
+	}
+	done := make(chan error, 1)
+	go func() { done <- skynetweb.PerformServiceHandshake(conn, port, d.service, host) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(relayHandshakeTimeout):
+		conn.Close() //nolint:errcheck,gosec
+		return errors.New("skynet service handshake timed out")
+	}
 }

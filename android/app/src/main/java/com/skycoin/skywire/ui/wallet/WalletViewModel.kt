@@ -14,6 +14,7 @@ import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.TxPlan
+import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,14 @@ data class SendState(
     val to: String = "",
     val amountText: String = "",
     val sendMax: Boolean = false,
+    /** The one address the send spends from; null = the whole wallet. */
+    val fromAddress: String? = null,
+    /** Unspent outputs picked to fund the send; empty = automatic. */
+    val inputs: Set<String> = emptySet(),
+    /** The unspent outputs as last loaded for the picker. */
+    val utxos: List<UtxoRecord> = emptyList(),
+    /** Hours for the recipient, digits only; blank = automatic split. */
+    val hoursText: String = "",
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -80,6 +89,8 @@ data class WalletUiState(
      * whether the address on screen is the user's or the shipped one.
      */
     val defaultNodeUrl: String = "",
+    /** The user's node addresses for this coin, in priority order. */
+    val nodeUrls: List<String> = emptyList(),
     /** The same for the Ethereum family's history indexer; null for coins without one. */
     val defaultIndexerUrl: String? = null,
     val message: String? = null,
@@ -118,6 +129,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         coins = coins,
                         coin = coin,
                         defaultNodeUrl = defaults[coin.id]?.nodeUrl ?: coin.nodeUrl,
+                        nodeUrls = coin.nodeUrls.filterNot { it == defaults[coin.id]?.nodeUrl },
                         defaultIndexerUrl = defaults[coin.id]?.indexerUrl ?: coin.indexerUrl,
                         allWallets = wallets,
                         coinWallets = coinWallets,
@@ -194,15 +206,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Point the selected coin at a different node, or hand it back to the
-     * shipped one with a blank [url]; [indexerUrl] likewise, for coins that
-     * have one. The wallet re-reads immediately: the coin flow carries the
+     * Save the selected coin's node list — every add, remove and move lands
+     * here at once, so the order on screen is the order the wallet asks in.
+     * An empty list hands the coin back to its shipped address;
+     * [indexerUrl] moves the Ethereum family's history indexer, null leaving
+     * it as it is. The wallet re-reads immediately: the coin flow carries the
      * new addresses, which rebuilds the client under them.
      */
-    fun setNodeUrl(url: String, indexerUrl: String?, onDone: () -> Unit) = action {
-        repo.setNodeUrl(mutable.value.coin.id, url, indexerUrl)
+    fun saveNodeUrls(urls: List<String>, indexerUrl: String? = null) = action {
+        repo.setNodeUrls(mutable.value.coin.id, urls, indexerUrl)
         mutable.update { it.copy(stale = false) }
-        onDone()
         refreshNow()
     }
 
@@ -309,13 +322,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         return wrong
     }
 
-    /** The phrase is validated by the restore screen before this is called. */
-    fun restoreWallet(seedText: String, onDone: () -> Unit) {
+    /**
+     * The phrase is validated by the restore screen before this is called.
+     * [legacy] is a checksum-less phrase the user chose to restore anyway.
+     */
+    fun restoreWallet(seedText: String, legacy: Boolean = false, onDone: () -> Unit) {
         val draft = mutable.value.draft
         action {
             mutable.update { it.copy(restoring = true) }
             val name = defaultWalletName(draft.coin)
-            repo.addWallet(draft.coin, name, seedText, restored = true)
+            repo.addWallet(draft.coin, name, seedText, restored = true, legacy = legacy)
             mutable.update { it.copy(draft = DraftState(), restoring = false) }
             onDone()
         }
@@ -346,6 +362,28 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetSend() = mutable.update { it.copy(send = SendState()) }
 
+    // --- coin control (fiber) ---
+
+    /** Loads the unspent outputs for the picker; keeps the last list on failure. */
+    fun loadUtxos() {
+        val active = mutable.value.active ?: return
+        if (mutable.value.coin.kind != CoinKind.SKY_FIBER) return
+        action {
+            val list = runCatching { repo.utxos(active.id) }
+                .getOrDefault(mutable.value.send.utxos)
+            mutable.update { it.copy(send = it.send.copy(utxos = list)) }
+        }
+    }
+
+    fun toggleInput(uxid: String) = updateSend { s ->
+        s.copy(
+            inputs = if (uxid in s.inputs) s.inputs - uxid else s.inputs + uxid,
+            plan = null,
+        )
+    }
+
+    fun clearInputs() = updateSend { it.copy(inputs = emptySet(), plan = null) }
+
     fun loadFeePresets() {
         val coin = mutable.value.coin
         if (coin.kind != CoinKind.BTC) return
@@ -362,11 +400,20 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun sendMaxAmount(): ULong {
         val st = mutable.value
         val snapshot = st.snapshot ?: return 0uL
+        // Picked outputs cap the send at what they hold; a fiber fee burns
+        // hours, not coins.
+        if (st.send.inputs.isNotEmpty()) {
+            return st.send.utxos.filter { it.uxid in st.send.inputs }.sumOf { it.coins }
+        }
+        // With a from-address chosen, Max is what that address holds. The
+        // output count is an estimate on Bitcoin — the plan recomputes the
+        // true fee from the real inputs either way.
+        val from = st.send.fromAddress
         val balance = com.skycoin.wallet.WalletBalance(
-            confirmed = snapshot.confirmed,
-            predicted = snapshot.predicted,
+            confirmed = from?.let { snapshot.perAddress[it] } ?: snapshot.confirmed,
+            predicted = from?.let { snapshot.perAddress[it] } ?: snapshot.predicted,
             hours = snapshot.hours,
-            spendableOutputs = snapshot.spendableOutputs,
+            spendableOutputs = if (from == null) snapshot.spendableOutputs else 1,
         )
         return repo.coreFor(st.coin).estimateMax(balance, st.send.feeRate)
     }
@@ -385,6 +432,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         }
+        val hoursTo = send.hoursText.trim().takeIf { it.isNotEmpty() }?.let { text ->
+            text.toULongOrNull() ?: run {
+                mutable.update {
+                    it.copy(send = send.copy(planError = app.getString(R.string.wallet_send_invalid_hours)))
+                }
+                return
+            }
+        }
         mutable.update { it.copy(send = send.copy(planning = true, planError = null)) }
         action {
             try {
@@ -394,6 +449,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     amount = amount,
                     feeRate = if (coin.kind == CoinKind.BTC) send.feeRate else null,
                     sendMax = send.sendMax,
+                    fromAddress = send.fromAddress,
+                    inputs = send.inputs,
+                    hoursTo = hoursTo,
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()

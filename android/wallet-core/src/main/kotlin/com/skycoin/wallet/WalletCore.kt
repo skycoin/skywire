@@ -19,6 +19,12 @@ interface WalletCore {
     fun validateSeed(mnemonic: String): Boolean
 
     /**
+     * A phrase restored although its checksum fails, after the user confirmed
+     * it. The older Skycoin wallets wrote 24 list words with no checksum.
+     */
+    fun acceptsLegacySeed(mnemonic: String): Boolean = false
+
+    /**
      * Deterministic addresses for this seed. Skycoin-family wallets have a
      * single chain (change returns to the first address, change list stays
      * empty); Bitcoin derives a separate change chain the UI never shows.
@@ -32,6 +38,9 @@ interface WalletCore {
 
     suspend fun balance(book: AddressBook): WalletBalance
 
+    /** The wallet's unspent outputs; empty where a chain has no coin control. */
+    suspend fun utxos(book: AddressBook): List<UtxoRecord> = emptyList()
+
     suspend fun history(book: AddressBook): List<TxRecord>
 
     /** Bitcoin fee-rate presets in sat/vB; null on chains that burn hours instead. */
@@ -44,6 +53,13 @@ interface WalletCore {
      * Build and fully price an unsigned transaction. Throws
      * WalletException subtypes on validation problems, IOException when the
      * node cannot be reached.
+     *
+     * @param fromAddress spends only outputs held by this one address; null
+     * spends from the whole wallet. Ignored where a wallet is one address.
+     * @param inputs hashes of the unspent outputs to spend; null chooses
+     * them automatically. Fiber chains only.
+     * @param hoursTo hours the destination receives; null splits them
+     * automatically. Fiber chains only.
      */
     suspend fun buildTx(
         seed: String,
@@ -52,6 +68,9 @@ interface WalletCore {
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        fromAddress: String? = null,
+        inputs: Set<String>? = null,
+        hoursTo: ULong? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
@@ -65,6 +84,15 @@ class AddressBook(val receive: List<String>, val change: List<String>) {
     fun all(): List<String> = receive + change
 }
 
+/** One unspent output, as a coin picker shows it. Fiber chains only. */
+class UtxoRecord(
+    val uxid: String,
+    val address: String,
+    val coins: ULong,
+    /** Calculated hours at the chain head. */
+    val hours: ULong,
+)
+
 class WalletBalance(
     /** Spendable now (confirmed, minus outputs already spent by pending txns). */
     val confirmed: ULong,
@@ -74,6 +102,9 @@ class WalletBalance(
     val hours: ULong?,
     /** Confirmed spendable outputs backing the balance. */
     val spendableOutputs: Int,
+    /** Confirmed coins held by each single address — the addresses sheet's
+     *  numbers. Empty when a chain reports only the total. */
+    val perAddress: Map<String, ULong> = emptyMap(),
 )
 
 class TxRecord(
@@ -89,6 +120,8 @@ class TxRecord(
     val confirmations: Long,
     /** Burned hours (Skycoin family) or satoshis (Bitcoin); null when unknown. */
     val fee: ULong?,
+    /** This wallet's addresses the coins left from (a send) or arrived at (a receive). */
+    val own: List<String> = emptyList(),
 )
 
 class FeePresets(val economy: Int, val normal: Int, val priority: Int)

@@ -64,6 +64,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // An x86_64 emulator runs the core built by `make android-mobile-x86_64`.
+            // Release stays arm64-only.
+            ndk {
+                abiFilters += "x86_64"
+            }
+        }
         release {
             // R8 is half of the download: unshrunk, every Compose, icons-extended,
             // OkHttp and BouncyCastle class ships — 24 MB of dex against 2.4 MB

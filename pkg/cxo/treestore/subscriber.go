@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -227,6 +228,10 @@ type SubConfig struct {
 	// subscribers on one visor must use distinct DmsgPort values to
 	// avoid a Listen collision.
 	DmsgPort uint16
+
+	// Dial, when set, is how Connect reaches the publisher instead of a
+	// plain dmsg dial (cxotransport.DMSGFactory.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
 }
 
 // NewSubscriber creates a Subscriber that will receive updates from
@@ -261,6 +266,7 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 		port = cxotransport.DefaultCXOPort
 	}
 	factory := cxotransport.NewDMSGFactory(dmsgC, port)
+	factory.Dial = conf.Dial
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err

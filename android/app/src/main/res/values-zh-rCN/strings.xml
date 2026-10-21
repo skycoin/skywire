@@ -27,7 +27,7 @@
     <string name="app_wallet">钱包</string>
     <string name="app_fleet">集群</string>
     <string name="app_skymeet">SkyMeet</string>
-    <string name="app_skymail">Skymail</string>
+    <string name="app_skymail">SkyMail</string>
 
     <!-- Apps hub -->
     <string name="hub_subtitle">已安装 %1$d 个 · 运行中 %2$d 个</string>
@@ -305,6 +305,7 @@
     <!-- SkyChat -->
     <string name="chat_menu">聊天操作</string>
     <string name="chat_reload">重新加载</string>
+    <string name="chat_page_lang">zh</string>
     <string name="chat_starting">正在启动 SkyChat…</string>
     <string name="chat_core_starting">正在等待 Skywire 核心启动…</string>
     <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
@@ -492,7 +493,7 @@
     <string name="wallet_intro_create">创建新钱包</string>
     <string name="wallet_intro_create_sub">生成一组新的助记词</string>
     <string name="wallet_intro_restore">用助记词恢复</string>
-    <string name="wallet_intro_restore_sub">输入已有的 12 个助记词</string>
+    <string name="wallet_intro_restore_sub">输入已有的 12 或 24 个助记词</string>
 
     <string name="wallet_seed_title">助记词</string>
     <string name="wallet_seed_body">按顺序抄下这十二个助记词，并离线保存。拿到它们的人就能花掉你的币。</string>
@@ -510,16 +511,20 @@
     <string name="wallet_verify_done">钱包已启用</string>
 
     <string name="wallet_restore_title">恢复钱包</string>
-    <string name="wallet_restore_progress">第 %1$d 个词，共 %2$d 个</string>
+    <string name="wallet_restore_progress">第 %1$d 个词，共 %2$s 个</string>
     <string name="wallet_restore_paste">粘贴完整助记词</string>
     <string name="wallet_restore_pasted">已从剪贴板读取十二个助记词</string>
     <string name="wallet_restore_hint">下一个词</string>
     <string name="wallet_restore_wordlist_note">候选词来自设备上的 BIP39 词表。你输入的内容不会发送到任何地方。</string>
     <string name="wallet_restore_action">恢复钱包</string>
-    <string name="wallet_restore_checksum">这组助记词校验不通过。十二个词中有一个写错了，或者顺序不对。</string>
-    <string name="wallet_restore_short">12 个词只输入了 %1$d 个。助记词必须完整输入，否则无法恢复。</string>
+    <string name="wallet_restore_checksum">这组助记词校验不通过。其中有一个词写错了，或者顺序不对。</string>
+    <string name="wallet_restore_legacy">这组助记词没有校验和——旧版钱包的助记词就是这样，因此它仍可能是有效的。请逐词核对后，再按一次以仍然恢复。</string>
+    <string name="wallet_restore_anyway">仍然恢复</string>
+    <string name="wallet_restore_short">助记词有 12 或 24 个词，这里有 %1$d 个。必须完整输入，否则无法恢复。</string>
     <string name="wallet_restore_done">钱包已恢复，正在扫描余额。</string>
     <string name="wallet_restore_scanning">正在恢复并扫描余额…</string>
+    <string name="wallet_lock_required_body">这个钱包靠手机的锁屏来保护。没有锁屏的话，任何拿到手机的人都能看到你的助记词并转走你的币。请先设置 PIN 码、图案或密码，然后再回来。</string>
+    <string name="wallet_lock_required_title">请先设置锁屏</string>
 
     <string name="wallet_coin_chip_description">选择币种</string>
     <string name="wallet_coins_title">选择币种</string>
@@ -594,6 +599,14 @@
     <string name="wallet_node_field">节点地址</string>
     <string name="wallet_node_save">使用该节点</string>
     <string name="wallet_node_default">恢复为 %1$s</string>
+    <string name="wallet_node_list_hint">请求会按顺序尝试这些地址——排在最前的优先级最高，内置节点作为兜底。</string>
+    <string name="wallet_node_add">添加节点</string>
+    <string name="wallet_node_shipped">内置 · 兜底</string>
+    <string name="wallet_node_duplicate">该地址已在列表中。</string>
+    <string name="wallet_node_invalid">不是 http(s) 地址。</string>
+    <string name="wallet_node_remove">移除此节点</string>
+    <string name="wallet_node_up">前移，提高优先级</string>
+    <string name="wallet_node_down">后移，降低优先级</string>
     <string name="wallet_node_encrypted">传输已加密。节点仍能看到你一并查询了哪些地址，但链路上的其他人看不到。</string>
     <string name="wallet_node_cleartext">未加密。本机与该地址之间的任何人都能看到你的全部地址列表及余额。你的币是安全的——密钥从不离开本机——但在旁观者眼中，这些地址会被关联到一起。</string>
     <string name="wallet_node_body_indexer">%1$s 的余额、手续费和广播都通过节点收发，交易记录则从索引服务读取。如果应用自带的地址在你所在的网络无法访问，或你有自建服务，可在此更改。</string>
@@ -620,6 +633,8 @@
     <string name="wallet_from_line">来自 %1$s · %2$s</string>
     <string name="wallet_to_line">发往 %1$s · %2$s</string>
     <string name="wallet_self_line">钱包内部转账 · %1$s</string>
+    <string name="wallet_own_sent_line">发出地址 %1$s</string>
+    <string name="wallet_own_received_line">接收地址 %1$s</string>
 
     <string name="wallet_receive_title">接收</string>
     <string name="wallet_receive_only">只能向该地址转入 %1$s。</string>
@@ -638,6 +653,17 @@
 
     <string name="wallet_send_title">发送</string>
     <string name="wallet_send_to">收款方</string>
+    <string name="wallet_send_from">付款地址</string>
+    <string name="wallet_send_from_wallet">整个钱包</string>
+    <string name="wallet_send_coins">未花费输出</string>
+    <string name="wallet_send_coins_auto">自动</string>
+    <string name="wallet_send_coins_picked">已选 %1$d / %2$d 个输出 · %3$s</string>
+    <string name="wallet_send_coins_none">没有可选的未花费输出。</string>
+    <string name="wallet_utxo_line">%1$s 币时 · %2$s</string>
+    <string name="wallet_send_hours">发送的币时</string>
+    <string name="wallet_send_hours_hint">留空时自动：燃烧后剩余币时的一半随币发送</string>
+    <string name="wallet_send_invalid_hours">币时数值无效。</string>
+    <string name="wallet_done">完成</string>
     <string name="wallet_send_to_hint_fiber">%1$s 地址</string>
     <string name="wallet_send_to_hint_btc">bc1… 或 1… 开头的地址</string>
     <string name="wallet_send_to_hint_eth">0x… 开头的地址</string>
@@ -709,6 +735,8 @@
     <string name="wallet_tx_from">来自</string>
     <string name="wallet_tx_to">发往</string>
     <string name="wallet_tx_wallet">钱包</string>
+    <string name="wallet_tx_sent_from">发出地址</string>
+    <string name="wallet_tx_received_at">接收地址</string>
     <string name="wallet_tx_date">日期</string>
     <string name="wallet_tx_fee">手续费</string>
     <string name="wallet_tx_confirmations">确认数</string>
@@ -785,8 +813,11 @@
     <string name="help_chat_body">消息、通话、群组和频道都经由 Skywire 传输，而不是某家公司的服务器。你在这里的身份就是本节点的公钥——用 QR 码按钮把它发出去，拿到它的人就能联系到你。\n\n这与桌面端是同一个聊天，只是为手机重新排版。历史记录只保存在本机；没有账号，也不会自行同步，所以换到另一部手机时，要先在聊天内的设置里导出，再到新手机上导入。\n\nSkyChat 的日志在“设置 \u25b8 诊断”里，与本应用保存的其他日志放在一起。</string>
 
     <string name="help_hub_title">关于应用</string>
-    <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，Skymail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
+    <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，SkyMail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
 
+    <string name="wallet_web_unreachable">钱包尚未运行。它会随 Skywire 一起启动。</string>
+    <string name="wallet_previous">旧钱包</string>
+    <string name="wallet_web_retry">重试</string>
     <string name="help_wallet_title">关于钱包</string>
     <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
 
@@ -854,12 +885,12 @@
     <string name="settings_encrypt_on_pending">断开连接后将对配置加密。</string>
     <string name="settings_encrypt_off_done">配置已不再加密。</string>
 
-    <!-- Skymail -->
+    <!-- SkyMail -->
     <plurals name="hub_mail_unread">
         <item quantity="other">%d 封未读</item>
     </plurals>
     <string name="mail_your_address">你的地址</string>
-    <string name="mail_address_hint">Skywire 上的任何人都能给这个地址写信，@ 前面写什么名字都能送到你这里。Skymail 只在 Skywire 网络里传递，不会送到普通电子邮箱。</string>
+    <string name="mail_address_hint">Skywire 上的任何人都能给这个地址写信，@ 前面写什么名字都能送到你这里。SkyMail 只在 Skywire 网络里传递，不会送到普通电子邮箱。</string>
     <string name="mail_copy">复制</string>
     <string name="mail_share">分享</string>
     <string name="mail_off_title">你的邮箱已关闭</string>
@@ -887,11 +918,30 @@
     <string name="mail_delete">删除</string>
     <string name="mail_delete_confirm">删除这封邮件？</string>
     <string name="mail_deleted">邮件已删除</string>
+    <string name="mail_selected_count">已选择 %1$d 封</string>
+    <string name="mail_select_all">全选</string>
+    <string name="mail_deselect_all">取消全选</string>
+    <string name="mail_invert_selection">反选</string>
+    <string name="mail_delete_selected">删除 %1$d 封</string>
+    <string name="mail_batch_delete_confirm">删除 %1$d 封邮件？</string>
+    <string name="mail_batch_deleted">已删除 %1$d 封邮件</string>
+    <string name="mail_batch_delete_failed">%2$d 封中有 %1$d 封未能删除</string>
     <string name="mail_attachment_saved">已把 %1$s 保存到“下载”</string>
     <string name="mail_attachment_failed">无法保存附件：%1$s</string>
     <string name="mail_compose_title">新邮件</string>
-    <string name="mail_to_hint">Skymail 地址，或节点的公钥</string>
+    <string name="mail_to_hint">SkyMail 地址，或节点的公钥</string>
+    <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
+    <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
+    <string name="mail_save_contact">保存联系人</string>
+    <string name="mail_contact_name">名称</string>
+    <string name="mail_contact_saved">联系人已保存</string>
+    <string name="mail_contact_failed">无法保存联系人：%1$s</string>
+    <string name="mail_contacts_manage">管理联系人</string>
+    <string name="mail_contacts_from_skychat">来自 SkyChat</string>
+    <string name="mail_contact_delete_confirm">要从联系人中删除 %1$s 吗？</string>
+    <string name="mail_contact_edit">编辑联系人</string>
+    <string name="mail_contact_add">添加联系人</string>
     <string name="mail_add_cc">添加抄送</string>
     <string name="mail_subject">主题</string>
     <string name="mail_body">正文</string>
@@ -902,9 +952,10 @@
     <string name="mail_sending">正在发送…</string>
     <string name="mail_sent">已发送</string>
     <string name="mail_send_failed">无法发送：%1$s</string>
-    <string name="mail_bad_address">不是 Skymail 地址：%1$s</string>
+    <string name="mail_send_unknown">仍在发送：节点还没有应答。请过几分钟查看已发送，再决定是否重发。</string>
+    <string name="mail_bad_address">不是 SkyMail 地址：%1$s</string>
     <string name="mail_no_recipient">请添加收件人。</string>
-    <string name="mail_attachments_too_big">太大了：一封邮件连同附件大约只能有 %1$s。</string>
+    <string name="mail_attachments_too_big">这些附件在传输时会膨胀到 %1$s，而一封邮件大约只能有 %2$s。</string>
     <string name="mail_result_title">没有全部送达</string>
     <string name="mail_result_delivered">已通过 %1$s 送达</string>
     <string name="mail_result_failed">未送达：%1$s</string>
@@ -917,9 +968,9 @@
     <string name="mail_allowed_title">谁可以给你写信</string>
     <string name="mail_allowed_everyone">所有人。添加公钥后，只接收列表中这些公钥的邮件。</string>
     <string name="mail_allowed_only">仅限：</string>
-    <string name="mail_allow_hint">公钥或 Skymail 地址</string>
+    <string name="mail_allow_hint">公钥或 SkyMail 地址</string>
     <string name="mail_allow_add">添加</string>
-    <string name="mail_allow_bad">这不是公钥，也不是 Skymail 地址。</string>
-    <string name="help_mail_title">Skymail</string>
-    <string name="help_mail_body">Skymail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。</string>
+    <string name="mail_allow_bad">这不是公钥，也不是 SkyMail 地址。</string>
+    <string name="help_mail_title">SkyMail</string>
+    <string name="help_mail_body">SkyMail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。</string>
 </resources>

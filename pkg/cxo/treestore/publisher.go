@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -38,6 +39,8 @@ import (
 // Put/Delete are safe; the publisher serializes its publish loop on
 // a single goroutine so encoding always sees a consistent snapshot.
 type Publisher struct {
+	// redial is PubConfig.Redial.
+	redial func(ctx context.Context, peer cipher.PubKey, addr net.Addr) bool
 	// lastRoot is the Root most recently published; publishHook, when set,
 	// receives every Root published after it (see SetPublishHook).
 	lastRoot    atomic.Pointer[registry.Root]
@@ -234,6 +237,13 @@ type PubConfig struct {
 
 	// DropPublishedLeaves, see Config.DropPublishedLeaves.
 	DropPublishedLeaves bool
+
+	// Dial, when set, is how the node dials peers instead of a plain dmsg
+	// dial (cxotransport.DMSGFactory.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
+	// Redial, when set, is asked on each AnnounceTo about the live conn to the
+	// peer; true closes it so the announce dials again.
+	Redial func(ctx context.Context, peer cipher.PubKey, addr net.Addr) bool
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -281,6 +291,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		port = cxotransport.DefaultCXOPort
 	}
 	factory := cxotransport.NewDMSGFactory(dmsgC, port)
+	factory.Dial = conf.Dial
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
@@ -297,6 +308,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		return nil, err
 	}
 	p.ownsNode = true
+	p.redial = conf.Redial
 	return p, nil
 }
 
@@ -735,6 +747,11 @@ func (p *Publisher) AnnounceTo(ctx context.Context, peerPK cipher.PubKey) error 
 	dmsgT := p.cxoNode.DMSG()
 	if dmsgT == nil {
 		return errors.New("treestore: publisher has no dmsg transport")
+	}
+	if p.redial != nil {
+		if addr, ok := dmsgT.PeerAddr(peerPK); ok && p.redial(ctx, peerPK, addr) {
+			dmsgT.Drop(peerPK)
+		}
 	}
 	_, err := dmsgT.ConnectPK(ctx, peerPK)
 	return err
@@ -1848,5 +1865,21 @@ func sweepUnreachable(conf *skyobject.Config, log *logging.Logger) {
 	if removed > 0 {
 		log.WithField("objects", removed).WithField("bytes", volume).WithField("took", time.Since(start)).
 			Info("treestore-pub: removed objects no stored Root reaches")
+	}
+}
+
+// PeerAddr returns the remote address of the feed's live conn to peerPK.
+func (p *Publisher) PeerAddr(peerPK cipher.PubKey) (net.Addr, bool) {
+	if p.cxoNode == nil || p.cxoNode.DMSG() == nil {
+		return nil, false
+	}
+	return p.cxoNode.DMSG().PeerAddr(peerPK)
+}
+
+// DropPeer closes the feed's conn to peerPK, so the next AnnounceTo dials it
+// again.
+func (p *Publisher) DropPeer(peerPK cipher.PubKey) {
+	if p.cxoNode != nil && p.cxoNode.DMSG() != nil {
+		p.cxoNode.DMSG().Drop(peerPK)
 	}
 }

@@ -70,6 +70,10 @@ const (
 	// WTLegacy is the pre-rename wire name for WT ("wt" → "swtr"), accepted on
 	// input so older configs / discovery entries keep working. Not emitted.
 	WTLegacy Type = "wt"
+
+	// LOCAL is a host visor's in-process link to a deployment service it runs
+	// under the service's own key. Nothing is routed over it.
+	LOCAL Type = "local"
 )
 
 // NormalizeType maps a legacy transport-type wire name to its canonical Type, so
@@ -123,3 +127,6 @@ func IsRelay(t Type) bool {
 func IsDirect(t Type) bool {
 	return Valid(t) && !IsRelay(t)
 }
+
+// IsLocal reports whether t is a host visor's in-process link to a service.
+func IsLocal(t Type) bool { return t == LOCAL }

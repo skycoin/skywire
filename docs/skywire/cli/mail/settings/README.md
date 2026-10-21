@@ -9,17 +9,17 @@ baseline they override.
 
 Keys:
   enable            true|false — run the mailbox
-  max_message_size  largest message accepted, e.g. 1MiB
-  max_total_size    room for Inbox and Sent together, e.g. 16MiB;
+  max_message_size  largest message accepted, e.g. 10MiB
+  max_total_size    room for Inbox and Sent together, e.g. 64MiB;
                     a full mailbox refuses mail until some is removed
   max_age           mail older than this is deleted, e.g. 7d or 36h
 
 Sizes take B, KiB, MiB, GiB (or KB, MB, GB). "default" restores the
-default (1MiB, 16MiB, 7d); "none" removes the bound.
+default (10MiB, 64MiB, 7d); "none" removes the bound.
 
 Examples:
   skywire cli mail settings
-  skywire cli mail settings max_total_size=64MiB max_age=30d
+  skywire cli mail settings max_total_size=128MiB max_age=30d
   skywire cli mail settings enable=false
 
 ## Usage

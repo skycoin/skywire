@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.wallet.Bip39
 
 /** Seed backup: the numbered grid, screenshots off, no copy anywhere. */
@@ -63,8 +64,13 @@ fun WalletSeedScreen(
     SecureWindow()
     val state by viewModel.uiState.collectAsState()
     val words = state.draft.seed?.split(" ") ?: emptyList()
+    val screenLock = rememberScreenLock()
 
     Scaffold(topBar = { SkyTopBar(stringResource(R.string.wallet_seed_title), onBack = onBack) }) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -260,15 +266,19 @@ fun WalletRestoreScreen(
     val words = remember { mutableListOf<String>().toMutableStateList() }
     var input by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var legacyOffer by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val screenLock = rememberScreenLock()
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
     }
 
     val target = if (words.size > 12) 24 else 12
+    // Until a 13th word settles it, the phrase may be either length.
+    val targetLabel = if (target == 24) "24" else "12/24"
 
     fun addWord(word: String) {
         val w = word.trim().lowercase()
@@ -277,19 +287,40 @@ fun WalletRestoreScreen(
             words.add(w)
             input = ""
             error = null
+            legacyOffer = false
         }
     }
 
-    fun finish() {
+    fun finish(force: Boolean = false) {
         if (words.size != 12 && words.size != 24) {
             error = context.getString(R.string.wallet_restore_short, words.size)
             return
         }
         val phrase = words.joinToString(" ")
         if (!Bip39.validate(phrase)) {
+            // A 24-word phrase of list words without a checksum is how the
+            // older wallets wrote seeds — their seeds were arbitrary strings,
+            // and refusing them strands those wallets. Offer the restore with
+            // the typo risk said plainly; 12-word phrases are our own format
+            // and always checksummed, so for them the checksum is the check.
+            // Only the fiber chains derive from the phrase itself.
+            val legacy = words.size == 24 && Bip39.legacyWords(phrase) &&
+                state.draft.coin.kind == CoinKind.SKY_FIBER
+            if (legacy && force) {
+                legacyOffer = false
+                viewModel.restoreWallet(phrase, legacy = true, onDone = onRestored)
+                return
+            }
+            if (legacy) {
+                error = context.getString(R.string.wallet_restore_legacy)
+                legacyOffer = true
+                return
+            }
             error = context.getString(R.string.wallet_restore_checksum)
+            legacyOffer = false
             return
         }
+        legacyOffer = false
         viewModel.restoreWallet(phrase, onDone = onRestored)
     }
 
@@ -297,6 +328,10 @@ fun WalletRestoreScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { SkyTopBar(stringResource(R.string.wallet_restore_title), onBack = onBack) },
     ) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
@@ -304,7 +339,7 @@ fun WalletRestoreScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), target),
+                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), targetLabel),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -316,6 +351,7 @@ fun WalletRestoreScreen(
                             words.clear()
                             words.addAll(pasted)
                             error = null
+                            legacyOffer = false
                         } else if (pasted.isNotEmpty()) {
                             error = context.getString(R.string.wallet_restore_short, pasted.size)
                         }
@@ -369,7 +405,10 @@ fun WalletRestoreScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { words.removeAt(i) }
+                                .clickable {
+                                    words.removeAt(i)
+                                    legacyOffer = false
+                                }
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -390,7 +429,7 @@ fun WalletRestoreScreen(
                     value = input,
                     onValueChange = { new ->
                         if (new.endsWith(" ") && new.isNotBlank()) addWord(new)
-                        else { input = new; error = null }
+                        else { input = new; error = null; legacyOffer = false }
                     },
                     placeholder = { Text(stringResource(R.string.wallet_restore_hint)) },
                     singleLine = true,
@@ -425,7 +464,7 @@ fun WalletRestoreScreen(
                     modifier = Modifier.padding(top = 14.dp),
                 )
                 Button(
-                    onClick = { finish() },
+                    onClick = { finish(force = legacyOffer) },
                     enabled = !state.restoring,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -437,7 +476,16 @@ fun WalletRestoreScreen(
                         Spacer(Modifier.width(10.dp))
                         Text(stringResource(R.string.wallet_restore_scanning), fontWeight = FontWeight.Bold)
                     } else {
-                        Text(stringResource(R.string.wallet_restore_action), fontWeight = FontWeight.Bold)
+                        Text(
+                            stringResource(
+                                // The second press of the same button is the
+                                // confirmation: the offer above it says what is
+                                // being agreed to.
+                                if (legacyOffer) R.string.wallet_restore_anyway
+                                else R.string.wallet_restore_action,
+                            ),
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
                 }
             }

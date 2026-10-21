@@ -699,6 +699,13 @@ return {
   }
 
   /**
+   * Checks whether a reward address has ever spent, which put its public key on chain.
+   */
+  getRewardsAddressExposure(nodeKey: string, address: string) {
+    return this.apiService.get(`visors/${nodeKey}/reward/exposure?address=${encodeURIComponent(address)}`);
+  }
+
+  /**
    * Gets the runtime logs of the node.
    */
   getRuntimeLogs(nodeKey: string) {

@@ -547,6 +547,34 @@ func TestOnXferDone_OutgoingSuccessPointsAtSenderCopy(t *testing.T) {
 	}
 }
 
+// A DM file is stored under its transfer id on both ends, so a delete for
+// everyone, which names it by that id, prunes the sender's and the recipient's copy.
+func TestOnXferDone_FileRowIsNamedByTransferID(t *testing.T) {
+	withXferEnv(t)
+	restoreHistoryStore(t)
+	historyStore = newTempStore(t, history.Limits{})
+	withCleanDownloads(t)
+	drain := collectEvents(t)
+
+	peer, _ := cipher.GenerateKeyPair()
+	for _, dir := range []xfer.Direction{xfer.Outgoing, xfer.Incoming} {
+		offer := xfer.Offer{ID: "oxd-del-" + string(dir), Name: "video-1.mp4", Size: 64}
+		onXferDone(dir, peer, offer, nil)
+		msgs, err := historyStore.ListByPeer(peer.Hex(), 10)
+		if err != nil {
+			t.Fatalf("history list: %v", err)
+		}
+		if len(msgs) != 1 || msgs[0].ID != offer.ID {
+			t.Fatalf("history rows = %+v, want one row with ID %s", msgs, offer.ID)
+		}
+		forgetPersisted(peer.Hex(), offer.ID)
+		if msgs, err := historyStore.ListByPeer(peer.Hex(), 10); err != nil || len(msgs) != 0 {
+			t.Errorf("history rows after the delete = %+v (%v), want none", msgs, err)
+		}
+	}
+	drain()
+}
+
 func TestOnXferDone_OutgoingFailure(t *testing.T) {
 	withXferEnv(t)
 	withCleanDownloads(t)

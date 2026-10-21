@@ -1,11 +1,16 @@
 package router
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -117,5 +122,33 @@ func TestFetchBestRoutesTakesTheDirectHop(t *testing.T) {
 	}
 	if len(fwd) != 1 || fwd[0].TpID != id || len(rev) != 1 || rev[0].TpID != id {
 		t.Fatalf("got forward %v reverse %v, want one hop over %v each way", fwd, rev, id)
+	}
+}
+
+// A per-dial hop floor above one must not be answered with the direct hop. A
+// multi-hop tunnel growing a leg asks this way, and got its own exit link back.
+func TestFetchBestRoutesHonorsAPerDialHopFloor(t *testing.T) {
+	r := newLegTestRouter(t)
+	remote, _ := cipher.GenerateKeyPair()
+	injectHopTp(t, r, remote, transport.LabelUser)
+
+	rf := rfclient.NewMockClient(t)
+	var asked uint16
+	rf.On("FindRoutes", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { asked = args.Get(2).(*rfclient.RouteOptions).MinHops }).
+		Return(nil, errors.New("no route")).Maybe()
+	r.conf.RouteFinder = rf
+
+	opts := DefaultDialOptions()
+	opts.MinHops = 2
+	opts.Retries = 0
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	fwd, _, err := r.fetchBestRoutes(ctx, r.logger, r.conf.PubKey, remote, opts, 1)
+	if err == nil && len(fwd) < 2 {
+		t.Fatalf("got a %d-hop forward route %v for a 2-hop floor", len(fwd), fwd)
+	}
+	if asked != 2 {
+		t.Fatalf("route finder asked for min %d hops, want 2", asked)
 	}
 }

@@ -36,7 +36,11 @@ func (c *directClient) Entry(_ context.Context, pubKey cipher.PubKey) (*disc.Ent
 	c.mx.RLock()
 	defer c.mx.RUnlock()
 	if entry, ok := c.entries[pubKey]; ok {
-		return entry, nil
+		// A copy, because callers edit the entry they read before publishing it,
+		// and the stored one is shared with the visor config's server list.
+		out := new(disc.Entry)
+		disc.Copy(out, entry)
+		return out, nil
 	}
 	return nil, disc.ErrKeyNotFound
 }

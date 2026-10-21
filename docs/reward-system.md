@@ -122,23 +122,28 @@ DMSGHTTP_SK=<reward-system-secret-key>
 
 The reward system UI is served over dmsghttp. Keys which are whitelisted by the reward system are able to view the collected system surveys and other non-public reward system data. Additionally, these whitelisted keys are permitted to `POST` a signed raw transaction to the reward system, which will be broadcast by the reward system. In this way, it is possible to avoid having funds on the same machine as is running the reward system.
 
-This is accomplished by the following script:
+This is accomplished by the following script. It builds the transaction through the running wallet node with `createRawTransactionV2`, so the change goes to an address that has never been used. Use a bip44 wallet: the node takes the change address from the change chain, and funding requests take addresses from the external chain, so the two never collide.
 
 ```
 #!/usr/bin/bash
 source sendrewards.conf
-skycoin-cli status ; [[ $? -ne 0 ]] && echo 'Skycoin wallet not running ; exiting' && exit 1
-skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS --csv <(skywire dmsg curl  $REWARD_SYS_URL/$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/csv -s $REWARD_WL_SK) -s $REWARD_WL_SK | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' |  grep -v '^,0.000$'))" -s $REWARD_WL_SK
+skywire skycoin cli status > /dev/null || { echo 'Skycoin wallet not running ; exiting' ; exit 1 ; }
+_csv="$(mktemp)" ; trap 'rm -f "${_csv}"' EXIT
+skywire dmsg curl $REWARD_SYS_URL/$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/csv -s $REWARD_WL_SK) -s $REWARD_WL_SK | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' | grep -v '^,0.000$' > "${_csv}"
+echo -n "Wallet password (if encrypted): " >&2
+_txn="$(skywire skycoin cli createRawTransactionV2 $WALLET_FILE --csv "${_csv}")" || exit 1
+skywire dmsg curl $REWARD_SYS_URL/reward -d "${_txn##*$'\n'}" -s $REWARD_WL_SK
 ```
 
 The script sources a `.conf` file of the following format
 
 ```
-WALLET_FILE="$HOME/.skycoin/wallets/<wallet-filename>.wlt"
-FROM_ADDRESS="<skycoin-address-containing-funds-to-distribute>"
+WALLET_FILE="<wallet-filename>.wlt"
 REWARD_WL_SK=<secret-key-of-whitelisted-public-key>
 REWARD_SYS_URL="dmsg://<reward-system-public-key>:80"
 ```
+
+`WALLET_FILE` is the wallet's filename as the node lists it in `skywire skycoin cli listWallets`. The CLI prints its own password prompt on stdout, which is why the script keeps only the last line of its output. Before sending, it is worth checking that the change output pays an address with no history (`skywire skycoin cli addressTransactions <address>`).
 
 before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly [log collection and reward calculation](https://theskywirenetwork.net/log-collection) is not ongoing.
 

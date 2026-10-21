@@ -5,6 +5,8 @@ package dtls
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
 	"encoding/gob"
 	"errors"
 	"sync/atomic"
@@ -19,10 +21,17 @@ import (
 // State holds the dtls connection state and implements both encoding.BinaryMarshaler and
 // encoding.BinaryUnmarshaler.
 type State struct {
+	// A pointer keeps the atomic aligned without making State uncopyable.
+	remoteSequenceNumber      *atomic.Uint64
+	remoteReplayCutoff        uint64
+	handshakeComplete         bool
 	localEpoch, remoteEpoch   atomic.Value
 	localSequenceNumber       []uint64 // uint48
 	localRandom, remoteRandom handshake.Random
 	masterSecret              []byte
+	serverCertificate         *tls.Certificate
+	pskHash                   [sha256.Size]byte
+	resumeSession             *Session
 	cipherSuite               CipherSuite // nil if a cipherSuite hasn't been chosen
 	CipherSuiteID             CipherSuiteID
 
@@ -68,6 +77,13 @@ type State struct {
 	localKeySignature          []byte                    // cached keySignature
 	peerCertificatesVerified   bool
 
+	// Server-side client flight progress, reset when starting a handshake.
+	clientKeyExchange     *handshake.MessageClientKeyExchange
+	clientFlightProcessed bool
+
+	// Binds the core ClientHello parameters across HelloVerifyRequest (RFC 6347).
+	initialClientHelloHash [sha256.Size]byte
+
 	replayDetector []replaydetector.ReplayDetector
 
 	peerSupportedProtocols []string
@@ -75,6 +91,8 @@ type State struct {
 }
 
 type serializedState struct {
+	RemoteSequenceNumber  uint64
+	HandshakeComplete     bool
 	LocalEpoch            uint16
 	RemoteEpoch           uint16
 	LocalRandom           [handshake.RandomLength]byte
@@ -116,8 +134,14 @@ func (s *State) serialize() (*serializedState, error) {
 	remoteRnd := s.remoteRandom.MarshalFixed()
 
 	epoch := s.getLocalEpoch()
+	var remoteSequenceNumber uint64
+	if s.remoteSequenceNumber != nil {
+		remoteSequenceNumber = s.remoteSequenceNumber.Load()
+	}
 
 	return &serializedState{
+		RemoteSequenceNumber:  remoteSequenceNumber,
+		HandshakeComplete:     s.handshakeComplete,
 		LocalEpoch:            s.getLocalEpoch(),
 		RemoteEpoch:           s.getRemoteEpoch(),
 		CipherSuiteID:         cipherSuiteID,
@@ -137,6 +161,10 @@ func (s *State) serialize() (*serializedState, error) {
 }
 
 func (s *State) deserialize(serialized serializedState) {
+	s.remoteSequenceNumber = &atomic.Uint64{}
+	s.remoteSequenceNumber.Store(serialized.RemoteSequenceNumber)
+	s.remoteReplayCutoff = serialized.RemoteSequenceNumber
+	s.handshakeComplete = serialized.HandshakeComplete
 	// Set epoch values
 	epoch := serialized.LocalEpoch
 	s.localEpoch.Store(serialized.LocalEpoch)
@@ -182,6 +210,9 @@ func (s *State) deserialize(serialized serializedState) {
 }
 
 func (s *State) initCipherSuite() error {
+	if s.cipherSuite == nil {
+		return errCipherSuiteNotSet
+	}
 	if s.cipherSuite.IsInitialized() {
 		return nil
 	}
@@ -202,9 +233,10 @@ func (s *State) initCipherSuite() error {
 	return nil
 }
 
-// MarshalBinary is a binary.BinaryMarshaler.MarshalBinary implementation.
+// MarshalBinary exports a snapshot of an established connection.
+// Resume the exported state only once; duplicating it reuses cryptographic nonces.
 func (s *State) MarshalBinary() ([]byte, error) {
-	serialized, err := s.serialize()
+	serialized, err := s.export()
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +256,9 @@ func (s *State) UnmarshalBinary(data []byte) error {
 	var serialized serializedState
 	if err := enc.Decode(&serialized); err != nil {
 		return err
+	}
+	if !serialized.HandshakeComplete {
+		return errInvalidExportedState
 	}
 
 	s.deserialize(serialized)
@@ -300,4 +335,12 @@ func (s *State) setLocalConnectionID(v []byte) {
 // RemoteRandomBytes returns the remote client hello random bytes.
 func (s *State) RemoteRandomBytes() [handshake.RandomBytesLength]byte {
 	return s.remoteRandom.RandomBytes
+}
+
+func (s *State) export() (*serializedState, error) {
+	if !s.handshakeComplete {
+		return nil, errInvalidExportedState
+	}
+
+	return s.serialize()
 }
