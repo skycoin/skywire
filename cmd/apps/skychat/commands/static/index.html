@@ -7080,7 +7080,7 @@
           const senderLabel = (msg.group && msg.from !== 'me')
             ? `<div class="msg-sender" data-no-i18n>${this.escapeHtml(this.shortPk(msg.sender || msg.from))}</div>` : '';
           const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
-          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
+          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(this._shownText(msg.text));
           const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
           // A message is a reply or a forward, never both — one envelope per
           // body — so the two chips can share the slot above the text.
@@ -7677,7 +7677,7 @@
       _renderQuote(reply) {
         const isMine = reply.sender && (reply.sender === this.myPK || reply.sender === 'me');
         const who = isMine ? t('You') : (reply.sender ? this.shortPk(reply.sender) : t('message'));
-        const preview = this.escapeHtml(String(reply.preview || '').slice(0, 120)) || '&nbsp;';
+        const preview = this.escapeHtml(String(this._shownText(reply.preview) || '').slice(0, 120)) || '&nbsp;';
         return `<div class="reply-quote" data-target-ts="${this.escapeAttr(reply.ts || '')}" onclick="app.scrollToMessage(this.dataset.targetTs)" title="${t('Go to message')}" data-no-i18n>
             <span class="reply-quote-who">${this.escapeHtml(who)}</span>
             <span class="reply-quote-text">${preview}</span>
@@ -7723,7 +7723,7 @@
         chip.innerHTML = `
           <div class="reply-chip-body" data-no-i18n>
             <span class="reply-chip-who">${t('Replying to {name}', { name: this.escapeHtml(who) })}</span>
-            <span class="reply-chip-text">${this.escapeHtml(String(r.preview || '').slice(0, 120))}</span>
+            <span class="reply-chip-text">${this.escapeHtml(String(this._shownText(r.preview) || '').slice(0, 120))}</span>
           </div>
           <button class="reply-chip-x" onclick="app.cancelReply()" title="${t('Cancel reply')}">&times;</button>`;
         chip.classList.remove('hidden');
@@ -12428,7 +12428,7 @@
         }
 
         document.getElementById('msgSheetPreview').textContent =
-          msg.text || (msg.file ? (msg.file.name || t('Attachment')) : t('Message'));
+          this._shownText(msg.text) || (msg.file ? (msg.file.name || t('Attachment')) : t('Message'));
 
         let html = `<button onclick="app.sheetAction('reply')"><span class="ms-icon">${icon('reply', 19)}</span>${t('Reply')}</button>`;
         html += `<button onclick="app.sheetAction('forward')"><span class="ms-icon">${icon('forward', 19)}</span>${t('Forward')}</button>`;
@@ -14158,7 +14158,7 @@
         return `<li><div class="recipient-item" onclick="app.openSearchHit(${i})">
             <div class="recipient-info">
               <div class="recipient-pk">${this.escapeHtml(title)}</div>
-              <div class="recipient-preview search-snippet">${this.escapeHtml(who)}${this._searchSnippet(h.text, needle)}</div>
+              <div class="recipient-preview search-snippet">${this.escapeHtml(who)}${this._searchSnippet(this._shownText(h.text), needle)}</div>
             </div>
             <span class="search-when">${this.escapeHtml(when)}</span>
           </div></li>`;
@@ -15500,11 +15500,15 @@
         });
       }
 
-      // _shownText shows a recorded message's stock caption, which travels in
+      // _shownText shows a stock caption, which travels and is stored in
       // English, in the reader's language. Any other text is the sender's own.
       _shownText(text) {
-        const m = /^(\u{1F3A4}|\u{1F4F9}) (Voice|Video) message$/u.exec(String(text || ''));
-        return m ? `${m[1]} ${m[2] === 'Video' ? t('Video message') : t('Voice message')}` : text;
+        const s = String(text || '');
+        const m = /^(\u{1F3A4}|\u{1F4F9}) (Voice|Video) message$/u.exec(s);
+        if (m) return `${m[1]} ${m[2] === 'Video' ? t('Video message') : t('Voice message')}`;
+        // A call record, as voice_missed.go callRecordText writes it.
+        const c = /^\u{1F4DE} (Missed call|Incoming call|Outgoing call)( · \d+:\d\d)?$/u.exec(s);
+        return c ? `\u{1F4DE} ${this._outcomeLabel(c[1])}${c[2] || ''}` : text;
       }
 
       deleteChat() {
@@ -15710,7 +15714,7 @@
       // notifPreviewLen chars. Returns '' for an empty/whitespace text.
       _previewText(text, file) {
         if (file) return file.name || t('Attachment');
-        const s = String(text || '').replace(/\s+/g, ' ').trim();
+        const s = String(this._shownText(text) || '').replace(/\s+/g, ' ').trim();
         if (!s) return '';
         return s.length > this.notifPreviewLen ? s.slice(0, this.notifPreviewLen) + '…' : s;
       }

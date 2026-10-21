@@ -137,11 +137,12 @@ internal class NotificationBridge(context: Context) {
                 PendingIntent.FLAG_IMMUTABLE,
             )
         }
+        val body = shownBody(event)
         val builder = NotificationCompat.Builder(app, channel.id)
             .setSmallIcon(R.drawable.skywire_logo)
             .setContentTitle(event.title.ifEmpty { channel.label })
-            .setContentText(event.body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(event.body))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
             .setAutoCancel(true)
         channel.category?.let(builder::setCategory)
@@ -155,6 +156,15 @@ internal class NotificationBridge(context: Context) {
         runCatching { notifications.notify(tag, id, builder.build()) }
             .onFailure { Log.w(TAG, "cannot post a notification from ${event.app}", it) }
     }
+
+    // SkyChat stores its call records in English (voice_missed.go callRecordText),
+    // and a missed call is the one it notifies.
+    private fun shownBody(event: NotifyEvent): String =
+        if (event.app == SKYCHAT && event.body == MISSED_CALL) {
+            "$CALL_ICON " + AppLocale.localized(app).getString(R.string.call_missed_title)
+        } else {
+            event.body
+        }
 
     /**
      * The channel an app's notifications belong in, created on first use.
@@ -189,6 +199,8 @@ internal class NotificationBridge(context: Context) {
         private const val TAG = "SkywireNotify"
         private const val SKYCHAT = "skychat"
         private const val SKYMAIL = "skymail"
+        private const val CALL_ICON = "\uD83D\uDCDE"
+        private const val MISSED_CALL = "$CALL_ICON Missed call"
         private const val DATA_PREFIX = "data: "
         private const val RETRY_MS = 2_000L
 
