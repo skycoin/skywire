@@ -45,6 +45,7 @@ import com.skycoin.skywire.core.WalletWeb
 import com.skycoin.skywire.ui.chat.QrBridge
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.navigation.HoldTabSwipe
 import com.skycoin.skywire.ui.theme.LocalDarkTheme
 import com.skycoin.skywire.ui.webview.JsDialogChromeClient
 
@@ -71,6 +72,8 @@ fun WalletWebScreen(onBack: () -> Unit, onPreviousWallet: (() -> Unit)? = null) 
     }
 
     BackHandler(enabled = canGoBack) { webView?.goBack() }
+    // Swipes change tabs only from the wallet's first page.
+    HoldTabSwipe(canGoBack)
 
     Scaffold(
         topBar = {

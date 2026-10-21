@@ -52,6 +52,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.navigation.HoldTabSwipe
 import com.skycoin.skywire.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -148,6 +149,8 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         if (canGoBack && view != null) view.goBack() else onBack()
     }
     BackHandler(enabled = canGoBack) { webView?.goBack() }
+    // An open conversation owns horizontal drags: slide to cancel a recording, seek bars.
+    HoldTabSwipe(canGoBack)
     // Back leaves a full-screen video before it leaves anything else. After
     // the handler above on purpose: the last one registered is asked first,
     // and a video the player itself made full screen has no history entry
