@@ -23,6 +23,13 @@
       var m = /[?&]theme=(dark|light)/.exec(location.search);
       if (m) document.documentElement.dataset.theme = m[1];
     })();
+    // Page zoom is off in the phone app. On Android 10 the WebView's own
+    // zoom setting did not stop a two-finger pinch.
+    if (window.SkywireQr) {
+      document.querySelector('meta[name="viewport"]').content =
+        'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+      document.documentElement.classList.add('in-app');
+    }
   </script>
   <!-- Translations keyed by the English text with whitespace folded. Data
        only, read when the URL asks for a language. -->
@@ -2216,6 +2223,10 @@
       background: var(--bg-primary);
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
+    }
+
+    html.in-app {
+      touch-action: pan-x pan-y;
     }
 
     body {
