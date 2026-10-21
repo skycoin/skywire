@@ -23,6 +23,9 @@ class SkywirePaths(context: Context) {
      */
     val sealedConfigFile: File = File(dataDir, "skywire-config.json.enc")
 
+    /** skycoin-web's wallet files: server wallets, coin and endpoint lists. */
+    val walletDir: File = File(dataDir, "wallets")
+
     /** Config `local_path` — app workdirs, log DBs, uptime.db land here. */
     val localDir: File = File(dataDir, "local")
 

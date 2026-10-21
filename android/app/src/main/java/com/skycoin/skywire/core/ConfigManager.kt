@@ -133,9 +133,10 @@ class ConfigManager(
      * `config gen` argv. `-r` retains the secret key across regens (and is
      * safe on first run); `--hvaddr` pins the API to loopback — the compiled
      * default `":8000"` binds every interface; the autostart-off and
-     * disableapps flags leave exactly the four in-proc apps, all
-     * user-initiated; `--nofetch` keeps first-run generation offline (the
-     * visor refreshes service endpoints in-memory at runtime anyway).
+     * disableapps flags leave the four user-initiated in-proc apps, plus the
+     * skycoin-web wallet the wallet tab loads from [WalletWeb.ADDR];
+     * `--nofetch` keeps first-run generation offline (the visor refreshes
+     * service endpoints in-memory at runtime anyway).
      */
     private fun genArgs(): List<String> = listOf(
         paths.visorBinary.absolutePath, "config", "gen",
@@ -146,7 +147,9 @@ class ConfigManager(
         "--hvaddr", "127.0.0.1:8000",
         "--autoconn",
         "--servechat=false", "--serveproxy=false", "--servevpn=false",
-        "--disableapps", "skysocks,vpn-server,vpn-router,skydex-market,skycoin-web",
+        "--disableapps", "skysocks,vpn-server,vpn-router,skydex-market",
+        "--skycoinweb", "--skycoinwebaddr", WalletWeb.ADDR,
+        "--skycoinwebwallet", paths.walletDir.absolutePath,
         "--binpath", paths.binDir.absolutePath,
         "--nofetch",
     )
