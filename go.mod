@@ -129,7 +129,7 @@ require (
 require (
 	gioui.org/shader v1.0.9 // indirect
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
-	github.com/0magnet/gio v0.10.4-0.20261021172429-4a8790050951 // indirect
+	github.com/0magnet/gio v0.10.4-0.20261021191625-2885f59ca910 // indirect
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
 	github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 // indirect

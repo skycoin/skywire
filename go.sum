@@ -85,8 +85,8 @@ github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a h1:W8l2XyZb6O
 github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a/go.mod h1:rKx0iuYFns6ZS0Ud33Sn4KC4C0jHAZDHy1I39R9Xn3c=
 github.com/0magnet/dtls/v3 v3.1.11 h1:QmTZt2VFfYa16Q/0UpJcdJNgx4gCh2td9ii/Hx0pnQU=
 github.com/0magnet/dtls/v3 v3.1.11/go.mod h1:4+o81WGOMZF/3pUtI9ICKb3Ns1VBtREBJdtzkt8a8F0=
-github.com/0magnet/gio v0.10.4-0.20261021172429-4a8790050951 h1:oD7M+R7qqFCPWuN9Cy/h2NEb8oIlk380cx/8jFmjJGI=
-github.com/0magnet/gio v0.10.4-0.20261021172429-4a8790050951/go.mod h1:s6Jv+G7IJtoOBtTnLLxtwyECQne5UPUCgu194IcM9L4=
+github.com/0magnet/gio v0.10.4-0.20261021191625-2885f59ca910 h1:dCMYlvMxoZHiMBzRqwqLCgvd7QJe+XimoAqYcnnpLZY=
+github.com/0magnet/gio v0.10.4-0.20261021191625-2885f59ca910/go.mod h1:s6Jv+G7IJtoOBtTnLLxtwyECQne5UPUCgu194IcM9L4=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb h1:JAp38Yr7DXoyTVko9hDhBIJDpNZWRiVkp66vGLbYHCI=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb/go.mod h1:ThqukkPy/kmN6c6cyboZYESC9qdJKfYgHTMVp0iW7T0=
 github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba h1:boyLKdsynFPzjQ5fFh7RpvuudRbb6yuqlXquDIt6lic=
