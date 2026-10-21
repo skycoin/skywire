@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,6 +92,37 @@ func TestResolve(t *testing.T) {
 		require.Error(t, err)
 		require.NotErrorIs(t, err, ErrNoEntry)
 	})
+}
+
+func TestResolveRetriesUnavailable(t *testing.T) {
+	target, _ := cipher.GenerateKeyPair()
+
+	var hits, errHits atomic.Int32
+	mux := httputil.NewRouter()
+	mux.Get("/resolve/stcpr/{pk}", func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) == 1 {
+			http.Error(w, `{"error":"address store unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(VisorData{RemoteAddr: "1.2.3.4:5000"}) //nolint
+	})
+	mux.Get("/resolve/stcp/{pk}", func(w http.ResponseWriter, _ *http.Request) {
+		errHits.Add(1)
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(arRouter(mux))
+	defer srv.Close()
+
+	c := newReadyClient(t, srv)
+
+	vd, err := c.Resolve(context.Background(), "stcpr", target)
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.3.4:5000", vd.RemoteAddr)
+	assert.Equal(t, int32(2), hits.Load(), "a 503 should be retried once")
+
+	_, err = c.Resolve(context.Background(), "stcp", target)
+	require.Error(t, err)
+	assert.Equal(t, int32(1), errHits.Load(), "a 500 should not be retried")
 }
 
 func TestResolveNotReady(t *testing.T) {

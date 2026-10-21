@@ -605,9 +605,12 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Any other store error is the store being unavailable, e.g. redis loading
+	// its dataset after a restart. 503 tells the client to retry shortly.
 	if err != nil {
 		a.logger(r).Errorf("Failed to resolve PK:%v (%v): %v", receiverPK, tpType, err)
-		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Retry-After", "2")
+		a.writeJSON(w, r, http.StatusServiceUnavailable, &Error{Error: "address store unavailable"})
 		return
 	}
 
