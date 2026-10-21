@@ -98,6 +98,7 @@ func RunSkyDNS(ctx context.Context, args []string) error {
 	}
 	err = vpn.RunSkyDNS(ctx, vpn.SkyDNSConfig{
 		Dial:     vpn.MeshDialer(appCl),
+		Local:    statusDialer(appCl, logger),
 		Upstream: upstream,
 		Minter:   minter,
 		// home.skynet is this visor's directory of the mesh (dmsgweb.HomeAlias).
