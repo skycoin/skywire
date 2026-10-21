@@ -30,6 +30,8 @@ func (s skyDNSSplit) Write(p []byte) (int, error) {
 type SkyDNSConfig struct {
 	// Dial carries connections to mesh names. See MeshDialer.
 	Dial meshgw.MeshDial
+	// Local reaches the visor's own status pages. Optional.
+	Local meshgw.LocalDial
 	// Upstream is the resolver for every other name, an IP. Empty means the
 	// phone's own, as the app reports them.
 	Upstream string
