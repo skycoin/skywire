@@ -517,7 +517,7 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val PING_INTERVAL_MS = 1_000L
         const val POLL_INTERVAL_MS = 15_000L
-        const val DEFAULT_MAX_MESSAGE = 1L shl 20
+        const val DEFAULT_MAX_MESSAGE = 10L shl 20
         const val ENVELOPE_BYTES = 16 * 1024L
     }
 }

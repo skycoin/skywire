@@ -94,6 +94,15 @@ func (r *RPC) VoiceDialing(_ *struct{}, out *[]visorapi.VoiceDialingInfo) (err e
 	return nil
 }
 
+// VoiceSetBlocked replaces the callers whose calls never ring here.
+func (r *RPC) VoiceSetBlocked(peers *[]cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceSetBlocked", nil)(nil, &err)
+	if peers == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceSetBlocked(*peers)
+}
+
 // VoiceSetRingback sets (or, with no data, clears) this visor's ringback tone.
 // The tone is not logged: it is up to a megabyte of audio.
 func (r *RPC) VoiceSetRingback(in *visorapi.VoiceRingback, _ *struct{}) (err error) {

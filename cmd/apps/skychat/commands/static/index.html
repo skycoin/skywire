@@ -23,6 +23,13 @@
       var m = /[?&]theme=(dark|light)/.exec(location.search);
       if (m) document.documentElement.dataset.theme = m[1];
     })();
+    // Page zoom is off in the phone app. On Android 10 the WebView's own
+    // zoom setting did not stop a two-finger pinch.
+    if (window.SkywireQr) {
+      document.querySelector('meta[name="viewport"]').content =
+        'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+      document.documentElement.classList.add('in-app');
+    }
   </script>
   <!-- Translations keyed by the English text with whitespace folded. Data
        only, read when the URL asks for a language. -->
@@ -2216,6 +2223,10 @@
       background: var(--bg-primary);
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
+    }
+
+    html.in-app {
+      touch-action: pan-x pan-y;
     }
 
     body {
@@ -7080,7 +7091,7 @@
           const senderLabel = (msg.group && msg.from !== 'me')
             ? `<div class="msg-sender" data-no-i18n>${this.escapeHtml(this.shortPk(msg.sender || msg.from))}</div>` : '';
           const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
-          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
+          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(this._shownText(msg.text));
           const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
           // A message is a reply or a forward, never both — one envelope per
           // body — so the two chips can share the slot above the text.
@@ -7238,8 +7249,9 @@
         if (data.status === 'deleted') {
           const l = this.messages[key] || [];
           const before = l.length;
-          this.messages[key] = l.filter(x => !(x && x.wireId && x.wireId === data.id));
+          this.messages[key] = l.filter(x => !(x && this._dmWireId(x) === data.id));
           if (this.messages[key].length !== before) {
+            this._afterRemoval(key);
             this.saveChat(key);
             if (this.activeKey() === key) this._rerenderActive();
           }
@@ -7677,7 +7689,7 @@
       _renderQuote(reply) {
         const isMine = reply.sender && (reply.sender === this.myPK || reply.sender === 'me');
         const who = isMine ? t('You') : (reply.sender ? this.shortPk(reply.sender) : t('message'));
-        const preview = this.escapeHtml(String(reply.preview || '').slice(0, 120)) || '&nbsp;';
+        const preview = this.escapeHtml(String(this._shownText(reply.preview) || '').slice(0, 120)) || '&nbsp;';
         return `<div class="reply-quote" data-target-ts="${this.escapeAttr(reply.ts || '')}" onclick="app.scrollToMessage(this.dataset.targetTs)" title="${t('Go to message')}" data-no-i18n>
             <span class="reply-quote-who">${this.escapeHtml(who)}</span>
             <span class="reply-quote-text">${preview}</span>
@@ -7723,7 +7735,7 @@
         chip.innerHTML = `
           <div class="reply-chip-body" data-no-i18n>
             <span class="reply-chip-who">${t('Replying to {name}', { name: this.escapeHtml(who) })}</span>
-            <span class="reply-chip-text">${this.escapeHtml(String(r.preview || '').slice(0, 120))}</span>
+            <span class="reply-chip-text">${this.escapeHtml(String(this._shownText(r.preview) || '').slice(0, 120))}</span>
           </div>
           <button class="reply-chip-x" onclick="app.cancelReply()" title="${t('Cancel reply')}">&times;</button>`;
         chip.classList.remove('hidden');
@@ -7795,7 +7807,7 @@
           if (this.group) {
             canDeleteAll = !!row.dataset.tsnano;
           } else {
-            canDeleteAll = !!(msg && msg.wireId);
+            canDeleteAll = !!this._dmWireId(msg);
           }
         }
         const menu = document.createElement('div');
@@ -7899,6 +7911,7 @@
         if (!key || !this.messages[key]) return;
         const dropped = this.messages[key].find(m => m && String(m.mid) === String(mid));
         this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
+        this._afterRemoval(key);
         if (this.group) {
           if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
         } else {
@@ -7906,6 +7919,12 @@
           this._forgetStored(key, dropped);
         }
         this._rerenderActive();
+      }
+
+      // _dmWireId is the id both ends know a DM by. A file is known by its
+      // transfer id, which its bubble gets back from /send-file.
+      _dmWireId(msg) {
+        return (msg && (msg.wireId || (msg.file && msg.file.id))) || null;
       }
 
       // _forgetStored drops the visor's stored copy of one DM. Local only: the
@@ -7917,11 +7936,12 @@
       // the store. Best-effort: the bubble is already gone from the screen and
       // the cache, so a failed request must not undo that.
       _forgetStored(pk, msg) {
-        if (this.isSaved() || !msg || !msg.wireId) return;
+        const id = this._dmWireId(msg);
+        if (this.isSaved() || !id) return;
         fetch('/history/forget', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pk, id: msg.wireId })
+          body: JSON.stringify({ pk, id })
         }).catch(e => console.debug('skychat: forget stored copy skipped:', e.message));
       }
 
@@ -7938,6 +7958,7 @@
           if (!tsNano) { this.showToast(t('Message not yet confirmed — try again in a moment.'), 'error'); return; }
           // Optimistic local removal (+ remember, so a late echo can't re-add it).
           this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
+          this._afterRemoval(gid);
           this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
           this._rerenderActive();
           fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
@@ -7953,10 +7974,11 @@
         const pk = this.recipient;
         const list = this.messages[pk] || [];
         const m = list.find(x => String(x.mid) === String(mid));
-        if (!m || !m.wireId) { this.showToast(t('Message not yet confirmed — try again in a moment.'), 'error'); return; }
-        const id = m.wireId;
+        const id = this._dmWireId(m);
+        if (!id) { this.showToast(t('Message not yet confirmed — try again in a moment.'), 'error'); return; }
         const viaPair = !!m.viaPair;
         this.messages[pk] = list.filter(x => String(x.mid) !== String(mid));
+        this._afterRemoval(pk);
         this.saveChat(pk);
         this._rerenderActive();
         const req = viaPair
@@ -7978,6 +8000,7 @@
         const list = this.messages[gid];
         if (list) {
           this.messages[gid] = list.filter(m => !(String(m.tsNano) === String(tsNano) && (m.sender || '') === by));
+          this._afterRemoval(gid);
           if (this.group === gid) this._rerenderActive();
         }
       }
@@ -9209,7 +9232,7 @@
                 // no name the peer shares, so "delete for everyone" (and any
                 // late receipt) would silently skip every message restored from
                 // the store rather than localStorage.
-                wireId: m.id || null,
+                wireId: m.id || m.file_id || null,
               };
               // A persisted file message carries file_* metadata; rebuild the
               // file descriptor so history re-renders the thumbnail/player.
@@ -12424,11 +12447,11 @@
         const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
         let canDeleteAll = false;
         if (isOwn) {
-          canDeleteAll = this.group ? !!row.dataset.tsnano : !!msg.wireId;
+          canDeleteAll = this.group ? !!row.dataset.tsnano : !!this._dmWireId(msg);
         }
 
         document.getElementById('msgSheetPreview').textContent =
-          msg.text || (msg.file ? (msg.file.name || t('Attachment')) : t('Message'));
+          this._shownText(msg.text) || (msg.file ? (msg.file.name || t('Attachment')) : t('Message'));
 
         let html = `<button onclick="app.sheetAction('reply')"><span class="ms-icon">${icon('reply', 19)}</span>${t('Reply')}</button>`;
         html += `<button onclick="app.sheetAction('forward')"><span class="ms-icon">${icon('forward', 19)}</span>${t('Forward')}</button>`;
@@ -14158,7 +14181,7 @@
         return `<li><div class="recipient-item" onclick="app.openSearchHit(${i})">
             <div class="recipient-info">
               <div class="recipient-pk">${this.escapeHtml(title)}</div>
-              <div class="recipient-preview search-snippet">${this.escapeHtml(who)}${this._searchSnippet(h.text, needle)}</div>
+              <div class="recipient-preview search-snippet">${this.escapeHtml(who)}${this._searchSnippet(this._shownText(h.text), needle)}</div>
             </div>
             <span class="search-when">${this.escapeHtml(when)}</span>
           </div></li>`;
@@ -15484,6 +15507,23 @@
         }
       }
 
+      // _afterRemoval points a chat row's preview at what is left of the
+      // thread once messages leave it, or at the empty-thread line.
+      _afterRemoval(key) {
+        const last = (this.messages[key] || []).filter(m => m && !m.date).pop();
+        const group = (this.groups || []).find(g => g.id === key);
+        if (last) {
+          if (group) this.updateGroupPreview(key, last); else this.updatePreview(key, last);
+          return;
+        }
+        const rows = group ? '.group-item' : '#recipients .recipient-item, #requests .recipient-item, #pinnedList .recipient-item';
+        document.querySelectorAll(rows).forEach(item => {
+          if ((group ? item.dataset.gid : item.dataset.pk) !== key) return;
+          const el = item.querySelector('.recipient-preview');
+          if (el) el.textContent = group ? this._groupSubtitle(group) : t('New conversation');
+        });
+      }
+
       // updatePreview writes the last message under a chat row.
       //
       // Scoped to the chat list on purpose: a contact row's second line is
@@ -15500,11 +15540,15 @@
         });
       }
 
-      // _shownText shows a recorded message's stock caption, which travels in
+      // _shownText shows a stock caption, which travels and is stored in
       // English, in the reader's language. Any other text is the sender's own.
       _shownText(text) {
-        const m = /^(\u{1F3A4}|\u{1F4F9}) (Voice|Video) message$/u.exec(String(text || ''));
-        return m ? `${m[1]} ${m[2] === 'Video' ? t('Video message') : t('Voice message')}` : text;
+        const s = String(text || '');
+        const m = /^(\u{1F3A4}|\u{1F4F9}) (Voice|Video) message$/u.exec(s);
+        if (m) return `${m[1]} ${m[2] === 'Video' ? t('Video message') : t('Voice message')}`;
+        // A call record, as voice_missed.go callRecordText writes it.
+        const c = /^\u{1F4DE} (Missed call|Incoming call|Outgoing call)( · \d+:\d\d)?$/u.exec(s);
+        return c ? `\u{1F4DE} ${this._outcomeLabel(c[1])}${c[2] || ''}` : text;
       }
 
       deleteChat() {
@@ -15710,7 +15754,7 @@
       // notifPreviewLen chars. Returns '' for an empty/whitespace text.
       _previewText(text, file) {
         if (file) return file.name || t('Attachment');
-        const s = String(text || '').replace(/\s+/g, ' ').trim();
+        const s = String(this._shownText(text) || '').replace(/\s+/g, ' ').trim();
         if (!s) return '';
         return s.length > this.notifPreviewLen ? s.slice(0, this.notifPreviewLen) + '…' : s;
       }

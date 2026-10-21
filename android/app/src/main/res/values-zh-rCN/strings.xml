@@ -493,7 +493,7 @@
     <string name="wallet_intro_create">创建新钱包</string>
     <string name="wallet_intro_create_sub">生成一组新的助记词</string>
     <string name="wallet_intro_restore">用助记词恢复</string>
-    <string name="wallet_intro_restore_sub">输入已有的 12 个助记词</string>
+    <string name="wallet_intro_restore_sub">输入已有的 12 或 24 个助记词</string>
 
     <string name="wallet_seed_title">助记词</string>
     <string name="wallet_seed_body">按顺序抄下这十二个助记词，并离线保存。拿到它们的人就能花掉你的币。</string>
@@ -511,18 +511,20 @@
     <string name="wallet_verify_done">钱包已启用</string>
 
     <string name="wallet_restore_title">恢复钱包</string>
-    <string name="wallet_restore_progress">第 %1$d 个词，共 %2$d 个</string>
+    <string name="wallet_restore_progress">第 %1$d 个词，共 %2$s 个</string>
     <string name="wallet_restore_paste">粘贴完整助记词</string>
     <string name="wallet_restore_pasted">已从剪贴板读取十二个助记词</string>
     <string name="wallet_restore_hint">下一个词</string>
     <string name="wallet_restore_wordlist_note">候选词来自设备上的 BIP39 词表。你输入的内容不会发送到任何地方。</string>
     <string name="wallet_restore_action">恢复钱包</string>
-    <string name="wallet_restore_checksum">这组助记词校验不通过。十二个词中有一个写错了，或者顺序不对。</string>
+    <string name="wallet_restore_checksum">这组助记词校验不通过。其中有一个词写错了，或者顺序不对。</string>
     <string name="wallet_restore_legacy">这组助记词没有校验和——旧版钱包的助记词就是这样，因此它仍可能是有效的。请逐词核对后，再按一次以仍然恢复。</string>
     <string name="wallet_restore_anyway">仍然恢复</string>
-    <string name="wallet_restore_short">12 个词只输入了 %1$d 个。助记词必须完整输入，否则无法恢复。</string>
+    <string name="wallet_restore_short">助记词有 12 或 24 个词，这里有 %1$d 个。必须完整输入，否则无法恢复。</string>
     <string name="wallet_restore_done">钱包已恢复，正在扫描余额。</string>
     <string name="wallet_restore_scanning">正在恢复并扫描余额…</string>
+    <string name="wallet_lock_required_body">这个钱包靠手机的锁屏来保护。没有锁屏的话，任何拿到手机的人都能看到你的助记词并转走你的币。请先设置 PIN 码、图案或密码，然后再回来。</string>
+    <string name="wallet_lock_required_title">请先设置锁屏</string>
 
     <string name="wallet_coin_chip_description">选择币种</string>
     <string name="wallet_coins_title">选择币种</string>
@@ -631,6 +633,8 @@
     <string name="wallet_from_line">来自 %1$s · %2$s</string>
     <string name="wallet_to_line">发往 %1$s · %2$s</string>
     <string name="wallet_self_line">钱包内部转账 · %1$s</string>
+    <string name="wallet_own_sent_line">发出地址 %1$s</string>
+    <string name="wallet_own_received_line">接收地址 %1$s</string>
 
     <string name="wallet_receive_title">接收</string>
     <string name="wallet_receive_only">只能向该地址转入 %1$s。</string>
@@ -731,6 +735,8 @@
     <string name="wallet_tx_from">来自</string>
     <string name="wallet_tx_to">发往</string>
     <string name="wallet_tx_wallet">钱包</string>
+    <string name="wallet_tx_sent_from">发出地址</string>
+    <string name="wallet_tx_received_at">接收地址</string>
     <string name="wallet_tx_date">日期</string>
     <string name="wallet_tx_fee">手续费</string>
     <string name="wallet_tx_confirmations">确认数</string>

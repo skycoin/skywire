@@ -120,6 +120,8 @@ class TxRecord(
     val confirmations: Long,
     /** Burned hours (Skycoin family) or satoshis (Bitcoin); null when unknown. */
     val fee: ULong?,
+    /** This wallet's addresses the coins left from (a send) or arrived at (a receive). */
+    val own: List<String> = emptyList(),
 )
 
 class FeePresets(val economy: Int, val normal: Int, val priority: Int)

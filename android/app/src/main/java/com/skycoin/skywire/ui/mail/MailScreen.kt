@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.AlternateEmail
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -416,7 +417,7 @@ private fun MailRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    displayAddress(if (sent) m.to else m.from, contacts),
+                    if (sent) displayAddress(m.to, contacts) else displayAddress(m.from, contacts, m.peerPk),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
                     // Read mail steps back in color as well as weight: weight
@@ -478,8 +479,9 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
             open.error != null -> Text(open.error, color = MaterialTheme.colorScheme.error)
             m == null -> CircularProgressIndicator()
             else -> {
-                HeaderLine(R.string.mail_from, m.from)
-                if (open.folder == MailFolder.INBOX) VerifiedLine(m.fromVerified, m.peerPk)
+                val inbox = open.folder == MailFolder.INBOX
+                HeaderLine(R.string.mail_from, displayAddress(m.from, state.contacts, if (inbox) m.peerPk else ""), m.from)
+                if (inbox) VerifiedLine(m.fromVerified, m.peerPk)
                 HeaderLine(R.string.mail_to, m.to)
                 if (m.cc.isNotEmpty()) HeaderLine(R.string.mail_cc, m.cc)
                 HeaderLine(R.string.mail_date, m.date)
@@ -581,8 +583,9 @@ private fun MessageView(state: MailUiState, viewModel: MailViewModel) {
     }
 }
 
+/** One header; [raw], when it says more than [value], is shown under it as written. */
 @Composable
-private fun HeaderLine(label: Int, value: String) {
+private fun HeaderLine(label: Int, value: String, raw: String = value) {
     Row(Modifier.padding(vertical = 2.dp)) {
         Text(
             stringResource(label),
@@ -590,8 +593,22 @@ private fun HeaderLine(label: Int, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(56.dp),
         )
+        val differs = raw.trim() != value
         SelectionContainer {
-            Text(value, style = MaterialTheme.typography.bodySmall)
+            Column {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (differs) FontWeight.SemiBold else null,
+                )
+                if (differs) {
+                    Text(
+                        raw,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -669,13 +686,45 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
         }
         items(state.contacts, key = { it.address }) { c ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                    Text(c.name, style = MaterialTheme.typography.bodyLarge)
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        displayAddress(c.address),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        c.name.trim().take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                }
+                Spacer(Modifier.width(12.dp))
+                // The name and the address must not read as two lines of one thing.
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(
+                        c.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.AlternateEmail,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            shortAddress(c.address.trim()),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 IconButton(onClick = { editing = c }) {
                     Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.mail_contact_edit))
@@ -1059,19 +1108,26 @@ private fun SettingsView(state: MailUiState, viewModel: MailViewModel) {
 // --- helpers ---
 
 /**
- * An address short enough to read: the display name when there is one, a
- * SkyChat contact's name for the key, or the address with its key cut.
+ * What to call a mail party: the user's own name for the key (SkyMail, then
+ * SkyChat) before the name the mail carries, else the address with its key
+ * cut. [pk] is the key the transport proved, which a From line cannot forge.
  */
-private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList()): String {
+private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList(), pk: String = ""): String {
     val text = raw.trim()
+    val addr = text.substringAfter('<').substringBefore('>').trim()
+    (pk.ifEmpty { null } ?: SkymailAddress.pkOfAddress(addr))?.let { key ->
+        contacts.firstOrNull { SkymailAddress.pkOfAddress(it.address).equals(key, ignoreCase = true) }
+            ?.let { return it.name }
+        val named = VoiceCalls.displayName(key)
+        if (named != VoiceCallWatcher.shortPk(key)) return named
+    }
     val name = text.substringBefore('<', "").trim().trim('"')
     if (name.isNotEmpty() && '<' in text) return name
-    val addr = text.substringAfter('<').substringBefore('>').trim()
-    SkymailAddress.pkOfAddress(addr)?.let { pk ->
-        contacts.firstOrNull { SkymailAddress.pkOfAddress(it.address) == pk }?.let { return it.name }
-        val named = VoiceCalls.displayName(pk)
-        if (named != VoiceCallWatcher.shortPk(pk)) return named
-    }
+    return shortAddress(addr)
+}
+
+/** The address itself with its key cut, never a name for it. */
+private fun shortAddress(addr: String): String {
     val local = addr.substringBefore('@', addr)
     val domain = addr.substringAfter('@', "")
     if (domain.length <= 16) return addr

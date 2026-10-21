@@ -56,9 +56,6 @@ import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CachedTx
 import com.skycoin.skywire.wallet.historyBehind
 import com.skycoin.wallet.Amounts
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 private enum class TxFilter { ALL, SENT, RECEIVED, PENDING }
@@ -301,11 +298,13 @@ fun WalletTxScreen(
                         first = true,
                     )
                     DetailRow(stringResource(R.string.wallet_tx_wallet), state.active?.name ?: "—")
-                    DetailRow(
-                        stringResource(R.string.wallet_tx_date),
-                        Instant.ofEpochSecond(tx.timestamp).atZone(ZoneId.systemDefault())
-                            .format(DateTimeFormatter.ofPattern("d MMMM, HH:mm")),
-                    )
+                    if (tx.own.isNotEmpty()) {
+                        DetailRow(
+                            stringResource(if (tx.incoming) R.string.wallet_tx_received_at else R.string.wallet_tx_sent_from),
+                            tx.own.joinToString("\n"),
+                        )
+                    }
+                    DetailRow(stringResource(R.string.wallet_tx_date), fullDateTime(tx.timestamp))
                     DetailRow(stringResource(R.string.wallet_tx_fee), feeText(coin, tx.fee))
                     DetailRow(
                         stringResource(R.string.wallet_tx_confirmations),
@@ -389,7 +388,13 @@ private fun DetailRow(label: String, value: String, first: Boolean = false) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        // A long value (a full address) wraps in its own column, clear of the label.
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).padding(start = 16.dp),
+        )
     }
 }
