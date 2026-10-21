@@ -119,8 +119,11 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			return
 		}
 
-		// serve web page
+		// serve web page. No other site may frame it: a hidden frame could
+		// otherwise open a terminal through the browser's whitelisted proxy.
 		if !isWebsocket(r.Header) {
+			w.Header().Set("Content-Security-Policy", "frame-ancestors 'self'")
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 			termPage.ServeHTTP(w, r)
 			return
 		}
@@ -464,16 +467,24 @@ func urlCommands(r *http.Request, customCommands map[string][]string) string {
 			commands = append(commands, strings.Split(commandsQuery[0], ",")...)
 		}
 	}
-	// var commandQuery string
+	// Only the visor's own named commands run by themselves. Anything else
+	// is typed for the person to run with Enter, so a link cannot run it.
+	named := true
 	for i, command := range commands {
 		if val, ok := customCommands[command]; ok {
 			commands[i] = strings.Join(val, " && ")
+		} else {
+			named = false
 		}
 	}
 	if len(commands) == 0 {
 		return ""
 	}
-	return strings.Join(commands, " && ") + "\n"
+	line := strings.Join(commands, " && ")
+	if named {
+		line += "\n"
+	}
+	return line
 }
 
 // resizeMsg represents a terminal resize message from the client.

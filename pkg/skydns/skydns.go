@@ -63,6 +63,9 @@ type Exchanger interface {
 type Config struct {
 	// Dial carries a connection to a synthetic IP over the mesh.
 	Dial meshgw.MeshDial
+	// Local reaches the visor's own status pages (status.dmsg, status.skynet,
+	// status.skywire). Optional: without it those names are not answered.
+	Local meshgw.LocalDial
 	// Upstream answers every name that is not a mesh name.
 	Upstream Exchanger
 	// Aliases maps friendly names to PKs. Optional.
@@ -121,6 +124,9 @@ func New(cfg Config) (*Engine, error) {
 	}
 	if cfg.Minter != nil {
 		gw.EnableTLSMITM(cfg.Minter, 443)
+	}
+	if cfg.Local != nil {
+		gw.SetLocal(cfg.Local)
 	}
 
 	s := stack.New(stack.Options{

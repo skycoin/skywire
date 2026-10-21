@@ -490,8 +490,13 @@ type vstreamConn struct {
 func (c *vstreamConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
-func (c *vstreamConn) RemoteAddr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+
+// RemoteAddr names the peer by its PK, so a handler that gates on the caller
+// (the logserver's /pty, a whitelisted forwarded port) can tell who it is.
+func (c *vstreamConn) RemoteAddr() net.Addr { return skynetPeerAddr(c.RemotePK()) }
+
+func skynetPeerAddr(pk cipher.PubKey) net.Addr {
+	return appnet.Addr{Net: appnet.TypeSkynet, PubKey: pk}
 }
 func (c *vstreamConn) SetDeadline(_ time.Time) error      { return nil }
 func (c *vstreamConn) SetReadDeadline(_ time.Time) error  { return nil }
