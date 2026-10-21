@@ -171,7 +171,7 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261021190529-ea7a27814169
+# github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
@@ -1337,6 +1337,7 @@ golang.org/x/exp/shiny/materialdesign/icons
 ## explicit; go 1.26.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
+golang.org/x/image/draw
 golang.org/x/image/font
 golang.org/x/image/font/gofont/gobold
 golang.org/x/image/font/gofont/gobolditalic

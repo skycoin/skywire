@@ -155,19 +155,29 @@ func (g *Grid) drawCell(dst *image.RGBA, col, row, width int, c *vt.CellData, cu
 
 // glyph is s drawn once, as a mask the size of width cells.
 func (g *Grid) glyph(s string, face, width int) *image.Alpha {
-	k := glyphKey{s, face}
-	if m, ok := g.glyphs[k]; ok {
+	key := glyphKey{s, face}
+	if m, ok := g.glyphs[key]; ok {
 		return m
 	}
 	m := image.NewAlpha(image.Rect(0, 0, width*g.CellW, g.CellH))
 	if r := []rune(s); len(r) == 1 && r[0] >= 0x2800 && r[0] <= 0x28ff {
 		g.braille(m, int(r[0]-0x2800))
-		g.glyphs[k] = m
+		g.glyphs[key] = m
 		return m
 	}
-	d := font.Drawer{Dst: m, Src: image.Opaque, Face: g.faceFor(s, face), Dot: fixed.P(0, g.Ascent)}
+	f := g.faceFor(s, face)
+	if r, _ := utf8.DecodeRuneInString(s); f == g.faces[face] {
+		if _, ok := f.GlyphAdvance(r); !ok {
+			if k := kanaBitmap(r); k != nil {
+				g.drawKana(m, k)
+				g.glyphs[key] = m
+				return m
+			}
+		}
+	}
+	d := font.Drawer{Dst: m, Src: image.Opaque, Face: f, Dot: fixed.P(0, g.Ascent)}
 	d.DrawString(s)
-	g.glyphs[k] = m
+	g.glyphs[key] = m
 	return m
 }
 
