@@ -571,6 +571,8 @@
     <string name="wallet_restore_short">Seulement %1$d mots sur 12 saisis. Une graine se restaure en entier ou pas du tout.</string>
     <string name="wallet_restore_done">Portefeuille restauré. Recherche des soldes.</string>
     <string name="wallet_restore_scanning">Restauration et recherche des soldes…</string>
+    <string name="wallet_lock_required_body">Ce portefeuille est protégé par le verrouillage d’écran du téléphone. Sans lui, quiconque tient le téléphone pourrait voir votre phrase de récupération et envoyer vos pièces. Définissez un code PIN, un schéma ou un mot de passe, puis revenez.</string>
+    <string name="wallet_lock_required_title">Configurez d’abord un verrouillage d’écran</string>
 
     <string name="wallet_coin_chip_description">Choisir une pièce</string>
     <string name="wallet_coins_title">Choisir une pièce</string>

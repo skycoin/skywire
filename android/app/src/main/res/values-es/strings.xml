@@ -573,6 +573,8 @@
     <string name="wallet_restore_short">Solo has introducido %1$d de 12 palabras. Una semilla se restaura entera o no se restaura.</string>
     <string name="wallet_restore_done">Billetera restaurada. Buscando saldos.</string>
     <string name="wallet_restore_scanning">Restaurando y buscando saldos…</string>
+    <string name="wallet_lock_required_body">Esta billetera está protegida por el bloqueo de pantalla del teléfono. Sin él, cualquiera que tenga el teléfono podría ver tu frase de recuperación y enviar tus monedas. Configura un PIN, un patrón o una contraseña y vuelve.</string>
+    <string name="wallet_lock_required_title">Primero configura un bloqueo de pantalla</string>
 
     <string name="wallet_coin_chip_description">Elige una moneda</string>
     <string name="wallet_coins_title">Elige una moneda</string>
