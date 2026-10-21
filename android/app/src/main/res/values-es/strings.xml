@@ -897,6 +897,9 @@
     <string name="help_hub_title">Sobre Apps</string>
     <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, SkyMail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
 
+    <string name="wallet_web_unreachable">La billetera aún no está en marcha. Se inicia con Skywire.</string>
+    <string name="wallet_previous">Billetera anterior</string>
+    <string name="wallet_web_retry">Reintentar</string>
     <string name="help_wallet_title">Sobre la Billetera</string>
     <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
 

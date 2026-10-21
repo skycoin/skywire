@@ -236,11 +236,12 @@ build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (req
 # the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
 ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
 MOBILE_TAGS := mobile,withoutsystray
-# Size budget for the android payload, in bytes (70 MiB). The CI lane fails
+# Size budget for the android payload, in bytes (74 MiB). The CI lane fails
 # over it so the lite variant can't silently rot or regain the stripped fat.
 # It gates the pure-Go lane, which measured 68.8 MB (65.6 MiB) on 2026-09-23;
 # the NDK release lane is 6 MB smaller again (packed relocations).
-ANDROID_MOBILE_MAX_BYTES := 73400320
+# Raised from 70 MiB on 2026-10-20 for the skycoin-web wallet (75.7 MB).
+ANDROID_MOBILE_MAX_BYTES := 77594624
 
 # MOBILE_APPINFO stamps the same symbols as $(BUILDINFO) with the phone's own
 # version. It is listed AFTER $(BUILDINFO) on the ldflags line, and the linker
