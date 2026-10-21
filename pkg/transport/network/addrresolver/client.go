@@ -1003,6 +1003,14 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 			continue
 		}
 
+		// The resolver or its store is briefly down, e.g. redis reloading
+		// after a restart. Retry on the same backoff unless out of attempts.
+		if transientStatus(status) && attempt < maxRetries {
+			resp.Body.Close() //nolint:errcheck,gosec
+			c.log.Debugf("Address resolver returned %d on resolve for %s, retrying...", status, pk.String())
+			continue
+		}
+
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
 				c.log.WithError(err).Warn("Failed to close response body")
@@ -1032,6 +1040,16 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 	}
 
 	return VisorData{}, fmt.Errorf("resolve for %s failed: rate limited after %d attempts", pk.String(), maxRetries+1)
+}
+
+// transientStatus reports whether an address resolver response means it is
+// temporarily unable to answer and the request is worth retrying.
+func transientStatus(status int) bool {
+	switch status {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
 }
 
 // Transports query available transports.
