@@ -532,6 +532,8 @@
     <string name="wallet_restore_short">Only %1$d of 12 words entered. A seed is restored in full or not at all.</string>
     <string name="wallet_restore_done">Wallet restored. Scanning for balances.</string>
     <string name="wallet_restore_scanning">Restoring and scanning for balances…</string>
+    <string name="wallet_lock_required_body">This wallet is guarded by your phone\'s screen lock. Without one, anyone holding the phone could see your recovery phrase and send your coins. Set a PIN, pattern or password, then come back.</string>
+    <string name="wallet_lock_required_title">Set a screen lock first</string>
 
     <string name="wallet_coin_chip_description">Choose a coin</string>
     <string name="wallet_coins_title">Choose a coin</string>

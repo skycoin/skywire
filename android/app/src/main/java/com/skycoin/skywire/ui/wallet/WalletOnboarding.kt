@@ -64,8 +64,13 @@ fun WalletSeedScreen(
     SecureWindow()
     val state by viewModel.uiState.collectAsState()
     val words = state.draft.seed?.split(" ") ?: emptyList()
+    val screenLock = rememberScreenLock()
 
     Scaffold(topBar = { SkyTopBar(stringResource(R.string.wallet_seed_title), onBack = onBack) }) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -265,6 +270,7 @@ fun WalletRestoreScreen(
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val screenLock = rememberScreenLock()
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
@@ -320,6 +326,10 @@ fun WalletRestoreScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = { SkyTopBar(stringResource(R.string.wallet_restore_title), onBack = onBack) },
     ) { padding ->
+        if (!screenLock) {
+            ScreenLockNeeded(Modifier.padding(padding))
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),

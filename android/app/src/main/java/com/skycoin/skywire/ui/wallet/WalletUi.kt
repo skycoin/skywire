@@ -1,6 +1,10 @@
 package com.skycoin.skywire.ui.wallet
 
+import android.app.KeyguardManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,13 +19,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,8 +39,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -229,3 +239,61 @@ fun confirmWithBiometrics(
         if (success) onConfirmed() else onDenied(error)
     }
 }
+
+/** Whether the phone has a screen lock, checked again each time the screen resumes. */
+@Composable
+fun rememberScreenLock(): Boolean {
+    val context = LocalContext.current
+    var secure by remember { mutableStateOf(hasScreenLock(context)) }
+    LifecycleResumeEffect(Unit) {
+        secure = hasScreenLock(context)
+        onPauseOrDispose {}
+    }
+    return secure
+}
+
+/**
+ * Shown in place of wallet setup on a phone with no screen lock. The lock is
+ * what guards every send and seed reveal, so no wallet is made without one.
+ */
+@Composable
+fun ScreenLockNeeded(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var noSettings by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(Icons.Outlined.Lock, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(
+            stringResource(R.string.wallet_lock_required_title),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            stringResource(R.string.wallet_lock_required_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        FilledTonalButton(onClick = {
+            noSettings = runCatching {
+                context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+            }.isFailure
+        }) {
+            Text(stringResource(R.string.settings_open_security))
+        }
+        if (noSettings) {
+            Text(
+                stringResource(R.string.settings_no_security_screen),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+private fun hasScreenLock(context: Context): Boolean =
+    (context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isDeviceSecure == true

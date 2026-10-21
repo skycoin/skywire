@@ -523,6 +523,8 @@
     <string name="wallet_restore_short">12 个词只输入了 %1$d 个。助记词必须完整输入，否则无法恢复。</string>
     <string name="wallet_restore_done">钱包已恢复，正在扫描余额。</string>
     <string name="wallet_restore_scanning">正在恢复并扫描余额…</string>
+    <string name="wallet_lock_required_body">这个钱包靠手机的锁屏来保护。没有锁屏的话，任何拿到手机的人都能看到你的助记词并转走你的币。请先设置 PIN 码、图案或密码，然后再回来。</string>
+    <string name="wallet_lock_required_title">请先设置锁屏</string>
 
     <string name="wallet_coin_chip_description">选择币种</string>
     <string name="wallet_coins_title">选择币种</string>
