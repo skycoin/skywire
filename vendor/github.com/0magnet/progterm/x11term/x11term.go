@@ -47,8 +47,12 @@ type window struct {
 	at    atoms
 	keys  *keymap
 	grid  *glterm.Grid
-	ts    glterm.Tabs
-	clip  *clipboard
+	// The font, and the size it opened at, which zoom scales.
+	font   glterm.Font
+	basePx float64
+	zoom   float64
+	ts     glterm.Tabs
+	clip   *clipboard
 
 	size    image.Point // the window, in pixels
 	stripH  int
@@ -112,7 +116,8 @@ func (w *window) init() error {
 	if dpi := parseDPI(w.resources()); dpi > 0 {
 		scale = dpi / 96
 	}
-	if w.grid, err = glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*scale); err != nil {
+	w.font, w.basePx, w.zoom = f, f.Pt*glterm.DpPerPt()*scale, 1
+	if w.grid, err = glterm.NewGridFont(f, w.basePx); err != nil {
 		return err
 	}
 	cols, rows := w.opt.Cols, w.opt.Rows
@@ -430,6 +435,8 @@ func (w *window) key(code byte, state uint16) bool {
 	switch {
 	case !ok:
 		return false
+	case w.zoomKey(e):
+		return true
 	case text != "":
 		return t.Term.Text(text)
 	case w.ts.Shortcut(e, w.newTab):
@@ -519,4 +526,24 @@ func internAtoms(c *xgb.Conn) (atoms, error) {
 		*names[i].to = r.Atom
 	}
 	return a, nil
+}
+
+// zoomKey scales the font when e is a zoom key, and reports whether it was.
+func (w *window) zoomKey(e glterm.KeyEvent) bool {
+	z, ok := glterm.ZoomKey(e, w.zoom)
+	if !ok {
+		return false
+	}
+	if z == w.zoom {
+		return true
+	}
+	g, err := glterm.NewGridFont(w.font, w.basePx*z)
+	if err != nil {
+		return true
+	}
+	w.zoom, w.grid = z, g
+	w.stripH = glterm.StripHeight(g)
+	a := w.area()
+	w.ts.Resize(g, a.X, a.Y)
+	return true
 }

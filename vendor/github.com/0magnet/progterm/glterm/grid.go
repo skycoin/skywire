@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"image/draw"
 	"strconv"
+	"unicode/utf8"
 
 	xterm "github.com/0magnet/xterm-go"
 	"github.com/0magnet/xterm-go/vt"
@@ -27,10 +28,14 @@ type Grid struct {
 	// distance from a cell's top.
 	CellW, CellH, Ascent int
 
-	faces   [4]font.Face // regular, bold, italic, bold italic
-	glyphs  map[glyphKey]*image.Alpha
-	palette [256]color.RGBA
-	fg, bg  color.RGBA
+	faces [4]font.Face // regular, bold, italic, bold italic
+	// fallbackFace draws what faces lack, made the first time it is needed.
+	px           float64
+	fallbackFace font.Face
+	fallbackDone bool
+	glyphs       map[glyphKey]*image.Alpha
+	palette      [256]color.RGBA
+	fg, bg       color.RGBA
 }
 
 // The selection's colors.
@@ -49,7 +54,7 @@ func NewGrid(px float64) (*Grid, error) { return NewGridFont(GoMono(0), px) }
 
 // NewGridFont is a grid drawing f at px pixels per em; f.Pt is not used.
 func NewGridFont(f Font, px float64) (*Grid, error) {
-	g := &Grid{glyphs: map[glyphKey]*image.Alpha{}}
+	g := &Grid{glyphs: map[glyphKey]*image.Alpha{}, px: px}
 	for i, sf := range f.styles {
 		if sf == nil {
 			return nil, errors.New("glterm: a font with no faces")
@@ -160,7 +165,7 @@ func (g *Grid) glyph(s string, face, width int) *image.Alpha {
 		g.glyphs[k] = m
 		return m
 	}
-	d := font.Drawer{Dst: m, Src: image.Opaque, Face: g.faces[face], Dot: fixed.P(0, g.Ascent)}
+	d := font.Drawer{Dst: m, Src: image.Opaque, Face: g.faceFor(s, face), Dot: fixed.P(0, g.Ascent)}
 	d.DrawString(s)
 	g.glyphs[k] = m
 	return m
@@ -228,4 +233,26 @@ func (g *Grid) Label(dst *image.RGBA, r image.Rectangle, s string, fg, bg color.
 		}
 		x += g.CellW
 	}
+}
+
+// faceFor is face, or the fallback face where face has no glyph for s and the
+// fallback does, so a character the font lacks is drawn rather than a box.
+func (g *Grid) faceFor(s string, face int) font.Face {
+	f := g.faces[face]
+	r, _ := utf8.DecodeRuneInString(s)
+	if _, ok := f.GlyphAdvance(r); ok || r < 0x80 {
+		return f
+	}
+	if !g.fallbackDone {
+		g.fallbackDone = true
+		if fb := fallback(); fb != nil {
+			g.fallbackFace, _ = opentype.NewFace(fb, &opentype.FaceOptions{Size: g.px, DPI: 72, Hinting: font.HintingFull}) //nolint:errcheck // nil keeps the box
+		}
+	}
+	if g.fallbackFace != nil {
+		if _, ok := g.fallbackFace.GlyphAdvance(r); ok {
+			return g.fallbackFace
+		}
+	}
+	return f
 }

@@ -131,6 +131,13 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 		sized               bool // the window was made its size in cells
 		ime                 imeMirror
 		tch                 touch
+		// zoom scales the font, by keys or a pinch. The terminals take a new
+		// grid at once and are resized for it once it has held, as for an area.
+		zoom       = 1.0
+		gridZoom   float64
+		sizedGrid  *glterm.Grid
+		resizeGrid *glterm.Grid
+		pin        pinch
 	)
 	pending := append([]glterm.Tab{{Shell: opt.Shell, Args: opt.Args, Run: opt.Run}}, opt.Tabs...)
 	defer ts.CloseAll()
@@ -154,13 +161,19 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 			// The window less its insets: system bars, and an on-screen keyboard.
 			size := gtx.Constraints.Max
 
-			if grid == nil || e.Metric.PxPerSp != pxPerSp {
-				g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(e.Metric.PxPerSp))
+			if grid == nil || e.Metric.PxPerSp != pxPerSp || zoom != gridZoom {
+				g, err := glterm.NewGridFont(f, f.Pt*glterm.DpPerPt()*float64(e.Metric.PxPerSp)*zoom)
 				if err != nil {
 					return err
 				}
-				grid, pxPerSp = g, e.Metric.PxPerSp
-				area = image.Point{} // lay the terminals out again at the new size
+				if grid == nil || e.Metric.PxPerSp != pxPerSp {
+					area = image.Point{} // lay the terminals out again at the new size
+				}
+				// Drawn at once in the new size, resized when it has held.
+				for _, t := range ts.List {
+					t.Term.Grid = g
+				}
+				grid, pxPerSp, gridZoom = g, e.Metric.PxPerSp, zoom
 			}
 			if !sized {
 				// A wrong guess is put right before a tab opens: a terminal
@@ -176,13 +189,13 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 				}
 			}
 			stripH := glterm.StripHeight(grid)
-			if a := image.Pt(size.X, max(1, size.Y-stripH)); a != area {
-				if a != resizeTo {
-					resizeTo, resizeAt = a, e.Now.Add(resizeSettle)
+			if a := image.Pt(size.X, max(1, size.Y-stripH)); a != area || grid != sizedGrid {
+				if a != resizeTo || grid != resizeGrid {
+					resizeTo, resizeGrid, resizeAt = a, grid, e.Now.Add(resizeSettle)
 				}
 				// The first layout, or one for a new font, is taken at once.
 				if area == (image.Point{}) || !e.Now.Before(resizeAt) {
-					area = a
+					area, sizedGrid = a, grid
 					ts.Resize(grid, area.X, area.Y)
 					canvas = nil
 				} else {
@@ -221,7 +234,7 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 				gtx.Execute(key.FocusCmd{Tag: tag})
 				focused = true
 			}
-			handle(gtx.Source, tag, &ts, s, stripH, newTab, cb, &buttons, &ime, &tch, gtx.Now, float32(grid.CellW))
+			handle(gtx.Source, tag, &ts, s, stripH, newTab, cb, &buttons, &ime, &tch, &pin, &zoom, gtx.Now, float32(grid.CellW))
 			whole.Pop()
 
 			if cb.write != nil {
@@ -256,7 +269,7 @@ func loop(w *app.Window, opt glterm.Options, f glterm.Font) error {
 // handle reads the frame's input: tab shortcuts and the strip for the window,
 // the rest for the current tab's terminal, which sees the pointer relative to
 // its own top.
-func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons, ime *imeMirror, tch *touch, now time.Time, slop float32) {
+func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH int, newTab func(), cb *clipboardBridge, held *pointer.Buttons, ime *imeMirror, tch *touch, pin *pinch, zoom *float64, now time.Time, slop float32) {
 	filters := []event.Filter{
 		key.FocusFilter{Target: tag},
 		// Keys that are not text: named keys, and anything with Ctrl or Alt.
@@ -313,8 +326,13 @@ func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH 
 				ime.newLine()
 			}
 			ime.report(src.Execute, tag)
-			if ke, ok := termKey(ev); ok && !ts.Shortcut(ke, newTab) {
-				t.Term.Key(ke)
+			if ke, ok := termKey(ev); ok {
+				if z, isZoom := glterm.ZoomKey(ke, *zoom); isZoom {
+					*zoom = z
+					src.Execute(op.InvalidateCmd{})
+				} else if !ts.Shortcut(ke, newTab) {
+					t.Term.Key(ke)
+				}
 			}
 		case pointer.Event:
 			if ev.Kind == pointer.Press {
@@ -330,6 +348,16 @@ func handle(src input.Source, tag *int, ts *glterm.Tabs, s glterm.Strip, stripH 
 			}
 			ev.Position.Y -= float32(stripH)
 			if ev.Source == pointer.Touch {
+				if pinching := pin.on; pin.event(ev, zoom) {
+					if !pinching {
+						for _, me := range tch.abort() {
+							t.Term.Mouse(me)
+						}
+					}
+					*held = ev.Buttons
+					src.Execute(op.InvalidateCmd{})
+					continue
+				}
 				for _, me := range tch.event(ev, now, slop) {
 					t.Term.Mouse(me)
 				}
