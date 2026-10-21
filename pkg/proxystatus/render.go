@@ -355,6 +355,7 @@ func writeLiveRegion(b *strings.Builder, snap Snapshot) {
 	// section of the Snapshot is unset, so the skysocks page is unchanged.
 	writeLayerSection(b, snap)
 	writeSessionsSection(b, snap)
+	writeRequestsSection(b, snap)
 	writeNamesSection(b, snap)
 	writeForwardsSection(b, snap)
 	writeConnsSection(b, snap)
@@ -428,9 +429,9 @@ func writeLayerSection(b *strings.Builder, snap Snapshot) {
 // click-to-copy. Omitted when the surface tracks no dmsg sessions.
 func writeSessionsSection(b *strings.Builder, snap Snapshot) {
 	// Rendered (including its "none connected" state, which is the interesting
-	// case) only for the dmsg surface with a populated layer — no other surface
-	// relays over dmsg sessions.
-	if snap.Surface != SurfaceDmsg || snap.Layer == nil {
+	// case) for the dmsg surface with a populated layer, and on the skywire
+	// surface when it carries the visor's sessions.
+	if (snap.Surface != SurfaceDmsg || snap.Layer == nil) && (snap.Surface != SurfaceSkywire || len(snap.Sessions) == 0) {
 		return
 	}
 	fmt.Fprintf(b, `<section><h2>dmsg sessions <small>%d connected</small></h2>`, len(snap.Sessions))
@@ -514,6 +515,36 @@ func writeForwardsSection(b *strings.Builder, snap Snapshot) {
 
 // writeConnsSection renders the surface's active raw forwarded connections.
 // Omitted when none are open, so an idle page stays short.
+// requestsShown caps the request table; the log keeps more for the JSON view.
+const requestsShown = 50
+
+// writeRequestsSection renders the resolving proxies' recent requests: the
+// host the browser asked for, the layer that took it, how it traveled and
+// how the dial ended.
+func writeRequestsSection(b *strings.Builder, snap Snapshot) {
+	if len(snap.Requests) == 0 {
+		return
+	}
+	fmt.Fprintf(b, `<section><h2>requests <small>%d recent</small></h2>`, len(snap.Requests))
+	b.WriteString(`<table class="strm"><thead><tr><th>age</th><th>layer</th><th>host</th><th>path</th>` +
+		`<th>result</th><th class="num">dial</th></tr></thead><tbody>`)
+	now := time.Now()
+	for i, q := range snap.Requests {
+		if i == requestsShown {
+			break
+		}
+		result := "ok"
+		if q.Err != "" {
+			result = q.Err
+		}
+		fmt.Fprintf(b, `<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="num">%dms</td></tr>`,
+			html.EscapeString(compactAge(now.Sub(q.At).Milliseconds())), html.EscapeString(q.Layer),
+			html.EscapeString(fmt.Sprintf("%s:%d", q.Host, q.Port)), html.EscapeString(orDash(q.Path)),
+			html.EscapeString(result), q.DialMS)
+	}
+	b.WriteString(`</tbody></table></section>`)
+}
+
 func writeConnsSection(b *strings.Builder, snap Snapshot) {
 	if len(snap.Conns) == 0 {
 		return

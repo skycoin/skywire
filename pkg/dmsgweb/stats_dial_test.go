@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 )
 
 // TestSOCKS5CountsDmsgRequests checks that every dial of a .dmsg host is
@@ -22,7 +23,9 @@ import (
 // zero on a live visor before: nothing on the dial path recorded a request.
 func TestSOCKS5CountsDmsgRequests(t *testing.T) {
 	stats := NewStats()
-	skynetDial := func(context.Context, cipher.PubKey, uint16) (net.Conn, error) {
+	requests := proxystatus.NewRequestLog(10)
+	skynetDial := func(ctx context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
+		proxystatus.NotePath(ctx, "direct transport")
 		c, s := net.Pipe()
 		go func() {
 			defer s.Close() //nolint:errcheck
@@ -34,8 +37,8 @@ func TestSOCKS5CountsDmsgRequests(t *testing.T) {
 		return c, nil
 	}
 	port := freePort(t)
-	cfg := Config{DomainSuffix: ".dmsg", ProxyPort: uint(port), Stats: stats, SkynetDial: skynetDial} //nolint:gosec
-	go func() { _ = serveSOCKS5Direct(t.Context(), logging.MustGetLogger("stats-web"), nil, cfg) }()  //nolint:errcheck
+	cfg := Config{DomainSuffix: ".dmsg", ProxyPort: uint(port), Stats: stats, Requests: requests, SkynetDial: skynetDial} //nolint:gosec
+	go func() { _ = serveSOCKS5Direct(t.Context(), logging.MustGetLogger("stats-web"), nil, cfg) }()                      //nolint:errcheck
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", port)
 	waitForListen(t, proxyAddr)
 
@@ -57,4 +60,13 @@ func TestSOCKS5CountsDmsgRequests(t *testing.T) {
 	require.EqualValues(t, 2, snap.TotalRequests, "requests")
 	require.EqualValues(t, 1, snap.Successful, "successful")
 	require.EqualValues(t, 1, snap.Failed, "failed")
+
+	got := requests.Recent("")
+	require.Len(t, got, 2)
+	require.NotEmpty(t, got[0].Err, "the newest request is the failed one")
+	require.Equal(t, "dmsg", got[1].Layer)
+	require.Equal(t, destPK.Hex()+".dmsg", got[1].Host)
+	require.EqualValues(t, 80, got[1].Port)
+	require.Equal(t, "skynet direct transport", got[1].Path)
+	require.Empty(t, got[1].Err)
 }
