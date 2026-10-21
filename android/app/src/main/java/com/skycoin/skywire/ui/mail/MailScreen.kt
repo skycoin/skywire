@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.AlternateEmail
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -669,13 +670,45 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
         }
         items(state.contacts, key = { it.address }) { c ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                    Text(c.name, style = MaterialTheme.typography.bodyLarge)
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        displayAddress(c.address),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        c.name.trim().take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                }
+                Spacer(Modifier.width(12.dp))
+                // The name and the address must not read as two lines of one thing.
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(
+                        c.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.AlternateEmail,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            shortAddress(c.address.trim()),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 IconButton(onClick = { editing = c }) {
                     Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.mail_contact_edit))
@@ -1072,6 +1105,11 @@ private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList(
         val named = VoiceCalls.displayName(pk)
         if (named != VoiceCallWatcher.shortPk(pk)) return named
     }
+    return shortAddress(addr)
+}
+
+/** The address itself with its key cut, never a name for it. */
+private fun shortAddress(addr: String): String {
     val local = addr.substringBefore('@', addr)
     val domain = addr.substringAfter('@', "")
     if (domain.length <= 16) return addr
