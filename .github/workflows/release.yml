@@ -573,6 +573,14 @@ jobs:
           }
           gh release upload "${{ env.RELEASE_TAG }}" @files --repo ${{ github.repository }} --clobber
 
+  android-sh:
+    # The skywire Android app, see android-sh.yml.
+    needs: create-release
+    uses: ./.github/workflows/android-sh.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -596,7 +604,7 @@ jobs:
         shell: bash
 
   create-checksums:
-    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, android-sh]
     runs-on: ubuntu-latest
     steps:
       - name: Download all checksums and create combined file
@@ -621,7 +629,7 @@ jobs:
     # old draft-gating publish step (needs all jobs) never ran. This job is a
     # belt-and-suspenders final pass: it runs regardless of upstream job
     # outcome (if: always()) and re-asserts the published state.
-    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, android-sh, docker, create-checksums]
     if: always()
     runs-on: ubuntu-latest
     steps:

@@ -2,7 +2,7 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race netview-wasm check-netview-wasm
-.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-mobile-x86_64 android-apk android-aab android-apk-debug check-mobile-version
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-mobile-x86_64 android-apk android-aab android-apk-debug android-sh-apk check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci hostbridge-dist
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
@@ -361,6 +361,29 @@ android-aab: ## Build the Android App Bundle (release .aab for Play; APK_VERSION
 
 android-apk-debug: ## Build + the debug-signed APK (installable via adb) — the dev loop's CLI twin of Android Studio Run
 	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleDebug
+
+# The skywire app: skywire sh in a Gio window, built by gogio from the 0magnet
+# Gio fork, which opens with the visor starting as the browser desk does. It
+# is not the Skywire app above. Needs ANDROID_HOME (the newest platform there
+# is the target SDK), ANDROID_NDK_ROOT and a JDK. ANDROID_SH_VERSION=X.Y.Z
+# stamps it, the version code X*1000000+Y*1000+Z. Signed with the keystore
+# ANDROID_SH_KEYSTORE and its password in GOGIO_SIGNPASS, else a debug key.
+GOGIO_VERSION := 332d2dd
+ANDROID_SH_APPID := com.skycoin.skywire.term
+ANDROID_SH_ARCH ?= arm64,amd64
+ANDROID_SH_APK ?= skywire-android.apk
+ANDROID_SH_CODE := $(shell echo '$(ANDROID_SH_VERSION)' | awk -F. 'NF==3 && $$0 ~ /^[0-9]+\.[0-9]+\.[0-9]+$$/ && $$2<1000 && $$3<1000 { print $$1*1000000+$$2*1000+$$3 }')
+
+android-sh-apk: ## Build the skywire app (skywire sh in a window, starting the visor), see the comment above
+	@if [ -n "$(ANDROID_SH_VERSION)" ] && [ -z "$(ANDROID_SH_CODE)" ]; then \
+		echo "ANDROID_SH_VERSION='$(ANDROID_SH_VERSION)' is not X.Y.Z with minor and patch below 1000"; exit 1; fi
+	GOBIN=$(CURDIR)/build/gogio GOFLAGS= go install github.com/0magnet/gio-cmd/gogio@$(GOGIO_VERSION)
+	GOFLAGS=-mod=vendor $(CURDIR)/build/gogio/gogio -target android -arch $(ANDROID_SH_ARCH) -minsdk 26 \
+		-tags withoutsystray -ldflags "-checklinkname=0 $(BUILDINFO)" \
+		-appid $(ANDROID_SH_APPID) -name skywire -o $(ANDROID_SH_APK) \
+		$(if $(ANDROID_SH_CODE),-version $(ANDROID_SH_VERSION).$(ANDROID_SH_CODE)) \
+		$(if $(ANDROID_SH_KEYSTORE),-signkey $(ANDROID_SH_KEYSTORE)) \
+		. sh --window --tab "skywire autoconfig --ishv" --tab "skywire --help"
 
 build-merged-windows: clean-windows
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe .'
