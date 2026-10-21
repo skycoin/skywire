@@ -106,6 +106,9 @@ type Publisher struct {
 	// Config.DropPublishedLeaves).
 	dropLeaves bool
 
+	// keepRoots is how many Roots runCleanup keeps (see Config.KeepRoots).
+	keepRoots int
+
 	batchWindow  time.Duration
 	wakeup       chan struct{}
 	done         chan struct{}
@@ -199,6 +202,11 @@ type Config struct {
 	// and settled, such as one per day.
 	DropPublishedLeaves bool
 
+	// KeepRoots is how many of the newest Roots the cleanup sweep keeps,
+	// so a subscriber still filling an older Root can fetch its objects.
+	// Zero or less keeps one.
+	KeepRoots int
+
 	// sharedAllow is set internally by NewWithDMSG when it builds the
 	// allowState before constructing the CXO node, so the OnSubscribeRemote
 	// closure and the resulting Publisher share the same state. Not
@@ -237,6 +245,9 @@ type PubConfig struct {
 
 	// DropPublishedLeaves, see Config.DropPublishedLeaves.
 	DropPublishedLeaves bool
+
+	// KeepRoots, see Config.KeepRoots.
+	KeepRoots int
 
 	// Dial, when set, is how the node dials peers instead of a plain dmsg
 	// dial (cxotransport.DMSGFactory.Dial).
@@ -302,6 +313,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
+		KeepRoots:           conf.KeepRoots,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -357,6 +369,7 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
+		KeepRoots:           conf.KeepRoots,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -414,6 +427,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		cleanupDone:  make(chan struct{}),
 	}
 	p.dropLeaves = conf.DropPublishedLeaves
+	p.keepRoots = max(conf.KeepRoots, 1)
 	// Hydrate the in-memory tree from the previously-published Root on
 	// the underlying CXO node, if one exists. Without this, every
 	// process restart starts from an empty memNode — the next Put
@@ -1110,7 +1124,7 @@ const cleanupForceInterval = 10 * time.Minute
 
 func (p *Publisher) runCleanup() {
 	c := p.cxoNode.Container()
-	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
+	if err := cxoutils.RemoveRootObjects(c, p.keepRoots); err != nil {
 		p.log.WithError(err).Debug("treestore: RemoveRootObjects failed; will retry next publish")
 		return
 	}

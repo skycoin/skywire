@@ -43,6 +43,10 @@ const RoutingPathPrefix = "routing/"
 // routingPublishInterval is how often the routing shards are recomputed.
 const routingPublishInterval = 60 * time.Second
 
+// routingKeepRoots keeps about five minutes of Roots, so a subscriber whose
+// fill of the changed shards outlasts one publish can still fetch them.
+const routingKeepRoots = 10
+
 // RoutingCXOPublisher publishes the routing feed.
 type RoutingCXOPublisher struct {
 	api *API
@@ -67,6 +71,7 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 		Logger:     log,
 		InMemoryDB: true,
 		DmsgPort:   skyenv.DmsgTPDRoutingCXOPort,
+		KeepRoots:  routingKeepRoots,
 	})
 	if err != nil {
 		return nil, err
