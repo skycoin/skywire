@@ -73,7 +73,7 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
-# github.com/0magnet/gio v0.10.4-0.20261021161935-ee4944b41af4
+# github.com/0magnet/gio v0.10.4-0.20261021172429-4a8790050951
 ## explicit; go 1.24.0
 github.com/0magnet/gio/app
 github.com/0magnet/gio/app/internal/ibus
@@ -171,7 +171,7 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261021162138-c071448a457a
+# github.com/0magnet/progterm v0.0.0-20261021172517-e02bab11eb7e
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
