@@ -10,7 +10,7 @@ import (
 // Flag defaults that come from the SKYENV file are evaluated when the
 // flag is registered, which is this package's init phase. That is early
 // enough to be wrong: `skywire autoconfig` on js/wasm re-enters `config
-// gen` inside the SAME process (autoconfig_exec_js.go), so gen's
+// gen` inside the SAME process (autoconfig_exec_inproc.go), so gen's
 // registrations have already run — with whatever SKYENV resolved to
 // then — before autoconfig points at the file it just wrote. Measured
 // in the browser visor: with WISP=true in /etc/skywire.conf, the

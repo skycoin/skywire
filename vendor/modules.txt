@@ -3,6 +3,10 @@
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
 fyne.io/systray/internal/generated/notifier
+# gioui.org/shader v1.0.9
+## explicit; go 1.16
+gioui.org/shader
+gioui.org/shader/gio
 # github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 ## explicit; go 1.26.0
 github.com/0magnet/afero
@@ -69,6 +73,53 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
+# github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399
+## explicit; go 1.24.0
+github.com/0magnet/gio/app
+github.com/0magnet/gio/app/internal/ibus
+github.com/0magnet/gio/app/internal/windows
+github.com/0magnet/gio/app/internal/xkb
+github.com/0magnet/gio/app/permission/foreground
+github.com/0magnet/gio/f32
+github.com/0magnet/gio/font
+github.com/0magnet/gio/font/gofont
+github.com/0magnet/gio/font/opentype
+github.com/0magnet/gio/gesture
+github.com/0magnet/gio/gpu
+github.com/0magnet/gio/gpu/internal/d3d11
+github.com/0magnet/gio/gpu/internal/driver
+github.com/0magnet/gio/gpu/internal/metal
+github.com/0magnet/gio/gpu/internal/opengl
+github.com/0magnet/gio/gpu/internal/vulkan
+github.com/0magnet/gio/internal/byteslice
+github.com/0magnet/gio/internal/cocoainit
+github.com/0magnet/gio/internal/d3d11
+github.com/0magnet/gio/internal/debug
+github.com/0magnet/gio/internal/egl
+github.com/0magnet/gio/internal/f32
+github.com/0magnet/gio/internal/f32color
+github.com/0magnet/gio/internal/fling
+github.com/0magnet/gio/internal/gl
+github.com/0magnet/gio/internal/ops
+github.com/0magnet/gio/internal/scene
+github.com/0magnet/gio/internal/stroke
+github.com/0magnet/gio/internal/vk
+github.com/0magnet/gio/io/clipboard
+github.com/0magnet/gio/io/event
+github.com/0magnet/gio/io/input
+github.com/0magnet/gio/io/key
+github.com/0magnet/gio/io/pointer
+github.com/0magnet/gio/io/semantic
+github.com/0magnet/gio/io/system
+github.com/0magnet/gio/io/transfer
+github.com/0magnet/gio/layout
+github.com/0magnet/gio/op
+github.com/0magnet/gio/op/clip
+github.com/0magnet/gio/op/paint
+github.com/0magnet/gio/text
+github.com/0magnet/gio/unit
+github.com/0magnet/gio/widget
+github.com/0magnet/gio/widget/material
 # github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb
 ## explicit; go 1.23.0
 github.com/0magnet/go-dsp/dsputils
@@ -121,6 +172,11 @@ github.com/0magnet/plot-go
 # github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
+# github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21
+## explicit; go 1.27.1
+github.com/0magnet/progterm/gioterm
+github.com/0magnet/progterm/glterm
+github.com/0magnet/progterm/x11term
 # github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
@@ -162,7 +218,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261021174048-11d97ed1a6d9
+# github.com/0magnet/websh v0.0.1-0.20261021195704-ed6338761719
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -472,6 +528,21 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
+# github.com/go-text/typesetting v0.3.5
+## explicit; go 1.19
+github.com/go-text/typesetting/bidi
+github.com/go-text/typesetting/di
+github.com/go-text/typesetting/font
+github.com/go-text/typesetting/font/cff
+github.com/go-text/typesetting/font/cff/interpreter
+github.com/go-text/typesetting/font/opentype
+github.com/go-text/typesetting/font/opentype/tables
+github.com/go-text/typesetting/fontscan
+github.com/go-text/typesetting/harfbuzz
+github.com/go-text/typesetting/internal/unicodedata
+github.com/go-text/typesetting/language
+github.com/go-text/typesetting/segmenter
+github.com/go-text/typesetting/shaping
 # github.com/go-viper/mapstructure/v2 v2.5.0
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
@@ -586,6 +657,10 @@ github.com/jaypipes/ghw/pkg/watchdog
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
+# github.com/jezek/xgb v1.3.1
+## explicit; go 1.11
+github.com/jezek/xgb
+github.com/jezek/xgb/xproto
 # github.com/jfreymuth/pulse v0.1.3
 ## explicit; go 1.12
 github.com/jfreymuth/pulse
@@ -1254,14 +1329,39 @@ golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e
 ## explicit; go 1.26.0
 golang.org/x/exp/constraints
+# golang.org/x/exp/shiny v0.0.0-20261014143641-f0251eb4aa3e
+## explicit; go 1.26.0
+golang.org/x/exp/shiny/iconvg
+golang.org/x/exp/shiny/iconvg/internal/gradient
+golang.org/x/exp/shiny/materialdesign/icons
 # golang.org/x/image v0.47.0
 ## explicit; go 1.26.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
+golang.org/x/image/draw
+golang.org/x/image/font
+golang.org/x/image/font/gofont/gobold
+golang.org/x/image/font/gofont/gobolditalic
+golang.org/x/image/font/gofont/goitalic
+golang.org/x/image/font/gofont/gomedium
+golang.org/x/image/font/gofont/gomediumitalic
+golang.org/x/image/font/gofont/gomono
+golang.org/x/image/font/gofont/gomonobold
+golang.org/x/image/font/gofont/gomonobolditalic
+golang.org/x/image/font/gofont/gomonoitalic
+golang.org/x/image/font/gofont/goregular
+golang.org/x/image/font/gofont/gosmallcaps
+golang.org/x/image/font/gofont/gosmallcapsitalic
+golang.org/x/image/font/opentype
+golang.org/x/image/font/sfnt
 golang.org/x/image/internal/safemath
+golang.org/x/image/math/f32
+golang.org/x/image/math/f64
+golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
+golang.org/x/image/vector
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
@@ -1305,6 +1405,7 @@ golang.org/x/term
 # golang.org/x/text v0.43.0
 ## explicit; go 1.26.0
 golang.org/x/text/encoding
+golang.org/x/text/encoding/charmap
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/encoding/unicode
