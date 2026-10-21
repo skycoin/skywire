@@ -379,6 +379,57 @@ func (h *sseHub) forgetPeer(pk string) {
 	}
 }
 
+// forgetMessage drops one message of the 1:1 conversation with pk from both
+// replay rings, so a page that loads after a delete is not handed it back.
+func (h *sseHub) forgetMessage(pk, id string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.replayLen > 0 {
+		kept := make([]string, 0, h.replayLen)
+		start := (h.replayHead - h.replayLen + len(h.replay)) % len(h.replay)
+		for i := 0; i < h.replayLen; i++ {
+			entry := h.replay[(start+i)%len(h.replay)]
+			if !legacySSENamesPeer(entry, pk) || !legacySSENamesMessage(entry, id) {
+				kept = append(kept, entry)
+			}
+		}
+		h.replay = make([]string, len(h.replay))
+		copy(h.replay, kept)
+		h.replayLen = len(kept)
+		h.replayHead = len(kept) % len(h.replay)
+	}
+
+	if h.eventsLen > 0 {
+		kept := make([]chatEvent, 0, h.eventsLen)
+		start := (h.eventsHead - h.eventsLen + len(h.events)) % len(h.events)
+		for i := 0; i < h.eventsLen; i++ {
+			ev := h.events[(start+i)%len(h.events)]
+			if (ev.Channel == channelDM || ev.Channel == channelPair) && (ev.From == pk || ev.To == pk) &&
+				(ev.ID == id || ev.FileID == id) {
+				continue
+			}
+			kept = append(kept, ev)
+		}
+		h.events = make([]chatEvent, len(h.events))
+		copy(h.events, kept)
+		h.eventsLen = len(kept)
+		h.eventsHead = len(kept) % len(h.events)
+	}
+}
+
+// legacySSENamesMessage reports whether a legacy /sse entry is the message id:
+// its own id, or for a file the transfer id.
+func legacySSENamesMessage(entry, id string) bool {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(entry), &m); err != nil {
+		return false
+	}
+	msgID, _ := m["id"].(string)
+	fileID, _ := m["file_id"].(string)
+	return msgID == id || fileID == id
+}
+
 // legacySSENamesPeer reports whether a legacy /sse entry belongs to the 1:1
 // conversation with pk: a DM (no channel key) or a CXO pair message
 // (channel="pair") sent by them, or this side's own outbound mirror to them.

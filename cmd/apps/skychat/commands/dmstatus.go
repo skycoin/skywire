@@ -92,10 +92,16 @@ func sendReadReceipt(ctx context.Context, peer cipher.PubKey, id string) error {
 // so a delete-for-everyone survives a reload instead of coming back the next
 // time a client hydrates from /history. Best-effort and symmetric: both the
 // deleter (deleteHandler) and the recipient (the controller's OnDelete) call
-// it, so neither side keeps bytes the author retracted. No-op when persistence
-// is off.
+// it, so neither side keeps bytes the author retracted. It also leaves the
+// /sse replay ring, which would hand it to the next page load otherwise.
 func forgetPersisted(peer, id string) {
-	if historyStore == nil || id == "" {
+	if id == "" {
+		return
+	}
+	if hub != nil {
+		hub.forgetMessage(peer, id)
+	}
+	if historyStore == nil {
 		return
 	}
 	switch found, err := historyStore.DeleteByID(peer, id); {

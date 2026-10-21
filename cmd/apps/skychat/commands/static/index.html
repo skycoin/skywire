@@ -7251,6 +7251,7 @@
           const before = l.length;
           this.messages[key] = l.filter(x => !(x && this._dmWireId(x) === data.id));
           if (this.messages[key].length !== before) {
+            this._afterRemoval(key);
             this.saveChat(key);
             if (this.activeKey() === key) this._rerenderActive();
           }
@@ -7910,6 +7911,7 @@
         if (!key || !this.messages[key]) return;
         const dropped = this.messages[key].find(m => m && String(m.mid) === String(mid));
         this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
+        this._afterRemoval(key);
         if (this.group) {
           if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
         } else {
@@ -7956,6 +7958,7 @@
           if (!tsNano) { this.showToast(t('Message not yet confirmed — try again in a moment.'), 'error'); return; }
           // Optimistic local removal (+ remember, so a late echo can't re-add it).
           this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
+          this._afterRemoval(gid);
           this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
           this._rerenderActive();
           fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
@@ -7975,6 +7978,7 @@
         if (!id) { this.showToast(t('Message not yet confirmed — try again in a moment.'), 'error'); return; }
         const viaPair = !!m.viaPair;
         this.messages[pk] = list.filter(x => String(x.mid) !== String(mid));
+        this._afterRemoval(pk);
         this.saveChat(pk);
         this._rerenderActive();
         const req = viaPair
@@ -7996,6 +8000,7 @@
         const list = this.messages[gid];
         if (list) {
           this.messages[gid] = list.filter(m => !(String(m.tsNano) === String(tsNano) && (m.sender || '') === by));
+          this._afterRemoval(gid);
           if (this.group === gid) this._rerenderActive();
         }
       }
@@ -15500,6 +15505,23 @@
           this.saveChat(remotePk);
           this.updatePreview(remotePk, msg);
         }
+      }
+
+      // _afterRemoval points a chat row's preview at what is left of the
+      // thread once messages leave it, or at the empty-thread line.
+      _afterRemoval(key) {
+        const last = (this.messages[key] || []).filter(m => m && !m.date).pop();
+        const group = (this.groups || []).find(g => g.id === key);
+        if (last) {
+          if (group) this.updateGroupPreview(key, last); else this.updatePreview(key, last);
+          return;
+        }
+        const rows = group ? '.group-item' : '#recipients .recipient-item, #requests .recipient-item, #pinnedList .recipient-item';
+        document.querySelectorAll(rows).forEach(item => {
+          if ((group ? item.dataset.gid : item.dataset.pk) !== key) return;
+          const el = item.querySelector('.recipient-preview');
+          if (el) el.textContent = group ? this._groupSubtitle(group) : t('New conversation');
+        });
       }
 
       // updatePreview writes the last message under a chat row.
