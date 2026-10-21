@@ -59,6 +59,10 @@ type Options struct {
 	// In and Out are the terminal. Nil means os.Stdin and os.Stdout.
 	In, Out *os.File
 
+	// Run is a command line run first, shown at the first prompt as if typed;
+	// the shell reads the next one from the terminal, as after any other.
+	Run string
+
 	// Signals carries Ctrl+C (os.Interrupt) and Ctrl+\ (SIGQUIT) for a terminal
 	// that is not the process's own, as a window's tab is: its host sends them
 	// here. Nil listens for the process's signals.
@@ -180,8 +184,16 @@ func Run(opt Options) (int, error) {
 	if err := c.runRC(); err != nil {
 		c.write(c.host + ": " + shell.RCFile + ": " + strings.ReplaceAll(err.Error(), "\n", "\r\n") + "\r\n")
 	}
+	first := opt.Run
 	for {
-		line, ok := c.readLine()
+		line, ok := first, true
+		if first != "" {
+			c.writePrompt()
+			c.write(first + "\n") // the terminal is not raw here, so it makes \r\n
+			first = ""
+		} else {
+			line, ok = c.readLine()
+		}
 		if !ok {
 			c.write("\r\n")
 			return 0, nil
