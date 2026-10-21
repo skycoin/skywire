@@ -44,13 +44,13 @@ func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 		name string
 		err  error
 	)
-	if _, perr := setupClientSysPrivileges(); perr != nil {
-		// Without CAP_NET_ADMIN, ask for a password once to set up a tun this
-		// user owns, then run on it. It outlives this run, so later starts
-		// need no prompt.
-		log.WithError(perr).Debug("skydns: no CAP_NET_ADMIN, using the persistent " + SkyDNSTunName)
+	_, perr := setupClientSysPrivileges()
+	if perr != nil || SkyDNSSplitDNS() {
+		// One password prompt sets up a tun that outlives this run. resolved asks
+		// polkit per setting even with CAP_NET_ADMIN, so a fresh tun would prompt five times.
+		log.WithError(perr).Debug("skydns: using the persistent " + SkyDNSTunName)
 		if err := ensureSkyDNSTun(); err != nil {
-			return fmt.Errorf("skydns: no CAP_NET_ADMIN, and setting up %s as root failed: %w", SkyDNSTunName, err)
+			return fmt.Errorf("skydns: setting up %s as root failed: %w", SkyDNSTunName, err)
 		}
 		if tun, err = openSkyDNSTun(); err != nil {
 			return err
