@@ -168,7 +168,7 @@ func (s *MemStore) DeleteByID(peer, id string) (bool, error) {
 	kept := msgs[:0:0]
 	found := false
 	for _, m := range msgs {
-		if m.ID == id {
+		if m.hasID(id) {
 			s.totalBytes -= msgSize(m)
 			found = true
 			continue
