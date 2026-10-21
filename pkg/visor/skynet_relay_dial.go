@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -87,6 +88,7 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 					WithField("relay", relay.String()).
 					WithField("port", port).
 					Debug("Skynet: reached destination via 1-hop relay (no route)")
+				proxystatus.NotePath(ctx, "relay via "+relay.String())
 				winner <- conn
 			} else {
 				conn.Close() //nolint:errcheck,gosec // another relay already won
@@ -224,6 +226,7 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 			conn := &vstreamConn{VStream: stream}
 			if herr := d.handshake(conn, remote, port); herr == nil {
 				d.log.WithField("remote", remote.String()).Debug("dmsg-over-skynet: direct transport")
+				proxystatus.NotePath(ctx, "direct transport")
 				return conn, nil
 			}
 			conn.Close() //nolint:errcheck,gosec

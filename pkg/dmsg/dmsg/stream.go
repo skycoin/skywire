@@ -376,6 +376,12 @@ func (s *Stream) ServerPK() cipher.PubKey {
 	return s.ses.RemotePK()
 }
 
+// Carrier reports how the stream's session reaches its dmsg server, such as
+// "skynet" for a session carried over a skywire transport.
+func (s *Stream) Carrier() string {
+	return s.ses.Carrier()
+}
+
 // StreamID returns the stream ID.
 func (s *Stream) StreamID() uint32 {
 	switch {

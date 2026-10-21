@@ -94,6 +94,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			runtime.skynetDial = v.dmsgWebSkynetDial
 			runtime.homePage = v.homePage
 			v.wireLocalResolverPublish(runtime)
+			v.wireResolverRequests(runtime)
 			v.embeddedDmsgWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -126,6 +127,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			log := logging.MustGetLogger("embedded_skynetweb")
 			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
 			v.wireLocalResolverPublish(runtime)
+			v.wireResolverRequests(runtime)
 			v.embeddedSkynetWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -329,6 +331,7 @@ func (v *Visor) autoStartSkynetWeb() {
 		log := logging.MustGetLogger("embedded_skynetweb")
 		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
 		v.wireLocalResolverPublish(runtime)
+		v.wireResolverRequests(runtime)
 		v.embeddedSkynetWeb = runtime
 	}
 	v.initLock.Unlock()
