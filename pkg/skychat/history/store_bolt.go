@@ -240,7 +240,7 @@ func (s *BoltStore) DeleteByID(peer, id string) (bool, error) {
 			if err := json.Unmarshal(v, &msg); err != nil {
 				continue
 			}
-			if msg.ID != id {
+			if !msg.hasID(id) {
 				continue
 			}
 			kk := make([]byte, len(k))
