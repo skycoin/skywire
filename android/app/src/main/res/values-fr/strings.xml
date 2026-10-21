@@ -895,6 +895,9 @@
     <string name="help_hub_title">À propos d’Applications</string>
     <string name="help_hub_body">Tout ce que votre visor peut exécuter, au même endroit. Une tuile ouvre l’écran propre de l’application ; le visor continue de tourner dessous, quel que soit celui que vous regardez.\n\nSkySOCKS et SkyVPN envoient d’autres trafics via le réseau, SkyDEX négocie, SkyChat envoie des messages, SkyMail transporte le courrier entre visors et Fleet surveille les visors que vous faites tourner ailleurs. Une tuile grisée n’est pas encore construite.</string>
 
+    <string name="wallet_web_unreachable">Le portefeuille ne tourne pas encore. Il démarre avec Skywire.</string>
+    <string name="wallet_previous">Ancien portefeuille</string>
+    <string name="wallet_web_retry">Réessayer</string>
     <string name="help_wallet_title">À propos du Portefeuille</string>
     <string name="help_wallet_body">Skycoin, les Fibercoins qui partagent son logiciel de nœud, et Bitcoin — le tout détenu par des clés générées sur ce téléphone et qui ne le quittent jamais. Skywire ne les voit jamais et elles ne sont jamais envoyées au réseau.\n\nLes douze mots de récupération sont le portefeuille. Quiconque les lit peut dépenser les pièces depuis n’importe quel appareil sans votre téléphone, et si vous les perdez, personne ne peut récupérer le portefeuille pour vous — ni nous, ni personne.\n\nLes soldes et l’historique viennent du nœud vers lequel chaque pièce pointe : une pièce dont le nœud est injoignable affiche son dernier solde connu et n’envoie pas.</string>
 

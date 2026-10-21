@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
+	swc "github.com/skycoin/skywire/cmd/apps/skycoin-web/commands"
 	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
 	sdns "github.com/skycoin/skywire/cmd/apps/skydns/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -37,7 +38,7 @@ var RootCmd = &cobra.Command{
 	Use:   "skywire-mobile",
 	Short: "Skywire mobile core (visor + config + client apps)",
 	Long: `skywire-mobile — the lite skywire core for the mobile app:
-the visor, config generation, and the skychat / skysocks-client /
+the visor, config generation, and the skychat / skycoin-web / skysocks-client /
 vpn-client / skydex-client apps in one binary. Apps run in-process
 inside the visor by default; 'app <name>' runs one standalone
 (the launcher's exec fallback).`,
@@ -56,7 +57,7 @@ var appsCmd = &cobra.Command{
 }
 
 func init() {
-	appsCmd.AddCommand(sc.RootCmd, sdns.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
+	appsCmd.AddCommand(sc.RootCmd, swc.RootCmd, sdns.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
 	RootCmd.AddCommand(visor.RootCmd, cliconfig.RootCmd, appsCmd)
 	// visor.RootCmd computes its Use from os.Args[0]; pin the mounted name —
 	// the same post-mount rename cmd/skywire/commands does.

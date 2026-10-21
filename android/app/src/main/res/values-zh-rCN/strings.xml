@@ -809,6 +809,9 @@
     <string name="help_hub_title">关于应用</string>
     <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，SkyMail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
 
+    <string name="wallet_web_unreachable">钱包尚未运行。它会随 Skywire 一起启动。</string>
+    <string name="wallet_previous">旧钱包</string>
+    <string name="wallet_web_retry">重试</string>
     <string name="help_wallet_title">关于钱包</string>
     <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
 
