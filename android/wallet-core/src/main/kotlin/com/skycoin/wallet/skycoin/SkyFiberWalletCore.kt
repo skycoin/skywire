@@ -125,6 +125,11 @@ class SkyFiberWalletCore(
             } else {
                 txn.outputs.firstOrNull { it.dst !in ours }?.dst
             }
+            val own = if (incoming) {
+                txn.outputs.map { it.dst }.filter { it in ours }
+            } else {
+                txn.inputs.map { it.owner }.filter { it in ours }
+            }.distinct()
             val ts = if (txn.timestamp > 0uL) txn.timestamp.toLong() else entry.time.toLong()
             TxRecord(
                 txid = txn.txid,
@@ -135,6 +140,7 @@ class SkyFiberWalletCore(
                 confirmed = entry.status.confirmed,
                 confirmations = entry.status.height.toLong(),
                 fee = txn.fee,
+                own = own,
             )
         }.sortedWith(compareBy<TxRecord> { it.confirmed }.thenByDescending { it.timestamp })
     }

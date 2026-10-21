@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +59,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /** "2GgFvq…7uQ" — how every address is shown outside copy/share. */
 fun shortAddress(address: String, head: Int = 8, tail: Int = 6): String =
@@ -101,9 +103,19 @@ fun dayLabel(timestamp: Long): String {
     }
 }
 
-fun timeLabel(timestamp: Long): String =
-    Instant.ofEpochSecond(timestamp).atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("HH:mm"))
+/** Date and time in full, year and seconds included, in the app's language. */
+@Composable
+fun fullDateTime(timestamp: Long): String =
+    Instant.ofEpochSecond(timestamp).atZone(ZoneId.systemDefault()).format(
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(LocalConfiguration.current.locales[0]),
+    )
+
+/** The first of the wallet's own addresses a transaction used, and how many more. */
+fun ownAddressLabel(tx: CachedTx): String? {
+    val first = tx.own.firstOrNull() ?: return null
+    val more = tx.own.size - 1
+    return shortAddress(first, 6, 4) + if (more > 0) " +$more" else ""
+}
 
 /** One transaction row — recent activity and full history share it. */
 @Composable
@@ -179,20 +191,31 @@ fun TxRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            Column(horizontalAlignment = Alignment.End) {
+                ownAddressLabel(tx)?.let {
+                    Text(
+                        stringResource(
+                            if (tx.incoming) R.string.wallet_own_received_line else R.string.wallet_own_sent_line,
+                            it,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
-                    text = (if (tx.incoming) "+" else "−") + coin.amountText(tx.amount),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = txColor(tx),
-                )
-                Text(
-                    timeLabel(tx.timestamp),
+                    fullDateTime(tx.timestamp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
+            Text(
+                text = (if (tx.incoming) "+" else "−") + coin.amountText(tx.amount),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = txColor(tx),
+            )
         }
     }
 }

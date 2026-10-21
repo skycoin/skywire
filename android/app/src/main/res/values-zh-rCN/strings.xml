@@ -633,6 +633,8 @@
     <string name="wallet_from_line">来自 %1$s · %2$s</string>
     <string name="wallet_to_line">发往 %1$s · %2$s</string>
     <string name="wallet_self_line">钱包内部转账 · %1$s</string>
+    <string name="wallet_own_sent_line">发出地址 %1$s</string>
+    <string name="wallet_own_received_line">接收地址 %1$s</string>
 
     <string name="wallet_receive_title">接收</string>
     <string name="wallet_receive_only">只能向该地址转入 %1$s。</string>
@@ -733,6 +735,8 @@
     <string name="wallet_tx_from">来自</string>
     <string name="wallet_tx_to">发往</string>
     <string name="wallet_tx_wallet">钱包</string>
+    <string name="wallet_tx_sent_from">发出地址</string>
+    <string name="wallet_tx_received_at">接收地址</string>
     <string name="wallet_tx_date">日期</string>
     <string name="wallet_tx_fee">手续费</string>
     <string name="wallet_tx_confirmations">确认数</string>
