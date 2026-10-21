@@ -30,6 +30,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // HelpWidth is the column the flag block wraps at.
@@ -40,6 +42,19 @@ import (
 // the window makes all of those differ for no reason the reader can see. 80 is
 // the width every terminal still opens at.
 const HelpWidth = 80
+
+// helpTerminal is where help is shown: whether a terminal that takes color,
+// and how wide. A variable so tests can stand in for a person at a terminal.
+var helpTerminal = cmdutil.Terminal
+
+// helpWidth is HelpWidth, or a terminal's width where help is shown on one
+// narrower than that, which would otherwise wrap each long line a second time.
+func helpWidth() int {
+	if _, cols := helpTerminal(); cols > 0 && cols < HelpWidth {
+		return cols
+	}
+	return HelpWidth
+}
 
 // descCap is how far right the description column may be pushed.
 //
@@ -80,7 +95,7 @@ func FlagBlock(fs *pflag.FlagSet) string {
 	}
 
 	descCol := descColumn(rows)
-	descWidth := HelpWidth - descCol
+	descWidth := helpWidth() - descCol
 	if descWidth < descFloor {
 		descWidth = descFloor
 	}

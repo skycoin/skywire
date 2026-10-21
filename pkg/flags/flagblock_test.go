@@ -187,3 +187,15 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// TestHelpWidthFitsANarrowTerminal: help keeps its 80 columns everywhere but
+// on a terminal narrower than that, a phone's, where each long line would
+// otherwise be wrapped a second time by the terminal.
+func TestHelpWidthFitsANarrowTerminal(t *testing.T) {
+	for _, c := range []struct{ cols, want int }{{0, HelpWidth}, {51, 51}, {200, HelpWidth}} {
+		asTerminal(t, c.cols)
+		if got := helpWidth(); got != c.want {
+			t.Errorf("on %d columns help is %d wide, want %d", c.cols, got, c.want)
+		}
+	}
+}
