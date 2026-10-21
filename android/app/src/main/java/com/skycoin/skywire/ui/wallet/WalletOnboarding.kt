@@ -277,6 +277,8 @@ fun WalletRestoreScreen(
     }
 
     val target = if (words.size > 12) 24 else 12
+    // Until a 13th word settles it, the phrase may be either length.
+    val targetLabel = if (target == 24) "24" else "12/24"
 
     fun addWord(word: String) {
         val w = word.trim().lowercase()
@@ -337,7 +339,7 @@ fun WalletRestoreScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), target),
+                        stringResource(R.string.wallet_restore_progress, (words.size + 1).coerceAtMost(target), targetLabel),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

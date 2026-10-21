@@ -541,7 +541,7 @@
     <string name="wallet_intro_create">Créer un portefeuille</string>
     <string name="wallet_intro_create_sub">Générer une nouvelle phrase de récupération</string>
     <string name="wallet_intro_restore">Restaurer depuis une phrase</string>
-    <string name="wallet_intro_restore_sub">Saisissez une phrase existante de 12 mots</string>
+    <string name="wallet_intro_restore_sub">Saisissez une phrase existante de 12 ou 24 mots</string>
 
     <string name="wallet_seed_title">Phrase de récupération</string>
     <string name="wallet_seed_body">Écrivez ces douze mots dans l’ordre et gardez-les hors ligne. Quiconque les détient peut dépenser vos pièces.</string>
@@ -559,16 +559,16 @@
     <string name="wallet_verify_done">Portefeuille activé</string>
 
     <string name="wallet_restore_title">Restaurer le portefeuille</string>
-    <string name="wallet_restore_progress">Mot %1$d sur %2$d</string>
+    <string name="wallet_restore_progress">Mot %1$d sur %2$s</string>
     <string name="wallet_restore_paste">Coller la phrase entière</string>
     <string name="wallet_restore_pasted">Douze mots lus depuis le presse-papiers</string>
     <string name="wallet_restore_hint">Mot suivant</string>
     <string name="wallet_restore_wordlist_note">Les suggestions viennent de la liste BIP39 conservée sur l’appareil. Rien de ce que vous tapez n’est envoyé nulle part.</string>
     <string name="wallet_restore_action">Restaurer le portefeuille</string>
-    <string name="wallet_restore_checksum">Cette phrase échoue à sa somme de contrôle. Un des douze mots est faux ou mal ordonné.</string>
+    <string name="wallet_restore_checksum">Cette phrase échoue à sa somme de contrôle. Un des mots est faux ou mal ordonné.</string>
     <string name="wallet_restore_legacy">Cette phrase ne porte pas de somme de contrôle — les anciens portefeuilles écrivaient leurs graines ainsi, elle peut donc quand même être bonne. Vérifiez chaque mot, puis appuyez de nouveau pour restaurer quand même.</string>
     <string name="wallet_restore_anyway">Restaurer quand même</string>
-    <string name="wallet_restore_short">Seulement %1$d mots sur 12 saisis. Une graine se restaure en entier ou pas du tout.</string>
+    <string name="wallet_restore_short">Une graine compte 12 ou 24 mots, celle-ci en compte %1$d. Elle se restaure en entier ou pas du tout.</string>
     <string name="wallet_restore_done">Portefeuille restauré. Recherche des soldes.</string>
     <string name="wallet_restore_scanning">Restauration et recherche des soldes…</string>
     <string name="wallet_lock_required_body">Ce portefeuille est protégé par le verrouillage d’écran du téléphone. Sans lui, quiconque tient le téléphone pourrait voir votre phrase de récupération et envoyer vos pièces. Définissez un code PIN, un schéma ou un mot de passe, puis revenez.</string>
