@@ -105,7 +105,11 @@ type EmbeddedDmsgWeb struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	parentCtx context.Context // captured so Start() without args still works after construction
+
+	requests *proxystatus.RequestLog
 }
+
+func (e *EmbeddedDmsgWeb) setRequestLog(l *proxystatus.RequestLog) { e.requests = l }
 
 // newEmbeddedDmsgWeb is the constructor used by initEmbeddedDmsgWeb.
 // Stats starts counting from construction, so UI can distinguish
@@ -268,6 +272,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		UpstreamRules: e.cfg.UpstreamRules,
 		Stats:         e.stats,
+		Requests:      e.requests,
 	}
 
 	// Self-loopback: serve requests for THIS visor's own PK in-process
@@ -544,6 +549,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
 	runtime := newEmbeddedDmsgWeb(ctx, resolverC, v.dmsgDC, resolverPK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 	v.wireLocalResolverPublish(runtime)
+	v.wireResolverRequests(runtime)
 	runtime.statusProvider = v.proxyStatusProvider()
 	if resolverC == v.dmsgC {
 		runtime.skynetDial = v.dmsgWebSkynetDial

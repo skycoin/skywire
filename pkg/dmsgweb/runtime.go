@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
@@ -111,6 +112,9 @@ type Config struct {
 	// "direct", ahead of UpstreamSOCKS.
 	UpstreamRules []proxyroute.Rule
 
+	// Requests, when non-nil, records every .dmsg dial with the path it took,
+	// for the status pages. The visor shares one log across its resolvers.
+	Requests *proxystatus.RequestLog
 	// Stats, when non-nil, is updated for every SOCKS5 dial. The visor
 	// layer allocates one per resolver lifetime so counters persist
 	// across Start/Stop cycles.
@@ -524,6 +528,15 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 
 				done := cfg.Stats.RecordRequest()
 				defer func() { done(dialErr) }()
+				start, path := time.Now(), ""
+				defer func() {
+					r := proxystatus.Request{At: start, Layer: "dmsg", Host: origHost, Port: uint16(port), Path: path, //nolint:gosec // ParseUint with bitSize 16
+						DialMS: time.Since(start).Milliseconds()}
+					if dialErr != nil {
+						r.Err = dialErr.Error()
+					}
+					cfg.Requests.Add(r)
+				}()
 
 				dstAddr := dmsg.Addr{PK: dest, Port: dialPort}
 				var stream net.Conn
@@ -540,6 +553,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					if serr != nil {
 						return nil, fmt.Errorf("direct session to dmsg server %s: %w", dest, serr)
 					}
+					path = "dmsg direct to server " + dest.Hex()
 					str, derr := ses.DialStream(ctx, dstAddr)
 					if derr != nil {
 						return nil, derr
@@ -563,25 +577,31 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					// a relay-attached client has no discovery to resolve the
 					// pinned server's address with, and does not need one —
 					// its relay resolves the destination itself. See its doc.
+					path = "dmsg pinned via " + serverPK.Hex()
 					str, derr := dmsgC.DialStreamVia(ctx, serverPK, dstAddr)
 					if derr != nil {
 						return nil, derr
 					}
 					stream = str
+					path = dmsgPath(str, path)
 				default:
 					if cfg.SkynetDial != nil {
-						if c, serr := cfg.SkynetDial(ctx, dest, dialPort); serr == nil {
+						sctx, note := proxystatus.WithPathNote(ctx)
+						if c, serr := cfg.SkynetDial(sctx, dest, dialPort); serr == nil {
 							log.WithField("port", port).Debug("SOCKS5 → DMSG over skynet")
+							path = "skynet " + orUnknown(note.String())
 							stream = c
 							break
 						}
 					}
 					log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
+					path = "dmsg"
 					c, derr := dmsgC.Dial(ctx, dstAddr)
 					if derr != nil {
 						return nil, derr
 					}
 					stream = c
+					path = dmsgPath(c, path)
 				}
 
 				// Rewrite the Host header to the vhost (the labels before the
@@ -722,6 +742,26 @@ func dmsgRedialProbe(dmsgC *dmsg.Client, upstream *proxyroute.Forwarder, cfg Con
 		}
 		return e
 	}
+}
+
+// dmsgPath names the dmsg server a stream went through and how its session
+// reaches that server, or returns def for a conn that does not say.
+func dmsgPath(c net.Conn, def string) string {
+	s, ok := c.(interface {
+		ServerPK() cipher.PubKey
+		Carrier() string
+	})
+	if !ok {
+		return def
+	}
+	return "dmsg via " + s.ServerPK().Hex() + " over " + orUnknown(s.Carrier())
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
 }
 
 // Context keys used by the SOCKS5 resolver ↔ Dial callback handshake.

@@ -851,7 +851,7 @@ func meshStatusSurface(host, suffix string) (proxystatus.Surface, bool) {
 		return "", false
 	}
 	switch proxystatus.Surface(rest) {
-	case proxystatus.SurfaceDmsg, proxystatus.SurfaceSkynet, proxystatus.SurfaceSkysocks:
+	case proxystatus.SurfaceDmsg, proxystatus.SurfaceSkynet, proxystatus.SurfaceSkysocks, proxystatus.SurfaceSkywire:
 		return proxystatus.Surface(rest), true
 	default:
 		return "", false

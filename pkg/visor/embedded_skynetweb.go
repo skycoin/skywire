@@ -74,7 +74,11 @@ type EmbeddedSkynetWeb struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	parentCtx context.Context
+
+	requests *proxystatus.RequestLog
 }
+
+func (e *EmbeddedSkynetWeb) setRequestLog(l *proxystatus.RequestLog) { e.requests = l }
 
 func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), selfDialAs func(uint16, cipher.PubKey) (net.Conn, error), cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
@@ -219,6 +223,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		UpstreamRules: e.cfg.UpstreamRules,
 		Stats:         e.stats,
+		Requests:      e.requests,
 	}
 
 	// Self-loopback: serve requests for THIS visor's own PK in-process
@@ -331,6 +336,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	// exact forward+reverse hops and dial them, bypassing the direct-transport
 	// fast path and the route-finder. Single-path only (no mux).
 	if len(route) > 0 {
+		proxystatus.NotePath(ctx, fmt.Sprintf("source route, %d hops", len(route)+1))
 		return d.dialSourceRoute(ctx, remote, port, route)
 	}
 
@@ -358,6 +364,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 				conn.Close() //nolint:errcheck,gosec
 				return nil, err
 			}
+			proxystatus.NotePath(ctx, "direct transport")
 			return conn, nil
 		}
 		// No direct transport (dial failed) — try a 1-hop relay (a peer we
@@ -387,6 +394,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 				_ = stream.Close() //nolint:errcheck,gosec
 				return nil, hErr
 			}
+			proxystatus.NotePath(ctx, "held route")
 			return stream, nil
 		}
 		if !errors.Is(err, skyroute.ErrNoMux) {
@@ -411,6 +419,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		_ = conn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
+	proxystatus.NotePath(ctx, "route")
 	return conn, nil
 }
 
@@ -617,6 +626,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
 	v.wireLocalResolverPublish(runtime)
+	v.wireResolverRequests(runtime)
 	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime

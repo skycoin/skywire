@@ -35,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -255,6 +256,8 @@ type Visor struct {
 	// Seeded from config; extended at runtime when a connected
 	// hypervisor pushes its own hypervisors. See peer_whitelist.go.
 	peerWhitelist pty.Whitelist
+	// requestLog keeps the resolving proxies' recent requests for the status pages.
+	requestLog *proxystatus.RequestLog
 
 	// hvPair is the hypervisor pairing state (pairing_hv.go), made on first use.
 	hvPairOnce sync.Once
@@ -889,6 +892,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		isTransportabilityHealthy: newInternalHealthInfo(),
 		connectedHypervisors:      make(map[cipher.PubKey]bool),
 		peerWhitelist:             newPeerWhitelist(conf),
+		requestLog:                proxystatus.NewRequestLog(statusRequestsKept),
 		hypervisorCancels:         make(map[cipher.PubKey]context.CancelFunc),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),
