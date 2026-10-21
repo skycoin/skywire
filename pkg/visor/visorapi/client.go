@@ -2023,6 +2023,11 @@ func (rc *rpcClient) VoiceDialing() ([]VoiceDialingInfo, error) {
 	return out, err
 }
 
+// VoiceSetBlocked implements API.
+func (rc *rpcClient) VoiceSetBlocked(peers []cipher.PubKey) error {
+	return rc.Call("VoiceSetBlocked", &peers, &struct{}{})
+}
+
 // VoiceSetRingback implements API.
 func (rc *rpcClient) VoiceSetRingback(tone VoiceRingback) error {
 	return rc.Call("VoiceSetRingback", &tone, &struct{}{})

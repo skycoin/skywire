@@ -248,6 +248,9 @@ type Chat interface {
 	VoiceSetRingback(tone VoiceRingback) error
 	// VoiceRingback returns this visor's own ringback tone.
 	VoiceRingback() (VoiceRingback, error)
+	// VoiceSetBlocked replaces the callers whose calls never ring here. Skychat
+	// owns the block list and hands it over.
+	VoiceSetBlocked(peers []cipher.PubKey) error
 	// VoiceDialRingback returns the ringback tone the peer of an outbound
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)

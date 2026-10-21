@@ -91,6 +91,16 @@ func (v *Visor) VoiceDecline(callID string) error {
 	return v.voice.Decline(callID)
 }
 
+// VoiceSetBlocked replaces the callers whose calls never ring here: they hear
+// an ordinary ring that goes unanswered. See call.Manager.SetBlocked.
+func (v *Visor) VoiceSetBlocked(peers []cipher.PubKey) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	v.voice.SetBlocked(peers)
+	return nil
+}
+
 // VoiceIncoming returns the ringing inbound calls awaiting an answer, each
 // formatted as "<call-id> from <peer-pk>".
 func (v *Visor) VoiceIncoming() ([]string, error) {

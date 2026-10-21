@@ -197,3 +197,41 @@ func TestPrivacy_UnacceptEndsConsent(t *testing.T) {
 		t.Fatalf("blocked stays blocked: %v, want Reject", got)
 	}
 }
+
+type blockAPI struct {
+	visorAPIShim
+	pushes [][]cipher.PubKey
+}
+
+func (a *blockAPI) VoiceSetBlocked(peers []cipher.PubKey) error {
+	a.pushes = append(a.pushes, peers)
+	return nil
+}
+
+// The visor learns the block list on a change, and again each minute in case
+// it restarted, so a blocked caller never rings here.
+func TestPrivacy_BlockListReachesTheVisor(t *testing.T) {
+	withPrivacyStore(t)
+	prev := blockedPush
+	t.Cleanup(func() { blockedPush = prev })
+	blockedPush.list, blockedPush.at = nil, time.Time{}
+	fake := &blockAPI{}
+	withPairRPC(t, fake)
+
+	now := time.Now()
+	pushBlockedCallers(now)
+	blocked, _ := cipher.GenerateKeyPair()
+	if err := privacyStore.SetBlocked(blocked.Hex(), true); err != nil {
+		t.Fatal(err)
+	}
+	pushBlockedCallers(now.Add(time.Second))
+	pushBlockedCallers(now.Add(2 * time.Second))
+	pushBlockedCallers(now.Add(time.Second + blockedPushEvery))
+
+	if len(fake.pushes) != 3 {
+		t.Fatalf("pushes = %d, want 3 (first, the change, the minute refresh)", len(fake.pushes))
+	}
+	if got := fake.pushes[1]; len(got) != 1 || got[0] != blocked {
+		t.Fatalf("pushed %v, want [%s]", got, blocked.Hex())
+	}
+}

@@ -21,10 +21,12 @@ package commands
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/privacy"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -152,7 +154,38 @@ func watchMissedCalls(ctx context.Context) {
 			// one currently in progress.
 			continue
 		}
+		pushBlockedCallers(time.Now())
 		resolveCalls(seen, declineBlockedCalls(incoming), active, time.Now(), recordCall)
+	}
+}
+
+// blockedPushEvery re-sends an unchanged block list, for a visor that restarted
+// and lost it.
+const blockedPushEvery = time.Minute
+
+// blockedPush is what the visor was last sent, and when.
+var blockedPush struct {
+	list []string
+	at   time.Time
+}
+
+// pushBlockedCallers hands the block list to the visor, which then never rings
+// for those callers. declineBlockedCalls stays as the fallback for an older visor.
+func pushBlockedCallers(now time.Time) {
+	list := privacyStore.BlockedList()
+	if slices.Equal(list, blockedPush.list) && now.Sub(blockedPush.at) < blockedPushEvery {
+		return
+	}
+	blockedPush.list, blockedPush.at = list, now
+	pks := make([]cipher.PubKey, 0, len(list))
+	for _, h := range list {
+		var pk cipher.PubKey
+		if pk.Set(h) == nil {
+			pks = append(pks, pk)
+		}
+	}
+	if err := pairRPCCall("VoiceSetBlocked", func(c visorapi.API) error { return c.VoiceSetBlocked(pks) }); err != nil && chatLog != nil {
+		chatLog.Debugf("voice: could not hand the block list to the visor: %v", err)
 	}
 }
 
