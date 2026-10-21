@@ -110,6 +110,10 @@ const clientsByServerBatchVersion = 1
 // publishers run 60s; this sits between that and the old 1s.)
 const clientsByServerCXOBatchWindow = 30 * time.Second
 
+// clientsByServerKeepRoots keeps about five minutes of Roots, so a subscriber
+// whose fill outlasts one publish can still fetch the objects it needs.
+const clientsByServerKeepRoots = 10
+
 // clientsByServerFlushWindow coalesces the per-server LEAF re-encode (sort +
 // concat + gzip in encodeClientsBatch) the way BatchWindow coalesces the
 // whole-tree publish. Without it, flushServers re-gzipped an affected server's
@@ -183,6 +187,7 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 		Logger:      log,
 		InMemoryDB:  true, // recomputed from redis on every mutation
 		DmsgPort:    skyenv.DmsgDMSGDClientsByServerCXOPort,
+		KeepRoots:   clientsByServerKeepRoots,
 		BatchWindow: clientsByServerCXOBatchWindow, // coarse: this feed only drives network-viz; avoids per-second whole-tree re-encode (see const doc)
 	})
 	if err != nil {
