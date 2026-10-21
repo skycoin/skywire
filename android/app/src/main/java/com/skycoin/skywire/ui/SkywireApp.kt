@@ -71,6 +71,9 @@ import com.skycoin.skywire.ui.hub.HubScreen
 import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
+import com.skycoin.skywire.ui.navigation.TAB_ORDER
+import com.skycoin.skywire.ui.navigation.tabSwipe
+import com.skycoin.skywire.ui.navigation.tabSwipeHeld
 import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
@@ -181,7 +184,15 @@ fun SkywireApp() {
             // keyboard inset it is measured from.
             modifier = Modifier
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
+                .consumeWindowInsets(innerPadding)
+                .tabSwipe(enabled = currentRoute in TAB_ORDER && !tabSwipeHeld.value) { next ->
+                    val at = TAB_ORDER.indexOf(currentRoute)
+                    when (val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)) {
+                        null -> Unit
+                        Routes.HUB -> navController.navigateToHub()
+                        else -> navController.navigateToTab(to)
+                    }
+                },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
