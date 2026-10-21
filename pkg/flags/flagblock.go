@@ -30,6 +30,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
 // HelpWidth is the column the flag block wraps at.
@@ -40,6 +42,19 @@ import (
 // the window makes all of those differ for no reason the reader can see. 80 is
 // the width every terminal still opens at.
 const HelpWidth = 80
+
+// helpTerminal is where help is shown: whether a terminal that takes color,
+// and how wide. A variable so tests can stand in for a person at a terminal.
+var helpTerminal = cmdutil.Terminal
+
+// helpWidth is HelpWidth, or a terminal's width where help is shown on one
+// narrower than that, which would otherwise wrap each long line a second time.
+func helpWidth() int {
+	if _, cols := helpTerminal(); cols > 0 && cols < HelpWidth {
+		return cols
+	}
+	return HelpWidth
+}
 
 // descCap is how far right the description column may be pushed.
 //
@@ -53,6 +68,10 @@ const descCap = 34
 // worse than leaving it long. Below this, words break in places that read
 // worse than an over-long line.
 const descFloor = 24
+
+// narrowDescCol is the description column where the terminal is too narrow
+// for one beside the flags, every description then on the lines under its flag.
+const narrowDescCol = 6
 
 // specGap is the gap between the longest flag spec and the description column.
 const specGap = 2
@@ -79,11 +98,14 @@ func FlagBlock(fs *pflag.FlagSet) string {
 		return ""
 	}
 
+	width := helpWidth()
 	descCol := descColumn(rows)
-	descWidth := HelpWidth - descCol
-	if descWidth < descFloor {
-		descWidth = descFloor
+	if width-descCol < max(descFloor, longestWord(rows)) {
+		// Too narrow for two columns, as on a phone: every description goes
+		// under its flag, as a long spec's does, so no word is broken.
+		descCol = narrowDescCol
 	}
+	descWidth := max(width-descCol, descFloor)
 
 	var b strings.Builder
 	for _, r := range rows {
@@ -305,4 +327,18 @@ func isAllZeros(s string) bool {
 		return false
 	}
 	return strings.Trim(s, "0") == ""
+}
+
+// longestWord is the widest word in any description, which a column narrower
+// than it could only break.
+func longestWord(rows []row) int {
+	n := 0
+	for _, r := range rows {
+		for _, s := range append([]string{r.usage}, r.extras...) {
+			for _, w := range strings.Fields(s) {
+				n = max(n, len(w))
+			}
+		}
+	}
+	return n
 }

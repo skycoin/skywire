@@ -12,7 +12,7 @@
 //
 // SKYDEPLOY is honored when a command is given it in its environment, as
 // natively. A browser visor started by autoconfig loads the SKYDEPLOY of
-// its skywire.conf instead (cmd/skywire/commands/autoconfig_exec_js.go).
+// its skywire.conf instead (cmd/skywire/commands/autoconfig_exec_inproc.go).
 package deployment
 
 import (

@@ -1,8 +1,9 @@
-//go:build js
+//go:build js || android
 
-// Package commands cmd/skywire/commands/autoconfig_exec_js.go c4-vis-cli
+// Package commands cmd/skywire/commands/autoconfig_exec_inproc.go c4-vis-cli
 //
-// js/wasm half of the autoconfig process-management seam. The browser
+// js/wasm half of the autoconfig process-management seam, used on Android too,
+// where an app cannot exec its own binary. The browser
 // has no subprocesses and no init system, so the native strategy —
 // re-invoke this binary for config gen and hand the visor to systemd —
 // doesn't translate. Instead:
@@ -29,6 +30,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -58,7 +60,12 @@ func selfRewardAddress() ([]byte, error) {
 // extraGenArgs appends --nofetch under js: the services-config URL is
 // not reachable cross-origin from a browser page, and the fetch
 // failure path lands on the embedded defaults anyway — skip the stall.
-func extraGenArgs() []string { return []string{"--nofetch"} }
+func extraGenArgs() []string {
+	if runtime.GOOS != "js" {
+		return nil
+	}
+	return []string{"--nofetch"}
+}
 
 // execConfigGen re-enters the command tree in-process with the
 // assembled `cli config gen` args. SKYENV is exported first so gen

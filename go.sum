@@ -54,8 +54,13 @@ cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RX
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3fOKtUw0Xmo=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d h1:ARo7NCVvN2NdhLlJE9xAbKweuI9L6UgfTbYb0YwPacY=
+eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d/go.mod h1:OYVuxibdk9OSLX8vAqydtRPP87PyTFcT9uH3MlEGBQA=
 fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 h1:149/+Wa5EsLLXfyj2pdTmvnQf2VIlgCIwSjcCTHYhIo=
 fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4/go.mod h1:RVwqP9nYMo7h5zViCBHri2FgjXF7H2cub7MAq4NSoLs=
+gioui.org/cpu v0.0.0-20210808092351-bfe733dd3334/go.mod h1:A8M0Cn5o+vY5LTMlnRoK3O5kG+rH0kWfJjeKd9QpBmQ=
+gioui.org/shader v1.0.9 h1:XxnqIfmClWpN49kizxH2W0JcCFrrEP4q3jZmNYaltbs=
+gioui.org/shader v1.0.9/go.mod h1:mWdiME581d/kV7/iEhLmUgUK5iZ09XR5XpduXzbePVM=
 github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992 h1:pZAOYtc0bq6O2bND5d/QRt9k1rctn24XrEJocleRqAw=
 github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992/go.mod h1:NSftFi+9304TBnW2Le6Vd3q19YrVL3CbErMOMDmPxmU=
 github.com/0magnet/ansifilter-go v0.0.1-0.20261014103223-d1dc4f19777e h1:xvxKYPNPoDn4WtQom3Bl2nv/Qsf5DgNEuQzizincbRQ=
@@ -80,6 +85,8 @@ github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a h1:W8l2XyZb6O
 github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a/go.mod h1:rKx0iuYFns6ZS0Ud33Sn4KC4C0jHAZDHy1I39R9Xn3c=
 github.com/0magnet/dtls/v3 v3.1.11 h1:QmTZt2VFfYa16Q/0UpJcdJNgx4gCh2td9ii/Hx0pnQU=
 github.com/0magnet/dtls/v3 v3.1.11/go.mod h1:4+o81WGOMZF/3pUtI9ICKb3Ns1VBtREBJdtzkt8a8F0=
+github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399 h1:QqkChfMkotXkNU9u0Q8GuXKH70YuWiRDhJVEQNUYjQw=
+github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399/go.mod h1:s6Jv+G7IJtoOBtTnLLxtwyECQne5UPUCgu194IcM9L4=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb h1:JAp38Yr7DXoyTVko9hDhBIJDpNZWRiVkp66vGLbYHCI=
 github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb/go.mod h1:ThqukkPy/kmN6c6cyboZYESC9qdJKfYgHTMVp0iW7T0=
 github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba h1:boyLKdsynFPzjQ5fFh7RpvuudRbb6yuqlXquDIt6lic=
@@ -108,6 +115,8 @@ github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d h1:zLwPS+LqZKeKQ
 github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d/go.mod h1:SPdEIkbuE6PjbbCoCkX3gwYycrA+OZPrOfYFLUg6xss=
 github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029 h1:vN5+KmlqBDUrn8gdBHk/XOplNcLhydPqfj1tr9Emz/M=
 github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029/go.mod h1:bJZTb79j5rnUPAnUgNjTFM+jH2BVKhkq8stefBySk+E=
+github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21 h1:tZp35vxG7CzaGBUq2/vCiXbn3pFa0hjdYO9elGl+Oe8=
+github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21/go.mod h1:O+W1dBDXRztwN+ox0yjtjyOh+9/RYqm5OlS3kPNcmxg=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585 h1:Izm48DGh4xsTTytTzTux1wLn2016Erqp4heOqLYJphM=
 github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585/go.mod h1:WnuZAVQbE9SxpVgGrP7Xnrk2x+9T9o7GCRRpiB/hxhY=
 github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076 h1:25bEd9CynC/HmPEo+vqxcm3ne1j4/x2Ee1iIKKXf0Ww=
@@ -124,8 +133,8 @@ github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 h1:wK2MncQOnEea7
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754/go.mod h1:9N1kqBjNdAUT/pfrWKyty4zS5ZQgG1OvsTmhdcpAWB0=
 github.com/0magnet/webrtc/v4 v4.2.24 h1:d2qdtJRYvjS730nfnT3ISK7S5DL3CoDClGb2Ohe9FGg=
 github.com/0magnet/webrtc/v4 v4.2.24/go.mod h1:EbAqt0EnBzEYIXysqLT6pm4tiQe4D56f7wEPX6/3KuE=
-github.com/0magnet/websh v0.0.1-0.20261021174048-11d97ed1a6d9 h1:TBdg8BJ6zlvFoP+wn9A4QoeP9aAO6rxGT2neDSrI+04=
-github.com/0magnet/websh v0.0.1-0.20261021174048-11d97ed1a6d9/go.mod h1:J2baDR/5d2DJRt6YnEb24KlQYkNga9QKQ17aa2PPJHA=
+github.com/0magnet/websh v0.0.1-0.20261021195704-ed6338761719 h1:AEXApjxXcfAQMEgclfVi6yarmeFfPmbuLXZzYlsO6EU=
+github.com/0magnet/websh v0.0.1-0.20261021195704-ed6338761719/go.mod h1:J2baDR/5d2DJRt6YnEb24KlQYkNga9QKQ17aa2PPJHA=
 github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6 h1:BTRb2m334NAgm6Sp6l3FNoQ4LzPOf+oMSRU/XFnzF0k=
 github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6/go.mod h1:96VjVNvqxs7yCaVsSLjSTn8y1PrWsqNfMj9Jc+BhHaU=
 github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20 h1:MKczsltMtQF+KFbPCodPoi8TSnbOykcgkTAOZqstgP0=
@@ -352,6 +361,10 @@ github.com/go-redis/redis v6.15.9+incompatible/go.mod h1:NAIEuMOZ/fxfXJIrKDQDz8w
 github.com/go-redis/redis/v8 v8.11.5 h1:AcZZR7igkdvfVmQTPnu9WE37LRrO/YrBH5zWyjDC0oI=
 github.com/go-redis/redis/v8 v8.11.5/go.mod h1:gREzHqY1hg6oD9ngVRbLStwAWKhA0FEgq8Jd4h5lpwo=
 github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
+github.com/go-text/typesetting v0.3.5 h1:XZPUooClHY0Vf/rFyUyuPRNEkawARaFzLMQcXLSEyPk=
+github.com/go-text/typesetting v0.3.5/go.mod h1:XZO1hD+nQVyvVa5IicQk7FsCa4PFQaJ2soWAP1f//68=
+github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=
+github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
 github.com/go-viper/mapstructure/v2 v2.5.0 h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=
 github.com/go-viper/mapstructure/v2 v2.5.0/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=
 github.com/goccy/go-yaml v1.9.5/go.mod h1:U/jl18uSupI5rdI2jmuCswEA2htH9eXfferR3KfscvA=
@@ -523,6 +536,8 @@ github.com/jaypipes/ghw v0.26.0/go.mod h1:Qk3UjdH8Xu/OiVyb/eDJqnDsUc+awHU75y23Er
 github.com/jaypipes/pcidb v1.1.1 h1:QmPhpsbmmnCwZmHeYAATxEaoRuiMAJusKYkUncMC0ro=
 github.com/jaypipes/pcidb v1.1.1/go.mod h1:x27LT2krrUgjf875KxQXKB0Ha/YXLdZRVmw6hH0G7g8=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
+github.com/jezek/xgb v1.3.1 h1:NQCAEfQyzN+3RjWUSHBuVIxQcy2YfG3/mNvKfs/0rEg=
+github.com/jezek/xgb v1.3.1/go.mod h1:nrhwO0FX/enq75I7Y7G8iN1ubpSGZEiA3v9e9GyRFlk=
 github.com/jfreymuth/pulse v0.1.3 h1:bc5TdxiB8E+2INnFjFWWgyfgXtz2IyNNNCX+Wt/ZD14=
 github.com/jfreymuth/pulse v0.1.3/go.mod h1:cpYspI6YljhkUf1WLXLLDmeaaPFc3CnGLjDZf9dZ4no=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
@@ -963,6 +978,8 @@ golang.org/x/exp v0.0.0-20200207192155-f17229e696bd/go.mod h1:J/WKrq2StrnmMY6+EH
 golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6/go.mod h1:3jZMyOhIsHpP37uCMkUooju7aAi5cS1Q23tOzKc+0MU=
 golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e h1:HgI6W1OolKK6tcV74is+rl9SMT0njsHlp0TbQiGXI/A=
 golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e/go.mod h1:DBoxwWhjaW8DJJw/YeM4zpeOKMC1FMXSblsYy+1mFSw=
+golang.org/x/exp/shiny v0.0.0-20261014143641-f0251eb4aa3e h1:z4P0s/a5L9p+5XPLaFdiLrek83ZClG+yXkO2J+1RKlI=
+golang.org/x/exp/shiny v0.0.0-20261014143641-f0251eb4aa3e/go.mod h1:ZdXIpWF4Owq+1g/S4uCKu+fMhV3xxPseTF4wQNeKtgM=
 golang.org/x/image v0.0.0-20190227222117-0694c2d4d067/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
 golang.org/x/image v0.0.0-20190802002840-cff245a6509b/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
 golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=

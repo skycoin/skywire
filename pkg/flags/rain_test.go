@@ -12,10 +12,20 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 )
 
+// asTerminal stands in for a person at a terminal of cols columns (0 unknown)
+// for the rest of the test. Under go test stdout is never one.
+func asTerminal(t *testing.T, cols int) {
+	t.Helper()
+	prev := helpTerminal
+	helpTerminal = func() (bool, int) { return true, cols }
+	t.Cleanup(func() { helpTerminal = prev })
+}
+
 // The backdrop is decoration on one screen. Everything that is not a person
 // reading a terminal must come back exactly as the help function produced it,
 // and that is what Off means.
 func TestRainOptionsOff(t *testing.T) {
+	asTerminal(t, 0)
 	newCmd := func() *cobra.Command {
 		c := &cobra.Command{Use: "root", Run: func(*cobra.Command, []string) {}}
 		cliout.RegisterOutputFlags(c)
@@ -56,6 +66,16 @@ func TestRainOptionsOff(t *testing.T) {
 
 	t.Run("env override", func(t *testing.T) {
 		t.Setenv(NoRainEnv, "1")
+		require.True(t, rainOptions(newCmd()).Off)
+	})
+
+	// A pipe, a redirect, or a shell's tab whose output is not a terminal,
+	// whatever the process's own stdout is.
+	t.Run("not a terminal", func(t *testing.T) {
+		t.Setenv(NoRainEnv, "")
+		prev := helpTerminal
+		helpTerminal = func() (bool, int) { return false, 0 }
+		t.Cleanup(func() { helpTerminal = prev })
 		require.True(t, rainOptions(newCmd()).Off)
 	})
 }
@@ -151,6 +171,7 @@ func TestEachDeepestFirstVisitsChildrenFirst(t *testing.T) {
 // could only ever check the negative half.
 func TestHelpSubcommandIsPlainAndHelpFlagIsNot(t *testing.T) {
 	t.Setenv(NoRainEnv, "")
+	asTerminal(t, 0)
 
 	backdropOff := func(args []string) bool {
 		root := newTree()

@@ -15,6 +15,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
+	github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399
 	github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a
@@ -27,6 +28,7 @@ require (
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 	github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
+	github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
@@ -34,7 +36,7 @@ require (
 	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261021174048-11d97ed1a6d9
+	github.com/0magnet/websh v0.0.1-0.20261021195704-ed6338761719
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
@@ -126,6 +128,7 @@ require (
 )
 
 require (
+	gioui.org/shader v1.0.9 // indirect
 	github.com/0magnet/dtls/v3 v3.1.11 // indirect
 	github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb // indirect
 	github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b // indirect
@@ -165,6 +168,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.4 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20261011113952-f83953680332 // indirect
@@ -175,6 +179,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/jaypipes/pcidb v1.1.1 // indirect
+	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/klauspost/reedsolomon v1.14.2 // indirect
@@ -254,6 +259,7 @@ require (
 	go.uber.org/mock v0.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
+	golang.org/x/exp/shiny v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect

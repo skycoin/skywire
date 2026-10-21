@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -62,6 +63,10 @@ func init() {
 // stdio on the command it runs, not the root, and resets only that path's flags.
 func Run(ctx context.Context, root *cobra.Command, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	r := &inproc{exited: make(chan int, 1), stdin: stdin, stdout: stdout, stderr: stderr}
+	// fatih/color, and coloredcobra with it, decide color once for the process
+	// from its own stdout. A run decides for its own; the latest to start wins.
+	colorOK, _ := terminalOf(stdout)
+	color.NoColor = !colorOK
 	startMu.Lock()
 	holder.Store(r)
 	defer func() {
