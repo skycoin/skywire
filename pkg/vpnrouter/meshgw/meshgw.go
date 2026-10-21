@@ -41,6 +41,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 )
@@ -51,15 +52,21 @@ import (
 // destination port). The vpn-router app implements this over its app.Client.
 type MeshDial func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error)
 
+// LocalDial reaches a name this visor serves itself, such as status.skywire,
+// on port. It is what the resolving proxies answer for that name.
+type LocalDial func(ctx context.Context, host string, port uint16) (net.Conn, error)
+
 type target struct {
-	scheme string // "dmsg" | "skynet"
+	scheme string // "dmsg" | "skynet" | "skywire"
 	dest   cipher.PubKey
+	host   string // set for a name the visor serves itself, reached by local
 }
 
 // Gateway resolves .dmsg/.skynet names to synthetic IPs and proxies TCP to them
 // into mesh streams. Safe for concurrent use.
 type Gateway struct {
 	dial    MeshDial
+	local   LocalDial                // optional: the visor's own names (status pages)
 	aliases map[string]cipher.PubKey // optional friendly-name → PK
 	log     logrus.FieldLogger
 
@@ -97,6 +104,11 @@ func (g *Gateway) EnableTLSMITM(minter skynetca.LeafMinter, tlsPort uint16) {
 	g.tlsUpstreamPort = 80
 }
 
+// SetLocal serves the reserved status hosts (status.dmsg, status.skynet,
+// status.skywire, status.skysocks) through local instead of a mesh dial. Call
+// before the gateway answers names.
+func (g *Gateway) SetLocal(local LocalDial) { g.local = local }
+
 // New builds a Gateway that leases synthetic IPs from cidr (e.g.
 // "100.64.0.0/16" — a slice of shared/CGNAT space unlikely to collide with the
 // LAN). dial performs the mesh dial; aliases (may be nil) maps friendly names to
@@ -129,11 +141,20 @@ func (g *Gateway) PoolCIDR() *net.IPNet { return g.pool.net }
 // resolve leases (or reuses) a synthetic IP for a parsed name under scheme.
 // Returns the IP to answer DNS with.
 func (g *Gateway) resolve(scheme, name string) (net.IP, error) {
-	dest, err := g.parse(scheme, name)
-	if err != nil {
-		return nil, err
+	var t target
+	var key string
+	if _, ok := proxystatus.Match(name); ok && g.local != nil && strings.HasSuffix(name, "."+scheme) {
+		t, key = target{scheme: scheme, host: name}, "local|"+name
+	} else {
+		if scheme == "skywire" {
+			return nil, fmt.Errorf("meshgw: %q is not a name this visor serves", name)
+		}
+		dest, err := g.parse(scheme, name)
+		if err != nil {
+			return nil, err
+		}
+		t, key = target{scheme: scheme, dest: dest}, scheme+"|"+dest.Hex()
 	}
-	key := scheme + "|" + dest.Hex()
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -144,7 +165,7 @@ func (g *Gateway) resolve(scheme, name string) (net.IP, error) {
 	if err != nil {
 		return nil, err
 	}
-	g.byIP[ip4] = target{scheme: scheme, dest: dest}
+	g.byIP[ip4] = t
 	g.byKey[key] = ip4
 	g.log.WithField("name", name).WithField("ip", net.IP(ip4[:]).String()).
 		WithField("scheme", scheme).Debug("mesh gateway: leased synthetic IP")
@@ -187,6 +208,15 @@ func (g *Gateway) DialIP(ctx context.Context, ip net.IP, port uint16) (net.Conn,
 	t, ok := g.lookup(ip)
 	if !ok {
 		return nil, fmt.Errorf("meshgw: no mesh name holds %s", ip)
+	}
+	return g.dialTarget(ctx, t, port)
+}
+
+// dialTarget reaches t on port: the visor's own handler for a reserved name,
+// otherwise the mesh.
+func (g *Gateway) dialTarget(ctx context.Context, t target, port uint16) (net.Conn, error) {
+	if t.host != "" {
+		return g.local(ctx, t.host, port)
 	}
 	return g.dial(ctx, t.scheme, t.dest, port)
 }
@@ -241,9 +271,9 @@ func (g *Gateway) bridge(ctx context.Context, conn net.Conn, origIP net.IP, orig
 	if mitm {
 		dialPort = g.tlsUpstreamPort
 	}
-	mesh, err := g.dial(ctx, t.scheme, t.dest, dialPort)
+	mesh, err := g.dialTarget(ctx, t, dialPort)
 	if err != nil {
-		g.log.WithError(err).WithField("dest", t.dest.Hex()).WithField("port", dialPort).
+		g.log.WithError(err).WithField("dest", t.dest.Hex()).WithField("host", t.host).WithField("port", dialPort).
 			Debug("mesh gateway: dial failed")
 		return
 	}
@@ -263,6 +293,9 @@ func (g *Gateway) bridge(ctx context.Context, conn net.Conn, origIP net.IP, orig
 // decrypted stream to the plain-HTTP mesh upstream.
 func (g *Gateway) spliceTLS(client, mesh net.Conn, t target) {
 	fallback := t.dest.DNSLabel() + "." + t.scheme
+	if t.host != "" {
+		fallback = t.host
+	}
 	cfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
