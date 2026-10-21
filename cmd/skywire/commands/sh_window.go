@@ -12,9 +12,16 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 )
 
+// keepRunning, where set, keeps the process running while the window is not in
+// front: on Android, a foreground service.
+var keepRunning func()
+
 // runWindow opens a window whose tabs each run websh with opt, and returns
 // when it closes.
 func runWindow(opt console.Options, font string) error {
+	if keepRunning != nil {
+		keepRunning()
+	}
 	// A full-screen command draws on its tab, which is not the process's /dev/tty.
 	childtty.Terminal = func() *os.File {
 		if f, ok := cmdutil.Stdin().(*os.File); ok && f != os.Stdin {
