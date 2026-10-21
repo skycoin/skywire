@@ -14,7 +14,7 @@ import (
 //
 // The browser build has no subprocesses: `skywire autoconfig` re-enters
 // `config gen` in THIS process, and sets SKYENV right before it does
-// (autoconfig_exec_js.go) for parity with the environment the native
+// (autoconfig_exec_inproc.go) for parity with the environment the native
 // path hands its child. That set comes too late. The defaults below are
 // read in this package's var/init phase, which is over before any
 // command runs — so gen read an empty SKYENV and sourced no file at
