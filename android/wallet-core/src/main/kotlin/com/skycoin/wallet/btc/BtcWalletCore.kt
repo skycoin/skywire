@@ -2,6 +2,7 @@ package com.skycoin.wallet.btc
 
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Hashes
 import com.skycoin.wallet.Recipient
@@ -174,6 +175,7 @@ class BtcWalletCore(
         more: List<Recipient>,
         changeAddress: String?,
         @Suppress("UNUSED_PARAMETER") shareFactor: BigDecimal?,
+        @Suppress("UNUSED_PARAMETER") feeLevel: FeeLevel?,
     ): TxPlan {
         if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
         if (changeAddress != null) throw WalletException.InvalidAddress()

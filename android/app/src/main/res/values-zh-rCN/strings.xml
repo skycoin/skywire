@@ -749,6 +749,9 @@
     <string name="wallet_fee_gas">Gas 上限 %1$d · 每单位 Gas 最高 %2$d gwei</string>
     <string name="wallet_fee_note_eth">显示的是按当前价格计算的最高手续费——未用完的 Gas 不会收取。</string>
     <string name="wallet_fee_note_erc20">代币转账会消耗 Gas，而 Gas 由发送地址中的 ETH 支付——请在存放代币的地址里留一点 ETH。</string>
+    <string name="wallet_fee_eth_slow">最低小费</string>
+    <string name="wallet_fee_eth_normal">节点建议小费</string>
+    <string name="wallet_fee_eth_fast">双倍小费</string>
     <string name="wallet_review">预览</string>
     <string name="wallet_review_title">你即将发送</string>
     <!-- %2$s 是币种自身的名称 -->

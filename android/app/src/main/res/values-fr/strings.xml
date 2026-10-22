@@ -825,6 +825,9 @@
     <string name="wallet_fee_gas">Limite de gaz %1$d · jusqu’à %2$d gwei par unité de gaz</string>
     <string name="wallet_fee_note_eth">Les frais affichés sont le pire cas aux prix du jour — le gaz non dépensé n’est jamais facturé.</string>
     <string name="wallet_fee_note_erc20">Les transferts de jetons brûlent du gaz, et le gaz est payé en ETH depuis l’adresse d’envoi — gardez un peu d’ETH à côté des jetons.</string>
+    <string name="wallet_fee_eth_slow">Pourboire minimal</string>
+    <string name="wallet_fee_eth_normal">Pourboire du nœud</string>
+    <string name="wallet_fee_eth_fast">Pourboire double</string>
     <string name="wallet_review">Vérifier</string>
     <string name="wallet_review_title">Vous êtes sur le point d’envoyer</string>
     <!-- %2$s is the coin's own name: Skycoin is the original chain, each

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -695,6 +696,7 @@ class WalletRepository private constructor(private val context: Context) {
         more: List<Recipient> = emptyList(),
         changeAddress: String? = null,
         shareFactor: BigDecimal? = null,
+        feeLevel: FeeLevel? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
@@ -712,6 +714,7 @@ class WalletRepository private constructor(private val context: Context) {
             more = more.map { Recipient(it.address.trim(), it.amount, it.hours) },
             changeAddress = changeAddress?.trim()?.takeIf { it.isNotEmpty() },
             shareFactor = shareFactor,
+            feeLevel = feeLevel,
         )
     }
 

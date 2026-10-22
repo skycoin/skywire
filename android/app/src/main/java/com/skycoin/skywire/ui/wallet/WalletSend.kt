@@ -81,6 +81,7 @@ import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.decodeQrImage
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.wallet.Amounts
+import com.skycoin.wallet.FeeLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1051,10 +1052,9 @@ private fun FiberFeeCard(viewModel: WalletViewModel) {
 }
 
 /**
- * The gas card: EIP-1559 prices itself, so this shows rather than asks —
- * the worst-case fee once a plan exists, and where that money comes from
- * on a token send. No slider: the one honest knob (priority tip) moves a
- * mainnet fee by fractions of a cent.
+ * The gas card: three tips, as skycoin-web offers, then the worst-case fee
+ * once a plan exists and where that money comes from on a token send. No
+ * slider: the tip is the one honest knob, and three steps of it are enough.
  */
 @Composable
 private fun EthFeeCard(viewModel: WalletViewModel) {
@@ -1069,6 +1069,21 @@ private fun EthFeeCard(viewModel: WalletViewModel) {
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(16.dp),
     ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
+            listOf(
+                Triple(FeeLevel.SLOW, R.string.wallet_fee_economy, R.string.wallet_fee_eth_slow),
+                Triple(FeeLevel.NORMAL, R.string.wallet_fee_normal, R.string.wallet_fee_eth_normal),
+                Triple(FeeLevel.FAST, R.string.wallet_fee_priority, R.string.wallet_fee_eth_fast),
+            ).forEach { (level, name, note) ->
+                FeeChoice(
+                    name = stringResource(name),
+                    note = stringResource(note),
+                    selected = state.send.ethLevel == level,
+                    onClick = { viewModel.updateSend { it.copy(ethLevel = level, plan = null) } },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
         Row {
             Text(stringResource(R.string.wallet_fee_network), style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.weight(1f))
@@ -1189,7 +1204,17 @@ private fun FeePresetButton(
     viewModel: WalletViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val selected = rate == currentRate
+    FeeChoice(
+        name = name,
+        note = eta,
+        selected = rate == currentRate,
+        onClick = { viewModel.updateSend { it.copy(feeRate = rate, plan = null) } },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun FeeChoice(name: String, note: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(11.dp))
@@ -1197,7 +1222,7 @@ private fun FeePresetButton(
                 if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else MaterialTheme.colorScheme.surfaceContainerHighest,
             )
-            .clickable { viewModel.updateSend { it.copy(feeRate = rate, plan = null) } }
+            .clickable(onClick = onClick)
             .padding(vertical = 11.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1207,7 +1232,7 @@ private fun FeePresetButton(
             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            eta,
+            note,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
