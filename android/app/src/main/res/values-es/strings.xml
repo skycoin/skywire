@@ -697,6 +697,8 @@
     <string name="wallet_node_check_pubkey">Clave pública de la cadena</string>
     <string name="wallet_node_check_use">Usar este nodo</string>
     <string name="wallet_node_unreachable">No se pudo conectar con el nodo. Comprueba la dirección y tu conexión e inténtalo otra vez.</string>
+    <string name="wallet_node_mesh">Se alcanza por la red Skywire, cifrado de extremo a extremo. El nodo ve la clave Skywire de este teléfono, no su dirección de internet. Funciona mientras Skywire está conectado.</string>
+    <string name="wallet_node_unreachable_mesh">El nodo no respondió por la red Skywire. Conecta Skywire primero y vuelve a intentarlo: las direcciones .dmsg se alcanzan a través de él.</string>
     <string name="wallet_node_too_old">Este nodo es demasiado antiguo para la billetera. Tiene que tener al menos la versión 0.24.0.</string>
     <string name="wallet_node_wrong_chain">Este servidor no está en la red principal de Ethereum.</string>
     <string name="wallet_node_other_coin">Este nodo es de %1$s, no de %2$s. Sus saldos e historial serían los de esa moneda.</string>

@@ -76,6 +76,7 @@ class WalletRepository private constructor(private val context: Context) {
     // skychat's large file transfers: an idle deadline does the work, the
     // absolute one is a last resort.
     private val client = OkHttpClient.Builder()
+        .proxySelector(WalletMesh.proxySelector)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(BULK_CALL_BACKSTOP_MINUTES, TimeUnit.MINUTES)
@@ -188,7 +189,7 @@ class WalletRepository private constructor(private val context: Context) {
 
     /** [url] trimmed for storage; blank stays blank, which means the shipped one. */
     private fun checkedUrl(url: String): String {
-        val trimmed = url.trim().removeSuffix("/")
+        val trimmed = WalletMesh.normalize(url).removeSuffix("/")
         require(trimmed.isEmpty() || trimmed.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
@@ -223,7 +224,7 @@ class WalletRepository private constructor(private val context: Context) {
      * and so is the block explorer the coin's transactions link to.
      */
     suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String? = null): CoinSpec {
-        val url = nodeUrl.trim().removeSuffix("/")
+        val url = WalletMesh.normalize(nodeUrl).removeSuffix("/")
         require(url.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
@@ -341,7 +342,7 @@ class WalletRepository private constructor(private val context: Context) {
      * with the reason, an unreachable one with IOException.
      */
     suspend fun checkNode(coin: CoinSpec, url: String): NodeInfo = withContext(Dispatchers.IO) {
-        val info = coreFor(coin.copy(nodeUrl = url.trim().removeSuffix("/"), nodeUrls = emptyList())).nodeInfo()
+        val info = coreFor(coin.copy(nodeUrl = WalletMesh.normalize(url).removeSuffix("/"), nodeUrls = emptyList())).nodeInfo()
         when (info.problem) {
             NodeProblem.TOO_OLD -> throw IllegalArgumentException(context.getString(R.string.wallet_node_too_old))
             NodeProblem.WRONG_CHAIN -> throw IllegalArgumentException(context.getString(R.string.wallet_node_wrong_chain))

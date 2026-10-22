@@ -619,6 +619,8 @@
     <string name="wallet_node_check_pubkey">区块链公钥</string>
     <string name="wallet_node_check_use">使用这个节点服务器</string>
     <string name="wallet_node_unreachable">无法连接到节点服务器。请检查地址和网络连接后重试。</string>
+    <string name="wallet_node_mesh">通过 Skywire 网络访问，端到端加密。节点服务器看到的是这部手机的 Skywire 公钥，而不是它的网络地址。Skywire 连接时才可用。</string>
+    <string name="wallet_node_unreachable_mesh">节点服务器没有通过 Skywire 网络响应。请先连接 Skywire 再试：.dmsg 地址要经由它访问。</string>
     <string name="wallet_node_too_old">这个节点服务器的版本太旧，钱包无法使用。它至少需要 0.24.0 版本。</string>
     <string name="wallet_node_wrong_chain">这个服务器不在以太坊主网上。</string>
     <string name="wallet_node_other_coin">这个节点服务器属于 %1$s，而不是 %2$s。它给出的余额和交易记录会是那个币种的。</string>

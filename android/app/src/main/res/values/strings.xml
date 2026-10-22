@@ -654,6 +654,8 @@
     <string name="wallet_node_check_pubkey">Blockchain pubkey</string>
     <string name="wallet_node_check_use">Use this node</string>
     <string name="wallet_node_unreachable">It was not possible to connect to the node. Check the address and your connection and try again.</string>
+    <string name="wallet_node_mesh">Reached over the Skywire mesh, encrypted end to end. The node sees this phone\'s Skywire key, not its internet address. Works while Skywire is connected.</string>
+    <string name="wallet_node_unreachable_mesh">The node did not answer over the Skywire mesh. Connect Skywire first, then try again: .dmsg addresses are reached through it.</string>
     <string name="wallet_node_too_old">This node is too old for the wallet. It must run at least version 0.24.0.</string>
     <string name="wallet_node_wrong_chain">This server is not on Ethereum mainnet.</string>
     <string name="wallet_node_other_coin">This node is for %1$s, not %2$s. Its balances and history would be that coin\'s.</string>
