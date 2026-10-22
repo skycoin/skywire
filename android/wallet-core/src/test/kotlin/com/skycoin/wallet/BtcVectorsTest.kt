@@ -68,7 +68,7 @@ class Bip84FixtureTest {
 
     private val fx: Bip84Fixture = Json { ignoreUnknownKeys = true }.decodeFromString(
         Fixtures.serializer(),
-        javaClass.getResourceAsStream("/skycoin-fixtures.json")!!.bufferedReader().readText(),
+        javaClass.getResourceAsStream("/btc-fixtures.json")!!.bufferedReader().readText(),
     ).bip84
 
     @Test
