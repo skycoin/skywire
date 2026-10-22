@@ -31,12 +31,12 @@ interface WalletCore {
      * single chain (change returns to the first address, change list stays
      * empty); Bitcoin derives a separate change chain the UI never shows.
      */
-    fun deriveAddresses(seed: String, receiveCount: Int, changeCount: Int): AddressBook
+    fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook
 
     fun validateAddress(address: String): Boolean
 
     /** On restore: probe the network for used addresses. (receive, change) counts, each ≥ minimum. */
-    suspend fun scanUsed(seed: String): Pair<Int, Int>
+    suspend fun scanUsed(seed: KeySource): Pair<Int, Int>
 
     suspend fun balance(book: AddressBook): WalletBalance
 
@@ -71,7 +71,7 @@ interface WalletCore {
      * @param feeLevel how much tip to offer; null is normal. Ethereum family only.
      */
     suspend fun buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: ULong,
@@ -87,7 +87,7 @@ interface WalletCore {
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
-    fun signTx(seed: String, plan: TxPlan): SignedTx
+    fun signTx(seed: KeySource, plan: TxPlan): SignedTx
 
     /** Hand the signed transaction to the node; returns the txid it reports. */
     suspend fun broadcast(tx: SignedTx): String
@@ -99,7 +99,7 @@ interface WalletCore {
      * Signs a raw transaction made elsewhere. Every input must be an unspent
      * output of this wallet. Fiber chains only.
      */
-    suspend fun signRaw(seed: String, book: AddressBook, rawHex: String): SignedTx =
+    suspend fun signRaw(seed: KeySource, book: AddressBook, rawHex: String): SignedTx =
         throw WalletException.BadTransaction("this chain does not sign raw transactions here")
 
     /** Broadcasts a raw signed transaction; returns the txid the node reports. Fiber chains only. */
@@ -109,6 +109,24 @@ interface WalletCore {
 
 /** One destination of a send. [hours] is fiber only; null splits hours automatically. */
 class Recipient(val address: String, val amount: ULong, val hours: ULong? = null)
+
+/**
+ * What a wallet's keys come from: its phrase, the BIP 39 passphrase that
+ * goes with it, and the way keys are derived from the two.
+ */
+class KeySource(
+    val mnemonic: String,
+    val passphrase: String = "",
+    val derivation: Derivation = Derivation.STANDARD,
+)
+
+/**
+ * How keys come from a phrase. STANDARD is each chain's usual way:
+ * Skycoin's deterministic chain over the phrase bytes for fiber coins,
+ * BIP 84 for Bitcoin, BIP 44 for Ethereum. BIP44 is the alternative a
+ * chain offers: BIP 44 coin 8000 for fiber coins, legacy BIP 44 for Bitcoin.
+ */
+enum class Derivation { STANDARD, BIP44 }
 
 class AddressBook(val receive: List<String>, val change: List<String>) {
     fun all(): List<String> = receive + change

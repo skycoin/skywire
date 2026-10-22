@@ -5,6 +5,7 @@ import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.KeySource
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -45,8 +46,8 @@ class SkyFiberWalletCore(
     // The seed is the phrase's bytes (deriveAddresses), so no checksum is needed.
     override fun acceptsLegacySeed(mnemonic: String): Boolean = Bip39.legacyWords(mnemonic)
 
-    override fun deriveAddresses(seed: String, receiveCount: Int, changeCount: Int): AddressBook {
-        val keys = SkycoinCrypto.generateKeyPairs(seed.toByteArray(Charsets.UTF_8), receiveCount)
+    override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
+        val keys = SkycoinCrypto.generateKeyPairs(seed.mnemonic.toByteArray(Charsets.UTF_8), receiveCount)
         return AddressBook(
             receive = keys.map { SkycoinCrypto.addressFromPubKey(it.public) },
             change = emptyList(),
@@ -55,7 +56,7 @@ class SkyFiberWalletCore(
 
     override fun validateAddress(address: String): Boolean = SkycoinCrypto.isValidAddress(address)
 
-    override suspend fun scanUsed(seed: String): Pair<Int, Int> {
+    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
         var count = 1
         while (count < SCAN_CAP) {
             val window = deriveAddresses(seed, count + SCAN_AHEAD, 0)
@@ -160,7 +161,7 @@ class SkyFiberWalletCore(
     override fun estimateMax(balance: WalletBalance, feeRate: Int?): ULong = balance.confirmed
 
     override suspend fun buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: ULong,
@@ -281,7 +282,7 @@ class SkyFiberWalletCore(
         )
     }
 
-    override fun signTx(seed: String, plan: TxPlan): SignedTx {
+    override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
         val byAddress = keysByAddress(seed, payload.receiveAddresses.size)
         val inputKeys = payload.inputAddresses.map { addr ->
@@ -291,15 +292,15 @@ class SkyFiberWalletCore(
         return SignedTx(rawHex = payload.txn.serializeHex(), txid = payload.txn.txidHex())
     }
 
-    private fun keysByAddress(seed: String, count: Int): Map<String, ByteArray> =
-        SkycoinCrypto.generateKeyPairs(seed.toByteArray(Charsets.UTF_8), count)
+    private fun keysByAddress(seed: KeySource, count: Int): Map<String, ByteArray> =
+        SkycoinCrypto.generateKeyPairs(seed.mnemonic.toByteArray(Charsets.UTF_8), count)
             .associate { SkycoinCrypto.addressFromPubKey(it.public) to it.secret }
 
     override suspend fun broadcast(tx: SignedTx): String = node.inject(tx.rawHex)
 
     override fun unsignedHex(plan: TxPlan): String = (plan.payload as Payload).txn.unsignedHex()
 
-    override suspend fun signRaw(seed: String, book: AddressBook, rawHex: String): SignedTx {
+    override suspend fun signRaw(seed: KeySource, book: AddressBook, rawHex: String): SignedTx {
         val txn = decodeRaw(rawHex)
         // The owner of each input is the address its unspent output sits at.
         val owners = node.outputs(book.all()).headOutputs.associate { it.hash to it.address }

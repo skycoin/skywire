@@ -4,6 +4,7 @@ import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.KeySource
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -65,8 +66,8 @@ class EthWalletCore(
 
     override fun validateSeed(mnemonic: String): Boolean = Bip39.validate(mnemonic)
 
-    override fun deriveAddresses(seed: String, receiveCount: Int, changeCount: Int): AddressBook {
-        val account = EthCrypto.accountKey(seed)
+    override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
+        val account = EthCrypto.accountKey(seed.mnemonic)
         return AddressBook(
             receive = (0 until receiveCount).map { EthCrypto.address(EthCrypto.key(account, it).pubKey()) },
             // An account chain has no change side: sends spend from one
@@ -77,8 +78,8 @@ class EthWalletCore(
 
     override fun validateAddress(address: String): Boolean = EthCrypto.isValidAddress(address)
 
-    override suspend fun scanUsed(seed: String): Pair<Int, Int> {
-        val account = EthCrypto.accountKey(seed)
+    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
+        val account = EthCrypto.accountKey(seed.mnemonic)
         var lastUsed = -1
         var i = 0
         var gap = 0
@@ -176,7 +177,7 @@ class EthWalletCore(
     }
 
     override suspend fun buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: ULong,
@@ -273,9 +274,9 @@ class EthWalletCore(
         )
     }
 
-    override fun signTx(seed: String, plan: TxPlan): SignedTx {
+    override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val key = EthCrypto.key(EthCrypto.accountKey(seed), payload.fromIndex)
+        val key = EthCrypto.key(EthCrypto.accountKey(seed.mnemonic), payload.fromIndex)
         val signed = EthTxn(
             chainId = payload.chainId,
             nonce = payload.nonce,

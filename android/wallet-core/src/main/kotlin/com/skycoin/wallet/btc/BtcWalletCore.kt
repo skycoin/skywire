@@ -5,6 +5,7 @@ import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Hashes
+import com.skycoin.wallet.KeySource
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -47,8 +48,8 @@ class BtcWalletCore(
 
     override fun validateSeed(mnemonic: String): Boolean = Bip39.validate(mnemonic)
 
-    override fun deriveAddresses(seed: String, receiveCount: Int, changeCount: Int): AddressBook {
-        val account = Bip84.accountKey(seed)
+    override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
+        val account = Bip84.accountKey(seed.mnemonic)
         return AddressBook(
             receive = (0 until receiveCount).map { Bip84.address(Bip84.key(account, 0, it).pubKey()) },
             change = (0 until changeCount).map { Bip84.address(Bip84.key(account, 1, it).pubKey()) },
@@ -57,8 +58,8 @@ class BtcWalletCore(
 
     override fun validateAddress(address: String): Boolean = BtcAddress.isValid(address)
 
-    override suspend fun scanUsed(seed: String): Pair<Int, Int> {
-        val account = Bip84.accountKey(seed)
+    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
+        val account = Bip84.accountKey(seed.mnemonic)
         suspend fun scanChain(chain: Int, minimum: Int): Int {
             var lastUsed = -1
             var i = 0
@@ -163,7 +164,7 @@ class BtcWalletCore(
     }
 
     override suspend fun buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: ULong,
@@ -182,7 +183,7 @@ class BtcWalletCore(
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
 
-        val account = Bip84.accountKey(seed)
+        val account = Bip84.accountKey(seed.mnemonic)
         val programOf = HashMap<String, Triple<Int, Int, ByteArray>>() // address → (chain, index, hash160)
         book.receive.forEachIndexed { i, a -> programOf[a] = Triple(0, i, Hashes.hash160(Bip84.key(account, 0, i).pubKey())) }
         book.change.forEachIndexed { i, a -> programOf[a] = Triple(1, i, Hashes.hash160(Bip84.key(account, 1, i).pubKey())) }
@@ -271,9 +272,9 @@ class BtcWalletCore(
         )
     }
 
-    override fun signTx(seed: String, plan: TxPlan): SignedTx {
+    override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val account = Bip84.accountKey(seed)
+        val account = Bip84.accountKey(seed.mnemonic)
         val txn = BtcTxn(
             inputs = payload.inputs.map { BtcTxn.Input(it.txid, it.vout, it.value, it.pubKeyHash) },
             outputs = payload.outputs,

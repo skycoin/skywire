@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.FeeLevel
+import com.skycoin.wallet.KeySource
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -393,14 +394,15 @@ class WalletRepository private constructor(private val context: Context) {
             // from "the answer is one address" — a fresh phrase genuinely has
             // one and is settled, a restore that could not reach the node is
             // not.
+            val keys = KeySource(seed)
             val scan = if (restored) {
-                runCatching { core.scanUsed(seed) }.getOrNull()
+                runCatching { core.scanUsed(keys) }.getOrNull()
             } else {
                 1 to 0
             }
             val (receiveCount, changeCount) = scan ?: (1 to 0)
             val scannedAt = if (scan != null) System.currentTimeMillis() else 0
-            val book = core.deriveAddresses(seed, receiveCount, changeCount)
+            val book = core.deriveAddresses(keys, receiveCount, changeCount)
 
             // This coin may already hold this exact account — most likely
             // because mirroring put it there, and the user restored the phrase
@@ -578,13 +580,16 @@ class WalletRepository private constructor(private val context: Context) {
         }
     }
 
+    /** What the wallet's keys come from, unsealed; null when the seed cannot be read. */
+    private suspend fun keys(meta: WalletMeta): KeySource? = seeds.seed(meta.id)?.let { KeySource(it) }
+
     /** The phrase in the clear — callers gate this behind the biometric confirm. */
     suspend fun revealSeed(id: String): String? = seeds.seed(id)
 
     suspend fun newReceiveAddress(walletId: String): String {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val book = coreFor(spec).deriveAddresses(
             seed, meta.receiveAddresses.size + 1, meta.changeAddresses.size,
         )
@@ -664,7 +669,7 @@ class WalletRepository private constructor(private val context: Context) {
         if (!meta.addressScanPending) return meta
         val now = System.currentTimeMillis()
         if (now < (scanRetryAfter[meta.id] ?: 0L)) return meta
-        val seed = seeds.seed(meta.id) ?: return meta
+        val seed = keys(meta) ?: return meta
         val scanned = runCatching { core.scanUsed(seed) }.getOrNull()
         if (scanned == null) {
             scanRetryAfter[meta.id] = now + SCAN_RETRY_BACKOFF_MS
@@ -700,7 +705,7 @@ class WalletRepository private constructor(private val context: Context) {
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         coreFor(spec).buildTx(
             seed = seed,
             book = AddressBook(meta.receiveAddresses, meta.changeAddresses),
@@ -730,7 +735,7 @@ class WalletRepository private constructor(private val context: Context) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val signed: SignedTx = core.signTx(seed, plan)
         val txid = core.broadcast(signed)
 
@@ -759,7 +764,7 @@ class WalletRepository private constructor(private val context: Context) {
     suspend fun signRaw(walletId: String, rawHex: String): SignedTx = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         coreFor(spec).signRaw(seed, AddressBook(meta.receiveAddresses, meta.changeAddresses), rawHex)
     }
 
