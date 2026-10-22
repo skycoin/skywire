@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -15,22 +14,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.input.KeyboardType
-import com.skycoin.skywire.wallet.CoinKind
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -43,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,16 +56,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.wallet.CoinKind
 import kotlinx.coroutines.launch
 
 /** Receive: the QR, tap-to-copy, share, and the other-addresses sheet. */
 @Composable
 fun WalletReceiveScreen(
     viewModel: WalletViewModel,
+    onHistory: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -73,6 +79,7 @@ fun WalletReceiveScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addressSheet by remember { mutableStateOf(false) }
+    var outputsOf by remember { mutableStateOf<String?>(null) }
     var requestOpen by remember { mutableStateOf(false) }
     var reqAmount by remember { mutableStateOf("") }
     var reqHours by remember { mutableStateOf("") }
@@ -288,7 +295,59 @@ fun WalletReceiveScreen(
             viewModel = viewModel,
             onDismiss = { addressSheet = false },
             onPicked = { addressSheet = false },
+            onHistory = { addr ->
+                addressSheet = false
+                onHistory(addr)
+            },
+            onOutputs = { addr ->
+                addressSheet = false
+                outputsOf = addr
+            },
         )
+    }
+    outputsOf?.let { addr ->
+        OutputsSheet(viewModel = viewModel, address = addr, onDismiss = { outputsOf = null })
+    }
+}
+
+/** The unspent outputs one address holds, as skycoin-web's per-address outputs view. Fiber only. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OutputsSheet(viewModel: WalletViewModel, address: String, onDismiss: () -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+    LaunchedEffect(address) { viewModel.loadUtxos() }
+    val outputs = state.send.utxos.filter { it.address == address }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                stringResource(R.string.wallet_outputs_title, shortAddress(address)),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            if (outputs.isEmpty()) {
+                Text(
+                    stringResource(R.string.wallet_outputs_none),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+            outputs.forEach { u ->
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+                    Text(
+                        "${state.coin.amountText(u.coins)} ${state.coin.ticker}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.wallet_utxo_line, hoursText(u.hours), shortAddress(u.uxid, 10, 8)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -298,10 +357,14 @@ private fun AddressSheet(
     viewModel: WalletViewModel,
     onDismiss: () -> Unit,
     onPicked: () -> Unit,
+    onHistory: (String) -> Unit,
+    onOutputs: (String) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
     val wallet = state.active ?: return
     val generated = stringResource(R.string.wallet_address_generated, wallet.name)
+    var hideEmpty by rememberSaveable { mutableStateOf(false) }
+    var menuFor by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.padding(bottom = 24.dp)) {
             Text(
@@ -315,10 +378,21 @@ private fun AddressSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
             )
-            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { hideEmpty = !hideEmpty }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = hideEmpty, onCheckedChange = { hideEmpty = it })
+                Text(stringResource(R.string.wallet_addresses_hide_empty), style = MaterialTheme.typography.bodyMedium)
+            }
             val perAddress = state.snapshot?.perAddress.orEmpty()
             wallet.receiveAddresses.forEachIndexed { i, addr ->
                 val held = perAddress[addr]
+                // The address being shown stays, so hiding never takes away what is on screen.
+                if (hideEmpty && (held == null || held == 0uL) && i != state.receiveIndex) return@forEachIndexed
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -379,6 +453,33 @@ private fun AddressSheet(
                                 .clip(androidx.compose.foundation.shape.CircleShape)
                                 .background(MaterialTheme.colorScheme.primary),
                         )
+                    }
+                    Box {
+                        IconButton(onClick = { menuFor = addr }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Outlined.MoreVert,
+                                contentDescription = stringResource(R.string.wallet_address_actions),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(expanded = menuFor == addr, onDismissRequest = { menuFor = null }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.wallet_address_history)) },
+                                onClick = {
+                                    menuFor = null
+                                    onHistory(addr)
+                                },
+                            )
+                            if (state.coin.kind == CoinKind.SKY_FIBER) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.wallet_address_outputs)) },
+                                    onClick = {
+                                        menuFor = null
+                                        onOutputs(addr)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }

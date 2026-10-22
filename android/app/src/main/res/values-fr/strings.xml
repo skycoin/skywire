@@ -736,6 +736,14 @@
     <string name="wallet_other_addresses">Autres adresses de ce portefeuille</string>
     <string name="wallet_addresses_in">Adresses dans %1$s</string>
     <string name="wallet_addresses_note">Toutes appartiennent à la même graine. En utiliser une neuve rend votre solde plus difficile à suivre.</string>
+    <string name="wallet_addresses_hide_empty">Masquer les adresses vides</string>
+    <string name="wallet_address_actions">Options de l’adresse</string>
+    <string name="wallet_address_history">Historique</string>
+    <string name="wallet_address_outputs">Sorties non dépensées</string>
+    <string name="wallet_outputs_title">Sorties non dépensées de %1$s</string>
+    <string name="wallet_outputs_none">Cette adresse ne détient aucune sortie non dépensée.</string>
+    <string name="wallet_history_all_addresses">Toutes les adresses</string>
+    <string name="wallet_history_address_pick">Afficher les transactions de</string>
     <string name="wallet_address_default">Par défaut · en usage</string>
     <string name="wallet_address_unused">Jamais utilisée</string>
     <string name="wallet_address_new">Générer une nouvelle adresse</string>

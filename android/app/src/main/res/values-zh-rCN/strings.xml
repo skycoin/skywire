@@ -660,6 +660,14 @@
     <string name="wallet_other_addresses">此钱包中的其他地址</string>
     <string name="wallet_addresses_in">%1$s 中的地址</string>
     <string name="wallet_addresses_note">它们都来自同一组助记词。每次使用新地址，可以让你的余额更难被追踪。</string>
+    <string name="wallet_addresses_hide_empty">隐藏空地址</string>
+    <string name="wallet_address_actions">地址选项</string>
+    <string name="wallet_address_history">交易记录</string>
+    <string name="wallet_address_outputs">未花费输出</string>
+    <string name="wallet_outputs_title">%1$s 的未花费输出</string>
+    <string name="wallet_outputs_none">这个地址没有未花费输出。</string>
+    <string name="wallet_history_all_addresses">全部地址</string>
+    <string name="wallet_history_address_pick">显示以下地址的交易</string>
     <string name="wallet_address_default">默认 · 使用中</string>
     <string name="wallet_address_unused">从未使用</string>
     <string name="wallet_address_new">生成新地址</string>

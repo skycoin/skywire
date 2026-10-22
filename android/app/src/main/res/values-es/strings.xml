@@ -738,6 +738,14 @@
     <string name="wallet_other_addresses">Otras direcciones de esta billetera</string>
     <string name="wallet_addresses_in">Direcciones en %1$s</string>
     <string name="wallet_addresses_note">Todas pertenecen a la misma semilla. Usar una nueva hace que tu saldo sea más difícil de seguir.</string>
+    <string name="wallet_addresses_hide_empty">Ocultar direcciones vacías</string>
+    <string name="wallet_address_actions">Opciones de la dirección</string>
+    <string name="wallet_address_history">Historial</string>
+    <string name="wallet_address_outputs">Salidas sin gastar</string>
+    <string name="wallet_outputs_title">Salidas sin gastar de %1$s</string>
+    <string name="wallet_outputs_none">Esta dirección no tiene salidas sin gastar.</string>
+    <string name="wallet_history_all_addresses">Todas las direcciones</string>
+    <string name="wallet_history_address_pick">Mostrar las transacciones de</string>
     <string name="wallet_address_default">Predeterminada · en uso</string>
     <string name="wallet_address_unused">Nunca usada</string>
     <string name="wallet_address_new">Generar una dirección nueva</string>
