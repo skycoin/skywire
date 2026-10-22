@@ -80,6 +80,9 @@ import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.decodeQrImage
 import com.skycoin.skywire.wallet.CoinKind
+import com.skycoin.skywire.wallet.coinTextFromUsd
+import com.skycoin.skywire.wallet.usdPlain
+import com.skycoin.skywire.wallet.usdText
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.FeeLevel
 import kotlinx.coroutines.Dispatchers
@@ -352,22 +355,57 @@ fun WalletSendScreen(
                     colors = transparentFieldColors(),
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    coin.ticker,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // With a price, the amount can be typed in US dollars, as skycoin-web allows.
+                val price = state.usdPrice
+                if (price != null) {
+                    TextButton(onClick = {
+                        viewModel.updateSend {
+                            val converted = if (it.usdMode) {
+                                it.amountText.trim().takeIf { t -> t.isNotEmpty() }?.let { t ->
+                                    coin.coinTextFromUsd(t, price)
+                                }
+                            } else {
+                                Amounts.parse(it.amountText, coin.exponent)?.let { units -> coin.usdPlain(units, price) }
+                            }
+                            it.copy(usdMode = !it.usdMode, amountText = converted ?: "", sendMax = false, plan = null)
+                        }
+                    }) {
+                        Text(if (send.usdMode) "USD" else coin.ticker, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Text(
+                        coin.ticker,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (send.extra.isEmpty()) TextButton(onClick = {
                     val max = viewModel.sendMaxAmount()
                     viewModel.updateSend {
                         it.copy(
                             amountText = Amounts.format(max, coin.exponent, coin.displayDecimals).replace(",", ""),
                             sendMax = true,
+                            usdMode = false,
                             planError = null,
                         )
                     }
                 }) {
                     Text(stringResource(R.string.wallet_max), fontWeight = FontWeight.Bold)
+                }
+            }
+            state.usdPrice?.let { price ->
+                val other = if (send.usdMode) {
+                    coin.coinTextFromUsd(send.amountText, price)?.let { "≈ $it ${coin.ticker}" }
+                } else {
+                    Amounts.parse(send.amountText, coin.exponent)?.let { stringResource(R.string.wallet_usd_value, coin.usdText(it, price)) }
+                }
+                if (other != null) {
+                    Text(
+                        other,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
             if (send.extra.isEmpty()) Text(
@@ -1281,6 +1319,13 @@ private fun ReviewSheet(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 16.dp),
             )
+            state.usdPrice?.let { price ->
+                Text(
+                    stringResource(R.string.wallet_usd_value, coin.usdText(plan.amount, price)),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 // The network is the coin's own chain — Skycoin, this fiber
                 // coin's, or Bitcoin. Skycoin is not a Fibercoin.

@@ -730,6 +730,10 @@
     <string name="wallet_pending_delete_confirm">¿Quitar esta transacción del grupo sin confirmar de este nodo? No se cancela: otros nodos que la tengan aún pueden confirmarla. No se puede deshacer.</string>
     <string name="wallet_pending_removed">Quitada del grupo del nodo</string>
     <string name="wallet_outputs_none_wallet">Esta billetera no tiene salidas sin gastar.</string>
+    <string name="wallet_usd_value">≈ %1$s</string>
+    <string name="wallet_tx_usd_now">Valor actual</string>
+    <string name="settings_wallet_prices">Precios en dólares</string>
+    <string name="settings_wallet_prices_hint">Muestra también los saldos y cantidades de la billetera en USD. Los precios vienen de coinpaprika.com, que así ve la dirección de internet de este teléfono y qué monedas miras. Desactivado por defecto.</string>
     <string name="wallet_add_coin_from_node">Del nodo si se deja vacío</string>
     <string name="wallet_node_invalid">No es una dirección http(s).</string>
     <string name="wallet_node_remove">Quitar este nodo</string>
