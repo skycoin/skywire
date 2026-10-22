@@ -728,6 +728,12 @@
     <string name="wallet_send_dest_hours_hint">Coin hours (optional)</string>
     <string name="wallet_review_dest_many">to the addresses below on the %1$s network. Nothing is signed until you confirm.</string>
     <string name="wallet_result_body_many">%1$s %2$s is on its way to the destinations you chose. It stays pending until the network confirms it.</string>
+    <string name="wallet_send_advanced">Advanced</string>
+    <string name="wallet_send_change">Change address</string>
+    <string name="wallet_send_change_auto">Automatic</string>
+    <string name="wallet_send_change_select">Select</string>
+    <string name="wallet_send_change_note">Where the coins left over go. Empty sends them back to the address they came from. Any address works, also one outside this wallet.</string>
+    <string name="wallet_review_change_to">Change goes to</string>
     <string name="wallet_done">Done</string>
     <string name="wallet_send_to_hint_fiber">%1$s address</string>
     <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>

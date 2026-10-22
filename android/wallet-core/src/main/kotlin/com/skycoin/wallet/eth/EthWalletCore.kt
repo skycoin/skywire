@@ -185,8 +185,10 @@ class EthWalletCore(
         @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
         @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
         more: List<Recipient>,
+        changeAddress: String?,
     ): TxPlan {
         if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
+        if (changeAddress != null) throw WalletException.InvalidAddress()
         val dest = EthCrypto.parseAddress(toAddress.trim()) ?: throw WalletException.InvalidAddress()
         if (!sendMax && amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
 

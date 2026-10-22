@@ -771,6 +771,12 @@
     <string name="wallet_send_dest_hours_hint">Horas de moneda (opcional)</string>
     <string name="wallet_review_dest_many">a las direcciones de abajo en la red %1$s. No se firma nada hasta que confirmes.</string>
     <string name="wallet_result_body_many">%1$s %2$s va de camino a los destinos que elegiste. Sigue pendiente hasta que la red la confirme.</string>
+    <string name="wallet_send_advanced">Avanzado</string>
+    <string name="wallet_send_change">Dirección de cambio</string>
+    <string name="wallet_send_change_auto">Automática</string>
+    <string name="wallet_send_change_select">Elegir</string>
+    <string name="wallet_send_change_note">A dónde van las monedas que sobran. Vacío las devuelve a la dirección de la que salieron. Sirve cualquier dirección, también una de fuera de esta billetera.</string>
+    <string name="wallet_review_change_to">El cambio va a</string>
     <string name="wallet_done">Hecho</string>
     <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
     <string name="wallet_send_to_hint_btc">dirección bc1… o 1…</string>

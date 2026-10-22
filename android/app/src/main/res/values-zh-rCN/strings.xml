@@ -693,6 +693,12 @@
     <string name="wallet_send_dest_hours_hint">币时（可选）</string>
     <string name="wallet_review_dest_many">到 %1$s 网络上的下列地址。在你确认之前不会签名。</string>
     <string name="wallet_result_body_many">%1$s %2$s 正在发往你选择的收款方。在网络确认之前，交易一直处于待确认状态。</string>
+    <string name="wallet_send_advanced">高级</string>
+    <string name="wallet_send_change">找零地址</string>
+    <string name="wallet_send_change_auto">自动</string>
+    <string name="wallet_send_change_select">选择</string>
+    <string name="wallet_send_change_note">剩余的币发往哪里。留空则退回币原来所在的地址。任何地址都可以，包括本钱包以外的地址。</string>
+    <string name="wallet_review_change_to">找零发往</string>
     <string name="wallet_done">完成</string>
     <string name="wallet_send_to_hint_fiber">%1$s 地址</string>
     <string name="wallet_send_to_hint_btc">bc1… 或 1… 开头的地址</string>

@@ -71,6 +71,14 @@ class MultiDestinationTest {
     }
 
     @Test
+    fun changeGoesToTheAddressAsked() = runBlocking {
+        val plan = core.buildTx(seed, book, third, 20_000_000uL, null, false, changeAddress = fourth)
+        assertEquals(fourth, plan.changeAddress)
+        assertEquals(80_000_000uL, plan.changeAmount)
+        assertEquals("79a463487be5b9083d1f0c330deed5160210fb171cb4745b535e989dde72bb4b", innerHash(plan))
+    }
+
+    @Test
     fun hoursForSomeDestinationsOnlyAreRefused() {
         assertFailsWith<WalletException.InvalidAmount> {
             runBlocking {

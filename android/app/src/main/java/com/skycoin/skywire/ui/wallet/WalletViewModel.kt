@@ -48,6 +48,8 @@ data class SendState(
     val hoursText: String = "",
     /** Destinations after the first. Fiber only. */
     val extra: List<DestDraft> = emptyList(),
+    /** Where change goes; blank keeps the automatic choice. Fiber only. */
+    val changeAddress: String = "",
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -500,6 +502,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     inputs = send.inputs,
                     hoursTo = hoursTo,
                     more = more,
+                    changeAddress = send.changeAddress.takeIf { coin.kind == CoinKind.SKY_FIBER },
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()
