@@ -49,6 +49,8 @@ class SkyFiberWalletCore(
     // The seed is the phrase's bytes (deriveAddresses), so no checksum is needed.
     override fun acceptsLegacySeed(mnemonic: String): Boolean = Bip39.legacyWords(mnemonic)
 
+    override fun takesAnySeed(): Boolean = true
+
     override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
         if (seed.derivation == Derivation.BIP44) {
             val account = SkycoinBip44.accountKey(seed.mnemonic, seed.passphrase)

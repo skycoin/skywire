@@ -527,6 +527,11 @@
     <string name="wallet_restore_pasted">Twelve words read from the clipboard</string>
     <string name="wallet_restore_hint">Next word</string>
     <string name="wallet_restore_wordlist_note">Suggestions come from the BIP39 wordlist held on the device. Nothing you type is sent anywhere.</string>
+    <string name="wallet_restore_custom_open">Use a non-standard seed</string>
+    <string name="wallet_restore_custom_hint">The seed, exactly as it was written</string>
+    <string name="wallet_restore_custom_warning">This is not a 12 or 24 word recovery phrase. Older Skycoin wallets took any text as a seed, and every letter, capital and space counts. A typo restores a different, empty wallet. Only use this if your wallet really was made from such a seed.</string>
+    <string name="wallet_restore_custom_accept">Continue with the non-standard seed</string>
+    <string name="wallet_restore_custom_back">Use the word list instead</string>
     <string name="wallet_restore_action">Restore wallet</string>
     <string name="wallet_restore_checksum">This phrase fails its checksum. One of the words is wrong or out of order.</string>
     <string name="wallet_restore_legacy">This phrase carries no checksum — the older wallets wrote their seeds that way, so it may still be a good one. Check every word, then press again to restore anyway.</string>

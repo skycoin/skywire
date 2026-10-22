@@ -568,6 +568,11 @@
     <string name="wallet_restore_pasted">Doce palabras leídas del portapapeles</string>
     <string name="wallet_restore_hint">Siguiente palabra</string>
     <string name="wallet_restore_wordlist_note">Las sugerencias salen de la lista de palabras BIP39 guardada en el dispositivo. Nada de lo que escribes se envía a ningún sitio.</string>
+    <string name="wallet_restore_custom_open">Usar una semilla no estándar</string>
+    <string name="wallet_restore_custom_hint">La semilla, exactamente como se escribió</string>
+    <string name="wallet_restore_custom_warning">Esto no es una frase de recuperación de 12 o 24 palabras. Las billeteras antiguas de Skycoin aceptaban cualquier texto como semilla, y cuenta cada letra, mayúscula y espacio. Un error restaura otra billetera vacía. Úsalo solo si tu billetera de verdad se creó con una semilla así.</string>
+    <string name="wallet_restore_custom_accept">Continuar con la semilla no estándar</string>
+    <string name="wallet_restore_custom_back">Usar la lista de palabras</string>
     <string name="wallet_restore_action">Restaurar la billetera</string>
     <string name="wallet_restore_checksum">Esta frase no pasa su suma de verificación. Una de las palabras está mal o fuera de orden.</string>
     <string name="wallet_restore_legacy">Esta frase no lleva suma de verificación — las carteras antiguas escribían sus semillas así, así que puede seguir siendo válida. Revisa cada palabra y pulsa de nuevo para restaurar de todos modos.</string>

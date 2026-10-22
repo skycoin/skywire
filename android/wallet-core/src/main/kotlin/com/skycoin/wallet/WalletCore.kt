@@ -27,6 +27,13 @@ interface WalletCore {
     fun acceptsLegacySeed(mnemonic: String): Boolean = false
 
     /**
+     * Whether any text, taken exactly as written, can be a seed. The classic
+     * fiber wallet hashes the seed's bytes, so skycoin-web lets a user restore
+     * one from text that is not a BIP 39 phrase at all, after a warning.
+     */
+    fun takesAnySeed(): Boolean = false
+
+    /**
      * Deterministic addresses for this seed. Skycoin-family wallets have a
      * single chain (change returns to the first address, change list stays
      * empty); Bitcoin derives a separate change chain the UI never shows.
