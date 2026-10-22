@@ -84,6 +84,7 @@ import com.skycoin.wallet.Amounts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** Send: recipient, amount, the per-chain fee card, then review → sign. */
 @Composable
@@ -432,6 +433,33 @@ fun WalletSendScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
+                    )
+                    // Automatic hours only: hours typed by hand say exactly what each destination gets.
+                    val manualHours = send.hoursText.isNotBlank()
+                    SectionLabel(stringResource(R.string.wallet_send_share), modifier = Modifier.padding(top = 20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Slider(
+                            value = send.sharePercent.toFloat(),
+                            onValueChange = { v ->
+                                viewModel.updateSend { it.copy(sharePercent = v.roundToInt().coerceIn(10, 100), plan = null) }
+                            },
+                            valueRange = 10f..100f,
+                            steps = 89,
+                            enabled = !manualHours,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            stringResource(R.string.wallet_send_share_value, send.sharePercent),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 12.dp).width(52.dp),
+                            textAlign = TextAlign.End,
+                        )
+                    }
+                    Text(
+                        stringResource(if (manualHours) R.string.wallet_send_share_manual else R.string.wallet_send_share_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

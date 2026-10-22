@@ -752,7 +752,7 @@
     <string name="wallet_send_coins_none">Aucune sortie non dépensée à choisir.</string>
     <string name="wallet_utxo_line">%1$s heures · %2$s</string>
     <string name="wallet_send_hours">Coin Hours à envoyer</string>
-    <string name="wallet_send_hours_hint">Vide envoie la moitié des heures restantes après la combustion</string>
+    <string name="wallet_send_hours_hint">Vide envoie la part automatique des heures restantes après la combustion</string>
     <string name="wallet_send_invalid_hours">Ce n’est pas un nombre d’heures.</string>
     <string name="wallet_send_destination">Destination %1$d</string>
     <string name="wallet_send_add_destination">Ajouter une destination</string>
@@ -774,6 +774,10 @@
     <string name="wallet_send_change_auto">Automatique</string>
     <string name="wallet_send_change_select">Choisir</string>
     <string name="wallet_send_change_note">Où vont les pièces restantes. Vide les renvoie à l’adresse d’où elles viennent. N’importe quelle adresse convient, même hors de ce portefeuille.</string>
+    <string name="wallet_send_share">Part des Coin Hours</string>
+    <string name="wallet_send_share_value">%1$d %%</string>
+    <string name="wallet_send_share_note">La part des Coin Hours restant après la combustion qui part avec les pièces. Le reste revient avec la monnaie.</string>
+    <string name="wallet_send_share_manual">Inutilisé tant que les Coin Hours sont saisies à la main.</string>
     <string name="wallet_review_change_to">La monnaie va à</string>
     <string name="wallet_done">Terminé</string>
     <string name="wallet_send_to_hint_fiber">adresse %1$s</string>

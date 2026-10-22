@@ -14,6 +14,7 @@ import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.WalletException
 import com.skycoin.wallet.hexToBytes
 import okhttp3.OkHttpClient
+import java.math.BigDecimal
 
 /**
  * WalletCore for Skycoin and every fiber chain — same daemon, same rules,
@@ -168,6 +169,7 @@ class SkyFiberWalletCore(
         hoursTo: ULong?,
         more: List<Recipient>,
         changeAddress: String?,
+        shareFactor: BigDecimal?,
     ): TxPlan {
         val allTo = listOf(toAddress) + more.map { it.address } + listOfNotNull(changeAddress)
         if (allTo.any { !validateAddress(it) }) {
@@ -233,6 +235,7 @@ class SkyFiberWalletCore(
                 // from #2 would move #2's rest to #1.
                 changeAddress = changeAddress ?: fromAddress ?: book.receive.first(),
                 burnFactor = params.burnFactor,
+                shareFactor = shareFactor ?: SkycoinCreate.DEFAULT_SHARE,
             )
         } catch (e: SkycoinCreate.InsufficientBalance) {
             throw WalletException.InsufficientBalance()

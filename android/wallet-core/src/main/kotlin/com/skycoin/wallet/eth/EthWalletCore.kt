@@ -11,6 +11,7 @@ import com.skycoin.wallet.WalletBalance
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.WalletException
 import okhttp3.OkHttpClient
+import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
@@ -186,6 +187,7 @@ class EthWalletCore(
         @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
         more: List<Recipient>,
         changeAddress: String?,
+        @Suppress("UNUSED_PARAMETER") shareFactor: BigDecimal?,
     ): TxPlan {
         if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
         if (changeAddress != null) throw WalletException.InvalidAddress()

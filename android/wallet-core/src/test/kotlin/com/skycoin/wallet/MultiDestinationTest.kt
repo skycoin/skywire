@@ -79,6 +79,25 @@ class MultiDestinationTest {
     }
 
     @Test
+    fun shareFactorSetsTheHoursSentOnward() = runBlocking {
+        val cases = listOf(
+            Triple("0.1", listOf(72uL, 18uL, 810uL), "c6d604ec6052bb8dd0358eb0f0be54d40a581a3cbad164a5e8cb0e553f87173f"),
+            Triple("0.25", listOf(180uL, 45uL, 675uL), "5928013c3b40aef3dce60d13fa2ce49d4d230bfbc51db92d56efc43b6c4ea101"),
+            Triple("0.73", listOf(526uL, 131uL, 243uL), "ef56f22e3a3e42f69bc161b0c2c398c701c4493c05a62bc8b3a703561e93f164"),
+            Triple("1", listOf(720uL, 180uL, 0uL), "1c672237d11bb4b948f82249a4f7fee9791266cba872f11a97f29fdcf9c8d0b9"),
+        )
+        for ((share, hours, inner) in cases) {
+            val plan = core.buildTx(
+                seed, book, third, 20_000_000uL, null, false,
+                more = listOf(Recipient(fourth, 5_000_000uL)),
+                shareFactor = java.math.BigDecimal(share),
+            )
+            assertEquals(hours, plan.recipients.map { it.hours } + plan.hoursChange, "share $share")
+            assertEquals(inner, innerHash(plan), "share $share")
+        }
+    }
+
+    @Test
     fun hoursForSomeDestinationsOnlyAreRefused() {
         assertFailsWith<WalletException.InvalidAmount> {
             runBlocking {

@@ -29,6 +29,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.io.File
 import java.io.IOException
+import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -693,6 +694,7 @@ class WalletRepository private constructor(private val context: Context) {
         hoursTo: ULong? = null,
         more: List<Recipient> = emptyList(),
         changeAddress: String? = null,
+        shareFactor: BigDecimal? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
@@ -709,6 +711,7 @@ class WalletRepository private constructor(private val context: Context) {
             hoursTo = hoursTo,
             more = more.map { Recipient(it.address.trim(), it.amount, it.hours) },
             changeAddress = changeAddress?.trim()?.takeIf { it.isNotEmpty() },
+            shareFactor = shareFactor,
         )
     }
 
