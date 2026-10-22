@@ -1,6 +1,8 @@
 package com.skycoin.skywire.ui.wallet
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -70,9 +74,12 @@ import com.journeyapps.barcodescanner.ScanOptions
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.components.decodeQrImage
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.wallet.Amounts
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Send: recipient, amount, the per-chain fee card, then review → sign. */
 @Composable
@@ -112,6 +119,16 @@ fun WalletSendScreen(
     }
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let(::fillFrom)
+    }
+    var scanMenu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val noCode = stringResource(R.string.wallet_scan_no_code)
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { runCatching { decodeQrImage(context, uri) }.getOrNull() }
+            if (text == null) snackbar.showSnackbar(noCode) else fillFrom(text)
+        }
     }
 
     LaunchedEffect(Unit) { viewModel.loadFeePresets() }
@@ -162,19 +179,37 @@ fun WalletSendScreen(
                 }) {
                     Text(stringResource(R.string.wallet_paste), fontWeight = FontWeight.Bold)
                 }
-                IconButton(onClick = {
-                    scanLauncher.launch(
-                        ScanOptions()
-                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            .setBeepEnabled(false)
-                            .setOrientationLocked(true),
-                    )
-                }) {
-                    Icon(
-                        Icons.Outlined.QrCodeScanner,
-                        contentDescription = stringResource(R.string.wallet_scan_description),
-                        modifier = Modifier.size(20.dp),
-                    )
+                Box {
+                    IconButton(onClick = { scanMenu = true }) {
+                        Icon(
+                            Icons.Outlined.QrCodeScanner,
+                            contentDescription = stringResource(R.string.wallet_scan_description),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    DropdownMenu(expanded = scanMenu, onDismissRequest = { scanMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.wallet_scan_camera)) },
+                            onClick = {
+                                scanMenu = false
+                                scanLauncher.launch(
+                                    ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setBeepEnabled(false)
+                                        .setOrientationLocked(true),
+                                )
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.wallet_scan_image)) },
+                            onClick = {
+                                scanMenu = false
+                                imageLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            },
+                        )
+                    }
                 }
             }
 

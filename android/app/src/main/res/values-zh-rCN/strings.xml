@@ -651,6 +651,9 @@
     <string name="wallet_request_copy">复制收款请求</string>
     <string name="wallet_request_copied">收款请求已复制</string>
     <string name="wallet_scan_wrong_token">这个二维码请求的是另一种代币，而不是 %1$s。没有填入任何内容。</string>
+    <string name="wallet_scan_camera">用相机扫描</string>
+    <string name="wallet_scan_image">从图片读取</string>
+    <string name="wallet_scan_no_code">这张图片里没有找到二维码。</string>
     <string name="wallet_copy">复制</string>
     <string name="wallet_share">分享</string>
     <string name="wallet_address_copied">地址已复制到剪贴板</string>

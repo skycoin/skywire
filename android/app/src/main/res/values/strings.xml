@@ -686,6 +686,9 @@
     <string name="wallet_request_copy">Copy request</string>
     <string name="wallet_request_copied">Payment request copied</string>
     <string name="wallet_scan_wrong_token">This code asks for a payment in another token, not %1$s. Nothing was filled in.</string>
+    <string name="wallet_scan_camera">Scan with the camera</string>
+    <string name="wallet_scan_image">Read from an image</string>
+    <string name="wallet_scan_no_code">No QR code was found in that image.</string>
     <string name="wallet_copy">Copy</string>
     <string name="wallet_share">Share</string>
     <string name="wallet_address_copied">Address copied to the clipboard</string>
