@@ -9,6 +9,9 @@ import (
 
 // ClientConfig is a configuration for VPN client.
 type ClientConfig struct {
+	// Host puts the tunnel on the computer a browser visor runs on, through
+	// its host bridge (SetHostNetwork). A native client is always there.
+	Host       bool
 	Killswitch bool
 	ServerPK   cipher.PubKey
 	DNSAddr    string

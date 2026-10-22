@@ -97,6 +97,7 @@ var (
 	useExternal        bool
 	existingTpOnly     bool
 	forceLocalRoutes   bool
+	hostTunnel         bool
 	startVerbose       bool
 	startVerboseLevel  string
 	startRoutingPolicy string

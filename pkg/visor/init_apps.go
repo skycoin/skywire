@@ -12,6 +12,7 @@ import (
 	mathrand "math/rand"
 	"mime"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -564,14 +565,33 @@ func appsContains(apps []appserver.AppConfig, name string) bool {
 // and port — and the vpn-client, handed that, DNS-resolved the key and refused
 // to start ("lookup 0281a1…: no such host"). What that session actually rides
 // is skywire transports, whose IPs already travel as TPRemoteIPs.
+//
+// A browser's WebSocket hides the address it reached, so a session dialed
+// by URL gives the URL's host, which resolves as the browser resolved it.
 func vpnDirectDmsgAddr(ses interface {
 	Carrier() string
+	CarrierAddr() string
 	RemoteTCPAddr() net.Addr
 }) (string, bool) {
 	if c := ses.Carrier(); c == dmsg.CarrierSkynet || c == dmsg.CarrierInProcess {
 		return "", false
 	}
-	return ses.RemoteTCPAddr().String(), true
+	remote := ses.RemoteTCPAddr().String()
+	if _, _, err := net.SplitHostPort(remote); err == nil {
+		return remote, true
+	}
+	u, err := url.Parse(ses.CarrierAddr())
+	if err != nil || u.Hostname() == "" {
+		return "", false
+	}
+	port := u.Port()
+	if port == "" {
+		port = "443"
+		if u.Scheme == "ws" || u.Scheme == "http" {
+			port = "80"
+		}
+	}
+	return net.JoinHostPort(u.Hostname(), port), true
 }
 
 // Make an env maker function for vpn application
