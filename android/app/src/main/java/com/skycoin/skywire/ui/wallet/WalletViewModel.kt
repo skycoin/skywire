@@ -77,6 +77,8 @@ data class DraftState(
     val quizPositions: List<Int> = emptyList(),
     /** The kind of wallet being made. Fiber coins offer BIP 44 besides their classic wallet. */
     val derivation: Derivation = Derivation.STANDARD,
+    /** The optional BIP 39 passphrase; held in memory only until the wallet is saved. */
+    val passphrase: String = "",
 )
 
 /** Four flows, one carrier — Kotlin ships Triple and stops. */
@@ -310,17 +312,19 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     // --- create / restore ---
 
     /** Begin the create flow for the selected coin: fresh phrase of [words] words + quiz picks. */
-    fun startCreate(words: Int = 12, derivation: Derivation = Derivation.STANDARD) {
+    fun startCreate(words: Int = 12, derivation: Derivation = Derivation.STANDARD, passphrase: String = "") {
         val coin = mutable.value.coin
         val seed = Bip39.newMnemonic(if (words == 24) 256 else 128)
         val rnd = SecureRandom()
         val positions = (1..seed.split(" ").size).toMutableList().let { pool ->
             List(3) { pool.removeAt(rnd.nextInt(pool.size)) }.sorted()
         }
-        mutable.update { it.copy(draft = DraftState(coin, seed, positions, derivation)) }
+        mutable.update { it.copy(draft = DraftState(coin, seed, positions, derivation, passphrase)) }
     }
 
     fun setDraftDerivation(derivation: Derivation) = mutable.update { it.copy(draft = it.draft.copy(derivation = derivation)) }
+
+    fun setDraftPassphrase(passphrase: String) = mutable.update { it.copy(draft = it.draft.copy(passphrase = passphrase)) }
 
     fun startRestore() {
         mutable.update { it.copy(draft = DraftState(it.coin, null, emptyList())) }
@@ -337,7 +341,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         if (wrong.isEmpty()) {
             action {
                 val name = defaultWalletName(draft.coin)
-                repo.addWallet(draft.coin, name, seed, restored = false, derivation = draft.derivation)
+                repo.addWallet(draft.coin, name, seed, restored = false, derivation = draft.derivation, passphrase = draft.passphrase)
                 mutable.update { it.copy(draft = DraftState(), message = null) }
                 onActivated()
             }
@@ -354,7 +358,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         action {
             mutable.update { it.copy(restoring = true) }
             val name = defaultWalletName(draft.coin)
-            repo.addWallet(draft.coin, name, seedText, restored = true, legacy = legacy, derivation = draft.derivation)
+            repo.addWallet(
+                draft.coin, name, seedText, restored = true, legacy = legacy,
+                derivation = draft.derivation, passphrase = draft.passphrase,
+            )
             mutable.update { it.copy(draft = DraftState(), restoring = false) }
             onDone()
         }
@@ -619,6 +626,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun revealSeed(walletId: String): String? = repo.revealSeed(walletId)
+
+    suspend fun revealPassphrase(walletId: String): String = repo.revealPassphrase(walletId)
 
     suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = repo.extendedPublicKeys(walletId)
 

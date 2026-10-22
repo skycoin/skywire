@@ -523,10 +523,12 @@ fun WalletRevealScreen(
     var seed by remember { mutableStateOf<String?>(null) }
     var unavailable by remember { mutableStateOf(false) }
     var secondsLeft by remember { mutableStateOf(120) }
+    var passphrase by remember { mutableStateOf("") }
 
     LaunchedEffect(walletId) {
         val s = viewModel.revealSeed(walletId)
         if (s == null) unavailable = true else seed = s
+        passphrase = viewModel.revealPassphrase(walletId)
     }
     LaunchedEffect(seed) {
         if (seed == null) return@LaunchedEffect
@@ -571,6 +573,26 @@ fun WalletRevealScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
                 seed != null -> SeedGrid(seed!!.split(" "))
+            }
+            // A wallet made with a passphrase needs it as much as the words to be restored.
+            if (seed != null && passphrase.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.wallet_passphrase_reveal_label).uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 18.dp),
+                )
+                Text(
+                    passphrase,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                )
             }
             if (seed != null) {
                 Text(

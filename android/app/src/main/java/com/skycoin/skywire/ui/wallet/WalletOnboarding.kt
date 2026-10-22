@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SecureWindow
@@ -112,7 +113,7 @@ fun WalletSeedScreen(
                 listOf(12, 24).forEachIndexed { i, n ->
                     SegmentedButton(
                         selected = words.size == n,
-                        onClick = { if (words.size != n) viewModel.startCreate(n, state.draft.derivation) },
+                        onClick = { if (words.size != n) viewModel.startCreate(n, state.draft.derivation, state.draft.passphrase) },
                         shape = SegmentedButtonDefaults.itemShape(i, 2),
                     ) {
                         Text(stringResource(if (n == 24) R.string.wallet_seed_words_24 else R.string.wallet_seed_words_12))
@@ -122,8 +123,10 @@ fun WalletSeedScreen(
             DerivationChoice(viewModel)
             Spacer(Modifier.height(20.dp))
             SeedGrid(words)
+            val passphraseOk = PassphraseFields(viewModel, confirm = true)
             Button(
                 onClick = onContinue,
+                enabled = passphraseOk,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 28.dp, bottom = 24.dp)
@@ -172,6 +175,55 @@ fun DerivationChoice(viewModel: WalletViewModel) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+/**
+ * The optional BIP 39 passphrase, as skycoin-web offers it. Every wallet but
+ * the classic fiber one runs the phrase through BIP 39, and there it changes
+ * every key. Creating asks for it twice, since a typo would lose the wallet.
+ * Returns whether what is typed can be used.
+ */
+@Composable
+fun PassphraseFields(viewModel: WalletViewModel, confirm: Boolean): Boolean {
+    val state by viewModel.uiState.collectAsState()
+    val draft = state.draft
+    if (draft.coin.kind == CoinKind.SKY_FIBER && draft.derivation == Derivation.STANDARD) return true
+    var again by remember { mutableStateOf("") }
+    val mismatch = confirm && draft.passphrase != again
+    Text(
+        stringResource(R.string.wallet_passphrase_title).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 22.dp),
+    )
+    OutlinedTextField(
+        value = draft.passphrase,
+        onValueChange = viewModel::setDraftPassphrase,
+        placeholder = { Text(stringResource(R.string.wallet_passphrase_hint)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+    )
+    if (confirm && draft.passphrase.isNotEmpty()) {
+        OutlinedTextField(
+            value = again,
+            onValueChange = { again = it },
+            placeholder = { Text(stringResource(R.string.wallet_passphrase_confirm)) },
+            singleLine = true,
+            isError = mismatch && again.isNotEmpty(),
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            shape = RoundedCornerShape(12.dp),
+        )
+    }
+    Text(
+        stringResource(if (mismatch && again.isNotEmpty()) R.string.wallet_passphrase_mismatch else R.string.wallet_passphrase_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (mismatch && again.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    return !mismatch
 }
 
 /** The two-column numbered word grid — backup and reveal share it. */
@@ -423,6 +475,7 @@ fun WalletRestoreScreen(
                         .height(3.dp),
                 )
                 DerivationChoice(viewModel)
+                PassphraseFields(viewModel, confirm = false)
             }
 
             error?.let { err ->
