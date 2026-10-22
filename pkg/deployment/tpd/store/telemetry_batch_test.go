@@ -22,6 +22,9 @@ func TestApplyTelemetryBatch(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	tp1, tp2 := uuid.New(), uuid.New()
+	seedPrev(t, s, tp1.String(), a)
+	seedPrev(t, s, tp1.String(), b)
+	seedPrev(t, s, tp2.String(), a)
 
 	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{
 		{ID: tp1, Reporter: a, Sent: 100, Recv: 50, ThroughputBps: 500, LatMin: 5, LatMax: 15, LatAvg: 10, Type: "stcpr"},
@@ -163,6 +166,7 @@ func TestApplyTelemetryDatedByArrival(t *testing.T) {
 	ctx := context.Background()
 	a, _ := cipher.GenerateKeyPair()
 	id := uuid.New()
+	seedPrev(t, s, id.String(), a)
 	yesterday := time.Now().UTC().AddDate(0, 0, -1)
 	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{
 		{ID: id, Reporter: a, Sent: 100, Recv: 10, Type: "stcpr", At: yesterday, LatMin: 1, LatMax: 3, LatAvg: 2},
