@@ -922,6 +922,12 @@
     <string name="wallet_derivation_standard">Determinista</string>
     <string name="wallet_derivation_bip44">BIP44 (HD)</string>
     <string name="wallet_derivation_note">Determinista es la billetera clásica de Skycoin. BIP44 guarda el cambio en direcciones aparte. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó.</string>
+    <string name="wallet_passphrase_title">Frase de contraseña (opcional)</string>
+    <string name="wallet_passphrase_hint">Frase de contraseña</string>
+    <string name="wallet_passphrase_confirm">Escribe la frase de contraseña otra vez</string>
+    <string name="wallet_passphrase_mismatch">Las dos frases de contraseña no coinciden.</string>
+    <string name="wallet_passphrase_note">Un secreto más además de las palabras. Para restaurar la billetera hacen falta las dos cosas, y otra frase de contraseña abre otra billetera vacía. Déjala vacía si no quieres ninguna.</string>
+    <string name="wallet_passphrase_reveal_label">Frase de contraseña</string>
     <string name="wallet_xpub_action">Claves públicas extendidas</string>
     <string name="wallet_xpub_action_sub">Permite a una herramienta de solo lectura ver todas las direcciones de esta billetera. No puede gastar.</string>
     <string name="wallet_xpub_note">Quien tenga estas claves puede ver todas las direcciones y saldos de esta billetera, pero no gastar. Toca una para copiarla.</string>

@@ -385,6 +385,7 @@ class WalletRepository private constructor(private val context: Context) {
         restored: Boolean,
         legacy: Boolean = false,
         derivation: Derivation = Derivation.STANDARD,
+        passphrase: String = "",
     ): WalletMeta =
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
@@ -397,7 +398,9 @@ class WalletRepository private constructor(private val context: Context) {
             // from "the answer is one address" — a fresh phrase genuinely has
             // one and is settled, a restore that could not reach the node is
             // not.
-            val keys = KeySource(seed, derivation = derivation)
+            // The classic fiber wallet hashes the phrase itself; a passphrase has no part in it.
+            val pass = passphrase.takeUnless { spec.kind == CoinKind.SKY_FIBER && derivation == Derivation.STANDARD }.orEmpty()
+            val keys = KeySource(seed, pass, derivation)
             val scan = if (restored) {
                 runCatching { core.scanUsed(keys) }.getOrNull()
             } else {
@@ -447,9 +450,10 @@ class WalletRepository private constructor(private val context: Context) {
                 derivation = derivation,
             )
             seeds.putSeed(meta.id, seed)
+            seeds.putPassphrase(meta.id, pass)
             putWallets(wallets().first() + meta)
             setActiveWallet(spec.id, meta.id)
-            if (spec.isEthFamily) mirrorIntoEthFamily(meta, seed, book, exceptCoin = spec.id)
+            if (spec.isEthFamily) mirrorIntoEthFamily(meta, seed, pass, book, exceptCoin = spec.id)
             meta
         }
 
@@ -471,6 +475,7 @@ class WalletRepository private constructor(private val context: Context) {
     private suspend fun mirrorIntoEthFamily(
         source: WalletMeta,
         seed: String,
+        passphrase: String,
         book: AddressBook,
         exceptCoin: String,
     ) {
@@ -478,7 +483,7 @@ class WalletRepository private constructor(private val context: Context) {
             .filter { it.isEthFamily && it.id != exceptCoin }
             .forEach { sibling ->
                 mirrorWallet(
-                    sibling, source.name, source.createdAtMs, seed, book, source.addressScanAtMs,
+                    sibling, source.name, source.createdAtMs, seed, passphrase, book, source.addressScanAtMs,
                 )
             }
     }
@@ -496,6 +501,7 @@ class WalletRepository private constructor(private val context: Context) {
         name: String,
         createdAtMs: Long,
         seed: String,
+        passphrase: String,
         book: AddressBook,
         // The mirror is the same account with the same addresses, so the
         // source's answer about them is the mirror's answer too. Carrying it
@@ -521,6 +527,7 @@ class WalletRepository private constructor(private val context: Context) {
         // shared by reference) makes deleting any one wallet able to strand
         // the others.
         seeds.putSeed(meta.id, seed)
+        seeds.putPassphrase(meta.id, passphrase)
         putWallets(wallets().first() + meta)
         // Only if that coin has nothing selected yet: arriving at a coin the
         // user was already using must not move them off their own choice.
@@ -555,6 +562,7 @@ class WalletRepository private constructor(private val context: Context) {
                     existing.name,
                     existing.createdAtMs,
                     seed,
+                    seeds.passphrase(existing.id),
                     AddressBook(existing.receiveAddresses, existing.changeAddresses),
                     existing.addressScanAtMs,
                 )
@@ -587,7 +595,7 @@ class WalletRepository private constructor(private val context: Context) {
 
     /** What the wallet's keys come from, unsealed; null when the seed cannot be read. */
     private suspend fun keys(meta: WalletMeta): KeySource? =
-        seeds.seed(meta.id)?.let { KeySource(it, derivation = meta.derivation) }
+        seeds.seed(meta.id)?.let { KeySource(it, seeds.passphrase(meta.id), meta.derivation) }
 
     /** The wallet's xpubs, for a watch-only view; null where the wallet has none. */
     suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = withContext(Dispatchers.IO) {
@@ -598,6 +606,9 @@ class WalletRepository private constructor(private val context: Context) {
 
     /** The phrase in the clear — callers gate this behind the biometric confirm. */
     suspend fun revealSeed(id: String): String? = seeds.seed(id)
+
+    /** The passphrase in the clear, empty when there is none — gated like [revealSeed]. */
+    suspend fun revealPassphrase(id: String): String = seeds.passphrase(id)
 
     suspend fun newReceiveAddress(walletId: String): String {
         val meta = wallet(walletId) ?: error("unknown wallet")

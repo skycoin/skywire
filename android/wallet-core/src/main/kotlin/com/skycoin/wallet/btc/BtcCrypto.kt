@@ -14,8 +14,8 @@ import com.skycoin.wallet.Hashes
 object Bip84 {
     private val PURPOSE = intArrayOf(84 or Bip32.HARDENED, 0 or Bip32.HARDENED, 0 or Bip32.HARDENED)
 
-    fun accountKey(mnemonic: String): Bip32.ExtKey =
-        Bip32.derive(Bip32.master(Bip39.toSeed(mnemonic)), PURPOSE)
+    fun accountKey(mnemonic: String, passphrase: String = ""): Bip32.ExtKey =
+        Bip32.derive(Bip32.master(Bip39.toSeed(mnemonic, passphrase)), PURPOSE)
 
     fun key(account: Bip32.ExtKey, change: Int, index: Int): Bip32.ExtKey =
         Bip32.ckdPriv(Bip32.ckdPriv(account, change), index)

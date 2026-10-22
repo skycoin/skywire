@@ -49,7 +49,7 @@ class BtcWalletCore(
     override fun validateSeed(mnemonic: String): Boolean = Bip39.validate(mnemonic)
 
     override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
-        val account = Bip84.accountKey(seed.mnemonic)
+        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
         return AddressBook(
             receive = (0 until receiveCount).map { Bip84.address(Bip84.key(account, 0, it).pubKey()) },
             change = (0 until changeCount).map { Bip84.address(Bip84.key(account, 1, it).pubKey()) },
@@ -59,7 +59,7 @@ class BtcWalletCore(
     override fun validateAddress(address: String): Boolean = BtcAddress.isValid(address)
 
     override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
-        val account = Bip84.accountKey(seed.mnemonic)
+        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
         suspend fun scanChain(chain: Int, minimum: Int): Int {
             var lastUsed = -1
             var i = 0
@@ -183,7 +183,7 @@ class BtcWalletCore(
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
 
-        val account = Bip84.accountKey(seed.mnemonic)
+        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
         val programOf = HashMap<String, Triple<Int, Int, ByteArray>>() // address → (chain, index, hash160)
         book.receive.forEachIndexed { i, a -> programOf[a] = Triple(0, i, Hashes.hash160(Bip84.key(account, 0, i).pubKey())) }
         book.change.forEachIndexed { i, a -> programOf[a] = Triple(1, i, Hashes.hash160(Bip84.key(account, 1, i).pubKey())) }
@@ -274,7 +274,7 @@ class BtcWalletCore(
 
     override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val account = Bip84.accountKey(seed.mnemonic)
+        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
         val txn = BtcTxn(
             inputs = payload.inputs.map { BtcTxn.Input(it.txid, it.vout, it.value, it.pubKeyHash) },
             outputs = payload.outputs,

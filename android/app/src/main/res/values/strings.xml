@@ -879,6 +879,12 @@
     <string name="wallet_derivation_standard">Deterministic</string>
     <string name="wallet_derivation_bip44">BIP44 (HD)</string>
     <string name="wallet_derivation_note">Deterministic is the classic Skycoin wallet. BIP44 keeps change on separate addresses. The same phrase gives different addresses in each, so restore it as the type it was made as.</string>
+    <string name="wallet_passphrase_title">Seed passphrase (optional)</string>
+    <string name="wallet_passphrase_hint">Passphrase</string>
+    <string name="wallet_passphrase_confirm">Type the passphrase again</string>
+    <string name="wallet_passphrase_mismatch">The two passphrases differ.</string>
+    <string name="wallet_passphrase_note">An extra secret on top of the words. Restoring the wallet needs both, and a different passphrase opens a different, empty wallet. Leave it empty for none.</string>
+    <string name="wallet_passphrase_reveal_label">Seed passphrase</string>
     <string name="wallet_xpub_action">Extended public keys</string>
     <string name="wallet_xpub_action_sub">Lets a watch-only tool see every address of this wallet. It cannot spend.</string>
     <string name="wallet_xpub_note">Anyone with these keys can see all of this wallet\'s addresses and balances, but cannot spend. Tap one to copy it.</string>

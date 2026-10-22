@@ -920,6 +920,12 @@
     <string name="wallet_derivation_standard">Déterministe</string>
     <string name="wallet_derivation_bip44">BIP44 (HD)</string>
     <string name="wallet_derivation_note">Déterministe est le portefeuille Skycoin classique. BIP44 garde la monnaie sur des adresses à part. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée.</string>
+    <string name="wallet_passphrase_title">Phrase secrète (facultative)</string>
+    <string name="wallet_passphrase_hint">Phrase secrète</string>
+    <string name="wallet_passphrase_confirm">Saisissez de nouveau la phrase secrète</string>
+    <string name="wallet_passphrase_mismatch">Les deux phrases secrètes diffèrent.</string>
+    <string name="wallet_passphrase_note">Un secret en plus des mots. La restauration du portefeuille demande les deux, et une autre phrase secrète ouvre un autre portefeuille, vide. Laissez-la vide pour n’en avoir aucune.</string>
+    <string name="wallet_passphrase_reveal_label">Phrase secrète</string>
     <string name="wallet_xpub_action">Clés publiques étendues</string>
     <string name="wallet_xpub_action_sub">Permet à un outil en lecture seule de voir toutes les adresses de ce portefeuille. Il ne peut pas dépenser.</string>
     <string name="wallet_xpub_note">Quiconque a ces clés peut voir toutes les adresses et les soldes de ce portefeuille, sans pouvoir dépenser. Touchez-en une pour la copier.</string>
