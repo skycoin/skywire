@@ -60,8 +60,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
+import com.skycoin.skywire.wallet.exposedAddresses
 import kotlinx.coroutines.launch
 
 /** Receive: the QR, tap-to-copy, share, and the other-addresses sheet. */
@@ -121,6 +123,15 @@ fun WalletReceiveScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            if (coin.kind == CoinKind.SKY_FIBER && address in state.snapshot?.exposedAddresses.orEmpty()) {
+                Text(
+                    stringResource(R.string.wallet_receive_exposed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PENDING_AMBER,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
             Box(
                 modifier = Modifier
                     .padding(top = 20.dp)
@@ -364,6 +375,7 @@ private fun AddressSheet(
     val wallet = state.active ?: return
     val generated = stringResource(R.string.wallet_address_generated, wallet.name)
     var hideEmpty by rememberSaveable { mutableStateOf(false) }
+    val exposed = state.snapshot?.exposedAddresses.orEmpty().takeIf { state.coin.kind == CoinKind.SKY_FIBER }.orEmpty()
     var menuFor by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.padding(bottom = 24.dp)) {
@@ -430,6 +442,17 @@ private fun AddressSheet(
                                 stringResource(R.string.wallet_address_unused),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                        if (addr in exposed) {
+                            Text(
+                                stringResource(
+                                    if ((held ?: 0uL) > 0uL) R.string.wallet_address_exposed_funded
+                                    else R.string.wallet_address_exposed,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PENDING_AMBER,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }

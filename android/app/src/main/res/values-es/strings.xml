@@ -746,6 +746,10 @@
     <string name="wallet_outputs_none">Esta dirección no tiene salidas sin gastar.</string>
     <string name="wallet_history_all_addresses">Todas las direcciones</string>
     <string name="wallet_history_address_pick">Mostrar las transacciones de</string>
+    <string name="wallet_exposed_banner">Algunas direcciones de esta billetera aún tienen monedas después de haber enviado monedas. Sus claves públicas están en la cadena de bloques, así que un futuro ordenador cuántico podría robar esas monedas. Envíalas a una dirección nueva de esta billetera.</string>
+    <string name="wallet_address_exposed">Ha enviado monedas, así que su clave pública es pública. No vuelvas a recibir monedas aquí.</string>
+    <string name="wallet_address_exposed_funded">Ha enviado monedas y aún tiene algunas. Su clave pública es pública, así que mueve estas monedas a una dirección nueva.</string>
+    <string name="wallet_receive_exposed">Esta dirección ya ha enviado monedas, así que su clave pública está en la cadena de bloques. Un futuro ordenador cuántico podría usarla para robar las monedas que se envíen aquí. Usa una dirección nueva.</string>
     <string name="wallet_address_default">Predeterminada · en uso</string>
     <string name="wallet_address_unused">Nunca usada</string>
     <string name="wallet_address_new">Generar una dirección nueva</string>

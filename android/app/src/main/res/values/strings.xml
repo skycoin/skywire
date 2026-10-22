@@ -703,6 +703,10 @@
     <string name="wallet_outputs_none">This address holds no unspent outputs.</string>
     <string name="wallet_history_all_addresses">All addresses</string>
     <string name="wallet_history_address_pick">Show the transactions of</string>
+    <string name="wallet_exposed_banner">Some addresses in this wallet still hold coins after having sent coins. Their public keys are on the blockchain, so a future quantum computer could steal those coins. Send them to a new address of this wallet.</string>
+    <string name="wallet_address_exposed">Has sent coins, so its public key is public. Do not receive coins here again.</string>
+    <string name="wallet_address_exposed_funded">Has sent coins and still holds some. Its public key is public, so move these coins to a new address.</string>
+    <string name="wallet_receive_exposed">This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent here. Use a new address instead.</string>
     <string name="wallet_address_default">Default · in use</string>
     <string name="wallet_address_unused">Never used</string>
     <string name="wallet_address_new">Generate a new address</string>

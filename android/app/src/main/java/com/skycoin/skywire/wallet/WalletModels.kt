@@ -252,6 +252,19 @@ data class WalletSnapshot(
 val WalletSnapshot.historyBehind: Boolean get() = historyFetchedAtMs < fetchedAtMs
 
 /**
+ * The wallet's addresses that have sent coins. A spend puts the address's
+ * public key on the chain, where a future quantum computer could use it to
+ * take what is still there or sent there later. Read from the history the
+ * wallet already holds; skycoin-web asks the node per address for the same.
+ */
+val WalletSnapshot.exposedAddresses: Set<String>
+    get() = txs.filter { !it.incoming }.flatMapTo(HashSet()) { it.own }
+
+/** Exposed addresses that still hold coins: the ones worth moving. */
+val WalletSnapshot.exposedWithCoins: Set<String>
+    get() = exposedAddresses.filterTo(HashSet()) { (perAddress[it] ?: 0uL) > 0uL }
+
+/**
  * Fold one refresh's results into the snapshot that gets cached.
  *
  * [history] is null when that fetch failed, which is a normal outcome rather
