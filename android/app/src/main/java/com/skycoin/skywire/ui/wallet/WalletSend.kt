@@ -25,9 +25,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,6 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -97,6 +100,7 @@ fun WalletSendScreen(
     var reviewSheet by remember { mutableStateOf(false) }
     var fromSheet by remember { mutableStateOf(false) }
     var coinsSheet by remember { mutableStateOf(false) }
+    var bulkDialog by remember { mutableStateOf(false) }
 
     val wrongToken = stringResource(R.string.wallet_scan_wrong_token, coin.ticker)
     // A scanned code and a pasted one are read alike: an address, or a payment request.
@@ -345,7 +349,7 @@ fun WalletSendScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = {
+                if (send.extra.isEmpty()) TextButton(onClick = {
                     val max = viewModel.sendMaxAmount()
                     viewModel.updateSend {
                         it.copy(
@@ -358,7 +362,7 @@ fun WalletSendScreen(
                     Text(stringResource(R.string.wallet_max), fontWeight = FontWeight.Bold)
                 }
             }
-            Text(
+            if (send.extra.isEmpty()) Text(
                 text = when (coin.kind) {
                     CoinKind.BTC -> stringResource(R.string.wallet_max_note_btc)
                     CoinKind.ETH -> stringResource(R.string.wallet_max_note_eth)
@@ -369,6 +373,30 @@ fun WalletSendScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
+
+            // More destinations in the same transaction, fiber only, as skycoin-web's advanced form.
+            if (coin.kind == CoinKind.SKY_FIBER) {
+                send.extra.forEachIndexed { i, d ->
+                    DestinationCard(
+                        number = i + 2,
+                        draft = d,
+                        coin = coin,
+                        onChange = { t -> viewModel.updateDestination(i, t) },
+                        onRemove = { viewModel.removeDestination(i) },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(onClick = viewModel::addDestination) {
+                        Text(stringResource(R.string.wallet_send_add_destination), fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { bulkDialog = true }) {
+                        Text(stringResource(R.string.wallet_send_bulk), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
 
             SectionLabel(
                 stringResource(R.string.wallet_fee),
@@ -449,6 +477,19 @@ fun WalletSendScreen(
         UtxoSheet(
             viewModel = viewModel,
             onDismiss = { coinsSheet = false },
+        )
+    }
+
+    if (bulkDialog) {
+        BulkSendDialog(
+            initial = (listOf(DestDraft(send.to, send.amountText, send.hoursText)) + send.extra)
+                .filter { it.address.isNotBlank() || it.amountText.isNotBlank() }
+                .joinToString("\n") { d -> listOf(d.address, d.amountText, d.hoursText).filter { it.isNotBlank() }.joinToString(", ") },
+            onApply = {
+                viewModel.applyBulk(it)
+                bulkDialog = false
+            },
+            onDismiss = { bulkDialog = false },
         )
     }
 
@@ -628,6 +669,129 @@ private fun UtxoSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/** A destination after the first: address, amount and, optionally, its hours. */
+@Composable
+private fun DestinationCard(
+    number: Int,
+    draft: DestDraft,
+    coin: com.skycoin.skywire.wallet.CoinSpec,
+    onChange: ((DestDraft) -> DestDraft) -> Unit,
+    onRemove: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(
+                stringResource(R.string.wallet_send_destination, number),
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
+            )
+            IconButton(onClick = onRemove) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.wallet_send_remove_destination),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        TextField(
+            value = draft.address,
+            onValueChange = { v -> onChange { it.copy(address = v.trim()) } },
+            placeholder = { Text(stringResource(R.string.wallet_send_to_hint_fiber, coin.name)) },
+            singleLine = true,
+            colors = transparentFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextField(
+                value = draft.amountText,
+                onValueChange = { v -> onChange { it.copy(amountText = v) } },
+                placeholder = { Text("0") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                colors = transparentFieldColors(),
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                coin.ticker,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
+        TextField(
+            value = draft.hoursText,
+            onValueChange = { v -> onChange { it.copy(hoursText = v.take(18)) } },
+            placeholder = { Text(stringResource(R.string.wallet_send_dest_hours_hint)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = transparentFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** Every destination as text, one per line, skycoin-web's bulk send format. */
+@Composable
+private fun BulkSendDialog(initial: String, onApply: (List<DestDraft>) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    var problem by remember { mutableStateOf<BulkParse?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.wallet_send_bulk)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.wallet_send_bulk_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; problem = null },
+                    placeholder = { Text(stringResource(R.string.wallet_send_bulk_hint)) },
+                    minLines = 5,
+                    maxLines = 10,
+                    isError = problem != null,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                problem?.let { p ->
+                    Text(
+                        when (p) {
+                            is BulkParse.BadLine -> stringResource(R.string.wallet_send_bulk_line, p.line)
+                            is BulkParse.MixedHours -> stringResource(R.string.wallet_send_bulk_mixed, p.line)
+                            else -> stringResource(R.string.wallet_send_bulk_empty)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                when (val r = parseBulk(text)) {
+                    is BulkParse.Ok -> onApply(r.destinations)
+                    else -> problem = r
+                }
+            }) {
+                Text(stringResource(R.string.wallet_send_bulk_apply), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable
@@ -893,11 +1057,11 @@ private fun ReviewSheet(
             Text(
                 // The network is the coin's own chain — Skycoin, this fiber
                 // coin's, or Bitcoin. Skycoin is not a Fibercoin.
-                stringResource(
-                    R.string.wallet_review_dest,
-                    shortAddress(plan.toAddress),
-                    coin.name,
-                ),
+                if (plan.recipients.size > 1) {
+                    stringResource(R.string.wallet_review_dest_many, coin.name)
+                } else {
+                    stringResource(R.string.wallet_review_dest, shortAddress(plan.toAddress), coin.name)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
@@ -960,6 +1124,14 @@ private fun ReviewSheet(
                         "${coin.amountText(plan.amount)} ${coin.ticker}",
                         first = true,
                     )
+                    if (plan.recipients.size > 1) {
+                        plan.recipients.forEach { r ->
+                            ReviewRow(
+                                shortAddress(r.address),
+                                "${coin.amountText(r.amount)} ${coin.ticker} · ${hoursText(r.hours ?: 0uL)}",
+                            )
+                        }
+                    }
                     ReviewRow(stringResource(R.string.wallet_hours_burned), hoursText(plan.fee))
                     ReviewRow(
                         stringResource(R.string.wallet_review_balance_after, coin.ticker),
@@ -1052,12 +1224,16 @@ fun WalletResultScreen(
                 textAlign = TextAlign.Center,
             )
             Text(
-                stringResource(
-                    R.string.wallet_result_body,
-                    coin.amountText(send.sentAmount),
-                    coin.ticker,
-                    shortAddress(send.sentTo, 6, 4),
-                ),
+                if (send.sentCount > 1) {
+                    stringResource(R.string.wallet_result_body_many, coin.amountText(send.sentAmount), coin.ticker)
+                } else {
+                    stringResource(
+                        R.string.wallet_result_body,
+                        coin.amountText(send.sentAmount),
+                        coin.ticker,
+                        shortAddress(send.sentTo, 6, 4),
+                    )
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),

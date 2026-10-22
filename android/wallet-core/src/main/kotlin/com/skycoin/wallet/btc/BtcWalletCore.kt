@@ -4,6 +4,7 @@ import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Hashes
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.TxRecord
@@ -169,7 +170,9 @@ class BtcWalletCore(
         fromAddress: String?,
         @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
         @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
+        more: List<Recipient>,
     ): TxPlan {
+        if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
 

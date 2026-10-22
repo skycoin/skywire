@@ -4,6 +4,7 @@ import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.TxRecord
@@ -165,8 +166,15 @@ class SkyFiberWalletCore(
         fromAddress: String?,
         inputs: Set<String>?,
         hoursTo: ULong?,
+        more: List<Recipient>,
     ): TxPlan {
-        if (!validateAddress(toAddress)) throw WalletException.InvalidAddress()
+        if (!validateAddress(toAddress) || more.any { !validateAddress(it.address) }) {
+            throw WalletException.InvalidAddress()
+        }
+        if (sendMax && more.isNotEmpty()) throw WalletException.InvalidAmount("Max sends to one destination")
+        if (more.any { (it.hours == null) != (hoursTo == null) }) {
+            throw WalletException.InvalidAmount("set the hours for every destination, or for none")
+        }
 
         val health = node.health()
         val params = health.userVerifyTxn
@@ -203,20 +211,22 @@ class SkyFiberWalletCore(
         } else {
             amount
         }
-        if (sendAmount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
+        val destinations = listOf(SkycoinCreate.Destination(toAddress, sendAmount, hoursTo)) +
+            more.map { SkycoinCreate.Destination(it.address, it.amount, it.hours) }
+        if (destinations.any { it.coins == 0uL }) throw WalletException.InvalidAmount("enter an amount to send")
 
         // The chain caps decimal precision; sub-precision amounts are rejected
         // by every node, so fail here with the limit spelled out.
         var divisor = 1uL
         repeat(DROPLET_EXPONENT - params.maxDecimals) { divisor *= 10uL }
-        if (sendAmount % divisor != 0uL) {
+        if (destinations.any { it.coins % divisor != 0uL }) {
             throw WalletException.InvalidAmount("amounts on this chain carry at most ${params.maxDecimals} decimals")
         }
 
         val created = try {
             SkycoinCreate.create(
                 unspents = spendable,
-                to = listOf(SkycoinCreate.Destination(toAddress, sendAmount, hoursTo)),
+                to = destinations,
                 // Change goes back where it came from, or a send from #2 moves #2's rest to #1.
                 changeAddress = fromAddress ?: book.receive.first(),
                 burnFactor = params.burnFactor,
@@ -242,9 +252,11 @@ class SkyFiberWalletCore(
             created.spends.first { it.hash.contentEquals(uxid) }.address
         }
 
+        var total = 0uL
+        for (d in destinations) total += d.coins
         return TxPlan(
             toAddress = toAddress,
-            amount = sendAmount,
+            amount = total,
             fee = created.feeHours,
             changeAmount = created.changeCoins,
             hoursToRecipient = created.hoursToDestinations,
@@ -252,6 +264,10 @@ class SkyFiberWalletCore(
             vsize = null,
             feeRate = null,
             payload = Payload(created.txn, inputAddresses, book.receive),
+            // The destinations are the transaction's first outputs, in order.
+            recipients = destinations.mapIndexed { i, d ->
+                Recipient(d.address, d.coins, created.txn.outputs[i].hours)
+            },
         )
     }
 

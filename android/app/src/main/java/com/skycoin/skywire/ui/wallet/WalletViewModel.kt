@@ -13,6 +13,7 @@ import com.skycoin.skywire.wallet.WalletSnapshot
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletException
@@ -45,6 +46,8 @@ data class SendState(
     val utxos: List<UtxoRecord> = emptyList(),
     /** Hours for the recipient, digits only; blank = automatic split. */
     val hoursText: String = "",
+    /** Destinations after the first. Fiber only. */
+    val extra: List<DestDraft> = emptyList(),
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -54,6 +57,7 @@ data class SendState(
     val sentTxid: String? = null,
     val sentAmount: ULong = 0u,
     val sentTo: String = "",
+    val sentCount: Int = 1,
 )
 
 /** The create/restore flow in progress — the phrase lives only here, in memory. */
@@ -362,6 +366,32 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetSend() = mutable.update { it.copy(send = SendState()) }
 
+    // --- more destinations (fiber) ---
+
+    fun addDestination() = updateSend { it.copy(extra = it.extra + DestDraft(), sendMax = false, plan = null) }
+
+    fun updateDestination(index: Int, transform: (DestDraft) -> DestDraft) = updateSend { s ->
+        s.copy(extra = s.extra.mapIndexed { i, d -> if (i == index) transform(d) else d }, plan = null, planError = null)
+    }
+
+    fun removeDestination(index: Int) = updateSend { s ->
+        s.copy(extra = s.extra.filterIndexed { i, _ -> i != index }, plan = null, planError = null)
+    }
+
+    /** Bulk send replaces every destination, the first one included. */
+    fun applyBulk(destinations: List<DestDraft>) = updateSend { s ->
+        val first = destinations.first()
+        s.copy(
+            to = first.address,
+            amountText = first.amountText,
+            hoursText = first.hoursText,
+            extra = destinations.drop(1),
+            sendMax = false,
+            plan = null,
+            planError = null,
+        )
+    }
+
     // --- coin control (fiber) ---
 
     /** Loads the unspent outputs for the picker; keeps the last list on failure. */
@@ -440,6 +470,23 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 return
             }
         }
+        val more = ArrayList<Recipient>()
+        for ((i, d) in send.extra.withIndex()) {
+            val coins = Amounts.parse(d.amountText, coin.exponent)?.takeIf { it > 0uL }
+            val typedHours = d.hoursText.trim().takeIf { it.isNotEmpty() }
+            val hours = typedHours?.toULongOrNull()
+            val problem = when {
+                coins == null -> app.getString(R.string.wallet_send_dest_invalid_amount, i + 2)
+                typedHours != null && hours == null -> app.getString(R.string.wallet_send_invalid_hours)
+                (hours == null) != (hoursTo == null) -> app.getString(R.string.wallet_send_hours_mixed)
+                else -> null
+            }
+            if (problem != null || coins == null) {
+                mutable.update { it.copy(send = send.copy(planError = problem)) }
+                return
+            }
+            more += Recipient(d.address.trim(), coins, hours)
+        }
         mutable.update { it.copy(send = send.copy(planning = true, planError = null)) }
         action {
             try {
@@ -452,6 +499,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     fromAddress = send.fromAddress,
                     inputs = send.inputs,
                     hoursTo = hoursTo,
+                    more = more,
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()
@@ -487,6 +535,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                             sentTxid = txid,
                             sentAmount = plan.amount,
                             sentTo = plan.toAddress,
+                            sentCount = plan.recipients.size,
                         ),
                     )
                 }

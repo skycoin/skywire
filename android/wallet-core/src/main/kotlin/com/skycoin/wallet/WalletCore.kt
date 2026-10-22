@@ -60,6 +60,8 @@ interface WalletCore {
      * them automatically. Fiber chains only.
      * @param hoursTo hours the destination receives; null splits them
      * automatically. Fiber chains only.
+     * @param more destinations after the first, in output order. Fiber
+     * chains only; hours are given for every destination or for none.
      */
     suspend fun buildTx(
         seed: String,
@@ -71,6 +73,7 @@ interface WalletCore {
         fromAddress: String? = null,
         inputs: Set<String>? = null,
         hoursTo: ULong? = null,
+        more: List<Recipient> = emptyList(),
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
@@ -79,6 +82,9 @@ interface WalletCore {
     /** Hand the signed transaction to the node; returns the txid it reports. */
     suspend fun broadcast(tx: SignedTx): String
 }
+
+/** One destination of a send. [hours] is fiber only; null splits hours automatically. */
+class Recipient(val address: String, val amount: ULong, val hours: ULong? = null)
 
 class AddressBook(val receive: List<String>, val change: List<String>) {
     fun all(): List<String> = receive + change
@@ -127,7 +133,9 @@ class TxRecord(
 class FeePresets(val economy: Int, val normal: Int, val priority: Int)
 
 class TxPlan(
+    /** The first destination. */
     val toAddress: String,
+    /** Coins leaving for every destination together. */
     val amount: ULong,
     /** Burned hours on Skycoin-family chains, satoshis on Bitcoin. */
     val fee: ULong,
@@ -141,6 +149,8 @@ class TxPlan(
     val feeRate: Int?,
     /** Implementation payload consumed by signTx. */
     internal val payload: Any,
+    /** Every destination with the hours it receives, in output order. */
+    val recipients: List<Recipient> = listOf(Recipient(toAddress, amount, hoursToRecipient)),
 )
 
 class SignedTx(val rawHex: String, val txid: String, internal val payload: Any? = null)
