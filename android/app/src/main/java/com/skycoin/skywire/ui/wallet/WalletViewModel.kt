@@ -558,6 +558,34 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --- offline transactions (fiber) ---
+
+    /** The planned send unsigned, or null when there is no plan. */
+    suspend fun unsignedHex(): String? {
+        val st = mutable.value
+        val plan = st.send.plan ?: return null
+        return repo.unsignedHex(st.active?.id ?: return null, plan)
+    }
+
+    /** Signs a pasted transaction; the result or the reason it failed, in the user's words. */
+    suspend fun signRaw(rawHex: String): Result<String> = offline { repo.signRaw(it, rawHex).rawHex }
+
+    /** Broadcasts a pasted signed transaction; the txid or the reason it failed. */
+    suspend fun broadcastRaw(rawHex: String): Result<String> = offline { walletId ->
+        repo.broadcastRaw(walletId, rawHex).also { refreshNow() }
+    }
+
+    private suspend fun offline(block: suspend (String) -> String): Result<String> {
+        val active = mutable.value.active ?: return Result.failure(IllegalStateException())
+        return try {
+            Result.success(block(active.id))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException(report(e)))
+        }
+    }
+
     // --- wallet management ---
 
     fun useWallet(walletId: String) = action {

@@ -105,6 +105,8 @@ fun WalletSendScreen(
     var bulkDialog by remember { mutableStateOf(false) }
     var advancedOpen by remember { mutableStateOf(false) }
     var changeSheet by remember { mutableStateOf(false) }
+    var offlineMode by remember { mutableStateOf<OfflineMode?>(null) }
+    var unsignedHex by remember { mutableStateOf<String?>(null) }
 
     val wrongToken = stringResource(R.string.wallet_scan_wrong_token, coin.ticker)
     // A scanned code and a pasted one are read alike: an address, or a payment request.
@@ -461,6 +463,18 @@ fun WalletSendScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Offline signing, as skycoin-web: sign here what another device built, or send what it signed.
+                    Row(
+                        modifier = Modifier.padding(top = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        TextButton(onClick = { offlineMode = OfflineMode.SIGN }) {
+                            Text(stringResource(R.string.wallet_offline_sign_title), fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { offlineMode = OfflineMode.BROADCAST }) {
+                            Text(stringResource(R.string.wallet_offline_broadcast_title), fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
 
@@ -546,6 +560,19 @@ fun WalletSendScreen(
         )
     }
 
+    offlineMode?.let { mode ->
+        OfflineTxDialog(viewModel = viewModel, mode = mode, onDismiss = { offlineMode = null })
+    }
+
+    unsignedHex?.let { hex ->
+        RawTxDialog(
+            title = stringResource(R.string.wallet_offline_unsigned_title),
+            body = stringResource(R.string.wallet_offline_unsigned_body),
+            hex = hex,
+            onDismiss = { unsignedHex = null },
+        )
+    }
+
     if (changeSheet) {
         ChangeSheet(viewModel = viewModel, onDismiss = { changeSheet = false })
     }
@@ -566,6 +593,12 @@ fun WalletSendScreen(
     if (reviewSheet && send.plan != null) {
         ReviewSheet(
             viewModel = viewModel,
+            onUnsigned = {
+                scope.launch {
+                    unsignedHex = viewModel.unsignedHex()
+                    reviewSheet = false
+                }
+            },
             onDismiss = { reviewSheet = false },
             onConfirm = {
                 reviewSheet = false
@@ -1186,6 +1219,7 @@ private fun FeePresetButton(
 @Composable
 private fun ReviewSheet(
     viewModel: WalletViewModel,
+    onUnsigned: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -1313,6 +1347,12 @@ private fun ReviewSheet(
                         Spacer(Modifier.width(10.dp))
                     }
                     Text(stringResource(R.string.wallet_review_sign), fontWeight = FontWeight.Bold)
+                }
+            }
+            // Fiber only: the unsigned transaction, to sign on a device that holds the keys.
+            if (coin.kind == CoinKind.SKY_FIBER) {
+                TextButton(onClick = onUnsigned, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    Text(stringResource(R.string.wallet_offline_unsigned_button), fontWeight = FontWeight.Bold)
                 }
             }
         }
