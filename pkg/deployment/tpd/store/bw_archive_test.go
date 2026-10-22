@@ -21,6 +21,7 @@ func TestBandwidthDailyTTLWithArchive(t *testing.T) {
 	ctx := context.Background()
 	pk, _ := cipher.GenerateKeyPair()
 	id := uuid.New().String()
+	seedPrev(t, s, id, pk)
 	require.NoError(t, s.UpdateBandwidth(ctx, id, pk, 100, 50, "stcpr"))
 	ttl, err := s.client.TTL(ctx, s.bandwidthDailyKey(id, time.Now().UTC())).Result()
 	require.NoError(t, err)

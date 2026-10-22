@@ -19,7 +19,7 @@
 // report of the new day is applied at once so the day boundary stays sharp.
 //
 // A row identical to the last one applied is not applied again until
-// unchangedRefresh has passed, which keeps its bw:prev counters (6 h TTL)
+// unchangedRefresh has passed, which keeps its bw:prev counters (7 day TTL)
 // and its latency record (latencyTTL) alive.
 package cxoaggregator
 
@@ -49,7 +49,7 @@ const telemetryApplyEvery = 15 * time.Minute
 const maxTelemetryApplyEvery = 30 * time.Minute
 
 // unchangedRefresh is how long a row identical to the last one applied may
-// go unwritten. Under the store's 1 h latency TTL and 6 h bw:prev TTL.
+// go unwritten. Under the store's 1 h latency TTL and 7 day bw:prev TTL.
 const unchangedRefresh = 45 * time.Minute
 
 // telemetryFlushEvery is how often held snapshots are checked for flushing.

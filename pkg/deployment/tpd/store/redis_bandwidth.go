@@ -35,8 +35,9 @@ func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
 const bandwidthHistoryTTL = 14 * 24 * time.Hour
 
 // bandwidthPrevTTL keeps a reporter's last counters past any gap in applied
-// reports, such as a TPD restart. Without them a report re-counts its lifetime.
-const bandwidthPrevTTL = 6 * time.Hour
+// reports, such as a TPD restart or a stalled feed, so the bytes sent during
+// the gap still come out as one delta. A report with no snapshot credits 0.
+const bandwidthPrevTTL = 7 * 24 * time.Hour
 
 var bandwidthPrevTTLSeconds = int64(bandwidthPrevTTL / time.Second)
 

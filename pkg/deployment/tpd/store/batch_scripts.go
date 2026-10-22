@@ -30,9 +30,10 @@ for i = 1, n do
   local kp, kd = KEYS[3 + 2 * i], KEYS[4 + 2 * i]
   local cs, cr = tonumber(ARGV[5 + 3 * i]), tonumber(ARGV[6 + 3 * i])
   local ty = ARGV[7 + 3 * i]
-  local ds, dr = cs, cr
+  local ds, dr = 0, 0
   local prev = redis.call('HMGET', kp, 'sent', 'recv')
   if prev[1] and prev[2] then
+    ds, dr = cs, cr
     local ps, pr = tonumber(prev[1]), tonumber(prev[2])
     if cs >= ps then ds = cs - ps end
     if cr >= pr then dr = cr - pr end
