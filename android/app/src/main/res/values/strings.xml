@@ -784,6 +784,9 @@
     <string name="wallet_fee_gas">Gas limit %1$d · up to %2$d gwei per gas</string>
     <string name="wallet_fee_note_eth">The fee shown is the worst case at today’s prices — unspent gas is never charged.</string>
     <string name="wallet_fee_note_erc20">Token transfers burn gas, and gas is paid in ETH from the sending address — keep a little ETH next to the tokens.</string>
+    <string name="wallet_fee_eth_slow">Least tip</string>
+    <string name="wallet_fee_eth_normal">Node\'s tip</string>
+    <string name="wallet_fee_eth_fast">Double tip</string>
     <string name="wallet_review">Review</string>
     <string name="wallet_review_title">You are about to send</string>
     <!-- %2$s is the coin's own name: Skycoin is the original chain, each

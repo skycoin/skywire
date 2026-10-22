@@ -68,6 +68,7 @@ interface WalletCore {
      * rule. Fiber chains only.
      * @param shareFactor the share of post-burn hours automatic hours send
      * onward, 0 to 1; null is the default half. Fiber chains only.
+     * @param feeLevel how much tip to offer; null is normal. Ethereum family only.
      */
     suspend fun buildTx(
         seed: String,
@@ -82,6 +83,7 @@ interface WalletCore {
         more: List<Recipient> = emptyList(),
         changeAddress: String? = null,
         shareFactor: BigDecimal? = null,
+        feeLevel: FeeLevel? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
@@ -153,6 +155,9 @@ class TxRecord(
 )
 
 class FeePresets(val economy: Int, val normal: Int, val priority: Int)
+
+/** An Ethereum fee choice: the least tip, the node's suggested tip, or twice it. */
+enum class FeeLevel { SLOW, NORMAL, FAST }
 
 class TxPlan(
     /** The first destination. */

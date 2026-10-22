@@ -2,6 +2,7 @@ package com.skycoin.wallet.eth
 
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
@@ -188,6 +189,7 @@ class EthWalletCore(
         more: List<Recipient>,
         changeAddress: String?,
         @Suppress("UNUSED_PARAMETER") shareFactor: BigDecimal?,
+        feeLevel: FeeLevel?,
     ): TxPlan {
         if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
         if (changeAddress != null) throw WalletException.InvalidAddress()
@@ -204,7 +206,14 @@ class EthWalletCore(
             ?: throw WalletException.InsufficientBalance()
 
         val id = chainId ?: api.chainId().also { chainId = it }
-        val priority = api.maxPriorityFeePerGas()
+        // The tips skycoin's eth.FeePresets offers: the least, the node's
+        // suggestion (never below the least), and twice the suggestion.
+        val suggested = api.maxPriorityFeePerGas().max(MIN_TIP_WEI)
+        val priority = when (feeLevel) {
+            FeeLevel.SLOW -> MIN_TIP_WEI
+            FeeLevel.FAST -> suggested * BigInteger.valueOf(2)
+            else -> suggested
+        }
         // Twice the current base fee rides out the worst-case climb while
         // the send waits; anything unspent is never charged.
         val maxFee = api.baseFeePerGas() * BigInteger.valueOf(2) + priority
@@ -330,6 +339,9 @@ class EthWalletCore(
 
         /** A plain EOA transfer, exactly. */
         val GAS_TRANSFER: BigInteger = BigInteger.valueOf(21_000)
+
+        /** 0.1 gwei: some nodes suggest a zero tip, which block builders skip. */
+        val MIN_TIP_WEI: BigInteger = BigInteger.valueOf(100_000_000)
 
         /** Fallback when the node will not estimate a token transfer. */
         val GAS_TOKEN_TRANSFER: BigInteger = BigInteger.valueOf(100_000)

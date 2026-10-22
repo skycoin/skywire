@@ -827,6 +827,9 @@
     <string name="wallet_fee_gas">Límite de gas %1$d · hasta %2$d gwei por gas</string>
     <string name="wallet_fee_note_eth">La comisión que se muestra es el peor caso a los precios de hoy: el gas que no se usa nunca se cobra.</string>
     <string name="wallet_fee_note_erc20">Las transferencias de tokens queman gas, y el gas se paga en ETH desde la dirección que envía: ten siempre un poco de ETH junto a los tokens.</string>
+    <string name="wallet_fee_eth_slow">Propina mínima</string>
+    <string name="wallet_fee_eth_normal">Propina del nodo</string>
+    <string name="wallet_fee_eth_fast">Propina doble</string>
     <string name="wallet_review">Revisar</string>
     <string name="wallet_review_title">Estás a punto de enviar</string>
     <!-- %2$s is the coin's own name: Skycoin is the original chain, each

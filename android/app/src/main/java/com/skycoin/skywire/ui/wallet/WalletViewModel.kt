@@ -12,6 +12,7 @@ import com.skycoin.skywire.wallet.WalletRepository
 import com.skycoin.skywire.wallet.WalletSnapshot
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.TxPlan
@@ -53,6 +54,8 @@ data class SendState(
     val changeAddress: String = "",
     /** Percent of post-burn hours automatic hours send onward, 10 to 100. Fiber only. */
     val sharePercent: Int = 50,
+    /** The tip offered. Ethereum family only. */
+    val ethLevel: FeeLevel = FeeLevel.NORMAL,
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -508,6 +511,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     changeAddress = send.changeAddress.takeIf { coin.kind == CoinKind.SKY_FIBER },
                     shareFactor = BigDecimal(send.sharePercent).movePointLeft(2)
                         .takeIf { coin.kind == CoinKind.SKY_FIBER },
+                    feeLevel = send.ethLevel.takeIf { coin.isEthFamily },
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()

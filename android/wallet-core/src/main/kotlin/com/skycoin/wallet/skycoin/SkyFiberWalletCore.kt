@@ -3,6 +3,7 @@ package com.skycoin.wallet.skycoin
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
@@ -171,6 +172,7 @@ class SkyFiberWalletCore(
         more: List<Recipient>,
         changeAddress: String?,
         shareFactor: BigDecimal?,
+        @Suppress("UNUSED_PARAMETER") feeLevel: FeeLevel?,
     ): TxPlan {
         val allTo = listOf(toAddress) + more.map { it.address } + listOfNotNull(changeAddress)
         if (allTo.any { !validateAddress(it) }) {
