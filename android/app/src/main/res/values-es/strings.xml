@@ -922,6 +922,9 @@
     <string name="wallet_derivation_standard">Determinista</string>
     <string name="wallet_derivation_bip44">BIP44 (HD)</string>
     <string name="wallet_derivation_note">Determinista es la billetera clásica de Skycoin. BIP44 guarda el cambio en direcciones aparte. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó.</string>
+    <string name="wallet_derivation_btc_segwit">SegWit nativo</string>
+    <string name="wallet_derivation_btc_legacy">Heredado</string>
+    <string name="wallet_derivation_note_btc">Las direcciones SegWit nativas empiezan por bc1q y cuesta menos gastar desde ellas. Las heredadas empiezan por 1, para billeteras y servicios que solo conocen esas. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó.</string>
     <string name="wallet_passphrase_title">Frase de contraseña (opcional)</string>
     <string name="wallet_passphrase_hint">Frase de contraseña</string>
     <string name="wallet_passphrase_confirm">Escribe la frase de contraseña otra vez</string>

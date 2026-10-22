@@ -838,6 +838,9 @@
     <string name="wallet_derivation_standard">确定性</string>
     <string name="wallet_derivation_bip44">BIP44（HD）</string>
     <string name="wallet_derivation_note">确定性是经典的 Skycoin 钱包。BIP44 把找零放在单独的地址上。同一组助记词在两种类型下生成的地址不同，恢复时请选择创建时的类型。</string>
+    <string name="wallet_derivation_btc_segwit">原生隔离见证</string>
+    <string name="wallet_derivation_btc_legacy">传统地址</string>
+    <string name="wallet_derivation_note_btc">原生隔离见证地址以 bc1q 开头，花费时手续费更低。传统地址以 1 开头，适用于只支持这类地址的钱包和服务。同一组助记词在两种类型下生成的地址不同，恢复时请选择创建时的类型。</string>
     <string name="wallet_passphrase_title">助记词密码（可选）</string>
     <string name="wallet_passphrase_hint">密码</string>
     <string name="wallet_passphrase_confirm">再次输入密码</string>

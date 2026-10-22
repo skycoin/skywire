@@ -920,6 +920,9 @@
     <string name="wallet_derivation_standard">Déterministe</string>
     <string name="wallet_derivation_bip44">BIP44 (HD)</string>
     <string name="wallet_derivation_note">Déterministe est le portefeuille Skycoin classique. BIP44 garde la monnaie sur des adresses à part. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée.</string>
+    <string name="wallet_derivation_btc_segwit">SegWit natif</string>
+    <string name="wallet_derivation_btc_legacy">Ancien format</string>
+    <string name="wallet_derivation_note_btc">Les adresses SegWit natives commencent par bc1q et coûtent moins cher à dépenser. Les adresses de l’ancien format commencent par 1, pour les portefeuilles et services qui ne connaissent qu’elles. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée.</string>
     <string name="wallet_passphrase_title">Phrase secrète (facultative)</string>
     <string name="wallet_passphrase_hint">Phrase secrète</string>
     <string name="wallet_passphrase_confirm">Saisissez de nouveau la phrase secrète</string>
