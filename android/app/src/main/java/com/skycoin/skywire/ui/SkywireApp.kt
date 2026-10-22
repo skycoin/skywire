@@ -90,7 +90,6 @@ import com.skycoin.skywire.ui.wallet.WalletRestoreScreen
 import com.skycoin.skywire.ui.wallet.WalletResultScreen
 import com.skycoin.skywire.ui.wallet.WalletRevealScreen
 import com.skycoin.skywire.ui.wallet.WalletScreen
-import com.skycoin.skywire.ui.wallet.WalletWebScreen
 import com.skycoin.skywire.ui.wallet.WalletSeedScreen
 import com.skycoin.skywire.ui.wallet.WalletSendScreen
 import com.skycoin.skywire.ui.wallet.WalletTxScreen
@@ -219,22 +218,13 @@ fun SkywireApp() {
                     onOpenTab = { navController.navigate(it) { launchSingleTop = true } },
                 )
             }
-            composable(Routes.WALLET) {
-                val old by walletViewModel.uiState.collectAsState()
-                WalletWebScreen(
-                    onBack = { navController.leaveTab() },
-                    onPreviousWallet = if (old.allWallets.isEmpty()) null else {
-                        { navController.navigate(Routes.WALLET_PREVIOUS) { launchSingleTop = true } }
-                    },
-                )
-            }
-            // The old wallet flow shares one ViewModel across its routes — the
+            // The wallet flow shares one ViewModel across its routes — the
             // freshly generated seed and the send draft live in it, never in
             // navigation arguments.
-            composable(Routes.WALLET_PREVIOUS) {
+            composable(Routes.WALLET) {
                 WalletScreen(
                     viewModel = walletViewModel,
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.leaveTab() },
                     onCreate = { navController.navigate(Routes.WALLET_CREATE) { launchSingleTop = true } },
                     onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
                     onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
@@ -256,7 +246,7 @@ fun SkywireApp() {
             composable(Routes.WALLET_VERIFY) {
                 WalletVerifyScreen(
                     viewModel = walletViewModel,
-                    onActivated = { navController.popBackStack(Routes.WALLET_PREVIOUS, inclusive = false) },
+                    onActivated = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onShowSeed = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
                 )
@@ -264,7 +254,7 @@ fun SkywireApp() {
             composable(Routes.WALLET_RESTORE) {
                 WalletRestoreScreen(
                     viewModel = walletViewModel,
-                    onRestored = { navController.popBackStack(Routes.WALLET_PREVIOUS, inclusive = false) },
+                    onRestored = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -280,7 +270,7 @@ fun SkywireApp() {
                     onSent = {
                         navController.navigate(Routes.WALLET_RESULT) {
                             launchSingleTop = true
-                            popUpTo(Routes.WALLET_PREVIOUS) { inclusive = false }
+                            popUpTo(Routes.WALLET) { inclusive = false }
                         }
                     },
                     onBack = { navController.popBackStack() },
@@ -289,11 +279,11 @@ fun SkywireApp() {
             composable(Routes.WALLET_RESULT) {
                 WalletResultScreen(
                     viewModel = walletViewModel,
-                    onDone = { navController.popBackStack(Routes.WALLET_PREVIOUS, inclusive = false) },
+                    onDone = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onHistory = {
                         navController.navigate(Routes.WALLET_HISTORY) {
                             launchSingleTop = true
-                            popUpTo(Routes.WALLET_PREVIOUS) { inclusive = false }
+                            popUpTo(Routes.WALLET) { inclusive = false }
                         }
                     },
                 )
@@ -345,7 +335,7 @@ fun SkywireApp() {
             composable(Routes.WALLET_ADD_COIN) {
                 WalletAddCoinScreen(
                     viewModel = walletViewModel,
-                    onAdded = { navController.popBackStack(Routes.WALLET_PREVIOUS, inclusive = false) },
+                    onAdded = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onBack = { navController.popBackStack() },
                 )
             }
