@@ -2,6 +2,7 @@ package com.skycoin.wallet.btc
 
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.Derivation
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Hashes
@@ -42,6 +43,8 @@ class BtcWalletCore(
         val outputs: List<BtcTxn.Output>,
         /** Fresh change chain index used by this plan, or -1 when no change. */
         val changeIndex: Int,
+        /** Legacy P2PKH inputs, signed in their scriptSigs. */
+        val legacy: Boolean,
     )
 
     override fun newSeed(): String = Bip39.newMnemonic(128)
@@ -49,23 +52,23 @@ class BtcWalletCore(
     override fun validateSeed(mnemonic: String): Boolean = Bip39.validate(mnemonic)
 
     override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
-        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
+        val account = BtcKeys.accountKey(seed)
         return AddressBook(
-            receive = (0 until receiveCount).map { Bip84.address(Bip84.key(account, 0, it).pubKey()) },
-            change = (0 until changeCount).map { Bip84.address(Bip84.key(account, 1, it).pubKey()) },
+            receive = (0 until receiveCount).map { BtcKeys.address(Bip84.key(account, 0, it).pubKey(), seed.derivation) },
+            change = (0 until changeCount).map { BtcKeys.address(Bip84.key(account, 1, it).pubKey(), seed.derivation) },
         )
     }
 
     override fun validateAddress(address: String): Boolean = BtcAddress.isValid(address)
 
     override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
-        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
+        val account = BtcKeys.accountKey(seed)
         suspend fun scanChain(chain: Int, minimum: Int): Int {
             var lastUsed = -1
             var i = 0
             var gap = 0
             while (gap < SCAN_GAP && i < SCAN_CAP) {
-                val addr = Bip84.address(Bip84.key(account, chain, i).pubKey())
+                val addr = BtcKeys.address(Bip84.key(account, chain, i).pubKey(), seed.derivation)
                 val info = api.addressInfo(addr)
                 if (info.chain.txCount > 0 || info.mempool.txCount > 0) {
                     lastUsed = i
@@ -183,7 +186,9 @@ class BtcWalletCore(
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
 
-        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
+        val legacy = seed.derivation == Derivation.BIP44
+        val dust = if (legacy) DUST_SATS_P2PKH else DUST_SATS
+        val account = BtcKeys.accountKey(seed)
         val programOf = HashMap<String, Triple<Int, Int, ByteArray>>() // address → (chain, index, hash160)
         book.receive.forEachIndexed { i, a -> programOf[a] = Triple(0, i, Hashes.hash160(Bip84.key(account, 0, i).pubKey())) }
         book.change.forEachIndexed { i, a -> programOf[a] = Triple(1, i, Hashes.hash160(Bip84.key(account, 1, i).pubKey())) }
@@ -199,7 +204,7 @@ class BtcWalletCore(
         if (utxos.isEmpty()) throw WalletException.InsufficientBalance()
         utxos.sortByDescending { it.second.value }
 
-        val changeScriptLen = 22 // P2WPKH change
+        val changeScriptLen = if (legacy) 25 else 22 // P2PKH or P2WPKH change
 
         fun planInput(p: Pair<String, BtcEsploraClient.Utxo>): PlanInput {
             val (chain, index, hash) = programOf.getValue(p.first)
@@ -208,8 +213,8 @@ class BtcWalletCore(
 
         if (sendMax) {
             val total = utxos.sumOf { it.second.value }
-            val fee = rate * BtcTxn.estimateVsize(utxos.size, listOf(destScript)).toULong()
-            if (total <= fee + DUST_SATS) throw WalletException.InsufficientBalance()
+            val fee = rate * BtcTxn.estimateVsize(utxos.size, listOf(destScript), legacy).toULong()
+            if (total <= fee + dust) throw WalletException.InsufficientBalance()
             val sendAmount = total - fee
             val outputs = listOf(BtcTxn.Output(sendAmount, destScript))
             return TxPlan(
@@ -219,14 +224,14 @@ class BtcWalletCore(
                 changeAmount = 0uL,
                 hoursToRecipient = null,
                 hoursChange = null,
-                vsize = BtcTxn.estimateVsize(utxos.size, listOf(destScript)),
+                vsize = BtcTxn.estimateVsize(utxos.size, listOf(destScript), legacy),
                 feeRate = rate.toLong().toInt(),
-                payload = Payload(utxos.map(::planInput), outputs, changeIndex = -1),
+                payload = Payload(utxos.map(::planInput), outputs, changeIndex = -1, legacy = legacy),
             )
         }
 
         if (amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
-        if (amount < DUST_SATS) throw WalletException.InvalidAmount("amount is below the dust limit")
+        if (amount < dust) throw WalletException.InvalidAmount("amount is below the dust limit")
 
         val selected = ArrayList<Pair<String, BtcEsploraClient.Utxo>>()
         var inSum = 0uL
@@ -234,7 +239,7 @@ class BtcWalletCore(
         for (u in utxos) {
             selected.add(u)
             inSum += u.second.value
-            feeWithChange = rate * BtcTxn.estimateVsize(selected.size, listOf(destScript, ByteArray(changeScriptLen))).toULong()
+            feeWithChange = rate * BtcTxn.estimateVsize(selected.size, listOf(destScript, ByteArray(changeScriptLen)), legacy).toULong()
             if (inSum >= amount + feeWithChange) break
         }
         if (inSum < amount) throw WalletException.InsufficientBalance()
@@ -245,20 +250,20 @@ class BtcWalletCore(
         val outputs = ArrayList<BtcTxn.Output>()
         outputs.add(BtcTxn.Output(amount, destScript))
 
-        if (change < DUST_SATS) {
+        if (change < dust) {
             // No change output: whatever is left over joins the fee.
             fee = inSum - amount
-            val feeNoChange = rate * BtcTxn.estimateVsize(selected.size, listOf(destScript)).toULong()
+            val feeNoChange = rate * BtcTxn.estimateVsize(selected.size, listOf(destScript), legacy).toULong()
             if (fee < feeNoChange) throw WalletException.InsufficientBalance()
             change = 0uL
         } else {
             changeIndex = book.change.size
-            val changeAddr = Bip84.address(Bip84.key(account, 1, changeIndex).pubKey())
+            val changeAddr = BtcKeys.address(Bip84.key(account, 1, changeIndex).pubKey(), seed.derivation)
             val changeScript = BtcAddress.scriptPubKey(changeAddr) ?: error("derived change address failed to decode")
             outputs.add(BtcTxn.Output(change, changeScript))
         }
 
-        val vsize = BtcTxn.estimateVsize(selected.size, outputs.map { it.scriptPubKey })
+        val vsize = BtcTxn.estimateVsize(selected.size, outputs.map { it.scriptPubKey }, legacy)
         return TxPlan(
             toAddress = toAddress,
             amount = amount,
@@ -268,15 +273,15 @@ class BtcWalletCore(
             hoursChange = null,
             vsize = vsize,
             feeRate = rate.toLong().toInt(),
-            payload = Payload(selected.map(::planInput), outputs, changeIndex),
+            payload = Payload(selected.map(::planInput), outputs, changeIndex, legacy),
         )
     }
 
     override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val account = Bip84.accountKey(seed.mnemonic, seed.passphrase)
+        val account = BtcKeys.accountKey(seed)
         val txn = BtcTxn(
-            inputs = payload.inputs.map { BtcTxn.Input(it.txid, it.vout, it.value, it.pubKeyHash) },
+            inputs = payload.inputs.map { BtcTxn.Input(it.txid, it.vout, it.value, it.pubKeyHash, legacy = payload.legacy) },
             outputs = payload.outputs,
         )
         val keys = payload.inputs.map { Bip84.key(account, it.change, it.index).key }
@@ -292,6 +297,9 @@ class BtcWalletCore(
     companion object {
         /** Core's dust threshold for P2WPKH outputs. */
         const val DUST_SATS = 294uL
+
+        /** Core's dust threshold for P2PKH outputs. */
+        const val DUST_SATS_P2PKH = 546uL
         private const val SCAN_GAP = 5
         private const val SCAN_CAP = 40
     }

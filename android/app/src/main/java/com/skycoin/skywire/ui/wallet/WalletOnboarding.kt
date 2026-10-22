@@ -139,14 +139,17 @@ fun WalletSeedScreen(
 }
 
 /**
- * Fiber coins offer two kinds of wallet, as skycoin-web does: the classic
- * deterministic one and BIP 44. The phrase is the same; the addresses are not,
- * so a restore has to name the kind the wallet was made as.
+ * Two kinds of wallet, as skycoin-web offers them: for fiber coins the classic
+ * deterministic one or BIP 44, for Bitcoin native segwit or legacy P2PKH. The
+ * phrase is the same; the addresses are not, so a restore has to name the kind
+ * the wallet was made as.
  */
 @Composable
 fun DerivationChoice(viewModel: WalletViewModel) {
     val state by viewModel.uiState.collectAsState()
-    if (state.draft.coin.kind != CoinKind.SKY_FIBER) return
+    val kind = state.draft.coin.kind
+    if (kind != CoinKind.SKY_FIBER && kind != CoinKind.BTC) return
+    val btc = kind == CoinKind.BTC
     val selected = state.draft.derivation
     Text(
         stringResource(R.string.wallet_derivation_title).uppercase(),
@@ -163,14 +166,19 @@ fun DerivationChoice(viewModel: WalletViewModel) {
             ) {
                 Text(
                     stringResource(
-                        if (d == Derivation.BIP44) R.string.wallet_derivation_bip44 else R.string.wallet_derivation_standard,
+                        when {
+                            btc && d == Derivation.BIP44 -> R.string.wallet_derivation_btc_legacy
+                            btc -> R.string.wallet_derivation_btc_segwit
+                            d == Derivation.BIP44 -> R.string.wallet_derivation_bip44
+                            else -> R.string.wallet_derivation_standard
+                        },
                     ),
                 )
             }
         }
     }
     Text(
-        stringResource(R.string.wallet_derivation_note),
+        stringResource(if (btc) R.string.wallet_derivation_note_btc else R.string.wallet_derivation_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),
