@@ -22,6 +22,10 @@
 # the loop puts it back after every build; without it the step is skipped:
 #   <user> ALL=(root) NOPASSWD: /usr/bin/setcap cap_net_admin+eip <GOBIN>/skywire
 #
+# To run a prebuilt binary instead (a TinyGo build, say), write its path to
+# ./local/visor-binary. Each start checks the file, so `skywire cli visor halt`
+# switches over, and deleting the file goes back to building from source.
+#
 # Runs from the repo root regardless of where it is invoked.
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1 # script lives in scripts/, build from repo root
@@ -35,10 +39,23 @@ VISOR_FLAGS="${VISOR_FLAGS:--sl debug -q http}"
 SKYWIRE_BIN="$(go env GOBIN)"
 [ -z "$SKYWIRE_BIN" ] && SKYWIRE_BIN="$(go env GOPATH)/bin"
 SKYWIRE_BIN="$SKYWIRE_BIN/skywire"
+INSTALLED_BIN="$SKYWIRE_BIN"
 
 while true; do
-	echo ">>> building…"
-	if ! time go install .; then
+	SKYWIRE_BIN="$INSTALLED_BIN"
+	prebuilt=$(cat ./local/visor-binary 2>/dev/null)
+	if [ -n "$prebuilt" ]; then
+		if [ ! -x "$prebuilt" ]; then
+			echo ">>> ./local/visor-binary names $prebuilt, which is not executable; retrying in 5s"
+			sleep 5
+			continue
+		fi
+		SKYWIRE_BIN="$prebuilt"
+		echo ">>> running the prebuilt $SKYWIRE_BIN (from ./local/visor-binary)"
+	else
+		echo ">>> building…"
+	fi
+	if [ -z "$prebuilt" ] && ! time go install .; then
 		echo ">>> build failed — not starting a stale binary; retrying in 5s"
 		sleep 5
 		continue
