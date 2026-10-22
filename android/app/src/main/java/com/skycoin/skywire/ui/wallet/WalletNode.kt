@@ -53,6 +53,7 @@ import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
+import com.skycoin.skywire.wallet.WalletMesh
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.NodeInfo
 import kotlinx.coroutines.launch
@@ -98,7 +99,7 @@ fun WalletNodeScreen(
     var checking by remember { mutableStateOf(false) }
     var candidate by remember { mutableStateOf<Pair<String, NodeInfo>?>(null) }
     val scope = rememberCoroutineScope()
-    fun typed(value: String) = value.trim().removeSuffix("/")
+    fun typed(value: String) = WalletMesh.normalize(value).removeSuffix("/")
 
     // Every mutation saves at once: the order on screen is the order the
     // wallet asks in, with nothing waiting on a save button.
@@ -321,7 +322,7 @@ private fun NodeCheckDialog(coin: CoinSpec, info: NodeInfo, onUse: () -> Unit, o
  *  remove controls. Position 1 is asked first. */
 @Composable
 private fun NodeRow(position: Int, url: String, onUp: () -> Unit, onDown: () -> Unit, onRemove: () -> Unit) {
-    val cleartext = url.startsWith("http://", ignoreCase = true)
+    val cleartext = cleartextNode(url)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -338,7 +339,7 @@ private fun NodeRow(position: Int, url: String, onUp: () -> Unit, onDown: () -> 
             fontWeight = FontWeight.Bold,
         )
         Text(
-            url,
+            shortMeshUrl(url),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -445,9 +446,25 @@ private fun UrlField(
 }
 
 /** Whether what is typed will be encrypted on the wire, said plainly. */
+/** A .dmsg node's 53-character key label shortened in the middle, so the row still shows whose node it is. */
+private fun shortMeshUrl(url: String): String {
+    val host = url.toHttpUrlOrNull()?.host ?: return url
+    if (!WalletMesh.isMesh(host)) return url
+    val label = host.removeSuffix(".dmsg")
+    return if (label.length <= 16) url else url.replace(label, label.take(8) + "…" + label.takeLast(6))
+}
+
+/** Plain http to a host on the internet. A .dmsg host is reached over dmsg, which encrypts it end to end. */
+private fun cleartextNode(url: String): Boolean {
+    val trimmed = url.trim()
+    return trimmed.startsWith("http://", ignoreCase = true) &&
+        trimmed.toHttpUrlOrNull()?.host?.let(WalletMesh::isMesh) != true
+}
+
 @Composable
 private fun TransportNote(url: String) {
-    val cleartext = url.trim().startsWith("http://", ignoreCase = true)
+    val cleartext = cleartextNode(url)
+    val mesh = url.toHttpUrlOrNull()?.host?.let(WalletMesh::isMesh) == true
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -469,7 +486,11 @@ private fun TransportNote(url: String) {
         )
         Text(
             stringResource(
-                if (cleartext && url.isNotBlank()) R.string.wallet_node_cleartext else R.string.wallet_node_encrypted,
+                when {
+                    mesh -> R.string.wallet_node_mesh
+                    cleartext && url.isNotBlank() -> R.string.wallet_node_cleartext
+                    else -> R.string.wallet_node_encrypted
+                },
             ),
             style = MaterialTheme.typography.bodySmall,
             color = if (cleartext && url.isNotBlank()) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,

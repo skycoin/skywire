@@ -695,6 +695,8 @@
     <string name="wallet_node_check_pubkey">Clé publique de la chaîne</string>
     <string name="wallet_node_check_use">Utiliser ce nœud</string>
     <string name="wallet_node_unreachable">Impossible de se connecter au nœud. Vérifiez l’adresse et votre connexion, puis réessayez.</string>
+    <string name="wallet_node_mesh">Joint par le maillage Skywire, chiffré de bout en bout. Le nœud voit la clé Skywire de ce téléphone, pas son adresse internet. Fonctionne tant que Skywire est connecté.</string>
+    <string name="wallet_node_unreachable_mesh">Le nœud n’a pas répondu par le maillage Skywire. Connectez d’abord Skywire, puis réessayez : les adresses .dmsg passent par lui.</string>
     <string name="wallet_node_too_old">Ce nœud est trop ancien pour le portefeuille. Il doit être au moins en version 0.24.0.</string>
     <string name="wallet_node_wrong_chain">Ce serveur n’est pas sur le réseau principal Ethereum.</string>
     <string name="wallet_node_other_coin">Ce nœud sert %1$s, pas %2$s. Ses soldes et son historique seraient ceux de cette pièce.</string>

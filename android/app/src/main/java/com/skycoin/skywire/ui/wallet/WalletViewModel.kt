@@ -10,6 +10,7 @@ import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.WalletMeta
 import com.skycoin.skywire.wallet.WalletRepository
+import com.skycoin.skywire.wallet.WalletMesh
 import com.skycoin.skywire.wallet.WalletPrices
 import com.skycoin.skywire.wallet.WalletSnapshot
 import com.skycoin.skywire.wallet.coinTextFromUsd
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 import java.math.BigDecimal
 import java.security.SecureRandom
@@ -304,7 +306,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         Result.failure(e)
     } catch (e: Exception) {
         val app: Application = getApplication()
-        Result.failure(IllegalStateException(app.getString(R.string.wallet_node_unreachable)))
+        // A .dmsg node is reached through the Skywire core, which may simply not be running.
+        val mesh = WalletMesh.normalize(url).toHttpUrlOrNull()?.host?.let(WalletMesh::isMesh) == true
+        Result.failure(
+            IllegalStateException(
+                app.getString(if (mesh) R.string.wallet_node_unreachable_mesh else R.string.wallet_node_unreachable),
+            ),
+        )
     }
 
     fun saveNodeUrls(urls: List<String>, indexerUrl: String? = null) = action {
