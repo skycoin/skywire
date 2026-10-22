@@ -50,7 +50,8 @@ func (s *redisStore) netDailySinceKey() string {
 // against its previous snapshot, the transport's daily hash, the reporter's
 // visor totals, and the growth of the transport's daily max into the
 // network total. One round trip, atomic, where it used to be an HGETALL
-// plus a pipeline.
+// plus a pipeline. A reporter with no previous snapshot is credited nothing:
+// its counters are a lifetime total, not the bytes since its last report.
 //
 // KEYS: prev, daily, visorAll, visorDaily, netDaily, netSince
 // ARGV: reporter, sent, recv, now, type, prevTTL, histTTL, visorAllTTL, date,
@@ -58,9 +59,10 @@ func (s *redisStore) netDailySinceKey() string {
 var bandwidthScript = redis.NewScript(`
 local function int(v) return string.format('%d', v) end
 local cs, cr = tonumber(ARGV[2]), tonumber(ARGV[3])
-local ds, dr = cs, cr
+local ds, dr = 0, 0
 local prev = redis.call('HMGET', KEYS[1], 'sent', 'recv')
 if prev[1] and prev[2] then
+  ds, dr = cs, cr
   local ps, pr = tonumber(prev[1]), tonumber(prev[2])
   if cs >= ps then ds = cs - ps end
   if cr >= pr then dr = cr - pr end

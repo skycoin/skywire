@@ -80,6 +80,8 @@ type API struct {
 	chartState atomic.Pointer[tpdCharts]
 	// dmsgRoles is set when TPD can reach dmsg discovery over dmsg.
 	dmsgRoles atomic.Pointer[dmsgRoles]
+	// arIPs holds visors' public IPs from the address resolver's feed.
+	arIPs arIPs
 
 	transportsCache         []*transport.Entry
 	transportsCacheFiltered []*transport.Entry // excludes self-transports

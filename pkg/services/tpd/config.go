@@ -38,6 +38,10 @@ type Config struct {
 	// written to redis. Empty means 15m, and it is capped at 30m.
 	TelemetryApplyEvery services.Duration `json:"telemetry_apply_every,omitempty"`
 
+	// AddressResolverDmsg is the address resolver whose bindings feed shows
+	// which visors share a public IP. Empty means the production one.
+	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"`
+
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`
