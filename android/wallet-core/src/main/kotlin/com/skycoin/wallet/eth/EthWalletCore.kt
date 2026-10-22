@@ -3,6 +3,7 @@ package com.skycoin.wallet.eth
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.TxRecord
@@ -183,7 +184,9 @@ class EthWalletCore(
         fromAddress: String?,
         @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
         @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
+        more: List<Recipient>,
     ): TxPlan {
+        if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
         val dest = EthCrypto.parseAddress(toAddress.trim()) ?: throw WalletException.InvalidAddress()
         if (!sendMax && amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
 
