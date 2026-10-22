@@ -729,6 +729,9 @@
     <string name="wallet_request_copy">Copiar petición</string>
     <string name="wallet_request_copied">Petición de pago copiada</string>
     <string name="wallet_scan_wrong_token">Este código pide un pago en otro token, no en %1$s. No se ha rellenado nada.</string>
+    <string name="wallet_scan_camera">Escanear con la cámara</string>
+    <string name="wallet_scan_image">Leer de una imagen</string>
+    <string name="wallet_scan_no_code">No se encontró ningún código QR en esa imagen.</string>
     <string name="wallet_copy">Copiar</string>
     <string name="wallet_share">Compartir</string>
     <string name="wallet_address_copied">Dirección copiada al portapapeles</string>
