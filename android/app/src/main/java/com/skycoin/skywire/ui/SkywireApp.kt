@@ -83,6 +83,7 @@ import com.skycoin.skywire.ui.socks.SocksScreen
 import com.skycoin.skywire.ui.vpn.VpnScreen
 import com.skycoin.skywire.ui.wallet.WalletAddCoinScreen
 import com.skycoin.skywire.ui.wallet.WalletHistoryScreen
+import com.skycoin.skywire.ui.wallet.WalletNodeInfoScreen
 import com.skycoin.skywire.ui.wallet.WalletManageScreen
 import com.skycoin.skywire.ui.wallet.WalletNodeScreen
 import com.skycoin.skywire.ui.wallet.WalletReceiveScreen
@@ -316,6 +317,13 @@ fun SkywireApp() {
             }
             composable(Routes.WALLET_NODE) {
                 WalletNodeScreen(
+                    viewModel = walletViewModel,
+                    onDetails = { navController.navigate(Routes.WALLET_NODE_INFO) { launchSingleTop = true } },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_NODE_INFO) {
+                WalletNodeInfoScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
                 )

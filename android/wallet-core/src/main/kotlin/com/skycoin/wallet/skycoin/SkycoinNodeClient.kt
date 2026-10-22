@@ -65,6 +65,39 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
         @SerialName("open_connections") val openConnections: Int = -1,
     )
 
+    @Serializable
+    class BlockHead(
+        val seq: ULong = 0u,
+        val timestamp: ULong = 0u,
+        @SerialName("block_hash") val blockHash: String = "",
+    )
+
+    @Serializable
+    class Metadata(val head: BlockHead = BlockHead())
+
+    @Serializable
+    class Supply(
+        @SerialName("current_supply") val currentSupply: String = "",
+        @SerialName("total_supply") val totalSupply: String = "",
+    )
+
+    @Serializable
+    class Connection(
+        val address: String = "",
+        val height: ULong = 0u,
+        val outgoing: Boolean = false,
+        @SerialName("is_trusted_peer") val trusted: Boolean = false,
+        @SerialName("user_agent") val userAgent: String = "",
+        @SerialName("last_sent") val lastSent: Long = 0,
+        @SerialName("last_received") val lastReceived: Long = 0,
+    )
+
+    @Serializable
+    class Connections(val connections: List<Connection> = emptyList())
+
+    @Serializable
+    class PendingEntry(val transaction: VerboseTxn, val received: String = "")
+
     /** How far the node has synced: its own height and the highest its peers report. */
     @Serializable
     class Progress(val current: ULong = 0u, val highest: ULong = 0u)
@@ -162,6 +195,34 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
         get("api/v1/transactions", "addrs" to addresses.joinToString(","), "verbose" to "1") { body ->
             json.decodeFromString(ListSerializer(TxnEntry.serializer()), body)
         }
+
+    suspend fun metadata(): Metadata = get("api/v1/blockchain/metadata") { body ->
+        json.decodeFromString(Metadata.serializer(), body)
+    }
+
+    suspend fun coinSupply(): Supply = get("api/v1/coinSupply") { body ->
+        json.decodeFromString(Supply.serializer(), body)
+    }
+
+    suspend fun connections(): Connections = get("api/v1/network/connections") { body ->
+        json.decodeFromString(Connections.serializer(), body)
+    }
+
+    suspend fun pendingTxs(): List<PendingEntry> = get("api/v1/pendingTxs", "verbose" to "1") { body ->
+        json.decodeFromString(ListSerializer(PendingEntry.serializer()), body)
+    }
+
+    /** Removes a transaction from the node's own unconfirmed pool. Peers that hold it are unaffected. */
+    suspend fun deletePending(txid: String) = withContext(Dispatchers.IO) {
+        val csrf = fetchCsrf()
+        val url = base.newBuilder().addPathSegments("api/v1/pendingTxs").addQueryParameter("txid", txid).build()
+        val req = Request.Builder().url(url).delete()
+            .apply { if (csrf != null) header("X-CSRF-Token", csrf) }
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw WalletException.NodeRejected(errorMessage(resp.body.string(), resp.code))
+        }
+    }
 
     /** Broadcast; returns the txid the node reports. Node-side rejections carry the node's own words. */
     suspend fun inject(rawTxHex: String): String = withContext(Dispatchers.IO) {
