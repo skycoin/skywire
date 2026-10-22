@@ -744,6 +744,10 @@
     <string name="wallet_outputs_none">Cette adresse ne détient aucune sortie non dépensée.</string>
     <string name="wallet_history_all_addresses">Toutes les adresses</string>
     <string name="wallet_history_address_pick">Afficher les transactions de</string>
+    <string name="wallet_exposed_banner">Certaines adresses de ce portefeuille détiennent encore des pièces après en avoir envoyé. Leurs clés publiques sont sur la blockchain, donc un futur ordinateur quantique pourrait voler ces pièces. Envoyez-les vers une nouvelle adresse de ce portefeuille.</string>
+    <string name="wallet_address_exposed">A envoyé des pièces, sa clé publique est donc publique. Ne recevez plus de pièces ici.</string>
+    <string name="wallet_address_exposed_funded">A envoyé des pièces et en détient encore. Sa clé publique est publique, déplacez donc ces pièces vers une nouvelle adresse.</string>
+    <string name="wallet_receive_exposed">Cette adresse a déjà envoyé des pièces, sa clé publique est donc sur la blockchain. Un futur ordinateur quantique pourrait s’en servir pour voler les pièces envoyées ici. Utilisez plutôt une nouvelle adresse.</string>
     <string name="wallet_address_default">Par défaut · en usage</string>
     <string name="wallet_address_unused">Jamais utilisée</string>
     <string name="wallet_address_new">Générer une nouvelle adresse</string>

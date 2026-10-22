@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -76,6 +77,7 @@ import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.addressScanPending
+import com.skycoin.skywire.wallet.exposedWithCoins
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -166,6 +168,9 @@ fun WalletScreen(
                     // thing that settles it.
                     if (state.active?.addressScanPending == true && !state.refreshing) {
                         ScanPendingBanner()
+                    }
+                    if (state.coin.kind == CoinKind.SKY_FIBER && state.snapshot?.exposedWithCoins?.isNotEmpty() == true) {
+                        ExposedBanner()
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
@@ -527,6 +532,27 @@ private fun ScanPendingBanner() {
         Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = PENDING_AMBER)
         Text(
             stringResource(R.string.wallet_scan_pending),
+            style = MaterialTheme.typography.bodySmall,
+            color = PENDING_AMBER,
+        )
+    }
+}
+
+/** Coins sit at addresses whose public keys are on the chain, as skycoin-web warns. */
+@Composable
+private fun ExposedBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PENDING_AMBER.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(Icons.Outlined.WarningAmber, null, Modifier.size(16.dp), tint = PENDING_AMBER)
+        Text(
+            stringResource(R.string.wallet_exposed_banner),
             style = MaterialTheme.typography.bodySmall,
             color = PENDING_AMBER,
         )

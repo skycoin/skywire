@@ -668,6 +668,10 @@
     <string name="wallet_outputs_none">这个地址没有未花费输出。</string>
     <string name="wallet_history_all_addresses">全部地址</string>
     <string name="wallet_history_address_pick">显示以下地址的交易</string>
+    <string name="wallet_exposed_banner">这个钱包里有些地址发送过币，但仍持有币。它们的公钥已在区块链上公开，未来的量子计算机可能会偷走这些币。请把它们转到本钱包的新地址。</string>
+    <string name="wallet_address_exposed">发送过币，公钥已公开。不要再用它收币。</string>
+    <string name="wallet_address_exposed_funded">发送过币且仍持有币。公钥已公开，请把这些币转到新地址。</string>
+    <string name="wallet_receive_exposed">这个地址发送过币，公钥已在区块链上公开。未来的量子计算机可能借此偷走发到这里的币。请改用新地址。</string>
     <string name="wallet_address_default">默认 · 使用中</string>
     <string name="wallet_address_unused">从未使用</string>
     <string name="wallet_address_new">生成新地址</string>
