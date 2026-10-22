@@ -92,6 +92,9 @@ interface WalletCore {
     /** Hand the signed transaction to the node; returns the txid it reports. */
     suspend fun broadcast(tx: SignedTx): String
 
+    /** The wallet's extended public keys, for a watch-only view; null where a wallet has none. */
+    fun extendedPublicKeys(seed: KeySource): ExtendedPublicKeys? = null
+
     /** The plan's transaction with no signatures, to be signed elsewhere. Null where a chain has no such form here. */
     fun unsignedHex(plan: TxPlan): String? = null
 
@@ -106,6 +109,9 @@ interface WalletCore {
     suspend fun broadcastRaw(rawHex: String): String =
         throw WalletException.BadTransaction("this chain does not broadcast raw transactions here")
 }
+
+/** A BIP 44 account's xpub and its receive and change chain xpubs. */
+class ExtendedPublicKeys(val account: String, val receive: String, val change: String)
 
 /** One destination of a send. [hours] is fiber only; null splits hours automatically. */
 class Recipient(val address: String, val amount: ULong, val hours: ULong? = null)

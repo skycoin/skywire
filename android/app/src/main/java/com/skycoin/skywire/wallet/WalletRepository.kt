@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.Derivation
+import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.KeySource
 import com.skycoin.wallet.Recipient
@@ -382,6 +384,7 @@ class WalletRepository private constructor(private val context: Context) {
         mnemonic: String,
         restored: Boolean,
         legacy: Boolean = false,
+        derivation: Derivation = Derivation.STANDARD,
     ): WalletMeta =
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
@@ -394,7 +397,7 @@ class WalletRepository private constructor(private val context: Context) {
             // from "the answer is one address" — a fresh phrase genuinely has
             // one and is settled, a restore that could not reach the node is
             // not.
-            val keys = KeySource(seed)
+            val keys = KeySource(seed, derivation = derivation)
             val scan = if (restored) {
                 runCatching { core.scanUsed(keys) }.getOrNull()
             } else {
@@ -412,7 +415,8 @@ class WalletRepository private constructor(private val context: Context) {
             // either, so the existing one is adopted instead of duplicated.
             val head = book.receive.firstOrNull()
             val already = wallets().first().firstOrNull {
-                it.coinId == spec.id && head != null && it.receiveAddresses.firstOrNull() == head
+                it.coinId == spec.id && head != null && it.receiveAddresses.firstOrNull() == head &&
+                    it.derivation == derivation
             }
             if (already != null) {
                 // A restore that scanned further than the mirror knew about is
@@ -440,6 +444,7 @@ class WalletRepository private constructor(private val context: Context) {
                 receiveAddresses = book.receive,
                 changeAddresses = book.change,
                 addressScanAtMs = scannedAt,
+                derivation = derivation,
             )
             seeds.putSeed(meta.id, seed)
             putWallets(wallets().first() + meta)
@@ -581,7 +586,15 @@ class WalletRepository private constructor(private val context: Context) {
     }
 
     /** What the wallet's keys come from, unsealed; null when the seed cannot be read. */
-    private suspend fun keys(meta: WalletMeta): KeySource? = seeds.seed(meta.id)?.let { KeySource(it) }
+    private suspend fun keys(meta: WalletMeta): KeySource? =
+        seeds.seed(meta.id)?.let { KeySource(it, derivation = meta.derivation) }
+
+    /** The wallet's xpubs, for a watch-only view; null where the wallet has none. */
+    suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: return@withContext null
+        val spec = coin(meta.coinId) ?: return@withContext null
+        keys(meta)?.let { coreFor(spec).extendedPublicKeys(it) }
+    }
 
     /** The phrase in the clear — callers gate this behind the biometric confirm. */
     suspend fun revealSeed(id: String): String? = seeds.seed(id)
@@ -738,6 +751,15 @@ class WalletRepository private constructor(private val context: Context) {
         val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val signed: SignedTx = core.signTx(seed, plan)
         val txid = core.broadcast(signed)
+
+        // A fresh change address the plan sent change to is the wallet's next
+        // one on its change chain; it holds coins now, so the wallet keeps it.
+        plan.changeAddress?.takeIf { it !in meta.receiveAddresses && it !in meta.changeAddresses }?.let { change ->
+            val grown = core.deriveAddresses(seed, meta.receiveAddresses.size, meta.changeAddresses.size + 1)
+            if (grown.change.lastOrNull() == change) {
+                putWallets(wallets().first().map { if (it.id == walletId) it.copy(changeAddresses = grown.change) else it })
+            }
+        }
 
         // A Bitcoin plan that paid change to a fresh chain address makes that
         // address part of the wallet the moment the transaction exists.

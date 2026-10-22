@@ -56,6 +56,7 @@ import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.Derivation
 
 /** Seed backup: the numbered grid, screenshots off, no copy anywhere. */
 @Composable
@@ -111,13 +112,14 @@ fun WalletSeedScreen(
                 listOf(12, 24).forEachIndexed { i, n ->
                     SegmentedButton(
                         selected = words.size == n,
-                        onClick = { if (words.size != n) viewModel.startCreate(n) },
+                        onClick = { if (words.size != n) viewModel.startCreate(n, state.draft.derivation) },
                         shape = SegmentedButtonDefaults.itemShape(i, 2),
                     ) {
                         Text(stringResource(if (n == 24) R.string.wallet_seed_words_24 else R.string.wallet_seed_words_12))
                     }
                 }
             }
+            DerivationChoice(viewModel)
             Spacer(Modifier.height(20.dp))
             SeedGrid(words)
             Button(
@@ -131,6 +133,45 @@ fun WalletSeedScreen(
             }
         }
     }
+}
+
+/**
+ * Fiber coins offer two kinds of wallet, as skycoin-web does: the classic
+ * deterministic one and BIP 44. The phrase is the same; the addresses are not,
+ * so a restore has to name the kind the wallet was made as.
+ */
+@Composable
+fun DerivationChoice(viewModel: WalletViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    if (state.draft.coin.kind != CoinKind.SKY_FIBER) return
+    val selected = state.draft.derivation
+    Text(
+        stringResource(R.string.wallet_derivation_title).uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 18.dp),
+    )
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        listOf(Derivation.STANDARD, Derivation.BIP44).forEachIndexed { i, d ->
+            SegmentedButton(
+                selected = selected == d,
+                onClick = { viewModel.setDraftDerivation(d) },
+                shape = SegmentedButtonDefaults.itemShape(i, 2),
+            ) {
+                Text(
+                    stringResource(
+                        if (d == Derivation.BIP44) R.string.wallet_derivation_bip44 else R.string.wallet_derivation_standard,
+                    ),
+                )
+            }
+        }
+    }
+    Text(
+        stringResource(R.string.wallet_derivation_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
 }
 
 /** The two-column numbered word grid — backup and reveal share it. */
@@ -320,7 +361,7 @@ fun WalletRestoreScreen(
             // without a checksum, so for them the checksum is the check.
             // Only the fiber chains derive from the phrase itself.
             val legacy = words.size == 24 && Bip39.legacyWords(phrase) &&
-                state.draft.coin.kind == CoinKind.SKY_FIBER
+                state.draft.coin.kind == CoinKind.SKY_FIBER && state.draft.derivation == Derivation.STANDARD
             if (legacy && force) {
                 legacyOffer = false
                 viewModel.restoreWallet(phrase, legacy = true, onDone = onRestored)
@@ -381,6 +422,7 @@ fun WalletRestoreScreen(
                         .padding(top = 6.dp)
                         .height(3.dp),
                 )
+                DerivationChoice(viewModel)
             }
 
             error?.let { err ->

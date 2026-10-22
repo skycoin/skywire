@@ -834,6 +834,17 @@
     <string name="wallet_export_action_sub">一个 CSV 文件，每行一个本钱包的地址。不含任何密钥。</string>
     <string name="wallet_export_done">地址已保存</string>
     <string name="wallet_export_failed">无法写入文件。</string>
+    <string name="wallet_derivation_title">钱包类型</string>
+    <string name="wallet_derivation_standard">确定性</string>
+    <string name="wallet_derivation_bip44">BIP44（HD）</string>
+    <string name="wallet_derivation_note">确定性是经典的 Skycoin 钱包。BIP44 把找零放在单独的地址上。同一组助记词在两种类型下生成的地址不同，恢复时请选择创建时的类型。</string>
+    <string name="wallet_xpub_action">扩展公钥</string>
+    <string name="wallet_xpub_action_sub">让只读工具查看本钱包的所有地址。它无法花费。</string>
+    <string name="wallet_xpub_note">拿到这些公钥的人可以看到本钱包的所有地址和余额，但无法花费。点按即可复制。</string>
+    <string name="wallet_xpub_account">账户</string>
+    <string name="wallet_xpub_receive">收款链</string>
+    <string name="wallet_xpub_change">找零链</string>
+    <string name="wallet_xpub_copied">已复制</string>
     <string name="wallet_remove_action">从本机移除</string>
     <string name="wallet_remove_action_sub">删除本机保存的密钥。没有助记词，币将永远无法找回。</string>
     <string name="wallet_remove_title">从本机移除 %1$s？</string>

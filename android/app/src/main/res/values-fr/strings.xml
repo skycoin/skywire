@@ -916,6 +916,17 @@
     <string name="wallet_export_action_sub">Un fichier CSV avec toutes les adresses de ce portefeuille, une par ligne. Il ne contient aucune clé.</string>
     <string name="wallet_export_done">Adresses enregistrées</string>
     <string name="wallet_export_failed">Le fichier n’a pas pu être écrit.</string>
+    <string name="wallet_derivation_title">Type de portefeuille</string>
+    <string name="wallet_derivation_standard">Déterministe</string>
+    <string name="wallet_derivation_bip44">BIP44 (HD)</string>
+    <string name="wallet_derivation_note">Déterministe est le portefeuille Skycoin classique. BIP44 garde la monnaie sur des adresses à part. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée.</string>
+    <string name="wallet_xpub_action">Clés publiques étendues</string>
+    <string name="wallet_xpub_action_sub">Permet à un outil en lecture seule de voir toutes les adresses de ce portefeuille. Il ne peut pas dépenser.</string>
+    <string name="wallet_xpub_note">Quiconque a ces clés peut voir toutes les adresses et les soldes de ce portefeuille, sans pouvoir dépenser. Touchez-en une pour la copier.</string>
+    <string name="wallet_xpub_account">Compte</string>
+    <string name="wallet_xpub_receive">Chaîne de réception</string>
+    <string name="wallet_xpub_change">Chaîne de monnaie</string>
+    <string name="wallet_xpub_copied">Copiée</string>
     <string name="wallet_remove_action">Retirer de cet appareil</string>
     <string name="wallet_remove_action_sub">Supprime les clés ici. Sans la phrase, les pièces sont perdues pour de bon.</string>
     <string name="wallet_remove_title">Retirer %1$s de cet appareil ?</string>

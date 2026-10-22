@@ -875,6 +875,17 @@
     <string name="wallet_export_action_sub">A CSV file with every address of this wallet, one per line. It holds no keys.</string>
     <string name="wallet_export_done">Addresses saved</string>
     <string name="wallet_export_failed">The file could not be written.</string>
+    <string name="wallet_derivation_title">Wallet type</string>
+    <string name="wallet_derivation_standard">Deterministic</string>
+    <string name="wallet_derivation_bip44">BIP44 (HD)</string>
+    <string name="wallet_derivation_note">Deterministic is the classic Skycoin wallet. BIP44 keeps change on separate addresses. The same phrase gives different addresses in each, so restore it as the type it was made as.</string>
+    <string name="wallet_xpub_action">Extended public keys</string>
+    <string name="wallet_xpub_action_sub">Lets a watch-only tool see every address of this wallet. It cannot spend.</string>
+    <string name="wallet_xpub_note">Anyone with these keys can see all of this wallet\'s addresses and balances, but cannot spend. Tap one to copy it.</string>
+    <string name="wallet_xpub_account">Account</string>
+    <string name="wallet_xpub_receive">Receive chain</string>
+    <string name="wallet_xpub_change">Change chain</string>
+    <string name="wallet_xpub_copied">Copied</string>
     <string name="wallet_remove_action">Remove from this device</string>
     <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
     <string name="wallet_remove_title">Remove %1$s from this device?</string>

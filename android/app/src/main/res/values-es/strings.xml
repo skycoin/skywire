@@ -918,6 +918,17 @@
     <string name="wallet_export_action_sub">Un archivo CSV con todas las direcciones de esta billetera, una por línea. No contiene claves.</string>
     <string name="wallet_export_done">Direcciones guardadas</string>
     <string name="wallet_export_failed">No se pudo escribir el archivo.</string>
+    <string name="wallet_derivation_title">Tipo de billetera</string>
+    <string name="wallet_derivation_standard">Determinista</string>
+    <string name="wallet_derivation_bip44">BIP44 (HD)</string>
+    <string name="wallet_derivation_note">Determinista es la billetera clásica de Skycoin. BIP44 guarda el cambio en direcciones aparte. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó.</string>
+    <string name="wallet_xpub_action">Claves públicas extendidas</string>
+    <string name="wallet_xpub_action_sub">Permite a una herramienta de solo lectura ver todas las direcciones de esta billetera. No puede gastar.</string>
+    <string name="wallet_xpub_note">Quien tenga estas claves puede ver todas las direcciones y saldos de esta billetera, pero no gastar. Toca una para copiarla.</string>
+    <string name="wallet_xpub_account">Cuenta</string>
+    <string name="wallet_xpub_receive">Cadena de recepción</string>
+    <string name="wallet_xpub_change">Cadena de cambio</string>
+    <string name="wallet_xpub_copied">Copiada</string>
     <string name="wallet_remove_action">Quitar de este dispositivo</string>
     <string name="wallet_remove_action_sub">Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre.</string>
     <string name="wallet_remove_title">¿Quitar %1$s de este dispositivo?</string>
