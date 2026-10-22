@@ -386,11 +386,14 @@ class WalletRepository private constructor(private val context: Context) {
         legacy: Boolean = false,
         derivation: Derivation = Derivation.STANDARD,
         passphrase: String = "",
+        exact: Boolean = false,
     ): WalletMeta =
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
-            val seed = normalizeSeed(mnemonic)
-            require(core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed))) {
+            // A non-standard seed is its exact text: case and spacing are part of what is hashed.
+            val seed = if (exact) mnemonic else normalizeSeed(mnemonic)
+            val anyText = exact && seed.isNotEmpty() && derivation == Derivation.STANDARD && core.takesAnySeed()
+            require(core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed)) || anyText) {
                 context.getString(R.string.wallet_seed_invalid)
             }
 

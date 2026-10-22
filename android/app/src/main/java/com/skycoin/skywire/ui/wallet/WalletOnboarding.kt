@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ScreenshotMonitor
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -383,6 +384,12 @@ fun WalletRestoreScreen(
     var input by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var legacyOffer by remember { mutableStateOf(false) }
+    // A classic fiber wallet takes any text as its seed; skycoin-web allows it after a warning.
+    val anyText = state.draft.coin.kind == CoinKind.SKY_FIBER && state.draft.derivation == Derivation.STANDARD
+    var customMode by remember { mutableStateOf(false) }
+    val custom = customMode && anyText
+    var customText by remember { mutableStateOf("") }
+    var customAccepted by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -511,99 +518,155 @@ fun WalletRestoreScreen(
                 }
             }
 
-            item {
-                // Entered words as numbered chips; tapping one takes it out.
-                FlowRow(
-                    modifier = Modifier.padding(top = 18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    words.forEachIndexed { i, w ->
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    words.removeAt(i)
-                                    legacyOffer = false
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        ) {
-                            Text(
-                                "${i + 1}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(w, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            if (custom) {
+                item {
+                    OutlinedTextField(
+                        value = customText,
+                        onValueChange = {
+                            customText = it
+                            customAccepted = false
+                        },
+                        placeholder = { Text(stringResource(R.string.wallet_restore_custom_hint)) },
+                        minLines = 2,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 18.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    Text(
+                        stringResource(R.string.wallet_restore_custom_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clickable { customAccepted = !customAccepted },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = customAccepted, onCheckedChange = { customAccepted = it })
+                        Text(stringResource(R.string.wallet_restore_custom_accept), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Button(
+                        // Exactly as typed: no trimming or case folding, since every byte is part of the seed.
+                        onClick = { viewModel.restoreWallet(customText, exact = true, onDone = onRestored) },
+                        enabled = customAccepted && customText.isNotBlank() && !state.restoring,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 18.dp)
+                            .height(52.dp),
+                    ) {
+                        Text(
+                            stringResource(if (state.restoring) R.string.wallet_restore_scanning else R.string.wallet_restore_action),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    TextButton(onClick = { customMode = false }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                        Text(stringResource(R.string.wallet_restore_custom_back), fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                item {
+                    // Entered words as numbered chips; tapping one takes it out.
+                    FlowRow(
+                        modifier = Modifier.padding(top = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        words.forEachIndexed { i, w ->
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable {
+                                        words.removeAt(i)
+                                        legacyOffer = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            ) {
+                                Text(
+                                    "${i + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(w, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
-            }
 
-            item {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { new ->
-                        if (new.endsWith(" ") && new.isNotBlank()) addWord(new)
-                        else { input = new; error = null; legacyOffer = false }
-                    },
-                    placeholder = { Text(stringResource(R.string.wallet_restore_hint)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    shape = RoundedCornerShape(12.dp),
-                )
-                val suggestions = if (input.isNotBlank()) Bip39.suggestions(input, 4) else emptyList()
-                Row(
-                    modifier = Modifier.padding(top = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    suggestions.forEach { s ->
-                        Text(
-                            s,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .clickable { addWord(s) }
-                                .padding(horizontal = 14.dp, vertical = 9.dp),
-                        )
+                item {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { new ->
+                            if (new.endsWith(" ") && new.isNotBlank()) addWord(new)
+                            else { input = new; error = null; legacyOffer = false }
+                        },
+                        placeholder = { Text(stringResource(R.string.wallet_restore_hint)) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    val suggestions = if (input.isNotBlank()) Bip39.suggestions(input, 4) else emptyList()
+                    Row(
+                        modifier = Modifier.padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        suggestions.forEach { s ->
+                            Text(
+                                s,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                                    .clickable { addWord(s) }
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                            )
+                        }
                     }
-                }
-                Text(
-                    stringResource(R.string.wallet_restore_wordlist_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 14.dp),
-                )
-                Button(
-                    onClick = { finish(force = legacyOffer) },
-                    enabled = !state.restoring,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 26.dp)
-                        .height(52.dp),
-                ) {
-                    if (state.restoring) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(stringResource(R.string.wallet_restore_scanning), fontWeight = FontWeight.Bold)
-                    } else {
-                        Text(
-                            stringResource(
-                                // The second press of the same button is the
-                                // confirmation: the offer above it says what is
-                                // being agreed to.
-                                if (legacyOffer) R.string.wallet_restore_anyway
-                                else R.string.wallet_restore_action,
-                            ),
-                            fontWeight = FontWeight.Bold,
-                        )
+                    Text(
+                        stringResource(R.string.wallet_restore_wordlist_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                    Button(
+                        onClick = { finish(force = legacyOffer) },
+                        enabled = !state.restoring,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 26.dp)
+                            .height(52.dp),
+                    ) {
+                        if (state.restoring) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.wallet_restore_scanning), fontWeight = FontWeight.Bold)
+                        } else {
+                            Text(
+                                stringResource(
+                                    // The second press of the same button is the
+                                    // confirmation: the offer above it says what is
+                                    // being agreed to.
+                                    if (legacyOffer) R.string.wallet_restore_anyway
+                                    else R.string.wallet_restore_action,
+                                ),
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    if (anyText) {
+                        TextButton(onClick = { customMode = true }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                            Text(stringResource(R.string.wallet_restore_custom_open), fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
