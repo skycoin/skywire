@@ -9,6 +9,8 @@ import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
+import com.skycoin.wallet.NodeProblem
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -183,6 +185,22 @@ class SkyFiberWalletCore(
         var sum = 0uL
         for (e in this) sum += Amounts.parse(selector(e), DROPLET_EXPONENT) ?: 0uL
         return sum
+    }
+
+    override suspend fun nodeInfo(): NodeInfo {
+        val h = node.health()
+        val name = h.fiber.displayName.ifEmpty { h.fiber.name.ifEmpty { h.coin } }
+        return NodeInfo(
+            coinName = name.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercase() },
+            ticker = h.fiber.ticker.ifEmpty { h.fiber.name.uppercase() }.takeIf { it.isNotEmpty() },
+            version = h.version.version.takeIf { it.isNotEmpty() },
+            height = h.blockchain.head.seq.toLong(),
+            burnFactor = h.userVerifyTxn.burnFactor.toInt(),
+            pubkey = h.blockchainPubkey.takeIf { it.isNotEmpty() },
+            explorerUrl = h.fiber.explorerUrl.trimEnd('/').takeIf { it.isNotEmpty() },
+            // skycoin-web refuses nodes older than 0.24.0; the API this wallet calls is from there on.
+            problem = if (versionBelow(h.version.version, listOf(0, 24, 0))) NodeProblem.TOO_OLD else null,
+        )
     }
 
     override suspend fun feePresets(): FeePresets? = null
@@ -364,6 +382,16 @@ class SkyFiberWalletCore(
     }
 
     companion object {
+        /** True when [version] parses and is below [floor]; an unknown version is not held against a node. */
+        internal fun versionBelow(version: String, floor: List<Int>): Boolean {
+            val parts = version.trim().removePrefix("v").substringBefore('-').split('.').map { it.toIntOrNull() ?: return false }
+            for (i in floor.indices) {
+                val v = parts.getOrElse(i) { 0 }
+                if (v != floor[i]) return v < floor[i]
+            }
+            return false
+        }
+
         const val DROPLET_EXPONENT = 6
         private const val SCAN_AHEAD = 10
         private const val SCAN_CAP = 100

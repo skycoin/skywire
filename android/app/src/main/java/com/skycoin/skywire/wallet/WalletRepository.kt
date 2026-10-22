@@ -11,6 +11,8 @@ import com.skycoin.wallet.Derivation
 import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
+import com.skycoin.wallet.NodeProblem
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -212,17 +214,33 @@ class WalletRepository private constructor(private val context: Context) {
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
 
+    /**
+     * Adds a fiber coin once its node has answered, as skycoin-web does. A
+     * blank name or ticker is taken from what the node says about its coin,
+     * and so is the block explorer the coin's transactions link to.
+     */
     suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String? = null): CoinSpec {
         val url = nodeUrl.trim().removeSuffix("/")
         require(url.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
+        val info = try {
+            checkNode(CoinSpec("", "", "", CoinKind.SKY_FIBER, url), url)
+        } catch (e: IOException) {
+            throw IOException(context.getString(R.string.wallet_node_unreachable), e)
+        }
+        val coinName = name.trim().ifEmpty { info.coinName.orEmpty() }
+        val coinTicker = ticker.trim().ifEmpty { info.ticker.orEmpty() }.uppercase()
+        require(coinName.isNotEmpty()) { context.getString(R.string.wallet_add_coin_name_required) }
+        require(coinTicker.isNotEmpty()) { context.getString(R.string.wallet_add_coin_ticker_required) }
         val spec = CoinSpec(
             id = "fiber-${UUID.randomUUID().toString().take(8)}",
-            name = name.trim(),
-            ticker = ticker.trim().uppercase(),
+            name = coinName,
+            ticker = coinTicker,
             kind = CoinKind.SKY_FIBER,
             nodeUrl = url,
+            // The Skycoin explorer's transaction page; fiber coins run the same explorer.
+            explorerTxUrl = info.explorerUrl?.let { "$it/app/transaction/%s" },
             icon = icon,
         )
         storeUserCoin(spec)
@@ -311,6 +329,20 @@ class WalletRepository private constructor(private val context: Context) {
             prefs[KEY_FIBER_COINS] = json.encodeToString(
                 ListSerializer(CoinSpec.serializer()), current + spec,
             )
+        }
+    }
+
+    /**
+     * Asks [url] about itself as a node for [coin], alone, with none of the
+     * coin's other nodes behind it. A node the wallet must not use is refused
+     * with the reason, an unreachable one with IOException.
+     */
+    suspend fun checkNode(coin: CoinSpec, url: String): NodeInfo = withContext(Dispatchers.IO) {
+        val info = coreFor(coin.copy(nodeUrl = url.trim().removeSuffix("/"), nodeUrls = emptyList())).nodeInfo()
+        when (info.problem) {
+            NodeProblem.TOO_OLD -> throw IllegalArgumentException(context.getString(R.string.wallet_node_too_old))
+            NodeProblem.WRONG_CHAIN -> throw IllegalArgumentException(context.getString(R.string.wallet_node_wrong_chain))
+            null -> info
         }
     }
 

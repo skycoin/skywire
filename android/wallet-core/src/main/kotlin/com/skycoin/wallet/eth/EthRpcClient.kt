@@ -53,6 +53,8 @@ class EthRpcClient(
 
     suspend fun chainId(): BigInteger = quantity(call("eth_chainId"))
 
+    suspend fun blockNumber(): BigInteger = quantity(call("eth_blockNumber"))
+
     /** The node's tip suggestion, or 1 gwei where the method is not served. */
     suspend fun maxPriorityFeePerGas(): BigInteger =
         runCatching { quantity(call("eth_maxPriorityFeePerGas")) }

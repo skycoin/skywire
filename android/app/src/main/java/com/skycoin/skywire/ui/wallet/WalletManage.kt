@@ -674,8 +674,18 @@ fun WalletAddCoinScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(24.dp))
-            LabeledField(stringResource(R.string.wallet_add_coin_name), name, stringResource(R.string.wallet_add_coin_name_hint)) { name = it }
-            LabeledField(stringResource(R.string.wallet_add_coin_ticker), ticker, stringResource(R.string.wallet_add_coin_ticker_hint)) { ticker = it }
+            // A fiber coin's node names its coin, so these may be left for it to fill.
+            val fromNode = stringResource(R.string.wallet_add_coin_from_node)
+            LabeledField(
+                stringResource(R.string.wallet_add_coin_name),
+                name,
+                if (kind == AddCoinKind.FIBER) fromNode else stringResource(R.string.wallet_add_coin_name_hint),
+            ) { name = it }
+            LabeledField(
+                stringResource(R.string.wallet_add_coin_ticker),
+                ticker,
+                if (kind == AddCoinKind.FIBER) fromNode else stringResource(R.string.wallet_add_coin_ticker_hint),
+            ) { ticker = it }
             IconPickerRow(
                 ticker = ticker,
                 iconName = icon,
@@ -696,9 +706,11 @@ fun WalletAddCoinScreen(
                         viewModel.addErc20Token(name, ticker, contract, decimals, icon, onDone = onAdded)
                     }
                 },
-                enabled = name.isNotBlank() && ticker.isNotBlank() &&
-                    if (kind == AddCoinKind.FIBER) node.isNotBlank()
-                    else contract.isNotBlank() && decimals.isNotBlank(),
+                enabled = if (kind == AddCoinKind.FIBER) {
+                    node.isNotBlank()
+                } else {
+                    name.isNotBlank() && ticker.isNotBlank() && contract.isNotBlank() && decimals.isNotBlank()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 24.dp)

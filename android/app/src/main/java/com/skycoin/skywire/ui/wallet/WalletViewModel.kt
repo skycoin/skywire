@@ -16,6 +16,7 @@ import com.skycoin.wallet.Derivation
 import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.NodeInfo
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.UtxoRecord
@@ -236,6 +237,18 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
      * it as it is. The wallet re-reads immediately: the coin flow carries the
      * new addresses, which rebuilds the client under them.
      */
+    /** Checks a node before it joins the selected coin's list: what it reports, or why it will not do. */
+    suspend fun checkNode(url: String): Result<NodeInfo> = try {
+        Result.success(repo.checkNode(mutable.value.coin, url))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: IllegalArgumentException) {
+        Result.failure(e)
+    } catch (e: Exception) {
+        val app: Application = getApplication()
+        Result.failure(IllegalStateException(app.getString(R.string.wallet_node_unreachable)))
+    }
+
     fun saveNodeUrls(urls: List<String>, indexerUrl: String? = null) = action {
         repo.setNodeUrls(mutable.value.coin.id, urls, indexerUrl)
         mutable.update { it.copy(stale = false) }
@@ -283,9 +296,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?, onDone: () -> Unit) = action {
-        val app: Application = getApplication()
-        require(name.isNotBlank()) { app.getString(R.string.wallet_add_coin_name_required) }
-        require(ticker.isNotBlank()) { app.getString(R.string.wallet_add_coin_ticker_required) }
+        // A blank name or ticker comes from the node; the repository says when it cannot.
         val spec = repo.addFiberCoin(name, ticker, nodeUrl, icon)
         repo.setSelectedCoin(spec.id)
         onDone()

@@ -52,6 +52,12 @@ interface WalletCore {
 
     suspend fun history(book: AddressBook): List<TxRecord>
 
+    /**
+     * What the node says about itself, so it can be checked before it is
+     * used. Throws IOException when it cannot be reached.
+     */
+    suspend fun nodeInfo(): NodeInfo
+
     /** Bitcoin fee-rate presets in sat/vB; null on chains that burn hours instead. */
     suspend fun feePresets(): FeePresets?
 
@@ -186,6 +192,29 @@ class TxRecord(
 )
 
 class FeePresets(val economy: Int, val normal: Int, val priority: Int)
+
+/** A node's own account of itself. Fields a chain does not report are null. */
+class NodeInfo(
+    val coinName: String? = null,
+    val ticker: String? = null,
+    val version: String? = null,
+    val height: Long? = null,
+    /** Fiber chains: one hour in this many is burned per transaction. */
+    val burnFactor: Int? = null,
+    val pubkey: String? = null,
+    /** Fiber chains: the coin's block explorer. */
+    val explorerUrl: String? = null,
+    /** Why the wallet should not use this node; null when it can. */
+    val problem: NodeProblem? = null,
+)
+
+enum class NodeProblem {
+    /** A Skycoin-family node older than 0.24, which the wallet's calls do not fit. */
+    TOO_OLD,
+
+    /** An Ethereum server on a chain other than mainnet. */
+    WRONG_CHAIN,
+}
 
 /** An Ethereum fee choice: the least tip, the node's suggested tip, or twice it. */
 enum class FeeLevel { SLOW, NORMAL, FAST }

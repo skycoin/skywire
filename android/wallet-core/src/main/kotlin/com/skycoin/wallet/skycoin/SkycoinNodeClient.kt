@@ -43,10 +43,25 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
     class BlockchainInfo(val head: BlockHeader = BlockHeader())
 
     @Serializable
+    class BuildInfo(val version: String = "")
+
+    /** The fiber.toml settings a node reports: how the coin names and shows itself. */
+    @Serializable
+    class FiberInfo(
+        val name: String = "",
+        @SerialName("display_name") val displayName: String = "",
+        val ticker: String = "",
+        @SerialName("explorer_url") val explorerUrl: String = "",
+    )
+
+    @Serializable
     class Health(
         val blockchain: BlockchainInfo = BlockchainInfo(),
         @SerialName("user_verify_transaction") val userVerifyTxn: VerifyTxnParams = VerifyTxnParams(),
         val coin: String = "",
+        val version: BuildInfo = BuildInfo(),
+        @SerialName("blockchain_pubkey") val blockchainPubkey: String = "",
+        val fiber: FiberInfo = FiberInfo(),
     )
 
     @Serializable
