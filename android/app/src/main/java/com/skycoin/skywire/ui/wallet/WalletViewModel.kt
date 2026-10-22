@@ -106,6 +106,8 @@ data class WalletUiState(
     /** The same for the Ethereum family's history indexer; null for coins without one. */
     val defaultIndexerUrl: String? = null,
     val message: String? = null,
+    /** History shows only transactions this address of the wallet took part in; null shows all. */
+    val historyAddress: String? = null,
 )
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
@@ -148,6 +150,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         active = active,
                         snapshot = active?.let { w -> repo.cachedSnapshot(w.id) } ?: it.snapshot.takeIf { _ -> sameWallet },
                         stale = if (sameWallet) it.stale else false,
+                        historyAddress = it.historyAddress.takeIf { _ -> sameWallet },
                         receiveIndex = if (sameWallet) {
                             it.receiveIndex.coerceAtMost((active?.receiveAddresses?.size ?: 1) - 1).coerceAtLeast(0)
                         } else 0,
@@ -190,6 +193,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun messageShown() = mutable.update { it.copy(message = null) }
+
+    fun filterHistoryBy(address: String?) = mutable.update { it.copy(historyAddress = address) }
 
     private fun report(e: Exception): String {
         val app: Application = getApplication()

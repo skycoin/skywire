@@ -695,6 +695,14 @@
     <string name="wallet_other_addresses">Other addresses in this wallet</string>
     <string name="wallet_addresses_in">Addresses in %1$s</string>
     <string name="wallet_addresses_note">All of them belong to the same seed. Using a fresh one makes your balance harder to follow.</string>
+    <string name="wallet_addresses_hide_empty">Hide empty addresses</string>
+    <string name="wallet_address_actions">Address options</string>
+    <string name="wallet_address_history">History</string>
+    <string name="wallet_address_outputs">Unspent outputs</string>
+    <string name="wallet_outputs_title">Unspent outputs of %1$s</string>
+    <string name="wallet_outputs_none">This address holds no unspent outputs.</string>
+    <string name="wallet_history_all_addresses">All addresses</string>
+    <string name="wallet_history_address_pick">Show the transactions of</string>
     <string name="wallet_address_default">Default · in use</string>
     <string name="wallet_address_unused">Never used</string>
     <string name="wallet_address_new">Generate a new address</string>

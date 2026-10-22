@@ -229,7 +229,10 @@ fun SkywireApp() {
                     onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
                     onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
                     onSend = { navController.navigate(Routes.WALLET_SEND) { launchSingleTop = true } },
-                    onHistory = { navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true } },
+                    onHistory = {
+                        walletViewModel.filterHistoryBy(null)
+                        navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true }
+                    },
                     onTx = { txid -> navController.navigate(Routes.walletTx(txid)) { launchSingleTop = true } },
                     onWallets = { navController.navigate(Routes.WALLET_WALLETS) { launchSingleTop = true } },
                     onNode = { navController.navigate(Routes.WALLET_NODE) { launchSingleTop = true } },
@@ -261,6 +264,10 @@ fun SkywireApp() {
             composable(Routes.WALLET_RECEIVE) {
                 WalletReceiveScreen(
                     viewModel = walletViewModel,
+                    onHistory = { address ->
+                        walletViewModel.filterHistoryBy(address)
+                        navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true }
+                    },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -281,6 +288,7 @@ fun SkywireApp() {
                     viewModel = walletViewModel,
                     onDone = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onHistory = {
+                        walletViewModel.filterHistoryBy(null)
                         navController.navigate(Routes.WALLET_HISTORY) {
                             launchSingleTop = true
                             popUpTo(Routes.WALLET) { inclusive = false }
