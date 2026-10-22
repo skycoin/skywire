@@ -1,5 +1,7 @@
 package com.skycoin.wallet
 
+import java.math.BigDecimal
+
 /**
  * The one seam the app sees. Two implementations: Skycoin/fiber nodes
  * (parameterized by node URL — every fiber chain speaks the same API) and
@@ -64,6 +66,8 @@ interface WalletCore {
      * chains only; hours are given for every destination or for none.
      * @param changeAddress where change goes; null keeps the chain's own
      * rule. Fiber chains only.
+     * @param shareFactor the share of post-burn hours automatic hours send
+     * onward, 0 to 1; null is the default half. Fiber chains only.
      */
     suspend fun buildTx(
         seed: String,
@@ -77,6 +81,7 @@ interface WalletCore {
         hoursTo: ULong? = null,
         more: List<Recipient> = emptyList(),
         changeAddress: String? = null,
+        shareFactor: BigDecimal? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */

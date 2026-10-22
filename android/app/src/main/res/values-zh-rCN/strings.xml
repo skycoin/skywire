@@ -676,7 +676,7 @@
     <string name="wallet_send_coins_none">没有可选的未花费输出。</string>
     <string name="wallet_utxo_line">%1$s 币时 · %2$s</string>
     <string name="wallet_send_hours">发送的币时</string>
-    <string name="wallet_send_hours_hint">留空时自动：燃烧后剩余币时的一半随币发送</string>
+    <string name="wallet_send_hours_hint">留空时自动：燃烧后剩余币时按设定比例随币发送</string>
     <string name="wallet_send_invalid_hours">币时数值无效。</string>
     <string name="wallet_send_destination">收款方 %1$d</string>
     <string name="wallet_send_add_destination">添加收款方</string>
@@ -698,6 +698,10 @@
     <string name="wallet_send_change_auto">自动</string>
     <string name="wallet_send_change_select">选择</string>
     <string name="wallet_send_change_note">剩余的币发往哪里。留空则退回币原来所在的地址。任何地址都可以，包括本钱包以外的地址。</string>
+    <string name="wallet_send_share">币时分配比例</string>
+    <string name="wallet_send_share_value">%1$d%%</string>
+    <string name="wallet_send_share_note">燃烧后剩余币时中随币发送的比例。其余的随找零退回。</string>
+    <string name="wallet_send_share_manual">手动填写币时时不使用此项。</string>
     <string name="wallet_review_change_to">找零发往</string>
     <string name="wallet_done">完成</string>
     <string name="wallet_send_to_hint_fiber">%1$s 地址</string>

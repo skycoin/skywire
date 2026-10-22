@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.math.BigDecimal
 import java.security.SecureRandom
 
 /** Where the send flow stands; the review sheet and result screen read this. */
@@ -50,6 +51,8 @@ data class SendState(
     val extra: List<DestDraft> = emptyList(),
     /** Where change goes; blank keeps the automatic choice. Fiber only. */
     val changeAddress: String = "",
+    /** Percent of post-burn hours automatic hours send onward, 10 to 100. Fiber only. */
+    val sharePercent: Int = 50,
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -503,6 +506,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                     hoursTo = hoursTo,
                     more = more,
                     changeAddress = send.changeAddress.takeIf { coin.kind == CoinKind.SKY_FIBER },
+                    shareFactor = BigDecimal(send.sharePercent).movePointLeft(2)
+                        .takeIf { coin.kind == CoinKind.SKY_FIBER },
                 )
                 mutable.update { it.copy(send = it.send.copy(planning = false, plan = plan)) }
                 onReady()

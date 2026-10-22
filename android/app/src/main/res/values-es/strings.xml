@@ -754,7 +754,7 @@
     <string name="wallet_send_coins_none">No hay salidas sin gastar para elegir.</string>
     <string name="wallet_utxo_line">%1$s horas · %2$s</string>
     <string name="wallet_send_hours">Horas de moneda a enviar</string>
-    <string name="wallet_send_hours_hint">Vacío envía la mitad de las horas restantes tras la quema</string>
+    <string name="wallet_send_hours_hint">Vacío envía la parte automática de las horas restantes tras la quema</string>
     <string name="wallet_send_invalid_hours">No es una cantidad de horas válida.</string>
     <string name="wallet_send_destination">Destino %1$d</string>
     <string name="wallet_send_add_destination">Añadir destino</string>
@@ -776,6 +776,10 @@
     <string name="wallet_send_change_auto">Automática</string>
     <string name="wallet_send_change_select">Elegir</string>
     <string name="wallet_send_change_note">A dónde van las monedas que sobran. Vacío las devuelve a la dirección de la que salieron. Sirve cualquier dirección, también una de fuera de esta billetera.</string>
+    <string name="wallet_send_share">Reparto de horas de moneda</string>
+    <string name="wallet_send_share_value">%1$d%%</string>
+    <string name="wallet_send_share_note">La parte de las horas de moneda que quedan tras la quema que viaja con las monedas. El resto vuelve con el cambio.</string>
+    <string name="wallet_send_share_manual">No se usa mientras las horas de moneda se ponen a mano.</string>
     <string name="wallet_review_change_to">El cambio va a</string>
     <string name="wallet_done">Hecho</string>
     <string name="wallet_send_to_hint_fiber">dirección de %1$s</string>
