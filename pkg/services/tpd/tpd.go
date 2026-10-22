@@ -340,6 +340,14 @@ func (s *service) Run(ctx context.Context) error {
 			tpdAPI.SetDmsgDiscoveryFeed(mgr)
 			defer mgr.Close()
 		}
+		arDmsg := cfg.AddressResolverDmsg
+		if arDmsg == "" {
+			arDmsg = dmsg.Prod.AddressResolver
+		}
+		if mgr := arBindingsFeed(h.DmsgClient, arDmsg, logger); mgr != nil {
+			tpdAPI.SetARBindingsFeed(mgr)
+			defer mgr.Close()
+		}
 	}
 
 	select {
@@ -484,6 +492,27 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 		Log: log,
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
+	return mgr
+}
+
+// arBindingsFeed subscribes to the address resolver's bindings feed at arURL,
+// or returns nil when arURL names no dmsg peer.
+func arBindingsFeed(dmsgC *dmsg.Client, arURL string, log *logging.Logger) *cxosub.Manager {
+	pk := cmdutil.PKFromDmsgURL(arURL)
+	if pk.Null() {
+		return nil
+	}
+	mgr := cxosub.NewManager(cxosub.Deps{
+		Dmsg: func() *dmsg.Client { return dmsgC },
+		FeedSpec: func(f cxosub.Feed) (cipher.PubKey, uint16, string, error) {
+			if f != cxosub.FeedARBindings {
+				return cipher.PubKey{}, 0, "", fmt.Errorf("feed %s is not held here", cxosub.FeedString(f))
+			}
+			return pk, skyenv.DmsgARBindingsCXOPort, "", nil
+		},
+		Log: log,
+	}, 0)
+	mgr.Pin(cxosub.FeedARBindings)
 	return mgr
 }
 
