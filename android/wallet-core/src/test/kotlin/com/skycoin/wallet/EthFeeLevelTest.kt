@@ -21,7 +21,7 @@ import kotlin.test.assertEquals
  */
 class EthFeeLevelTest {
 
-    private val seed = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    private val seed = KeySource("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
     private val to = "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"
 
     private fun core(suggestedTip: String) = EthWalletCore(

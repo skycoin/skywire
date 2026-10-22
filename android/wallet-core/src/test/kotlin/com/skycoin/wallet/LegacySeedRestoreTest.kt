@@ -26,7 +26,7 @@ class LegacySeedRestoreTest {
         assertTrue(fiber.acceptsLegacySeed(legacy))
         assertEquals(
             listOf("2Z5cJuiiUynTHDR9GL3Fm4nq9dS9bWaUDt9", "pQDsuJoS5SmJSZX3ABz5Qz7HtSJGVp9KU"),
-            fiber.deriveAddresses(legacy, 2, 0).receive,
+            fiber.deriveAddresses(KeySource(legacy), 2, 0).receive,
         )
     }
 

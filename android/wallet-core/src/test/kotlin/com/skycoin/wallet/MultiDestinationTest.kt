@@ -18,7 +18,7 @@ import kotlin.test.assertFailsWith
  */
 class MultiDestinationTest {
 
-    private val seed = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    private val seed = KeySource("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
     private val first = "2EFSW8YqFDG3x6mwfbDjBk6M9eMc6WUoFHZ"
     private val second = "24qhX1ZC9F8iDaT6R13j4fgJyQvumW2izpm"
     private val third = "oJAsEpQrwQdVs6D12ufJ4T25EcCQYg9XFX"
