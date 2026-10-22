@@ -698,6 +698,12 @@
     <string name="wallet_node_too_old">Ce nœud est trop ancien pour le portefeuille. Il doit être au moins en version 0.24.0.</string>
     <string name="wallet_node_wrong_chain">Ce serveur n’est pas sur le réseau principal Ethereum.</string>
     <string name="wallet_node_other_coin">Ce nœud sert %1$s, pas %2$s. Ses soldes et son historique seraient ceux de cette pièce.</string>
+    <string name="wallet_node_status_ok">Connecté · bloc %1$s</string>
+    <string name="wallet_node_status_down">Injoignable</string>
+    <string name="wallet_node_status_checking">Vérification…</string>
+    <string name="wallet_node_syncing">Le nœud se synchronise encore avec le réseau. Le solde et l’historique affichés peuvent ne pas être à jour.</string>
+    <string name="wallet_node_no_peers">Le nœud n’a aucune connexion avec d’autres nœuds. Ce qu’il affiche peut être dépassé.</string>
+    <string name="wallet_send_syncing_confirm">Le nœud se synchronise encore, le solde affiché peut donc être faux. Continuer quand même ?</string>
     <string name="wallet_add_coin_from_node">Fourni par le nœud si vide</string>
     <string name="wallet_node_invalid">Ce n’est pas une adresse http(s).</string>
     <string name="wallet_node_remove">Retirer ce nœud</string>
