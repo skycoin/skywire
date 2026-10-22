@@ -35,6 +35,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -656,6 +657,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.hostBridge.sockets.log = v.hostBridgeLog()
 		factory.Sockets = &v.hostBridge.sockets
 		vnet.SetHost(hostBridgeHost{&v.hostBridge.sockets})
+		vpn.SetHostNetwork(hostBridgeVPN{&v.hostBridge.sockets})
 	} else if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {

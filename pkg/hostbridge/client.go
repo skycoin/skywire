@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -267,3 +268,59 @@ func parseAddrPort(s string) (netip.AddrPort, error) {
 	}
 	return netip.AddrPortFrom(netip.IPv4Unspecified(), uint16(p)), nil
 }
+
+// TUN opens a TUN device on the bridge's host. Each Read and Write moves one
+// packet. Closing it deletes the device and the routes through it. The
+// bridge needs CAP_NET_ADMIN, as a native vpn-client does.
+func (c *Client) TUN(ctx context.Context) (*TUN, error) {
+	st, br, name, _, err := c.request(ctx, opTUN, "tun", "")
+	if err != nil {
+		return nil, err
+	}
+	return &TUN{st: st, br: br, name: name}, nil
+}
+
+// Net sets up the bridge's host for a TUN: "gateway" returns the default
+// gateway, "setup <tun> <cidr> <mtu>" addresses a TUN this bridge opened and
+// brings it up, and "route add|change|del <dst> <gateway>" edits a route.
+func (c *Client) Net(ctx context.Context, cmd string, args ...string) (string, error) {
+	st, _, res, _, err := c.request(ctx, opNet, cmd, strings.Join(args, " "))
+	if err != nil {
+		return "", err
+	}
+	_ = st.Close() //nolint:errcheck
+	return res, nil
+}
+
+// TUN is a TUN device on the bridge's host.
+type TUN struct {
+	st   net.Conn
+	br   *bufio.Reader
+	rmu  sync.Mutex
+	wmu  sync.Mutex
+	name string
+}
+
+// Name is the device's name on the host.
+func (t *TUN) Name() string { return t.name }
+
+func (t *TUN) Read(p []byte) (int, error) {
+	t.rmu.Lock()
+	defer t.rmu.Unlock()
+	return readPacket(t.br, p)
+}
+
+func (t *TUN) Write(p []byte) (int, error) {
+	if len(p) > maxDatagram {
+		return 0, errFieldTooLong
+	}
+	t.wmu.Lock()
+	defer t.wmu.Unlock()
+	if err := writePacket(t.st, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// Close deletes the device.
+func (t *TUN) Close() error { return t.st.Close() }

@@ -18,6 +18,10 @@ const (
 	opUDP      byte = 3
 	opAccepted byte = 4
 	opHello    byte = 5
+	// opTUN opens a TUN device on the host, and its stream carries packets.
+	opTUN byte = 6
+	// opNet sets up a TUN or a route, or reads the default gateway.
+	opNet byte = 7
 )
 
 const (
@@ -136,6 +140,34 @@ func validNetwork(op byte, network string) bool {
 		return network == "tcp" || network == "tcp4" || network == "tcp6"
 	case opUDP:
 		return network == "udp" || network == "udp4" || network == "udp6"
+	case opTUN:
+		return network == "tun"
+	case opNet:
+		return network == "gateway" || network == "setup" || network == "route" || network == "resolve"
 	}
 	return false
+}
+
+// A packet on a tun stream is its length, then the packet.
+func writePacket(w io.Writer, p []byte) error {
+	b := make([]byte, 0, binary.MaxVarintLen32+len(p))
+	b = binary.AppendUvarint(b, uint64(len(p)))
+	b = append(b, p...)
+	_, err := w.Write(b)
+	return err
+}
+
+func readPacket(r *bufio.Reader, p []byte) (int, error) {
+	n, err := binary.ReadUvarint(r)
+	if err != nil {
+		return 0, err
+	}
+	if n > maxDatagram {
+		return 0, errFieldTooLong
+	}
+	m := min(int(n), len(p))
+	if _, err = io.ReadFull(r, p[:m]); err == nil {
+		_, err = r.Discard(int(n) - m)
+	}
+	return m, err
 }

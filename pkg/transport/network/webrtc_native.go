@@ -196,8 +196,8 @@ func pumpRemoteSignals(ctx context.Context, pc *webrtc.PeerConnection, sc *signa
 // webrtcDial is the OFFERER: create the peer connection + DataChannel, send the
 // offer over sc, apply the answer + remote candidates, and return once the
 // DataChannel is open and detached to a net.Conn.
-func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
+func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
 	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(iceURLs))
 	if err != nil {
 		return nil, fmt.Errorf("webrtc: new peer connection: %w", err)
@@ -242,8 +242,8 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 
 // webrtcAccept is the ANSWERER: wait for the offer on sc, answer it, and return
 // the DataChannel (delivered via pc.OnDataChannel) once open and detached.
-func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
+func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
 	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(iceURLs))
 	if err != nil {
 		return nil, fmt.Errorf("webrtc: new peer connection: %w", err)

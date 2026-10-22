@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,10 +67,11 @@ type signalMsg struct {
 // the offer/answer (from the pump) are sent from different goroutines, so the
 // header+body pair must be written atomically.
 type signalConn struct {
-	rwc   io.ReadWriteCloser
-	wmu   sync.Mutex
-	hdr   [4]byte
-	rdHdr [4]byte
+	rwc      io.ReadWriteCloser
+	announce func(addr string)
+	wmu      sync.Mutex
+	hdr      [4]byte
+	rdHdr    [4]byte
 }
 
 func (c *signalConn) send(m signalMsg) error {
@@ -101,10 +103,91 @@ func (c *signalConn) recv() (signalMsg, error) {
 	}
 	var m signalMsg
 	err := json.Unmarshal(b, &m)
+	if err == nil && c.announce != nil {
+		for _, a := range peerAddrs(m) {
+			c.announce(a)
+		}
+	}
 	return m, err
 }
 
 func (c *signalConn) Close() error { return c.rwc.Close() }
+
+// newSignalConn frames signaling over rwc. announce, when set, is told each
+// ICE server and each peer candidate before the first packet goes to it.
+func newSignalConn(rwc io.ReadWriteCloser, iceURLs []string, announce func(string)) *signalConn {
+	if announce != nil {
+		for _, u := range iceURLs {
+			if a, ok := iceServerAddr(u); ok {
+				announce(a)
+			}
+		}
+	}
+	return &signalConn{rwc: rwc, announce: announce}
+}
+
+// peerAddrs are the addresses of the ICE candidates a signaling message
+// carries, trickled or in an offer or answer.
+func peerAddrs(m signalMsg) []string {
+	var cands []string
+	switch m.Type {
+	case "candidate":
+		cands = []string{m.Candidate}
+	case "offer", "answer":
+		for _, l := range strings.Split(m.SDP, "\n") {
+			if strings.HasPrefix(l, "a=candidate:") {
+				cands = append(cands, strings.TrimPrefix(l, "a="))
+			}
+		}
+	}
+	var addrs []string
+	for _, c := range cands {
+		if a, ok := candidateAddr(c); ok {
+			addrs = append(addrs, a)
+		}
+	}
+	return addrs
+}
+
+// candidateAddr is the host:port of an ICE candidate, RFC 8839 section 5.1:
+// "candidate:<foundation> <component> <transport> <priority> <address> <port> typ ...".
+// mDNS names and local addresses are left out, as they never take the default route.
+func candidateAddr(c string) (string, bool) {
+	f := strings.Fields(c)
+	if len(f) < 6 || !strings.HasPrefix(f[0], "candidate:") {
+		return "", false
+	}
+	ip := net.ParseIP(f[4])
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+		return "", false
+	}
+	return net.JoinHostPort(f[4], f[5]), true
+}
+
+// iceServerAddr is the host:port of a STUN or TURN URL, RFC 7064 and 7065,
+// e.g. "stun:host:3478" or "turn:host?transport=udp".
+func iceServerAddr(u string) (string, bool) {
+	scheme, rest, ok := strings.Cut(u, ":")
+	if !ok || !strings.HasPrefix(scheme, "stun") && !strings.HasPrefix(scheme, "turn") {
+		return "", false
+	}
+	rest, _, _ = strings.Cut(rest, "?")
+	if _, _, err := net.SplitHostPort(rest); err == nil {
+		return rest, true
+	}
+	if rest == "" {
+		return "", false
+	}
+	port := "3478"
+	if scheme == "stuns" || scheme == "turns" {
+		port = "5349"
+	}
+	return net.JoinHostPort(strings.Trim(rest, "[]"), port), true
+}
+
+// announcePeer routes a WebRTC peer or ICE server around a VPN tunnel, as
+// the IP carriers do for the address they dial.
+func (c *webrtcClient) announcePeer(addr string) { c.announceDial(types.WEBRTC, addr) }
 
 // webrtcClient is the WEBRTC-transport implementation of Client. It signals over
 // the dmsg client (dialing/accepting webrtcSignalPort) and negotiates a direct
@@ -142,7 +225,7 @@ func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 		return nil, err
 	}
 	c.log.Debugf("WebRTC signaling stream to %v established; starting offerer", rPK)
-	conn, err := webrtcDial(ctx, str, c.iceURLs)
+	conn, err := webrtcDial(ctx, str, c.iceURLs, c.announcePeer)
 	if err != nil {
 		str.Close() //nolint:errcheck,gosec
 		return nil, err
@@ -211,7 +294,7 @@ func (c *webrtcClient) Start() error {
 }
 
 func (c *webrtcClient) serve() {
-	lis, err := newWebRTCListener(c.dmsgC, c.iceURLs)
+	lis, err := newWebRTCListener(c.dmsgC, c.iceURLs, c.announcePeer)
 	if err != nil {
 		c.log.Errorf("Failed to start WebRTC signaling listener: %v", err)
 		return
@@ -223,23 +306,25 @@ func (c *webrtcClient) serve() {
 // accepted signaling stream is answered and its DataChannel net.Conn delivered
 // from Accept().
 type webrtcListener struct {
-	dmsgLis *dmsg.Listener
-	iceURLs []string
-	conns   chan net.Conn
-	done    chan struct{}
-	once    sync.Once
+	dmsgLis  *dmsg.Listener
+	iceURLs  []string
+	announce func(string)
+	conns    chan net.Conn
+	done     chan struct{}
+	once     sync.Once
 }
 
-func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string) (*webrtcListener, error) {
+func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string, announce func(string)) (*webrtcListener, error) {
 	dl, err := dmsgC.Listen(webrtcSignalPort)
 	if err != nil {
 		return nil, err
 	}
 	l := &webrtcListener{
-		dmsgLis: dl,
-		iceURLs: iceURLs,
-		conns:   make(chan net.Conn),
-		done:    make(chan struct{}),
+		dmsgLis:  dl,
+		iceURLs:  iceURLs,
+		announce: announce,
+		conns:    make(chan net.Conn),
+		done:     make(chan struct{}),
 	}
 	go l.acceptLoop()
 	return l, nil
@@ -254,7 +339,7 @@ func (l *webrtcListener) acceptLoop() {
 		go func(s *dmsg.Stream) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			conn, err := webrtcAccept(ctx, s, l.iceURLs)
+			conn, err := webrtcAccept(ctx, s, l.iceURLs, l.announce)
 			if err != nil {
 				s.Close() //nolint:errcheck,gosec
 				return
