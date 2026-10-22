@@ -28,6 +28,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -102,6 +105,18 @@ fun WalletSeedScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            // A new length is a new phrase: the words shown are always the ones the wallet gets.
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                listOf(12, 24).forEachIndexed { i, n ->
+                    SegmentedButton(
+                        selected = words.size == n,
+                        onClick = { if (words.size != n) viewModel.startCreate(n) },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2),
+                    ) {
+                        Text(stringResource(if (n == 24) R.string.wallet_seed_words_24 else R.string.wallet_seed_words_12))
+                    }
+                }
             }
             Spacer(Modifier.height(20.dp))
             SeedGrid(words)
@@ -301,8 +316,8 @@ fun WalletRestoreScreen(
             // A 24-word phrase of list words without a checksum is how the
             // older wallets wrote seeds — their seeds were arbitrary strings,
             // and refusing them strands those wallets. Offer the restore with
-            // the typo risk said plainly; 12-word phrases are our own format
-            // and always checksummed, so for them the checksum is the check.
+            // the typo risk said plainly; 12-word phrases were never written
+            // without a checksum, so for them the checksum is the check.
             // Only the fiber chains derive from the phrase itself.
             val legacy = words.size == 24 && Bip39.legacyWords(phrase) &&
                 state.draft.coin.kind == CoinKind.SKY_FIBER

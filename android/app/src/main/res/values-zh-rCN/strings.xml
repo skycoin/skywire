@@ -496,7 +496,9 @@
     <string name="wallet_intro_restore_sub">输入已有的 12 或 24 个助记词</string>
 
     <string name="wallet_seed_title">助记词</string>
-    <string name="wallet_seed_body">按顺序抄下这十二个助记词，并离线保存。拿到它们的人就能花掉你的币。</string>
+    <string name="wallet_seed_body">按顺序抄下这些助记词，并离线保存。拿到它们的人就能花掉你的币。</string>
+    <string name="wallet_seed_words_12">12 个词</string>
+    <string name="wallet_seed_words_24">24 个词</string>
     <string name="wallet_seed_secure">本页面已禁止截屏，也没有复制按钮。</string>
     <string name="wallet_seed_continue">继续</string>
 
@@ -760,17 +762,17 @@
     <string name="wallet_rename">重命名</string>
     <string name="wallet_rename_title">重命名钱包</string>
     <string name="wallet_reveal_action">显示助记词</string>
-    <string name="wallet_reveal_action_sub">以明文显示全部十二个助记词。需要先验证指纹。</string>
+    <string name="wallet_reveal_action_sub">以明文显示全部助记词。需要先验证指纹。</string>
     <string name="wallet_remove_action">从本机移除</string>
     <string name="wallet_remove_action_sub">删除本机保存的密钥。没有助记词，币将永远无法找回。</string>
     <string name="wallet_remove_title">从本机移除 %1$s？</string>
-    <string name="wallet_remove_body">本机保存的密钥会被删除。如果你没有抄下那十二个助记词，这个钱包里的币将再也无人能够动用，包括你自己。</string>
+    <string name="wallet_remove_body">本机保存的密钥会被删除。如果你没有抄下这些助记词，这个钱包里的币将再也无人能够动用，包括你自己。</string>
     <string name="wallet_remove_confirm">移除</string>
     <string name="wallet_remove_keep">保留</string>
     <string name="wallet_removed">%1$s 已从本机移除</string>
     <string name="wallet_bio_reveal_title">确认是你本人</string>
     <string name="wallet_bio_reveal_subtitle">%1$s 的助记词将在下一个页面以明文显示。</string>
-    <string name="wallet_reveal_warning">任何人读到这十二个助记词，都能在任意设备上转走 %1$s 中的全部币，不需要你的手机。只在没有人能看到你屏幕的地方查看它们。</string>
+    <string name="wallet_reveal_warning">任何人读到这些助记词，都能在任意设备上转走 %1$s 中的全部币，不需要你的手机。只在没有人能看到你屏幕的地方查看它们。</string>
     <string name="wallet_reveal_autohide">已禁用截屏。本页面将在 %1$s 后自动关闭。</string>
     <string name="wallet_reveal_hide">隐藏助记词</string>
 
@@ -816,7 +818,7 @@
     <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，SkyMail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
 
     <string name="help_wallet_title">关于钱包</string>
-    <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
+    <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
 
     <string name="help_settings_title">关于设置</string>
     <string name="help_settings_body">这部手机在网络上的身份，以及本应用的行为方式。身份是保存在文件里的一对密钥——请在需要之前就备份好，因为弄丢它就等于弄丢了你的地址、聊天记录的另一半，以及与这把密钥绑定的所有奖励。\n\n所有日志都在“诊断”里：节点核心、应用进程，以及在其之下运行的每个应用。连不上的时候就到那里看。</string>

@@ -544,7 +544,9 @@
     <string name="wallet_intro_restore_sub">Saisissez une phrase existante de 12 ou 24 mots</string>
 
     <string name="wallet_seed_title">Phrase de récupération</string>
-    <string name="wallet_seed_body">Écrivez ces douze mots dans l’ordre et gardez-les hors ligne. Quiconque les détient peut dépenser vos pièces.</string>
+    <string name="wallet_seed_body">Écrivez ces mots dans l’ordre et gardez-les hors ligne. Quiconque les détient peut dépenser vos pièces.</string>
+    <string name="wallet_seed_words_12">12 mots</string>
+    <string name="wallet_seed_words_24">24 mots</string>
     <string name="wallet_seed_secure">Les captures d’écran sont désactivées sur cet écran. Il n’y a pas de bouton copier.</string>
     <string name="wallet_seed_continue">Continuer</string>
 
@@ -842,17 +844,17 @@
     <string name="wallet_rename">Renommer</string>
     <string name="wallet_rename_title">Renommer le portefeuille</string>
     <string name="wallet_reveal_action">Révéler la phrase de récupération</string>
-    <string name="wallet_reveal_action_sub">Montre les douze mots en clair. Demande votre empreinte d’abord.</string>
+    <string name="wallet_reveal_action_sub">Montre tous les mots en clair. Demande votre empreinte d’abord.</string>
     <string name="wallet_remove_action">Retirer de cet appareil</string>
     <string name="wallet_remove_action_sub">Supprime les clés ici. Sans la phrase, les pièces sont perdues pour de bon.</string>
     <string name="wallet_remove_title">Retirer %1$s de cet appareil ?</string>
-    <string name="wallet_remove_body">Les clés stockées ici sont supprimées. Si vous n’avez pas écrit les douze mots de récupération, les pièces de ce portefeuille ne pourront être atteintes par personne, vous y compris.</string>
+    <string name="wallet_remove_body">Les clés stockées ici sont supprimées. Si vous n’avez pas écrit les mots de récupération, les pièces de ce portefeuille ne pourront être atteintes par personne, vous y compris.</string>
     <string name="wallet_remove_confirm">Retirer</string>
     <string name="wallet_remove_keep">Le garder</string>
     <string name="wallet_removed">%1$s retiré de cet appareil</string>
     <string name="wallet_bio_reveal_title">Confirmez que c’est vous</string>
     <string name="wallet_bio_reveal_subtitle">Les mots de %1$s seront montrés en clair à l’écran suivant.</string>
-    <string name="wallet_reveal_warning">Quiconque lit ces douze mots peut déplacer chaque pièce de %1$s, depuis n’importe quel appareil, sans votre téléphone. Ne les révélez que là où personne ne peut voir votre écran.</string>
+    <string name="wallet_reveal_warning">Quiconque lit ces mots peut déplacer chaque pièce de %1$s, depuis n’importe quel appareil, sans votre téléphone. Ne les révélez que là où personne ne peut voir votre écran.</string>
     <string name="wallet_reveal_autohide">Captures d’écran désactivées. Cet écran se ferme de lui-même dans %1$s.</string>
     <string name="wallet_reveal_hide">Masquer la phrase</string>
 
@@ -902,7 +904,7 @@
     <string name="help_hub_body">Tout ce que votre visor peut exécuter, au même endroit. Une tuile ouvre l’écran propre de l’application ; le visor continue de tourner dessous, quel que soit celui que vous regardez.\n\nSkySOCKS et SkyVPN envoient d’autres trafics via le réseau, SkyDEX négocie, SkyChat envoie des messages, SkyMail transporte le courrier entre visors et Fleet surveille les visors que vous faites tourner ailleurs. Une tuile grisée n’est pas encore construite.</string>
 
     <string name="help_wallet_title">À propos du Portefeuille</string>
-    <string name="help_wallet_body">Skycoin, les Fibercoins qui partagent son logiciel de nœud, et Bitcoin — le tout détenu par des clés générées sur ce téléphone et qui ne le quittent jamais. Skywire ne les voit jamais et elles ne sont jamais envoyées au réseau.\n\nLes douze mots de récupération sont le portefeuille. Quiconque les lit peut dépenser les pièces depuis n’importe quel appareil sans votre téléphone, et si vous les perdez, personne ne peut récupérer le portefeuille pour vous — ni nous, ni personne.\n\nLes soldes et l’historique viennent du nœud vers lequel chaque pièce pointe : une pièce dont le nœud est injoignable affiche son dernier solde connu et n’envoie pas.</string>
+    <string name="help_wallet_body">Skycoin, les Fibercoins qui partagent son logiciel de nœud, et Bitcoin — le tout détenu par des clés générées sur ce téléphone et qui ne le quittent jamais. Skywire ne les voit jamais et elles ne sont jamais envoyées au réseau.\n\nLes mots de récupération sont le portefeuille. Quiconque les lit peut dépenser les pièces depuis n’importe quel appareil sans votre téléphone, et si vous les perdez, personne ne peut récupérer le portefeuille pour vous — ni nous, ni personne.\n\nLes soldes et l’historique viennent du nœud vers lequel chaque pièce pointe : une pièce dont le nœud est injoignable affiche son dernier solde connu et n’envoie pas.</string>
 
     <string name="help_settings_title">À propos de Paramètres</string>
     <string name="help_settings_body">Qui ce téléphone est sur le réseau, et comment l’application se comporte. L’identité est une paire de clés dans un fichier — sauvegardez-la avant d’en avoir besoin, car la perdre perd votre adresse, l’autre moitié de votre historique de chat et toute récompense liée à la clé.\n\nDiagnostics est là où vit chaque journal : le cœur du visor, le processus de l’application, et chaque application qui tourne dessous. C’est l’endroit à regarder quand quelque chose ne veut pas se connecter.</string>
