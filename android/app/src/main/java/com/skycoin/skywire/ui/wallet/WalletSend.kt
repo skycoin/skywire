@@ -91,12 +91,27 @@ fun WalletSendScreen(
     var fromSheet by remember { mutableStateOf(false) }
     var coinsSheet by remember { mutableStateOf(false) }
 
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        result.contents?.let { raw ->
-            // Accept plain addresses and bitcoin:/skycoin: URIs.
-            val addr = raw.trim().substringAfterLast(":").substringBefore("?")
-            viewModel.updateSend { it.copy(to = addr) }
+    val wrongToken = stringResource(R.string.wallet_scan_wrong_token, coin.ticker)
+    // A scanned code and a pasted one are read alike: an address, or a payment request.
+    fun fillFrom(raw: String) {
+        val fill = coin.readScan(raw)
+        if (fill.wrongToken) {
+            viewModel.updateSend { it.copy(planError = wrongToken) }
+            return
         }
+        viewModel.updateSend {
+            it.copy(
+                to = fill.address ?: it.to,
+                amountText = fill.amountText ?: it.amountText,
+                sendMax = if (fill.amountText != null) false else it.sendMax,
+                hoursText = fill.hoursText ?: it.hoursText,
+                plan = null,
+                planError = null,
+            )
+        }
+    }
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.let(::fillFrom)
     }
 
     LaunchedEffect(Unit) { viewModel.loadFeePresets() }
@@ -143,9 +158,7 @@ fun WalletSendScreen(
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = {
-                    clipboard.getText()?.text?.trim()?.let { pasted ->
-                        viewModel.updateSend { it.copy(to = pasted, planError = null) }
-                    }
+                    clipboard.getText()?.text?.trim()?.takeIf { it.isNotEmpty() }?.let(::fillFrom)
                 }) {
                     Text(stringResource(R.string.wallet_paste), fontWeight = FontWeight.Bold)
                 }

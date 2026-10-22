@@ -717,6 +717,16 @@
     <string name="wallet_receive_title">Recevoir</string>
     <string name="wallet_receive_only">Envoyez seulement %1$s à cette adresse.</string>
     <string name="wallet_receive_tap_copy">Touchez pour copier l’adresse complète</string>
+    <string name="wallet_request_title">Demander un montant précis</string>
+    <string name="wallet_request_amount">Montant en %1$s</string>
+    <string name="wallet_request_hours">Coin Hours</string>
+    <string name="wallet_request_message">Message (facultatif)</string>
+    <string name="wallet_request_note">Une fois rempli, le code QR, Copier et Partager portent la demande. L’adresse ci-dessus ne change pas.</string>
+    <string name="wallet_request_bad_amount">Ce n’est pas un montant valide pour cette pièce.</string>
+    <string name="wallet_request_bad_hours">Les Coin Hours doivent être un nombre entier.</string>
+    <string name="wallet_request_copy">Copier la demande</string>
+    <string name="wallet_request_copied">Demande de paiement copiée</string>
+    <string name="wallet_scan_wrong_token">Ce code demande un paiement dans un autre jeton, pas en %1$s. Rien n’a été rempli.</string>
     <string name="wallet_copy">Copier</string>
     <string name="wallet_share">Partager</string>
     <string name="wallet_address_copied">Adresse copiée dans le presse-papiers</string>

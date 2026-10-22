@@ -676,6 +676,16 @@
     <string name="wallet_receive_title">Receive</string>
     <string name="wallet_receive_only">Send only %1$s to this address.</string>
     <string name="wallet_receive_tap_copy">Tap to copy the full address</string>
+    <string name="wallet_request_title">Request a specific amount</string>
+    <string name="wallet_request_amount">Amount in %1$s</string>
+    <string name="wallet_request_hours">Coin Hours</string>
+    <string name="wallet_request_message">Message (optional)</string>
+    <string name="wallet_request_note">Once filled in, the QR code, Copy and Share carry the request. The address above stays the same.</string>
+    <string name="wallet_request_bad_amount">Not a valid amount for this coin.</string>
+    <string name="wallet_request_bad_hours">Coin Hours must be a whole number.</string>
+    <string name="wallet_request_copy">Copy request</string>
+    <string name="wallet_request_copied">Payment request copied</string>
+    <string name="wallet_scan_wrong_token">This code asks for a payment in another token, not %1$s. Nothing was filled in.</string>
     <string name="wallet_copy">Copy</string>
     <string name="wallet_share">Share</string>
     <string name="wallet_address_copied">Address copied to the clipboard</string>

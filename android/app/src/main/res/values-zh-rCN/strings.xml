@@ -641,6 +641,16 @@
     <string name="wallet_receive_title">接收</string>
     <string name="wallet_receive_only">只能向该地址转入 %1$s。</string>
     <string name="wallet_receive_tap_copy">点按复制完整地址</string>
+    <string name="wallet_request_title">请求指定金额</string>
+    <string name="wallet_request_amount">%1$s 金额</string>
+    <string name="wallet_request_hours">币时</string>
+    <string name="wallet_request_message">附言（可选）</string>
+    <string name="wallet_request_note">填写后，二维码、复制和分享都会带上这个收款请求。上面的地址不变。</string>
+    <string name="wallet_request_bad_amount">这不是该币种的有效金额。</string>
+    <string name="wallet_request_bad_hours">币时必须是整数。</string>
+    <string name="wallet_request_copy">复制收款请求</string>
+    <string name="wallet_request_copied">收款请求已复制</string>
+    <string name="wallet_scan_wrong_token">这个二维码请求的是另一种代币，而不是 %1$s。没有填入任何内容。</string>
     <string name="wallet_copy">复制</string>
     <string name="wallet_share">分享</string>
     <string name="wallet_address_copied">地址已复制到剪贴板</string>

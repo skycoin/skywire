@@ -18,8 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
+import com.skycoin.skywire.wallet.CoinKind
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -67,6 +73,10 @@ fun WalletReceiveScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addressSheet by remember { mutableStateOf(false) }
+    var requestOpen by remember { mutableStateOf(false) }
+    var reqAmount by remember { mutableStateOf("") }
+    var reqHours by remember { mutableStateOf("") }
+    var reqMessage by remember { mutableStateOf("") }
 
     val address = wallet?.receiveAddresses?.getOrNull(state.receiveIndex)
         ?: wallet?.receiveAddresses?.firstOrNull()
@@ -77,10 +87,14 @@ fun WalletReceiveScreen(
     LaunchedEffect(wallet) { if (wallet == null) onBack() }
     if (wallet == null || address == null) return
 
+    val request = coin.paymentRequest(address, reqAmount, reqHours, reqMessage)
+    // The QR, Copy and Share carry the request once one is filled in; the chip stays the address.
+    val shared = request.uri ?: address
     val copiedText = stringResource(R.string.wallet_address_copied)
-    fun copy() {
-        clipboard.setText(AnnotatedString(address))
-        scope.launch { snackbar.showSnackbar(copiedText) }
+    val requestCopiedText = stringResource(R.string.wallet_request_copied)
+    fun copy(text: String = shared) {
+        clipboard.setText(AnnotatedString(text))
+        scope.launch { snackbar.showSnackbar(if (text == address) copiedText else requestCopiedText) }
     }
 
     Scaffold(
@@ -107,14 +121,14 @@ fun WalletReceiveScreen(
                     .background(Color.White)
                     .padding(16.dp),
             ) {
-                QrImage(address)
+                QrImage(shared)
             }
             Row(
                 modifier = Modifier
                     .padding(top = 20.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { copy() }
+                    .clickable { copy(address) }
                     .padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -143,19 +157,99 @@ fun WalletReceiveScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Button(onClick = { copy() }, modifier = Modifier.weight(1f).height(50.dp)) {
-                    Text(stringResource(R.string.wallet_copy), fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(if (request.uri != null) R.string.wallet_request_copy else R.string.wallet_copy),
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
                 FilledTonalButton(
                     onClick = {
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, address)
+                            putExtra(Intent.EXTRA_TEXT, shared)
                         }
                         context.startActivity(Intent.createChooser(send, null))
                     },
                     modifier = Modifier.weight(1f).height(50.dp),
                 ) {
                     Text(stringResource(R.string.wallet_share), fontWeight = FontWeight.Bold)
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { requestOpen = !requestOpen }
+                        .padding(horizontal = 16.dp, vertical = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.wallet_request_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (requestOpen) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                        null,
+                        Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (requestOpen) {
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                        OutlinedTextField(
+                            value = reqAmount,
+                            onValueChange = { reqAmount = it.take(40) },
+                            label = { Text(stringResource(R.string.wallet_request_amount, coin.ticker)) },
+                            isError = request.badAmount,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (coin.kind == CoinKind.SKY_FIBER) {
+                            OutlinedTextField(
+                                value = reqHours,
+                                onValueChange = { reqHours = it.take(18) },
+                                label = { Text(stringResource(R.string.wallet_request_hours)) },
+                                isError = request.badHours,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                        }
+                        if (!coin.isEthFamily) {
+                            OutlinedTextField(
+                                value = reqMessage,
+                                onValueChange = { reqMessage = it.take(REQUEST_MESSAGE_MAX) },
+                                label = { Text(stringResource(R.string.wallet_request_message)) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                        }
+                        Text(
+                            stringResource(
+                                when {
+                                    request.badAmount -> R.string.wallet_request_bad_amount
+                                    request.badHours -> R.string.wallet_request_bad_hours
+                                    else -> R.string.wallet_request_note
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (request.badAmount || request.badHours) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                    }
                 }
             }
             Row(
