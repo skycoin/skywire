@@ -80,6 +80,7 @@ import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.addressScanPending
 import com.skycoin.skywire.wallet.exposedWithCoins
+import com.skycoin.skywire.wallet.usdText
 import com.skycoin.wallet.Amounts
 import java.time.Instant
 import java.time.ZoneId
@@ -490,6 +491,14 @@ private fun BalanceHeader(state: WalletUiState) {
             if (state.refreshing) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             }
+        }
+        state.usdPrice?.let { price ->
+            Text(
+                stringResource(R.string.wallet_usd_value, coin.usdText(snapshot?.confirmed ?: 0uL, price)),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
         Text(
             text = when (coin.kind) {

@@ -38,6 +38,8 @@ data class CoinSpec(
     /** The node addresses requests try, in order. Empty until the user
      *  names their own; [nodeUrl] is always the first of them. */
     val nodeUrls: List<String> = emptyList(),
+    /** The coin's id at coinpaprika, for a USD price; null when it has none there. */
+    val priceId: String? = null,
 ) {
     /** The addresses a request walks before it gives up: the list, else the one. */
     val tryNodes: List<String> get() = nodeUrls.ifEmpty { listOf(nodeUrl) }
@@ -91,6 +93,7 @@ data class CoinSpec(
             nodeUrl = "https://node.skycoin.com",
             explorerTxUrl = "https://explorer.skycoin.com/app/transaction/%s",
             builtIn = true,
+            priceId = "sky-skycoin",
         )
         val BTC = CoinSpec(
             id = "BTC",
@@ -100,6 +103,7 @@ data class CoinSpec(
             nodeUrl = "https://mempool.space",
             explorerTxUrl = "https://mempool.space/tx/%s",
             builtIn = true,
+            priceId = "btc-bitcoin",
         )
         val ETH = CoinSpec(
             id = "ETH",
@@ -110,6 +114,7 @@ data class CoinSpec(
             explorerTxUrl = "$ETH_INDEXER/tx/%s",
             builtIn = true,
             indexerUrl = ETH_INDEXER,
+            priceId = "eth-ethereum",
         )
         val USDT = CoinSpec(
             id = "USDT",
@@ -122,6 +127,7 @@ data class CoinSpec(
             contract = "0xdAC17F958D2ee523a2206206994597C13D831ec7",
             tokenDecimals = 6,
             indexerUrl = ETH_INDEXER,
+            priceId = "usdt-tether",
         )
 
         /** Keyless public endpoints; both are user-replaceable per token. */

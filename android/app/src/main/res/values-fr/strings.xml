@@ -728,6 +728,10 @@
     <string name="wallet_pending_delete_confirm">Retirer cette transaction du pool non confirmé de ce nœud ? Elle n’est pas annulée : d’autres nœuds qui la détiennent peuvent encore la confirmer. Cette action est irréversible.</string>
     <string name="wallet_pending_removed">Retirée du pool du nœud</string>
     <string name="wallet_outputs_none_wallet">Ce portefeuille ne détient aucune sortie non dépensée.</string>
+    <string name="wallet_usd_value">≈ %1$s</string>
+    <string name="wallet_tx_usd_now">Valeur actuelle</string>
+    <string name="settings_wallet_prices">Prix en dollars US</string>
+    <string name="settings_wallet_prices_hint">Affiche aussi les soldes et montants du portefeuille en USD. Les prix viennent de coinpaprika.com, qui voit alors l’adresse internet de ce téléphone et les pièces que vous consultez. Désactivé par défaut.</string>
     <string name="wallet_add_coin_from_node">Fourni par le nœud si vide</string>
     <string name="wallet_node_invalid">Ce n’est pas une adresse http(s).</string>
     <string name="wallet_node_remove">Retirer ce nœud</string>

@@ -58,6 +58,7 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CachedTx
 import com.skycoin.skywire.wallet.historyBehind
+import com.skycoin.skywire.wallet.usdText
 import com.skycoin.wallet.Amounts
 import kotlinx.coroutines.launch
 
@@ -362,6 +363,10 @@ fun WalletTxScreen(
                         )
                     }
                     DetailRow(stringResource(R.string.wallet_tx_date), fullDateTime(tx.timestamp))
+                    state.usdPrice?.let { price ->
+                        // Today's price, not the price on the day: skycoin-web says the same.
+                        DetailRow(stringResource(R.string.wallet_tx_usd_now), stringResource(R.string.wallet_usd_value, coin.usdText(tx.amount, price)))
+                    }
                     DetailRow(stringResource(R.string.wallet_tx_fee), feeText(coin, tx.fee))
                     DetailRow(
                         stringResource(R.string.wallet_tx_confirmations),

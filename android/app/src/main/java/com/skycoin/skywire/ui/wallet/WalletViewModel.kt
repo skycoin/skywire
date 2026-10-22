@@ -5,11 +5,14 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.WalletMeta
 import com.skycoin.skywire.wallet.WalletRepository
+import com.skycoin.skywire.wallet.WalletPrices
 import com.skycoin.skywire.wallet.WalletSnapshot
+import com.skycoin.skywire.wallet.coinTextFromUsd
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.Derivation
@@ -62,6 +65,8 @@ data class SendState(
     val sharePercent: Int = 50,
     /** The tip offered. Ethereum family only. */
     val ethLevel: FeeLevel = FeeLevel.NORMAL,
+    /** The amount field holds US dollars, converted at the current price. */
+    val usdMode: Boolean = false,
     val feeRate: Int = 12,
     val presets: FeePresets? = null,
     val planning: Boolean = false,
@@ -122,11 +127,16 @@ data class WalletUiState(
     val node: NodeInfo? = null,
     /** False when the last node check got no answer. */
     val nodeReachable: Boolean = true,
+    /** The user turned USD prices on; they are fetched only then. */
+    val pricesEnabled: Boolean = false,
+    /** One [coin] in US dollars, when prices are on and the coin has one. */
+    val usdPrice: Double? = null,
 )
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = WalletRepository.get(app)
+    private val prefs = AppPreferences(app)
     private val mutable = MutableStateFlow(WalletUiState())
     val uiState: StateFlow<WalletUiState> = mutable.asStateFlow()
 
@@ -134,6 +144,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     private var actionJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            prefs.boolean(WalletPrices.PREF_KEY).collectLatest { on ->
+                mutable.update { it.copy(pricesEnabled = on, usdPrice = it.usdPrice.takeIf { _ -> on }) }
+                if (on) refreshPrice()
+            }
+        }
         viewModelScope.launch {
             // All four flows read the same DataStore, so any wallet-store edit
             // re-runs this block with a consistent view.
@@ -188,6 +204,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         else it.copy(refreshing = false)
                     }
                     checkNode()
+                    refreshPrice()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -198,6 +215,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         else it.copy(refreshing = false)
                     }
                     checkNode()
+                    refreshPrice()
                 }
                 delay(REFRESH_INTERVAL_MS)
             }
@@ -215,6 +233,24 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             null
         }
         mutable.update { if (it.coin.id == coin.id) it.copy(node = info, nodeReachable = info != null) else it }
+    }
+
+    /** The coin's USD price, when the user turned prices on; a failed fetch keeps the last one. */
+    private suspend fun refreshPrice() {
+        val st = mutable.value
+        val id = st.coin.priceId
+        if (!st.pricesEnabled || id == null) {
+            mutable.update { it.copy(usdPrice = null) }
+            return
+        }
+        val price = try {
+            WalletPrices.usd(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        mutable.update { if (it.coin.priceId == id && it.pricesEnabled) it.copy(usdPrice = price ?: it.usdPrice) else it }
     }
 
     fun refreshNow() {
@@ -281,7 +317,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCoin(coinId: String) = action {
         repo.setSelectedCoin(coinId)
-        mutable.update { it.copy(send = SendState(), receiveIndex = 0, node = null, nodeReachable = true) }
+        mutable.update { it.copy(send = SendState(), receiveIndex = 0, node = null, nodeReachable = true, usdPrice = null) }
     }
 
     /**
@@ -514,8 +550,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val coin = st.coin
         val send = st.send
         val app: Application = getApplication()
+        // In USD mode the field holds dollars; the plan is always in the coin.
+        val coinText = if (send.usdMode) st.usdPrice?.let { coin.coinTextFromUsd(send.amountText, it) }.orEmpty() else send.amountText
         val amount = if (send.sendMax) 0uL
-        else Amounts.parse(send.amountText, coin.exponent) ?: run {
+        else Amounts.parse(coinText, coin.exponent) ?: run {
             mutable.update {
                 it.copy(send = send.copy(planError = app.getString(R.string.wallet_send_invalid_amount)))
             }

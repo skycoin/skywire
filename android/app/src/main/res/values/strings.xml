@@ -687,6 +687,10 @@
     <string name="wallet_pending_delete_confirm">Remove this transaction from this node\'s unconfirmed pool? It is not cancelled: other nodes that hold it can still confirm it. This cannot be undone.</string>
     <string name="wallet_pending_removed">Removed from the node\'s pool</string>
     <string name="wallet_outputs_none_wallet">This wallet holds no unspent outputs.</string>
+    <string name="wallet_usd_value">≈ %1$s</string>
+    <string name="wallet_tx_usd_now">Value now</string>
+    <string name="settings_wallet_prices">Prices in US dollars</string>
+    <string name="settings_wallet_prices_hint">Show wallet balances and amounts in USD too. Prices come from coinpaprika.com, which then sees this phone\'s internet address and which coins you look at. Off by default.</string>
     <string name="wallet_add_coin_from_node">From the node when empty</string>
     <string name="wallet_node_invalid">Not an http(s) address.</string>
     <string name="wallet_node_remove">Remove this node</string>
