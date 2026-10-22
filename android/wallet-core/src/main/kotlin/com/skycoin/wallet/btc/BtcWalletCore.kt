@@ -7,6 +7,7 @@ import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Hashes
 import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -152,6 +153,8 @@ class BtcWalletCore(
         }
         return seen.values.sortedWith(compareBy<TxRecord> { it.confirmed }.thenByDescending { it.timestamp })
     }
+
+    override suspend fun nodeInfo(): NodeInfo = NodeInfo(coinName = "Bitcoin", ticker = "BTC", height = api.tipHeight())
 
     override suspend fun feePresets(): FeePresets {
         val (economy, normal, priority) = api.feeRates()

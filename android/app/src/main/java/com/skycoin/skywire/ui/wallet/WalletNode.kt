@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,10 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
+import com.skycoin.skywire.wallet.CoinSpec
+import com.skycoin.wallet.Amounts
+import com.skycoin.wallet.NodeInfo
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
@@ -86,6 +92,9 @@ fun WalletNodeScreen(
     val hasIndexer = shippedIndexer != null
     var add by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    var candidate by remember { mutableStateOf<Pair<String, NodeInfo>?>(null) }
+    val scope = rememberCoroutineScope()
     fun typed(value: String) = value.trim().removeSuffix("/")
 
     // Every mutation saves at once: the order on screen is the order the
@@ -102,9 +111,16 @@ fun WalletNodeScreen(
             url == shipped || url in state.nodeUrls ->
                 error = context.getString(R.string.wallet_node_duplicate)
             else -> {
+                // Asked first, as skycoin-web does: a node that does not answer, or
+                // is too old, never joins the list the wallet asks in.
                 error = null
-                add = ""
-                apply(state.nodeUrls + url)
+                checking = true
+                scope.launch {
+                    viewModel.checkNode(url)
+                        .onSuccess { candidate = url to it }
+                        .onFailure { error = it.message }
+                    checking = false
+                }
             }
         }
     }
@@ -182,10 +198,13 @@ fun WalletNodeScreen(
             }
             Button(
                 onClick = { addNode() },
-                enabled = typed(add).isNotEmpty(),
+                enabled = typed(add).isNotEmpty() && !checking,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(50.dp),
             ) {
-                Text(stringResource(R.string.wallet_node_add), fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(if (checking) R.string.wallet_node_checking else R.string.wallet_node_add),
+                    fontWeight = FontWeight.Bold,
+                )
             }
             TransportNote(typed(add))
 
@@ -208,6 +227,63 @@ fun WalletNodeScreen(
             }
         }
     }
+
+    candidate?.let { (url, info) ->
+        NodeCheckDialog(
+            coin = coin,
+            info = info,
+            onUse = {
+                candidate = null
+                add = ""
+                apply(state.nodeUrls + url)
+            },
+            onDismiss = { candidate = null },
+        )
+    }
+}
+
+/** What a node reports about itself, as skycoin-web shows it before switching. */
+@Composable
+private fun NodeCheckDialog(coin: CoinSpec, info: NodeInfo, onUse: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.wallet_node_check_title)) },
+        text = {
+            Column {
+                listOfNotNull(
+                    (info.coinName ?: coin.name).let { R.string.wallet_node_check_coin to it },
+                    info.version?.let { R.string.wallet_node_check_version to it },
+                    info.height?.let { R.string.wallet_node_check_height to Amounts.groupThousands(it.toString()) },
+                    info.burnFactor?.let { R.string.wallet_node_check_burn to "1/$it" },
+                    info.pubkey?.let { R.string.wallet_node_check_pubkey to shortAddress(it, 10, 8) },
+                ).forEach { (label, value) ->
+                    Row(Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            stringResource(label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    }
+                }
+                // A fiber node answers for its own chain; another coin's node would show that chain's balances.
+                val other = info.coinName?.takeIf { coin.kind == CoinKind.SKY_FIBER && !it.equals(coin.name, ignoreCase = true) }
+                if (other != null) {
+                    Text(
+                        stringResource(R.string.wallet_node_other_coin, other, coin.name),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onUse) { Text(stringResource(R.string.wallet_node_check_use), fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** One of the user's nodes: its priority, its address, and the reorder and

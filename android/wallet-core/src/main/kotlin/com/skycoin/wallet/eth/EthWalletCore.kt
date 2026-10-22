@@ -5,6 +5,8 @@ import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
+import com.skycoin.wallet.NodeProblem
 import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -163,6 +165,16 @@ class EthWalletCore(
     }
 
     /** EIP-1559 prices itself; there is no knob worth a card of presets. */
+    override suspend fun nodeInfo(): NodeInfo {
+        val id = api.chainId()
+        return NodeInfo(
+            coinName = "Ethereum",
+            ticker = "ETH",
+            height = api.blockNumber().toLong(),
+            problem = if (id != BigInteger.ONE) NodeProblem.WRONG_CHAIN else null,
+        )
+    }
+
     override suspend fun feePresets(): FeePresets? = null
 
     /**
