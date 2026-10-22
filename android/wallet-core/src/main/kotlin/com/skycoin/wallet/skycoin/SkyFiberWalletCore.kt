@@ -167,8 +167,10 @@ class SkyFiberWalletCore(
         inputs: Set<String>?,
         hoursTo: ULong?,
         more: List<Recipient>,
+        changeAddress: String?,
     ): TxPlan {
-        if (!validateAddress(toAddress) || more.any { !validateAddress(it.address) }) {
+        val allTo = listOf(toAddress) + more.map { it.address } + listOfNotNull(changeAddress)
+        if (allTo.any { !validateAddress(it) }) {
             throw WalletException.InvalidAddress()
         }
         if (sendMax && more.isNotEmpty()) throw WalletException.InvalidAmount("Max sends to one destination")
@@ -227,8 +229,9 @@ class SkyFiberWalletCore(
             SkycoinCreate.create(
                 unspents = spendable,
                 to = destinations,
-                // Change goes back where it came from, or a send from #2 moves #2's rest to #1.
-                changeAddress = fromAddress ?: book.receive.first(),
+                // Change goes where asked, else back where it came from, or a send
+                // from #2 would move #2's rest to #1.
+                changeAddress = changeAddress ?: fromAddress ?: book.receive.first(),
                 burnFactor = params.burnFactor,
             )
         } catch (e: SkycoinCreate.InsufficientBalance) {
@@ -268,6 +271,7 @@ class SkyFiberWalletCore(
             recipients = destinations.mapIndexed { i, d ->
                 Recipient(d.address, d.coins, created.txn.outputs[i].hours)
             },
+            changeAddress = changeAddress ?: fromAddress ?: book.receive.first(),
         )
     }
 

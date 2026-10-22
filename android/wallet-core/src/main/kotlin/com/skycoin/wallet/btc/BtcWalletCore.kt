@@ -171,8 +171,10 @@ class BtcWalletCore(
         @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
         @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
         more: List<Recipient>,
+        changeAddress: String?,
     ): TxPlan {
         if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
+        if (changeAddress != null) throw WalletException.InvalidAddress()
         val destScript = BtcAddress.scriptPubKey(toAddress) ?: throw WalletException.InvalidAddress()
         val rate = (feeRate ?: 1).coerceAtLeast(1).toULong()
 

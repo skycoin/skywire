@@ -62,6 +62,8 @@ interface WalletCore {
      * automatically. Fiber chains only.
      * @param more destinations after the first, in output order. Fiber
      * chains only; hours are given for every destination or for none.
+     * @param changeAddress where change goes; null keeps the chain's own
+     * rule. Fiber chains only.
      */
     suspend fun buildTx(
         seed: String,
@@ -74,6 +76,7 @@ interface WalletCore {
         inputs: Set<String>? = null,
         hoursTo: ULong? = null,
         more: List<Recipient> = emptyList(),
+        changeAddress: String? = null,
     ): TxPlan
 
     /** Local signing — the only step that touches keys, and it never suspends. */
@@ -151,6 +154,8 @@ class TxPlan(
     internal val payload: Any,
     /** Every destination with the hours it receives, in output order. */
     val recipients: List<Recipient> = listOf(Recipient(toAddress, amount, hoursToRecipient)),
+    /** Where the change goes, when the chain lets a send say. */
+    val changeAddress: String? = null,
 )
 
 class SignedTx(val rawHex: String, val txid: String, internal val payload: Any? = null)

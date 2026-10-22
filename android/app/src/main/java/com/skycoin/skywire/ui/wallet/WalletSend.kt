@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -101,6 +102,8 @@ fun WalletSendScreen(
     var fromSheet by remember { mutableStateOf(false) }
     var coinsSheet by remember { mutableStateOf(false) }
     var bulkDialog by remember { mutableStateOf(false) }
+    var advancedOpen by remember { mutableStateOf(false) }
+    var changeSheet by remember { mutableStateOf(false) }
 
     val wrongToken = stringResource(R.string.wallet_scan_wrong_token, coin.ticker)
     // A scanned code and a pasted one are read alike: an address, or a payment request.
@@ -396,6 +399,41 @@ fun WalletSendScreen(
                         Text(stringResource(R.string.wallet_send_bulk), fontWeight = FontWeight.Bold)
                     }
                 }
+                AdvancedOptions(
+                    open = advancedOpen,
+                    onToggle = { advancedOpen = !advancedOpen },
+                ) {
+                    SectionLabel(stringResource(R.string.wallet_send_change))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 9.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .padding(start = 4.dp, end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextField(
+                            value = send.changeAddress,
+                            onValueChange = { v ->
+                                viewModel.updateSend { it.copy(changeAddress = v.trim(), plan = null, planError = null) }
+                            },
+                            placeholder = { Text(stringResource(R.string.wallet_send_change_auto)) },
+                            singleLine = true,
+                            colors = transparentFieldColors(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { changeSheet = true }) {
+                            Text(stringResource(R.string.wallet_send_change_select), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        stringResource(R.string.wallet_send_change_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
 
             SectionLabel(
@@ -478,6 +516,10 @@ fun WalletSendScreen(
             viewModel = viewModel,
             onDismiss = { coinsSheet = false },
         )
+    }
+
+    if (changeSheet) {
+        ChangeSheet(viewModel = viewModel, onDismiss = { changeSheet = false })
     }
 
     if (bulkDialog) {
@@ -665,6 +707,86 @@ private fun UtxoSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
                     modifier = Modifier.weight(1f).height(46.dp),
                 ) {
                     Text(stringResource(R.string.wallet_done), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/** The fiber send's less common choices, folded away until asked for. */
+@Composable
+private fun AdvancedOptions(open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 16.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.wallet_send_advanced),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (open) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (open) {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) { content() }
+        }
+    }
+}
+
+/** Picks the change address from the wallet's own addresses. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChangeSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+    val wallet = state.active ?: return
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                stringResource(R.string.wallet_send_change),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            wallet.receiveAddresses.forEachIndexed { i, addr ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.updateSend { it.copy(changeAddress = addr, plan = null, planError = null) }
+                            onDismiss()
+                        }
+                        .padding(horizontal = 20.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "${i + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(16.dp),
+                    )
+                    Text(
+                        shortAddress(addr),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -1133,6 +1255,12 @@ private fun ReviewSheet(
                         }
                     }
                     ReviewRow(stringResource(R.string.wallet_hours_burned), hoursText(plan.fee))
+                    if (send.changeAddress.isNotEmpty() && plan.changeAmount > 0uL) {
+                        ReviewRow(
+                            stringResource(R.string.wallet_review_change_to),
+                            plan.changeAddress?.let(::shortAddress).orEmpty(),
+                        )
+                    }
                     ReviewRow(
                         stringResource(R.string.wallet_review_balance_after, coin.ticker),
                         coin.amountText(afterCoins),

@@ -692,6 +692,7 @@ class WalletRepository private constructor(private val context: Context) {
         inputs: Set<String> = emptySet(),
         hoursTo: ULong? = null,
         more: List<Recipient> = emptyList(),
+        changeAddress: String? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
@@ -707,6 +708,7 @@ class WalletRepository private constructor(private val context: Context) {
             inputs = inputs.takeIf { it.isNotEmpty() },
             hoursTo = hoursTo,
             more = more.map { Recipient(it.address.trim(), it.amount, it.hours) },
+            changeAddress = changeAddress?.trim()?.takeIf { it.isNotEmpty() },
         )
     }
 
