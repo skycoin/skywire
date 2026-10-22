@@ -1,6 +1,7 @@
 package com.skycoin.skywire.wallet
 
 import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.Derivation
 import com.skycoin.wallet.TxRecord
 import com.skycoin.wallet.WalletBalance
 import kotlinx.serialization.Serializable
@@ -160,6 +161,8 @@ data class WalletMeta(
      * repairs any that were truncated.
      */
     val addressScanAtMs: Long = 0,
+    /** How keys come from the phrase; wallets made before the choice existed are STANDARD. */
+    val derivation: Derivation = Derivation.STANDARD,
 )
 
 /**

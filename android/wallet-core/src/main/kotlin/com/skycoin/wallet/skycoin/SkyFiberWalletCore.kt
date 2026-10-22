@@ -2,7 +2,10 @@ package com.skycoin.wallet.skycoin
 
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Amounts
+import com.skycoin.wallet.Bip32
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.Derivation
+import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.KeySource
@@ -36,7 +39,7 @@ class SkyFiberWalletCore(
         val txn: SkycoinTxn,
         /** Owning address of each input, in input order. */
         val inputAddresses: List<String>,
-        val receiveAddresses: List<String>,
+        val book: AddressBook,
     )
 
     override fun newSeed(): String = Bip39.newMnemonic(128)
@@ -47,6 +50,12 @@ class SkyFiberWalletCore(
     override fun acceptsLegacySeed(mnemonic: String): Boolean = Bip39.legacyWords(mnemonic)
 
     override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
+        if (seed.derivation == Derivation.BIP44) {
+            val account = SkycoinBip44.accountKey(seed.mnemonic, seed.passphrase)
+            fun chain(c: Int, n: Int) = List(n) { SkycoinCrypto.addressFromPubKey(SkycoinBip44.key(account, c, it).pubKey()) }
+            return AddressBook(receive = chain(0, receiveCount), change = chain(1, changeCount))
+        }
+        // The classic wallet has one chain; change returns to an address of it.
         val keys = SkycoinCrypto.generateKeyPairs(seed.mnemonic.toByteArray(Charsets.UTF_8), receiveCount)
         return AddressBook(
             receive = keys.map { SkycoinCrypto.addressFromPubKey(it.public) },
@@ -54,19 +63,37 @@ class SkyFiberWalletCore(
         )
     }
 
+    /** The account and chain xpubs of a BIP 44 wallet, as skycoin's GetXPubKey gives them; null otherwise. */
+    override fun extendedPublicKeys(seed: KeySource): ExtendedPublicKeys? {
+        if (seed.derivation != Derivation.BIP44) return null
+        val account = SkycoinBip44.accountKey(seed.mnemonic, seed.passphrase)
+        return ExtendedPublicKeys(
+            account = account.xpub(),
+            receive = Bip32.ckdPriv(account, 0).xpub(),
+            change = Bip32.ckdPriv(account, 1).xpub(),
+        )
+    }
+
     override fun validateAddress(address: String): Boolean = SkycoinCrypto.isValidAddress(address)
 
     override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
-        var count = 1
+        val receive = scanChain(1) { n -> deriveAddresses(seed, n, 0).receive }
+        // A BIP 44 wallet's change chain starts empty; its first address may never have been used.
+        val change = if (seed.derivation == Derivation.BIP44) scanChain(0) { n -> deriveAddresses(seed, 0, n).change } else 0
+        return receive to change
+    }
+
+    /** How many addresses of one chain are in use, looking [SCAN_AHEAD] past the last used one. */
+    private suspend fun scanChain(start: Int, derive: (Int) -> List<String>): Int {
+        var count = start
         while (count < SCAN_CAP) {
-            val window = deriveAddresses(seed, count + SCAN_AHEAD, 0)
-                .receive.subList(count, count + SCAN_AHEAD)
+            val window = derive(count + SCAN_AHEAD).subList(count, count + SCAN_AHEAD)
             val used = usedAddresses(window)
             val lastUsed = window.indexOfLast { it in used }
             if (lastUsed < 0) break
             count += lastUsed + 1
         }
-        return count.coerceAtMost(SCAN_CAP) to 0
+        return count.coerceAtMost(SCAN_CAP)
     }
 
     private suspend fun usedAddresses(addrs: List<String>): Set<String> {
@@ -231,13 +258,17 @@ class SkyFiberWalletCore(
             throw WalletException.InvalidAmount("amounts on this chain carry at most ${params.maxDecimals} decimals")
         }
 
+        // A BIP 44 wallet's change goes to a fresh address of its change chain, as
+        // skycoin's own BIP 44 wallet does; the classic wallet's goes back where it came from.
+        val change = changeAddress ?: when (seed.derivation) {
+            Derivation.BIP44 -> deriveAddresses(seed, 0, book.change.size + 1).change.last()
+            Derivation.STANDARD -> fromAddress ?: book.receive.first()
+        }
         val created = try {
             SkycoinCreate.create(
                 unspents = spendable,
                 to = destinations,
-                // Change goes where asked, else back where it came from, or a send
-                // from #2 would move #2's rest to #1.
-                changeAddress = changeAddress ?: fromAddress ?: book.receive.first(),
+                changeAddress = change,
                 burnFactor = params.burnFactor,
                 shareFactor = shareFactor ?: SkycoinCreate.DEFAULT_SHARE,
             )
@@ -273,18 +304,18 @@ class SkyFiberWalletCore(
             hoursChange = created.changeHours,
             vsize = null,
             feeRate = null,
-            payload = Payload(created.txn, inputAddresses, book.receive),
+            payload = Payload(created.txn, inputAddresses, book),
             // The destinations are the transaction's first outputs, in order.
             recipients = destinations.mapIndexed { i, d ->
                 Recipient(d.address, d.coins, created.txn.outputs[i].hours)
             },
-            changeAddress = changeAddress ?: fromAddress ?: book.receive.first(),
+            changeAddress = change,
         )
     }
 
     override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val byAddress = keysByAddress(seed, payload.receiveAddresses.size)
+        val byAddress = keysByAddress(seed, payload.book)
         val inputKeys = payload.inputAddresses.map { addr ->
             byAddress[addr] ?: error("input address $addr is not part of this wallet")
         }
@@ -292,9 +323,16 @@ class SkyFiberWalletCore(
         return SignedTx(rawHex = payload.txn.serializeHex(), txid = payload.txn.txidHex())
     }
 
-    private fun keysByAddress(seed: KeySource, count: Int): Map<String, ByteArray> =
-        SkycoinCrypto.generateKeyPairs(seed.mnemonic.toByteArray(Charsets.UTF_8), count)
+    private fun keysByAddress(seed: KeySource, book: AddressBook): Map<String, ByteArray> {
+        if (seed.derivation == Derivation.BIP44) {
+            val account = SkycoinBip44.accountKey(seed.mnemonic, seed.passphrase)
+            fun chain(c: Int, n: Int) = List(n) { SkycoinBip44.key(account, c, it) }
+            return (chain(0, book.receive.size) + chain(1, book.change.size))
+                .associate { SkycoinCrypto.addressFromPubKey(it.pubKey()) to it.key }
+        }
+        return SkycoinCrypto.generateKeyPairs(seed.mnemonic.toByteArray(Charsets.UTF_8), book.receive.size)
             .associate { SkycoinCrypto.addressFromPubKey(it.public) to it.secret }
+    }
 
     override suspend fun broadcast(tx: SignedTx): String = node.inject(tx.rawHex)
 
@@ -304,7 +342,7 @@ class SkyFiberWalletCore(
         val txn = decodeRaw(rawHex)
         // The owner of each input is the address its unspent output sits at.
         val owners = node.outputs(book.all()).headOutputs.associate { it.hash to it.address }
-        val byAddress = keysByAddress(seed, book.receive.size)
+        val byAddress = keysByAddress(seed, book)
         val keys = txn.inputs.map { uxid ->
             owners[uxid.toHex()]?.let(byAddress::get) ?: throw WalletException.NotInWallet()
         }

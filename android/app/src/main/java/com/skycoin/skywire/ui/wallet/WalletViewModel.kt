@@ -12,6 +12,8 @@ import com.skycoin.skywire.wallet.WalletRepository
 import com.skycoin.skywire.wallet.WalletSnapshot
 import com.skycoin.wallet.Amounts
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.Derivation
+import com.skycoin.wallet.ExtendedPublicKeys
 import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.Recipient
@@ -73,6 +75,8 @@ data class DraftState(
     val coin: CoinSpec = CoinSpec.SKY,
     val seed: String? = null,
     val quizPositions: List<Int> = emptyList(),
+    /** The kind of wallet being made. Fiber coins offer BIP 44 besides their classic wallet. */
+    val derivation: Derivation = Derivation.STANDARD,
 )
 
 /** Four flows, one carrier — Kotlin ships Triple and stops. */
@@ -306,15 +310,17 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     // --- create / restore ---
 
     /** Begin the create flow for the selected coin: fresh phrase of [words] words + quiz picks. */
-    fun startCreate(words: Int = 12) {
+    fun startCreate(words: Int = 12, derivation: Derivation = Derivation.STANDARD) {
         val coin = mutable.value.coin
         val seed = Bip39.newMnemonic(if (words == 24) 256 else 128)
         val rnd = SecureRandom()
         val positions = (1..seed.split(" ").size).toMutableList().let { pool ->
             List(3) { pool.removeAt(rnd.nextInt(pool.size)) }.sorted()
         }
-        mutable.update { it.copy(draft = DraftState(coin, seed, positions)) }
+        mutable.update { it.copy(draft = DraftState(coin, seed, positions, derivation)) }
     }
+
+    fun setDraftDerivation(derivation: Derivation) = mutable.update { it.copy(draft = it.draft.copy(derivation = derivation)) }
 
     fun startRestore() {
         mutable.update { it.copy(draft = DraftState(it.coin, null, emptyList())) }
@@ -331,7 +337,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         if (wrong.isEmpty()) {
             action {
                 val name = defaultWalletName(draft.coin)
-                repo.addWallet(draft.coin, name, seed, restored = false)
+                repo.addWallet(draft.coin, name, seed, restored = false, derivation = draft.derivation)
                 mutable.update { it.copy(draft = DraftState(), message = null) }
                 onActivated()
             }
@@ -348,7 +354,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         action {
             mutable.update { it.copy(restoring = true) }
             val name = defaultWalletName(draft.coin)
-            repo.addWallet(draft.coin, name, seedText, restored = true, legacy = legacy)
+            repo.addWallet(draft.coin, name, seedText, restored = true, legacy = legacy, derivation = draft.derivation)
             mutable.update { it.copy(draft = DraftState(), restoring = false) }
             onDone()
         }
@@ -613,6 +619,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun revealSeed(walletId: String): String? = repo.revealSeed(walletId)
+
+    suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = repo.extendedPublicKeys(walletId)
 
     override fun onCleared() {
         refreshJob?.cancel()

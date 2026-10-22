@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
@@ -57,8 +58,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -66,6 +70,8 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.WalletMeta
+import com.skycoin.wallet.Derivation
+import com.skycoin.wallet.ExtendedPublicKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,6 +97,7 @@ fun WalletManageScreen(
     var removeTarget by remember { mutableStateOf<WalletMeta?>(null) }
     var renameTarget by remember { mutableStateOf<WalletMeta?>(null) }
     var exportTarget by remember { mutableStateOf<WalletMeta?>(null) }
+    var xpubs by remember { mutableStateOf<ExtendedPublicKeys?>(null) }
     val exportDone = stringResource(R.string.wallet_export_done)
     val exportFailed = stringResource(R.string.wallet_export_failed)
     // The system's own save dialog: the user picks the place, and the app needs no storage permission.
@@ -240,8 +247,20 @@ fun WalletManageScreen(
                 exportTarget = wallet
                 saveCsv.launch("${wallet.name}.csv")
             },
+            onXpub = if (wallet.derivation == Derivation.BIP44) {
+                {
+                    sheetWallet = null
+                    scope.launch { xpubs = viewModel.extendedPublicKeys(wallet.id) }
+                }
+            } else {
+                null
+            },
             onDismiss = { sheetWallet = null },
         )
+    }
+
+    xpubs?.let { keys ->
+        XpubDialog(keys, onDismiss = { xpubs = null })
     }
 
     renameTarget?.let { wallet ->
@@ -301,6 +320,7 @@ private fun WalletActionSheet(
     onReveal: () -> Unit,
     onRemove: () -> Unit,
     onExport: () -> Unit,
+    onXpub: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
@@ -346,6 +366,14 @@ private fun WalletActionSheet(
                 subtitle = stringResource(R.string.wallet_export_action_sub),
                 onClick = onExport,
             )
+            if (onXpub != null) {
+                SheetAction(
+                    icon = { Icon(Icons.Outlined.Key, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    title = stringResource(R.string.wallet_xpub_action),
+                    subtitle = stringResource(R.string.wallet_xpub_action_sub),
+                    onClick = onXpub,
+                )
+            }
             SheetAction(
                 icon = { Icon(Icons.Outlined.DeleteOutline, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.error) },
                 title = stringResource(R.string.wallet_remove_action),
@@ -356,6 +384,62 @@ private fun WalletActionSheet(
             )
         }
     }
+}
+
+/** A BIP 44 wallet's xpubs, as skycoin-web shows them: the account and its two chains. */
+@Composable
+private fun XpubDialog(keys: ExtendedPublicKeys, onDismiss: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.wallet_xpub_action)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    stringResource(R.string.wallet_xpub_note),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                listOf(
+                    R.string.wallet_xpub_account to keys.account,
+                    R.string.wallet_xpub_receive to keys.receive,
+                    R.string.wallet_xpub_change to keys.change,
+                ).forEach { (label, xpub) ->
+                    Text(
+                        stringResource(label).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                    Text(
+                        xpub,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .clickable {
+                                clipboard.setText(AnnotatedString(xpub))
+                                copied = xpub
+                            }
+                            .padding(10.dp),
+                    )
+                    if (copied == xpub) {
+                        Text(
+                            stringResource(R.string.wallet_xpub_copied),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.wallet_done)) } },
+    )
 }
 
 /** Every address of the wallet, one per line, as skycoin-web saves them. */
