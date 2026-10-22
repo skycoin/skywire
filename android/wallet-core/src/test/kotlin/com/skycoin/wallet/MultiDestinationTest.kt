@@ -97,6 +97,35 @@ class MultiDestinationTest {
         }
     }
 
+    // skycoin's transaction.Create output for the two-destination send above, unsigned.
+    private val goUnsigned = "01010000008cdc4be4cb7e4424c9bb4a500075a005c118775c4d3dc281cad56bed133e4309" +
+        "01000000" + "00".repeat(65) + "01000000" + spent +
+        "0300000000730e4768ecc67163e20a7107c3814a18700ccb90002d31010000000068010000000000000051a19bde64aeff9c" +
+        "6515a7886838340716cfd7ba404b4c00000000005a0000000000000000b111ba744917645301e900a180feba35191a0551" +
+        "c068780400000000c201000000000000"
+
+    @Test
+    fun unsignedMatchesTheReferenceAndSignsLikeASend() = runBlocking {
+        val plan = core.buildTx(seed, book, third, 20_000_000uL, null, false, more = listOf(Recipient(fourth, 5_000_000uL)))
+        assertEquals(goUnsigned, core.unsignedHex(plan))
+        // Signatures are deterministic (RFC 6979), so signing the pasted
+        // transaction gives the bytes the send itself would have broadcast.
+        assertEquals(core.signTx(seed, plan).rawHex, core.signRaw(seed, book, goUnsigned).rawHex)
+        assertEquals(goUnsigned, core.unsignedHex(plan), "signing must not change the unsigned form")
+    }
+
+    @Test
+    fun rawTransactionsAreChecked() = runBlocking {
+        assertFailsWith<WalletException.BadTransaction> { core.signRaw(seed, book, goUnsigned.dropLast(2)) }
+        assertFailsWith<WalletException.BadTransaction> { core.signRaw(seed, book, goUnsigned + "00") }
+        // A changed output no longer matches the inner hash.
+        assertFailsWith<WalletException.BadTransaction> { core.signRaw(seed, book, goUnsigned.replace("68010000", "69010000")) }
+        assertFailsWith<WalletException.BadTransaction> { core.broadcastRaw(goUnsigned) }
+        val stranger = AddressBook(receive = listOf(first), change = emptyList())
+        assertFailsWith<WalletException.NotInWallet> { core.signRaw(seed, stranger, goUnsigned) }
+        Unit
+    }
+
     @Test
     fun hoursForSomeDestinationsOnlyAreRefused() {
         assertFailsWith<WalletException.InvalidAmount> {

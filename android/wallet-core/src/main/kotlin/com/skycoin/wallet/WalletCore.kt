@@ -89,6 +89,20 @@ interface WalletCore {
 
     /** Hand the signed transaction to the node; returns the txid it reports. */
     suspend fun broadcast(tx: SignedTx): String
+
+    /** The plan's transaction with no signatures, to be signed elsewhere. Null where a chain has no such form here. */
+    fun unsignedHex(plan: TxPlan): String? = null
+
+    /**
+     * Signs a raw transaction made elsewhere. Every input must be an unspent
+     * output of this wallet. Fiber chains only.
+     */
+    suspend fun signRaw(seed: String, book: AddressBook, rawHex: String): SignedTx =
+        throw WalletException.BadTransaction("this chain does not sign raw transactions here")
+
+    /** Broadcasts a raw signed transaction; returns the txid the node reports. Fiber chains only. */
+    suspend fun broadcastRaw(rawHex: String): String =
+        throw WalletException.BadTransaction("this chain does not broadcast raw transactions here")
 }
 
 /** One destination of a send. [hours] is fiber only; null splits hours automatically. */
@@ -177,4 +191,10 @@ sealed class WalletException(message: String) : Exception(message) {
 
     /** Token sends: the token balance is there, the gas money is not. */
     class InsufficientGas(message: String) : WalletException(message)
+
+    /** A raw transaction that does not decode, or is not in the state the step needs. */
+    class BadTransaction(message: String) : WalletException(message)
+
+    /** A raw transaction spends outputs this wallet holds no keys for. */
+    class NotInWallet : WalletException("this wallet does not hold the keys of every input")
 }

@@ -13,6 +13,7 @@ import com.skycoin.wallet.WalletBalance
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.WalletException
 import com.skycoin.wallet.hexToBytes
+import com.skycoin.wallet.toHex
 import okhttp3.OkHttpClient
 import java.math.BigDecimal
 
@@ -280,13 +281,7 @@ class SkyFiberWalletCore(
 
     override fun signTx(seed: String, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val keys = SkycoinCrypto.generateKeyPairs(
-            seed.toByteArray(Charsets.UTF_8),
-            payload.receiveAddresses.size,
-        )
-        val byAddress = payload.receiveAddresses.indices.associate { i ->
-            SkycoinCrypto.addressFromPubKey(keys[i].public) to keys[i].secret
-        }
+        val byAddress = keysByAddress(seed, payload.receiveAddresses.size)
         val inputKeys = payload.inputAddresses.map { addr ->
             byAddress[addr] ?: error("input address $addr is not part of this wallet")
         }
@@ -294,7 +289,36 @@ class SkyFiberWalletCore(
         return SignedTx(rawHex = payload.txn.serializeHex(), txid = payload.txn.txidHex())
     }
 
+    private fun keysByAddress(seed: String, count: Int): Map<String, ByteArray> =
+        SkycoinCrypto.generateKeyPairs(seed.toByteArray(Charsets.UTF_8), count)
+            .associate { SkycoinCrypto.addressFromPubKey(it.public) to it.secret }
+
     override suspend fun broadcast(tx: SignedTx): String = node.inject(tx.rawHex)
+
+    override fun unsignedHex(plan: TxPlan): String = (plan.payload as Payload).txn.unsignedHex()
+
+    override suspend fun signRaw(seed: String, book: AddressBook, rawHex: String): SignedTx {
+        val txn = decodeRaw(rawHex)
+        // The owner of each input is the address its unspent output sits at.
+        val owners = node.outputs(book.all()).headOutputs.associate { it.hash to it.address }
+        val byAddress = keysByAddress(seed, book.receive.size)
+        val keys = txn.inputs.map { uxid ->
+            owners[uxid.toHex()]?.let(byAddress::get) ?: throw WalletException.NotInWallet()
+        }
+        txn.signInputs(keys)
+        return SignedTx(rawHex = txn.serializeHex(), txid = txn.txidHex())
+    }
+
+    override suspend fun broadcastRaw(rawHex: String): String {
+        if (!decodeRaw(rawHex).isSigned()) throw WalletException.BadTransaction("the transaction is not signed")
+        return node.inject(rawHex.trim())
+    }
+
+    private fun decodeRaw(rawHex: String): SkycoinTxn = try {
+        SkycoinTxn.decode(rawHex)
+    } catch (e: IllegalArgumentException) {
+        throw WalletException.BadTransaction(e.message ?: "not a transaction")
+    }
 
     companion object {
         const val DROPLET_EXPONENT = 6

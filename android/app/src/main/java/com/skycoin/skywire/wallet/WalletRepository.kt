@@ -745,6 +745,28 @@ class WalletRepository private constructor(private val context: Context) {
         txid
     }
 
+    /** The plan's transaction unsigned, for signing on another device. */
+    suspend fun unsignedHex(walletId: String, plan: TxPlan): String? {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        return coreFor(spec).unsignedHex(plan)
+    }
+
+    /** Signs a raw transaction made elsewhere with this wallet's keys. Nothing is broadcast. */
+    suspend fun signRaw(walletId: String, rawHex: String): SignedTx = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        coreFor(spec).signRaw(seed, AddressBook(meta.receiveAddresses, meta.changeAddresses), rawHex)
+    }
+
+    /** Broadcasts a raw signed transaction through the wallet's coin node. */
+    suspend fun broadcastRaw(walletId: String, rawHex: String): String = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        coreFor(spec).broadcastRaw(rawHex)
+    }
+
     companion object {
         /**
          * Last resort, not a budget: a node that keeps sending is allowed to
