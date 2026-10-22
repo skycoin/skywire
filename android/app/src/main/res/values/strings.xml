@@ -657,6 +657,12 @@
     <string name="wallet_node_too_old">This node is too old for the wallet. It must run at least version 0.24.0.</string>
     <string name="wallet_node_wrong_chain">This server is not on Ethereum mainnet.</string>
     <string name="wallet_node_other_coin">This node is for %1$s, not %2$s. Its balances and history would be that coin\'s.</string>
+    <string name="wallet_node_status_ok">Connected · block %1$s</string>
+    <string name="wallet_node_status_down">Unreachable</string>
+    <string name="wallet_node_status_checking">Checking…</string>
+    <string name="wallet_node_syncing">The node is still synchronizing with the network. The balance and history shown may not be up to date.</string>
+    <string name="wallet_node_no_peers">The node has no connections to other nodes. What it shows may be out of date.</string>
+    <string name="wallet_send_syncing_confirm">The node is still synchronizing, so the balance shown may be wrong. Continue anyway?</string>
     <string name="wallet_add_coin_from_node">From the node when empty</string>
     <string name="wallet_node_invalid">Not an http(s) address.</string>
     <string name="wallet_node_remove">Remove this node</string>

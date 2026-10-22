@@ -206,6 +206,10 @@ class NodeInfo(
     val explorerUrl: String? = null,
     /** Why the wallet should not use this node; null when it can. */
     val problem: NodeProblem? = null,
+    /** Fiber chains: the node's peer connections. */
+    val connections: Int? = null,
+    /** Fiber chains: false while the node is still catching up with its peers. */
+    val synced: Boolean? = null,
 )
 
 enum class NodeProblem {

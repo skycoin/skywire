@@ -700,6 +700,12 @@
     <string name="wallet_node_too_old">Este nodo es demasiado antiguo para la billetera. Tiene que tener al menos la versión 0.24.0.</string>
     <string name="wallet_node_wrong_chain">Este servidor no está en la red principal de Ethereum.</string>
     <string name="wallet_node_other_coin">Este nodo es de %1$s, no de %2$s. Sus saldos e historial serían los de esa moneda.</string>
+    <string name="wallet_node_status_ok">Conectado · bloque %1$s</string>
+    <string name="wallet_node_status_down">Sin conexión</string>
+    <string name="wallet_node_status_checking">Comprobando…</string>
+    <string name="wallet_node_syncing">El nodo aún se está sincronizando con la red. Puede que el saldo y el historial no estén al día.</string>
+    <string name="wallet_node_no_peers">El nodo no tiene conexiones con otros nodos. Lo que muestra puede estar desactualizado.</string>
+    <string name="wallet_send_syncing_confirm">El nodo aún se está sincronizando, así que el saldo puede ser incorrecto. ¿Continuar de todos modos?</string>
     <string name="wallet_add_coin_from_node">Del nodo si se deja vacío</string>
     <string name="wallet_node_invalid">No es una dirección http(s).</string>
     <string name="wallet_node_remove">Quitar este nodo</string>

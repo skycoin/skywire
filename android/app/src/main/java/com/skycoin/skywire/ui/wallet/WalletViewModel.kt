@@ -115,6 +115,10 @@ data class WalletUiState(
     val message: String? = null,
     /** History shows only transactions this address of the wallet took part in; null shows all. */
     val historyAddress: String? = null,
+    /** The coin's node as it last answered; null before it has, or when it did not. */
+    val node: NodeInfo? = null,
+    /** False when the last node check got no answer. */
+    val nodeReachable: Boolean = true,
 )
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
@@ -180,6 +184,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         if (it.active?.id == active.id) it.copy(snapshot = snapshot, stale = false, refreshing = false)
                         else it.copy(refreshing = false)
                     }
+                    checkNode()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -189,10 +194,24 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                         if (it.active?.id == active.id) it.copy(stale = true, refreshing = false)
                         else it.copy(refreshing = false)
                     }
+                    checkNode()
                 }
                 delay(REFRESH_INTERVAL_MS)
             }
         }
+    }
+
+    /** The node status line: asked with each refresh, as skycoin-web polls its node's health. */
+    private suspend fun checkNode() {
+        val coin = mutable.value.coin
+        val info = try {
+            repo.nodeStatus(coin)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        mutable.update { if (it.coin.id == coin.id) it.copy(node = info, nodeReachable = info != null) else it }
     }
 
     fun refreshNow() {
@@ -259,7 +278,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectCoin(coinId: String) = action {
         repo.setSelectedCoin(coinId)
-        mutable.update { it.copy(send = SendState(), receiveIndex = 0) }
+        mutable.update { it.copy(send = SendState(), receiveIndex = 0, node = null, nodeReachable = true) }
     }
 
     /**

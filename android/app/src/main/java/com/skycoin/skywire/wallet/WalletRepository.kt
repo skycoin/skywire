@@ -346,6 +346,9 @@ class WalletRepository private constructor(private val context: Context) {
         }
     }
 
+    /** What the coin's node, through its usual list, says about itself now. */
+    suspend fun nodeStatus(coin: CoinSpec): NodeInfo = withContext(Dispatchers.IO) { coreFor(coin).nodeInfo() }
+
     fun coreFor(spec: CoinSpec): WalletCore {
         // More than one address to ask: the client walks them in the stored
         // order, which is what the screen means by priority.

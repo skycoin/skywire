@@ -62,7 +62,12 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
         val version: BuildInfo = BuildInfo(),
         @SerialName("blockchain_pubkey") val blockchainPubkey: String = "",
         val fiber: FiberInfo = FiberInfo(),
+        @SerialName("open_connections") val openConnections: Int = -1,
     )
+
+    /** How far the node has synced: its own height and the highest its peers report. */
+    @Serializable
+    class Progress(val current: ULong = 0u, val highest: ULong = 0u)
 
     @Serializable
     class NodeOutput(
@@ -137,6 +142,10 @@ class SkycoinNodeClient(baseUrl: String, private val client: OkHttpClient) {
 
     suspend fun health(): Health = get("api/v1/health") { body ->
         json.decodeFromString(Health.serializer(), body)
+    }
+
+    suspend fun progress(): Progress = get("api/v1/blockchain/progress") { body ->
+        json.decodeFromString(Progress.serializer(), body)
     }
 
     suspend fun outputs(addresses: List<String>): Outputs =

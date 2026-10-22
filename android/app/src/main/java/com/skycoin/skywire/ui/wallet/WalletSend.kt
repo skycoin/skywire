@@ -108,6 +108,7 @@ fun WalletSendScreen(
     var changeSheet by remember { mutableStateOf(false) }
     var offlineMode by remember { mutableStateOf<OfflineMode?>(null) }
     var unsignedHex by remember { mutableStateOf<String?>(null) }
+    var syncConfirm by remember { mutableStateOf(false) }
 
     val wrongToken = stringResource(R.string.wallet_scan_wrong_token, coin.ticker)
     // A scanned code and a pasted one are read alike: an address, or a payment request.
@@ -531,7 +532,10 @@ fun WalletSendScreen(
             }
 
             Button(
-                onClick = { viewModel.buildPlan { reviewSheet = true } },
+                onClick = {
+                    // skycoin-web asks first when the node is still syncing: the balance may not be its last.
+                    if (state.node?.synced == false) syncConfirm = true else viewModel.buildPlan { reviewSheet = true }
+                },
                 enabled = !send.planning && !state.stale,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -558,6 +562,20 @@ fun WalletSendScreen(
         UtxoSheet(
             viewModel = viewModel,
             onDismiss = { coinsSheet = false },
+        )
+    }
+
+    if (syncConfirm) {
+        AlertDialog(
+            onDismissRequest = { syncConfirm = false },
+            text = { Text(stringResource(R.string.wallet_send_syncing_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    syncConfirm = false
+                    viewModel.buildPlan { reviewSheet = true }
+                }) { Text(stringResource(R.string.wallet_review), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { syncConfirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 

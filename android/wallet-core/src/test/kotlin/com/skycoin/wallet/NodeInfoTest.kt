@@ -41,6 +41,31 @@ class NodeInfoTest {
     }
 
     @Test
+    fun syncAndPeers() = runBlocking {
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val body = when (chain.request().url.encodedPath) {
+                "/api/v1/health" -> health("0.27.1").replace("\"coin\":\"skycoin\"", "\"coin\":\"skycoin\",\"open_connections\":0")
+                "/api/v1/blockchain/progress" -> """{"current":195700,"highest":195720,"peers":[]}"""
+                else -> error("unexpected ${chain.request().url}")
+            }
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody("application/json".toMediaType())).build()
+        }.build()
+        val info = SkyFiberWalletCore("http://node.test", client).nodeInfo()
+        assertEquals(0, info.connections)
+        assertEquals(false, info.synced)
+        // A node without the progress call is not reported as behind.
+        val noProgress = OkHttpClient.Builder().addInterceptor { chain ->
+            val missing = chain.request().url.encodedPath.endsWith("/progress")
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (missing) 404 else 200).message(if (missing) "Not Found" else "OK")
+                .body((if (missing) "404 page not found" else health("0.27.1")).toResponseBody("application/json".toMediaType()))
+                .build()
+        }.build()
+        assertNull(SkyFiberWalletCore("http://node.test", noProgress).nodeInfo().synced)
+    }
+
+    @Test
     fun oldNodesAreRefused() = runBlocking {
         assertEquals(NodeProblem.TOO_OLD, SkyFiberWalletCore("http://node.test", answering(health("0.23.9"))).nodeInfo().problem)
     }

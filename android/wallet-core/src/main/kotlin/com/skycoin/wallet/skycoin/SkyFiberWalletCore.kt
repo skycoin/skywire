@@ -189,6 +189,8 @@ class SkyFiberWalletCore(
 
     override suspend fun nodeInfo(): NodeInfo {
         val h = node.health()
+        // A node that does not serve its progress is not called unsynced: nothing says it is.
+        val progress = runCatching { node.progress() }.getOrNull()
         val name = h.fiber.displayName.ifEmpty { h.fiber.name.ifEmpty { h.coin } }
         return NodeInfo(
             coinName = name.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercase() },
@@ -200,6 +202,8 @@ class SkyFiberWalletCore(
             explorerUrl = h.fiber.explorerUrl.trimEnd('/').takeIf { it.isNotEmpty() },
             // skycoin-web refuses nodes older than 0.24.0; the API this wallet calls is from there on.
             problem = if (versionBelow(h.version.version, listOf(0, 24, 0))) NodeProblem.TOO_OLD else null,
+            connections = h.openConnections.takeIf { it >= 0 },
+            synced = progress?.let { it.current >= it.highest },
         )
     }
 
