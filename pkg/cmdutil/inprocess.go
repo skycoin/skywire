@@ -65,9 +65,10 @@ func Run(ctx context.Context, root *cobra.Command, args []string, stdin io.Reade
 	r := &inproc{exited: make(chan int, 1), stdin: stdin, stdout: stdout, stderr: stderr}
 	// fatih/color, and coloredcobra with it, decide color once for the process
 	// from its own stdout. A run decides for its own; the latest to start wins.
-	colorOK, _ := terminalOf(stdout)
-	color.NoColor = !colorOK
 	startMu.Lock()
+	if colorOK, _ := terminalOf(stdout); color.NoColor == colorOK {
+		color.NoColor = !colorOK
+	}
 	holder.Store(r)
 	defer func() {
 		if holder.CompareAndSwap(r, nil) {
