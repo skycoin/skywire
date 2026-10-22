@@ -830,6 +830,10 @@
     <string name="wallet_rename_title">重命名钱包</string>
     <string name="wallet_reveal_action">显示助记词</string>
     <string name="wallet_reveal_action_sub">以明文显示全部助记词。需要先验证指纹。</string>
+    <string name="wallet_export_action">保存地址</string>
+    <string name="wallet_export_action_sub">一个 CSV 文件，每行一个本钱包的地址。不含任何密钥。</string>
+    <string name="wallet_export_done">地址已保存</string>
+    <string name="wallet_export_failed">无法写入文件。</string>
     <string name="wallet_remove_action">从本机移除</string>
     <string name="wallet_remove_action_sub">删除本机保存的密钥。没有助记词，币将永远无法找回。</string>
     <string name="wallet_remove_title">从本机移除 %1$s？</string>

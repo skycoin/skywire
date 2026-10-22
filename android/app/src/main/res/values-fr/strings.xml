@@ -912,6 +912,10 @@
     <string name="wallet_rename_title">Renommer le portefeuille</string>
     <string name="wallet_reveal_action">Révéler la phrase de récupération</string>
     <string name="wallet_reveal_action_sub">Montre tous les mots en clair. Demande votre empreinte d’abord.</string>
+    <string name="wallet_export_action">Enregistrer les adresses</string>
+    <string name="wallet_export_action_sub">Un fichier CSV avec toutes les adresses de ce portefeuille, une par ligne. Il ne contient aucune clé.</string>
+    <string name="wallet_export_done">Adresses enregistrées</string>
+    <string name="wallet_export_failed">Le fichier n’a pas pu être écrit.</string>
     <string name="wallet_remove_action">Retirer de cet appareil</string>
     <string name="wallet_remove_action_sub">Supprime les clés ici. Sans la phrase, les pièces sont perdues pour de bon.</string>
     <string name="wallet_remove_title">Retirer %1$s de cet appareil ?</string>

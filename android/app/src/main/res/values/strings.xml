@@ -871,6 +871,10 @@
     <string name="wallet_rename_title">Rename wallet</string>
     <string name="wallet_reveal_action">Reveal recovery phrase</string>
     <string name="wallet_reveal_action_sub">Shows every word of the phrase in the clear. Asks for your fingerprint first.</string>
+    <string name="wallet_export_action">Save addresses</string>
+    <string name="wallet_export_action_sub">A CSV file with every address of this wallet, one per line. It holds no keys.</string>
+    <string name="wallet_export_done">Addresses saved</string>
+    <string name="wallet_export_failed">The file could not be written.</string>
     <string name="wallet_remove_action">Remove from this device</string>
     <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
     <string name="wallet_remove_title">Remove %1$s from this device?</string>
