@@ -914,6 +914,10 @@
     <string name="wallet_rename_title">Cambiar el nombre de la billetera</string>
     <string name="wallet_reveal_action">Mostrar la frase de recuperación</string>
     <string name="wallet_reveal_action_sub">Muestra todas las palabras a la vista. Pide tu huella antes.</string>
+    <string name="wallet_export_action">Guardar direcciones</string>
+    <string name="wallet_export_action_sub">Un archivo CSV con todas las direcciones de esta billetera, una por línea. No contiene claves.</string>
+    <string name="wallet_export_done">Direcciones guardadas</string>
+    <string name="wallet_export_failed">No se pudo escribir el archivo.</string>
     <string name="wallet_remove_action">Quitar de este dispositivo</string>
     <string name="wallet_remove_action_sub">Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre.</string>
     <string name="wallet_remove_title">¿Quitar %1$s de este dispositivo?</string>

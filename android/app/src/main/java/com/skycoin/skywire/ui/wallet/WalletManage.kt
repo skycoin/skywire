@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
@@ -65,11 +66,13 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.WalletMeta
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /** Wallets of the selected coin: switch, rename, reveal, remove, add. */
 @Composable
@@ -87,6 +90,23 @@ fun WalletManageScreen(
     var sheetWallet by remember { mutableStateOf<WalletMeta?>(null) }
     var removeTarget by remember { mutableStateOf<WalletMeta?>(null) }
     var renameTarget by remember { mutableStateOf<WalletMeta?>(null) }
+    var exportTarget by remember { mutableStateOf<WalletMeta?>(null) }
+    val exportDone = stringResource(R.string.wallet_export_done)
+    val exportFailed = stringResource(R.string.wallet_export_failed)
+    // The system's own save dialog: the user picks the place, and the app needs no storage permission.
+    val saveCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val wallet = exportTarget ?: return@rememberLauncherForActivityResult
+        exportTarget = null
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(addressesCsv(wallet).toByteArray()) }
+                }.getOrNull() != null
+            }
+            snackbar.showSnackbar(if (ok) exportDone else exportFailed)
+        }
+    }
 
     LaunchedEffect(state.message) {
         state.message?.let { snackbar.showSnackbar(it); viewModel.messageShown() }
@@ -215,6 +235,11 @@ fun WalletManageScreen(
                 sheetWallet = null
                 removeTarget = wallet
             },
+            onExport = {
+                sheetWallet = null
+                exportTarget = wallet
+                saveCsv.launch("${wallet.name}.csv")
+            },
             onDismiss = { sheetWallet = null },
         )
     }
@@ -275,6 +300,7 @@ private fun WalletActionSheet(
     onRename: () -> Unit,
     onReveal: () -> Unit,
     onRemove: () -> Unit,
+    onExport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
@@ -315,6 +341,12 @@ private fun WalletActionSheet(
                 onClick = onReveal,
             )
             SheetAction(
+                icon = { Icon(Icons.Outlined.FileDownload, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                title = stringResource(R.string.wallet_export_action),
+                subtitle = stringResource(R.string.wallet_export_action_sub),
+                onClick = onExport,
+            )
+            SheetAction(
                 icon = { Icon(Icons.Outlined.DeleteOutline, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.error) },
                 title = stringResource(R.string.wallet_remove_action),
                 subtitle = stringResource(R.string.wallet_remove_action_sub),
@@ -325,6 +357,9 @@ private fun WalletActionSheet(
         }
     }
 }
+
+/** Every address of the wallet, one per line, as skycoin-web saves them. */
+fun addressesCsv(wallet: WalletMeta): String = (wallet.receiveAddresses + wallet.changeAddresses).joinToString("\n")
 
 @Composable
 private fun SheetAction(
