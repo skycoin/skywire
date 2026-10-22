@@ -860,9 +860,6 @@
     <string name="help_hub_title">About Apps</string>
     <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages, SkyMail sends mail between visors and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
 
-    <string name="wallet_web_unreachable">The wallet is not running yet. It starts with Skywire.</string>
-    <string name="wallet_previous">Previous wallet</string>
-    <string name="wallet_web_retry">Retry</string>
     <string name="help_wallet_title">About Wallet</string>
     <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
 

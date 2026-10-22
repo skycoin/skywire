@@ -23,9 +23,6 @@ object Routes {
 
     // Wallet flow — pushed from the Wallet tab root; the bar keeps the
     // Wallet slot highlighted throughout.
-    // The old in-app wallet, kept reachable while users move their seeds into
-    // skycoin-web; the rest of the flow below belongs to it.
-    const val WALLET_PREVIOUS = "wallet/previous"
     const val WALLET_CREATE = "wallet/create"
     const val WALLET_VERIFY = "wallet/verify"
     const val WALLET_RESTORE = "wallet/restore"
@@ -58,7 +55,7 @@ object Routes {
 
     /** Same, for the Wallet tab. */
     val walletPushed = setOf(
-        WALLET_PREVIOUS, WALLET_CREATE, WALLET_VERIFY, WALLET_RESTORE, WALLET_RECEIVE,
+        WALLET_CREATE, WALLET_VERIFY, WALLET_RESTORE, WALLET_RECEIVE,
         WALLET_SEND, WALLET_RESULT, WALLET_HISTORY, WALLET_TX,
         WALLET_WALLETS, WALLET_REVEAL, WALLET_ADD_COIN, WALLET_NODE,
     )
