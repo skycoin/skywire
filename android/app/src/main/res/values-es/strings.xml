@@ -546,7 +546,9 @@
     <string name="wallet_intro_restore_sub">Introduce una frase de 12 o 24 palabras que ya tengas</string>
 
     <string name="wallet_seed_title">Frase de recuperación</string>
-    <string name="wallet_seed_body">Apunta estas doce palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas.</string>
+    <string name="wallet_seed_body">Apunta estas palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas.</string>
+    <string name="wallet_seed_words_12">12 palabras</string>
+    <string name="wallet_seed_words_24">24 palabras</string>
     <string name="wallet_seed_secure">Las capturas de pantalla están desactivadas en esta pantalla. No hay botón de copiar.</string>
     <string name="wallet_seed_continue">Continuar</string>
 
@@ -844,17 +846,17 @@
     <string name="wallet_rename">Cambiar el nombre</string>
     <string name="wallet_rename_title">Cambiar el nombre de la billetera</string>
     <string name="wallet_reveal_action">Mostrar la frase de recuperación</string>
-    <string name="wallet_reveal_action_sub">Muestra las doce palabras a la vista. Pide tu huella antes.</string>
+    <string name="wallet_reveal_action_sub">Muestra todas las palabras a la vista. Pide tu huella antes.</string>
     <string name="wallet_remove_action">Quitar de este dispositivo</string>
     <string name="wallet_remove_action_sub">Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre.</string>
     <string name="wallet_remove_title">¿Quitar %1$s de este dispositivo?</string>
-    <string name="wallet_remove_body">Las claves guardadas aquí se borran. Si no tienes apuntadas las doce palabras de recuperación, nadie podrá volver a alcanzar las monedas de esta billetera, tú incluido.</string>
+    <string name="wallet_remove_body">Las claves guardadas aquí se borran. Si no tienes apuntadas las palabras de recuperación, nadie podrá volver a alcanzar las monedas de esta billetera, tú incluido.</string>
     <string name="wallet_remove_confirm">Quitar</string>
     <string name="wallet_remove_keep">Conservarla</string>
     <string name="wallet_removed">%1$s quitada de este dispositivo</string>
     <string name="wallet_bio_reveal_title">Confirma que eres tú</string>
     <string name="wallet_bio_reveal_subtitle">Las palabras de %1$s se mostrarán a la vista en la siguiente pantalla.</string>
-    <string name="wallet_reveal_warning">Cualquiera que lea estas doce palabras puede mover todas las monedas de %1$s, desde cualquier dispositivo y sin tu teléfono. Muéstralas solo donde nadie pueda ver tu pantalla.</string>
+    <string name="wallet_reveal_warning">Cualquiera que lea estas palabras puede mover todas las monedas de %1$s, desde cualquier dispositivo y sin tu teléfono. Muéstralas solo donde nadie pueda ver tu pantalla.</string>
     <string name="wallet_reveal_autohide">Las capturas de pantalla están desactivadas. Esta pantalla se cierra sola en %1$s.</string>
     <string name="wallet_reveal_hide">Ocultar la frase</string>
 
@@ -904,7 +906,7 @@
     <string name="help_hub_body">Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, SkyMail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido.</string>
 
     <string name="help_wallet_title">Sobre la Billetera</string>
-    <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
+    <string name="help_wallet_body">Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar.</string>
 
     <string name="help_settings_title">Sobre los Ajustes</string>
     <string name="help_settings_body">Quién es este teléfono en la red y cómo se comporta la app. La identidad es un par de claves en un archivo: haz una copia antes de necesitarla, porque perderla es perder tu dirección, la otra mitad de tu historial de chat y cualquier recompensa ligada a la clave.\n\nDiagnóstico es donde vive cada registro: el núcleo del nodo, el proceso de la app y cada app que corre bajo él. Ahí es donde hay que mirar cuando algo no conecta.</string>

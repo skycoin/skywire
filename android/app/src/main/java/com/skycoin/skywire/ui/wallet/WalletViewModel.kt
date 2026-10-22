@@ -288,12 +288,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- create / restore ---
 
-    /** Begin the create flow for the selected coin: fresh phrase + quiz picks. */
-    fun startCreate() {
+    /** Begin the create flow for the selected coin: fresh phrase of [words] words + quiz picks. */
+    fun startCreate(words: Int = 12) {
         val coin = mutable.value.coin
-        val seed = Bip39.newMnemonic(128)
+        val seed = Bip39.newMnemonic(if (words == 24) 256 else 128)
         val rnd = SecureRandom()
-        val positions = (1..12).toMutableList().let { pool ->
+        val positions = (1..seed.split(" ").size).toMutableList().let { pool ->
             List(3) { pool.removeAt(rnd.nextInt(pool.size)) }.sorted()
         }
         mutable.update { it.copy(draft = DraftState(coin, seed, positions)) }

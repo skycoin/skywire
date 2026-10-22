@@ -505,7 +505,9 @@
     <string name="wallet_intro_restore_sub">Enter an existing 12 or 24 word phrase</string>
 
     <string name="wallet_seed_title">Recovery phrase</string>
-    <string name="wallet_seed_body">Write these twelve words down in order and keep them offline. Anyone who has them can spend your coins.</string>
+    <string name="wallet_seed_body">Write these words down in order and keep them offline. Anyone who has them can spend your coins.</string>
+    <string name="wallet_seed_words_12">12 words</string>
+    <string name="wallet_seed_words_24">24 words</string>
     <string name="wallet_seed_secure">Screenshots are disabled on this screen. There is no copy button.</string>
     <string name="wallet_seed_continue">Continue</string>
 
@@ -801,17 +803,17 @@
     <string name="wallet_rename">Rename</string>
     <string name="wallet_rename_title">Rename wallet</string>
     <string name="wallet_reveal_action">Reveal recovery phrase</string>
-    <string name="wallet_reveal_action_sub">Shows all twelve words in the clear. Asks for your fingerprint first.</string>
+    <string name="wallet_reveal_action_sub">Shows every word of the phrase in the clear. Asks for your fingerprint first.</string>
     <string name="wallet_remove_action">Remove from this device</string>
     <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
     <string name="wallet_remove_title">Remove %1$s from this device?</string>
-    <string name="wallet_remove_body">The keys stored here are deleted. If you do not have the twelve recovery words written down, the coins in this wallet cannot be reached again by anyone, including you.</string>
+    <string name="wallet_remove_body">The keys stored here are deleted. If you do not have the recovery words written down, the coins in this wallet cannot be reached again by anyone, including you.</string>
     <string name="wallet_remove_confirm">Remove</string>
     <string name="wallet_remove_keep">Keep it</string>
     <string name="wallet_removed">%1$s removed from this device</string>
     <string name="wallet_bio_reveal_title">Confirm it is you</string>
     <string name="wallet_bio_reveal_subtitle">The words of %1$s will be shown in the clear on the next screen.</string>
-    <string name="wallet_reveal_warning">Anyone who reads these twelve words can move every coin in %1$s, from any device, without your phone. Only reveal them somewhere no one can see your screen.</string>
+    <string name="wallet_reveal_warning">Anyone who reads these words can move every coin in %1$s, from any device, without your phone. Only reveal them somewhere no one can see your screen.</string>
     <string name="wallet_reveal_autohide">Screenshots are disabled. This screen closes on its own in %1$s.</string>
     <string name="wallet_reveal_hide">Hide the phrase</string>
 
@@ -861,7 +863,7 @@
     <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages, SkyMail sends mail between visors and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
 
     <string name="help_wallet_title">About Wallet</string>
-    <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
+    <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
 
     <string name="help_settings_title">About Settings</string>
     <string name="help_settings_body">Who this phone is on the network, and how the app behaves. The identity is a keypair in a file — back it up before you need it, because losing it loses your address, your chat history\u2019s other half and any rewards tied to the key.\n\nDiagnostics is where every log lives: the visor core, the app process, and each app that runs under it. That is the place to look when something will not connect.</string>
