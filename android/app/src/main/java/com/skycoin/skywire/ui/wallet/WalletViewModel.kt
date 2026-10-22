@@ -21,6 +21,9 @@ import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.UtxoRecord
 import com.skycoin.wallet.WalletException
+import com.skycoin.wallet.skycoin.ChainInfo
+import com.skycoin.wallet.skycoin.PeerInfo
+import com.skycoin.wallet.skycoin.PendingInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -608,6 +611,27 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    // --- node details (fiber) ---
+
+    suspend fun chainInfo(): Result<ChainInfo> = attempt { repo.chainInfo(mutable.value.coin) }
+
+    suspend fun peers(): Result<List<PeerInfo>> = attempt { repo.peers(mutable.value.coin) }
+
+    suspend fun pending(): Result<List<PendingInfo>> = attempt {
+        repo.pending(mutable.value.active?.id ?: error("no wallet"))
+    }
+
+    suspend fun deletePending(txid: String): Result<Unit> = attempt { repo.deletePending(mutable.value.coin, txid) }
+
+    /** The call's result, or its failure in the words the screens show. */
+    private suspend fun <T> attempt(block: suspend () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(IllegalStateException(report(e)))
     }
 
     // --- offline transactions (fiber) ---

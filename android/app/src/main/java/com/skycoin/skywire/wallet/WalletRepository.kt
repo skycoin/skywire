@@ -21,6 +21,9 @@ import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.btc.BtcWalletCore
 import com.skycoin.wallet.eth.EthCrypto
 import com.skycoin.wallet.eth.EthWalletCore
+import com.skycoin.wallet.skycoin.ChainInfo
+import com.skycoin.wallet.skycoin.PeerInfo
+import com.skycoin.wallet.skycoin.PendingInfo
 import com.skycoin.wallet.skycoin.SkyFiberWalletCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -345,6 +348,21 @@ class WalletRepository private constructor(private val context: Context) {
             null -> info
         }
     }
+
+    private fun fiber(coin: CoinSpec): SkyFiberWalletCore =
+        coreFor(coin) as? SkyFiberWalletCore ?: error("node details are for fiber coins")
+
+    suspend fun chainInfo(coin: CoinSpec): ChainInfo = withContext(Dispatchers.IO) { fiber(coin).chainInfo() }
+
+    suspend fun peers(coin: CoinSpec): List<PeerInfo> = withContext(Dispatchers.IO) { fiber(coin).peers() }
+
+    suspend fun pending(walletId: String): List<PendingInfo> = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        fiber(spec).pending(AddressBook(meta.receiveAddresses, meta.changeAddresses))
+    }
+
+    suspend fun deletePending(coin: CoinSpec, txid: String) = withContext(Dispatchers.IO) { fiber(coin).deletePending(txid) }
 
     /** What the coin's node, through its usual list, says about itself now. */
     suspend fun nodeStatus(coin: CoinSpec): NodeInfo = withContext(Dispatchers.IO) { coreFor(coin).nodeInfo() }

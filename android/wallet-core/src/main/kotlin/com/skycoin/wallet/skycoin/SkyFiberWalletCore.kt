@@ -207,6 +207,40 @@ class SkyFiberWalletCore(
         )
     }
 
+    /** The chain as skycoin-web's Blockchain page shows it. */
+    suspend fun chainInfo(): ChainInfo {
+        val meta = node.metadata()
+        val supply = node.coinSupply()
+        return ChainInfo(
+            height = meta.head.seq.toLong(),
+            timestamp = meta.head.timestamp.toLong(),
+            blockHash = meta.head.blockHash,
+            currentSupply = supply.currentSupply,
+            totalSupply = supply.totalSupply,
+        )
+    }
+
+    /** The node's peers, as skycoin-web's Networking page shows them. */
+    suspend fun peers(): List<PeerInfo> = node.connections().connections.map {
+        PeerInfo(it.address, it.height.toLong(), it.outgoing, it.trusted, it.userAgent, it.lastSent, it.lastReceived)
+    }
+
+    /** The node's unconfirmed transactions; [PendingInfo.mine] marks those spending from [book]. */
+    suspend fun pending(book: AddressBook): List<PendingInfo> {
+        val ours = book.all().toHashSet()
+        return node.pendingTxs().map { e ->
+            val t = e.transaction
+            PendingInfo(
+                txid = t.txid,
+                received = e.received,
+                coins = t.outputs.sumOfDroplets { it.coins },
+                mine = t.inputs.any { it.owner in ours } || t.outputs.any { it.dst in ours },
+            )
+        }
+    }
+
+    suspend fun deletePending(txid: String) = node.deletePending(txid)
+
     override suspend fun feePresets(): FeePresets? = null
 
     override fun estimateMax(balance: WalletBalance, feeRate: Int?): ULong = balance.confirmed
@@ -401,3 +435,18 @@ class SkyFiberWalletCore(
         private const val SCAN_CAP = 100
     }
 }
+
+class ChainInfo(val height: Long, val timestamp: Long, val blockHash: String, val currentSupply: String, val totalSupply: String)
+
+class PeerInfo(
+    val address: String,
+    val height: Long,
+    val outgoing: Boolean,
+    val trusted: Boolean,
+    val userAgent: String,
+    val lastSent: Long,
+    val lastReceived: Long,
+)
+
+/** One unconfirmed transaction in a node's pool; [mine] when it moves this wallet's coins. */
+class PendingInfo(val txid: String, val received: String, val coins: ULong, val mine: Boolean)
