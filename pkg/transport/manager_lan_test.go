@@ -217,11 +217,13 @@ func TestManagedTransportSameNetwork(t *testing.T) {
 		typ  types.Type
 		want bool
 	}{
-		{"192.168.1.20", types.STCPR, true}, // private: only reachable over the LAN
-		{"1.2.3.4", types.SUDPH, true},      // our own public IP: NAT hairpin
-		{"5.6.7.8", types.STCPR, true},      // one of our interface addresses
-		{"1.2.3.9", types.STCPR, false},     // same /24, another host
-		{"9.9.9.9", types.STCPR, false},     // elsewhere
+		{"192.168.1.20", types.STCPR, true},  // private: only reachable over the LAN
+		{"1.2.3.4", types.SUDPH, true},       // our own public IP: NAT hairpin
+		{"5.6.7.8", types.STCPR, true},       // one of our interface addresses
+		{"1.2.3.9", types.STCPR, false},      // same /24, another host
+		{"9.9.9.9", types.STCPR, false},      // elsewhere
+		{"192.168.1.20", types.WEBRTC, true}, // the selected ICE candidate
+		{"9.9.9.9", types.WEBRTC, false},
 		{"192.168.1.20", types.DMSG, false}, // a dmsg peer's address is unknown by design
 	} {
 		require.Equal(t, c.want, at(c.ip, c.typ).SameNetwork(self, local), "%s over %s", c.ip, c.typ)
