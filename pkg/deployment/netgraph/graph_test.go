@@ -19,7 +19,7 @@ func TestBuildMergesPairs(t *testing.T) {
 		{A: "b", B: "a", Type: "sudph"},
 		{A: "a", B: "b", Type: "stcpr"},
 		{A: "b", B: "c", Type: "stcpr"},
-	}, nil)
+	}, nil, nil)
 	require.Equal(t, []string{"stcpr", "sudph"}, g.Types, "most common type first")
 	require.Len(t, g.Edges, 2)
 	require.Equal(t, uint8(0b11), g.Edges[0].Mask, "both types join a and b")
@@ -35,8 +35,8 @@ func TestWarmStartKeepsThePicture(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		links = append(links, Link{A: string(rune('A' + i%20)), B: string(rune('a' + i%13)), Type: "stcpr"})
 	}
-	g := Build(links, nil)
-	h := Build(links, g.Positions())
+	g := Build(links, nil, nil)
+	h := Build(links, g.Positions(), nil)
 	moved := 0.0
 	for i, k := range h.Nodes {
 		p := g.Positions()[k]
@@ -75,4 +75,29 @@ func TestPageMarks(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"c":["","#4e79a7"]`)
 	require.Contains(t, rec.Body.String(), "registered dmsg server")
+}
+
+// Groups are numbered in node order, a key with one visor in the graph is no
+// group, and the page carries the numbers but never the keys.
+func TestGroups(t *testing.T) {
+	links := []Link{{A: "a", B: "b", Type: "stcpr"}, {A: "c", B: "d", Type: "stcpr"}, {A: "b", B: "c", Type: "dmsg"}}
+	groups := map[string]string{"a": "203.0.113.9", "d": "203.0.113.9", "c": "198.51.100.1", "zz": "198.51.100.1"}
+	g := Build(links, nil, groups)
+	require.Equal(t, []string{"a", "b", "c", "d"}, g.Nodes)
+	require.Equal(t, []int{0, -1, -1, 0}, g.Group)
+	require.Equal(t, 1, g.Groups)
+	apart := Build(links, nil, nil)
+	dist := func(g *Graph, i, j int) float64 { return math.Hypot(g.X[i]-g.X[j], g.Y[i]-g.Y[j]) }
+	require.Less(t, dist(g, 0, 3), dist(apart, 0, 3), "a group is drawn together")
+
+	p := &Page{Title: "T", GroupsAre: "one public IP",
+		Source: func(context.Context) ([]Link, error) { return links, nil },
+		Groups: func(context.Context) map[string]string { return groups }}
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/graph", nil))
+	body := rec.Body.String()
+	require.Contains(t, body, `"g":[0,-1,-1,0]`)
+	require.Contains(t, body, "2 visors in 1 circled groups, each on one public IP.")
+	require.NotContains(t, body, "203.0.113.9")
+	require.NotContains(t, body, "198.51.100.1")
 }

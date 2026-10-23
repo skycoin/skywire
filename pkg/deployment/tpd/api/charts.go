@@ -61,6 +61,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		},
 	}
 	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
+		Groups: api.ipGroups, GroupsAre: "one public IP",
 		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
 	api.chartState.Store(c)
 	go charts.Run(ctx, st, api.Stats.Wrap(api.collectCharts), log)

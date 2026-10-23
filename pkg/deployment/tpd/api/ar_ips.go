@@ -9,6 +9,7 @@
 package api
 
 import (
+	"context"
 	"net"
 	"sync"
 	"time"
@@ -113,6 +114,48 @@ func bindingIPs(b *arfeed.PeerBindings) []string {
 			add(d.RemoteAddr)
 			add(d.RemoteAddrV6)
 		}
+	}
+	return out
+}
+
+// ipGroups keys every visor the resolver sees by a visor of its group, the
+// visors joined by sharing a public IP, so the graph can draw them together
+// without knowing the IPs.
+func (api *API) ipGroups(context.Context) map[string]string {
+	idx, _ := api.arIPs.snapshot()
+	return groupByIP(idx)
+}
+
+// groupByIP joins the visors of idx that share any IP, keying each by one
+// visor of its group.
+func groupByIP(idx map[string][]string) map[string]string {
+	if len(idx) == 0 {
+		return nil
+	}
+	parent := make(map[string]string, len(idx))
+	find := func(k string) string {
+		for parent[k] != k {
+			parent[k] = parent[parent[k]]
+			k = parent[k]
+		}
+		return k
+	}
+	byIP := map[string]string{}
+	for pk, ips := range idx {
+		if _, ok := parent[pk]; !ok {
+			parent[pk] = pk
+		}
+		for _, ip := range ips {
+			if other, ok := byIP[ip]; ok {
+				parent[find(pk)] = find(other)
+			} else {
+				byIP[ip] = pk
+			}
+		}
+	}
+	out := make(map[string]string, len(parent))
+	for pk := range parent {
+		out[pk] = find(pk)
 	}
 	return out
 }
