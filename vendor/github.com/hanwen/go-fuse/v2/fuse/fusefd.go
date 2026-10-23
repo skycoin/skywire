@@ -239,3 +239,15 @@ func (r *fuseFD) writev(iov [][]byte) (int, syscall.Errno) {
 	}
 	return n, errno
 }
+
+func (r *fuseFD) writeWithSlice(req *request, ws withSlice) Status {
+	slices, st := ws.Slices()
+	if !st.Ok() {
+		return st
+	}
+	bufs := make([][]byte, 0, 2+len(slices))
+	bufs = append(bufs, req.outHeaderBuf, req.outDataBuf)
+	bufs = append(bufs, slices...)
+	_, err := r.writevFD(bufs)
+	return ToStatus(err)
+}

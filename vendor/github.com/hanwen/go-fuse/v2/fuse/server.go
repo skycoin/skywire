@@ -54,9 +54,6 @@ type Server struct {
 	// maxReaders is the maximum number of goroutines reading requests
 	maxReaders int
 
-	// Pools for []byte
-	buffers bufferPool
-
 	// Pool for request structs.
 	reqPool sync.Pool
 
@@ -502,13 +499,17 @@ func (ms *Server) handleRequest(req *requestAlloc) Status {
 		defer ms.requestProcessingMu.Unlock()
 	}
 
-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, &ms.kernelSettings)
+	h, inSize, outSize, outPayloadSize, code := parseRequest(req.inputBuf, &ms.kernelSettings, ms.negotiatedFlags)
 	req.request.status = code
 	if !code.Ok() && code != ENOSYS {
 		ms.opts.Logger.Printf("parseRequest: %v", code)
 	}
-	req.inPayload = req.inputBuf[inSize:]
-	req.inputBuf = req.inputBuf[:inSize]
+	if code.Ok() {
+		req.request.status = req.splitPayload(inSize, int(h.InputSize))
+		if !req.request.status.Ok() {
+			ms.opts.Logger.Printf("op %s: bad request extension: %v", h.Name, req.request.status)
+		}
+	}
 	req.outHeaderBuf = req.outHeaderInline[:]
 	req.outDataBuf = req.outDataInline[:outSize]
 	clear(req.outHeaderBuf)

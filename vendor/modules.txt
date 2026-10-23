@@ -169,10 +169,10 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/progkit v0.0.0-20261018094932-527aa5efb029
+# github.com/0magnet/progkit v0.0.0-20261023102135-04c4a2aee2e1
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261021191245-ca60a67f6c21
+# github.com/0magnet/progterm v0.0.0-20261023102244-22de0b5d7f7a
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
@@ -218,7 +218,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261021195704-ed6338761719
+# github.com/0magnet/websh v0.0.1-0.20261023101735-d1b156e77e3e
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -552,7 +552,7 @@ github.com/go-viper/mapstructure/v2/internal/errors
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/gomarkdown/markdown v0.0.0-20261011113952-f83953680332
+# github.com/gomarkdown/markdown v0.0.0-20261022144421-6c848fa1b723
 ## explicit; go 1.22
 github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
@@ -597,7 +597,7 @@ github.com/gorilla/securecookie
 # github.com/guptarohit/asciigraph v0.10.0
 ## explicit; go 1.11
 github.com/guptarohit/asciigraph
-# github.com/hanwen/go-fuse/v2 v2.11.0
+# github.com/hanwen/go-fuse/v2 v2.12.1
 ## explicit; go 1.21
 github.com/hanwen/go-fuse/v2/fs
 github.com/hanwen/go-fuse/v2/fuse
@@ -805,7 +805,7 @@ github.com/peterh/liner
 # github.com/pion/datachannel v1.6.3
 ## explicit; go 1.24.0
 github.com/pion/datachannel
-# github.com/pion/dtls/v3 v3.1.14
+# github.com/pion/dtls/v3 v3.1.15
 ## explicit; go 1.24.0
 github.com/pion/dtls/v3
 github.com/pion/dtls/v3/internal/ciphersuite
@@ -828,7 +828,7 @@ github.com/pion/dtls/v3/pkg/protocol/alert
 github.com/pion/dtls/v3/pkg/protocol/extension
 github.com/pion/dtls/v3/pkg/protocol/handshake
 github.com/pion/dtls/v3/pkg/protocol/recordlayer
-# github.com/pion/ice/v4 v4.4.7
+# github.com/pion/ice/v4 v4.4.8
 ## explicit; go 1.24.0
 github.com/pion/ice/v4
 github.com/pion/ice/v4/internal/atomic
@@ -836,9 +836,10 @@ github.com/pion/ice/v4/internal/fakenet
 github.com/pion/ice/v4/internal/netutil
 github.com/pion/ice/v4/internal/stun
 github.com/pion/ice/v4/internal/taskloop
-# github.com/pion/interceptor v0.1.49
+# github.com/pion/interceptor v0.1.51
 ## explicit; go 1.24.0
 github.com/pion/interceptor
+github.com/pion/interceptor/internal/cc
 github.com/pion/interceptor/internal/ntp
 github.com/pion/interceptor/internal/rtpbuffer
 github.com/pion/interceptor/internal/sequencenumber
@@ -859,10 +860,10 @@ github.com/pion/mdns/v2
 # github.com/pion/randutil v0.1.0
 ## explicit; go 1.14
 github.com/pion/randutil
-# github.com/pion/rtcp v1.2.19
+# github.com/pion/rtcp v1.2.20
 ## explicit; go 1.24.0
 github.com/pion/rtcp
-# github.com/pion/rtp v1.10.5
+# github.com/pion/rtp v1.10.6
 ## explicit; go 1.24.0
 github.com/pion/rtp
 github.com/pion/rtp/codecs
@@ -901,13 +902,13 @@ github.com/pion/turn/v5/internal/client
 github.com/pion/turn/v5/internal/ipnet
 github.com/pion/turn/v5/internal/proto
 github.com/pion/turn/v5/internal/server
-# github.com/pires/go-proxyproto v0.15.0
-## explicit; go 1.25.0
+# github.com/pires/go-proxyproto v0.16.0
+## explicit; go 1.26.9
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pkg/sftp v1.13.11
+# github.com/pkg/sftp v1.13.12
 ## explicit; go 1.25.0
 github.com/pkg/sftp
 github.com/pkg/sftp/internal/encoding/ssh/filexfer
@@ -930,15 +931,15 @@ github.com/prometheus/client_model/go
 ## explicit; go 1.26.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.22.0
-## explicit; go 1.25.0
+# github.com/prometheus/procfs v0.23.0
+## explicit; go 1.26.0
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/parsers
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.64.0
+# github.com/quic-go/quic-go v0.64.1
 ## explicit; go 1.26.0
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -998,7 +999,7 @@ github.com/shirou/gopsutil/v3/process
 # github.com/shoenig/go-m1cpu v0.2.4
 ## explicit; go 1.26
 github.com/shoenig/go-m1cpu
-# github.com/shopspring/decimal v1.5.0
+# github.com/shopspring/decimal v1.6.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
 # github.com/sirupsen/logrus v1.10.2
@@ -1287,7 +1288,7 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.starlark.net v0.0.0-20261016124120-4811d7e34ea3
+# go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 ## explicit; go 1.25.0
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
@@ -1431,7 +1432,7 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20261012220534-4341edf3f941
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
 ## explicit; go 1.26.0
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.84.0
@@ -1626,7 +1627,7 @@ modernc.org/mathutil
 # modernc.org/memory v1.12.1
 ## explicit; go 1.23.0
 modernc.org/memory
-# modernc.org/sqlite v1.60.1
+# modernc.org/sqlite v1.61.0
 ## explicit; go 1.26.0
 modernc.org/sqlite
 modernc.org/sqlite/lib
