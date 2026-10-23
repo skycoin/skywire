@@ -982,8 +982,7 @@ func convertKeyCode(code C.jint) (key.Name, bool) {
 	case C.AKEYCODE_SPACE:
 		n = key.NameSpace
 	default:
-		// Letters, digits and symbols are named by their character, as on
-		// the desktop, so a chord such as Ctrl+C reaches a key.Filter.
+		// Letters, digits and symbols are named by their character.
 		switch c := int(code); {
 		case c >= C.AKEYCODE_A && c <= C.AKEYCODE_Z:
 			n = key.Name(rune('A' + c - C.AKEYCODE_A))
@@ -1568,11 +1567,11 @@ func (a AndroidViewEvent) Valid() bool {
 	return a != (AndroidViewEvent{})
 }
 
-func startForeground(title, text string) error {
+func startForeground(opts ForegroundOptions) error {
 	var err error
 	runInJVM(javaVM(), func(env *C.JNIEnv) {
 		err = callStaticVoidMethod(env, android.gioCls, android.mstartForeground,
-			jvalue(android.appCtx), jvalue(javaString(env, title)), jvalue(javaString(env, text)))
+			jvalue(android.appCtx), jvalue(javaString(env, opts.Title)), jvalue(javaString(env, opts.Text)))
 	})
 	return err
 }

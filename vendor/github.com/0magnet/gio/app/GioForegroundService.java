@@ -15,17 +15,18 @@ import android.os.IBinder;
 // GioForegroundService keeps the app's process running while it is not in
 // front, showing a notification that opens the app. It is started by
 // app.StartForeground, and declared by the foreground permission package.
+// Its notification channel is named for the app.
 public final class GioForegroundService extends Service {
-	private static final String CHANNEL = "org.gioui.foreground";
-
 	@Override public int onStartCommand(Intent intent, int flags, int startId) {
 		String title = intent != null ? intent.getStringExtra("title") : null;
 		String text = intent != null ? intent.getStringExtra("text") : null;
 		Notification.Builder b;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 			NotificationManager nm = getSystemService(NotificationManager.class);
-			nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Running", NotificationManager.IMPORTANCE_LOW));
-			b = new Notification.Builder(this, CHANNEL);
+			String channel = getPackageName() + ".foreground";
+			CharSequence name = getApplicationInfo().loadLabel(getPackageManager());
+			nm.createNotificationChannel(new NotificationChannel(channel, name, NotificationManager.IMPORTANCE_LOW));
+			b = new Notification.Builder(this, channel);
 		} else {
 			b = new Notification.Builder(this);
 		}
