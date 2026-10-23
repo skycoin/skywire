@@ -51,6 +51,10 @@ type Config struct {
 	// means 0.25; a negative value republishes every change.
 	RoutingHysteresis float64 `json:"routing_hysteresis,omitempty"`
 
+	// RoutingSnapshotEvery is how many routing publishes go by between full
+	// snapshots; the publishes between send only what changed. Zero means 6.
+	RoutingSnapshotEvery int `json:"routing_snapshot_every,omitempty"`
+
 	// AddressResolverDmsg is the address resolver whose bindings feed shows
 	// which visors share a public IP. Empty means the production one.
 	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"`

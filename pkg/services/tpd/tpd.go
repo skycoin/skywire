@@ -393,7 +393,11 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "metrics", skyenv.DmsgTPDMetricsCXOPort, mp, err)
 	up, err := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
-	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, time.Duration(s.cfg.RoutingPublishEvery), api.RoutingSmoothing{LatencyWindow: s.cfg.RoutingLatencyWindow, Hysteresis: s.cfg.RoutingHysteresis}, logger)
+	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, api.RoutingFeedConfig{
+		Every:         time.Duration(s.cfg.RoutingPublishEvery),
+		SnapshotEvery: s.cfg.RoutingSnapshotEvery,
+		Smoothing:     api.RoutingSmoothing{LatencyWindow: s.cfg.RoutingLatencyWindow, Hysteresis: s.cfg.RoutingHysteresis},
+	}, logger)
 	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
