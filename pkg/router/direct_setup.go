@@ -151,7 +151,7 @@ func (r *router) serveDirectSetup(conn *dmsg.Stream, caller cipher.PubKey) {
 	conn.SetDeadline(time.Now().Add(time.Minute)) //nolint:errcheck,gosec
 	srv := rpc.NewServer()
 	gw := &directSetupGateway{r: r, caller: caller, log: r.logger}
-	if err := registerDirectSetupRPC(srv, gw); err != nil {
+	if err := registerDirectSetupGateway(srv, RPCName, gw); err != nil {
 		r.logger.WithError(err).Warn("Could not serve direct route setup")
 		return
 	}

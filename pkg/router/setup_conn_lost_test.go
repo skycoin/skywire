@@ -7,8 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/rpc"
 	"testing"
+
+	rpc "github.com/0magnet/gobrpc"
 )
 
 // A cascade whose setup node connection closed is told apart from one the

@@ -1,7 +1,7 @@
 // Package appevent pkg/app/appevent/rpc.go c2-vis-appsvc
 package appevent
 
-//go:generate go run ../../../internal/rpcgen -type RPCGateway=registerRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../../internal/rpcgen -type RPCGateway=registerRPCGateway -o rpc_register.go
 
 import (
 	"context"
