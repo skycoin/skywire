@@ -328,6 +328,17 @@ func (r *RPC) LocalTransportStats(_ *struct{}, out *visorapi.LocalTransportStats
 	return nil
 }
 
+// VisorCharts returns the samples behind the visor's /status/visor page.
+func (r *RPC) VisorCharts(args *visorapi.VisorChartsArgs, out *visorapi.VisorCharts) (err error) {
+	defer rpcutil.LogCall(r.log, "VisorCharts", args)(nil, &err)
+	resp, err := r.visor.VisorCharts(*args)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // LocalUptimeStats returns the visor's tier-uptime bitmaps from the
 // bbolt stats store — process / dmsg / skynet, 5-minute resolution
 // for the requested window. Mirror of /stats/uptime on the

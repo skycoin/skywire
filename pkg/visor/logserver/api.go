@@ -145,6 +145,9 @@ type API struct {
 	// statusPage serves /status, the status of the deployment services the
 	// visor runs. Nil answers 404.
 	statusPage http.Handler
+	// visorStatus serves /status/visor, this visor's own load and traffic, to
+	// itself and the survey whitelist only.
+	visorStatus http.Handler
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -404,6 +407,17 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		}
 		api.statusPage.ServeHTTP(w, req)
 	})
+	r.HandleFunc("GET /status/visor", func(w http.ResponseWriter, req *http.Request) {
+		if api.visorStatus == nil {
+			http.NotFound(w, req)
+			return
+		}
+		if !isOwnUser(req) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		api.visorStatus.ServeHTTP(w, req)
+	})
 
 	// Landing page with links to available endpoints. When a custom
 	// websiteHandler is set (port 80 reverse-proxy or rewards UI), it
@@ -420,6 +434,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		}
 		if api.statusPage != nil {
 			links = append(links, `<a href="/status">/status</a> - deployment services status`)
+		}
+		if api.visorStatus != nil && isOwnUser(req) {
+			links = append(links, `<a href="/status/visor">/status/visor</a> - this visor's load and traffic`)
 		}
 		if wl {
 			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
@@ -580,6 +597,12 @@ func (api *API) serveWebsite(w http.ResponseWriter, req *http.Request) {
 // - The reward system UI handler
 func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
+}
+
+// SetVisorStatusPage serves h at /status/visor to this visor and the survey
+// whitelist, and links it from their landing page.
+func (api *API) SetVisorStatusPage(h http.Handler) {
+	api.visorStatus = h
 }
 
 // SetStatusPage serves h at /status and links it from the landing page.

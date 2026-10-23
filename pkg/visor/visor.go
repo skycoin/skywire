@@ -229,6 +229,9 @@ type Visor struct {
 	// caddySites caches the site names a local Caddy reports.
 	caddySites siteCache
 
+	// visorCharts samples this visor's load and traffic for /status/visor.
+	visorCharts atomic.Pointer[visorCharts]
+
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory

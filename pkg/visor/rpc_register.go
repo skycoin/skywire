@@ -3260,6 +3260,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.VisorCat(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".VisorCharts", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.VisorChartsArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.VisorCharts)
+			return rpcReply, rpcRcvr.VisorCharts(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".VisorSCP", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.VisorSCPRequest)
 		if err := rpcDec.Decode(rpcArg); err != nil {
