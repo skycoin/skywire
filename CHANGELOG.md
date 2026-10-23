@@ -8,6 +8,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.102
 
+-   all: build on 32-bit linux and go 1.27.2 again  [#5798](https://github.com/skycoin/skywire/pull/5798)
 -   all: update dependencies  [#5794](https://github.com/skycoin/skywire/pull/5794)
 -   tpd, visor, tpviz: send the routing feed as a snapshot and deltas  [#5793](https://github.com/skycoin/skywire/pull/5793)
 -   tpd: steady the latencies the routing feed publishes  [#5792](https://github.com/skycoin/skywire/pull/5792)
