@@ -61,7 +61,6 @@ const (
 	TabCLIServices       = cxosub.TabCLIServices
 	TabCLITransports     = cxosub.TabCLITransports
 	TabRoutingPolicy     = cxosub.TabRoutingPolicy
-	TabDmsgEntryLookup   = cxosub.TabDmsgEntryLookup
 	TabNetworkStats      = cxosub.TabNetworkStats
 	TabTransportMetrics  = cxosub.TabTransportMetrics
 	TabARResolve         = cxosub.TabARResolve
@@ -217,9 +216,8 @@ func sdCXOPeer(v *Visor) (cipher.PubKey, bool) {
 // Both discovery_dmsg AND discovery are tried, in that order, mirroring
 // tpdCXOPeer. On a dmsg-only deployment the PK lives in `discovery` (already
 // `dmsg://<pk>:80`) and discovery_dmsg is simply unset — reading only the
-// latter meant the feed spec always failed with "no DMSG-D CXO peer", so
-// enabling dmsg.lookup_cxo silently did nothing and every lookup fell back to
-// HTTP. parseDmsgPeer rejects a non-dmsg scheme, so a clearnet `discovery` is
+// latter meant the feed spec always failed with "no DMSG-D CXO peer".
+// parseDmsgPeer rejects a non-dmsg scheme, so a clearnet `discovery` is
 // still correctly ignored.
 func dmsgdCXOPeer(v *Visor) (cipher.PubKey, bool) {
 	if v.conf.Dmsg == nil {

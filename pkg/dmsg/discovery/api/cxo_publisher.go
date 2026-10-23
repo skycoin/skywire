@@ -23,8 +23,8 @@
 //
 // # Interop
 //
-// Readers of the version 1 lists (the visor's lookup_cxo resolver, tpviz
-// and the hypervisor's visualizer) skip a version 2 leaf, find no entries
+// Readers of the version 1 lists (tpviz and the hypervisor's visualizer)
+// skip a version 2 leaf, find no entries
 // and fall back to HTTP. Server entries (servers/<pk>, serverfeed) and
 // leaf paths are unchanged, so the server list and TPD's roles still read
 // from the feed.
