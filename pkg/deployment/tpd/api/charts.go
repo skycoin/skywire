@@ -52,6 +52,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
 		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
+		Extra: api.ChartsExtra(),
 		Stats: api.Stats,
 		Store: st,
 		Log:   log,
@@ -83,6 +84,15 @@ func (api *API) GraphPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.graph.ServeHTTP(w, r)
+}
+
+// ChartsExtra is the transport graph and its engine, served next to the charts page.
+func (api *API) ChartsExtra() []charts.Extra {
+	return []charts.Extra{
+		{Path: "/graph", Handler: http.HandlerFunc(api.GraphPage)},
+		{Path: "/graph/engine.wasm", Handler: http.HandlerFunc(netgraph.EngineWasm)},
+		{Path: "/graph/engine.js", Handler: http.HandlerFunc(netgraph.EngineLoader)},
+	}
 }
 
 // graphLinks is every transport in the cache, for the transport graph.
