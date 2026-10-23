@@ -2,9 +2,11 @@
 //
 // CXO routing feed: what visors route on. It carries the transports that
 // exist now (see routingEntries) with the latency and throughput routes are
-// weighed by, sharded one leaf per visor:
+// weighed by, as a snapshot sharded one leaf per visor plus the deltas since
+// it (see package routingfeed for the layout):
 //
-//	routing/<pk>   // gzipped JSON []allTransportsWireEntry
+//	routing/<pk>          // gzipped JSON []allTransportsWireEntry
+//	routing/delta/<seq>   // gzipped JSON routingfeed.Delta
 //
 // A transport lives in the shard of its lower-keyed edge (entries keep their
 // edges sorted), so each appears once. The all-transports feed republished
@@ -30,15 +32,17 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/routingfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // RoutingPathPrefix is the routing feed's sub-tree; shard paths are
 // RoutingPathPrefix + <pk hex>.
-const RoutingPathPrefix = "routing/"
+const RoutingPathPrefix = routingfeed.Prefix
 
 // DefaultRoutingPublishEvery is how often the routing shards are recomputed
 // when the config leaves it empty. Telemetry is applied every 15 minutes, so
@@ -49,30 +53,53 @@ const DefaultRoutingPublishEvery = 10 * time.Minute
 // the changed shards outlasts one publish can still fetch them.
 const routingKeepRoots = 3
 
+// DefaultRoutingSnapshotEvery is how many publishes go by between snapshots
+// when the config leaves it empty: an hour at the default interval.
+const DefaultRoutingSnapshotEvery = 6
+
+// RoutingFeedConfig configures the routing feed. Zero values take the
+// defaults.
+type RoutingFeedConfig struct {
+	// Every is the publish interval.
+	Every time.Duration
+	// SnapshotEvery is how many publishes go by between snapshots; the ones
+	// between add a delta each.
+	SnapshotEvery int
+	Smoothing     RoutingSmoothing
+}
+
 // RoutingCXOPublisher publishes the routing feed.
 type RoutingCXOPublisher struct {
-	api    *API
-	pub    *treestore.Publisher
-	log    *logging.Logger
-	every  time.Duration
-	smooth *routingSmoother
+	api           *API
+	pub           *treestore.Publisher
+	log           *logging.Logger
+	every         time.Duration
+	snapshotEvery int
+	smooth        *routingSmoother
 
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	// lists are the shards the last cycle published, by path, so the next
-	// puts only what changed. Only the publish loop touches it.
-	lists map[string][]allTransportsWireEntry
+	// lists are the shards of the last snapshot, by path, so the next one puts
+	// only what changed; published is the state the last publish carried,
+	// which the next delta starts from; deltaSeq counts the deltas since the
+	// snapshot. Only the publish loop touches them.
+	lists     map[string][]allTransportsWireEntry
+	published map[string][]allTransportsWireEntry
+	deltaSeq  int
 
 	mu        sync.Mutex
 	lastError error
 }
 
 // StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort,
-// publishing every interval (DefaultRoutingPublishEvery when zero or less).
-func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, every time.Duration, smooth RoutingSmoothing, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
-	if every <= 0 {
-		every = DefaultRoutingPublishEvery
+// configured by cfg.
+func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, cfg RoutingFeedConfig, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+	if cfg.Every <= 0 {
+		cfg.Every = DefaultRoutingPublishEvery
+	}
+	if cfg.SnapshotEvery <= 0 {
+		cfg.SnapshotEvery = DefaultRoutingSnapshotEvery
 	}
 	log := logging.MustGetLogger("tpd-cxo-routing-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
@@ -86,7 +113,8 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 	}
 	pub.SetAllowlist(nil) // open feed: every visor routes on it
 	pubCtx, cancel := context.WithCancel(ctx)
-	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, every: every, smooth: newRoutingSmoother(smooth), cancel: cancel, done: make(chan struct{})}
+	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, every: cfg.Every, snapshotEvery: cfg.SnapshotEvery,
+		smooth: newRoutingSmoother(cfg.Smoothing), cancel: cancel, done: make(chan struct{})}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDRoutingCXOPort).
 			Info("CXO routing publisher running")
@@ -118,14 +146,28 @@ func (r *RoutingCXOPublisher) publishOnce(ctx context.Context) {
 		return
 	}
 	lists := routingLists(r.smooth.apply(entries))
-	ops, err := r.changedShards(lists)
-	if err != nil {
-		r.log.WithError(err).Warn("routing shard encode failed")
-		r.recordError(err)
-		return
+
+	// A snapshot rewrites the shards that changed since the last one and
+	// deletes the deltas since it; any other publish adds one delta.
+	snapshot := r.lists == nil || r.deltaSeq >= r.snapshotEvery
+	var ops []treestore.PutOp
+	var deltaPath string
+	if snapshot {
+		if ops, err = r.changedShards(lists); err != nil {
+			r.log.WithError(err).Warn("routing shard encode failed")
+			r.recordError(err)
+			return
+		}
+		r.pub.Walk(routingfeed.DeltaPrefix, func(path string, _ []byte) bool {
+			ops = append(ops, treestore.PutOp{Path: path})
+			return true
+		})
+	} else if body, n := encodeDelta(r.published, lists); n > 0 {
+		deltaPath = routingfeed.DeltaPath(r.deltaSeq + 1)
+		ops = append(ops, treestore.PutOp{Path: deltaPath, Value: body})
 	}
-	// Every cycle still publishes a Root, as it did when every shard was put,
-	// so a new subscriber always finds a fresh head. One stored shard will do.
+	// Every cycle still publishes a Root, so a new subscriber always finds a
+	// fresh head. One stored shard will do.
 	if len(ops) == 0 {
 		for path := range lists {
 			if body, ok := r.pub.Get(path); ok {
@@ -139,7 +181,78 @@ func (r *RoutingCXOPublisher) publishOnce(ctx context.Context) {
 		r.recordError(err)
 		return
 	}
-	r.lists = lists
+	switch {
+	case snapshot:
+		r.lists, r.deltaSeq = lists, 0
+	case deltaPath != "":
+		r.deltaSeq++
+	}
+	r.published = lists
+}
+
+// encodeDelta returns the gzipped Delta from prev to cur and how many
+// transports it names.
+func encodeDelta(prev, cur map[string][]allTransportsWireEntry) ([]byte, int) {
+	type wireRemoval struct {
+		Edges [2]cipher.PubKey `json:"edges"`
+		Type  string           `json:"type"`
+	}
+	index := func(lists map[string][]allTransportsWireEntry) map[routingKey]allTransportsWireEntry {
+		out := make(map[routingKey]allTransportsWireEntry)
+		for _, list := range lists {
+			for _, w := range list {
+				out[routingKey{w.Edges, w.Type}] = w
+			}
+		}
+		return out
+	}
+	before, after := index(prev), index(cur)
+	var changed []allTransportsWireEntry
+	var removed []wireRemoval
+	for k, w := range after {
+		if old, ok := before[k]; !ok || old != w {
+			changed = append(changed, w)
+		}
+	}
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			removed = append(removed, wireRemoval{Edges: k.edges, Type: string(k.typ)})
+		}
+	}
+	if len(changed)+len(removed) == 0 {
+		return nil, 0
+	}
+	less := func(a, b [2]cipher.PubKey) bool {
+		if c := bytes.Compare(a[0][:], b[0][:]); c != 0 {
+			return c < 0
+		}
+		return bytes.Compare(a[1][:], b[1][:]) < 0
+	}
+	sort.Slice(changed, func(i, j int) bool {
+		if changed[i].Edges != changed[j].Edges {
+			return less(changed[i].Edges, changed[j].Edges)
+		}
+		return changed[i].Type < changed[j].Type
+	})
+	sort.Slice(removed, func(i, j int) bool {
+		if removed[i].Edges != removed[j].Edges {
+			return less(removed[i].Edges, removed[j].Edges)
+		}
+		return removed[i].Type < removed[j].Type
+	})
+	body, err := json.Marshal(struct {
+		Changed []allTransportsWireEntry `json:"c,omitempty"`
+		Removed []wireRemoval            `json:"r,omitempty"`
+	}{changed, removed})
+	if err != nil {
+		return nil, 0
+	}
+	return cxoutils.Gzip(body), len(changed) + len(removed)
+}
+
+type routingKey struct {
+	edges [2]cipher.PubKey
+	typ   types.Type
 }
 
 // changedShards returns the puts that bring the published tree from r.lists
