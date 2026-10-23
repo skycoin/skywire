@@ -2,6 +2,7 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -140,4 +142,30 @@ func (v *Visor) serveVisorStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.page.ServeHTTP(w, r)
+}
+
+// VisorCharts returns the samples and starts of the visor's status page in
+// the window args names.
+func (v *Visor) VisorCharts(args visorapi.VisorChartsArgs) (*visorapi.VisorCharts, error) {
+	c := v.visorCharts.Load()
+	if c == nil {
+		return nil, errors.New("visor charts not started")
+	}
+	ctx := context.Background()
+	samples, err := c.page.Store.Range(ctx, args.From, args.To, args.Hourly)
+	if err != nil {
+		return nil, err
+	}
+	starts, err := c.page.Store.Starts(ctx, args.From, args.To)
+	if err != nil {
+		return nil, err
+	}
+	out := &visorapi.VisorCharts{}
+	for _, s := range samples {
+		out.Samples = append(out.Samples, visorapi.ChartSample{At: s.At, V: s.V})
+	}
+	for _, s := range starts {
+		out.Starts = append(out.Starts, visorapi.ChartStart{At: s.At, Version: s.Version, Commit: s.Commit})
+	}
+	return out, nil
 }

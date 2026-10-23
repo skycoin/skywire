@@ -23,6 +23,9 @@ type Board struct {
 	// Summary, when set, is a table shown before the sections.
 	Summary func() *Table
 	Log     logrus.FieldLogger
+	// Separate keeps each section's process charts in it, for sections that
+	// are separate processes, such as the visors of a hypervisor.
+	Separate bool
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -67,6 +70,9 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	var process builtSection
 	for i, s := range sections {
 		built[i] = bd.build(ctx, s, rg, now)
+		if bd.Separate {
+			continue
+		}
 		var own, rest []Chart
 		for _, c := range built[i].content.Charts {
 			if c.Process {

@@ -1211,6 +1211,14 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 		// on the visor. Registering them here with the same Authorize middleware
 		// the rest of the hypervisor uses keeps every path identical while
 		// putting them behind the session.
+		// The status page of the hypervisor and its visors, behind the session.
+		r.Group(func(r *httputil.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Get("/status", (&hvStatus{hv: hv}).ServeHTTP)
+		})
+
 		if hv.tpvizServer != nil {
 			r.Group(func(r *httputil.Router) {
 				if hv.c.EnableAuth {
