@@ -41,7 +41,7 @@ func TestDCConnCloseDoesNotDoubleCloseSignal(t *testing.T) {
 	c := &countingCloser{}
 	releaseSignaling(c)
 
-	api := newWebRTCAPI()
+	api := newWebRTCAPI(nil)
 	pc, err := api.NewPeerConnection(webrtcConfig(nil))
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)

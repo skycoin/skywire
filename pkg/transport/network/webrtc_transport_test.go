@@ -15,6 +15,7 @@ package network
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -96,6 +97,13 @@ func TestWebRTC_DialAcceptEndToEnd(t *testing.T) {
 	n, err = dialed.Read(buf2)
 	require.NoError(t, err)
 	require.Equal(t, "yo", string(buf2[:n]))
+
+	// The raw address is the selected ICE pair, so same-network checks see an IP.
+	for _, tp := range []Transport{dialed, accepted} {
+		host, _, err := net.SplitHostPort(tp.RemoteRawAddr().String())
+		require.NoError(t, err)
+		require.NotNil(t, net.ParseIP(host), "RemoteRawAddr = %v", tp.RemoteRawAddr())
+	}
 
 	require.NoError(t, dialed.Close())
 	require.NoError(t, accepted.Close())

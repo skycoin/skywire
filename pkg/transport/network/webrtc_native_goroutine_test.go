@@ -28,7 +28,7 @@ func stacksContain(needle string) bool {
 // Together they were 8,816 goroutines (49%) on a host visor with 460 live
 // PeerConnections, so a regression here is expensive and invisible.
 func TestPeerConnectionSpawnsNoMDNSOrInterceptorGoroutines(t *testing.T) {
-	api := newWebRTCAPI()
+	api := newWebRTCAPI(nil)
 	pc, err := api.NewPeerConnection(webrtcConfig(nil))
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)
