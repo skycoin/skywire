@@ -38,6 +38,10 @@ type Config struct {
 	// written to redis. Empty means 15m, and it is capped at 30m.
 	TelemetryApplyEvery services.Duration `json:"telemetry_apply_every,omitempty"`
 
+	// RoutingPublishEvery is how often the routing feed is republished.
+	// Empty means 10m.
+	RoutingPublishEvery services.Duration `json:"routing_publish_every,omitempty"`
+
 	// AddressResolverDmsg is the address resolver whose bindings feed shows
 	// which visors share a public IP. Empty means the production one.
 	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"`
