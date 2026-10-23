@@ -42,6 +42,15 @@ type Config struct {
 	// Empty means 10m.
 	RoutingPublishEvery services.Duration `json:"routing_publish_every,omitempty"`
 
+	// RoutingLatencyWindow is how many routing publishes the published
+	// latency is the minimum of. Zero means 6.
+	RoutingLatencyWindow int `json:"routing_latency_window,omitempty"`
+
+	// RoutingHysteresis is the relative change a transport's latency or
+	// throughput must make before the routing feed republishes it. Zero
+	// means 0.25; a negative value republishes every change.
+	RoutingHysteresis float64 `json:"routing_hysteresis,omitempty"`
+
 	// AddressResolverDmsg is the address resolver whose bindings feed shows
 	// which visors share a public IP. Empty means the production one.
 	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"`
