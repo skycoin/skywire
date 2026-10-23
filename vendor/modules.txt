@@ -73,7 +73,7 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
-# github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399
+# github.com/0magnet/gio v0.10.4-0.20261023140628-7d7b8fd5abcc
 ## explicit; go 1.24.0
 github.com/0magnet/gio/app
 github.com/0magnet/gio/app/internal/ibus

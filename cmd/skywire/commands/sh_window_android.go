@@ -11,6 +11,6 @@ import (
 // in it with it, unless a foreground service holds the process.
 func init() {
 	keepRunning = func() {
-		_ = app.StartForeground("Skywire", "skywire sh is running") //nolint:errcheck // without it the app still runs while in front
+		_, _ = app.StartForeground(app.ForegroundOptions{Title: "Skywire", Text: "skywire sh is running"}) //nolint:errcheck // without it the app still runs while in front
 	}
 }
