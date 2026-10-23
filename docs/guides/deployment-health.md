@@ -114,8 +114,11 @@ skywire cli visor log --follow --min-level debug --via dmsg://<pk>
 
 Every visor charts its own load and traffic every 5 minutes and keeps
 the history in its stats database: process CPU and memory, dmsg
-traffic by port, bytes and transports by transport type, routing
-rules, dmsg sessions and running apps. It serves the charts at
+traffic by named port, bytes and transports by transport type, the
+eight busiest transports with their latency, bytes per app counted on
+the app's own route groups, route groups and mux legs, mux failover
+events and direct against multihop leg traffic, routing rules, dmsg
+sessions and running apps. It serves the charts at
 `/status/visor` on dmsg:80, only to itself and to keys on its survey
 whitelist and its hypervisors. Unlike the other whitelisted paths it
 stays closed when the whitelist is empty. Open it through the visor's
