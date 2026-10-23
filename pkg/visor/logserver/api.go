@@ -193,7 +193,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// no survey-whitelisted keys means the file is publicly accessible
 	authRoute := func(pattern string, h http.HandlerFunc) {
 		if len(whitelistedPKs) > 0 {
-			r.Handle(pattern, whitelistAuth(whitelistedPKs, h))
+			r.Handle(pattern, whitelistAuth(whitelistedPKs, func() string { return api.publicKey }, h))
 			return
 		}
 		r.Handle(pattern, h)
@@ -702,7 +702,7 @@ func (api *API) SetRelatedNodesProvider(p RelatedNodesProvider) {
 	api.relatedNodesProvider = p
 }
 
-func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handler {
+func whitelistAuth(whitelistedPKs []cipher.PubKey, self func() string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Get the remote PK.
 		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
@@ -711,7 +711,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handl
 			return
 		}
 		// Check if the remote PK is whitelisted.
-		whitelisted := len(whitelistedPKs) == 0
+		whitelisted := len(whitelistedPKs) == 0 || (self() != "" && remotePK == self())
 		for _, whitelistedPK := range whitelistedPKs {
 			if remotePK == whitelistedPK.String() {
 				whitelisted = true
