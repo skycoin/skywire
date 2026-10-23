@@ -31,10 +31,6 @@ type deploymentWithServer struct {
 	// operator actually wrote take effect.
 	DirectOnly      bool `json:"direct_only,omitempty"`
 	RelayMaxStreams int  `json:"relay_max_streams,omitempty"`
-	// LookupCXO is a visor-wide flag carried alongside the primary
-	// deployment in the single-object shape (like Server). See
-	// DmsgConfig.LookupCXO.
-	LookupCXO bool `json:"lookup_cxo,omitempty"`
 	// LocalRelay is visor-wide too (like Server): the local relay acceptor
 	// belongs to the client, not to any one deployment. Without this key
 	// here the field would be silently dropped on read AND on write — the
@@ -59,7 +55,6 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 		}
 		c.Deployments = []Deployment{single.Deployment}
 		c.Server = single.Server
-		c.LookupCXO = single.LookupCXO
 		c.DirectOnly = single.DirectOnly
 		c.RelayMaxStreams = single.RelayMaxStreams
 		c.LocalRelay = single.LocalRelay
@@ -83,7 +78,6 @@ func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 		return json.Marshal(deploymentWithServer{
 			Deployment:      deployments[0],
 			Server:          c.Server,
-			LookupCXO:       c.LookupCXO,
 			DirectOnly:      c.DirectOnly,
 			RelayMaxStreams: c.RelayMaxStreams,
 			LocalRelay:      c.LocalRelay,

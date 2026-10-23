@@ -243,16 +243,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// (dmsgDC) that self-evicted on the dmsg servers.
 	httpC := &http.Client{}
 	directOnly := v.conf.Dmsg != nil && v.conf.Dmsg.DirectOnly
-	// When LookupCXO is enabled, front the discovery client with a
-	// resolver that serves peer entries from the local CXO
-	// clients-by-server snapshot (no per-lookup dmsg Noise handshake),
-	// falling back to HTTP on a miss. nil resolver leaves the dmsg
-	// client's discovery chain unchanged.
-	var entryResolve dmsgdisc.EntryResolveFunc
-	if v.conf.Dmsg != nil && v.conf.Dmsg.LookupCXO {
-		entryResolve = v.newDmsgEntryCXOResolver()
-	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, entryResolve, v.MasterLogger())
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, v.MasterLogger())
 	selfOnly := dmsgConf.Server != nil && dmsgConf.Server.Enabled && dmsgConf.Server.ConfigPath == "" &&
 		!dmsgc.SkipSelfServer(v.conf.PK, &dmsgConf)
 	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
