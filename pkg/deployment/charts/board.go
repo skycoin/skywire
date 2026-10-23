@@ -99,6 +99,7 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 // builtSection is one section of a board, rendered but not yet written.
 type builtSection struct {
 	title, about, note string
+	links              []Link
 	starts             []Start
 	content            Content
 }
@@ -114,6 +115,7 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 		out.about = s.Page.About
 	}
 	if s.Page != nil {
+		out.links = s.Page.Links
 		var err error
 		if out.content, out.starts, err = s.Page.content(ctx, rg, now); err != nil {
 			if bd.Log != nil {
@@ -127,10 +129,31 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 
 func (s builtSection) write(b *bytes.Buffer, id, chartPrefix string) {
 	fmt.Fprintf(b, "<section class='svc' id='%s'><h2 class='svc'>%s</h2>", id, html.EscapeString(s.title))
-	writeIntro(b, s.about, s.starts, nil)
+	writeIntro(b, s.about, s.starts, s.links)
 	if s.note != "" {
 		fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(s.note))
 	}
 	writeContent(b, s.content, chartPrefix)
 	b.WriteString("</section>")
+}
+
+// Extras serves the Extra pages of the board's sections at their paths and
+// 404 for any other path. Mount it at "/" beside the board.
+func (bd *Board) Extras() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bd.Sections != nil {
+			for _, s := range bd.Sections() {
+				if s.Page == nil {
+					continue
+				}
+				for _, e := range s.Page.Extra {
+					if e.Path == r.URL.Path {
+						e.Handler.ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+		}
+		http.NotFound(w, r)
+	})
 }
