@@ -424,11 +424,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 }
 
 // dmsgServersCacheRefreshInterval is how often the cache is refreshed
-// from dmsg-discovery once dmsgC is up. 5m is short enough that the
-// cache converges on the live state within a few minutes of a server
-// rotating its address, long enough that the refresh isn't a load
-// concern on dmsgd.
-const dmsgServersCacheRefreshInterval = 5 * time.Minute
+// from dmsg-discovery once dmsgC is up. The cache seeds the next start;
+// live dials resolve servers through discovery, so it can lag. Each
+// refresh opens a fresh dmsg stream, a handshake on dmsg discovery, so
+// keep it rare.
+const dmsgServersCacheRefreshInterval = 30 * time.Minute
 
 // refreshDmsgServersCacheLoop runs until ctx is canceled, refreshing
 // v.dmsgServersCache from dmsg-discovery's all_servers endpoint at a
@@ -491,20 +491,16 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
 	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
 	refresh := func() {
-		entries, source := v.dmsgServersFromCXO(), "cxo"
-		if len(entries) == 0 {
-			var err error
-			if entries, err = dc.AllServers(ctx); err != nil {
-				cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
-				return
-			}
-			source = "http"
+		entries, err := dc.AllServers(ctx)
+		if err != nil {
+			cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
+			return
 		}
 		if err := v.dmsgServersCache.Replace(entries); err != nil {
 			cacheLog.WithError(err).Warn("Failed to write dmsg-servers cache file")
 			return
 		}
-		cacheLog.WithField("count", len(entries)).WithField("source", source).Debug("dmsg-servers cache refreshed")
+		cacheLog.WithField("count", len(entries)).Debug("dmsg-servers cache refreshed")
 	}
 	refresh()
 	t := time.NewTicker(dmsgServersCacheRefreshInterval)
