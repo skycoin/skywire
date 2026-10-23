@@ -62,6 +62,7 @@ func TestBuildHopLookups_DescribedHopsNeedNoSnapshot(t *testing.T) {
 
 // An older route-finder sends bare hops; those still come from the snapshot.
 func TestBuildHopLookups_BareHopsUseSnapshot(t *testing.T) {
+	setLocalGraph(t, true)
 	id := uuid.New()
 	dc := &countingDiscovery{
 		DiscoveryClient: transport.NewDiscoveryMock(),
@@ -81,10 +82,7 @@ func TestBuildHopLookups_BareHopsUseSnapshot(t *testing.T) {
 // route-finder hops go unranked and local calculation answers only with a
 // direct transport.
 func TestLocalGraphOffFetchesNothing(t *testing.T) {
-	require.NoError(t, routersettings.SetValue(routersettings.DialLocalGraph.Name(), routersettings.BoolBits(false)))
-	t.Cleanup(func() {
-		_ = routersettings.SetValue(routersettings.DialLocalGraph.Name(), routersettings.BoolBits(true)) //nolint:errcheck
-	})
+	setLocalGraph(t, false)
 
 	id := uuid.New()
 	dc := &countingDiscovery{
@@ -107,4 +105,13 @@ func TestLocalGraphOffFetchesNothing(t *testing.T) {
 	require.Len(t, all, 1)
 	require.Equal(t, 30.0, g.latencyByID[id])
 	require.Equal(t, int32(1), dc.all.Load())
+}
+
+// setLocalGraph sets dial.local_graph for one test and restores the default.
+func setLocalGraph(t *testing.T, on bool) {
+	t.Helper()
+	require.NoError(t, routersettings.SetValue(routersettings.DialLocalGraph.Name(), routersettings.BoolBits(on)))
+	t.Cleanup(func() {
+		_ = routersettings.SetValue(routersettings.DialLocalGraph.Name(), routersettings.BoolBits(false)) //nolint:errcheck
+	})
 }
