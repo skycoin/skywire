@@ -173,12 +173,6 @@ const (
 	// geo.country(pk) can resolve multihop intermediates that
 	// advertise themselves as proxy/vpn/visor services.
 	TabRoutingPolicy
-	// TabDmsgEntryLookup is the visor's dmsg-entry-lookup-over-CXO
-	// consumer. Held for the lifetime of the dmsg client so the
-	// clients-by-server snapshot stays warm, letting peer entry
-	// lookups resolve from CXO instead of a fresh HTTP-over-dmsg
-	// Noise handshake. HTTP stays the fallback on a snapshot miss.
-	TabDmsgEntryLookup
 	// TabNetworkStats is the consumer of TPD's network-aggregate
 	// stats feed (`cli tp net-stats`, `cli visor cxo fetch tpd-stats
 	// …`, dashboards charting the by-type counts over time). Its own
@@ -214,7 +208,6 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},
-	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
 	TabTransportMetrics:  {FeedTPDMetrics},
 	TabARResolve:         {FeedARBindings},
