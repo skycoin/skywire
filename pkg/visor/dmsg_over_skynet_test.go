@@ -1,14 +1,46 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
+
+func TestDmsgSkynetSkipsRelaysThatCannotReachDst(t *testing.T) {
+	var s dmsgSkynetStats
+	dst, _ := cipher.GenerateKeyPair()
+	r1, _ := cipher.GenerateKeyPair()
+	r2, _ := cipher.GenerateKeyPair()
+	e2e := "vstream relay: noise handshake with " + dst.String() + ": EOF"
+
+	// One relay failed for another reason: relays may still work.
+	s.note(dst, &relayDialError{dst: dst, candidates: 2, tries: []relayTry{
+		{relay: r1, err: e2e}, {relay: r2, err: "vstream: no non-DMSG transport to relay"},
+	}})
+	require.False(t, s.skipRelay(dst))
+
+	// Every relay ended in the end-to-end handshake: skip the tier.
+	s.note(dst, &relayDialError{dst: dst, candidates: 2, tries: []relayTry{
+		{relay: r1, err: e2e}, {relay: r2, err: e2e},
+	}})
+	require.True(t, s.skipRelay(dst))
+
+	s.mu.Lock()
+	s.relaySkip[dst] = time.Now().Add(-time.Second)
+	s.mu.Unlock()
+	require.False(t, s.skipRelay(dst))
+
+	d := &routerSkynetDialer{noRelay: true}
+	_, err := d.dialDirectOrRelay(context.Background(), dst, 80)
+	require.ErrorIs(t, err, errNoRelay)
+	require.Contains(t, err.Error(), "relays skipped")
+}
 
 func TestDmsgSkynetStatsRecordsRelayFailures(t *testing.T) {
 	var s dmsgSkynetStats
