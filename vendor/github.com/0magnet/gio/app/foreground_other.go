@@ -4,6 +4,6 @@
 
 package app
 
-func startForeground(string, string) error { return nil }
+func startForeground(ForegroundOptions) error { return nil }
 
 func stopForeground() {}

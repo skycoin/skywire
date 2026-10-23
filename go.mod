@@ -15,7 +15,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
-	github.com/0magnet/gio v0.10.4-0.20261021192951-b1a9a9fdf399
+	github.com/0magnet/gio v0.10.4-0.20261023140628-7d7b8fd5abcc
 	github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a

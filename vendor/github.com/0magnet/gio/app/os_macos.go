@@ -691,6 +691,10 @@ func gio_onMouse(h C.uintptr_t, evt C.CFTypeRef, cdir C.int, cbtn C.NSInteger, x
 		btn = pointer.ButtonSecondary
 	case 2:
 		btn = pointer.ButtonTertiary
+	case 3:
+		btn = pointer.ButtonQuaternary
+	case 4:
+		btn = pointer.ButtonQuinary
 	}
 	var typ pointer.Kind
 	switch cdir {
@@ -1166,6 +1170,10 @@ func convertKey(k rune) (key.Name, bool) {
 		n = key.NameF11
 	case C.NSF12FunctionKey:
 		n = key.NameF12
+	case C.NSInsertFunctionKey, C.NSHelpFunctionKey:
+		// The Insert key of PC keyboards produces NSHelpFunctionKey,
+		// and Apple keyboards used to have Help in its place.
+		n = key.NameInsert
 	case 0x20:
 		n = key.NameSpace
 	default:
