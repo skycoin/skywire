@@ -1,7 +1,7 @@
 // Package router pkg/router/rpc_gateway.go c2-net-routing
 package router
 
-//go:generate go run ../../internal/rpcgen -type RPCGateway=registerRPCGateway,SetupRPCGateway=RegisterSetupRPCGateway,TransportQueryRPCGateway=registerTransportQueryRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../internal/rpcgen -type RPCGateway=registerRPCGateway,SetupRPCGateway=RegisterSetupRPCGateway,TransportQueryRPCGateway=registerTransportQueryRPCGateway,directSetupGateway=registerDirectSetupGateway -o rpc_register.go
 
 import (
 	"github.com/skycoin/skywire/pkg/logging"

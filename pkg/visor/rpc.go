@@ -32,7 +32,7 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
-//go:generate go run ../../internal/rpcgen -type RPC=registerVisorRPC,TPSRPCGateway=registerTPSRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../internal/rpcgen -type RPC=registerVisorRPC,TPSRPCGateway=registerTPSRPCGateway -o rpc_register.go
 
 type RPC struct {
 	visor visorapi.API

@@ -125,7 +125,7 @@ github.com/0magnet/gio/widget/material
 github.com/0magnet/go-dsp/dsputils
 github.com/0magnet/go-dsp/fft
 github.com/0magnet/go-dsp/window
-# github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
+# github.com/0magnet/gobrpc v0.0.1-0.20261023160255-9d9e8694d21a
 ## explicit; go 1.25.0
 github.com/0magnet/gobrpc
 github.com/0magnet/gobrpc/gobimpl

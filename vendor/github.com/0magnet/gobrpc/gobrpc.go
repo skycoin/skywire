@@ -1,10 +1,6 @@
-//go:build tinygo
-
-// Package gobrpc — TinyGo build.
-// On the TinyGo js/wasm target net/rpc is unavailable (it pulls net/http,
-// which does not compile there), so pkg/gobrpc aliases to the dependency-free
-// gobimpl reimplementation, which speaks the identical gob wire protocol. See
-// gobrpc_native.go for the native (net/rpc) side.
+// Package gobrpc is a net/rpc compatible client and server speaking the
+// stdlib gob codec. It aliases gobimpl, which builds under both Go and TinyGo
+// and interoperates with a standard net/rpc peer (see gobimpl/gobimpl_test.go).
 package gobrpc
 
 import "github.com/0magnet/gobrpc/gobimpl"
@@ -18,14 +14,13 @@ type Server = gobimpl.Server
 // Call is gobimpl.Call (net/rpc-compatible).
 type Call = gobimpl.Call
 
-// HandlerFunc is gobimpl.HandlerFunc — a reflection-free RPC method handler.
-// TinyGo can't run net/rpc's reflection dispatch, so servers register handlers
-// via (*Server).HandleFunc instead of Register. Native builds use net/rpc and
-// have no equivalent (this alias is TinyGo-only).
+// HandlerFunc is gobimpl.HandlerFunc, a reflection-free RPC method handler.
+// TinyGo cannot run reflection dispatch, so servers that build there register
+// with (*Server).HandleFunc or HandleCall instead of Register.
 type HandlerFunc = gobimpl.HandlerFunc
 
 // CallFunc and DecodeFunc are the gobimpl types for (*Server).HandleCall, which
-// runs each call in its own goroutine. TinyGo only, like HandlerFunc.
+// runs each call in its own goroutine.
 type (
 	CallFunc   = gobimpl.CallFunc
 	DecodeFunc = gobimpl.DecodeFunc

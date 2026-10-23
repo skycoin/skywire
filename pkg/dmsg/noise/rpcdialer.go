@@ -1,18 +1,12 @@
 // Package noise pkg/dmsg/noise/rpcdialer.go c1-net-dmsg
-//
-// RPCClientDialer is split out of net.go behind //go:build !tinygo because it
-// imports net/rpc, which transitively pulls net/http — broken on the TinyGo js
-// target. It is a server-side redial helper (a visor exposing an RPC server to a
-// remote), never used by a dmsg client, so excluding it from TinyGo builds costs
-// nothing. See docs/design/tinygo-dmsg-client.md.
 package noise
 
 import (
 	"net"
-	"net/rpc"
 	"sync"
 	"time"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/flynn/noise"
 )
 
