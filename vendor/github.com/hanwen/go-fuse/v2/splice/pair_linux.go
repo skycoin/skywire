@@ -13,40 +13,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (p *Pair) Writev(bufs [][]byte) (int, error) {
-	var n int
-	var err error
-	p.wConn.Control(func(wfd uintptr) {
-		n, err = unix.Writev(int(wfd), bufs)
-	})
-	return n, err
-}
-
-func (p *Pair) SpliceFrom(src *Pair, sz int) (int, error) {
-	var n int
-	var err error
-	src.rConn.Control(func(rfd uintptr) {
-		p.wConn.Control(func(wfd uintptr) {
-			var sn int64
-			sn, err = syscall.Splice(int(rfd), nil, int(wfd), nil, sz, 0)
-			n = int(sn)
-		})
-	})
-	if err != nil {
-		err = os.NewSyscallError("Splice", err)
-	}
-	return n, err
-}
-
 func (p *Pair) LoadFromAt(fd uintptr, sz int, off int64) (int, error) {
-	var n int
-	var err error
-	p.wConn.Control(func(wfd uintptr) {
-		var sn int64
-		sn, err = syscall.Splice(int(fd), &off, int(wfd), nil, sz, 0)
-		n = int(sn)
-	})
-	return n, err
+	n, err := syscall.Splice(int(fd), &off, p.w, nil, sz, 0)
+	return int(n), err
 }
 
 func (p *Pair) LoadFrom(fd uintptr, sz int) (int, error) {
@@ -55,37 +24,19 @@ func (p *Pair) LoadFrom(fd uintptr, sz int) (int, error) {
 			sz, p.size)
 	}
 
-	var n int
-	var err error
-	p.wConn.Control(func(wfd uintptr) {
-		var sn int64
-		sn, err = syscall.Splice(int(fd), nil, int(wfd), nil, sz, 0)
-		n = int(sn)
-	})
+	n, err := syscall.Splice(int(fd), nil, p.w, nil, sz, 0)
 	if err != nil {
 		err = os.NewSyscallError("Splice load from", err)
 	}
-	return n, err
+	return int(n), err
 }
 
 func (p *Pair) WriteTo(fd uintptr, n int) (int, error) {
-	return p.WriteToFlags(fd, n, 0)
-}
-
-// WriteToFlags is WriteTo with splice(2) flags. /dev/fuse acts on SPLICE_F_MOVE
-// even though the generic pipe-to-file path ignores it.
-func (p *Pair) WriteToFlags(fd uintptr, n int, flags int) (int, error) {
-	var m int
-	var err error
-	p.rConn.Control(func(rfd uintptr) {
-		var sm int64
-		sm, err = syscall.Splice(int(rfd), nil, int(fd), nil, n, flags)
-		m = int(sm)
-	})
+	m, err := syscall.Splice(p.r, nil, int(fd), nil, int(n), 0)
 	if err != nil {
 		err = os.NewSyscallError("Splice write", err)
 	}
-	return m, err
+	return int(m), err
 }
 
 const (
@@ -95,19 +46,18 @@ const (
 
 func (p *Pair) discard() {
 	for {
-		var err error
-		p.rConn.Control(func(rfd uintptr) {
-			_, err = syscall.Splice(int(rfd), nil, devNullFD(), nil, int(p.size), _SPLICE_F_NONBLOCK)
-		})
+		_, err := syscall.Splice(p.r, nil, devNullFD(), nil, int(p.size), _SPLICE_F_NONBLOCK)
 		if err != nil && err != syscall.EAGAIN {
-			// This can happen if something closed our fd inadvertently (eg. double close)
-			log.Panicf("splicing into /dev/null: %v", err)
+			errR := syscall.Close(p.r)
+			errW := syscall.Close(p.w)
+
+			// This can happen if something closed our fd
+			// inadvertently (eg. double close)
+			log.Panicf("splicing into /dev/null: %v (close R %d '%v', close W %d '%v')", err, p.r, errR, p.w, errW)
 		}
 
-		var n int
-		p.rConn.Control(func(rfd uintptr) {
-			n, err = unix.IoctlGetInt(int(rfd), _FIONREAD)
-		})
+		// Verify the pipe is empty before returning it to the pool.
+		n, err := unix.IoctlGetInt(p.r, _FIONREAD)
 		if err != nil {
 			log.Panicf("FIONREAD on pipe: %v", err)
 		}
