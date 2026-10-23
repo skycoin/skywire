@@ -15,27 +15,18 @@ import (
 	"time"
 )
 
-var notifyNames = []string{
-	"OK",
-	"NOTIFY_POLL",
-	"NOTIFY_INVAL_INODE",
-	"NOTIFY_INVAL_ENTRY",
-	"NOTIFY_STORE_CACHE",
-	"NOTIFY_RETRIEVE_CACHE",
-	"NOTIFY_DELETE",
-	"NOTIFY_RESEND",
-	"NOTIFY_INC_EPOCH",
-	"NOTIFY_PRUNE",
-}
-
 func (code Status) String() string {
 	if code <= 0 {
-		idx := int(-code)
-		if idx < len(notifyNames) {
-			return notifyNames[idx]
-		}
-
-		return fmt.Sprintf("negative(%d)", code)
+		return []string{
+			"OK",
+			"NOTIFY_POLL",
+			"NOTIFY_INVAL_INODE",
+			"NOTIFY_INVAL_ENTRY",
+			"NOTIFY_STORE_CACHE",
+			"NOTIFY_RETRIEVE_CACHE",
+			"NOTIFY_DELETE",
+			"NOTIFY_PRUNE",
+		}[-code]
 	}
 	return fmt.Sprintf("%d=%v", int(code), syscall.Errno(code))
 }
