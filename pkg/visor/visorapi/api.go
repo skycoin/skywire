@@ -511,6 +511,7 @@ type Transports interface {
 	SetIsPublic(isPublic bool) error
 	GetIsPublic() bool
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
+	VisorCharts(args VisorChartsArgs) (*VisorCharts, error)
 	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error

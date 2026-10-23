@@ -44,6 +44,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	if conf != nil && conf.Disabled {
 		log.Info("Stats: disabled by config; skipping bbolt store and CXO publisher")
 		v.setTPDLeafPubReason("stats disabled by config")
+		startVisorCharts(v, nil, log)
 		return nil
 	}
 
@@ -156,6 +157,7 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	tracker.Run(v.ctx)
 	v.statsTracker = tracker
+	startVisorCharts(v, store, log)
 	v.pushCloseStack("stats", func() error {
 		err := tracker.Close()
 		if pub != nil {

@@ -750,6 +750,11 @@ func (mc *mockRPCClient) LocalTransportStats() (*LocalTransportStatsResponse, er
 	return &LocalTransportStatsResponse{}, nil
 }
 
+// VisorCharts implements API.
+func (mc *mockRPCClient) VisorCharts(_ VisorChartsArgs) (*VisorCharts, error) {
+	return &VisorCharts{}, nil
+}
+
 // LocalUptimeStats implements API.
 func (mc *mockRPCClient) LocalUptimeStats(_ LocalUptimeArgs) (*LocalUptimeResponse, error) {
 	return &LocalUptimeResponse{}, nil

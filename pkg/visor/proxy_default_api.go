@@ -498,6 +498,10 @@ func (proxyDefaultAPI) LocalTransportStats() (*visorapi.LocalTransportStatsRespo
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) VisorCharts(_ visorapi.VisorChartsArgs) (*visorapi.VisorCharts, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) LocalUptimeStats(_ visorapi.LocalUptimeArgs) (*visorapi.LocalUptimeResponse, error) {
 	return nil, ErrProxyNotSupported
 }

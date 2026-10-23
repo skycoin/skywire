@@ -878,6 +878,15 @@ func (rc *rpcClient) LocalTransportStats() (*LocalTransportStatsResponse, error)
 	return &resp, nil
 }
 
+// VisorCharts implements API.
+func (rc *rpcClient) VisorCharts(args VisorChartsArgs) (*VisorCharts, error) {
+	var out VisorCharts
+	if err := rc.Call("VisorCharts", &args, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // LocalUptimeStats implements API.
 func (rc *rpcClient) LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error) {
 	var resp LocalUptimeResponse
