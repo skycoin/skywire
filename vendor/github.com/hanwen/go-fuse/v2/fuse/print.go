@@ -16,7 +16,6 @@ var (
 	writeFlagNames = newFlagNames([]flagNameEntry{
 		{WRITE_CACHE, "CACHE"},
 		{WRITE_LOCKOWNER, "LOCKOWNER"},
-		{WRITE_KILL_SUIDGID, "KILL_SUIDGID"},
 	})
 	readFlagNames = newFlagNames([]flagNameEntry{
 		{READ_LOCKOWNER, "LOCKOWNER"},
@@ -84,12 +83,6 @@ var (
 		{FOPEN_NOFLUSH, "NOFLUSH"},
 		{FOPEN_PARALLEL_DIRECT_WRITES, "PARALLEL_DIRECT_WRITES"},
 		{FOPEN_PASSTHROUGH, "PASSTHROUGH"},
-	})
-	fuseOpenInFlagNames = newFlagNames([]flagNameEntry{
-		{OPEN_KILL_SUIDGID, "KILL_SUIDGID"},
-	})
-	expireFlagNames = newFlagNames([]flagNameEntry{
-		{EXPIRE_ONLY, "EXPIRE_ONLY"},
 	})
 	ioctlFlagNames = newFlagNames([]flagNameEntry{
 		{IOCTL_COMPAT, "COMPAT"},
@@ -188,6 +181,10 @@ func (in *MkdirIn) string() string {
 	return fmt.Sprintf("{0%o (mask 0%o)}", in.Mode, in.Umask)
 }
 
+func (in *Rename1In) string() string {
+	return fmt.Sprintf("{i%d}", in.Newdir)
+}
+
 func (in *RenameIn) string() string {
 	return fmt.Sprintf("{i%d %s}", in.Newdir, flagString(renameFlagNames, int64(in.Flags), "0"))
 }
@@ -227,15 +224,7 @@ func (in *ReleaseIn) string() string {
 }
 
 func (in *OpenIn) string() string {
-	return fmt.Sprintf("{%s%s}", flagString(openFlagNames, int64(in.Flags), "O_RDONLY"),
-		optFlagString(fuseOpenInFlagNames, int64(in.Mode)))
-}
-
-func optFlagString(names *flagNames, fl int64) string {
-	if fl == 0 {
-		return ""
-	}
-	return " [" + flagString(names, fl, "") + "]"
+	return fmt.Sprintf("{%s}", flagString(openFlagNames, int64(in.Flags), "O_RDONLY"))
 }
 
 func (in *OpenOut) string() string {
@@ -254,19 +243,19 @@ func (in *InitIn) string() string {
 }
 
 func (o *InitOut) string() string {
-	mapAlign := ""
-	if o.MapAlignment != 0 {
-		mapAlign = fmt.Sprintf(" MapAlign %d", o.MapAlignment)
-	}
-	return fmt.Sprintf("{%d.%d Ra %d %s %d/%d Wr %d Tg %d MaxPages %d MaxStack %d%s}",
+	return fmt.Sprintf("{%d.%d Ra %d %s %d/%d Wr %d Tg %d MaxPages %d MaxStack %d}",
 		o.Major, o.Minor, o.MaxReadAhead,
 		flagString(initFlagNames, int64(o.Flags64()), ""),
 		o.CongestionThreshold, o.MaxBackground, o.MaxWrite,
-		o.TimeGran, o.MaxPages, o.MaxStackDepth, mapAlign)
+		o.TimeGran, o.MaxPages, o.MaxStackDepth)
 }
 
 func (s *FsyncIn) string() string {
 	return fmt.Sprintf("{Fh %d Flags %x}", s.Fh, s.FsyncFlags)
+}
+
+func (in *SetXAttrIn) string() string {
+	return fmt.Sprintf("{sz %d f%o}", in.Size, in.Flags)
 }
 
 func (in *GetXAttrIn) string() string {
@@ -318,8 +307,7 @@ func (o *StatfsOut) string() string {
 }
 
 func (o *NotifyInvalEntryOut) string() string {
-	return fmt.Sprintf("{parent i%d sz %d%s}", o.Parent, o.NameLen,
-		optFlagString(expireFlagNames, int64(o.Flags)))
+	return fmt.Sprintf("{parent i%d sz %d}", o.Parent, o.NameLen)
 }
 
 func (o *NotifyInvalInodeOut) string() string {
@@ -407,12 +395,12 @@ func (a *Attr) string() string {
 			"B%d*%d i%d:%d "+
 			"A %f "+
 			"M %f "+
-			"C %f%s}",
+			"C %f}",
 		a.Mode, a.Size, a.Nlink,
 		a.Uid, a.Gid,
 		a.Blocks, a.Blksize,
 		a.Rdev, a.Ino, ft(a.Atime, a.Atimensec), ft(a.Mtime, a.Mtimensec),
-		ft(a.Ctime, a.Ctimensec), a.flagsString())
+		ft(a.Ctime, a.Ctimensec))
 }
 
 func (m *BackingMap) string() string {

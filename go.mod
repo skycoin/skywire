@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.27.3
+go 1.27.2
 
 require (
 	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
@@ -71,7 +71,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/guptarohit/asciigraph v0.10.0
-	github.com/hanwen/go-fuse/v2 v2.12.1
+	github.com/hanwen/go-fuse/v2 v2.11.0
 	github.com/hashicorp/go-version v1.9.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/ivanpirog/coloredcobra v1.0.1

@@ -7,7 +7,6 @@ package fuse
 import (
 	"sync"
 	"syscall"
-	"unsafe"
 )
 
 // protocolServer bridges from the FUSE datatypes to a RawFileSystem
@@ -22,21 +21,7 @@ type protocolServer struct {
 
 	kernelSettings InitIn
 
-	// If set, handleRequest does not flatten withReadv results
-	// with Bytes(), but leaves them in req.readResult, so
-	// ProtocolServer.HandleRequest can Readv them straight into
-	// the reply iov.
-	useReadv bool
-
-	// Capabilities sent in InitOut.
-	negotiatedFlags uint64
-
 	opts *MountOptions
-
-	// Pools for []byte
-	buffers bufferPool
-
-	writevCopyOnce sync.Once
 
 	// in-flight notify-retrieve queries
 	retrieveMu   sync.Mutex
@@ -58,12 +43,10 @@ func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
 			ms.opts.Logger.Printf("Unimplemented opcode %v", operationName(c))
 		}
 		req.status = ENOSYS
-	} else if !req.status.Ok() {
-		// Reply with the error from parsing the request.
 	} else if req.inHeader().NodeId == pollHackInode ||
 		req.inHeader().NodeId == FUSE_ROOT_ID && h.FileNames > 0 && req.filename() == pollHackName {
 		doPollHackLookup(ms, req)
-	} else {
+	} else if req.status.Ok() {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -99,15 +82,7 @@ func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
 		return
 	}
 	if req.readResult != nil && ms.opts.DisableSplice {
-		_, vectored := req.readResult.(withSlice)
-		_, readv := req.readResult.(withReadv)
-		if !vectored && !(readv && ms.useReadv) {
-			req.outPayload, req.status = req.readResult.Bytes(req.outPayload)
-			req.readResult.Done()
-			req.readResult = nil
-		}
-	}
-	if req.status > OK && req.readResult != nil {
+		req.outPayload, req.status = req.readResult.Bytes(req.outPayload)
 		req.readResult.Done()
 		req.readResult = nil
 	}
@@ -190,7 +165,6 @@ func NewProtocolServer(fs RawFileSystem, opts *MountOptions) *ProtocolServer {
 			fileSystem:  fs,
 			retrieveTab: make(map[uint64]*retrieveCacheRequest),
 			opts:        &optsCopy,
-			useReadv:    true,
 		},
 	}
 }
@@ -203,229 +177,92 @@ func iovLen(iov [][]byte) int {
 	return r
 }
 
-// iovSlice returns iov[off:off+n] if it lies within one element.
-func iovSlice(iov [][]byte, off, n int) ([]byte, bool) {
-	for _, e := range iov {
-		if off < len(e) {
-			if off+n <= len(e) {
-				return e[off : off+n], true
-			}
-			return nil, false
-		}
-		off -= len(e)
-	}
-	return nil, n == 0
-}
-
-func copyFromIov(dst []byte, iov [][]byte, off int) int {
-	var n int
-	for _, e := range iov {
-		if len(dst) == n {
-			break
-		}
-		if off >= len(e) {
-			off -= len(e)
-			continue
-		}
-		n += copy(dst[n:], e[off:])
-		off = 0
-	}
-	return n
-}
-
-type iovWriter struct {
-	dst     [][]byte
-	i, off  int
-	written int
-}
-
-func (w *iovWriter) next(n int) []byte {
-	for w.i < len(w.dst) && w.off == len(w.dst[w.i]) {
-		w.i++
-		w.off = 0
-	}
-	if w.i == len(w.dst) {
-		return nil
-	}
-	chunk := w.dst[w.i][w.off:]
-	chunk = chunk[:min(len(chunk), n)]
-	w.off += len(chunk)
-	w.written += len(chunk)
-	return chunk
-}
-
-func (w *iovWriter) write(src []byte) int {
-	var n int
-	for n < len(src) {
-		chunk := w.next(len(src) - n)
-		if chunk == nil {
-			break
-		}
-		n += copy(chunk, src[n:])
-	}
-	return n
-}
-
-func (w *iovWriter) skip(n int) {
-	for n > 0 {
-		chunk := w.next(n)
-		if chunk == nil {
-			break
-		}
-		n -= len(chunk)
-	}
-}
-
-// sliceIov returns the iov for bytes [off, off+n).
-func sliceIov(iov [][]byte, off, n int) [][]byte {
-	var r [][]byte
-	for _, e := range iov {
-		if n == 0 {
-			break
-		}
-		if off >= len(e) {
-			off -= len(e)
-			continue
-		}
-		e = e[off:]
-		off = 0
-		e = e[:min(len(e), n)]
-		n -= len(e)
-		r = append(r, e)
-	}
-	return r
-}
-
-func copyToIov(dst [][]byte, src ...[]byte) int {
-	w := iovWriter{dst: dst}
-	for _, s := range src {
-		w.write(s)
-	}
-	return w.written
-}
-
 // HandleRequest parses the iov in `in`, calls into the raw
-// filesystem, and puts the result in `out`. The iovs are treated
-// as byte streams. The return value is the number of bytes written.
+// filesystem, and puts the result in `out`. The shapes of the
+// input/output IOVs should follow conventions used by virtiofs.
+// The return value is the number of bytes written.
 //
 // EXPERIMENTAL: not subject to API stability.
 func (ps *ProtocolServer) HandleRequest(in [][]byte, out [][]byte) (int, Status) {
-	req := &requestAlloc{
-		request: request{
-			cancel: make(chan struct{}),
-		},
+	// for virtiofs, we get
+	//
+	// 2026/04/17 13:34:40 in: 40 32
+	// 2026/04/17 13:34:40 out: 16 16 4096
+	//
+	// ie. the iov looks like {header , variable size, payload},
+	// for both input and output.
+	//
+	// Our input data types have the InHeader embedded in the FooIn
+	// types, so we can never fully avoid copying.
+	inTogether := make([]byte, iovLen(in[:min(2, len(in))]))
+	copy(inTogether, in[0])
+	if len(in) > 1 {
+		copy(inTogether[len(in[0]):], in[1])
+	}
+	h, inSize, outSize, outPayloadSize, errno := parseRequest(inTogether, &ps.kernelSettings)
+	if errno != 0 {
+		return 0, errno
+	}
+	req := request{
+		cancel:        make(chan struct{}),
+		inputBuf:      inTogether[:inSize],
+		suppressReply: h.SuppressReply,
 	}
 
-	total := iovLen(in)
-	n := copyFromIov(req.smallInputBuf[:min(total, len(req.smallInputBuf))], in, 0)
-	if n < int(unsafe.Sizeof(InHeader{})) {
-		ps.opts.Logger.Printf("request too short: %v", iovLens(in))
-		return 0, EIO
+	if len(in) > 2 {
+		req.inPayload = in[2]
+	} else {
+		req.inPayload = inTogether[inSize:]
 	}
-	h, inSize, outSize, outPayloadSize, code := parseRequest(req.smallInputBuf[:n], &ps.kernelSettings, ps.negotiatedFlags)
-	if !code.Ok() && code != ENOSYS {
-		ps.opts.Logger.Printf("parseRequest: %v", code)
-	}
-	req.inputBuf = req.smallInputBuf[:n]
-	req.status = code
-	if code.Ok() {
-		req.inputBuf = req.inputBuf[:inSize]
-		payloadLen := total - inSize
-		if b, ok := iovSlice(in, inSize, payloadLen); ok {
-			req.inPayload = b
-		} else if req.inHeader().Opcode == _OP_WRITE {
-			req.inPayloadIov = sliceIov(in, inSize, payloadLen)
+
+	startOut := out
+	if !h.SuppressReply {
+		// validate the shape of the output iov. If we fail any of this, it's probably a programming error on our side, but
+		// since we can't trust the guest, be paranoid and return EIO instead.
+		if len(out) > 0 && len(out[0]) == int(sizeOfOutHeader) {
+			req.outHeaderBuf = out[0]
+			out = out[1:]
 		} else {
-			// IOCTL data comes in one element per page. Other
-			// payloads (names, xattr values, BATCH_FORGET
-			// entries, extensions) are only split if they
-			// cross a guest memory region boundary.
-			req.inPayload = make([]byte, payloadLen)
-			copyFromIov(req.inPayload, in, inSize)
-		}
-		req.extendInput(int(h.InputSize))
-		req.status = req.splitExt(&req.extInline)
-		if !req.status.Ok() {
-			ps.opts.Logger.Printf("op %s: bad request extension: %v", h.Name, req.status)
-		}
-	}
-
-	req.outHeaderBuf = req.outHeaderInline[:]
-	req.outDataBuf = req.outDataInline[:outSize]
-	clear(req.outHeaderBuf)
-	clear(req.outDataBuf)
-
-	var direct []byte
-	suppressReply := h != nil && h.SuppressReply
-	if !suppressReply && req.status.Ok() {
-		need := int(sizeOfOutHeader) + outSize + outPayloadSize
-		if iovLen(out) < need {
-			ps.opts.Logger.Printf("op %v: got out iov %v, need %d bytes", h.Name, iovLens(out), need)
+			ps.opts.Logger.Printf("op %v: got %v, out iov should start with 16 bytes", h.Name, iovLens(startOut))
 			return 0, EIO
 		}
-		if outPayloadSize > 0 {
-			if b, ok := iovSlice(out, int(sizeOfOutHeader)+outSize, outPayloadSize); ok {
-				direct = b
-				req.outPayload = b
+
+		if outSize > 0 {
+			if len(out) > 0 && len(out[0]) == outSize {
+				req.outDataBuf = out[0]
+				out = out[1:]
 			} else {
-				req.outPayload = ps.buffers.AllocBuffer(uint32(outPayloadSize))
-				defer ps.buffers.FreeBuffer(req.outPayload)
+				ps.opts.Logger.Printf("op %v: got %v, outData iov should have %d bytes", h.Name, iovLens(startOut), outSize)
+				return 0, EIO
 			}
+		}
+
+		if len(out) > 0 {
+			if len(out[0]) < outPayloadSize {
+				ps.opts.Logger.Printf("op %s: got %v, payload iov should have %d bytes", h.Name, iovLens(startOut), outPayloadSize)
+				return 0, EIO
+			}
+			req.outPayload = out[0]
+			out = out[1:]
+		} else if outPayloadSize != 0 {
+			ps.opts.Logger.Printf("op %s: got %v, payload iov should have %d bytes", h.Name, iovLens(startOut), outPayloadSize)
+			return 0, EIO
 		}
 	}
 
-	ps.protocolServer.handleRequest(h, &req.request)
-	if req.suppressReply {
-		return 0, OK
+	beforePayload := req.outPayload
+	ps.protocolServer.handleRequest(h, &req)
+	if len(req.outPayload) > 0 && len(beforePayload) > 0 &&
+		&beforePayload[0] != &req.outPayload[0] {
+		n := copy(beforePayload, req.outPayload)
+		req.outPayload = beforePayload[:n]
 	}
 
 	// Per the virtio spec, vring_used_elem.len should hold the
 	// number of bytes the device wrote to the descriptor
 	// chain. Returning more  inflates the live-migration dirty-page
 	// log and violates the spec.
-	w := iovWriter{dst: out}
-	if req.readResult != nil {
-		// The size is only known after the read, so redo the header.
-		payloadOff := int(sizeOfOutHeader) + len(req.outDataBuf)
-		dst := sliceIov(out, payloadOff, req.readResult.Size())
-		n, code := readIntoIov(req.readResult, dst)
-		req.readResult.Done()
-		req.readResult = nil
-		if !code.Ok() {
-			req.status = code
-			n = 0
-		}
-		req.serializeHeader(n)
-		w.write(req.outHeaderBuf)
-		w.write(req.outDataBuf)
-		w.skip(n)
-		return w.written, OK
-	}
-
-	w.write(req.outHeaderBuf)
-	w.write(req.outDataBuf)
-	if len(req.outPayload) > 0 && len(direct) > 0 && &req.outPayload[0] == &direct[0] {
-		// The filesystem filled the out iov in place; count
-		// the bytes without copying.
-		w.skip(len(req.outPayload))
-	} else {
-		w.write(req.outPayload)
-	}
-	return w.written, OK
-}
-
-func readIntoIov(rr ReadResult, dst [][]byte) (int, Status) {
-	switch r := rr.(type) {
-	case withReadv:
-		return r.Readv(dst)
-	case withSlice:
-		slices, code := r.Slices()
-		if !code.Ok() {
-			return 0, code
-		}
-		return copyToIov(dst, slices...), OK
-	}
-	return 0, EIO
+	return int(sizeOfOutHeader) + len(req.outDataBuf) + len(req.outPayload), 0
 }
 
 func iovLens(in [][]byte) []int {
