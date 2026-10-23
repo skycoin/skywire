@@ -8,9 +8,12 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -115,6 +118,9 @@ func (v *Visor) dmsgWebSkynetDial(ctx context.Context, pk cipher.PubKey, port ui
 	return v.dialDmsgOverSkynet(ctx, pk, port)
 }
 
+// dmsgSkynetFailureRing is how many failed dials the diag keeps.
+const dmsgSkynetFailureRing = 16
+
 // dmsgSkynetStats counts how the visor's dials to .dmsg peers went, for
 // `visor state --select diag`: carried over skynet, or fallen back to dmsg.
 type dmsgSkynetStats struct {
@@ -122,6 +128,7 @@ type dmsgSkynetStats struct {
 	mu               sync.Mutex
 	lastErr          string
 	lastPK           string
+	failures         []visorapi.DiagSkynetDialFailure
 }
 
 func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
@@ -130,8 +137,26 @@ func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
 		return
 	}
 	s.fallback.Add(1)
+	f := visorapi.DiagSkynetDialFailure{At: time.Now().UTC(), PK: pk.String(), Error: err.Error()}
+	var rerr *relayDialError
+	if errors.As(err, &rerr) {
+		if rerr.dst != pk {
+			f.Dst = rerr.dst.String()
+		}
+		f.Direct, f.Candidates, f.Confirmed = rerr.direct, rerr.candidates, rerr.confirmed
+		for _, t := range rerr.tries {
+			f.Relays = append(f.Relays, visorapi.DiagSkynetRelayTry{
+				Relay: t.relay.String(), Confirmed: t.confirmed, Stage: t.stage, Error: t.err,
+			})
+		}
+		sort.Slice(f.Relays, func(i, j int) bool { return f.Relays[i].Relay < f.Relays[j].Relay })
+	}
 	s.mu.Lock()
 	s.lastErr, s.lastPK = err.Error(), pk.String()
+	if len(s.failures) >= dmsgSkynetFailureRing {
+		s.failures = append(s.failures[:0], s.failures[1:]...)
+	}
+	s.failures = append(s.failures, f)
 	s.mu.Unlock()
 }
 
@@ -143,5 +168,6 @@ func (s *dmsgSkynetStats) snapshot() *visorapi.DiagDmsgOverSkynet {
 		Fallback:  s.fallback.Load(),
 		LastError: s.lastErr,
 		LastPK:    s.lastPK,
+		Failures:  slices.Clone(s.failures),
 	}
 }

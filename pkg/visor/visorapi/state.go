@@ -499,6 +499,29 @@ type DiagDmsgOverSkynet struct {
 	Fallback  uint64 `json:"fallback"`
 	LastError string `json:"last_error,omitempty"`
 	LastPK    string `json:"last_pk,omitempty"`
+	// Failures are the most recent failed dials, newest last.
+	Failures []DiagSkynetDialFailure `json:"failures,omitempty"`
+}
+
+// DiagSkynetDialFailure is one dial that fell back to dmsg, with what each
+// relay it tried answered.
+type DiagSkynetDialFailure struct {
+	At         time.Time            `json:"at"`
+	PK         string               `json:"pk"`
+	Dst        string               `json:"dst,omitempty"`
+	Error      string               `json:"error"`
+	Direct     string               `json:"direct,omitempty"`
+	Candidates int                  `json:"candidates"`
+	Confirmed  int                  `json:"confirmed"`
+	Relays     []DiagSkynetRelayTry `json:"relays,omitempty"`
+}
+
+// DiagSkynetRelayTry is one relay's outcome in a failed dial.
+type DiagSkynetRelayTry struct {
+	Relay     string `json:"relay"`
+	Confirmed bool   `json:"confirmed"`
+	Stage     string `json:"stage"`
+	Error     string `json:"error"`
 }
 
 // DiagDmsgSession is one dmsg session's liveness.

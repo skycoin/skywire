@@ -44,34 +44,63 @@ const (
 
 var errNoRelay = errors.New("skynet: no usable 1-hop relay to destination")
 
+// relayDialError is errNoRelay with what each attempt answered, kept for
+// `visor state --select diag` (dmsg.over_skynet.failures).
+type relayDialError struct {
+	dst        cipher.PubKey
+	direct     string
+	candidates int
+	confirmed  int
+	tries      []relayTry
+}
+
+type relayTry struct {
+	relay     cipher.PubKey
+	confirmed bool
+	stage     string
+	err       string
+}
+
+func (e *relayDialError) Error() string { return errNoRelay.Error() }
+func (e *relayDialError) Unwrap() error { return errNoRelay }
+
 // dialViaRelay reaches remote:port through a shared relay. Candidates are tried
 // in PARALLEL — first successful handshake wins — so a bounded blind-try (used
 // when the transport graph can't confirm which peer reaches the dst) stays
 // fast: wrong guesses just fail their own handshake without delaying the
-// winner. Returns errNoRelay if none succeed; the caller then falls back to a
-// multihop route.
+// winner. Returns a *relayDialError (errNoRelay) if none succeed; the caller
+// then falls back to a multihop route.
 func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
 	var mux *transport.VStreamMux
 	if d.skynetMuxPtr != nil {
 		mux = *d.skynetMuxPtr
 	}
+	fail := &relayDialError{dst: remote}
 	if mux == nil {
-		return nil, errNoRelay
+		return nil, fail
 	}
-	relays := d.discoverRelayCandidates(ctx, remote)
+	relays, nConfirmed := d.discoverRelayCandidates(ctx, remote)
+	fail.candidates, fail.confirmed = len(relays), nConfirmed
 	if len(relays) == 0 {
-		return nil, errNoRelay
+		return nil, fail
 	}
 
 	winner := make(chan net.Conn, 1)
 	var claimed atomic.Bool
 	var wg sync.WaitGroup
-	for _, r := range relays {
+	var triesMu sync.Mutex
+	noteTry := func(relay cipher.PubKey, i int, stage string, err error) {
+		triesMu.Lock()
+		fail.tries = append(fail.tries, relayTry{relay: relay, confirmed: i < nConfirmed, stage: stage, err: err.Error()})
+		triesMu.Unlock()
+	}
+	for i, r := range relays {
 		wg.Add(1)
-		go func(relay cipher.PubKey) {
+		go func(i int, relay cipher.PubKey) {
 			defer wg.Done()
 			stream, err := mux.DialThroughRelay(relay, remote, "")
 			if err != nil {
+				noteTry(relay, i, "relay", err)
 				d.log.WithField("relay", relay.String()).WithField("remote", remote.String()).
 					WithError(err).Debug("Skynet relay: DialThroughRelay failed")
 				return
@@ -79,6 +108,7 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 			conn := &vstreamConn{VStream: stream}
 			if herr := d.handshake(conn, remote, port); herr != nil {
 				conn.Close() //nolint:errcheck,gosec
+				noteTry(relay, i, "handshake", herr)
 				d.log.WithField("relay", relay.String()).WithField("remote", remote.String()).
 					WithError(herr).Debug("Skynet relay: handshake over relayed stream failed")
 				return
@@ -93,26 +123,27 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 			} else {
 				conn.Close() //nolint:errcheck,gosec // another relay already won
 			}
-		}(r)
+		}(i, r)
 	}
 	go func() { wg.Wait(); close(winner) }()
 	if conn, ok := <-winner; ok {
 		return conn, nil
 	}
-	return nil, errNoRelay
+	return nil, fail
 }
 
 // discoverRelayCandidates returns up to maxRelayFanout peers to try as 1-hop
 // relays: peers we have a direct non-dmsg transport to. Transport-graph-
 // CONFIRMED relays (peers the destination also has a transport to) are ordered
-// first, then our other direct peers are appended as blind fallbacks.
-func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote cipher.PubKey) []cipher.PubKey {
+// first, then our other direct peers are appended as blind fallbacks. The
+// count returned is how many of the leading candidates are confirmed.
+func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote cipher.PubKey) ([]cipher.PubKey, int) {
 	// Our own directly-connected non-dmsg peers — the only possible 1-hop
 	// relays. Computed first so we can both intersect with the transport graph
 	// and, if that's unavailable, blind-try them.
 	myPeers := d.directNonDmsgPeers(remote)
 	if len(myPeers) == 0 {
-		return nil
+		return nil, 0
 	}
 
 	// Prefer relays the transport graph CONFIRMS reach the destination.
@@ -149,12 +180,13 @@ func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote
 			if len(ordered) > maxRelayFanout {
 				ordered = ordered[:maxRelayFanout]
 			}
+			nConfirmed = min(nConfirmed, len(ordered))
 			if len(ordered) > 0 {
 				d.log.WithField("remote", remote.String()).
 					WithField("confirmed", nConfirmed).
 					WithField("candidates", len(ordered)).
 					Debug("Skynet relay: candidate set (confirmed relays first, blind fallbacks appended)")
-				return ordered
+				return ordered, nConfirmed
 			}
 		}
 	}
@@ -171,7 +203,7 @@ func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote
 	}
 	d.log.WithField("remote", remote.String()).WithField("candidates", len(myPeers)).
 		Debug("Skynet relay: transport graph gave no confirmed relay; blind-trying direct peers")
-	return myPeers
+	return myPeers, 0
 }
 
 // directNonDmsgPeers returns our currently-open, non-dmsg direct transport
@@ -221,18 +253,28 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 	if d.skynetMuxPtr != nil {
 		mux = *d.skynetMuxPtr
 	}
+	var direct string
 	if mux != nil {
 		if stream, err := mux.Dial(remote, ""); err == nil {
 			conn := &vstreamConn{VStream: stream}
-			if herr := d.handshake(conn, remote, port); herr == nil {
+			herr := d.handshake(conn, remote, port)
+			if herr == nil {
 				d.log.WithField("remote", remote.String()).Debug("dmsg-over-skynet: direct transport")
 				proxystatus.NotePath(ctx, "direct transport")
 				return conn, nil
 			}
 			conn.Close() //nolint:errcheck,gosec
+			direct = "handshake: " + herr.Error()
+		} else {
+			direct = err.Error()
 		}
 	}
-	return d.dialViaRelay(ctx, remote, port)
+	conn, err := d.dialViaRelay(ctx, remote, port)
+	var rerr *relayDialError
+	if errors.As(err, &rerr) {
+		rerr.direct = direct
+	}
+	return conn, err
 }
 
 // handshake runs the skynet handshake with host on a fresh stream: the plain
