@@ -17,13 +17,9 @@ package visor
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
-
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
-	tpdapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/routingfeed"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -69,29 +65,17 @@ func (c *cxoAwareTPD) getAllTransportsBase(_ context.Context) ([]*transport.Entr
 	return nil, ErrTPDAllTransportsNotReady
 }
 
-// routingTransports assembles TPD's routing feed (one gzipped leaf per
-// visor, see tpdapi.RoutingCXOPublisher) into the network's transport list:
-// the transports that exist now, with the latency and throughput routes are
-// weighed by. The publisher drops the derivable t_id; it is recomputed from
-// (edges, type). ok is false until the feed has synced.
+// routingTransports assembles TPD's routing feed (a snapshot plus deltas, see
+// routingfeed) into the network's transport list: the transports that exist
+// now, with the latency and throughput routes are weighed by. ok is false
+// until the feed has synced.
 func routingTransports(mgr *CXOSubscriptionManager) ([]*transport.Entry, bool) {
-	var entries []*transport.Entry
-	mgr.Walk(FeedTPDRouting, tpdapi.RoutingPathPrefix, func(_ string, body []byte) bool {
-		var shard []*transport.Entry
-		if err := json.Unmarshal(cxoutils.Gunzip(body), &shard); err != nil {
-			return true
-		}
-		for _, e := range shard {
-			if e == nil {
-				continue
-			}
-			if e.ID == (uuid.UUID{}) {
-				e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
-			}
-			entries = append(entries, e)
-		}
+	r := routingfeed.NewReader()
+	mgr.Walk(FeedTPDRouting, routingfeed.Prefix, func(path string, body []byte) bool {
+		r.Add(path, body)
 		return true
 	})
+	entries := r.Entries()
 	return entries, len(entries) > 0
 }
 

@@ -83,9 +83,10 @@ const (
 	// downloading a bulk snapshot to reduce it locally.
 	FeedTPDStats
 	// FeedTPDRouting is TPD's routing feed: the transports that exist
-	// now with their latency and throughput, one leaf per visor
-	// (routing/<pk>). What visors route on; a change ships only the
-	// shards it touched.
+	// now with their latency and throughput, as a snapshot of one leaf
+	// per visor (routing/<pk>) plus the deltas since it
+	// (routing/delta/<seq>). What visors route on; read it with
+	// routingfeed.Reader.
 	FeedTPDRouting
 	// FeedARReach is the address resolver's reach feed: per peer, whether it
 	// can actually be transported by each type (reach/<h>, 16 leaves). What
