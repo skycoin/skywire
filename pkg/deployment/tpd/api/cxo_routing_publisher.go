@@ -51,10 +51,11 @@ const routingKeepRoots = 3
 
 // RoutingCXOPublisher publishes the routing feed.
 type RoutingCXOPublisher struct {
-	api   *API
-	pub   *treestore.Publisher
-	log   *logging.Logger
-	every time.Duration
+	api    *API
+	pub    *treestore.Publisher
+	log    *logging.Logger
+	every  time.Duration
+	smooth *routingSmoother
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -69,7 +70,7 @@ type RoutingCXOPublisher struct {
 
 // StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort,
 // publishing every interval (DefaultRoutingPublishEvery when zero or less).
-func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, every time.Duration, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, every time.Duration, smooth RoutingSmoothing, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
 	if every <= 0 {
 		every = DefaultRoutingPublishEvery
 	}
@@ -85,7 +86,7 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 	}
 	pub.SetAllowlist(nil) // open feed: every visor routes on it
 	pubCtx, cancel := context.WithCancel(ctx)
-	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, every: every, cancel: cancel, done: make(chan struct{})}
+	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, every: every, smooth: newRoutingSmoother(smooth), cancel: cancel, done: make(chan struct{})}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDRoutingCXOPort).
 			Info("CXO routing publisher running")
@@ -116,7 +117,7 @@ func (r *RoutingCXOPublisher) publishOnce(ctx context.Context) {
 		r.recordError(err)
 		return
 	}
-	lists := routingLists(entries)
+	lists := routingLists(r.smooth.apply(entries))
 	ops, err := r.changedShards(lists)
 	if err != nil {
 		r.log.WithError(err).Warn("routing shard encode failed")
