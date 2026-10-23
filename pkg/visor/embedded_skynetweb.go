@@ -315,6 +315,8 @@ type routerSkynetDialer struct {
 	// service, when set, is a service the dialed visor hosts under the
 	// service's own key: the handshake names it and checks the host's proof.
 	service cipher.PubKey
+	// noRelay makes dialDirectOrRelay try only a direct transport.
+	noRelay bool
 }
 
 // dialRouteForPool dials the destination's mux forwarding port over a route, for

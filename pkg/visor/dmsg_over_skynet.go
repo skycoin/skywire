@@ -94,6 +94,7 @@ func (v *Visor) dialDmsgOverSkynet(ctx context.Context, pk cipher.PubKey, port u
 		log:          v.log,
 		tpM:          v.tpM,
 		skynetMuxPtr: &v.skynetFwdMux,
+		noRelay:      v.dmsgSkynet.skipRelay(pk),
 	}
 	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -121,6 +122,10 @@ func (v *Visor) dmsgWebSkynetDial(ctx context.Context, pk cipher.PubKey, port ui
 // dmsgSkynetFailureRing is how many failed dials the diag keeps.
 const dmsgSkynetFailureRing = 16
 
+// relaySkipTTL is how long a destination that no relay could reach skips the
+// relay tier and goes straight to dmsg when it has no direct transport.
+const relaySkipTTL = 10 * time.Minute
+
 // dmsgSkynetStats counts how the visor's dials to .dmsg peers went, for
 // `visor state --select diag`: carried over skynet, or fallen back to dmsg.
 type dmsgSkynetStats struct {
@@ -129,6 +134,19 @@ type dmsgSkynetStats struct {
 	lastErr          string
 	lastPK           string
 	failures         []visorapi.DiagSkynetDialFailure
+	relaySkip        map[cipher.PubKey]time.Time
+}
+
+// skipRelay reports whether pk's relay tier is skipped (relaySkipTTL).
+func (s *dmsgSkynetStats) skipRelay(pk cipher.PubKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	until, ok := s.relaySkip[pk]
+	if ok && time.Now().After(until) {
+		delete(s.relaySkip, pk)
+		return false
+	}
+	return ok
 }
 
 func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
@@ -157,6 +175,19 @@ func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
 		s.failures = append(s.failures[:0], s.failures[1:]...)
 	}
 	s.failures = append(s.failures, f)
+	if rerr != nil && rerr.dst == pk && rerr.e2eRefused() {
+		if s.relaySkip == nil {
+			s.relaySkip = make(map[cipher.PubKey]time.Time)
+		}
+		if len(s.relaySkip) >= 1024 {
+			for k, until := range s.relaySkip {
+				if time.Now().After(until) {
+					delete(s.relaySkip, k)
+				}
+			}
+		}
+		s.relaySkip[pk] = time.Now().Add(relaySkipTTL)
+	}
 	s.mu.Unlock()
 }
 

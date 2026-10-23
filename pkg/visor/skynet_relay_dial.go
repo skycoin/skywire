@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,6 +53,22 @@ type relayDialError struct {
 	candidates int
 	confirmed  int
 	tries      []relayTry
+	skipped    bool // the relay tier was not tried (relaySkipTTL)
+}
+
+// e2eRefused reports whether every relay was tried and each stream ended in
+// its end-to-end Noise handshake. A destination older than #5707 answers a
+// relayed stream that way, so no relay can reach it until it updates.
+func (e *relayDialError) e2eRefused() bool {
+	if e.skipped || len(e.tries) == 0 || len(e.tries) < e.candidates {
+		return false
+	}
+	for _, t := range e.tries {
+		if !strings.Contains(t.err, "noise handshake") {
+			return false
+		}
+	}
+	return true
 }
 
 type relayTry struct {
@@ -61,7 +78,12 @@ type relayTry struct {
 	err       string
 }
 
-func (e *relayDialError) Error() string { return errNoRelay.Error() }
+func (e *relayDialError) Error() string {
+	if e.skipped {
+		return errNoRelay.Error() + " (relays skipped: they failed to reach it recently)"
+	}
+	return errNoRelay.Error()
+}
 func (e *relayDialError) Unwrap() error { return errNoRelay }
 
 // dialViaRelay reaches remote:port through a shared relay. Candidates are tried
@@ -268,6 +290,9 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 		} else {
 			direct = err.Error()
 		}
+	}
+	if d.noRelay {
+		return nil, &relayDialError{dst: remote, direct: direct, skipped: true}
 	}
 	conn, err := d.dialViaRelay(ctx, remote, port)
 	var rerr *relayDialError
