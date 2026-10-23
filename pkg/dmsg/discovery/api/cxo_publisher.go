@@ -127,11 +127,7 @@ const clientsByServerKeepRoots = 10
 // server's leaf is current in the tree before the 30s publish captures it.
 const clientsByServerFlushWindow = 3 * time.Second
 
-// json is the package-scope jsoniter.ConfigFastest value declared
-// in api.go. We reuse it here to avoid pulling in encoding/json
-// (which collides with the package-scope name) and to match the
-// performance characteristics of the rest of dmsg-discovery's
-// hot path.
+// json is the package-scope fastjson.JSON codec declared in api.go.
 var _ = json // referenced from api.go; reuse here
 
 // publishQueueDepth bounds in-flight publish operations. Sized for

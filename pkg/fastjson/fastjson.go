@@ -1,7 +1,5 @@
-//go:build tinygo
-
-// Package fastjson is jsoniter.ConfigFastest on native builds and
-// encoding/json under TinyGo, where reflect2 has no implementation.
+// Package fastjson is the JSON codec shared by packages that bind the name
+// json to something else. It is encoding/json under both Go and TinyGo.
 package fastjson
 
 import (

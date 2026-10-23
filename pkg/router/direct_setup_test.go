@@ -58,7 +58,7 @@ func serveDirectGateway(t *testing.T, dst *router, caller cipher.PubKey) *Client
 	t.Helper()
 	cliConn, srvConn := net.Pipe()
 	srv := rpc.NewServer()
-	require.NoError(t, registerDirectSetupRPC(srv, &directSetupGateway{r: dst, caller: caller, log: dst.logger}))
+	require.NoError(t, registerDirectSetupGateway(srv, RPCName, &directSetupGateway{r: dst, caller: caller, log: dst.logger}))
 	go srv.ServeConn(srvConn)
 	c := NewClientFromRaw(cliConn, dst.conf.PubKey)
 	t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck

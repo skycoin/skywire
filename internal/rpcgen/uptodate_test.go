@@ -48,16 +48,14 @@ func TestGeneratedUpToDate(t *testing.T) {
 				continue
 			}
 			cfg.dir = filepath.Join(filepath.Dir(p), cfg.dir)
-			tiny, native, err := generate(cfg)
+			want, err := generate(cfg)
 			if err != nil {
 				t.Errorf("%s: %v", p, err)
 				continue
 			}
-			for name, want := range map[string][]byte{cfg.out: tiny, cfg.native: native} {
-				got, err := os.ReadFile(filepath.Join(cfg.dir, name)) //nolint:gosec
-				if err != nil || !bytes.Equal(got, want) {
-					t.Errorf("%s is stale, run go generate in %s", filepath.Join(cfg.dir, name), cfg.dir)
-				}
+			got, err := os.ReadFile(filepath.Join(cfg.dir, cfg.out)) //nolint:gosec
+			if err != nil || !bytes.Equal(got, want) {
+				t.Errorf("%s is stale, run go generate in %s", filepath.Join(cfg.dir, cfg.out), cfg.dir)
 			}
 		}
 		return nil
