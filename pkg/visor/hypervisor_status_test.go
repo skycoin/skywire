@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,15 +39,23 @@ func (a *chartsAPI) VisorCharts(args visorapi.VisorChartsArgs) (*visorapi.VisorC
 	return out, nil
 }
 
+// oldAPI is a visor whose build has no VisorCharts.
+type oldAPI struct{ visorapi.API }
+
+func (oldAPI) VisorCharts(visorapi.VisorChartsArgs) (*visorapi.VisorCharts, error) {
+	return nil, errors.New("gobrpc: can't find service app-visor")
+}
+
 func TestHypervisorStatus(t *testing.T) {
 	hvPK, _ := cipher.GenerateKeyPair()
 	remote, _ := cipher.GenerateKeyPair()
+	old, _ := cipher.GenerateKeyPair()
 	self, other := &chartsAPI{}, &chartsAPI{}
 	hv := &Hypervisor{
 		c:            visorconfig.HypervisorConfig{PK: hvPK},
 		mu:           new(sync.RWMutex),
 		selfConn:     Conn{API: self},
-		remoteVisors: map[cipher.PubKey]Conn{remote: {API: other}},
+		remoteVisors: map[cipher.PubKey]Conn{remote: {API: other}, old: {API: oldAPI{}}},
 		logger:       logging.MustGetLogger("hv-status-test"),
 	}
 	rec := httptest.NewRecorder()
@@ -65,4 +74,5 @@ func TestHypervisorStatus(t *testing.T) {
 	// A page reads one window for its charts and its process charts.
 	require.Equal(t, 1, self.calls)
 	require.Equal(t, 1, other.calls)
+	require.Contains(t, body, "keeps no status charts")
 }

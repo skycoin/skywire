@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,9 @@ type hvStatus struct {
 }
 
 func (s *hvStatus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Visors answer over RPC, each up to its RPC timeout, past the server's 10s
+	// WriteTimeout.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Minute)) //nolint:errcheck // the default deadline still applies
 	s.once.Do(func() {
 		s.pages = map[cipher.PubKey]*charts.Page{}
 		s.board = &charts.Board{
@@ -114,6 +118,9 @@ func (rc *remoteCharts) fetch(args visorapi.VisorChartsArgs) (*visorapi.VisorCha
 	}
 	out, err := rc.api.VisorCharts(args)
 	if err != nil {
+		if strings.Contains(err.Error(), "can't find") {
+			return nil, charts.NoteError("This visor's build keeps no status charts.")
+		}
 		return nil, err
 	}
 	rc.args, rc.last = args, out

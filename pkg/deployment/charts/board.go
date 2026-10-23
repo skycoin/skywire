@@ -3,6 +3,7 @@ package charts
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -30,6 +31,11 @@ type Board struct {
 	mu    sync.Mutex
 	cache map[string]cached
 }
+
+// NoteError is a section's render error that the board shows in its place.
+type NoteError string
+
+func (e NoteError) Error() string { return string(e) }
 
 // Section is one service on a Board.
 type Section struct {
@@ -66,10 +72,19 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	if bd.Sections != nil {
 		sections = bd.Sections()
 	}
+	// Sections render at once, since each may wait on another process.
 	built := make([]builtSection, len(sections))
-	var process builtSection
+	var wg sync.WaitGroup
 	for i, s := range sections {
-		built[i] = bd.build(ctx, s, rg, now)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			built[i] = bd.build(ctx, s, rg, now)
+		}()
+	}
+	wg.Wait()
+	var process builtSection
+	for i := range sections {
 		if bd.Separate {
 			continue
 		}
@@ -128,6 +143,10 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 				bd.Log.WithError(err).WithField("service", out.title).Warn("charts section render failed")
 			}
 			out.note = "Charts unavailable right now."
+			var ne NoteError
+			if errors.As(err, &ne) {
+				out.note = string(ne)
+			}
 		}
 	}
 	return out
