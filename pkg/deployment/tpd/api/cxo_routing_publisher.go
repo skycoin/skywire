@@ -40,18 +40,21 @@ import (
 // RoutingPathPrefix + <pk hex>.
 const RoutingPathPrefix = "routing/"
 
-// routingPublishInterval is how often the routing shards are recomputed.
-const routingPublishInterval = 60 * time.Second
+// DefaultRoutingPublishEvery is how often the routing shards are recomputed
+// when the config leaves it empty. Telemetry is applied every 15 minutes, so
+// publishing faster resends whole shards for noise to every subscriber.
+const DefaultRoutingPublishEvery = 10 * time.Minute
 
-// routingKeepRoots keeps about five minutes of Roots, so a subscriber whose
-// fill of the changed shards outlasts one publish can still fetch them.
-const routingKeepRoots = 10
+// routingKeepRoots keeps the last few Roots, so a subscriber whose fill of
+// the changed shards outlasts one publish can still fetch them.
+const routingKeepRoots = 3
 
 // RoutingCXOPublisher publishes the routing feed.
 type RoutingCXOPublisher struct {
-	api *API
-	pub *treestore.Publisher
-	log *logging.Logger
+	api   *API
+	pub   *treestore.Publisher
+	log   *logging.Logger
+	every time.Duration
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -64,8 +67,12 @@ type RoutingCXOPublisher struct {
 	lastError error
 }
 
-// StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort.
-func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+// StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort,
+// publishing every interval (DefaultRoutingPublishEvery when zero or less).
+func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, every time.Duration, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+	if every <= 0 {
+		every = DefaultRoutingPublishEvery
+	}
 	log := logging.MustGetLogger("tpd-cxo-routing-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
 		Logger:     log,
@@ -78,7 +85,7 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 	}
 	pub.SetAllowlist(nil) // open feed: every visor routes on it
 	pubCtx, cancel := context.WithCancel(ctx)
-	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, cancel: cancel, done: make(chan struct{})}
+	rp := &RoutingCXOPublisher{api: api, pub: pub, log: log, every: every, cancel: cancel, done: make(chan struct{})}
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgTPDRoutingCXOPort).
 			Info("CXO routing publisher running")
@@ -90,7 +97,7 @@ func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client,
 func (r *RoutingCXOPublisher) loop(ctx context.Context) {
 	defer close(r.done)
 	r.publishOnce(ctx)
-	t := time.NewTicker(routingPublishInterval)
+	t := time.NewTicker(r.every)
 	defer t.Stop()
 	for {
 		select {
