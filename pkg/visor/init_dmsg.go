@@ -697,7 +697,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	if len(v.conf.EmbeddedServices) > 0 {
 		lsAPI.SetStatusPage(v.statusBoard())
 	}
-	lsAPI.SetVisorStatusPage(http.HandlerFunc(v.serveVisorStatus))
+	lsAPI.SetVisorStatusPage(http.HandlerFunc(v.serveVisorStatus), v.configuredHypervisors)
 	v.initLock.Unlock()
 
 	// The dmsg HTTP port serves one mux: the log server at / and any

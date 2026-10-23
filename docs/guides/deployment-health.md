@@ -117,9 +117,9 @@ the history in its stats database: process CPU and memory, dmsg
 traffic by port, bytes and transports by transport type, routing
 rules, dmsg sessions and running apps. It serves the charts at
 `/status/visor` on dmsg:80, only to itself and to keys on its survey
-whitelist. Unlike the other whitelisted paths it stays closed when the
-whitelist is empty. Open it through the visor's own resolving proxy or
-SkyDNS, which fetch as the visor's key:
+whitelist and its hypervisors. Unlike the other whitelisted paths it
+stays closed when the whitelist is empty. Open it through the visor's
+own resolving proxy or SkyDNS, which fetch as the visor's key:
 
 ```
 http://<base32-pk>.dmsg/status/visor

@@ -148,6 +148,9 @@ type API struct {
 	// visorStatus serves /status/visor, this visor's own load and traffic, to
 	// itself and the survey whitelist only.
 	visorStatus http.Handler
+	// statusReaders are other keys that may read /status/visor, the visor's
+	// hypervisors.
+	statusReaders func() []cipher.PubKey
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -412,7 +415,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 			http.NotFound(w, req)
 			return
 		}
-		if !isOwnUser(req) {
+		if !isOwnUser(req) && !api.isStatusReader(req) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -435,7 +438,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		if api.statusPage != nil {
 			links = append(links, `<a href="/status">/status</a> - deployment services status`)
 		}
-		if api.visorStatus != nil && isOwnUser(req) {
+		if api.visorStatus != nil && (isOwnUser(req) || api.isStatusReader(req)) {
 			links = append(links, `<a href="/status/visor">/status/visor</a> - this visor's load and traffic`)
 		}
 		if wl {
@@ -599,10 +602,26 @@ func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
 }
 
-// SetVisorStatusPage serves h at /status/visor to this visor and the survey
-// whitelist, and links it from their landing page.
-func (api *API) SetVisorStatusPage(h http.Handler) {
-	api.visorStatus = h
+// SetVisorStatusPage serves h at /status/visor to this visor, the survey
+// whitelist and the keys readers returns, and links it from their landing page.
+func (api *API) SetVisorStatusPage(h http.Handler, readers func() []cipher.PubKey) {
+	api.visorStatus, api.statusReaders = h, readers
+}
+
+func (api *API) isStatusReader(req *http.Request) bool {
+	if api.statusReaders == nil {
+		return false
+	}
+	remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	for _, pk := range api.statusReaders() {
+		if remotePK == pk.String() {
+			return true
+		}
+	}
+	return false
 }
 
 // SetStatusPage serves h at /status and links it from the landing page.
