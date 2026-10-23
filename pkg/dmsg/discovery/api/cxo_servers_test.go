@@ -82,7 +82,7 @@ func TestServerLeafIsIgnoredByBatchReaders(t *testing.T) {
 	path := serverLeafPath(pk)
 	require.Equal(t, clientsByServerPrefix(), path[:len("clients-by-server/")])
 	require.NotContains(t, path, "/entry")
-	require.Nil(t, serverfeed.Decode(encodeClientsBatch(nil)), "a batch leaf does not decode as a server")
+	require.Nil(t, serverfeed.Decode(presenceLeaf), "a presence leaf does not decode as a server")
 }
 
 func clientsByServerPrefix() string { return "clients-by-server/" }
