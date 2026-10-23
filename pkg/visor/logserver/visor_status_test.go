@@ -17,12 +17,13 @@ func TestVisorStatusPrivate(t *testing.T) {
 	self, _ := cipher.GenerateKeyPair()
 	allowed, _ := cipher.GenerateKeyPair()
 	other, _ := cipher.GenerateKeyPair()
+	hv, _ := cipher.GenerateKeyPair()
 	page := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("visor charts")) }) //nolint:errcheck,gosec
 
 	for _, wl := range [][]cipher.PubKey{nil, {allowed}} {
 		api := New(logging.MustGetLogger("logserver-test"), t.TempDir(), "", wl, &visorconfig.Survey{}, true)
 		api.SetIdentity(self.Hex(), "")
-		api.SetVisorStatusPage(page)
+		api.SetVisorStatusPage(page, func() []cipher.PubKey { return []cipher.PubKey{hv} })
 		get := func(path string, pk cipher.PubKey) *httptest.ResponseRecorder {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			req.RemoteAddr = pk.String() + ":80"
@@ -32,6 +33,9 @@ func TestVisorStatusPrivate(t *testing.T) {
 		}
 		if rec := get("/status/visor", self); rec.Code != http.StatusOK || rec.Body.String() != "visor charts" {
 			t.Fatalf("whitelist %v: own request got %d %q", wl, rec.Code, rec.Body.String())
+		}
+		if rec := get("/status/visor", hv); rec.Code != http.StatusOK {
+			t.Fatalf("whitelist %v: the visor's hypervisor got %d", wl, rec.Code)
 		}
 		if rec := get("/status/visor", other); rec.Code != http.StatusUnauthorized {
 			t.Fatalf("whitelist %v: stranger got %d", wl, rec.Code)
