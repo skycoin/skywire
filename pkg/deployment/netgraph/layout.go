@@ -23,6 +23,10 @@ type Graph struct {
 	Edges  []Edge
 	// Transports is how many transports the graph was built from.
 	Transports int
+	// Group numbers each visor's group from 0, or is -1 for one alone.
+	// Nil when no groups were given. Groups is how many there are.
+	Group  []int
+	Groups int
 }
 
 // Edge joins Nodes[A] and Nodes[B]. Mask has bit i set for Types[i].
@@ -37,7 +41,9 @@ const maxTypes = 8
 
 // Build turns links into a graph laid out from prev, the positions of an
 // earlier layout by key, so that a refreshed picture stays where it was.
-func Build(links []Link, prev map[string][2]float64) *Graph {
+// Visors that groups gives one key, when two or more are in the graph, are
+// numbered as a group and laid out together.
+func Build(links []Link, prev map[string][2]float64, groups map[string]string) *Graph {
 	idx := map[string]int{}
 	g := &Graph{Transports: len(links)}
 	typeCount := map[string]int{}
@@ -97,6 +103,7 @@ func Build(links []Link, prev map[string][2]float64) *Graph {
 		return g.Edges[i].B < g.Edges[j].B
 	})
 
+	g.group(groups)
 	g.X = make([]float64, len(g.Nodes))
 	g.Y = make([]float64, len(g.Nodes))
 	warm := 0
@@ -118,9 +125,44 @@ func Build(links []Link, prev map[string][2]float64) *Graph {
 	return g
 }
 
+// group numbers the groups of two or more visors, in node order, so the
+// numbers say nothing about the keys.
+func (g *Graph) group(groups map[string]string) {
+	if len(groups) == 0 {
+		return
+	}
+	size := map[string]int{}
+	for _, k := range g.Nodes {
+		if key, ok := groups[k]; ok {
+			size[key]++
+		}
+	}
+	num := map[string]int{}
+	g.Group = make([]int, len(g.Nodes))
+	for i, k := range g.Nodes {
+		g.Group[i] = -1
+		key, ok := groups[k]
+		if !ok || size[key] < 2 {
+			continue
+		}
+		n, ok := num[key]
+		if !ok {
+			n = len(num)
+			num[key] = n
+		}
+		g.Group[i] = n
+	}
+	g.Groups = len(num)
+}
+
+// groupPull is how hard a group draws its visors to its middle, against the
+// gravity of 4 that centers the whole graph.
+const groupPull = 8
+
 // layout is a force-directed layout in a unit square: every pair of visors
-// repels, every edge pulls its ends together, and gravity keeps the whole
-// graph centered. The step shrinks each round so the picture settles.
+// repels, every edge pulls its ends together, gravity keeps the whole graph
+// centered and each group draws its visors together. The step shrinks each
+// round so the picture settles.
 func (g *Graph) layout(iterations int) {
 	n := len(g.Nodes)
 	if n < 2 {
@@ -161,6 +203,24 @@ func (g *Graph) layout(iterations int) {
 			dy[a] -= ey * f * pull[a]
 			dx[b] += ex * f * pull[b]
 			dy[b] += ey * f * pull[b]
+		}
+		if g.Groups > 0 {
+			cx := make([]float64, g.Groups)
+			cy := make([]float64, g.Groups)
+			cn := make([]float64, g.Groups)
+			for i, gr := range g.Group {
+				if gr >= 0 {
+					cx[gr] += g.X[i]
+					cy[gr] += g.Y[i]
+					cn[gr]++
+				}
+			}
+			for i, gr := range g.Group {
+				if gr >= 0 {
+					dx[i] -= (g.X[i] - cx[gr]/cn[gr]) * groupPull
+					dy[i] -= (g.Y[i] - cy[gr]/cn[gr]) * groupPull
+				}
+			}
 		}
 		for i := 0; i < n; i++ {
 			dx[i] -= g.X[i] * 4
