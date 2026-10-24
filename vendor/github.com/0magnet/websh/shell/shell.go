@@ -24,6 +24,10 @@ type Shell struct {
 	FS     afero.Fs
 	Runner *interp.Runner
 
+	// stopJobs cancels the context background jobs run under, which is not
+	// any line's: a job started with & outlives its line, as in bash.
+	stopJobs context.CancelFunc
+
 	// RawMode, when set by the embedder, toggles raw terminal input:
 	// no echo and no newline translation (used by full-screen applets
 	// like less).
@@ -132,19 +136,22 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer, extraEnv ...st
 // whatever the caller adds. The file handlers are the caller's: a virtual
 // filesystem needs its own, and the OS needs the interpreter's.
 func (s *Shell) start(env []string, stdin io.Reader, stdout, stderr io.Writer, opts ...interp.RunnerOption) error {
+	bg, stop := context.WithCancel(context.Background())
 	runner, err := interp.New(append([]interp.RunnerOption{
 		interp.StdIO(stdin, stdout, stderr),
 		interp.Env(expand.ListEnviron(env...)),
 		interp.CallHandler(s.callHandler),
 		interp.ExecHandlers(s.execHandler),
-		// Interactive keeps a job started with & alive after its line's
-		// context is canceled, as the web session does after every line.
 		interp.Interactive(true),
+		// A job started with & keeps running after its line's context is
+		// canceled, as the web session does after every line.
+		interp.BackgroundContext(bg),
 	}, opts...)...)
 	if err != nil {
+		stop()
 		return err
 	}
-	s.Runner = runner
+	s.Runner, s.stopJobs = runner, stop
 	s.ps1Start = s.Var("PS1")
 	return nil
 }
@@ -275,10 +282,6 @@ const reportJobsSrc = "__websh_exit_status=$?; jobs -n; (exit $__websh_exit_stat
 // ReportJobs announces the background jobs that have finished since the last
 // call, the way bash does before drawing a prompt. Without it a job that ended
 // is never mentioned at all: nothing in the interpreter reports a job unasked.
-//
-// It is also what keeps the job table bounded, since the interpreter drops a
-// finished job once something has reported it. A session that never called
-// this would accumulate every job it ever backgrounded.
 func (s *Shell) ReportJobs(ctx context.Context) {
 	if s.reportJobs == nil {
 		file, err := s.parser.Parse(strings.NewReader(reportJobsSrc), "websh")
@@ -447,4 +450,14 @@ func virtualDir(dir string) interp.RunnerOption {
 		r.Dir = dir
 		return nil
 	}
+}
+
+// StopJobs ends the background jobs, disowned ones too, and waits for them.
+// They outlive the lines that started them, so a shell going away must end
+// them; no job can be started after.
+func (s *Shell) StopJobs() {
+	if s.stopJobs != nil {
+		s.stopJobs()
+	}
+	s.Runner.WaitBackground()
 }
