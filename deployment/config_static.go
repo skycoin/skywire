@@ -1,10 +1,12 @@
 //go:build tinygo || js
 
-// Package deployment pkg/deployment/config_js.go
+// Package deployment pkg/deployment/config_static.go
 //
-// js/wasm init for the deployment vars. Populates Prod and
+// TinyGo and js/wasm init for the deployment vars. The file name has no _js
+// suffix, which would limit it to GOOS=js and leave native TinyGo with no Prod.
+// Populates Prod and
 // ProdConf from the code-genned static literals in
-// data_static_js.go instead of unmarshalling services-config.json
+// data_static.go instead of unmarshalling services-config.json
 // via encoding/json — TinyGo 0.41.1's stdlib doesn't ship the
 // reflect runtime helpers (reflect.unsafe_New, reflect.mapassign,
 // etc.) that encoding/json needs, so dragging it into the install-
@@ -23,7 +25,7 @@ import (
 )
 
 // mustPubKey parses a 33-byte hex-encoded public key. Called from
-// data_static_js.go to construct compile-time PK literals; any
+// data_static.go to construct compile-time PK literals; any
 // parse failure means the gen'd file drifted from cipher.PubKey's
 // wire format and warrants a regenerate, so panicking is correct.
 func mustPubKey(s string) cipher.PubKey {
