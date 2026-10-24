@@ -169,10 +169,10 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/progkit v0.0.0-20261023102135-04c4a2aee2e1
+# github.com/0magnet/progkit v0.0.0-20261024094515-51a7330475eb
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
-# github.com/0magnet/progterm v0.0.0-20261023102244-22de0b5d7f7a
+# github.com/0magnet/progterm v0.0.0-20261024094609-2e1f4c86cbec
 ## explicit; go 1.27.1
 github.com/0magnet/progterm/gioterm
 github.com/0magnet/progterm/glterm
@@ -185,7 +185,7 @@ github.com/0magnet/realorigin
 github.com/0magnet/router7/pkg/dhcp4d
 github.com/0magnet/router7/pkg/dns
 github.com/0magnet/router7/pkg/teelogger
-# github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
+# github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 ## explicit; go 1.26.0
 github.com/0magnet/sh/v3/expand
 github.com/0magnet/sh/v3/fileutil
@@ -218,7 +218,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261023101735-d1b156e77e3e
+# github.com/0magnet/websh v0.0.1-0.20261024151553-9917e7f9f7c8
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -893,7 +893,7 @@ github.com/pion/transport/v5/reuseport
 github.com/pion/transport/v5/stdnet
 github.com/pion/transport/v5/utils/xor
 github.com/pion/transport/v5/vnet
-# github.com/pion/turn/v5 v5.1.2
+# github.com/pion/turn/v5 v5.1.3
 ## explicit; go 1.24.0
 github.com/pion/turn/v5
 github.com/pion/turn/v5/internal/allocation

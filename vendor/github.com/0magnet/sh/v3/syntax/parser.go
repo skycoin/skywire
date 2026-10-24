@@ -476,6 +476,13 @@ func (p *Parser) Arithmetic(r io.Reader) (ArithmExpr, error) {
 	p.quote = arithmExpr
 	p.next()
 	expr := p.arithmExpr(false)
+	if p.err == nil && p.tok != _EOF {
+		var unexpected any = p.tok
+		if p.tok == _LitWord {
+			unexpected = p.val
+		}
+		p.curErr("unexpected %#q after the arithmetic expression", unexpected)
+	}
 	return expr, p.err
 }
 
@@ -570,6 +577,7 @@ const bufSize = 1 << 10
 // maxNesting is how deeply statements, words, and expressions may be nested,
 // so that a small input cannot overflow the Go stack when recursively parsing
 // or walking the syntax tree. Bash fails at a few thousand nested subshells.
+// [SplitBraces] applies it to brace expansions too.
 const maxNesting = 10_000
 
 // enterNode increments [Parser.openNodes], failing if [maxNesting] is exceeded.
@@ -1612,6 +1620,12 @@ zshPrefixLoop:
 		p.pos = p.nextPos()
 		p.rune()
 		pe.Index = p.eitherIndex()
+		for p.r == '[' {
+			p.checkLang(p.nextPos(), LangZsh, "multiple subscripts")
+			p.pos = p.nextPos()
+			p.rune()
+			pe.Subscripts = append(pe.Subscripts, p.eitherIndex())
+		}
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
@@ -2289,13 +2303,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
 				p.bashFuncDecl(s)
 			}
-		case "declare":
-			if p.lang.in(langBashLike | LangZsh) { // Note that mksh lacks this one.
-				p.declClause(s)
-			}
-		case "local", "export", "readonly", "typeset", "nameref":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
-				p.declClause(s)
+		case "declare", "local", "export", "readonly", "typeset", "nameref":
+			if p.isDeclKeyword() {
+				p.declClause(s, nil)
 			}
 		case "time":
 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
@@ -2561,6 +2571,14 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 	if wi.Name = p.getLit(); wi.Name == nil {
 		p.followErr(fpos, ftok, noQuote("a literal"))
 	}
+	for ftok == "for" && p.tok == _LitWord && ValidName(p.val) && !IsKeyword(p.val) {
+		if wi.Names == nil {
+			p.checkLang(fpos, LangZsh, "multi-name for loops")
+			wi.Names = []*Lit{wi.Name}
+			wi.Name = nil
+		}
+		wi.Names = append(wi.Names, p.getLit())
+	}
 	if p.got(semicolon) {
 		p.got(_Newl)
 		return wi
@@ -2812,8 +2830,18 @@ func (p *Parser) testExprUnary() TestExpr {
 	}
 }
 
-func (p *Parser) declClause(s *Stmt) {
-	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
+func (p *Parser) isDeclKeyword() bool {
+	switch p.val {
+	case "declare":
+		return p.lang.in(langBashLike | LangZsh) // Note that mksh lacks this one.
+	case "local", "export", "readonly", "typeset", "nameref":
+		return p.lang.in(langBashLike | LangMirBSDKorn | LangZsh)
+	}
+	return false
+}
+
+func (p *Parser) declClause(s *Stmt, assigns []*Assign) {
+	ds := &DeclClause{Variant: p.lit(p.pos, p.val), Assigns: assigns}
 	p.next()
 	for !p.stopToken() && !p.peekRedir() {
 		if p.hasValidIdent() {
@@ -2982,6 +3010,11 @@ loop:
 				ce.Assigns = append(ce.Assigns, p.getAssign(true))
 				break
 			}
+			if len(ce.Args) == 0 && p.isDeclKeyword() {
+				p.checkInlineAssigns(ce.Assigns)
+				p.declClause(s, ce.Assigns)
+				return
+			}
 			// Avoid failing later with the confusing "} can only be used to close a block".
 			if p.val == "{" && w != nil && w.Lit() == "function" {
 				p.checkLang(p.pos, langBashLike, `the "function" builtin`)
@@ -3035,13 +3068,17 @@ loop:
 	if len(ce.Args) == 0 {
 		ce.Args = nil
 	} else {
-		for _, asgn := range ce.Assigns {
-			if asgn.Index != nil || asgn.Array != nil {
-				p.posErr(asgn.Pos(), "inline variables cannot be arrays")
-			}
-		}
+		p.checkInlineAssigns(ce.Assigns)
 	}
 	s.Cmd = ce
+}
+
+func (p *Parser) checkInlineAssigns(assigns []*Assign) {
+	for _, asgn := range assigns {
+		if asgn.Index != nil || asgn.Array != nil {
+			p.posErr(asgn.Pos(), "inline variables cannot be arrays")
+		}
+	}
 }
 
 func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) {
@@ -3060,5 +3097,29 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
 	if fd.Body = p.getStmt(false, false, true); fd.Body == nil {
 		p.followErr(fd.Pos(), "foo()", noQuote("a statement"))
 	}
+	if len(names) == 0 && p.lang.in(LangZsh) {
+		p.anonFuncArgs(s, fd)
+	}
 	s.Cmd = fd
+}
+
+// anonFuncArgs parses the words following a zsh anonymous function body,
+// which are its arguments. Redirects may be mixed with them.
+func (p *Parser) anonFuncArgs(s *Stmt, fd *FuncDecl) {
+	for !p.stopToken() {
+		switch {
+		case p.peekRedir():
+			p.doRedirect(s)
+			continue
+		case p.tok == _LitWord && p.val == "}":
+			return // zsh does not require a semicolon to close a block
+		case p.tok == leftParen && p.r == ')':
+			return
+		}
+		w := p.getWord()
+		if w == nil {
+			return
+		}
+		fd.Args = append(fd.Args, w)
+	}
 }
