@@ -147,6 +147,42 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.SetPublicAutoconnect(nv.Bool())
 		},
 	}, {
+		Path: "transport.autoconnect.site_links",
+		Desc: "transports kept between two sites for site_types (0 = no limit), from the next autoconnect cycle",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			n, ok := nv.Interface().(*int)
+			if !ok {
+				return errors.New("site_links must be a number")
+			}
+			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.SiteLinks = n })
+		},
+	}, {
+		Path: "transport.autoconnect.site_types",
+		Desc: "transport types site_links applies to (empty = sudph)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			ts, ok := nv.Interface().([]string)
+			if !ok {
+				return errors.New("site_types must be a list of transport type names")
+			}
+			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.SiteTypes = ts })
+		},
+	}, {
+		Path: "transport.autoconnect.max_per_type",
+		Desc: "cap on transports autoconnect dials per type (0 = none), from the next autoconnect cycle",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			m, ok := nv.Interface().(map[string]int)
+			if !ok {
+				return errors.New("max_per_type must map transport type names to numbers")
+			}
+			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.MaxPerType = m })
+		},
+	}, {
+		Path: "transport.autoconnect.max_total",
+		Desc: "cap on transports autoconnect dials of all types (0 = none), from the next autoconnect cycle",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.MaxTotal = int(nv.Int()) })
+		},
+	}, {
 		Path: "routing.min_hops",
 		Desc: "minimum intermediate hops per route",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {

@@ -137,6 +137,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 		d.Dmsg = dd
 	}
 	d.Reach = v.reachCardStats()
+	d.Autoconnect = v.autoconnectDiag()
 	return d
 }
 

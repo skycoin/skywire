@@ -644,6 +644,9 @@ type Transport struct {
 	AddressResolver     string `json:"address_resolver"`
 	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
 	PublicAutoconnect   bool   `json:"public_autoconnect"`
+	// Autoconnect limits the transports public autoconnect dials. Unset, it
+	// keeps the built-in limits and two links per pair of sites for sudph.
+	Autoconnect Autoconnect `json:"autoconnect,omitzero"`
 	// HypervisorAutoconnect gates the background dialing of a direct (stcpr/sudph)
 	// transport to each configured hypervisor. A nil pointer means "on" (default),
 	// so configs written before this field existed keep the prior always-on
