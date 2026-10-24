@@ -14,11 +14,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skynetca"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
-func nilDial(context.Context, string, cipher.PubKey, uint16) (net.Conn, error) { return nil, nil }
+func nilDial(context.Context, string, cipher.PubKey, uint16, []skynetweb.RouteLabel) (net.Conn, error) {
+	return nil, nil
+}
 
 func TestIPPool(t *testing.T) {
 	p, err := newIPPool("100.64.0.0/30") // usable: .1, .2 (.0 net, .3 broadcast)
@@ -160,7 +165,7 @@ func TestTLSMITMEndToEnd(t *testing.T) {
 // HTTP port. Dialing the 443 the client asked for reaches nothing.
 func TestBridgeSendsTerminatedTLSToPort80(t *testing.T) {
 	ports := make(chan uint16, 2)
-	dial := func(_ context.Context, _ string, _ cipher.PubKey, port uint16) (net.Conn, error) {
+	dial := func(_ context.Context, _ string, _ cipher.PubKey, port uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 		ports <- port
 		a, b := net.Pipe()
 		go b.Close() //nolint:errcheck
@@ -196,5 +201,47 @@ func TestBridgeSendsTerminatedTLSToPort80(t *testing.T) {
 	}
 	if got := bridge(8080); got != 8080 {
 		t.Fatalf("a port other than 443 dials %d, want 8080", got)
+	}
+}
+
+// TestRouteLabelsReachTheDial: a name pinned to a transport gets an IP of its
+// own, and the dial is handed the transport ID, so the pin is not lost to the
+// plain name's lease.
+func TestRouteLabelsReachTheDial(t *testing.T) {
+	routes := make(chan []skynetweb.RouteLabel, 2)
+	dial := func(_ context.Context, _ string, _ cipher.PubKey, _ uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
+		routes <- route
+		a, b := net.Pipe()
+		go b.Close() //nolint:errcheck
+		return a, nil
+	}
+	g, err := New(dial, "100.64.0.0/16", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, _ := cipher.GenerateKeyPair()
+	tp := uuid.New()
+	plain, err := g.resolve("skynet", pk.DNSLabel()+".skynet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := g.resolve("skynet", tp.String()+"."+pk.DNSLabel()+".skynet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Equal(pinned) {
+		t.Fatalf("the pinned name shares the plain name's IP %s", plain)
+	}
+	if _, err := g.DialIP(context.Background(), plain, 80); err != nil {
+		t.Fatal(err)
+	}
+	if r := <-routes; len(r) != 0 {
+		t.Fatalf("plain name dialed with route %v, want none", r)
+	}
+	if _, err := g.DialIP(context.Background(), pinned, 80); err != nil {
+		t.Fatal(err)
+	}
+	if r := <-routes; len(r) != 1 || !r[0].IsTpID || r[0].TpID != tp {
+		t.Fatalf("pinned name dialed with route %v, want transport %s", r, tp)
 	}
 }

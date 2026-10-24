@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
 
@@ -47,7 +48,7 @@ func TestSkyDNSNetns(t *testing.T) {
 
 	socks, err := proxy.SOCKS5("unix", sock, nil, proxy.Direct)
 	require.NoError(t, err)
-	dial := func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+	dial := func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 		return socks.(proxy.ContextDialer).DialContext(ctx, "tcp", fmt.Sprintf("%s.%s:%d", dest.Hex(), scheme, port))
 	}
 

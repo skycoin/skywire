@@ -674,6 +674,11 @@ func (s *VStream) RemotePK() cipher.PubKey {
 	return s.remotePK
 }
 
+// TransportID returns the ID of the transport the stream rides.
+func (s *VStream) TransportID() uuid.UUID {
+	return s.tpID
+}
+
 func (s *VStream) sendFlag(flag byte, data []byte) error {
 	select {
 	case <-s.closed:
