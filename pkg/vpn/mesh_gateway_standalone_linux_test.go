@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 func TestMeshGatewayConfigDefaults(t *testing.T) {
@@ -35,7 +36,7 @@ func TestMeshGatewayConfigDefaults(t *testing.T) {
 // The two pre-flight checks fire before any privileged (netfilter / sysctl)
 // operation, so they are safe to assert without root.
 func TestRunMeshGatewayOnlyPreflight(t *testing.T) {
-	okDial := func(_ context.Context, _ string, _ cipher.PubKey, _ uint16) (net.Conn, error) {
+	okDial := func(_ context.Context, _ string, _ cipher.PubKey, _ uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 		return nil, nil //nolint:nilnil // never called in these error paths
 	}
 

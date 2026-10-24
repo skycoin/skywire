@@ -140,7 +140,7 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 					WithField("relay", relay.String()).
 					WithField("port", port).
 					Debug("Skynet: reached destination via 1-hop relay (no route)")
-				proxystatus.NotePath(ctx, "relay via "+relay.String())
+				proxystatus.NotePath(ctx, "relay via "+relay.String()+" on "+d.transportNote(stream.TransportID()))
 				winner <- conn
 			} else {
 				conn.Close() //nolint:errcheck,gosec // another relay already won
@@ -282,7 +282,7 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 			herr := d.handshake(conn, remote, port)
 			if herr == nil {
 				d.log.WithField("remote", remote.String()).Debug("dmsg-over-skynet: direct transport")
-				proxystatus.NotePath(ctx, "direct transport")
+				proxystatus.NotePath(ctx, d.transportNote(stream.TransportID()))
 				return conn, nil
 			}
 			conn.Close() //nolint:errcheck,gosec
