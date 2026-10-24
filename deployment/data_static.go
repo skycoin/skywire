@@ -2,14 +2,14 @@
 
 //go:build tinygo || js
 
-// Package deployment pkg/deployment/data_static_js.go
+// Package deployment pkg/deployment/data_static.go
 //
 // Static-data variant of the prod deployment bundle. The
 // non-WASM build path (config_native.go) populates deployment.Prod
 // by unmarshalling the embedded services-config.json at
 // init time; that drags encoding/json and the reflect runtime
 // helpers TinyGo can't link. Under js/wasm we use these literals
-// instead — config_js.go's init copies them into the public vars.
+// instead — config_static.go's init copies them into the public vars.
 //
 // Regenerate after editing services-config.json:
 //
