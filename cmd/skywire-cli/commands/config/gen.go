@@ -806,6 +806,7 @@ var genConfigCmd = &cobra.Command{
 
 		configureHypervisor(log)
 		keepPersistentTransports()
+		keepAutoconnect()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1737,6 +1738,14 @@ func keepPersistentTransports() {
 		if pt.NetType != tptypes.WS {
 			conf.PersistentTransports = append(conf.PersistentTransports, pt)
 		}
+	}
+}
+
+// keepAutoconnect carries the autoconnect limits over a regenerate: they are
+// set live with config set and have no skywire.conf variable.
+func keepAutoconnect() {
+	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+		conf.Transport.Autoconnect = oldConfCache.Transport.Autoconnect
 	}
 }
 

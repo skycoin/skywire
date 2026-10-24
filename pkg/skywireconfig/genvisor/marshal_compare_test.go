@@ -53,6 +53,14 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 		{"host-bridge-no-forwards", Options{}, func(v *visorconfig.V1) {
 			v.HostBridge = &visorconfig.HostBridgeConfig{URL: "ws://127.0.0.1:3438/t", Forwards: []visorconfig.HostBridgeForwardConfig{}}
 		}},
+		{"autoconnect-limits", Options{}, func(v *visorconfig.V1) {
+			k := 3
+			v.Transport.Autoconnect = visorconfig.Autoconnect{SiteLinks: &k, SiteTypes: []string{"sudph", "webrtc"}, MaxPerType: map[string]int{"webrtc": 10, "sudph": 64}, MaxTotal: 200}
+		}},
+		{"autoconnect-site-links-off", Options{}, func(v *visorconfig.V1) {
+			k := 0
+			v.Transport.Autoconnect.SiteLinks = &k
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
