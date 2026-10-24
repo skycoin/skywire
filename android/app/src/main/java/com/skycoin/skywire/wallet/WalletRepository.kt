@@ -7,6 +7,13 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.Derivation
+import com.skycoin.wallet.ExtendedPublicKeys
+import com.skycoin.wallet.FeeLevel
+import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
+import com.skycoin.wallet.NodeProblem
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.UtxoRecord
@@ -14,6 +21,9 @@ import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.btc.BtcWalletCore
 import com.skycoin.wallet.eth.EthCrypto
 import com.skycoin.wallet.eth.EthWalletCore
+import com.skycoin.wallet.skycoin.ChainInfo
+import com.skycoin.wallet.skycoin.PeerInfo
+import com.skycoin.wallet.skycoin.PendingInfo
 import com.skycoin.wallet.skycoin.SkyFiberWalletCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +38,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import java.io.File
 import java.io.IOException
+import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -65,6 +76,7 @@ class WalletRepository private constructor(private val context: Context) {
     // skychat's large file transfers: an idle deadline does the work, the
     // absolute one is a last resort.
     private val client = OkHttpClient.Builder()
+        .proxySelector(WalletMesh.proxySelector)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(BULK_CALL_BACKSTOP_MINUTES, TimeUnit.MINUTES)
@@ -177,7 +189,7 @@ class WalletRepository private constructor(private val context: Context) {
 
     /** [url] trimmed for storage; blank stays blank, which means the shipped one. */
     private fun checkedUrl(url: String): String {
-        val trimmed = url.trim().removeSuffix("/")
+        val trimmed = WalletMesh.normalize(url).removeSuffix("/")
         require(trimmed.isEmpty() || trimmed.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
@@ -206,17 +218,33 @@ class WalletRepository private constructor(private val context: Context) {
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
 
+    /**
+     * Adds a fiber coin once its node has answered, as skycoin-web does. A
+     * blank name or ticker is taken from what the node says about its coin,
+     * and so is the block explorer the coin's transactions link to.
+     */
     suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String? = null): CoinSpec {
-        val url = nodeUrl.trim().removeSuffix("/")
+        val url = WalletMesh.normalize(nodeUrl).removeSuffix("/")
         require(url.toHttpUrlOrNull() != null) {
             context.getString(R.string.wallet_add_coin_node_invalid)
         }
+        val info = try {
+            checkNode(CoinSpec("", "", "", CoinKind.SKY_FIBER, url), url)
+        } catch (e: IOException) {
+            throw IOException(context.getString(R.string.wallet_node_unreachable), e)
+        }
+        val coinName = name.trim().ifEmpty { info.coinName.orEmpty() }
+        val coinTicker = ticker.trim().ifEmpty { info.ticker.orEmpty() }.uppercase()
+        require(coinName.isNotEmpty()) { context.getString(R.string.wallet_add_coin_name_required) }
+        require(coinTicker.isNotEmpty()) { context.getString(R.string.wallet_add_coin_ticker_required) }
         val spec = CoinSpec(
             id = "fiber-${UUID.randomUUID().toString().take(8)}",
-            name = name.trim(),
-            ticker = ticker.trim().uppercase(),
+            name = coinName,
+            ticker = coinTicker,
             kind = CoinKind.SKY_FIBER,
             nodeUrl = url,
+            // The Skycoin explorer's transaction page; fiber coins run the same explorer.
+            explorerTxUrl = info.explorerUrl?.let { "$it/app/transaction/%s" },
             icon = icon,
         )
         storeUserCoin(spec)
@@ -308,6 +336,38 @@ class WalletRepository private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Asks [url] about itself as a node for [coin], alone, with none of the
+     * coin's other nodes behind it. A node the wallet must not use is refused
+     * with the reason, an unreachable one with IOException.
+     */
+    suspend fun checkNode(coin: CoinSpec, url: String): NodeInfo = withContext(Dispatchers.IO) {
+        val info = coreFor(coin.copy(nodeUrl = WalletMesh.normalize(url).removeSuffix("/"), nodeUrls = emptyList())).nodeInfo()
+        when (info.problem) {
+            NodeProblem.TOO_OLD -> throw IllegalArgumentException(context.getString(R.string.wallet_node_too_old))
+            NodeProblem.WRONG_CHAIN -> throw IllegalArgumentException(context.getString(R.string.wallet_node_wrong_chain))
+            null -> info
+        }
+    }
+
+    private fun fiber(coin: CoinSpec): SkyFiberWalletCore =
+        coreFor(coin) as? SkyFiberWalletCore ?: error("node details are for fiber coins")
+
+    suspend fun chainInfo(coin: CoinSpec): ChainInfo = withContext(Dispatchers.IO) { fiber(coin).chainInfo() }
+
+    suspend fun peers(coin: CoinSpec): List<PeerInfo> = withContext(Dispatchers.IO) { fiber(coin).peers() }
+
+    suspend fun pending(walletId: String): List<PendingInfo> = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        fiber(spec).pending(AddressBook(meta.receiveAddresses, meta.changeAddresses))
+    }
+
+    suspend fun deletePending(coin: CoinSpec, txid: String) = withContext(Dispatchers.IO) { fiber(coin).deletePending(txid) }
+
+    /** What the coin's node, through its usual list, says about itself now. */
+    suspend fun nodeStatus(coin: CoinSpec): NodeInfo = withContext(Dispatchers.IO) { coreFor(coin).nodeInfo() }
+
     fun coreFor(spec: CoinSpec): WalletCore {
         // More than one address to ask: the client walks them in the stored
         // order, which is what the screen means by priority.
@@ -378,11 +438,16 @@ class WalletRepository private constructor(private val context: Context) {
         mnemonic: String,
         restored: Boolean,
         legacy: Boolean = false,
+        derivation: Derivation = Derivation.STANDARD,
+        passphrase: String = "",
+        exact: Boolean = false,
     ): WalletMeta =
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
-            val seed = normalizeSeed(mnemonic)
-            require(core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed))) {
+            // A non-standard seed is its exact text: case and spacing are part of what is hashed.
+            val seed = if (exact) mnemonic else normalizeSeed(mnemonic)
+            val anyText = exact && seed.isNotEmpty() && derivation == Derivation.STANDARD && core.takesAnySeed()
+            require(core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed)) || anyText) {
                 context.getString(R.string.wallet_seed_invalid)
             }
 
@@ -390,14 +455,17 @@ class WalletRepository private constructor(private val context: Context) {
             // from "the answer is one address" — a fresh phrase genuinely has
             // one and is settled, a restore that could not reach the node is
             // not.
+            // The classic fiber wallet hashes the phrase itself; a passphrase has no part in it.
+            val pass = passphrase.takeUnless { spec.kind == CoinKind.SKY_FIBER && derivation == Derivation.STANDARD }.orEmpty()
+            val keys = KeySource(seed, pass, derivation)
             val scan = if (restored) {
-                runCatching { core.scanUsed(seed) }.getOrNull()
+                runCatching { core.scanUsed(keys) }.getOrNull()
             } else {
                 1 to 0
             }
             val (receiveCount, changeCount) = scan ?: (1 to 0)
             val scannedAt = if (scan != null) System.currentTimeMillis() else 0
-            val book = core.deriveAddresses(seed, receiveCount, changeCount)
+            val book = core.deriveAddresses(keys, receiveCount, changeCount)
 
             // This coin may already hold this exact account — most likely
             // because mirroring put it there, and the user restored the phrase
@@ -407,7 +475,8 @@ class WalletRepository private constructor(private val context: Context) {
             // either, so the existing one is adopted instead of duplicated.
             val head = book.receive.firstOrNull()
             val already = wallets().first().firstOrNull {
-                it.coinId == spec.id && head != null && it.receiveAddresses.firstOrNull() == head
+                it.coinId == spec.id && head != null && it.receiveAddresses.firstOrNull() == head &&
+                    it.derivation == derivation
             }
             if (already != null) {
                 // A restore that scanned further than the mirror knew about is
@@ -435,11 +504,13 @@ class WalletRepository private constructor(private val context: Context) {
                 receiveAddresses = book.receive,
                 changeAddresses = book.change,
                 addressScanAtMs = scannedAt,
+                derivation = derivation,
             )
             seeds.putSeed(meta.id, seed)
+            seeds.putPassphrase(meta.id, pass)
             putWallets(wallets().first() + meta)
             setActiveWallet(spec.id, meta.id)
-            if (spec.isEthFamily) mirrorIntoEthFamily(meta, seed, book, exceptCoin = spec.id)
+            if (spec.isEthFamily) mirrorIntoEthFamily(meta, seed, pass, book, exceptCoin = spec.id)
             meta
         }
 
@@ -461,6 +532,7 @@ class WalletRepository private constructor(private val context: Context) {
     private suspend fun mirrorIntoEthFamily(
         source: WalletMeta,
         seed: String,
+        passphrase: String,
         book: AddressBook,
         exceptCoin: String,
     ) {
@@ -468,7 +540,7 @@ class WalletRepository private constructor(private val context: Context) {
             .filter { it.isEthFamily && it.id != exceptCoin }
             .forEach { sibling ->
                 mirrorWallet(
-                    sibling, source.name, source.createdAtMs, seed, book, source.addressScanAtMs,
+                    sibling, source.name, source.createdAtMs, seed, passphrase, book, source.addressScanAtMs,
                 )
             }
     }
@@ -486,6 +558,7 @@ class WalletRepository private constructor(private val context: Context) {
         name: String,
         createdAtMs: Long,
         seed: String,
+        passphrase: String,
         book: AddressBook,
         // The mirror is the same account with the same addresses, so the
         // source's answer about them is the mirror's answer too. Carrying it
@@ -511,6 +584,7 @@ class WalletRepository private constructor(private val context: Context) {
         // shared by reference) makes deleting any one wallet able to strand
         // the others.
         seeds.putSeed(meta.id, seed)
+        seeds.putPassphrase(meta.id, passphrase)
         putWallets(wallets().first() + meta)
         // Only if that coin has nothing selected yet: arriving at a coin the
         // user was already using must not move them off their own choice.
@@ -545,6 +619,7 @@ class WalletRepository private constructor(private val context: Context) {
                     existing.name,
                     existing.createdAtMs,
                     seed,
+                    seeds.passphrase(existing.id),
                     AddressBook(existing.receiveAddresses, existing.changeAddresses),
                     existing.addressScanAtMs,
                 )
@@ -575,13 +650,27 @@ class WalletRepository private constructor(private val context: Context) {
         }
     }
 
+    /** What the wallet's keys come from, unsealed; null when the seed cannot be read. */
+    private suspend fun keys(meta: WalletMeta): KeySource? =
+        seeds.seed(meta.id)?.let { KeySource(it, seeds.passphrase(meta.id), meta.derivation) }
+
+    /** The wallet's xpubs, for a watch-only view; null where the wallet has none. */
+    suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: return@withContext null
+        val spec = coin(meta.coinId) ?: return@withContext null
+        keys(meta)?.let { coreFor(spec).extendedPublicKeys(it) }
+    }
+
     /** The phrase in the clear — callers gate this behind the biometric confirm. */
     suspend fun revealSeed(id: String): String? = seeds.seed(id)
+
+    /** The passphrase in the clear, empty when there is none — gated like [revealSeed]. */
+    suspend fun revealPassphrase(id: String): String = seeds.passphrase(id)
 
     suspend fun newReceiveAddress(walletId: String): String {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val book = coreFor(spec).deriveAddresses(
             seed, meta.receiveAddresses.size + 1, meta.changeAddresses.size,
         )
@@ -661,7 +750,7 @@ class WalletRepository private constructor(private val context: Context) {
         if (!meta.addressScanPending) return meta
         val now = System.currentTimeMillis()
         if (now < (scanRetryAfter[meta.id] ?: 0L)) return meta
-        val seed = seeds.seed(meta.id) ?: return meta
+        val seed = keys(meta) ?: return meta
         val scanned = runCatching { core.scanUsed(seed) }.getOrNull()
         if (scanned == null) {
             scanRetryAfter[meta.id] = now + SCAN_RETRY_BACKOFF_MS
@@ -690,10 +779,14 @@ class WalletRepository private constructor(private val context: Context) {
         fromAddress: String? = null,
         inputs: Set<String> = emptySet(),
         hoursTo: ULong? = null,
+        more: List<Recipient> = emptyList(),
+        changeAddress: String? = null,
+        shareFactor: BigDecimal? = null,
+        feeLevel: FeeLevel? = null,
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         coreFor(spec).buildTx(
             seed = seed,
             book = AddressBook(meta.receiveAddresses, meta.changeAddresses),
@@ -704,6 +797,10 @@ class WalletRepository private constructor(private val context: Context) {
             fromAddress = fromAddress?.trim()?.takeIf { it.isNotEmpty() },
             inputs = inputs.takeIf { it.isNotEmpty() },
             hoursTo = hoursTo,
+            more = more.map { Recipient(it.address.trim(), it.amount, it.hours) },
+            changeAddress = changeAddress?.trim()?.takeIf { it.isNotEmpty() },
+            shareFactor = shareFactor,
+            feeLevel = feeLevel,
         )
     }
 
@@ -719,9 +816,18 @@ class WalletRepository private constructor(private val context: Context) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
-        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val signed: SignedTx = core.signTx(seed, plan)
         val txid = core.broadcast(signed)
+
+        // A fresh change address the plan sent change to is the wallet's next
+        // one on its change chain; it holds coins now, so the wallet keeps it.
+        plan.changeAddress?.takeIf { it !in meta.receiveAddresses && it !in meta.changeAddresses }?.let { change ->
+            val grown = core.deriveAddresses(seed, meta.receiveAddresses.size, meta.changeAddresses.size + 1)
+            if (grown.change.lastOrNull() == change) {
+                putWallets(wallets().first().map { if (it.id == walletId) it.copy(changeAddresses = grown.change) else it })
+            }
+        }
 
         // A Bitcoin plan that paid change to a fresh chain address makes that
         // address part of the wallet the moment the transaction exists.
@@ -735,6 +841,28 @@ class WalletRepository private constructor(private val context: Context) {
             }
         }
         txid
+    }
+
+    /** The plan's transaction unsigned, for signing on another device. */
+    suspend fun unsignedHex(walletId: String, plan: TxPlan): String? {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        return coreFor(spec).unsignedHex(plan)
+    }
+
+    /** Signs a raw transaction made elsewhere with this wallet's keys. Nothing is broadcast. */
+    suspend fun signRaw(walletId: String, rawHex: String): SignedTx = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        val seed = keys(meta) ?: error(context.getString(R.string.wallet_seed_unavailable))
+        coreFor(spec).signRaw(seed, AddressBook(meta.receiveAddresses, meta.changeAddresses), rawHex)
+    }
+
+    /** Broadcasts a raw signed transaction through the wallet's coin node. */
+    suspend fun broadcastRaw(walletId: String, rawHex: String): String = withContext(Dispatchers.IO) {
+        val meta = wallet(walletId) ?: error("unknown wallet")
+        val spec = coin(meta.coinId) ?: error("unknown coin")
+        coreFor(spec).broadcastRaw(rawHex)
     }
 
     companion object {
