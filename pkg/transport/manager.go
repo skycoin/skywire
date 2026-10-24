@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
@@ -260,21 +261,21 @@ func (tm *Manager) Serve(ctx context.Context) {
 // that as a 55% slice of total samples in runtime.mcall +
 // runtime.findRunnable + futex on a steady-state idle visor.
 //
-// Centralizing collapses those wake-ups to two (logTicker + pingTicker)
-// regardless of transport count, and drops ~2N goroutines from the
-// steady-state count.
+// Centralizing collapses those wake-ups to a few tickers regardless of
+// transport count, and drops ~2N goroutines from the steady-state count.
+// pingTicker fires every pingSlotTick and pings only the transports whose
+// slot is due, so the pings go out spread over their interval.
 func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 	defer tm.wg.Done()
 
 	logTicker := time.NewTicker(logWriteInterval)
-	pingTicker := time.NewTicker(transportPingInterval)
-	sudphTicker := time.NewTicker(sudphKeepaliveInterval)
+	pingTicker := time.NewTicker(pingSlotTick)
 	bwProbeTicker := time.NewTicker(bwProbeInterval)
 	defer logTicker.Stop()
 	defer pingTicker.Stop()
-	defer sudphTicker.Stop()
 	defer bwProbeTicker.Stop()
 
+	var tick int
 	for {
 		select {
 		case <-ctx.Done():
@@ -284,9 +285,8 @@ func (tm *Manager) runTransportMaintenance(ctx context.Context) {
 		case <-logTicker.C:
 			tm.recordAllTransportLogs()
 		case <-pingTicker.C:
-			tm.pingAllTransports()
-		case <-sudphTicker.C:
-			tm.pingSUDPHTransports()
+			tm.pingDueTransports(tick)
+			tick++
 		case <-bwProbeTicker.C:
 			tm.probeUnmeasuredTransports()
 		}
@@ -364,27 +364,41 @@ func (tm *Manager) recordAllTransportLogs() {
 	}
 }
 
-// pingAllTransports fans tickPing across the live transport set.
+// pingSlotTick is how often the maintenance loop pings the transports whose
+// turn it is. Each transport keeps its own transportPingInterval and, for
+// sudph, sudphKeepaliveInterval; its slot only places it within them.
+const pingSlotTick = time.Second
+
+// pingSlot is the tick, out of slots, on which the transport with id is
+// pinged. It depends on the id alone, so each transport keeps its interval.
+func pingSlot(id uuid.UUID, slots int) int {
+	h := fnv.New32a()
+	h.Write(id[:])                        //nolint:errcheck,gosec // fnv never fails
+	return int(h.Sum32() % uint32(slots)) //nolint:gosec // slots is a small positive constant
+}
+
+// pingDueTransports pings the transports whose slot comes up on tick: every
+// transport once per transportPingInterval, and a sudph one also once per
+// sudphKeepaliveInterval. Sweeping them all at once sent a burst of a few
+// hundred packets to as many addresses, and a home router with several
+// visors behind it showed that as latency spikes for everything else.
 //
 // Concurrency: tickPing's sendTransportPing path does a small Write on
 // the underlying transport (15-byte ping packet) that can in principle
-// block on a stalled remote. To prevent one slow transport from
-// stalling the rest of the ping sweep, we bound concurrency at
-// pingFanoutWorkers — large enough that the full sweep finishes well
-// within transportPingInterval even on a hub visor with hundreds of
-// transports, small enough that the burst spawn isn't itself a
-// scheduler hot spot.
-//
-// Per-tick goroutine accounting: pingFanoutWorkers short-lived
-// goroutines per pingTicker fire (every transportPingInterval) ≈ one
-// short-lived spike per minute. Compared to the previous model — one
-// long-lived goroutine per transport for the lifetime of the
-// transport — this is a substantial steady-state goroutine reduction.
-func (tm *Manager) pingAllTransports() {
+// block on a stalled remote, so at most pingFanoutWorkers run at once.
+func (tm *Manager) pingDueTransports(tick int) {
+	const (
+		pingSlots  = int(transportPingInterval / pingSlotTick)
+		sudphSlots = int(sudphKeepaliveInterval / pingSlotTick)
+	)
 	tm.mx.RLock()
-	snapshot := make([]*ManagedTransport, 0, len(tm.tps))
+	var snapshot []*ManagedTransport
 	for _, mt := range tm.tps {
-		snapshot = append(snapshot, mt)
+		id := mt.Entry.ID
+		if pingSlot(id, pingSlots) == tick%pingSlots ||
+			(mt.Entry.Type == types.SUDPH && pingSlot(id, sudphSlots) == tick%sudphSlots) {
+			snapshot = append(snapshot, mt)
+		}
 	}
 	tm.mx.RUnlock()
 
@@ -2012,21 +2026,6 @@ func (tm *Manager) ReadQueue() (depth, capacity int) {
 // alive, and turns a dead flow into pong misses within a minute instead of
 // the 3-minute read deadline.
 const sudphKeepaliveInterval = 20 * time.Second
-
-// pingSUDPHTransports sends the maintenance ping to every sudph transport.
-func (tm *Manager) pingSUDPHTransports() {
-	tm.mx.RLock()
-	var snapshot []*ManagedTransport
-	for _, mt := range tm.tps {
-		if mt.Entry.Type == types.SUDPH {
-			snapshot = append(snapshot, mt)
-		}
-	}
-	tm.mx.RUnlock()
-	for _, mt := range snapshot {
-		mt.tickPing()
-	}
-}
 
 // SetHostedEntries sets what returns the local links from this visor to the
 // services it hosts, which every transport list publish carries.
