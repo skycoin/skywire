@@ -98,14 +98,18 @@ func TestSkyenvIsNotSettable(t *testing.T) {
 // regenKeeps are live settings that config gen carries over from the old
 // config on a regenerate instead of reading a skywire.conf variable.
 var regenKeeps = map[string]string{
-	"launcher.apps[*].auto_start":  "mergeExistingApps",
-	"launcher.apps[*].args":        "mergeExistingApps",
-	"launcher.apps[*].env":         "mergeExistingApps",
-	"routing.router_settings[*]":   "configureRouting",
-	"routing.transport_preference": "configureRouting",
-	"dmsg_web.upstream_rules":      "configureResolvingProxies",
-	"skynet_web.upstream_rules":    "configureResolvingProxies",
-	"persistent_transports":        "keepPersistentTransports",
+	"launcher.apps[*].auto_start":        "mergeExistingApps",
+	"launcher.apps[*].args":              "mergeExistingApps",
+	"launcher.apps[*].env":               "mergeExistingApps",
+	"routing.router_settings[*]":         "configureRouting",
+	"routing.transport_preference":       "configureRouting",
+	"dmsg_web.upstream_rules":            "configureResolvingProxies",
+	"skynet_web.upstream_rules":          "configureResolvingProxies",
+	"persistent_transports":              "keepPersistentTransports",
+	"transport.autoconnect.site_links":   "keepAutoconnect",
+	"transport.autoconnect.site_types":   "keepAutoconnect",
+	"transport.autoconnect.max_per_type": "keepAutoconnect",
+	"transport.autoconnect.max_total":    "keepAutoconnect",
 }
 
 // TestEveryLiveSettingSurvivesAutoconfig. A live change that neither reaches

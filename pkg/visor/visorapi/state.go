@@ -406,6 +406,8 @@ type DiagSnapshot struct {
 	// app-direct dials, visor RPC): open streams, relay legs, and frames that
 	// arrived for streams this side does not have.
 	VStream []DiagVStreamMux `json:"vstream,omitempty"`
+	// Autoconnect is the site limit as this visor applies it.
+	Autoconnect *DiagAutoconnect `json:"autoconnect,omitempty"`
 	// Dmsg is per-session ping health plus the relay nominee/backoff state.
 	Dmsg *DiagDmsg `json:"dmsg,omitempty"`
 	// Reach counts the reach cards this visor serves and fetches (reach_card.go).
@@ -575,4 +577,24 @@ type DiagReachCards struct {
 	Fetches uint64 `json:"fetches"`
 	Hits    uint64 `json:"hits"`
 	Misses  uint64 `json:"misses"`
+}
+
+// DiagAutoconnect is autoconnect's site limit as this visor sees the network:
+// the sites it groups visors into from the address-resolver feed, its own
+// site, and how many sudph peers the limit leaves to other members of their
+// site this cycle.
+type DiagAutoconnect struct {
+	SiteLinks int      `json:"site_links"`
+	SiteTypes []string `json:"site_types,omitempty"`
+	// Visors and Sites count the visors grouped into a site and the sites.
+	Visors int `json:"visors"`
+	Sites  int `json:"sites"`
+	// MultiSites counts the sites of more than one visor.
+	MultiSites int `json:"multi_sites"`
+	// Site is this visor's own site, empty when it is in none.
+	Site []cipher.PubKey `json:"site,omitempty"`
+	// SudphPeers is the peers the reach feed lists for sudph, and
+	// SudphAllowed how many of them the site limit lets this visor dial.
+	SudphPeers   int `json:"sudph_peers"`
+	SudphAllowed int `json:"sudph_allowed"`
 }

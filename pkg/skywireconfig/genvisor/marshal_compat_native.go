@@ -48,6 +48,7 @@
 package genvisor
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1023,6 +1024,10 @@ func marshalTransportNative(w *strings.Builder, t *visorconfig.Transport, indent
 	}
 	o.field("public_autoconnect")
 	writeBoolNative(w, t.PublicAutoconnect)
+	if a := t.Autoconnect; a.SiteLinks != nil || a.SiteTypes != nil || a.MaxPerType != nil || a.MaxTotal != 0 {
+		o.field("autoconnect")
+		marshalAutoconnectNative(w, &a, o.indent+1)
+	}
 	if t.HypervisorAutoconnect != nil {
 		o.field("hypervisor_autoconnect")
 		writeBoolNative(w, *t.HypervisorAutoconnect)
@@ -1463,6 +1468,37 @@ func marshalHostBridgeNative(w *strings.Builder, s *visorconfig.HostBridgeConfig
 		w.WriteByte('\n')
 		writeIndentNative(w, o.indent)
 		w.WriteByte(']')
+	}
+	o.close()
+}
+
+func marshalAutoconnectNative(w *strings.Builder, a *visorconfig.Autoconnect, indent int) {
+	o := newObjNative(w, indent)
+	if a.SiteLinks != nil {
+		o.field("site_links")
+		writeIntNative(w, int64(*a.SiteLinks))
+	}
+	if len(a.SiteTypes) > 0 {
+		o.field("site_types")
+		writeStringSliceNative(w, a.SiteTypes, o.indent+1)
+	}
+	if len(a.MaxPerType) > 0 {
+		o.field("max_per_type")
+		m := newObjNative(w, o.indent+1)
+		keys := make([]string, 0, len(a.MaxPerType))
+		for k := range a.MaxPerType {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m.field(k)
+			writeIntNative(w, int64(a.MaxPerType[k]))
+		}
+		m.close()
+	}
+	if a.MaxTotal != 0 {
+		o.field("max_total")
+		writeIntNative(w, int64(a.MaxTotal))
 	}
 	o.close()
 }
