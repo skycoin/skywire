@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.103
+
+-   go.mod: go 1.27.2 again  [#5807](https://github.com/skycoin/skywire/pull/5807)
+-   deps: bump websh and the sh fork, and update dependencies  [#5806](https://github.com/skycoin/skywire/pull/5806)
+-   visor: keep k transports between two sites, and make autoconnect caps configurable  [#5805](https://github.com/skycoin/skywire/pull/5805)
+-   transport: spread maintenance pings over their interval  [#5804](https://github.com/skycoin/skywire/pull/5804)
+-   skynetweb, meshgw: pin a skynet name to a transport and log which one  [#5803](https://github.com/skycoin/skywire/pull/5803)
+-   deployment: load the static deployment on native tinygo builds  [#5802](https://github.com/skycoin/skywire/pull/5802)
+-   ci: build the windows hardware wallet against ucrt64  [#5801](https://github.com/skycoin/skywire/pull/5801)
+-   ci: sync the msys2 package db before installing cgo deps  [#5800](https://github.com/skycoin/skywire/pull/5800)
+
 ## 1.3.102
 
 -   all: build on 32-bit linux and go 1.27.2 again  [#5798](https://github.com/skycoin/skywire/pull/5798)
