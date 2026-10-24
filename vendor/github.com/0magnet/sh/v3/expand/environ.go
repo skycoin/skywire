@@ -5,10 +5,13 @@ package expand
 
 import (
 	"cmp"
+	"maps"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/0magnet/sh/v3/internal"
 )
 
 // Environ is the base interface for a shell's environment, allowing it to fetch
@@ -167,16 +170,7 @@ func (v Variable) String() string {
 // indexedVal returns the element of an indexed array at index i,
 // taking [Variable.Indexes] into account for sparse arrays.
 func (v Variable) indexedVal(i int) (string, bool) {
-	if v.Indexes != nil {
-		if pos, ok := slices.BinarySearch(v.Indexes, i); ok {
-			return v.List[pos], true
-		}
-		return "", false
-	}
-	if i < len(v.List) {
-		return v.List[i], true
-	}
-	return "", false
+	return internal.IndexedElem(v.List, v.Indexes, i)
 }
 
 // indexedKeys returns the index of each element of an indexed array as a
@@ -191,6 +185,23 @@ func (v Variable) indexedKeys() []string {
 		}
 	}
 	return keys
+}
+
+// assocKeys returns the keys of an associative array, sorted, so that
+// expansions like "${!a[@]}" and "${a[@]}" pair up.
+func (v Variable) assocKeys() []string {
+	return slices.Sorted(maps.Keys(v.Map))
+}
+
+// assocVals returns the values of an associative array, in the order of
+// [Variable.assocKeys].
+func (v Variable) assocVals() []string {
+	keys := v.assocKeys()
+	vals := make([]string, len(keys))
+	for i, key := range keys {
+		vals[i] = v.Map[key]
+	}
+	return vals
 }
 
 // maxNameRefDepth defines the maximum number of times to follow references when

@@ -378,6 +378,16 @@ func (p *Printer) bslashNewl() {
 	p.indent()
 }
 
+// bslashNewlIfWanted escapes a newline before pos within a command,
+// indenting the following line like [Printer.wordJoin] does.
+func (p *Printer) bslashNewlIfWanted(pos Pos) {
+	if p.wantsNewline(pos, true) {
+		p.incLevel()
+		p.bslashNewl()
+		p.decLevel()
+	}
+}
+
 func (p *Printer) spacedString(s string, pos Pos) {
 	p.spacePad(pos)
 	p.w.WriteString(s)
@@ -890,6 +900,9 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		p.minify = saved
 	}
 	p.wroteIndex(pe.Index)
+	for _, sub := range pe.Subscripts {
+		p.wroteIndex(sub)
+	}
 	switch {
 	case len(pe.Modifiers) > 0:
 		for _, lit := range pe.Modifiers {
@@ -972,7 +985,17 @@ func (p *Printer) cmdSubst(cs *CmdSubst) {
 func (p *Printer) loop(loop Loop) {
 	switch loop := loop.(type) {
 	case *WordIter:
-		p.writeLit(loop.Name.Value)
+		if loop.Name != nil {
+			p.writeLit(loop.Name.Value)
+		} else {
+			for i, name := range loop.Names {
+				if i > 0 {
+					p.space()
+					p.bslashNewlIfWanted(name.Pos())
+				}
+				p.writeLit(name.Value)
+			}
+		}
 		if loop.InPos.IsValid() {
 			p.spacedString(" in", Pos{})
 			p.wordJoin(loop.Items)
@@ -1058,6 +1081,17 @@ func (p *Printer) arithmExprRecurse(expr ArithmExpr, compact, spacePlusMinus boo
 		if expr.X != nil {
 			p.arithmExprRecurse(expr.X, compact, false)
 		}
+	case *CallArithm:
+		p.w.WriteString(expr.Name.Value)
+		p.w.WriteByte('(')
+		for i, arg := range expr.Args {
+			if i > 0 {
+				p.w.WriteByte(',')
+				p.space()
+			}
+			p.arithmExprRecurse(arg, false, false)
+		}
+		p.w.WriteByte(')')
 	}
 }
 
@@ -1447,6 +1481,7 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.advanceLine(cmd.Body.Pos().Line())
 		p.comments(cmd.Body.Comments...)
 		p.stmt(cmd.Body)
+		p.wordJoin(cmd.Args)
 	case *CaseClause:
 		p.w.WriteString("case ")
 		p.word(cmd.Word)
@@ -1515,7 +1550,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.decLevel()
 		p.spacedString("]]", cmd.Right)
 	case *DeclClause:
-		p.spacedString(cmd.Variant.Value, cmd.Pos())
+		if len(cmd.Assigns) > 0 {
+			p.assigns(cmd.Assigns)
+			p.bslashNewlIfWanted(cmd.Variant.Pos())
+		}
+		p.spacedString(cmd.Variant.Value, cmd.Variant.Pos())
 		p.assigns(cmd.Args)
 	case *TimeClause:
 		p.spacedString("time", cmd.Pos())

@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.27.2
+go 1.27.3
 
 require (
 	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
@@ -27,16 +27,16 @@ require (
 	github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
 	github.com/0magnet/pfilter v0.0.14
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
-	github.com/0magnet/progkit v0.0.0-20261023102135-04c4a2aee2e1
-	github.com/0magnet/progterm v0.0.0-20261023102244-22de0b5d7f7a
+	github.com/0magnet/progkit v0.0.0-20261024094515-51a7330475eb
+	github.com/0magnet/progterm v0.0.0-20261024094609-2e1f4c86cbec
 	github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
-	github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
+	github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 	github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
-	github.com/0magnet/websh v0.0.1-0.20261023101735-d1b156e77e3e
+	github.com/0magnet/websh v0.0.1-0.20261024151553-9917e7f9f7c8
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
@@ -220,7 +220,7 @@ require (
 	github.com/pion/srtp/v3 v3.1.3 // indirect
 	github.com/pion/stun/v4 v4.0.1 // indirect
 	github.com/pion/transport/v5 v5.1.1 // indirect
-	github.com/pion/turn/v5 v5.1.2 // indirect
+	github.com/pion/turn/v5 v5.1.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/prometheus/client_golang v1.25.0 // indirect
