@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // localServicesTTL is how long the visor's list of local services is reused.
@@ -68,13 +69,24 @@ func (d visorServiceDialer) Dial(_, _ string) (net.Conn, error) {
 	return d.appCl.Dial(appnet.Addr{Net: appnet.TypeSkynet, PubKey: d.appCl.Config().VisorPK, Port: d.port})
 }
 
-// dialViaResolver asks the resolving proxy on port for <label>.<scheme>:dport.
-func dialViaResolver(ctx context.Context, appCl *app.Client, port routing.Port, scheme string, dest cipher.PubKey, dport uint16) (net.Conn, error) {
+// dialViaResolver asks the resolving proxy on port for
+// [<route labels>.]<label>.<scheme>:dport, so a pinned transport reaches it.
+func dialViaResolver(ctx context.Context, appCl *app.Client, port routing.Port, scheme string, dest cipher.PubKey, dport uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
 	d, err := proxy.SOCKS5("tcp", "visor", nil, visorServiceDialer{appCl: appCl, port: port})
 	if err != nil {
 		return nil, err
 	}
-	addr := net.JoinHostPort(dest.DNSLabel()+"."+scheme, strconv.Itoa(int(dport)))
+	var host strings.Builder
+	for _, rl := range route {
+		if rl.IsTpID {
+			host.WriteString(rl.TpID.String())
+		} else {
+			host.WriteString(rl.PK.DNSLabel())
+		}
+		host.WriteByte('.')
+	}
+	host.WriteString(dest.DNSLabel() + "." + scheme)
+	addr := net.JoinHostPort(host.String(), strconv.Itoa(int(dport)))
 	if cd, ok := d.(proxy.ContextDialer); ok {
 		return cd.DialContext(ctx, "tcp", addr)
 	}

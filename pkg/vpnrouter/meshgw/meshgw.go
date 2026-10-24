@@ -49,8 +49,10 @@ import (
 // MeshDial dials a mesh service and returns a byte stream to splice with the
 // LAN client's TCP connection. scheme is "dmsg" or "skynet"; dest is the target
 // visor; port is the mesh routing port (taken from the client's original
-// destination port). The vpn-router app implements this over its app.Client.
-type MeshDial func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error)
+// destination port). route holds the routing labels left of dest in the name,
+// such as a transport ID, or nothing. The vpn-router app implements this over
+// its app.Client.
+type MeshDial func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error)
 
 // LocalDial reaches a name this visor serves itself, such as status.skywire,
 // on port. It is what the resolving proxies answer for that name.
@@ -59,7 +61,8 @@ type LocalDial func(ctx context.Context, host string, port uint16) (net.Conn, er
 type target struct {
 	scheme string // "dmsg" | "skynet" | "skywire"
 	dest   cipher.PubKey
-	host   string // set for a name the visor serves itself, reached by local
+	route  []skynetweb.RouteLabel // labels left of dest, e.g. a pinned transport
+	host   string                 // set for a name the visor serves itself, reached by local
 }
 
 // Gateway resolves .dmsg/.skynet names to synthetic IPs and proxies TCP to them
@@ -149,11 +152,13 @@ func (g *Gateway) resolve(scheme, name string) (net.IP, error) {
 		if scheme == "skywire" {
 			return nil, fmt.Errorf("meshgw: %q is not a name this visor serves", name)
 		}
-		dest, err := g.parse(scheme, name)
+		dest, route, err := g.parse(scheme, name)
 		if err != nil {
 			return nil, err
 		}
-		t, key = target{scheme: scheme, dest: dest}, scheme+"|"+dest.Hex()
+		// A name with route labels gets an IP of its own: one pinned to a
+		// transport must not share the plain name's.
+		t, key = target{scheme: scheme, dest: dest, route: route}, scheme+"|"+routeKey(route)+dest.Hex()
 	}
 
 	g.mu.Lock()
@@ -172,16 +177,30 @@ func (g *Gateway) resolve(scheme, name string) (net.IP, error) {
 	return net.IP(ip4[:]).To4(), nil
 }
 
-// parse turns a query name (without trailing dot) into a destination PK, reusing
-// dmsgweb's resolver-host grammar (raw hex PK, DNSLabel, or alias, plus optional
-// route labels — routes are accepted but the direct dest is used here).
-func (g *Gateway) parse(scheme, name string) (cipher.PubKey, error) {
+// parse turns a query name (without trailing dot) into a destination PK and its
+// route labels, reusing dmsgweb's resolver-host grammar (raw hex PK, DNSLabel,
+// or alias, plus optional PK or transport ID labels).
+func (g *Gateway) parse(scheme, name string) (cipher.PubKey, []skynetweb.RouteLabel, error) {
 	suffix := "." + scheme
-	_, _, dest, _, err := skynetweb.ParseResolverHost(name, suffix, g.aliases)
+	_, route, dest, _, err := skynetweb.ParseResolverHost(name, suffix, g.aliases)
 	if err != nil {
-		return cipher.PubKey{}, fmt.Errorf("meshgw: parse %q: %w", name, err)
+		return cipher.PubKey{}, nil, fmt.Errorf("meshgw: parse %q: %w", name, err)
 	}
-	return dest, nil
+	return dest, route, nil
+}
+
+// routeKey spells route out for the lease map, one label per element.
+func routeKey(route []skynetweb.RouteLabel) string {
+	var b strings.Builder
+	for _, rl := range route {
+		if rl.IsTpID {
+			b.WriteString(rl.TpID.String())
+		} else {
+			b.WriteString(rl.PK.Hex())
+		}
+		b.WriteByte('.')
+	}
+	return b.String()
 }
 
 func (g *Gateway) lookup(ip net.IP) (target, bool) {
@@ -218,7 +237,7 @@ func (g *Gateway) dialTarget(ctx context.Context, t target, port uint16) (net.Co
 	if t.host != "" {
 		return g.local(ctx, t.host, port)
 	}
-	return g.dial(ctx, t.scheme, t.dest, port)
+	return g.dial(ctx, t.scheme, t.dest, port, t.route)
 }
 
 // ServeTransparent accepts REDIRECT'd TCP connections on lis and bridges each to

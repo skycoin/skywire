@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // TestStatusHostsGoToLocal checks that with a local dial set, the reserved
@@ -15,7 +16,7 @@ import (
 // answers nothing else.
 func TestStatusHostsGoToLocal(t *testing.T) {
 	meshDials := 0
-	g, err := New(func(context.Context, string, cipher.PubKey, uint16) (net.Conn, error) {
+	g, err := New(func(context.Context, string, cipher.PubKey, uint16, []skynetweb.RouteLabel) (net.Conn, error) {
 		meshDials++
 		return nil, net.ErrClosed
 	}, "100.64.0.0/16", nil, nil)
