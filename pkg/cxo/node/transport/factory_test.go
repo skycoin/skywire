@@ -10,16 +10,12 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// recvWithin reads one message from c.GetChanIn within d or fails the test.
+// recvWithin reads one message from c within d or fails the test.
 func recvWithin(t *testing.T, c *Connection, d time.Duration) []byte {
 	t.Helper()
-	select {
-	case got := <-c.GetChanIn():
-		return got
-	case <-time.After(d):
-		t.Fatal("timed out waiting for message")
-		return nil
-	}
+	got, err := c.ReadFrame(d)
+	require.NoError(t, err)
+	return got
 }
 
 // acceptWithin waits for an accepted server-side connection.
@@ -59,6 +55,7 @@ func TestTCPFactoryRoundTrip(t *testing.T) {
 	defer srvConn.Close()
 
 	conn.GetChanOut() <- Frame{Body: []byte("over noise")}
+	conn.Kick()
 	assert.Equal(t, []byte("over noise"), recvWithin(t, srvConn, 10*time.Second))
 }
 
@@ -114,6 +111,7 @@ func TestUDPFactoryRoundTrip(t *testing.T) {
 	defer srvConn.Close()
 
 	conn.GetChanOut() <- Frame{Body: []byte("udp-msg")}
+	conn.Kick()
 	assert.Equal(t, []byte("udp-msg"), recvWithin(t, srvConn, 5*time.Second))
 }
 
