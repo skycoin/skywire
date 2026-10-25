@@ -14,12 +14,13 @@ import (
 
 // StorageDevice information.
 type StorageDevice struct {
-	Name   string `json:"name,omitempty"`
-	Driver string `json:"driver,omitempty"`
-	Vendor string `json:"vendor,omitempty"`
-	Model  string `json:"model,omitempty"`
-	Serial string `json:"serial,omitempty"`
-	Size   uint   `json:"size,omitempty"` // device size in GB
+	Name      string `json:"name,omitempty"`
+	Driver    string `json:"driver,omitempty"`
+	Vendor    string `json:"vendor,omitempty"`
+	Model     string `json:"model,omitempty"`
+	Serial    string `json:"serial,omitempty"`
+	Size      uint   `json:"size,omitempty"` // device size in GB
+	Removable bool   `json:"removable"`
 }
 
 func getSerial(name, fullpath string) (serial string) {
@@ -28,21 +29,21 @@ func getSerial(name, fullpath string) (serial string) {
 
 	// Modern location/format of the udev database.
 	if dev := slurpFile(path.Join(fullpath, "dev")); dev != "" {
-		if f, err = os.Open(path.Join("/run/udev/data", "b"+dev)); err == nil { //nolint:gosec // udev db path under well-known /run/udev/data
+		if f, err = os.Open(path.Join("/run/udev/data", "b"+dev)); err == nil {
 			goto scan
 		}
 	}
 
 	// Legacy location/format of the udev database.
-	if f, err = os.Open(path.Join("/dev/.udev/db", "block:"+name)); err == nil { //nolint:gosec // legacy udev db path under well-known /dev/.udev/db
+	if f, err = os.Open(path.Join("/dev/.udev/db", "block:"+name)); err == nil {
 		goto scan
 	}
 
 	// No serial :(
-	return serial
+	return
 
 scan:
-	defer f.Close() //nolint:errcheck // read-only handle on udev db file
+	defer func() { _ = f.Close() }()
 
 	s := bufio.NewScanner(f)
 	for s.Scan() {
@@ -53,8 +54,11 @@ scan:
 			}
 		}
 	}
+	if s.Err() != nil {
+		return ""
+	}
 
-	return serial
+	return
 }
 
 func (si *SysInfo) getStorageInfo() {
@@ -96,8 +100,11 @@ func (si *SysInfo) getStorageInfo() {
 			device.Vendor = vendor
 		}
 
-		size, _ := strconv.ParseUint(slurpFile(path.Join(fullpath, "size")), 10, 64) //nolint:errcheck // non-numeric size → 0, acceptable
-		device.Size = uint(size) / 1953125                                           // GiB
+		size, _ := strconv.ParseUint(slurpFile(path.Join(fullpath, "size")), 10, 64)
+		device.Size = uint(size / 1953125) // GB
+
+		removable, _ := strconv.ParseBool(slurpFile(path.Join(fullpath, "removable")))
+		device.Removable = removable
 
 		si.Storage = append(si.Storage, device)
 	}

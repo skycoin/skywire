@@ -197,10 +197,6 @@ github.com/0magnet/sh/v3/syntax
 # github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 ## explicit; go 1.25.0
 github.com/0magnet/spheregraph
-# github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
-## explicit; go 1.23
-github.com/0magnet/sysinfo
-github.com/0magnet/sysinfo/cpuid
 # github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 ## explicit; go 1.26.0
 github.com/0magnet/termanim/canvas
@@ -1245,6 +1241,10 @@ github.com/yuin/goldmark/util
 # github.com/yusufpapurcu/wmi v1.2.4
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
+# github.com/zcalusic/sysinfo v1.2.1
+## explicit; go 1.27
+github.com/zcalusic/sysinfo
+github.com/zcalusic/sysinfo/cpuid
 # go.opentelemetry.io/auto/sdk v1.2.1
 ## explicit; go 1.24.0
 go.opentelemetry.io/auto/sdk

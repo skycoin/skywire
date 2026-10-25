@@ -33,7 +33,6 @@ require (
 	github.com/0magnet/router7 v0.0.0-20260918203824-9d84d0024076
 	github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 	github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
-	github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
 	github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 	github.com/0magnet/webrtc/v4 v4.2.24
 	github.com/0magnet/websh v0.0.1-0.20261024151553-9917e7f9f7c8
@@ -113,6 +112,7 @@ require (
 	github.com/xtaci/smux v1.5.57
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	github.com/yuin/goldmark v1.8.6
+	github.com/zcalusic/sysinfo v1.2.1
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
