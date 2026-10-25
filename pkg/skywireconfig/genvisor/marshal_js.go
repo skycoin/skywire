@@ -30,8 +30,8 @@
 package genvisor
 
 import (
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1016,6 +1016,10 @@ func marshalTransport(w *strings.Builder, t *visorconfig.Transport, indent int) 
 	if t.HypervisorAutoconnect != nil {
 		o.field("hypervisor_autoconnect")
 		writeBool(w, *t.HypervisorAutoconnect)
+	}
+	if t.TCPNotSentLowat != nil {
+		o.field("tcp_notsent_lowat")
+		writeInt(w, int64(*t.TCPNotSentLowat))
 	}
 	o.field("transport_setup")
 	writePubKeySlice(w, t.TransportSetupPKs, o.indent+1)
