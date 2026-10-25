@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 // Copyright © 2016 Zlatko Čalušić
 //
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file.
@@ -25,7 +22,7 @@ type NetworkDevice struct {
 }
 
 func getPortType(supp uint32) (port string) {
-	for i, p := range [...]string{"tp", "aui", "mii", "fibre", "bnc"} { //nolint:misspell // "fibre" is the kernel ethtool port-type spelling
+	for i, p := range [...]string{"tp", "aui", "mii", "fibre", "bnc"} {
 		if supp&(1<<uint(i+7)) > 0 {
 			port += p + "/"
 		}
@@ -64,7 +61,7 @@ func getSupported(name string) uint32 {
 	if err != nil {
 		return 0
 	}
-	defer syscall.Close(fd) //nolint:errcheck // best-effort close of ioctl socket
+	defer func() { _ = syscall.Close(fd) }()
 
 	// struct ethtool_cmd from /usr/include/linux/ethtool.h
 	var ethtool struct {
@@ -92,19 +89,21 @@ func getSupported(name string) uint32 {
 
 	ethtool.Cmd = GSET
 
-	// struct ifreq from /usr/include/linux/if.h
+	// struct ifreq from /usr/include/linux/if.h, padded to its full size (the union is as big as struct ifmap),
+	// because the kernel copies the whole struct back
 	var ifr struct {
 		Name [16]byte
 		Data uintptr
+		_    [unsafe.Sizeof(uintptr(0)) + 8]byte
 	}
 
 	copy(ifr.Name[:], name+"\000")
-	ifr.Data = uintptr(unsafe.Pointer(&ethtool)) //nolint:gosec // pass ethtool_cmd struct pointer to SIOCETHTOOL ioctl
+	ifr.Data = uintptr(unsafe.Pointer(&ethtool)) //nolint:gosec // ioctl argument, the kernel fills in struct ethtool_cmd
 
 	// SIOCETHTOOL from /usr/include/linux/sockios.h
 	const SIOCETHTOOL = 0x8946
 
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(SIOCETHTOOL), uintptr(unsafe.Pointer(&ifr))) //nolint:gosec // pass ifreq struct pointer to SIOCETHTOOL ioctl
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(SIOCETHTOOL), uintptr(unsafe.Pointer(&ifr))) //nolint:gosec // ioctl argument, struct ifreq is padded to its full kernel size
 	if errno == 0 {
 		return ethtool.Supported
 	}

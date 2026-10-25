@@ -4,9 +4,7 @@
 
 package sysinfo
 
-import (
-	"strconv"
-)
+import "strconv"
 
 // Chassis information.
 type Chassis struct {

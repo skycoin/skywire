@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0magnet/sysinfo"
+	"github.com/zcalusic/sysinfo"
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
 
