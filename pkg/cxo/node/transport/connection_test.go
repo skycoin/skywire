@@ -51,20 +51,24 @@ func (fakeAddr) Network() string { return "fake" }
 func (fakeAddr) String() string  { return "fake" }
 
 // TestConnection_Close_UnblocksStuckRead is the regression test for the CXO
-// transport-discovery goroutine leak. readLoop parks in io.ReadFull on a
-// half-dead dmsg stream; Close() must arm a read deadline to force that read
-// to return, otherwise readLoop never exits, close(c.in) never runs, and the
-// owning CXO Conn.run leaks forever on await.Wait() (tens of thousands of
-// stuck goroutines + multi-GB RSS observed in production).
+// transport-discovery goroutine leak. A read parked on a half-dead dmsg stream
+// must return once Close arms a read deadline, or the owning CXO Conn.run
+// leaks forever (tens of thousands of stuck goroutines + multi-GB RSS observed
+// in production).
 func TestConnection_Close_UnblocksStuckRead(t *testing.T) {
 	c := newConnection(newHalfDeadConn(), false)
 
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.ReadFrame(0)
+		errc <- err
+	}()
 	c.Close()
 
 	select {
-	case _, ok := <-c.GetChanIn():
-		require.False(t, ok, "c.in must be closed once readLoop exits")
+	case err := <-errc:
+		require.ErrorIs(t, err, ErrInterrupted)
 	case <-time.After(3 * time.Second):
-		t.Fatal("readLoop did not exit after Close — the stuck read was not unblocked (leak regression)")
+		t.Fatal("ReadFrame did not return after Close: the stuck read was not unblocked (leak regression)")
 	}
 }
