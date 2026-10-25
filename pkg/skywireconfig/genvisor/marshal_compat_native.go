@@ -1032,6 +1032,10 @@ func marshalTransportNative(w *strings.Builder, t *visorconfig.Transport, indent
 		o.field("hypervisor_autoconnect")
 		writeBoolNative(w, *t.HypervisorAutoconnect)
 	}
+	if t.TCPNotSentLowat != nil {
+		o.field("tcp_notsent_lowat")
+		writeIntNative(w, int64(*t.TCPNotSentLowat))
+	}
 	o.field("transport_setup")
 	writePubKeyNativeSlice(w, t.TransportSetupPKs, o.indent+1)
 	if len(t.UserTransportSetupPKs) > 0 {

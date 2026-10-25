@@ -433,8 +433,19 @@ func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Debug("stcpr transport is not available in a browser; not started")
 		return nil
 	}
+	applyTCPNotSentLowat(v.conf.Transport.TCPNotSentLowat)
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
+}
+
+// applyTCPNotSentLowat sets transport.tcp_notsent_lowat for TCP transports
+// opened from now on, with nil meaning the default.
+func applyTCPNotSentLowat(n *int) {
+	if n == nil {
+		network.SetTCPNotSentLowat(network.DefaultTCPNotSentLowat)
+		return
+	}
+	network.SetTCPNotSentLowat(*n)
 }
 
 // initWSClient starts the WebSocket transport server. WS has no dedicated
