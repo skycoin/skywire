@@ -125,8 +125,6 @@ github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128 h1:ABhMGezW+gg1dk
 github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128/go.mod h1:lkiwBghlcHik7Hli9029uD/KoJSNyBOUCCYd02IQHi4=
 github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5 h1:yS/lq1hf4A3lDWHkV01GhwzIWwb5iSDl2d0LzsSRP2s=
 github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5/go.mod h1:Lo6dEOjpVn+ra0q7gNWsvxxcd/SUF7Pg3dkRhykOScI=
-github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed h1:suukwDbntol8ase06v0FKb8BukKZfZQk4hmeTWzRnes=
-github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed/go.mod h1:WP5MYGTnUSPGl1B3G/dPBxI/T5EQBAOWlbZCtGUypi0=
 github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff h1:R5EjBAYkLdJAX2pwj4z9pb21U2c3T5CSlxKTE7UIHkA=
 github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff/go.mod h1:sPb6ZYeBx+TFCOBfDTHIaKXn+7DjQasS5vARJaiWP0Y=
 github.com/0magnet/u-root v0.16.1-0.20261003214924-44e47b732754 h1:wK2MncQOnEea7yqiOHvv3oD89sc+YC1dAw4zw1o48mQ=
@@ -904,6 +902,8 @@ github.com/yuin/goldmark v1.8.6 h1:d0VcaP1sx9GkFVkoW+KtggpGi2KZ965i14b0+bDQST4=
 github.com/yuin/goldmark v1.8.6/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
+github.com/zcalusic/sysinfo v1.2.1 h1:FfUn5d8zGXqz9eH1606xgH+7RspkG66wktuIqz8hbxk=
+github.com/zcalusic/sysinfo v1.2.1/go.mod h1:hxRL/4MEDzq4P8bACoQYPvyWf+dE7latAUwVDQ3gIHM=
 go.etcd.io/etcd/api/v3 v3.5.4/go.mod h1:5GB2vv4A4AOn3yk7MftYGHkUfGtDHnEraIjym4dYz5A=
 go.etcd.io/etcd/client/pkg/v3 v3.5.4/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3YSwc9/Ac1g=
 go.etcd.io/etcd/client/v2 v2.305.4/go.mod h1:Ud+VUwIi9/uQHOMA+4ekToJ12lTxlv0zB/+DHwTGEbU=

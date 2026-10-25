@@ -36,12 +36,17 @@ func (si *SysInfo) getMemoryInfo() {
 		// Xen hypervisor
 		if targetKB := slurpFile("/sys/devices/system/xen_memory/xen_memory0/target_kb"); targetKB != "" {
 			si.Memory.Type = "DRAM"
-			size, _ := strconv.ParseUint(targetKB, 10, 64) //nolint:errcheck // non-numeric target_kb → size 0, acceptable
+			size, _ := strconv.ParseUint(targetKB, 10, 64)
 			si.Memory.Size = uint(size) / 1024
 		}
 		return
 	}
 
+	si.parseDMI(dmi)
+}
+
+// parseDMI fills in memory information and CPU speed from a raw SMBIOS table.
+func (si *SysInfo) parseDMI(dmi []byte) {
 	si.Memory.Size = 0
 	var memSizeAlt uint
 loop:
@@ -49,12 +54,20 @@ loop:
 		recType := dmi[p]
 		recLen := dmi[p+1]
 
+		// Malformed or truncated table, stop parsing.
+		if recLen < 4 || p+int(recLen) > len(dmi) {
+			break
+		}
+
 		switch recType {
 		case 4:
-			if si.CPU.Speed == 0 {
+			if si.CPU.Speed == 0 && recLen >= 0x18 {
 				si.CPU.Speed = uint(word(dmi, p+0x16))
 			}
 		case 17:
+			if recLen < 0x13 {
+				break
+			}
 			size := uint(word(dmi, p+0x0c))
 			if size == 0 || size == 0xffff || size&0x8000 == 0x8000 {
 				break
@@ -90,6 +103,9 @@ loop:
 				}
 			}
 		case 19:
+			if recLen < 0x0f {
+				break
+			}
 			start := uint(dword(dmi, p+0x04))
 			end := uint(dword(dmi, p+0x08))
 			if start == 0xffffffff && end == 0xffffffff {
