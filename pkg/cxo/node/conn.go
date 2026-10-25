@@ -113,25 +113,27 @@ func (c *Conn) waitForInit() error {
 // run defines connection lifecycle. It blocks until the connection is fully
 // cleaned up (removed from node maps, transport closed, OnDisconnect called).
 func (c *Conn) run() {
-	// Receive messages, until close signal is received or error occurs.
-	var rcvErr error
-	c.await.Add(1)
-	go func() {
-		defer c.await.Done()
-		if rcvErr = c.receiveMsg(); rcvErr != nil {
-			c.signalClose()
-		}
-	}()
-
 	// The idle watchdog that closes a Conn after idleWatchdogThreshold
 	// of silence (half-dead-transport case: dmsg session gone but
 	// io.ReadFull never errors) is no longer per-conn. One shared
 	// Node.connReaper walks all active conns on the same interval —
 	// same detection guarantee, minus a goroutine+ticker per conn.
 
-	// If OnConnect returns error, connection will be closed.
+	// OnConnect may wait for replies, so it runs beside the receive loop. If
+	// it returns an error, the connection is closed.
 	var occErr error
-	if occErr = c.n.onConnect(c); occErr != nil {
+	c.await.Add(1)
+	go func() {
+		defer c.await.Done()
+		if occErr = c.n.onConnect(c); occErr != nil {
+			c.signalClose()
+		}
+	}()
+
+	// Receive messages on this goroutine until close is signaled or an
+	// error occurs.
+	rcvErr := c.receiveMsg()
+	if rcvErr != nil {
 		c.signalClose()
 	}
 
@@ -208,6 +210,7 @@ func (c *Conn) probe() {
 	select {
 	case <-c.closeq:
 	case c.sendq <- f:
+		c.Kick()
 	default:
 	}
 }
@@ -571,7 +574,11 @@ func (c *Conn) Getter() skyobject.Getter {
 // both take the default branch and double-close (panic: close of closed
 // channel). sync.Once removes that window.
 func (c *Conn) signalClose() {
-	c.closeOnce.Do(func() { close(c.closeq) })
+	c.closeOnce.Do(func() {
+		close(c.closeq)
+		// Wake the receive loop, which reads the transport directly.
+		c.Interrupt()
+	})
 }
 
 // Close the Conn
@@ -657,6 +664,7 @@ func (c *Conn) sendFrame(f transport.Frame) error {
 	// Fast path: buffer has room, enqueue immediately.
 	select {
 	case c.sendq <- f:
+		c.Kick()
 		return nil
 	default:
 	}
@@ -666,6 +674,7 @@ func (c *Conn) sendFrame(f transport.Frame) error {
 	// is also selected so a concurrent Close unblocks us cleanly.
 	select {
 	case c.sendq <- f:
+		c.Kick()
 		return nil
 	case <-c.closeq:
 		return ErrClosed
@@ -682,58 +691,55 @@ func (c *Conn) sendFrame(f transport.Frame) error {
 func (c *Conn) receiveMsg() error {
 	c.n.Debugf(ConnPin, "[%s] receiving", c.String())
 
-	receiveq := c.GetChanIn()
-
 	// Initialize activity timestamp so the watchdog has a starting
 	// point — without this, a Conn that handshakes but never receives
 	// chat traffic looks idle from t=0 and the watchdog would fire
 	// the moment it starts.
 	c.lastActivityNs.Store(time.Now().UnixNano())
 
-	// Read raw messages from transport.Connection.
-	// Terminate if connection is closed or if close signal is sent.
+	// Read raw messages from transport.Connection until it fails or close is
+	// signaled (signalClose interrupts the read).
 	for {
-		select {
-		case raw, ok := <-receiveq:
-			if ok == false { //nolint:staticcheck
-				return errors.New("connection closed")
+		raw, err := c.ReadFrame(0)
+		if err != nil {
+			select {
+			case <-c.closeq:
+				return nil
+			default:
+				return fmt.Errorf("connection closed: %w", err)
 			}
+		}
+		// Bump activity on every inbound — chat traffic, heartbeats,
+		// request responses. The watchdog reads this to decide whether
+		// the Conn has gone idle past the threshold.
+		c.lastActivityNs.Store(time.Now().UnixNano())
 
-			// Bump activity on every inbound — chat traffic, heartbeats,
-			// request responses. The watchdog reads this to decide whether
-			// the Conn has gone idle past the threshold.
-			c.lastActivityNs.Store(time.Now().UnixNano())
+		// Check message size.
+		// [ 4 seq ][ 4 rseq ][ 1 msg type ]
+		if len(raw) < 9 {
+			return errors.New("invalid message size")
+		}
 
-			// Check message size.
-			// [ 4 seq ][ 4 rseq ][ 1 msg type ]
-			if len(raw) < 9 {
-				return errors.New("invalid message size")
-			}
+		// Decode message.
+		var (
+			seq    = binary.LittleEndian.Uint32(raw[:4])
+			rseq   = binary.LittleEndian.Uint32(raw[4:8])
+			msgRaw = raw[8:]
+		)
+		msg, err := msg.Decode(msgRaw)
+		if err != nil {
+			return fmt.Errorf("failed to decode message: %s", err)
+		}
 
-			// Decode message.
-			var (
-				seq    = binary.LittleEndian.Uint32(raw[:4])
-				rseq   = binary.LittleEndian.Uint32(raw[4:8])
-				msgRaw = raw[8:]
-			)
-			msg, err := msg.Decode(msgRaw)
-			if err != nil {
-				return fmt.Errorf("failed to decode message: %s", err)
-			}
+		c.n.Debugf(MsgReceivePin, "[%s] receive %T", c.String(), msg)
 
-			c.n.Debugf(MsgReceivePin, "[%s] receive %T", c.String(), msg)
-
-			// Handle message.
-			if rq, ok := c.isResponse(rseq); ok == true { //nolint:staticcheck
-				rq <- msg
-				continue
-			}
-			if err := c.handle(seq, msg); err != nil {
-				return fmt.Errorf("failed to handle message %s", err)
-			}
-
-		case <-c.closeq:
-			return nil
+		// Handle message.
+		if rq, ok := c.isResponse(rseq); ok == true { //nolint:staticcheck
+			rq <- msg
+			continue
+		}
+		if err := c.handle(seq, msg); err != nil {
+			return fmt.Errorf("failed to handle message %s", err)
 		}
 	}
 }

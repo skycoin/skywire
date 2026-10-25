@@ -42,6 +42,7 @@ func TestConnectionWrite(t *testing.T) {
 	defer b.Close() //nolint:errcheck
 
 	c.GetChanOut() <- Frame{Body: []byte("hello")}
+	c.Kick()
 
 	done := make(chan []byte, 1)
 	go func() {
@@ -67,7 +68,7 @@ func TestConnectionWrite(t *testing.T) {
 }
 
 // TestConnectionRead verifies a framed message arriving on the conn is delivered
-// on the in channel.
+// by ReadFrame.
 func TestConnectionRead(t *testing.T) {
 	a, b := net.Pipe()
 	c := newConnection(a, false)
@@ -76,16 +77,13 @@ func TestConnectionRead(t *testing.T) {
 
 	go func() { _, _ = b.Write(frame([]byte("ping"))) }() //nolint
 
-	select {
-	case got := <-c.GetChanIn():
-		assert.Equal(t, []byte("ping"), got)
-	case <-time.After(2 * time.Second):
-		t.Fatal("readLoop did not deliver the message")
-	}
+	got, err := c.ReadFrame(2 * time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("ping"), got)
 }
 
 // TestConnectionReadInvalidLength verifies a zero-length frame tears the
-// connection down (readLoop exits, closing the in channel).
+// connection down.
 func TestConnectionReadInvalidLength(t *testing.T) {
 	a, b := net.Pipe()
 	c := newConnection(a, false)
@@ -94,12 +92,60 @@ func TestConnectionReadInvalidLength(t *testing.T) {
 
 	go func() { _, _ = b.Write([]byte{0, 0, 0, 0}) }() //nolint // length 0 → reject
 
-	select {
-	case _, ok := <-c.GetChanIn():
-		assert.False(t, ok, "in channel must close after an invalid length")
-	case <-time.After(2 * time.Second):
-		t.Fatal("readLoop did not tear down on an invalid length")
+	_, err := c.ReadFrame(2 * time.Second)
+	require.Error(t, err)
+	require.True(t, c.IsClosed(), "an invalid length must close the connection")
+}
+
+// TestConnectionWriterExitsWhenIdle verifies the writer goroutine only lives
+// while frames are queued.
+func TestConnectionWriterExitsWhenIdle(t *testing.T) {
+	a, b := net.Pipe()
+	c := newConnection(a, false)
+	defer c.Close()
+	defer b.Close()                               //nolint:errcheck
+	go func() { _, _ = io.Copy(io.Discard, b) }() //nolint
+
+	require.False(t, c.writing.Load(), "a new connection starts no writer")
+	for i := 0; i < 100; i++ {
+		c.GetChanOut() <- Frame{Body: []byte("x")}
+		c.Kick()
 	}
-	require.Eventually(t, c.IsClosed, time.Second, 10*time.Millisecond,
-		"connection should be closed after readLoop exits")
+	require.Eventually(t, func() bool { return !c.writing.Load() && len(c.out) == 0 },
+		2*time.Second, time.Millisecond, "the writer must drain the queue and exit")
+}
+
+// TestConnectionInterruptKeepsWrites verifies Interrupt stops reads but lets
+// queued frames reach the peer.
+func TestConnectionInterruptKeepsWrites(t *testing.T) {
+	a, b := net.Pipe()
+	c := newConnection(a, false)
+	defer c.Close()
+	defer b.Close() //nolint:errcheck
+
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.ReadFrame(0)
+		errc <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	c.Interrupt()
+	select {
+	case err := <-errc:
+		require.ErrorIs(t, err, ErrInterrupted)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Interrupt did not unblock ReadFrame")
+	}
+	require.False(t, c.IsClosed(), "Interrupt must not close the connection")
+
+	c.GetChanOut() <- Frame{Body: []byte("after")}
+	c.Kick()
+	header := make([]byte, 4)
+	require.NoError(t, b.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, err := io.ReadFull(b, header)
+	require.NoError(t, err)
+	payload := make([]byte, binary.BigEndian.Uint32(header))
+	_, err = io.ReadFull(b, payload)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("after"), payload)
 }
