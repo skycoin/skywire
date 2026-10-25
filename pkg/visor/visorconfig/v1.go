@@ -651,7 +651,11 @@ type Transport struct {
 	// transport to each configured hypervisor. A nil pointer means "on" (default),
 	// so configs written before this field existed keep the prior always-on
 	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
-	HypervisorAutoconnect *bool           `json:"hypervisor_autoconnect,omitempty"`
+	HypervisorAutoconnect *bool `json:"hypervisor_autoconnect,omitempty"`
+	// TCPNotSentLowat caps the unsent bytes the kernel holds for each stcpr or
+	// stcp transport (TCP_NOTSENT_LOWAT). Unset is 128 KiB, 0 is the kernel's
+	// default. Linux and Android only; it applies to transports opened after it.
+	TCPNotSentLowat       *int            `json:"tcp_notsent_lowat,omitempty"`
 	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
 	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
 	TPSetupSK             *cipher.SecKey  `json:"tps_sk,omitempty"`

@@ -807,6 +807,7 @@ var genConfigCmd = &cobra.Command{
 		configureHypervisor(log)
 		keepPersistentTransports()
 		keepAutoconnect()
+		keepTCPNotSentLowat()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1746,6 +1747,14 @@ func keepPersistentTransports() {
 func keepAutoconnect() {
 	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.Autoconnect = oldConfCache.Transport.Autoconnect
+	}
+}
+
+// keepTCPNotSentLowat carries transport.tcp_notsent_lowat over a regenerate:
+// it is set live with config set and has no skywire.conf variable.
+func keepTCPNotSentLowat() {
+	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+		conf.Transport.TCPNotSentLowat = oldConfCache.Transport.TCPNotSentLowat
 	}
 }
 

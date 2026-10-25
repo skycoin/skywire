@@ -61,6 +61,10 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 			k := 0
 			v.Transport.Autoconnect.SiteLinks = &k
 		}},
+		{"tcp-notsent-lowat", Options{}, func(v *visorconfig.V1) {
+			n := 0
+			v.Transport.TCPNotSentLowat = &n
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

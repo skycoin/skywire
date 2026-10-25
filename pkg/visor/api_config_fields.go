@@ -183,6 +183,23 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.MaxTotal = int(nv.Int()) })
 		},
 	}, {
+		Path: "transport.tcp_notsent_lowat",
+		Desc: "unsent bytes the kernel holds per stcpr/stcp transport (0 = kernel default), for transports opened after the change",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			n, ok := nv.Interface().(*int)
+			if !ok {
+				return errors.New("tcp_notsent_lowat must be a number")
+			}
+			if n != nil && *n < 0 {
+				return errors.New("tcp_notsent_lowat must not be negative")
+			}
+			if err := v.conf.UpdateTCPNotSentLowat(n); err != nil {
+				return err
+			}
+			applyTCPNotSentLowat(n)
+			return nil
+		},
+	}, {
 		Path: "routing.min_hops",
 		Desc: "minimum intermediate hops per route",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {
