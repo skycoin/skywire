@@ -31,3 +31,10 @@ func unwrapTCPConn(conn net.Conn) (*net.TCPConn, bool) {
 	tc, ok := conn.(*net.TCPConn)
 	return tc, ok
 }
+
+func tcpConnLinkStats(conn net.Conn) *LinkStats {
+	if tc, ok := unwrapTCPConn(conn); ok {
+		return tcpLinkStats(tc)
+	}
+	return nil
+}
