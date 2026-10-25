@@ -560,6 +560,12 @@ func (c *dcConn) selectedPair() *webrtc.ICECandidatePair {
 // rawConnDetails contributes the selected ICE candidate pair's endpoints to a
 // ConnDetails. The DTLS fingerprint is not exposed by pion's public API.
 func (c *dcConn) rawConnDetails(d *ConnDetails) {
+	if c.pc != nil {
+		if sctp := c.pc.SCTP(); sctp != nil {
+			s := sctp.Stats()
+			d.Link = &LinkStats{SRTTMs: s.SmoothedRoundTripTime * 1000, CwndBytes: uint64(s.CongestionWindow)}
+		}
+	}
 	pair := c.selectedPair()
 	if pair == nil {
 		return

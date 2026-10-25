@@ -165,6 +165,14 @@ func TestQUICDatagramRoundTrip(t *testing.T) {
 	got, err := srvWrap.ReadDatagram(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, payload, got)
+
+	var d ConnDetails
+	cliWrap.rawConnDetails(&d)
+	require.NotNil(t, d.Link)
+	require.NotNil(t, d.Link.Loss)
+	assert.Positive(t, d.Link.Loss.PacketsSent)
+	assert.Positive(t, d.Link.SRTTMs)
+	assert.Positive(t, d.Link.CwndBytes)
 }
 
 // TestQUICConnRejectsWrongServerPK verifies the client-side pin: dialing a

@@ -44,6 +44,9 @@ type ConnDetails struct {
 	// ALPN is the negotiated TLS application protocol (e.g.
 	// "skywire-quic-1"). squicr-only.
 	ALPN string `json:"alpn,omitempty"`
+	// Link holds live RTT, congestion and loss counters from the carrier's
+	// own stack (TCP_INFO, quic-go, KCP, SCTP).
+	Link *LinkStats `json:"link,omitempty"`
 }
 
 // ConnDetailer is optionally implemented by a network.Transport to
