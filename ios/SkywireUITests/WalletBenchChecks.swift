@@ -495,6 +495,55 @@ final class WalletBenchChecks: XCTestCase {
         try bench("reset")
     }
 
+    /// Node details: the chain, the node's peers, its unconfirmed pool with the wallet's own
+    /// removable, and the wallet's outputs by address.
+    func testNodeDetails() throws {
+        let app = try benchWallet()
+        try bench("pending")
+        openNode(app)
+        tapWhenUp("wallet-nodeinfo-open", in: app)
+        let blocks = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Number of blocks")).firstMatch
+        XCTAssertTrue(blocks.waitForExistence(timeout: 15), "no chain page")
+        XCTAssertTrue(blocks.label.contains("1,000"), blocks.label)
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "24,239,050 SKY")).firstMatch.exists,
+                      "the supply is not shown grouped")
+        attachScreenshot(app, "bench-nodeinfo-chain")
+
+        app.buttons["Peers"].tap()
+        let peer = app.descendants(matching: .any).matching(identifier: "wallet-peer").firstMatch
+        XCTAssertTrue(peer.waitForExistence(timeout: 15), "no peers")
+        XCTAssertTrue(peer.label.contains("139.162.161.41:20002"), peer.label)
+        XCTAssertTrue(peer.label.contains("Outgoing"), peer.label)
+        attachScreenshot(app, "bench-nodeinfo-peers")
+
+        app.buttons["Pending"].tap()
+        let mine = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "wallet-pending-delete-")).firstMatch
+        XCTAssertTrue(mine.waitForExistence(timeout: 15), "the wallet's own pending transaction is not removable")
+        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier BEGINSWITH %@",
+                                                                          "wallet-pending-", "wallet-pending-delete"))
+        XCTAssertEqual(rows.matching(NSPredicate(format: "label CONTAINS %@", "1.500 SKY")).count, 1, "Mine does not list the wallet's own")
+        XCTAssertEqual(rows.matching(NSPredicate(format: "label CONTAINS %@", "7.000 SKY")).count, 0, "Mine lists a stranger's")
+        app.buttons["All"].tap()
+        let stranger = rows.matching(NSPredicate(format: "label CONTAINS %@", "7.000 SKY")).firstMatch
+        XCTAssertTrue(stranger.waitForExistence(timeout: 5), "All does not list a stranger's")
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "wallet-pending-delete-")).count, 1,
+                       "a stranger's transaction can be removed")
+        attachScreenshot(app, "bench-nodeinfo-pending")
+        mine.tap()
+        tapWhenUp("wallet-pending-delete-confirm", in: app)
+        XCTAssertTrue(waitGone(mine, timeout: 15), "the removed transaction is still listed")
+        XCTAssertTrue(stranger.exists)
+
+        app.buttons["Outputs"].tap()
+        let output = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "10.000 SKY")).firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 15), "the wallet's outputs are not listed")
+        XCTAssertTrue(app.staticTexts[shortAddress(addresses[1])].exists, "the second address's outputs have no heading")
+        attachScreenshot(app, "bench-nodeinfo-outputs")
+        try bench("reset")
+    }
+
+    private func shortAddress(_ address: String) -> String { "\(address.prefix(8))…\(address.suffix(6))" }
+
     /// A fiber coin added with its name and ticker left blank takes them from its node.
     func testAFiberCoinIsNamedByItsNode() throws {
         try bench("reset")

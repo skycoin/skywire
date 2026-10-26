@@ -195,17 +195,19 @@ struct SkySegmentedRow<Item: Hashable>: View {
     let onSelect: (Item) -> Void
 
     var body: some View {
+        // Four segments on a phone leave no room for the check beside a seven-letter label.
+        let tight = items.count > 3
         HStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element) { index, item in
                 let on = item == selected
                 let shape = SegmentShape(first: index == 0, last: index == items.count - 1)
                 Button { onSelect(item) } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: tight ? 4 : 8) {
                         if on { MaterialIcon(MI.filledCheck, size: 18) }
                         label(item).skyText(.labelLarge).lineLimit(1)
                     }
                     .foregroundStyle(on ? Color.skyOnSecondaryContainer : Color.skyOnSurface)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, tight ? 6 : 12)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(on ? Color.skySecondaryContainer : .clear, in: shape)
                     .overlay(shape.stroke(Color.skyOutline, lineWidth: 1))
