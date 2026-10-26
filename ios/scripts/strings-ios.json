@@ -74,9 +74,9 @@
       "fr": "SkyDNS arrivera avec la version de Skywire qui tourne sur un iPhone. D’ici là, il reste désactivé."
     },
     "wallet_reveal_action_sub_ios": {
-      "en": "Shows all twelve words in the clear. Asks for Face ID, Touch ID or your passcode first.",
-      "zh-Hans": "以明文显示全部十二个助记词。需要先验证面容 ID、触控 ID 或设备密码。",
-      "es": "Muestra las doce palabras a la vista. Pide Face ID, Touch ID o tu código antes.",
+      "en": "Shows every word of the phrase in the clear. Asks for Face ID, Touch ID or your passcode first.",
+      "zh-Hans": "以明文显示全部助记词。需要先验证面容 ID、触控 ID 或设备密码。",
+      "es": "Muestra todas las palabras a la vista. Pide Face ID, Touch ID o tu código antes.",
       "fr": "Affiche tous les mots en clair. Demande d’abord Face ID, Touch ID ou votre code."
     },
     "wallet_reveal_autohide_ios": {

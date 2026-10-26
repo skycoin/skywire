@@ -12,9 +12,18 @@ struct WalletSeedView: View {
         WalletScreen(title: Text("wallet_seed_title")) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    let words = model.draft.seed?.split(separator: " ").map(String.init) ?? []
                     Text("wallet_seed_body").skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
                     SeedPrivacyNote().padding(.top, 16)
-                    SeedGrid(words: model.draft.seed?.split(separator: " ").map(String.init) ?? []).padding(.top, 20)
+                    // A new length is a new phrase: the words shown are always the ones the wallet gets.
+                    SkySegmentedRow(items: [12, 24], selected: words.count, label: {
+                        Text($0 == 24 ? L10n.key("wallet_seed_words_24") : L10n.key("wallet_seed_words_12"))
+                    }, onSelect: { count in
+                        if count != words.count { model.startCreate(words: count) }
+                    })
+                    .padding(.top, 16)
+                    .accessibilityIdentifier("wallet-seed-length")
+                    SeedGrid(words: words).padding(.top, 20)
                     Button { model.path.append(.verify) } label: { Text("wallet_seed_continue").frame(maxWidth: .infinity) }
                         .buttonStyle(FilledButtonStyle(height: 52))
                         .padding(.top, 28)
@@ -107,6 +116,8 @@ struct WalletRestoreView: View {
     @State private var words: [String] = []
     @State private var input = ""
     @State private var error: String?
+    /// The phrase failed its checksum but reads as an older wallet's seed: the next press restores it.
+    @State private var legacyOffer = false
 
     private var target: Int { words.count > 12 ? 24 : 12 }
 
@@ -138,12 +149,17 @@ struct WalletRestoreView: View {
                         .accessibilityIdentifier("wallet-restore-error")
                     }
                     // Android's FlowRow keeps its 18 pt top padding even with no chips.
-                    WordChips(words: words) { words.remove(at: $0) }.padding(.top, 18)
+                    WordChips(words: words) { words.remove(at: $0); legacyOffer = false }.padding(.top, 18)
                     SkyOutlinedTextField(placeholder: L10n.key("wallet_restore_hint"), text: $input,
                                          identifier: "wallet-restore-input", radius: SkyRadius.small)
                         .onSubmit { addWord(input) }
                         .onChange(of: input) { new in
-                            if new.hasSuffix(" ") && !new.trimmingCharacters(in: .whitespaces).isEmpty { addWord(new) } else { error = nil }
+                            if new.hasSuffix(" ") && !new.trimmingCharacters(in: .whitespaces).isEmpty {
+                                addWord(new)
+                            } else {
+                                error = nil
+                                legacyOffer = false
+                            }
                         }
                         .padding(.top, 16)
                     let suggestions = input.trimmingCharacters(in: .whitespaces).isEmpty ? [] : Bip39.suggestions(prefix: input, limit: 4)
@@ -167,7 +183,9 @@ struct WalletRestoreView: View {
                                 MaterialSpinner(size: 16, stroke: 2, color: .skyOnSurface.opacity(0.38))
                                 Text("wallet_restore_scanning")
                             } else {
-                                Text("wallet_restore_action")
+                                // The second press of the same button is the confirmation: the
+                                // offer above it says what is being agreed to.
+                                Text(legacyOffer ? L10n.key("wallet_restore_anyway") : L10n.key("wallet_restore_action"))
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -191,6 +209,7 @@ struct WalletRestoreView: View {
         words.append(contentsOf: typed.prefix(24 - words.count))
         input = ""
         error = nil
+        legacyOffer = false
     }
 
     private func paste() {
@@ -200,6 +219,7 @@ struct WalletRestoreView: View {
         if pasted.count == 12 || pasted.count == 24 {
             words = pasted
             error = nil
+            legacyOffer = false
         } else if !pasted.isEmpty {
             error = L10n.format("wallet_restore_short", pasted.count)
         }
@@ -212,9 +232,24 @@ struct WalletRestoreView: View {
         }
         let phrase = words.joined(separator: " ")
         guard Bip39.validate(phrase) else {
-            error = L10n.text("wallet_restore_checksum")
+            // A 24-word phrase of list words without a checksum is how the older wallets wrote
+            // seeds, and refusing them strands those wallets. Offer the restore with the typo risk
+            // said plainly; 12-word phrases were never written without a checksum. Only the fiber
+            // chains derive from the phrase itself.
+            let legacy = words.count == 24 && Bip39.legacyWords(phrase) && model.draft.coin.kind == .skyFiber
+            if legacy && legacyOffer {
+                legacyOffer = false
+                model.restoreWallet(phrase, legacy: true) { model.path.removeAll() }
+            } else if legacy {
+                error = L10n.text("wallet_restore_legacy")
+                legacyOffer = true
+            } else {
+                error = L10n.text("wallet_restore_checksum")
+                legacyOffer = false
+            }
             return
         }
+        legacyOffer = false
         model.restoreWallet(phrase) { model.path.removeAll() }
     }
 }

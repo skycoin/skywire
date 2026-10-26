@@ -18777,6 +18777,35 @@
         }
       }
     },
+    "wallet_restore_anyway" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore anyway"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurar de todos modos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurer quand même"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然恢复"
+          }
+        }
+      }
+    },
     "wallet_restore_checksum" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18831,6 +18860,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下一个词"
+          }
+        }
+      }
+    },
+    "wallet_restore_legacy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phrase carries no checksum — the older wallets wrote their seeds that way, so it may still be a good one. Check every word, then press again to restore anyway."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta frase no lleva suma de verificación — las carteras antiguas escribían sus semillas así, así que puede seguir siendo válida. Revisa cada palabra y pulsa de nuevo para restaurar de todos modos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette phrase ne porte pas de somme de contrôle — les anciens portefeuilles écrivaient leurs graines ainsi, elle peut donc quand même être bonne. Vérifiez chaque mot, puis appuyez de nouveau pour restaurer quand même."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这组助记词没有校验和——旧版钱包的助记词就是这样，因此它仍可能是有效的。请逐词核对后，再按一次以仍然恢复。"
           }
         }
       }
@@ -19189,13 +19247,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Shows all twelve words in the clear. Asks for Face ID, Touch ID or your passcode first."
+            "value" : "Shows every word of the phrase in the clear. Asks for Face ID, Touch ID or your passcode first."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Muestra las doce palabras a la vista. Pide Face ID, Touch ID o tu código antes."
+            "value" : "Muestra todas las palabras a la vista. Pide Face ID, Touch ID o tu código antes."
           }
         },
         "fr" : {
@@ -19207,7 +19265,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以明文显示全部十二个助记词。需要先验证面容 ID、触控 ID 或设备密码。"
+            "value" : "以明文显示全部助记词。需要先验证面容 ID、触控 ID 或设备密码。"
           }
         }
       }
@@ -20078,6 +20136,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取助记词——本钱包创建之后，手机的密钥库已经发生变化。"
+          }
+        }
+      }
+    },
+    "wallet_seed_words_12" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "12 words"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "12 palabras"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "12 mots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "12 个词"
+          }
+        }
+      }
+    },
+    "wallet_seed_words_24" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 words"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 palabras"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 mots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 个词"
           }
         }
       }

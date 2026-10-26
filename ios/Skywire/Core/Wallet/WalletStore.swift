@@ -243,10 +243,14 @@ final class WalletStore: ObservableObject {
     /// probe the network for used addresses; a dead node degrades to one
     /// address rather than failing the restore — but says so, in
     /// `addressScanAtMs`, so the probe is retried until it lands.
-    func addWallet(_ spec: CoinSpec, name: String, mnemonic: String, restored: Bool) async throws -> WalletMeta {
+    /// `legacy` is a checksum-less 24-word phrase the user chose to restore anyway: the older
+    /// Skycoin wallets wrote seeds that way.
+    func addWallet(_ spec: CoinSpec, name: String, mnemonic: String, restored: Bool, legacy: Bool = false) async throws -> WalletMeta {
         let core = try core(for: spec)
         let seed = Self.normalizeSeed(mnemonic)
-        guard core.validateSeed(seed) else { throw WalletStoreError(L10n.text("wallet_seed_invalid")) }
+        guard core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed)) else {
+            throw WalletStoreError(L10n.text("wallet_seed_invalid"))
+        }
 
         // nil means the question could not be put, which is different from
         // "the answer is one address" — a fresh phrase genuinely has one and
