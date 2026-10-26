@@ -130,20 +130,21 @@ const envfileTemplate = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
-#--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
-#	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
-#	Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a
-#	specific LAN IP, e.g. '192.168.0.2:8000'.
-#HVHTTPADDR=':8000'
+#--	Hypervisor web-UI listen address (host:port). Default '127.0.0.1:8000',
+#	reachable only from this machine. Set ':8000' to serve it on every
+#	interface (http://<this-host-ip>:8000 from the LAN, as a Skyminer
+#	router forward needs), or pin one LAN IP, e.g. '192.168.0.2:8000'.
+#HVHTTPADDR='127.0.0.1:8000'
 
 #--	Desk listen address (host:port): the wasm-visor hypervisor UI, served
 #	beside the dashboard with the same API and the same login. Default
-#	':8010'; the dashboard stays at HVHTTPADDR.
-#HVDESKADDR=':8010'
+#	'127.0.0.1:8010'; set ':8010' to serve it on the LAN.
+#HVDESKADDR='127.0.0.1:8010'
 
 #--	Expose an unauthenticated GET /api/pk on the hypervisor (returns this
 #	visor's public key). Off by default; skybian / Arch-ARM image builds
-#	set it so a freshly-imaged board can be discovered on the LAN.
+#	set it so a freshly-imaged board can be discovered on the LAN, which
+#	also needs HVHTTPADDR on a LAN address such as ':8000'.
 #ENABLEPKENDPOINT=true
 
 ### Browse origin #########################################################
