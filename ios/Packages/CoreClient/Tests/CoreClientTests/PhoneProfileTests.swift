@@ -58,7 +58,7 @@ final class PhoneProfileTests: XCTestCase {
         let swift = try PhoneProfile.edit(generated, settings: Self.settings(of: kotlin), paths: Self.androidPaths)
 
         let owned = [
-            ".cli_addr", ".hypervisors", ".log_level", ".local_path", ".pty", ".skywire-tcp", ".dmsgscp",
+            ".cli_addr", ".hypervisors", ".log_level", ".local_path", ".pty", ".skywire-tcp", ".dmsgscp", ".dmsg_web",
             ".transport.public_autoconnect", ".transport.log_store",
             ".hypervisor.db_path", ".hypervisor.dmsg_ingest", ".hypervisor.tp_viz", ".hypervisor.lan_dmsg_server",
             ".launcher.bin_path", ".routing.transport_preference", ".routing.mux_routes",

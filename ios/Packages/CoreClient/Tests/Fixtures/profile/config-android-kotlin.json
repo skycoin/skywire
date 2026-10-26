@@ -124,7 +124,9 @@
     },
     "dmsg_web": {
         "enable": true,
-        "upstream_socks": "127.0.0.1:4446"
+        "proxy_port": 4445,
+        "self_loopback_authenticated": false,
+        "upstream_socks": "none"
     },
     "skynet_web": {
         "enable": true

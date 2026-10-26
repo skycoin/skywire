@@ -23,6 +23,10 @@ import Foundation
 ///    its screen is open receives nothing. Android also adds a `skydns` app,
 ///    which the iOS core cannot run (see `SkyDNS`);
 ///  - `dmsgscp.disabled`: on when absent, it would serve an scp root;
+///  - `dmsg_web` on at 127.0.0.1:4445 for `.dmsg` names only (upstream
+///    `none`), and the visor's own page shown as to a stranger: the wallet
+///    reaches a node named `<pk>.dmsg` through it, and any app on the phone
+///    can reach a loopback port;
 ///  - `hypervisor.tp_viz.enable = false`;
 ///  - `routing.transport_preference` from the user's primary, and
 ///    `routing.mux_routes` = 2: the phone's policy, not a setting;
@@ -36,14 +40,18 @@ import Foundation
 ///    attaches, and its unix socket under an app container path is longer
 ///    than sun_path's 103 bytes, so it fails to bind anyway.
 ///
-/// Objects the phone edits one field of (`log_store`, `tp_viz`,
-/// `local_relay`) are merged, not replaced, as Kotlin does: their other
+/// Objects the phone edits some fields of (`log_store`, `tp_viz`,
+/// `local_relay`, `dmsg_web`) are merged, not replaced, as Kotlin does: their other
 /// fields (the log store's type, say) keep what the generator wrote.
 public enum PhoneProfile {
     /// Parallel routes a client app's dial asks for: the second leg buys a
     /// disjoint path, and a further one would cost another setup dial on every
     /// connect for a return a single-radio phone cannot use.
     public static let muxRoutes = 2
+
+    /// The visor's .dmsg resolver as the phone runs it: a SOCKS5 listener on loopback
+    /// (Android: DmsgWeb.PORT).
+    public static let dmsgWebPort = 4445
 
     public enum ProfileError: LocalizedError, Equatable {
         case notAnObject(String)
@@ -68,7 +76,7 @@ public enum PhoneProfile {
     }
 
     /// The edits, on a decoded config. A key the config does not have is not
-    /// added, as in Kotlin, except `dmsgscp` and `memory_limit`.
+    /// added, as in Kotlin, except `dmsgscp`, `dmsg_web` and `memory_limit`.
     public static func edit(_ root: [String: Any], settings: ProfileSettings, paths: CorePaths) throws -> [String: Any] {
         var out: [String: Any] = [:]
         for (key, value) in root {
@@ -119,6 +127,9 @@ public enum PhoneProfile {
             }
         }
         out["dmsgscp"] = ["disabled": true]
+        out["dmsg_web"] = merged(root["dmsg_web"], [
+            "enable": true, "proxy_port": dmsgWebPort, "upstream_socks": "none", "self_loopback_authenticated": false,
+        ])
         // iOS only (see above); nil writes no limit.
         out["memory_limit"] = settings.memoryLimit
         return out
