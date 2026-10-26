@@ -608,4 +608,16 @@ const envfileTemplate = `#
 #--	Do not keep or publish local telemetry
 #NOSTATS=true
 
+#--	Go memory limit of the visor: none (default), auto or a size like 256MiB
+#MEMORYLIMIT=none
+
+#--	Cap on transports public autoconnect dials, all types together (0 = no cap)
+#AUTOCONNMAXTOTAL=0
+
+#--	Transports autoconnect keeps between two sites (default 2, 0 = no limit)
+#AUTOCONNSITELINKS=2
+
+#--	Cap on transports autoconnect dials per type
+#AUTOCONNMAXPERTYPE='sudph=40,webrtc=10'
+
 `
