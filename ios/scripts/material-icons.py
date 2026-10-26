@@ -29,6 +29,7 @@ Outlined.KeyboardArrowDown Outlined.KeyboardArrowRight Outlined.Lock
 Outlined.LockOpen Outlined.MoreVert Outlined.OpenInNew Outlined.QrCodeScanner
 Outlined.Schedule Outlined.ScreenshotMonitor Outlined.Search Outlined.Settings
 Outlined.StarBorder Outlined.Visibility
+Outlined.FileDownload Outlined.Key Outlined.KeyboardArrowUp Outlined.Sync Outlined.WarningAmber
 Rounded.AccountBalanceWallet Rounded.AltRoute Rounded.ArrowBack
 Rounded.CandlestickChart Rounded.Chat Rounded.ChevronRight Rounded.Dns Rounded.Forum
 Rounded.HelpOutline Rounded.Home Rounded.Hub Rounded.Route Rounded.Settings
@@ -36,6 +37,7 @@ Rounded.Videocam Rounded.VpnLock
 Rounded.AttachFile Rounded.CheckCircle Rounded.Close Rounded.Contacts
 Rounded.ContentCopy Rounded.Delete Rounded.Download Rounded.Edit Rounded.Email
 Rounded.Reply Rounded.Send Rounded.Share Rounded.Warning
+Rounded.AlternateEmail Rounded.PersonAdd
 """.split()
 
 
