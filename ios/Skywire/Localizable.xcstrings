@@ -18081,6 +18081,64 @@
         }
       }
     },
+    "wallet_node_mesh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reached over the Skywire mesh, encrypted end to end. The node sees this phone's Skywire key, not its internet address. Works while Skywire is connected."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se alcanza por la red Skywire, cifrado de extremo a extremo. El nodo ve la clave Skywire de este teléfono, no su dirección de internet. Funciona mientras Skywire está conectado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joint par le maillage Skywire, chiffré de bout en bout. Le nœud voit la clé Skywire de ce téléphone, pas son adresse internet. Fonctionne tant que Skywire est connecté."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Skywire 网络访问，端到端加密。节点服务器看到的是这部手机的 Skywire 公钥，而不是它的网络地址。Skywire 连接时才可用。"
+          }
+        }
+      }
+    },
+    "wallet_node_mesh_ios16" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reaching a .dmsg node needs iOS 17 or later."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para llegar a un nodo .dmsg hace falta iOS 17 o posterior."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joindre un nœud .dmsg demande iOS 17 ou une version plus récente."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问 .dmsg 节点需要 iOS 17 或更高版本。"
+          }
+        }
+      }
+    },
     "wallet_node_no_peers" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18454,6 +18512,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法连接到节点服务器。请检查地址和网络连接后重试。"
+          }
+        }
+      }
+    },
+    "wallet_node_unreachable_mesh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The node did not answer over the Skywire mesh. Connect Skywire first, then try again: .dmsg addresses are reached through it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nodo no respondió por la red Skywire. Conecta Skywire primero y vuelve a intentarlo: las direcciones .dmsg se alcanzan a través de él."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nœud n’a pas répondu par le maillage Skywire. Connectez d’abord Skywire, puis réessayez : les adresses .dmsg passent par lui."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点服务器没有通过 Skywire 网络响应。请先连接 Skywire 再试：.dmsg 地址要经由它访问。"
           }
         }
       }

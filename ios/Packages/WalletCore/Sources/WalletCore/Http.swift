@@ -7,6 +7,9 @@ struct HttpClient: Sendable {
     let session: URLSession
     /// The coin's other nodes, asked in turn when the first does not answer.
     var failover: NodeFailover?
+    /// Where requests to Skywire mesh names (`.dmsg` hosts) go: a session through the visor's
+    /// resolver. Every other host stays on `session`.
+    var mesh: URLSession?
 
     struct Response {
         let status: Int
@@ -40,7 +43,8 @@ struct HttpClient: Sendable {
     }
 
     private func fetch(_ request: URLRequest) async throws -> Response {
-        let (data, response) = try await session.data(for: request)
+        let meshHost = request.url?.host?.lowercased().hasSuffix(".dmsg") == true
+        let (data, response) = try await (meshHost ? mesh ?? session : session).data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         return Response(status: status, body: String(decoding: data, as: UTF8.self))
     }

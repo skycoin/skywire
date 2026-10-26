@@ -50,9 +50,10 @@ public final class EthWalletCore: WalletCore {
     private let cachedChainId = OSAllocatedUnfairLock<BigUInt?>(initialState: nil)
 
     public init(
-        rpcURL: String, indexerURL: String?, session: URLSession = .shared, failover: NodeFailover? = nil, token: Erc20Token? = nil
+        rpcURL: String, indexerURL: String?, session: URLSession = .shared, failover: NodeFailover? = nil, mesh: URLSession? = nil,
+        token: Erc20Token? = nil
     ) throws {
-        api = try EthRpcClient(rpcURL: rpcURL, indexerURL: indexerURL, session: session, failover: failover)
+        api = try EthRpcClient(rpcURL: rpcURL, indexerURL: indexerURL, session: session, failover: failover, mesh: mesh)
         self.token = token
     }
 
