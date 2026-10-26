@@ -37,6 +37,10 @@ public actor EthRpcClient {
         try quantity(await call("eth_chainId"))
     }
 
+    public func blockNumber() async throws -> BigUInt {
+        try quantity(await call("eth_blockNumber"))
+    }
+
     /// The node's tip suggestion, or 1 gwei where the method is not served.
     public func maxPriorityFeePerGas() async -> BigUInt {
         (try? quantity(await call("eth_maxPriorityFeePerGas"))) ?? BigUInt(1_000_000_000)

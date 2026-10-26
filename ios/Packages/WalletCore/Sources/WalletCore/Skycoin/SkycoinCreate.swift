@@ -1,7 +1,9 @@
+import Foundation
+
 /// Unsigned-transaction construction — a faithful port of the reference
 /// implementation's transaction package (Create / ChooseSpends /
-/// DistributeCoinHoursProportional / RequiredFee), hours-auto with share
-/// factor 1/2, the same strategy the desktop wallet uses.
+/// DistributeCoinHoursProportional / RequiredFee). Hours are automatic in
+/// share mode, 1/2 by default as the desktop wallet sends, or manual.
 ///
 /// Everything here is pure: unspents in, chosen transaction out. Network and
 /// signing live elsewhere.
@@ -31,13 +33,18 @@ public enum SkycoinCreate {
         }
     }
 
+    /// A destination. Hours nil means automatic: a share of the post-burn
+    /// hours travels with the coins. A number means exactly that many hours
+    /// reach this destination.
     public struct Destination: Sendable {
         public let address: String
         public let coins: UInt64
+        public let hours: UInt64?
 
-        public init(address: String, coins: UInt64) {
+        public init(address: String, coins: UInt64, hours: UInt64? = nil) {
             self.address = address
             self.coins = coins
+            self.hours = hours
         }
     }
 
@@ -178,26 +185,36 @@ public enum SkycoinCreate {
         return out
     }
 
-    /// Create the unsigned transaction. Hours selection is auto/share; the
-    /// share of post-burn hours sent onward is 1/2, retried at 1/1 when
-    /// change hours would otherwise be burned with no change output to carry
-    /// them.
+    /// The share of post-burn hours sent onward when none is chosen, as the
+    /// desktop wallet sends.
+    public static let defaultShare = Decimal(string: "0.5")!
+
+    /// Create the unsigned transaction. Automatic hours send `shareFactor`
+    /// of the post-burn hours onward, retried at 1 when change hours would
+    /// otherwise be burned with no change output to carry them.
     public static func create(
         unspents: [UxBalance],
         to: [Destination],
         changeAddress: String,
         burnFactor: UInt32,
-        shareFull: Bool = false,
+        shareFactor: Decimal = defaultShare,
         callCount: Int = 0
     ) throws -> Created {
+        try require(shareFactor >= 0 && shareFactor <= 1, "share factor outside 0..1")
         try require(!to.isEmpty, "no destinations")
         try require(to.allSatisfy { $0.coins != 0 }, "zero-coin destination")
+        // Hours are all-automatic or all-manual in one call, never mixed.
+        let manualHours = to.map(\.hours)
+        let isManual = manualHours.allSatisfy { $0 != nil }
+        try require(manualHours.allSatisfy { $0 == nil } || isManual, "mixed hours selection")
+        var needHours: UInt64 = 0
+        if isManual { for h in manualHours { needHours = try addOrThrow(needHours, h!) } }
 
         var txn = SkycoinTxn()
         var totalOutCoins: UInt64 = 0
         for d in to { totalOutCoins = try addOrThrow(totalOutCoins, d.coins) }
 
-        var spends = try chooseSpends(unspents, coins: totalOutCoins, hours: 0, burnFactor: burnFactor)
+        var spends = try chooseSpends(unspents, coins: totalOutCoins, hours: needHours, burnFactor: burnFactor)
 
         var totalInputCoins: UInt64 = 0
         var totalInputHours: UInt64 = 0
@@ -211,8 +228,14 @@ public enum SkycoinCreate {
         if feeHours == 0 { throw CreateError.noFee }
         var remaining = totalInputHours - feeHours
 
-        let allocatedHours = shareFull ? remaining : remaining / 2
-        let addrHours = try distributeCoinHoursProportional(coins: to.map(\.coins), hours: allocatedHours)
+        let addrHours: [UInt64]
+        if isManual {
+            addrHours = manualHours.map { $0! }
+        } else {
+            // decimal.Mul(...).IntPart() in the reference: the product, truncated.
+            let allocatedHours = try share(shareFactor, of: remaining)
+            addrHours = try distributeCoinHoursProportional(coins: to.map(\.coins), hours: allocatedHours)
+        }
         for (i, d) in to.enumerated() {
             try txn.pushOutput(address: d.address, coins: d.coins, hours: addrHours[i])
         }
@@ -226,7 +249,8 @@ public enum SkycoinCreate {
         var changeHours = remaining - totalOutHours
 
         // No coin change but hour change: force one more input when the extra
-        // burn it causes costs less than the hours it saves.
+        // burn it causes costs less than the hours it saves. Manual hours too,
+        // as transaction/create.go in the Skycoin Go module does.
         if changeCoins == 0 && changeHours > 0 {
             var leftovers = unspents.filter { u in !spends.contains { $0.hash == u.hash } }
             sortHoursLowToHigh(&leftovers)
@@ -249,14 +273,21 @@ public enum SkycoinCreate {
         }
 
         // Still hours with nowhere to go: retry once sending the full share onward.
-        if changeCoins == 0 && changeHours > 0 && !shareFull {
+        if !isManual && changeCoins == 0 && changeHours > 0 {
+            try require(shareFactor != 1, "share factor is 1 but hours are left over")
             try require(callCount == 0, "create already retried at full share")
             return try create(
                 unspents: unspents, to: to, changeAddress: changeAddress, burnFactor: burnFactor,
-                shareFull: true, callCount: 1
+                shareFactor: 1, callCount: 1
             )
         }
 
+        // Hours no change output carries are burned, so they count in the fee:
+        // the chain's fee is the input hours less the output hours.
+        if changeCoins == 0 {
+            feeHours = try addOrThrow(feeHours, changeHours)
+            changeHours = 0
+        }
         if changeCoins > 0 {
             try txn.pushOutput(address: changeAddress, coins: changeCoins, hours: changeHours)
         }
@@ -273,6 +304,18 @@ public enum SkycoinCreate {
             changeCoins: changeCoins,
             changeHours: changeHours
         )
+    }
+
+    /// floor(factor × hours), exactly, for a factor in 0...1: Kotlin's
+    /// BigDecimal multiply then setScale(0, DOWN). A Decimal's description
+    /// is its exact digits in plain notation.
+    static func share(_ factor: Decimal, of hours: UInt64) throws -> UInt64 {
+        let parts = factor.description.split(separator: ".", omittingEmptySubsequences: false)
+        let frac = parts.count == 2 ? String(parts[1]) : ""
+        guard parts.count <= 2, let digits = BigUInt(decimal: String(parts[0]) + frac) else {
+            throw WalletCoreError("share factor \(factor) is not a plain decimal")
+        }
+        return (BigUInt(hours) * digits / BigUInt.pow10(frac.count)).clampedUInt64
     }
 
     private static func addOrThrow(_ a: UInt64, _ b: UInt64) throws -> UInt64 {

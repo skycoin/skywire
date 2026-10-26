@@ -251,10 +251,10 @@ final class WalletStore: ObservableObject {
         // nil means the question could not be put, which is different from
         // "the answer is one address" — a fresh phrase genuinely has one and
         // is settled, a restore that could not reach the node is not.
-        let scan: (receive: Int, change: Int)? = restored ? (try? await core.scanUsed(seed: seed)) : (1, 0)
+        let scan: (receive: Int, change: Int)? = restored ? (try? await core.scanUsed(seed: KeySource(mnemonic: seed))) : (1, 0)
         let counts = scan ?? (1, 0)
         let scannedAt: Int64 = scan != nil ? nowMs() : 0
-        let book = try await offMain { try core.deriveAddresses(seed: seed, receiveCount: counts.receive, changeCount: counts.change) }
+        let book = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: counts.receive, changeCount: counts.change) }
 
         // This coin may already hold this exact account — most likely because
         // mirroring put it there and the user restored the phrase under the
@@ -405,7 +405,7 @@ final class WalletStore: ObservableObject {
         let core = try core(for: spec)
         let receiveCount = meta.receiveAddresses.count + 1
         let changeCount = meta.changeAddresses.count
-        let book = try await offMain { try core.deriveAddresses(seed: seed, receiveCount: receiveCount, changeCount: changeCount) }
+        let book = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) }
         mutate { reg in
             reg.wallets = reg.wallets.map { w in
                 guard w.id == walletId else { return w }
@@ -460,14 +460,14 @@ final class WalletStore: ObservableObject {
         let now = nowMs()
         if now < scanRetryAfter[meta.id] ?? 0 { return meta }
         guard let seed = try? seeds.seed(meta.id) else { return meta }
-        guard let scanned = try? await core.scanUsed(seed: seed) else {
+        guard let scanned = try? await core.scanUsed(seed: KeySource(mnemonic: seed)) else {
             scanRetryAfter[meta.id] = now + Self.scanRetryBackoffMs
             return meta
         }
         scanRetryAfter[meta.id] = nil
         let receiveCount = max(scanned.receive, meta.receiveAddresses.count)
         let changeCount = max(scanned.change, meta.changeAddresses.count)
-        guard let book = try? await offMain({ try core.deriveAddresses(seed: seed, receiveCount: receiveCount, changeCount: changeCount) })
+        guard let book = try? await offMain({ try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) })
         else { return meta }
         let settled = settledAddresses(meta, scanned: book, nowMs: nowMs())
         mutate { reg in reg.wallets = reg.wallets.map { $0.id == settled.id ? settled : $0 } }
@@ -480,7 +480,7 @@ final class WalletStore: ObservableObject {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         return try await core(for: spec).buildTx(
-            seed: seed,
+            seed: KeySource(mnemonic: seed),
             book: AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses),
             toAddress: toAddress.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amount,
@@ -494,7 +494,7 @@ final class WalletStore: ObservableObject {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         let core = try core(for: spec)
-        let signed = try await offMain { try core.signTx(seed: seed, plan: plan) }
+        let signed = try await offMain { try core.signTx(seed: KeySource(mnemonic: seed), plan: plan) }
         let txid = try await core.broadcast(signed)
 
         // A Bitcoin plan that paid change to a fresh chain address makes that
@@ -503,7 +503,7 @@ final class WalletStore: ObservableObject {
             let index = btc.consumedChangeIndex(signed)
             if index >= 0, index == meta.changeAddresses.count {
                 let receiveCount = meta.receiveAddresses.count
-                let book = try await offMain { try btc.deriveAddresses(seed: seed, receiveCount: receiveCount, changeCount: index + 1) }
+                let book = try await offMain { try btc.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: index + 1) }
                 mutate { reg in
                     reg.wallets = reg.wallets.map { w in
                         guard w.id == walletId else { return w }

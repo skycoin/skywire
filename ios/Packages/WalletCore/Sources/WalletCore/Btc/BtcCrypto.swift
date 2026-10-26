@@ -4,8 +4,8 @@
 public enum Bip84 {
     private static let purpose: [UInt32] = [84 | Bip32.hardened, 0 | Bip32.hardened, 0 | Bip32.hardened]
 
-    public static func accountKey(mnemonic: String) throws -> Bip32.ExtKey {
-        try Bip32.derive(Bip32.master(seed: Bip39.toSeed(mnemonic)), path: purpose)
+    public static func accountKey(mnemonic: String, passphrase: String = "") throws -> Bip32.ExtKey {
+        try Bip32.derive(Bip32.master(seed: Bip39.toSeed(mnemonic, passphrase: passphrase)), path: purpose)
     }
 
     public static func key(_ account: Bip32.ExtKey, change: UInt32, index: UInt32) throws -> Bip32.ExtKey {
@@ -14,6 +14,32 @@ public enum Bip84 {
 
     public static func address(pubKey: [UInt8]) -> String {
         Bech32.segwitEncode(hrp: "bc", version: 0, program: Hashes.hash160(pubKey))
+    }
+}
+
+/// A Bitcoin wallet's keys and addresses by derivation: BIP 84 native
+/// segwit (bc1q…) by default, or legacy BIP 44 P2PKH (1…),
+/// m/44'/0'/0'/change/index.
+public enum BtcKeys {
+    private static let bip44: [UInt32] = [44 | Bip32.hardened, 0 | Bip32.hardened, 0 | Bip32.hardened]
+
+    public static func accountKey(_ seed: KeySource) throws -> Bip32.ExtKey {
+        switch seed.derivation {
+        case .bip44: try Bip32.derive(Bip32.master(seed: Bip39.toSeed(seed.mnemonic, passphrase: seed.passphrase)), path: bip44)
+        case .standard: try Bip84.accountKey(mnemonic: seed.mnemonic, passphrase: seed.passphrase)
+        }
+    }
+
+    public static func address(pubKey: [UInt8], derivation: Derivation) -> String {
+        switch derivation {
+        case .bip44: p2pkhAddress(Hashes.hash160(pubKey))
+        case .standard: Bip84.address(pubKey: pubKey)
+        }
+    }
+
+    private static func p2pkhAddress(_ hash160: [UInt8]) -> String {
+        let body: [UInt8] = [0x00] + hash160
+        return Base58.encode(body + Array(Hashes.doubleSha256(body)[0..<4]))
     }
 }
 

@@ -12,6 +12,11 @@ public enum WalletError: Error, Equatable, LocalizedError {
     case nodeRejected(String)
     /// Token sends: the token balance is there, the gas money is not.
     case insufficientGas(String)
+    /// A raw transaction that does not decode, or is not in the state the
+    /// step needs.
+    case badTransaction(String)
+    /// A raw transaction spends outputs this wallet holds no keys for.
+    case notInWallet
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +28,8 @@ public enum WalletError: Error, Equatable, LocalizedError {
         case .dustChange: "amount leaves change too small to spend"
         case .nodeRejected(let m): m
         case .insufficientGas(let m): m
+        case .badTransaction(let m): m
+        case .notInWallet: "this wallet does not hold the keys of every input"
         }
     }
 }

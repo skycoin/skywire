@@ -58,7 +58,8 @@ let package = Package(
             dependencies: ["WalletCore"],
             // Tests/ rather than Tests/WalletCoreTests/, so the fixtures sit at
             // Tests/Fixtures where the playbook (item 5.3) keeps them, beside
-            // nothing but the copies of android/wallet-core/src/test/resources.
+            // nothing but copies of the files the Kotlin suites read
+            // (Fixture.swift says where each comes from).
             path: "Tests",
             resources: [.copy("Fixtures")]
         ),

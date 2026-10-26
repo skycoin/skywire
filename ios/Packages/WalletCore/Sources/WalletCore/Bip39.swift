@@ -108,6 +108,12 @@ public enum Bip39 {
 
     public static func isWord(_ word: String) -> Bool { wordIndex[word.lowercased()] != nil }
 
+    /// The 24-word, on-list, checksum-less shape the older wallets
+    /// generated: their seeds were arbitrary strings, so a phrase of list
+    /// words restored then and must restore now. True only for exactly 24
+    /// list words.
+    public static func legacyWords(_ mnemonic: String) -> Bool { tokens(mnemonic)?.count == 24 }
+
     public static func suggestions(prefix: String, limit: Int = 4) -> [String] {
         let p = prefix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if p.isEmpty { return [] }

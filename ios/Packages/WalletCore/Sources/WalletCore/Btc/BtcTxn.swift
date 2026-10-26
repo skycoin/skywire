@@ -1,5 +1,6 @@
-/// Segwit transaction limited to what this wallet creates: P2WPKH inputs,
-/// arbitrary standard outputs, BIP 143 sighash, RBF signaled.
+/// Transaction limited to what this wallet creates: P2WPKH inputs signed
+/// with the BIP 143 sighash, or legacy P2PKH inputs signed with the original
+/// one, arbitrary standard outputs, RBF signaled.
 public struct BtcTxn: Sendable {
     public static let sighashAll: UInt32 = 1
 
@@ -12,15 +13,26 @@ public struct BtcTxn: Sendable {
         public let pubKeyHash: [UInt8]
         /// Default opts into replacement (BIP 125) while still allowing locktime.
         public let sequence: UInt32
+        /// A P2PKH input: signed in its scriptSig rather than a witness.
+        public let legacy: Bool
         public var witness: [[UInt8]] = []
+        public var scriptSig: [UInt8] = []
 
-        public init(txid: String, vout: UInt32, valueSats: UInt64, pubKeyHash: [UInt8], sequence: UInt32 = 0xFFFF_FFFD) {
+        public init(
+            txid: String, vout: UInt32, valueSats: UInt64, pubKeyHash: [UInt8], sequence: UInt32 = 0xFFFF_FFFD,
+            legacy: Bool = false
+        ) {
             self.txid = txid
             self.vout = vout
             self.valueSats = valueSats
             self.pubKeyHash = pubKeyHash
             self.sequence = sequence
+            self.legacy = legacy
         }
+
+        /// The P2PKH script over pubKeyHash: a legacy input's prevout
+        /// script, a segwit one's scriptCode.
+        public func p2pkhScript() -> [UInt8] { [0x76, 0xa9, 0x14] + pubKeyHash + [0x88, 0xac] }
     }
 
     public struct Output: Sendable {
@@ -64,6 +76,11 @@ public struct BtcTxn: Sendable {
         }
     }
 
+    private func scriptSig(_ w: inout ByteWriter, _ script: [UInt8]) {
+        w.varInt(UInt64(script.count))
+        w.append(script)
+    }
+
     /// Serialization without witness data — what the txid commits to.
     public func serializeStripped() -> [UInt8] {
         var w = ByteWriter()
@@ -71,7 +88,7 @@ public struct BtcTxn: Sendable {
         w.varInt(UInt64(inputs.count))
         for i in inputs {
             outpoint(&w, i)
-            w.varInt(0) // empty scriptSig — witness carries the signature
+            scriptSig(&w, i.scriptSig) // empty on a segwit input: its witness carries the signature
             w.u32(i.sequence)
         }
         serializeOutputs(&w)
@@ -88,7 +105,7 @@ public struct BtcTxn: Sendable {
         w.varInt(UInt64(inputs.count))
         for i in inputs {
             outpoint(&w, i)
-            w.varInt(0)
+            scriptSig(&w, i.scriptSig)
             w.u32(i.sequence)
         }
         serializeOutputs(&w)
@@ -139,13 +156,28 @@ public struct BtcTxn: Sendable {
         w.append(hashSequence)
         outpoint(&w, input)
         // scriptCode of P2WPKH: the classic P2PKH script over the program.
-        w.varInt(25)
-        w.append([0x76, 0xa9, 0x14])
-        w.append(input.pubKeyHash)
-        w.append([0x88, 0xac])
+        scriptSig(&w, input.p2pkhScript())
         w.u64(input.valueSats)
         w.u32(input.sequence)
         w.append(hashOutputs)
+        w.u32(locktime)
+        w.u32(Self.sighashAll)
+        return Hashes.doubleSha256(w.bytes)
+    }
+
+    /// The original signature hash for legacy input [index], SIGHASH_ALL:
+    /// the transaction with that input's scriptSig replaced by its prevout
+    /// script, every other scriptSig emptied, and the hash type appended.
+    public func legacySighash(_ index: Int) -> [UInt8] {
+        var w = ByteWriter()
+        w.u32(version)
+        w.varInt(UInt64(inputs.count))
+        for (n, i) in inputs.enumerated() {
+            outpoint(&w, i)
+            scriptSig(&w, n == index ? i.p2pkhScript() : [])
+            w.u32(i.sequence)
+        }
+        serializeOutputs(&w)
         w.u32(locktime)
         w.u32(Self.sighashAll)
         return Hashes.doubleSha256(w.bytes)
@@ -157,20 +189,27 @@ public struct BtcTxn: Sendable {
         for (i, key) in keys.enumerated() {
             let pub = try Secp256k1.pubKeyFromSecKey(key)
             try require(Hashes.hash160(pub) == inputs[i].pubKeyHash, "key does not own input \(i)")
-            let der = try Secp256k1.signDer(hash: sighash(i), sec: key)
-            inputs[i].witness = [der + [UInt8(Self.sighashAll)], pub]
+            if inputs[i].legacy {
+                let sig = try Secp256k1.signDer(hash: legacySighash(i), sec: key) + [UInt8(Self.sighashAll)]
+                inputs[i].scriptSig = [UInt8(sig.count)] + sig + [UInt8(pub.count)] + pub
+            } else {
+                let der = try Secp256k1.signDer(hash: sighash(i), sec: key)
+                inputs[i].witness = [der + [UInt8(Self.sighashAll)], pub]
+            }
         }
     }
 
-    /// Pre-selection fee estimate: vsize of a tx with n P2WPKH inputs and
-    /// the given output scripts.
-    public static func estimateVsize(inputCount: Int, outputScripts: [[UInt8]]) -> Int {
+    /// Pre-selection fee estimate: vsize of a tx with n P2WPKH (or legacy
+    /// P2PKH) inputs and the given output scripts.
+    public static func estimateVsize(inputCount: Int, outputScripts: [[UInt8]], legacy: Bool = false) -> Int {
         // Non-witness: version(4) + in-count + out-count varints + locktime(4);
         // witness adds marker+flag (2 WU) once any input is segwit.
-        var weight = (4 + varIntSize(UInt64(inputCount)) + varIntSize(UInt64(outputScripts.count)) + 4) * 4 + 2
-        // Input: outpoint 36 + empty-script varint 1 + sequence 4 (×4), witness ≈ 108 WU
+        var weight = (4 + varIntSize(UInt64(inputCount)) + varIntSize(UInt64(outputScripts.count)) + 4) * 4
+            + (legacy ? 0 : 2)
+        // Segwit input: outpoint 36 + empty-script varint 1 + sequence 4 (×4), witness ≈ 108 WU
         // (count 1 + 72-byte DER+sighash with its varint + 33-byte pubkey with its varint).
-        weight += inputCount * ((36 + 1 + 4) * 4 + 108)
+        // Legacy input: the same 107 bytes sit in the scriptSig, at full weight: 148 bytes.
+        weight += inputCount * (legacy ? (36 + 1 + 107 + 4) * 4 : (36 + 1 + 4) * 4 + 108)
         for s in outputScripts { weight += (8 + varIntSize(UInt64(s.count)) + s.count) * 4 }
         return (weight + 3) / 4
     }

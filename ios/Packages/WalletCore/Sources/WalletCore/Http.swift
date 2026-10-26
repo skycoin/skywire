@@ -25,6 +25,13 @@ struct HttpClient: Sendable {
         return try await send(request)
     }
 
+    func delete(_ url: URL, headers: [String: String] = [:]) async throws -> Response {
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
+        return try await send(request)
+    }
+
     private func send(_ request: URLRequest) async throws -> Response {
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0

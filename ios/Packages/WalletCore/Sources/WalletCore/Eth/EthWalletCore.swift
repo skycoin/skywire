@@ -31,6 +31,8 @@ public final class EthWalletCore: WalletCore {
     static let weiPerGwei = BigUInt(1_000_000_000)
     /// A plain EOA transfer, exactly.
     static let gasTransfer = BigUInt(21_000)
+    /// 0.1 gwei: some nodes suggest a zero tip, which block builders skip.
+    static let minTipWei = BigUInt(100_000_000)
     /// Fallback when the node will not estimate a token transfer.
     static let gasTokenTransfer = BigUInt(100_000)
     /// What the Max prefill holds back for gas on the native coin: 21 000
@@ -69,8 +71,8 @@ public final class EthWalletCore: WalletCore {
 
     public func validateSeed(_ mnemonic: String) -> Bool { Bip39.validate(mnemonic) }
 
-    public func deriveAddresses(seed: String, receiveCount: Int, changeCount: Int) throws -> AddressBook {
-        let account = try EthCrypto.accountKey(mnemonic: seed)
+    public func deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int) throws -> AddressBook {
+        let account = try EthCrypto.accountKey(mnemonic: seed.mnemonic, passphrase: seed.passphrase)
         return AddressBook(
             receive: try (0..<receiveCount).map {
                 try EthCrypto.address(pubCompressed: EthCrypto.key(account, index: UInt32($0)).pubKey())
@@ -83,8 +85,8 @@ public final class EthWalletCore: WalletCore {
 
     public func validateAddress(_ address: String) -> Bool { EthCrypto.isValidAddress(address) }
 
-    public func scanUsed(seed: String) async throws -> (receive: Int, change: Int) {
-        let account = try EthCrypto.accountKey(mnemonic: seed)
+    public func scanUsed(seed: KeySource) async throws -> (receive: Int, change: Int) {
+        let account = try EthCrypto.accountKey(mnemonic: seed.mnemonic, passphrase: seed.passphrase)
         var lastUsed = -1
         var i = 0
         var gap = 0
@@ -106,10 +108,12 @@ public final class EthWalletCore: WalletCore {
     public func balance(_ book: AddressBook) async throws -> WalletBalance {
         var total = BigUInt.zero
         var funded = 0
+        var per = [String: UInt64]()
         for addr in book.receive {
             let value = token == nil ? try await api.balanceWei(addr) : try await tokenBalanceRaw(addr)
             if !value.isZero { funded += 1 }
             total = total + value
+            per[addr] = toBase(value)
         }
         let base = toBase(total)
         return WalletBalance(
@@ -118,7 +122,8 @@ public final class EthWalletCore: WalletCore {
             // moves this number, exactly like a block would.
             predicted: base,
             hours: nil,
-            spendableOutputs: funded
+            spendableOutputs: funded,
+            perAddress: per
         )
     }
 
@@ -158,12 +163,24 @@ public final class EthWalletCore: WalletCore {
                     confirmations: confirmations,
                     // Always the ETH gas, in gwei — a token has no fee of its
                     // own, and the UI labels this line ETH on both cores.
-                    fee: feeWei.isZero ? nil : Self.weiToGwei(feeWei)
+                    fee: feeWei.isZero ? nil : Self.weiToGwei(feeWei),
+                    // The wallet's one account, whichever side of the transfer it is.
+                    own: [addr]
                 )
                 order.append(row.hash)
             }
         }
         return sortedForDisplay(order.map { seen[$0]! })
+    }
+
+    public func nodeInfo() async throws -> NodeInfo {
+        let id = try await api.chainId()
+        return NodeInfo(
+            coinName: "Ethereum",
+            ticker: "ETH",
+            height: Int64(clamping: try await api.blockNumber().clampedUInt64),
+            problem: id != BigUInt(1) ? .wrongChain : nil
+        )
     }
 
     /// EIP-1559 prices itself; there is no knob worth a card of presets.
@@ -179,13 +196,23 @@ public final class EthWalletCore: WalletCore {
     }
 
     public func buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: UInt64,
         feeRate: Int?,
-        sendMax: Bool
+        sendMax: Bool,
+        // One account per wallet: there is no second address to choose.
+        fromAddress: String? = nil,
+        inputs: Set<String>? = nil,
+        hoursTo: UInt64? = nil,
+        more: [Recipient] = [],
+        changeAddress: String? = nil,
+        shareFactor: Decimal? = nil,
+        feeLevel: FeeLevel? = nil
     ) async throws -> TxPlan {
+        if !more.isEmpty { throw WalletError.invalidAmount("this chain sends to one destination at a time") }
+        if changeAddress != nil { throw WalletError.invalidAddress }
         let trimmedTo = toAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let dest = EthCrypto.parseAddress(trimmedTo) else { throw WalletError.invalidAddress }
         if !sendMax && amount == 0 { throw WalletError.invalidAmount("enter an amount to send") }
@@ -202,7 +229,14 @@ public final class EthWalletCore: WalletCore {
         let (fromIndex, fromAddr, fromBalance) = best
 
         let id = try await chainId()
-        let priority = await api.maxPriorityFeePerGas()
+        // The tips skycoin's eth.FeePresets offers: the least, the node's
+        // suggestion (never below the least), and twice the suggestion.
+        let suggested = max(await api.maxPriorityFeePerGas(), Self.minTipWei)
+        let priority = switch feeLevel {
+        case .slow: Self.minTipWei
+        case .fast: suggested * BigUInt(2)
+        default: suggested
+        }
         // Twice the current base fee rides out the worst-case climb while
         // the send waits; anything unspent is never charged.
         let maxFee = try await api.baseFeePerGas() * BigUInt(2) + priority
@@ -269,9 +303,10 @@ public final class EthWalletCore: WalletCore {
         )
     }
 
-    public func signTx(seed: String, plan: TxPlan) throws -> SignedTx {
+    public func signTx(seed: KeySource, plan: TxPlan) throws -> SignedTx {
         guard case .eth(let payload) = plan.payload else { throw WalletCoreError("not an Ethereum plan") }
-        let key = try EthCrypto.key(EthCrypto.accountKey(mnemonic: seed), index: UInt32(payload.fromIndex))
+        let account = try EthCrypto.accountKey(mnemonic: seed.mnemonic, passphrase: seed.passphrase)
+        let key = try EthCrypto.key(account, index: UInt32(payload.fromIndex))
         let signed = try EthTxn(
             chainId: payload.chainId,
             nonce: payload.nonce,
