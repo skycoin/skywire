@@ -15,11 +15,11 @@ public actor EthRpcClient {
     private let http: HttpClient
     private var requestId = 0
 
-    public init(rpcURL: String, indexerURL: String?, session: URLSession) throws {
+    public init(rpcURL: String, indexerURL: String?, session: URLSession, failover: NodeFailover? = nil) throws {
         guard let url = parseBaseURL(rpcURL) else { throw WalletCoreError("invalid RPC URL: \(rpcURL)") }
         rpc = url
         indexer = indexerURL.flatMap(parseBaseURL)
-        http = HttpClient(session: session)
+        http = HttpClient(session: session, failover: failover)
     }
 
     // MARK: JSON-RPC

@@ -12,8 +12,8 @@ public final class SkyFiberWalletCore: WalletCore {
 
     private let node: SkycoinNodeClient
 
-    public init(nodeURL: String, session: URLSession = .shared) throws {
-        node = try SkycoinNodeClient(baseURL: nodeURL, session: session)
+    public init(nodeURL: String, session: URLSession = .shared, failover: NodeFailover? = nil) throws {
+        node = try SkycoinNodeClient(baseURL: nodeURL, session: session, failover: failover)
     }
 
     struct Payload: Sendable {

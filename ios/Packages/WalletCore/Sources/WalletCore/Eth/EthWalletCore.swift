@@ -49,8 +49,10 @@ public final class EthWalletCore: WalletCore {
     /// Read once per core, first use — it never changes under a URL.
     private let cachedChainId = OSAllocatedUnfairLock<BigUInt?>(initialState: nil)
 
-    public init(rpcURL: String, indexerURL: String?, session: URLSession = .shared, token: Erc20Token? = nil) throws {
-        api = try EthRpcClient(rpcURL: rpcURL, indexerURL: indexerURL, session: session)
+    public init(
+        rpcURL: String, indexerURL: String?, session: URLSession = .shared, failover: NodeFailover? = nil, token: Erc20Token? = nil
+    ) throws {
+        api = try EthRpcClient(rpcURL: rpcURL, indexerURL: indexerURL, session: session, failover: failover)
         self.token = token
     }
 

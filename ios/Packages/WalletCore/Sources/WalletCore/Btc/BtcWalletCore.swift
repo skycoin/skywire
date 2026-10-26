@@ -15,8 +15,8 @@ public final class BtcWalletCore: WalletCore {
 
     private let api: BtcEsploraClient
 
-    public init(esploraURL: String, session: URLSession = .shared) throws {
-        api = try BtcEsploraClient(baseURL: esploraURL, session: session)
+    public init(esploraURL: String, session: URLSession = .shared, failover: NodeFailover? = nil) throws {
+        api = try BtcEsploraClient(baseURL: esploraURL, session: session, failover: failover)
     }
 
     struct PlanInput: Sendable {

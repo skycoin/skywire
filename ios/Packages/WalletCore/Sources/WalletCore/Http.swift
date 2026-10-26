@@ -5,6 +5,8 @@ import Foundation
 /// transactions.
 struct HttpClient: Sendable {
     let session: URLSession
+    /// The coin's other nodes, asked in turn when the first does not answer.
+    var failover: NodeFailover?
 
     struct Response {
         let status: Int
@@ -33,6 +35,11 @@ struct HttpClient: Sendable {
     }
 
     private func send(_ request: URLRequest) async throws -> Response {
+        guard let failover else { return try await fetch(request) }
+        return try await failover.send(request, fetch)
+    }
+
+    private func fetch(_ request: URLRequest) async throws -> Response {
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         return Response(status: status, body: String(decoding: data, as: UTF8.self))
