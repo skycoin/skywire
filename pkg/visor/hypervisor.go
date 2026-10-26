@@ -967,6 +967,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
+				r.Get("/visors/{pk}/reward/exposure", hv.getRewardAddressExposure())
 				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
 				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())
 				r.Put("/visors/{pk}/public", hv.putIsPublic())
@@ -1211,6 +1212,14 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 		// on the visor. Registering them here with the same Authorize middleware
 		// the rest of the hypervisor uses keeps every path identical while
 		// putting them behind the session.
+		// The status page of the hypervisor and its visors, behind the session.
+		r.Group(func(r *httputil.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+			r.Get("/status", (&hvStatus{hv: hv}).ServeHTTP)
+		})
+
 		if hv.tpvizServer != nil {
 			r.Group(func(r *httputil.Router) {
 				if hv.c.EnableAuth {

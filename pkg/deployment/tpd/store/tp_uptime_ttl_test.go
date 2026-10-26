@@ -30,7 +30,7 @@ func TestTransportUptimeTTLs(t *testing.T) {
 	}
 	for _, id := range []uuid.UUID{one, two} {
 		require.InDelta(t, tpUptimeTodayTTL, ttl(tpUptimeKey(id.String(), date)), float64(time.Minute))
-		require.InDelta(t, tpUptimeTimelineTTL, ttl(tpUptimeTimelineKey(id.String(), date)), float64(time.Minute))
+		require.InDelta(t, tpUptimeTimelineTTL, ttl(tpUptimeTimelineKey(id.String(), date)), float64(time.Minute), "no archive: eight days")
 	}
 	require.InDelta(t, tpUptimeTodayTTL, ttl(tpUptimeOnlineKey(date)), float64(time.Minute))
 }

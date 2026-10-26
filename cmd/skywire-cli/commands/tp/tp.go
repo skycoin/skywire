@@ -98,6 +98,7 @@ func init() {
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
 	tpCmd.Flags().StringSliceVar(&listSkynetVisors, "skynet", nil, "list the transports remote visor(s) sign and serve, fetched over skywire transports (comma-separated PKs)")
 	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
+	tpCmd.Flags().BoolVarP(&showLink, "link", "k", false, "show carrier link stats: smoothed RTT, packet loss (stcpr, squicr) and congestion window")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -613,16 +614,16 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 
 	if showMore && bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else if showMore {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else if bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	}
 
@@ -718,22 +719,22 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 
 		latency := formatLatencyMS(tp.LatencyMS)
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
-				latency, formatBytes(recvBytes), formatBytes(sentBytes))
+				latency, formatBytes(recvBytes), formatBytes(sentBytes), linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency, linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency,
-				formatBytes(recvBytes), formatBytes(sentBytes))
+				formatBytes(recvBytes), formatBytes(sentBytes), linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		}
 	}
@@ -845,16 +846,16 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 
 	// Print header
 	if showMore && bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else if showMore {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else if bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	} else {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel"+linkHeader())
 		internal.Catch(cmdFlags, err)
 	}
 
@@ -959,22 +960,22 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 
 		latency := formatLatencyMS(tp.LatencyMS)
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
-				latency, formatBytes(recvBytes), formatBytes(sentBytes))
+				latency, formatBytes(recvBytes), formatBytes(sentBytes), linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency, linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency,
-				formatBytes(recvBytes), formatBytes(sentBytes))
+				formatBytes(recvBytes), formatBytes(sentBytes), linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		} else {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, linkCells(tp.Endpoint))
 			internal.Catch(cmdFlags, err)
 		}
 		lineNum++
@@ -992,22 +993,22 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		outputTPS = append(outputTPS, oTP)
 
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				"-", itp.ID, "-", "inactive", "-", "-", "-", "-", "-",
-				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
+				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes), linkCells(nil))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				"-", itp.ID, "-", "inactive", "-", "-", "-", "-", "-")
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-", "-", "-", "-", linkCells(nil))
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n",
 				"-", itp.ID, "-", "inactive", "-", "-",
-				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
+				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes), linkCells(nil))
 			internal.Catch(cmdFlags, err)
 		} else {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				"-", itp.ID, "-", "inactive", "-")
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s\n",
+				"-", itp.ID, "-", "inactive", "-", linkCells(nil))
 			internal.Catch(cmdFlags, err)
 		}
 		inactiveLines[lineNum] = true
@@ -1072,9 +1073,9 @@ func renderTransportListLive(rpcClient visorapi.API) (string, error) {
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
 	if bwDays > 0 {
-		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent") //nolint:errcheck
+		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent"+linkHeader()) //nolint:errcheck
 	} else {
-		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent") //nolint:errcheck
+		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent"+linkHeader()) //nolint:errcheck
 	}
 
 	for _, tp := range transports {
@@ -1105,10 +1106,10 @@ func renderTransportListLive(rpcClient visorapi.API) (string, error) {
 			}
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s%s\n", //nolint:errcheck
 			tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
 			formatLatencyMS(tp.LatencyMS),
-			formatBytes(recvBytes), formatBytes(sentBytes))
+			formatBytes(recvBytes), formatBytes(sentBytes), linkCells(tp.Endpoint))
 	}
 	if err := w.Flush(); err != nil {
 		return "", err

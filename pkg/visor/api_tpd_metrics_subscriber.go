@@ -97,8 +97,22 @@ func (v *Visor) FetchTransportMetricsCXO(days int) ([]byte, time.Time, error) {
 	if !mgr.WaitForFirstSync(context.Background(), FeedTPDMetrics, cxosub.FeedFirstSyncTimeout(FeedTPDMetrics)) {
 		return nil, time.Time{}, ErrTPDMetricsNotReady
 	}
+	if metricsSnapshotStale(mgr, time.Now()) {
+		return nil, time.Time{}, ErrTPDMetricsNotReady
+	}
 
 	return readTransportMetricsCXO(mgr, days)
+}
+
+// metricsSnapshotStale reports a snapshot with day leaves whose newest is
+// older than yesterday (UTC). Its window would be served as today's.
+func metricsSnapshotStale(mgr metricsSnapshot, now time.Time) bool {
+	dates := transportMetricDates(mgr)
+	if len(dates) == 0 {
+		return false
+	}
+	yesterday := now.UTC().AddDate(0, 0, -1).Format(tpdstore.MetricsDateFormat)
+	return dates[0] < yesterday
 }
 
 // metricsSnapshot is the slice of CXOSubscriptionManager the assembly

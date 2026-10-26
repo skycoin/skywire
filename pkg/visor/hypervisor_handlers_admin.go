@@ -344,3 +344,34 @@ func (hv *Hypervisor) putRuntimeConfig() http.HandlerFunc {
 		})
 	})
 }
+
+// getRewardAddressExposure reports whether a reward address has ever spent.
+// It checks ?address= when given, else the visor's own reward address.
+func (hv *Hypervisor) getRewardAddressExposure() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		addr := r.URL.Query().Get("address")
+		if addr == "" {
+			a, err := ctx.API.GetRewardAddress()
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+			addr = a
+		}
+		_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+		if err == nil && isXpub {
+			err = errors.New("an xpub has no single address to check")
+		}
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		// Chain data, so the hypervisor's own visor answers even for visors on older builds.
+		e, err := hv.visor.RewardAddressExposure(addr)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadGateway, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, e)
+	})
+}

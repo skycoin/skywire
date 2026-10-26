@@ -31,6 +31,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // MockRPCClient mocks API.
@@ -747,6 +748,11 @@ func (mc *mockRPCClient) SetConfigFields(_ map[string]json.RawMessage) ([]Config
 // LocalTransportStats implements API.
 func (mc *mockRPCClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
 	return &LocalTransportStatsResponse{}, nil
+}
+
+// VisorCharts implements API.
+func (mc *mockRPCClient) VisorCharts(_ VisorChartsArgs) (*VisorCharts, error) {
+	return &VisorCharts{}, nil
 }
 
 // LocalUptimeStats implements API.
@@ -1535,6 +1541,9 @@ func (mc *mockRPCClient) VoiceIncoming() ([]string, error) { return nil, nil }
 // VoiceSetRingback implements API.
 func (mc *mockRPCClient) VoiceSetRingback(_ VoiceRingback) error { return nil }
 
+// VoiceSetBlocked implements API.
+func (mc *mockRPCClient) VoiceSetBlocked(_ []cipher.PubKey) error { return nil }
+
 // VoiceRingback implements API.
 func (mc *mockRPCClient) VoiceRingback() (VoiceRingback, error) { return VoiceRingback{}, nil }
 
@@ -1931,3 +1940,8 @@ func (mc *mockRPCClient) HostBridgeForward(host, local string) (HostBridgeForwar
 
 // HostBridgeUnforward implements API.
 func (mc *mockRPCClient) HostBridgeUnforward(string) error { return nil }
+
+// RewardAddressExposure implements API.
+func (mc *mockRPCClient) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
+	return rewardconfig.AddressExposure{Address: addr, Balance: "0"}, nil
+}

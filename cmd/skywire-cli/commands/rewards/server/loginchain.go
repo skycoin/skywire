@@ -289,7 +289,7 @@ func runLoginChain() {
 	done := make(chan error, 2)
 	go func() { done <- publisherCmd.Wait() }()
 	go func() { done <- peerCmd.Wait() }()
-	<-done
+	<-done //nolint:errcheck
 
 	// Kill the other
 	publisherCmd.Process.Kill() //nolint:errcheck,gosec

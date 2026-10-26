@@ -87,7 +87,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		select {
-		case <-closeDone:
+		case <-closeDone: //nolint:errcheck
 			return true
 		default:
 			return false

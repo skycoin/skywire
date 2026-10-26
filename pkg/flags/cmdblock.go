@@ -34,7 +34,7 @@ func CmdRow(name, short string, pad int) string {
 	if descCol > descCap {
 		descCol = descCap
 	}
-	width := HelpWidth - descCol
+	width := helpWidth() - descCol
 	if width < descFloor {
 		width = descFloor
 	}

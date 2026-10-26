@@ -137,12 +137,20 @@ type API struct {
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	// homePage renders the mesh directory for home.skynet and home.dmsg.
-	homePage func(suffix string) []byte
+	homePage func(suffix string, ownUser bool) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
 	vhosts atomic.Pointer[map[string]*Vhost]
+	// ownPages serves the visor's own pages, its landing page at /.
+	ownPages http.Handler
 	// statusPage serves /status, the status of the deployment services the
 	// visor runs. Nil answers 404.
 	statusPage http.Handler
+	// visorStatus serves /status/visor, this visor's own load and traffic, to
+	// itself and the survey whitelist only.
+	visorStatus http.Handler
+	// statusReaders are other keys that may read /status/visor, the visor's
+	// hypervisors.
+	statusReaders func() []cipher.PubKey
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -188,7 +196,7 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	// no survey-whitelisted keys means the file is publicly accessible
 	authRoute := func(pattern string, h http.HandlerFunc) {
 		if len(whitelistedPKs) > 0 {
-			r.Handle(pattern, whitelistAuth(whitelistedPKs, h))
+			r.Handle(pattern, whitelistAuth(whitelistedPKs, func() string { return api.publicKey }, h))
 			return
 		}
 		r.Handle(pattern, h)
@@ -382,6 +390,19 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		return false
 	}
 
+	// isOwnUser is a request from this visor itself, as the resolving proxy,
+	// SkyDNS and the tab's guest make, or from a key the survey whitelist names.
+	isOwnUser := func(req *http.Request) bool {
+		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
+		if err != nil {
+			return false
+		}
+		if api.publicKey != "" && remotePK == api.publicKey {
+			return true
+		}
+		return len(whitelistedPKs) > 0 && isWhitelisted(req)
+	}
+
 	r.HandleFunc("GET /status", func(w http.ResponseWriter, req *http.Request) {
 		if api.statusPage == nil {
 			http.NotFound(w, req)
@@ -389,22 +410,24 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		}
 		api.statusPage.ServeHTTP(w, req)
 	})
+	r.HandleFunc("GET /status/visor", func(w http.ResponseWriter, req *http.Request) {
+		if api.visorStatus == nil {
+			http.NotFound(w, req)
+			return
+		}
+		if !isOwnUser(req) && !api.isStatusReader(req) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		api.visorStatus.ServeHTTP(w, req)
+	})
 
 	// Landing page with links to available endpoints. When a custom
 	// websiteHandler is set (port 80 reverse-proxy or rewards UI), it
 	// serves the root path too — replacing the default landing page
 	// rather than only catching unmatched routes.
-	r.HandleFunc("GET /{$}", func(w http.ResponseWriter, req *http.Request) {
-		if suffix, ok := homeSuffix(landingHost(req)); ok && api.homePage != nil {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(api.homePage(suffix)) //nolint:errcheck,gosec // rendered and escaped by dmsgweb
-			return
-		}
-		if api.websiteHandler != nil {
-			api.websiteHandler.ServeHTTP(w, req)
-			return
-		}
+	// The visor's own page is always at /.skywire/, whatever its root shows.
+	landing := func(w http.ResponseWriter, req *http.Request) {
 		wl := isWhitelisted(req)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		var links []string
@@ -414,6 +437,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		}
 		if api.statusPage != nil {
 			links = append(links, `<a href="/status">/status</a> - deployment services status`)
+		}
+		if api.visorStatus != nil && (isOwnUser(req) || api.isStatusReader(req)) {
+			links = append(links, `<a href="/status/visor">/status/visor</a> - this visor's load and traffic`)
 		}
 		if wl {
 			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
@@ -468,6 +494,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		// Use the request Host to construct proper URLs that work
 		// in the browser (e.g. http://pk.skynet:8000/).
 		host := landingHost(req)
+		if n := vhostName(req.Host); n != "" {
+			host = strings.TrimPrefix(host, n+".") // served under a landing vhost
+		}
 		if api.forwardedPortLister != nil {
 			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
 				label := fp.Label
@@ -484,12 +513,9 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		}
 
 		// Sites served by Host, linked under this visor's name.
-		for _, v := range api.vhostList() {
-			if v.Name == AnyVhost || !callerAllowed(req, v.Whitelist) {
-				continue
-			}
-			url := html.EscapeString(fmt.Sprintf("http://%s.%s/", v.Names[0], host))
-			links = append(links, fmt.Sprintf(`<a href="%s">%s</a> - site`, url, html.EscapeString(v.Name)))
+		for _, s := range api.sitesFor(req) {
+			url := html.EscapeString(fmt.Sprintf("http://%s.%s/", s, host))
+			links = append(links, fmt.Sprintf(`<a href="%s">%s</a> - site`, url, html.EscapeString(s)))
 		}
 
 		// Render via the shared landingpage package so this page and the browser
@@ -498,6 +524,25 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 		// whitelist above); the styling/structure is shared.
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, landingpage.Render(api.publicKey, links)) //nolint:errcheck,gosec // the request Host is escaped above
+	}
+	r.HandleFunc("GET /{$}", func(w http.ResponseWriter, req *http.Request) {
+		if suffix, ok := homeSuffix(landingHost(req)); ok && api.homePage != nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(api.homePage(suffix, isOwnUser(req))) //nolint:errcheck,gosec // rendered and escaped by dmsgweb
+			return
+		}
+		if api.websiteHandler != nil {
+			api.serveWebsite(w, req)
+			return
+		}
+		landing(w, req)
+	})
+	r.HandleFunc("GET /.skywire/{$}", landing)
+	// The sites this visor serves by Host, for pages that link to them.
+	r.HandleFunc("GET /.skywire/sites", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		writeJSON(w, http.StatusOK, SiteList{PK: api.publicKey, Sites: api.sitesFor(req)})
 	})
 
 	// Catch-all: if a custom website handler is set, serve unmatched
@@ -510,15 +555,18 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   everything else (website) — forwarded port whitelist (if set)
 	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		if api.websiteHandler != nil {
-			// Enforce the forwarded port's PK whitelist on the website.
-			if api.forwardedPortLister != nil && !callerAllowed(req, api.forwardedPortLister.PortWhitelist(80)) {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			api.websiteHandler.ServeHTTP(w, req)
+			api.serveWebsite(w, req)
 			return
 		}
 		writeString(w, http.StatusNotFound, "404 not found")
+	})
+
+	api.ownPages = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/" {
+			req = req.Clone(req.Context())
+			req.URL.Path = "/.skywire/"
+		}
+		r.ServeHTTP(w, req)
 	})
 
 	h := api.vhostRouter(r)
@@ -527,6 +575,19 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	}
 	api.Handler = recoverPanics(log, h)
 	return api
+}
+
+// OwnPages serves the visor's own pages, with its landing page at /, for a
+// port or a name other than its bare one.
+func (api *API) OwnPages() http.Handler { return api.ownPages }
+
+// serveWebsite serves the port 80 site to the keys its forwarded port allows.
+func (api *API) serveWebsite(w http.ResponseWriter, req *http.Request) {
+	if api.forwardedPortLister != nil && !callerAllowed(req, api.forwardedPortLister.PortWhitelist(80)) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	api.websiteHandler.ServeHTTP(w, req)
 }
 
 // SetWebsiteHandler sets a custom HTTP handler for serving unmatched
@@ -539,6 +600,28 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 // - The reward system UI handler
 func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
+}
+
+// SetVisorStatusPage serves h at /status/visor to this visor, the survey
+// whitelist and the keys readers returns, and links it from their landing page.
+func (api *API) SetVisorStatusPage(h http.Handler, readers func() []cipher.PubKey) {
+	api.visorStatus, api.statusReaders = h, readers
+}
+
+func (api *API) isStatusReader(req *http.Request) bool {
+	if api.statusReaders == nil {
+		return false
+	}
+	remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	for _, pk := range api.statusReaders() {
+		if remotePK == pk.String() {
+			return true
+		}
+	}
+	return false
 }
 
 // SetStatusPage serves h at /status and links it from the landing page.
@@ -638,7 +721,7 @@ func (api *API) SetRelatedNodesProvider(p RelatedNodesProvider) {
 	api.relatedNodesProvider = p
 }
 
-func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handler {
+func whitelistAuth(whitelistedPKs []cipher.PubKey, self func() string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Get the remote PK.
 		remotePK, _, err := net.SplitHostPort(req.RemoteAddr)
@@ -647,7 +730,7 @@ func whitelistAuth(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handl
 			return
 		}
 		// Check if the remote PK is whitelisted.
-		whitelisted := len(whitelistedPKs) == 0
+		whitelisted := len(whitelistedPKs) == 0 || (self() != "" && remotePK == self())
 		for _, whitelistedPK := range whitelistedPKs {
 			if remotePK == whitelistedPK.String() {
 				whitelisted = true
@@ -827,10 +910,44 @@ type Vhost struct {
 	Names     []string // Host names, lower case: the name and its aliases
 	Handler   http.Handler
 	Whitelist []cipher.PubKey // empty = everyone
+	// Sites are the names its backend serves, for a vhost that takes many.
+	Sites func() []string
+	// VisorPages serves the visor's own pages under this name instead of a site.
+	VisorPages bool
 }
 
 // AnyVhost is the name of the vhost that serves every name no other has.
 const AnyVhost = "*"
+
+// SiteList is what GET /.skywire/sites returns.
+type SiteList struct {
+	PK    string   `json:"pk"`
+	Sites []string `json:"sites"`
+}
+
+// sitesFor is each site name req's caller may open, sorted.
+func (api *API) sitesFor(req *http.Request) []string {
+	seen := map[string]bool{}
+	for _, v := range api.vhostList() {
+		if !callerAllowed(req, v.Whitelist) {
+			continue
+		}
+		if v.Name != AnyVhost && !v.VisorPages {
+			seen[v.Names[0]] = true
+		}
+		if v.Sites != nil {
+			for _, s := range v.Sites() {
+				seen[s] = true
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // SetVhosts replaces the sites served by Host. Nil or empty serves none.
 func (api *API) SetVhosts(vs []Vhost) {
@@ -859,6 +976,10 @@ func (api *API) vhostRouter(next http.Handler) http.Handler {
 			if v != nil {
 				if !callerAllowed(req, v.Whitelist) {
 					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				if v.VisorPages {
+					api.ownPages.ServeHTTP(w, req)
 					return
 				}
 				// The site sees the name it was asked by, not the visor's suffix.
@@ -966,6 +1087,6 @@ func homeSuffix(host string) (string, bool) {
 }
 
 // SetHomePage installs the renderer for the mesh directory at home.skynet.
-func (api *API) SetHomePage(render func(suffix string) []byte) {
+func (api *API) SetHomePage(render func(suffix string, ownUser bool) []byte) {
 	api.homePage = render
 }

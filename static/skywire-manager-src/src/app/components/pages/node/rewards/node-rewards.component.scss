@@ -51,3 +51,22 @@ tr.sent td {
 tr.pending td {
   border-left: 2px solid rgba(255, 193, 7, 0.3);
 }
+
+.exposure-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 4px solid #f44336;
+  border-radius: 4px;
+  background: rgba(244, 67, 54, 0.12);
+  color: #ff8a80;
+
+  &.has-balance {
+    border-left-width: 6px;
+    background: rgba(244, 67, 54, 0.28);
+    color: #ffffff;
+    font-weight: bold;
+  }
+}

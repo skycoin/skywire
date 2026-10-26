@@ -33,8 +33,14 @@ import (
 // configuration path — picked up by an elevated Notepad or the
 // %ProgramData% environment variable). Anything else falls back to the
 // Linux path so darwin / freebsd builds keep their previous behavior;
-// they're not formally supported here but shouldn't regress.
+// they're not formally supported here but shouldn't regress. An Android app
+// cannot write /etc, so there it is in the app's own config directory.
 func DefaultPath() string {
+	if runtime.GOOS == "android" {
+		if dir, err := os.UserConfigDir(); err == nil {
+			return filepath.Join(dir, "skywire.conf")
+		}
+	}
 	if runtime.GOOS == "windows" {
 		if pd := os.Getenv("ProgramData"); pd != "" {
 			return filepath.Join(pd, "Skywire", "skywire.conf")

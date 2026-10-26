@@ -4,6 +4,7 @@ package visor
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -347,7 +348,8 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 			}
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, VisorTreeResponse{Sections: sections})
+		resp := VisorTreeResponse{Sections: sections}
+		hv.writeStreamedJSON(w, r, resp, func(w io.Writer) error { return writeVisorTree(w, resp) })
 	}
 }
 
@@ -850,6 +852,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}
 		}
 
-		httputil.WriteJSON(w, r, http.StatusOK, compactSummaryTransports(summaries))
+		compact := compactSummaryTransports(summaries)
+		hv.writeStreamedJSON(w, r, compact, func(w io.Writer) error { return writeJSONArray(w, compact) })
 	}
 }

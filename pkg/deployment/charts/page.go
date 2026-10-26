@@ -77,6 +77,9 @@ type Page struct {
 	About string
 	// Links are other pages of the service, shown under the title.
 	Links []Link
+	// Extra are the pages Links point to, so a Board that shows this page
+	// can serve them too.
+	Extra []Extra
 	Build func(ctx context.Context, r Range, now time.Time) (Content, error)
 	// Stats, when set, adds the service's process and traffic charts after
 	// Build's, read from Store.

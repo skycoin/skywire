@@ -134,6 +134,13 @@ func (c *quicStreamConn) rawConnDetails(d *ConnDetails) {
 		sum := sha256.Sum256(tlsState.PeerCertificates[0].Raw)
 		d.TLSCertSHA256 = hex.EncodeToString(sum[:])
 	}
+	s := c.conn.ConnectionStats()
+	d.Link = &LinkStats{
+		SRTTMs:    durationMs(s.SmoothedRTT),
+		MinRTTMs:  durationMs(s.MinRTT),
+		CwndBytes: s.CongestionWindow,
+		Loss:      newLinkLoss(s.PacketsSent, s.PacketsLost, s.BytesLost),
+	}
 }
 
 func (c *quicStreamConn) Close() error {

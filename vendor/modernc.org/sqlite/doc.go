@@ -53,26 +53,26 @@
 //
 //	OS      Arch    SQLite version
 //	------------------------------
-//	darwin	amd64   3.53.4
-//	darwin	arm64   3.53.4
-//	freebsd	386     3.53.4
-//	freebsd	amd64   3.53.4
-//	freebsd	arm     3.53.4
-//	freebsd	arm64   3.53.4
-//	linux	386     3.53.4
-//	linux	amd64   3.53.4
-//	linux	arm     3.53.4
-//	linux	arm64   3.53.4
-//	linux	loong64 3.53.4
-//	linux	ppc64le 3.53.4
-//	linux	riscv64 3.53.4
-//	linux	s390x   3.53.4
-//	netbsd	amd64   3.53.4
-//	openbsd	amd64   3.53.4
-//	openbsd	arm64   3.53.4
-//	windows	386     3.53.4
-//	windows	amd64   3.53.4
-//	windows	arm64   3.53.4
+//	darwin	amd64   3.54.1
+//	darwin	arm64   3.54.1
+//	freebsd	386     3.54.1
+//	freebsd	amd64   3.54.1
+//	freebsd	arm     3.54.1
+//	freebsd	arm64   3.54.1
+//	linux	386     3.54.1
+//	linux	amd64   3.54.1
+//	linux	arm     3.54.1
+//	linux	arm64   3.54.1
+//	linux	loong64 3.54.1
+//	linux	ppc64le 3.54.1
+//	linux	riscv64 3.54.1
+//	linux	s390x   3.54.1
+//	netbsd	amd64   3.54.1
+//	openbsd	amd64   3.54.1
+//	openbsd	arm64   3.54.1
+//	windows	386     3.54.1
+//	windows	amd64   3.54.1
+//	windows	arm64   3.54.1
 //
 // # Benchmarks
 //

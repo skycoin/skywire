@@ -371,11 +371,12 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 ?.let { wallet.cachedSnapshot(it) }
                 ?.let { Amounts.format(it.confirmed, CoinSpec.SKY.exponent, 0) }
         }
-        val mail = if (mutable.value.apps[MAIL_APP]?.running == true) {
-            runCatching { api.mailStatus().unread }.getOrDefault(mutable.value.unreadMail)
-        } else {
-            0
-        }
+        // The mailbox's own word for whether it runs — the same truth the
+        // mail screen gates on. The apps list can lag it, which left the
+        // badge stuck at zero while mail flowed.
+        val mail = runCatching {
+            api.mailStatus().takeIf { it.running }?.unread ?: 0
+        }.getOrDefault(mutable.value.unreadMail)
         mutable.update { it.copy(unreadMessages = unread, unreadMail = mail, skyBalance = balance) }
     }
 

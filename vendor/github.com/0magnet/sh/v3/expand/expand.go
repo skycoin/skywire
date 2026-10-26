@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"iter"
-	"maps"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -116,6 +115,16 @@ func (u UnexpectedCommandError) Error() string {
 	return fmt.Sprintf("unexpected command substitution at %s", u.Node.Pos())
 }
 
+// UnexpectedProcessError is returned if a process substitution is encountered
+// when [Config.ProcSubst] is nil.
+type UnexpectedProcessError struct {
+	Node *syntax.ProcSubst
+}
+
+func (u UnexpectedProcessError) Error() string {
+	return fmt.Sprintf("unexpected process substitution at %s", u.Node.Pos())
+}
+
 // expander holds the state for a single expansion call with a copy of
 // a [Config], so that the caller's can be reused and shared by concurrent calls.
 type expander struct {
@@ -127,9 +136,13 @@ type expander struct {
 	fieldAlloc  [4]fieldPart
 	fieldsAlloc [4][]fieldPart
 
-	// A pointer to a parameter expansion node, if we're inside one.
-	// Necessary for ${LINENO}.
-	curParam *syntax.ParamExp
+	// arithmRecursion counts the variables whose values are being
+	// evaluated as nested arithmetic expressions; see [expander.arithmValue].
+	arithmRecursion int
+	// arithmParser parses those values and the subscripts of indirect
+	// expansions via [expander.parseArithm]. It is only allocated when
+	// needed, and kept across [expander.release].
+	arithmParser *syntax.Parser
 
 	// depth counts the levels of recursion in the expansion,
 	// reported to [Config.CmdSubst] via [internal.NestingWriter].
@@ -165,8 +178,16 @@ func newExpander(cfg *Config) *expander {
 }
 
 func (e *expander) release() {
-	*e = expander{}
+	*e = expander{arithmParser: e.arithmParser}
 	expanderPool.Put(e)
+}
+
+// parseArithm parses an arithmetic expression held in a string.
+func (e *expander) parseArithm(src string) (syntax.ArithmExpr, error) {
+	if e.arithmParser == nil {
+		e.arithmParser = syntax.NewParser()
+	}
+	return e.arithmParser.Arithmetic(strings.NewReader(src))
 }
 
 // readDir2 uses [Config.ReadDir2], falling back to [Config.ReadDir].
@@ -218,7 +239,8 @@ func (e *expander) strBuilder() *strings.Builder {
 }
 
 func (e *expander) envGet(name string) string {
-	return e.Env.Get(name).String()
+	_, vr := e.Env.Get(name).Resolve(e.Env)
+	return vr.String()
 }
 
 func (e *expander) envSet(name, value string) error {
@@ -641,10 +663,12 @@ func (e *expander) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			s := wp.Value
 			if i == 0 && ql == quoteNone {
 				if prefix, rest := e.expandUser(s, len(wps) > 1); prefix != "" {
-					// TODO: return two separate fieldParts,
-					// like in wordFields?
-					s = prefix + rest
+					field = append(field, fieldPart{val: prefix})
+					s = rest
 				}
+			}
+			if ql == quoteNone {
+				field, s = appendUnescaped(field, s)
 			}
 			if (ql == quoteDouble || ql == quoteHeredoc) && strings.Contains(s, "\\") {
 				sb := e.strBuilder()
@@ -676,16 +700,12 @@ func (e *expander) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fp)
 		case *syntax.DblQuoted:
-			wfield, err := e.wordField(wp.Parts, quoteDouble)
-			if err != nil {
+			var err error
+			if field, err = e.appendDblQuoted(field, wp.Parts); err != nil {
 				return nil, err
 			}
-			for _, part := range wfield {
-				part.quote = quoteDouble
-				field = append(field, part)
-			}
 		case *syntax.ParamExp:
-			val, err := e.paramExp(wp)
+			val, err := e.paramExp(wp, ql != quoteNone)
 			if err != nil {
 				return nil, err
 			}
@@ -697,7 +717,7 @@ func (e *expander) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			}
 			field = append(field, fieldPart{val: val})
 		case *syntax.ArithmExp:
-			n, err := e.arithm(wp.X)
+			n, err := e.arithmExp(wp.X)
 			if err != nil {
 				return nil, err
 			}
@@ -722,7 +742,7 @@ func (e *expander) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 
 func (e *expander) procSubst(ps *syntax.ProcSubst) (string, error) {
 	if e.ProcSubst == nil {
-		return "", fmt.Errorf("unexpected process substitution at %s", ps.Pos())
+		return "", UnexpectedProcessError{Node: ps}
 	}
 	return e.ProcSubst(ps)
 }
@@ -782,20 +802,7 @@ func (e *expander) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				})
 				s = rest
 			}
-			// Escaped characters are quoted, so that they aren't
-			// treated as metacharacters when globbing.
-			for {
-				i := strings.IndexByte(s, '\\')
-				if i < 0 || i == len(s)-1 {
-					break // a trailing backslash is kept as-is
-				}
-				_, size := utf8.DecodeRuneInString(s[i+1:])
-				curField = append(curField,
-					fieldPart{val: s[:i]},
-					fieldPart{quote: quoteSingle, val: s[i+1 : i+1+size]},
-				)
-				s = s[i+1+size:]
-			}
+			curField, s = appendUnescaped(curField, s)
 			curField = append(curField, fieldPart{val: s})
 		case *syntax.SglQuoted:
 			allowEmpty = true
@@ -806,36 +813,94 @@ func (e *expander) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			}
 			curField = append(curField, fp)
 		case *syntax.DblQuoted:
-			if len(wp.Parts) == 1 {
-				pe, _ := wp.Parts[0].(*syntax.ParamExp)
-				elems, err := e.quotedElemFields(pe)
-				if err != nil {
-					return nil, err
-				}
-				if elems != nil {
-					for i, elem := range elems {
-						if i > 0 {
-							flush()
+			// A list expansion like "${a[@]}" produces one field per
+			// element, and zero fields when the list is empty.
+			// Within a longer string like "x${a[@]}y", the other parts
+			// join the first and last elements. Like in Bash, the string
+			// produces an empty field unless it holds such a list and
+			// expands to nothing, so that "$@$x" produces no fields when
+			// there are no parameters and x is empty.
+			start := len(curField)
+			list, listElems := false, false
+			// A word used by an operator, as in "${x-word}", continues
+			// the string, and any list in it splits fields just the same,
+			// but it does not allow the string to produce no fields.
+			var appendParts func(parts []syntax.WordPart, operand bool) error
+			appendParts = func(parts []syntax.WordPart, operand bool) error {
+				for j, part := range parts {
+					if dq, ok := part.(*syntax.DblQuoted); ok && operand {
+						if err := appendParts(dq.Parts, true); err != nil {
+							return err
 						}
-						curField = append(curField, fieldPart{
-							quote: quoteDouble,
-							val:   elem,
-						})
+						continue
 					}
-					continue
+					pe, ok := part.(*syntax.ParamExp)
+					if !ok {
+						var err error
+						if curField, err = e.appendDblQuoted(curField, parts[j:j+1]); err != nil {
+							return err
+						}
+						continue
+					}
+					p, err := e.resolveParam(pe)
+					if err != nil {
+						return err
+					}
+					if word, ok, err := e.operandWord(pe, &p); err != nil {
+						return err
+					} else if ok {
+						if word != nil {
+							e.depth++
+							err := appendParts(word.Parts, true)
+							e.depth--
+							if err != nil {
+								return err
+							}
+						}
+						continue
+					}
+					elems, star, err := e.quotedElemFields(pe, p)
+					if err != nil {
+						return err
+					}
+					if elems != nil {
+						if !star && !operand {
+							list = true
+							listElems = listElems || len(elems) > 0
+						}
+						for k, elem := range elems {
+							if k > 0 {
+								flush()
+							}
+							curField = append(curField, fieldPart{
+								quote: quoteDouble,
+								val:   elem,
+							})
+						}
+						continue
+					}
+					val, err := e.paramExpResolved(pe, p, true)
+					if err != nil {
+						return err
+					}
+					curField = append(curField, fieldPart{quote: quoteDouble, val: val})
 				}
+				return nil
 			}
-			allowEmpty = true
-			wfield, err := e.wordField(wp.Parts, quoteDouble)
+			if err := appendParts(wp.Parts, false); err != nil {
+				return nil, err
+			}
+			if list && !listElems && !slices.ContainsFunc(curField[start:], func(part fieldPart) bool { return part.val != "" }) {
+				curField = curField[:start] // the empty parts produce no field
+			} else {
+				allowEmpty = true
+			}
+		case *syntax.ParamExp:
+			p, err := e.resolveParam(wp)
 			if err != nil {
 				return nil, err
 			}
-			for _, part := range wfield {
-				part.quote = quoteDouble
-				curField = append(curField, part)
-			}
-		case *syntax.ParamExp:
-			if elems, ok := e.unquotedElemFields(wp); ok {
+			if elems, ok := e.unquotedElemFields(wp, p); ok {
 				// Unquoted "*" or "@" expansions produce one field per
 				// element; joining and re-splitting them would lose
 				// fields when IFS is empty.
@@ -847,7 +912,7 @@ func (e *expander) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 				}
 				continue
 			}
-			val, err := e.paramExp(wp)
+			val, err := e.paramExpResolved(wp, p, false)
 			if err != nil {
 				return nil, err
 			}
@@ -859,7 +924,7 @@ func (e *expander) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			}
 			splitAdd(val)
 		case *syntax.ArithmExp:
-			n, err := e.arithm(wp.X)
+			n, err := e.arithmExp(wp.X)
 			if err != nil {
 				return nil, err
 			}
@@ -893,81 +958,141 @@ func (e *expander) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 	return fields, nil
 }
 
+// appendUnescaped appends the parts of an unquoted literal up to its last
+// backslash escape, returning the rest. Each escaped character is quoted,
+// so that it is not treated as a metacharacter when globbing. A trailing
+// backslash is kept as-is.
+func appendUnescaped(parts []fieldPart, s string) ([]fieldPart, string) {
+	for {
+		before, escaped, after, ok := internal.CutEscape(s)
+		if !ok {
+			return parts, s
+		}
+		parts = append(parts,
+			fieldPart{val: before},
+			fieldPart{quote: quoteSingle, val: escaped},
+		)
+		s = after
+	}
+}
+
 // listElems returns the elements of a "*" or "@" expansion of a list, like
 // $@ or ${arr[*]}, with star set for the "*" forms which join into a single
 // field when quoted. ok is false for any other parameter expansion.
-func (e *expander) listElems(pe *syntax.ParamExp) (elems []string, star, ok bool) {
-	if pe.Param == nil { // e.g. zsh's ${}; paramExp rejects it
-		return nil, false, false
-	}
-	switch name := pe.Param.Value; name {
+func (e *expander) listElems(pe *syntax.ParamExp, p param) (elems []string, star, ok bool) {
+	switch p.name {
 	case "*", "@":
-		return e.sliceElems(pe, e.Env.Get(name).List, nil, true), name == "*", true
+		return e.sliceElems(pe, p.vr.List, nil, true), p.name == "*", true
 	}
-	switch lit := nodeLit(pe.Index); lit {
+	switch lit := nodeLit(p.index); lit {
 	case "@", "*":
-		switch vr := e.Env.Get(pe.Param.Value); vr.Kind {
+		switch vr := p.vr; vr.Kind {
 		case Indexed:
 			return e.sliceElems(pe, vr.List, vr.Indexes, false), lit == "*", true
 		case Associative:
-			return slices.Sorted(maps.Values(vr.Map)), lit == "*", true
+			return vr.assocVals(), lit == "*", true
 		}
 	}
 	return nil, false, false
 }
 
+// appendDblQuoted appends the field parts of a double-quoted string.
+func (e *expander) appendDblQuoted(field []fieldPart, wps []syntax.WordPart) ([]fieldPart, error) {
+	wfield, err := e.wordField(wps, quoteDouble)
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range wfield {
+		part.quote = quoteDouble
+		field = append(field, part)
+	}
+	return field, nil
+}
+
 // unquotedElemFields returns the elements of an unquoted "*" or "@" list
-// expansion like $* or ${foo[@]}; ok is false for any other expansion.
-func (e *expander) unquotedElemFields(pe *syntax.ParamExp) ([]string, bool) {
-	if pe.Excl || pe.Length || pe.Width || pe.IsSet || pe.Repl != nil || pe.Exp != nil {
+// expansion like $* or ${foo[@]}, given its resolved parameter;
+// ok is false for any other expansion.
+func (e *expander) unquotedElemFields(pe *syntax.ParamExp, p param) (elems []string, ok bool) {
+	if !mayExpandList(pe) || pe.Length || pe.Width || pe.IsSet || pe.Repl != nil || pe.Exp != nil {
 		return nil, false
 	}
-	elems, _, ok := e.listElems(pe)
+	if namesExp(pe) {
+		return nil, false
+	}
+	elems, _, ok = e.listElems(pe, p)
 	return elems, ok
 }
 
 // quotedElemFields returns the list of elements resulting from a quoted
-// parameter expansion that should be treated especially, like "${foo[@]}".
-// The result is nil for any other parameter expansion.
-func (e *expander) quotedElemFields(pe *syntax.ParamExp) ([]string, error) {
-	if pe == nil || pe.Param == nil || pe.Length || pe.Width || pe.IsSet {
-		return nil, nil
+// parameter expansion that should be treated especially, like "${foo[@]}",
+// given its resolved parameter. The result is nil for any other parameter
+// expansion. The "*" forms like "${foo[*]}" join the elements into a single
+// one and report star.
+func (e *expander) quotedElemFields(pe *syntax.ParamExp, p param) (elems []string, star bool, err error) {
+	if !mayExpandList(pe) || pe.Length || pe.Width || pe.IsSet {
+		return nil, false, nil
 	}
-	name := pe.Param.Value
-	if pe.Excl {
+	if namesExp(pe) {
 		switch pe.Names {
 		case syntax.NamesPrefixWords: // "${!prefix@}"
-			return e.namesByPrefix(pe.Param.Value), nil
+			return e.namesByPrefix(pe.Param.Value), false, nil
 		case syntax.NamesPrefix: // "${!prefix*}"
-			return nil, nil
+			return nil, false, nil
 		}
 		switch nodeLit(pe.Index) {
 		case "@": // "${!name[@]}"
-			switch vr := e.Env.Get(name); vr.Kind {
+			switch vr := p.vr; vr.Kind {
 			case Indexed:
-				return vr.indexedKeys(), nil
+				return vr.indexedKeys(), false, nil
 			case Associative:
-				return slices.Collect(maps.Keys(vr.Map)), nil
+				return vr.assocKeys(), false, nil
 			}
 		}
-		return nil, nil
+		return nil, false, nil
 	}
-	if nodeLit(pe.Index) == "@" && !overridingUnset(pe) && !e.Env.Get(name).IsSet() {
+	if nodeLit(p.index) == "@" && !overridingUnset(pe) && !p.vr.IsSet() {
 		// An unset "${name[@]}" produces zero fields, like an empty array.
-		return []string{}, nil
+		return []string{}, false, nil
 	}
-	if elems, star, ok := e.listElems(pe); ok {
-		// Operators like "${foo[@]#prefix}" apply to each element.
-		elems, err := e.perElemOps(pe, elems)
-		if err != nil {
-			return nil, err
-		}
-		if star {
-			return []string{e.ifsJoin(elems)}, nil
-		}
-		return elems, nil
+	elems, star, ok := e.listElems(pe, p)
+	if !ok {
+		return nil, false, nil
 	}
-	return nil, nil
+	if elems == nil {
+		elems = []string{} // an empty list still produces zero fields
+	}
+	var arg string
+	if pe.Exp != nil {
+		if arg, err = e.expArg(pe.Exp, true); err != nil {
+			return nil, false, err
+		}
+		switch op := pe.Exp.Op; op {
+		case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+			// Like in [expander.operandWord], the list is tested as a whole.
+			null := op == syntax.ErrorUnsetOrNull && e.joinElems(elems, star) == ""
+			if testParamOp(op, len(elems) > 0, null) == testFail {
+				return nil, false, UnsetParameterError{Node: pe, Message: arg}
+			}
+		case syntax.OtherParamOps:
+			if _, ok, _ := transformOp(arg, ""); !ok {
+				if arg != "a" {
+					// Operators like @A describe the variable as one word.
+					return nil, false, nil
+				}
+				// @a gives the attributes once per element.
+				elems = slices.Repeat([]string{p.orig.Flags()}, len(elems))
+			}
+		}
+	}
+	// Operators like "${foo[@]#prefix}" apply to each element.
+	elems, err = e.perElemOps(pe, arg, elems)
+	if err != nil {
+		return nil, false, err
+	}
+	if star {
+		return []string{e.ifsJoin(elems)}, true, nil
+	}
+	return elems, false, nil
 }
 
 // sliceElems applies ${var:offset:length} slicing to a list of elements.
@@ -1093,35 +1218,39 @@ var (
 
 // pathJoin2 is a simpler version of [filepath.Join] without cleaning the result,
 // since that's needed for globbing.
-func pathJoin2(elem1, elem2 string) string {
+func pathJoin2(sep, elem1, elem2 string) string {
 	if elem1 == "" {
 		return elem2
 	}
-	if strings.HasSuffix(elem1, string(filepath.Separator)) {
+	if strings.HasSuffix(elem1, sep) {
 		return elem1 + elem2
 	}
-	return elem1 + string(filepath.Separator) + elem2
+	return elem1 + sep + elem2
 }
 
 // pathSplit splits a file path into its elements, retaining empty ones. Before
-// splitting, slashes are replaced with [filepath.Separator], so that splitting
-// Unix paths on Windows works as well.
-func pathSplit(path string) []string {
-	path = filepath.FromSlash(path)
-	return strings.Split(path, string(filepath.Separator))
+// splitting, slashes are replaced with the OS separator, so that splitting
+// Unix paths on Windows works as well, unless sep is a slash already.
+func pathSplit(sep, path string) []string {
+	if sep != "/" {
+		path = filepath.FromSlash(path)
+	}
+	return strings.Split(path, sep)
 }
 
 func (e *expander) glob(base, pat string) ([]string, error) {
-	parts := pathSplit(pat)
+	ps := internal.PathsFor(base)
+	sep := ps.Separator()
+	parts := pathSplit(sep, pat)
 	matches := []string{""}
-	if filepath.IsAbs(pat) {
+	if ps.IsAbs(pat) {
 		if parts[0] == "" {
 			// unix-like
-			matches[0] = string(filepath.Separator)
+			matches[0] = sep
 		} else {
 			// windows (for some reason it won't work without the
 			// trailing separator)
-			matches[0] = parts[0] + string(filepath.Separator)
+			matches[0] = parts[0] + sep
 		}
 		parts = parts[1:]
 	}
@@ -1142,17 +1271,17 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 		switch {
 		case part == "", part == ".", part == "..":
 			for i, dir := range matches {
-				matches[i] = pathJoin2(dir, part)
+				matches[i] = pathJoin2(sep, dir, part)
 			}
 			continue
 		case !pattern.HasMeta(part, 0):
 			var newMatches []string
 			for _, dir := range matches {
 				match := dir
-				if !filepath.IsAbs(match) {
-					match = filepath.Join(base, match)
+				if !ps.IsAbs(match) {
+					match = ps.Join(base, match)
 				}
-				match = pathJoin2(match, part)
+				match = pathJoin2(sep, match, part)
 				// We can't use [Config.ReadDir2] on the parent and match the directory
 				// entry by name, because short paths on Windows break that.
 				// Our only option is to [Config.ReadDir2] on the directory entry itself,
@@ -1171,7 +1300,7 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 						continue // exists but not a directory
 					}
 				}
-				newMatches = append(newMatches, pathJoin2(dir, part))
+				newMatches = append(newMatches, pathJoin2(sep, dir, part))
 			}
 			matches = newMatches
 			continue
@@ -1198,7 +1327,7 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 			for _, match := range slices.Backward(matches) {
 				// "a/**" should match "a/ a/b a/b/cfg ...";
 				// note how the zero-match case there has a trailing separator.
-				stack = append(stack, walkDir{path: pathJoin2(match, "")})
+				stack = append(stack, walkDir{path: pathJoin2(sep, match, "")})
 			}
 			// Like Bash, don't walk symbolic links, which may form loops,
 			// and only match them when "**" is the last path element.
@@ -1218,7 +1347,7 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 					rx = rxGlobStarDotGlob.MatchString
 				}
 				n := len(stack)
-				e.globDir(base, dir.path, rx, wantDir, last, func(path string, link bool) {
+				e.globDir(ps, base, dir.path, rx, wantDir, last, func(path string, link bool) {
 					stack = append(stack, walkDir{path: path, link: link})
 				})
 				slices.Reverse(stack[n:])
@@ -1241,7 +1370,7 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 		}
 		var newMatches []string
 		for _, dir := range matches {
-			if err := e.globDir(base, dir, matcher, wantDir, true, func(path string, _ bool) {
+			if err := e.globDir(ps, base, dir, matcher, wantDir, true, func(path string, _ bool) {
 				newMatches = append(newMatches, path)
 			}); err != nil {
 				return nil, err
@@ -1262,10 +1391,10 @@ func (e *expander) glob(base, pat string) ([]string, error) {
 // globDir calls match with the path of each entry in dir accepted by matcher,
 // only including directories if wantDir is set and symbolic links if links is set,
 // and whether the entry is a symbolic link.
-func (e *expander) globDir(base, dir string, matcher func(string) bool, wantDir, links bool, match func(path string, link bool)) error {
+func (e *expander) globDir(ps internal.Paths, base, dir string, matcher func(string) bool, wantDir, links bool, match func(path string, link bool)) error {
 	fullDir := dir
-	if !filepath.IsAbs(dir) {
-		fullDir = filepath.Join(base, dir)
+	if !ps.IsAbs(dir) {
+		fullDir = ps.Join(base, dir)
 	}
 	infos, err := e.readDir2(fullDir)
 	if err != nil {
@@ -1286,7 +1415,7 @@ func (e *expander) globDir(base, dir string, matcher func(string) bool, wantDir,
 			// does not follow symlinks for each of the directory entries.
 			// ReadDir is somewhat wasteful here, as we only want its error result,
 			// but we could try to reuse its result as per the TODO in [expander.glob].
-			if _, err := e.readDir2(filepath.Join(fullDir, info.Name())); err != nil {
+			if _, err := e.readDir2(ps.Join(fullDir, info.Name())); err != nil {
 				continue
 			}
 		} else if !mode.IsDir() {
@@ -1294,7 +1423,7 @@ func (e *expander) globDir(base, dir string, matcher func(string) bool, wantDir,
 			continue
 		}
 		if matcher(name) {
-			match(pathJoin2(dir, name), link)
+			match(pathJoin2(ps.Separator(), dir, name), link)
 		}
 	}
 	return nil
@@ -1308,65 +1437,84 @@ func (e *expander) globDir(base, dir string, matcher func(string) bool, wantDir,
 func ReadFields(cfg *Config, s string, n int, raw bool) []string {
 	e := newExpander(cfg)
 	defer e.release()
-	type pos struct {
-		start, end int
-	}
-	var fpos []pos
 
-	runes := make([]rune, 0, len(s))
-	infield := false
+	// Decode the line, where a backslash escapes the next character unless raw.
+	type char struct {
+		r   rune
+		esc bool
+	}
+	chars := make([]char, 0, len(s))
 	esc := false
 	for _, r := range s {
-		if infield {
-			if e.ifsRune(r) && (raw || !esc) {
-				fpos[len(fpos)-1].end = len(runes)
-				infield = false
-			}
-		} else {
-			if !e.ifsRune(r) && (raw || !esc) {
-				fpos = append(fpos, pos{start: len(runes), end: -1})
-				infield = true
-			}
-		}
-		if r == '\\' {
-			if raw || esc {
-				runes = append(runes, r)
-			}
-			esc = !esc
+		if r == '\\' && !raw && !esc {
+			esc = true
 			continue
 		}
-		runes = append(runes, r)
+		chars = append(chars, char{r, esc})
 		esc = false
 	}
-	if len(fpos) == 0 {
-		return nil
+	isIFS := func(c char) bool { return !c.esc && e.ifsRune(c.r) }
+	isSpace := func(c char) bool { return !c.esc && e.ifsWhitespace(c.r) }
+	skipSpace := func(cs []char) []char {
+		for len(cs) > 0 && isSpace(cs[0]) {
+			cs = cs[1:]
+		}
+		return cs
 	}
-	if infield {
-		fpos[len(fpos)-1].end = len(runes)
+	text := func(cs []char) string {
+		sb := e.strBuilder()
+		sb.Grow(len(cs))
+		for _, c := range cs {
+			sb.WriteRune(c.r)
+		}
+		return sb.String()
+	}
+	// word extracts the next field like Bash: it skips leading IFS
+	// whitespace, takes the characters up to an IFS character, and
+	// consumes that delimiter along with any IFS whitespace around it.
+	word := func(cs []char) ([]char, []char) {
+		cs = skipSpace(cs)
+		i := 0
+		for i < len(cs) && !isIFS(cs[i]) {
+			i++
+		}
+		w, cs := cs[:i], cs[i:]
+		if len(cs) > 0 {
+			if isSpace(cs[0]) {
+				cs = skipSpace(cs)
+				if len(cs) > 0 && isIFS(cs[0]) {
+					cs = skipSpace(cs[1:])
+				}
+			} else {
+				cs = skipSpace(cs[1:])
+			}
+		}
+		return w, cs
 	}
 
-	switch {
-	case n == 1:
-		// The single field spans the whole line minus leading and trailing
-		// IFS whitespace; anything outside the fields is already IFS.
-		lo, hi := 0, len(runes)
-		for lo < fpos[0].start && e.ifsWhitespace(runes[lo]) {
-			lo++
+	var fields []string
+	var w []char
+	if n < 0 {
+		for len(skipSpace(chars)) > 0 {
+			w, chars = word(chars)
+			fields = append(fields, text(w))
 		}
-		for hi > fpos[len(fpos)-1].end && e.ifsWhitespace(runes[hi-1]) {
-			hi--
+		return fields
+	}
+	for range n - 1 {
+		w, chars = word(chars)
+		fields = append(fields, text(w))
+	}
+	// Like Bash, the last field is the rest of the line without leading or
+	// trailing IFS whitespace, unless it holds a single word, in which
+	// case a delimiter following it is dropped as well.
+	chars = skipSpace(chars)
+	if w, rest := word(chars); len(rest) == 0 {
+		chars = w
+	} else {
+		for len(chars) > 0 && isSpace(chars[len(chars)-1]) {
+			chars = chars[:len(chars)-1]
 		}
-		fpos[0].start, fpos[0].end = lo, hi
-		fpos = fpos[:1]
-	case n != -1 && n < len(fpos):
-		// combine to max n fields
-		fpos[n-1].end = fpos[len(fpos)-1].end
-		fpos = fpos[:n]
 	}
-
-	fields := make([]string, len(fpos))
-	for i, p := range fpos {
-		fields[i] = string(runes[p.start:p.end])
-	}
-	return fields
+	return append(fields, text(chars))
 }

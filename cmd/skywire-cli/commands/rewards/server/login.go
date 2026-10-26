@@ -18,11 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/cmdutil"
-
 	"github.com/bitfield/script"
 	skycoincipher "github.com/skycoin/skycoin/src/cipher"
 
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
@@ -142,8 +142,14 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 	if isXpub {
 		// Match the xpub itself (in case it appears in the CSV)
 		matchAddrs[address] = true
-		// Derive first 20 external chain addresses
-		for i := uint32(0); i < 20; i++ {
+		// Derive the first 20 external chain addresses, or up to the highest index paid.
+		n := uint32(20)
+		if x, err := deprewards.LoadXpubIndex(filepath.Join(filepath.Dir(histDir), deprewards.XpubIndexFile)); err == nil {
+			if maxIdx, ok := x.MaxIndex(address); ok && maxIdx+1 > n {
+				n = maxIdx + 1
+			}
+		}
+		for i := uint32(0); i < n; i++ {
 			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
 			if err != nil {
 				break

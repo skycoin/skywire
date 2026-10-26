@@ -92,9 +92,8 @@ func (w *EmbeddedWisp) upstream() string {
 	if w.cfg.UpstreamSOCKS != "" {
 		return w.cfg.UpstreamSOCKS
 	}
-	// SkysocksClientAddr is ":1080" — the port the proxy app's SOCKS5
-	// listener binds, not its dmsg port.
-	return "127.0.0.1" + skyenv.SkysocksClientAddr
+	// The proxy app's SOCKS5 listener, not its dmsg port.
+	return skyenv.SkysocksClientAddr
 }
 
 // Addr reports the address the server is bound to, or "" when it is stopped.

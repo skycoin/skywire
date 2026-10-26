@@ -1,6 +1,8 @@
 package com.skycoin.wallet.skycoin
 
 import com.skycoin.wallet.Base58
+import com.skycoin.wallet.Bip32
+import com.skycoin.wallet.Bip39
 import com.skycoin.wallet.Hashes
 import com.skycoin.wallet.Secp256k1
 
@@ -78,4 +80,21 @@ object SkycoinCrypto {
     }
 
     fun isValidAddress(address: String): Boolean = decodeAddress(address) != null
+}
+
+/**
+ * Skycoin's BIP 44 wallets: m/44'/8000'/account'/chain/index, chain 0 for
+ * receiving and 1 for change, the phrase run through BIP 39 with its
+ * passphrase. The address of a key is the usual Skycoin one.
+ */
+object SkycoinBip44 {
+    private const val COIN_TYPE = 8000
+
+    fun accountKey(mnemonic: String, passphrase: String, account: Int = 0): Bip32.ExtKey = Bip32.derive(
+        Bip32.master(Bip39.toSeed(mnemonic, passphrase)),
+        intArrayOf(44 or Bip32.HARDENED, COIN_TYPE or Bip32.HARDENED, account or Bip32.HARDENED),
+    )
+
+    fun key(account: Bip32.ExtKey, chain: Int, index: Int): Bip32.ExtKey =
+        Bip32.ckdPriv(Bip32.ckdPriv(account, chain), index)
 }

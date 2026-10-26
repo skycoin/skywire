@@ -71,14 +71,16 @@ func NewRegisteringFallbackDiscClient(direct, http disc.APIClient, log *logging.
 // client" (dmsg error 102) without the live discovery ever being asked — every
 // route through a folded visor failed at id reservation. For such a hit ask
 // the live discovery and prefer its answer, which carries both halves; if the
-// discovery cannot be reached the seed still serves the server bootstrap.
-// Synthetic seeds for service PKs are CLIENT entries, so they short-circuit
-// as before and the discovery's own PK never recurses through here.
+// discovery cannot be reached the seed still serves the server bootstrap. A
+// seed that already has a client half asks too, because getHTTPClient builds
+// one for a service on the visor's own key and it has no version to publish.
+// Synthetic seeds for service PKs are CLIENT-only entries, so they
+// short-circuit as before and the discovery's own PK never recurses through here.
 func (f *fallbackDiscClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
 	// Try direct client first
 	entry, err := f.direct.Entry(ctx, pk)
 	if err == nil && entry.Static == pk {
-		if entry.Client == nil && entry.Server != nil {
+		if entry.Server != nil {
 			if live, lerr := f.http.Entry(ctx, pk); lerr == nil && live != nil && live.Static == pk {
 				return live, nil
 			}

@@ -31,6 +31,7 @@ import (
 
 	clilog "github.com/skycoin/skywire/cmd/skywire-cli/commands/log"
 	"github.com/skycoin/skywire/deployment"
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
@@ -52,6 +53,7 @@ func init() {
 	runCmd.Flags().SortFlags = false
 	runCmd.Flags().StringVarP(&runDate, "date", "d", "", "date to calculate (YYYY-MM-DD); default = yesterday UTC")
 	runCmd.Flags().StringVarP(&runHistDir, "hist", "H", "hist", "history output directory")
+	runCmd.Flags().StringVar(&skycoinNodeURL, "skycoin-node", skycoinNodeURL, "skycoin node API used to find unused xpub reward addresses")
 	runCmd.Flags().StringVarP(&runHwSurveyPath, "lpath", "p", "log_backups", "path to collected surveys")
 	runCmd.Flags().StringVar(&runMinVersion, "minv", "", "minimum skywire version to fetch from / keep surveys for")
 	runCmd.Flags().BoolVar(&runSkipCollect, "skip-collect", false, "skip survey/tp/bw collection (use existing data on disk)")
@@ -97,6 +99,7 @@ Replaces the legacy 'script reward | bash' pipeline.`,
 		if err := os.MkdirAll(runHistDir, 0750); err != nil {
 			log.Fatal("Failed to create hist dir: ", err)
 		}
+		xpubIndexPath = filepath.Join(filepath.Dir(runHistDir), deprewards.XpubIndexFile)
 
 		if !runSkipCollect {
 			collectAll(date, runMinVersion, runProxy)
@@ -416,7 +419,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 			if geoRes, geoErr := geoip.Lookup(geoDB, ip); geoErr == nil && geoRes.CountryCode != "" {
 				ni.Country = geoRes.CountryCode
 			} else {
-				ni.Country = "XX"
+				ni.Country = unknownCountry
 			}
 		}
 
@@ -576,7 +579,7 @@ func writeSharesCSV(w io.Writer, r *dayResult) error {
 	}
 	combined := r.NodesInfos1
 	for _, ni := range combined {
-		resolved := resolveRewardAddress(ni.SkyAddr)
+		resolved := resolveRewardAddress(ni.SkyAddr, r.Date)
 		xpub := ""
 		if strings.HasPrefix(ni.SkyAddr, "xpub") {
 			xpub = ni.SkyAddr
@@ -611,7 +614,7 @@ func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
 		return err
 	}
 	for _, p := range rows {
-		if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(p.addr), p.amt); err != nil {
+		if _, err := fmt.Fprintf(w, "%s, %.6f\n", resolveRewardAddress(p.addr, r.Date), p.amt); err != nil {
 			return err
 		}
 	}

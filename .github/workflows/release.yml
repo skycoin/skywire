@@ -411,8 +411,8 @@ jobs:
         if: matrix.arch == 'amd64'
         shell: pwsh
         run: |
-          C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm mingw-w64-x86_64-libusb mingw-w64-x86_64-hidapi mingw-w64-x86_64-pkg-config"
-          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          C:\msys64\usr\bin\bash.exe -lc "pacman -Sy --needed --noconfirm mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libusb mingw-w64-ucrt-x86_64-hidapi mingw-w64-ucrt-x86_64-pkgconf"
+          echo "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Fetch Windows installer files
         shell: pwsh
@@ -476,8 +476,8 @@ jobs:
           GOPROXY: "https://proxy.golang.org,direct"
           GOSUMDB: "off"
           CGO_ENABLED: "1"
-          CGO_CFLAGS: -IC:/msys64/mingw64/include -IC:/msys64/mingw64/include/libusb-1.0
-          CGO_LDFLAGS: -LC:/msys64/mingw64/lib
+          CGO_CFLAGS: -IC:/msys64/ucrt64/include -IC:/msys64/ucrt64/include/libusb-1.0
+          CGO_LDFLAGS: -LC:/msys64/ucrt64/lib
           GOOS: windows
           GOARCH: amd64
         shell: pwsh
@@ -505,7 +505,7 @@ jobs:
           if (Test-Path "bin\skyhw.exe") {
             Copy-Item "bin\skyhw.exe" "dist\"
             # Bundle required DLLs for the CGO hardware wallet binary
-            $dllDir = "C:\msys64\mingw64\bin"
+            $dllDir = "C:\msys64\ucrt64\bin"
             foreach ($dll in @("libhidapi-0.dll", "libusb-1.0.dll")) {
               $dllPath = "$dllDir\$dll"
               if (Test-Path $dllPath) {
@@ -573,6 +573,14 @@ jobs:
           }
           gh release upload "${{ env.RELEASE_TAG }}" @files --repo ${{ github.repository }} --clobber
 
+  android-sh:
+    # The skywire Android app, see android-sh.yml.
+    needs: create-release
+    uses: ./.github/workflows/android-sh.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -596,7 +604,7 @@ jobs:
         shell: bash
 
   create-checksums:
-    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, android-sh]
     runs-on: ubuntu-latest
     steps:
       - name: Download all checksums and create combined file
@@ -621,7 +629,7 @@ jobs:
     # old draft-gating publish step (needs all jobs) never ran. This job is a
     # belt-and-suspenders final pass: it runs regardless of upstream job
     # outcome (if: always()) and re-asserts the published state.
-    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
+    needs: [wasm-module, linux, darwin-amd64, darwin-arm64, windows, android-sh, docker, create-checksums]
     if: always()
     runs-on: ubuntu-latest
     steps:

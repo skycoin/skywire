@@ -6,6 +6,11 @@ import "strings"
 // terminal byte stream: cursor movement, history, and the usual
 // control keys. It is terminal-agnostic — echo happens through the
 // Echo callback with standard escape sequences.
+//
+// With Prompt set, the editor draws the line itself and knows where it wraps:
+// it assumes the prompt was written at the start of a row and the terminal
+// wraps at Cols, and moves the cursor across rows to edit a line longer than
+// one. Without Prompt it draws through Redraw, as one row.
 type LineEditor struct {
 	// Echo writes to the terminal.
 	Echo func(s string)
@@ -19,7 +24,15 @@ type LineEditor struct {
 	ClearScreen func()
 	// Redraw must repaint prompt+content with the cursor n runes back
 	// from the end (used by history navigation and mid-line edits).
+	// It is not used when Prompt is set.
 	Redraw func(content string, cursorBack int)
+	// Prompt returns the prompt in front of the line, as the host writes it.
+	// Escape sequences and text between \x01 and \x02 take no cells.
+	Prompt func() string
+	// Cols returns the terminal's width in cells. Nil or 0 means it does not
+	// wrap. A changed width is taken to have reflowed the line, as xterm.js
+	// and VTE do.
+	Cols func() int
 	// Complete returns candidates for the word being completed. When
 	// isFirstWord, the word is a command name; otherwise a path.
 	// Directory candidates should end in "/".
@@ -34,6 +47,10 @@ type LineEditor struct {
 
 	esc int // escape state: 0 none, 1 ESC, 2 CSI
 	csi strings.Builder
+
+	// settled is set once the cursor is known to be where the editor puts it
+	// after the prompt the host wrote; see settle.
+	settled bool
 }
 
 // Line returns the current buffer contents.
@@ -45,6 +62,7 @@ func (e *LineEditor) Reset() {
 	e.cursor = 0
 	e.histIdx = len(e.history)
 	e.histSave = ""
+	e.settled = false
 }
 
 // AddHistory appends a line to the history.
@@ -70,6 +88,118 @@ func (e *LineEditor) ClearHistory() {
 	e.histSave = ""
 }
 
+func (e *LineEditor) cols() int {
+	if e.Cols == nil {
+		return 0
+	}
+	return max(e.Cols(), 0)
+}
+
+// layout returns where the cursor is before each rune of the line and after
+// the last, on a terminal cols wide.
+func (e *LineEditor) layout(prompt string, cols int) []cell {
+	var p cell
+	for _, r := range promptCells(prompt) {
+		p = advance(p, r, cols)
+	}
+	at := make([]cell, len(e.buf)+1)
+	at[0] = p
+	for i, r := range e.buf {
+		p = advance(p, r, cols)
+		at[i+1] = p
+	}
+	return at
+}
+
+// at is where the cursor is when it is before rune i of the line.
+func (e *LineEditor) at(i int) cell {
+	at := e.layout(e.Prompt(), e.cols())
+	return at[i]
+}
+
+// settle makes the terminal's cursor the one the layout has after a prompt
+// that ends exactly at the right edge. A terminal leaves its cursor on the
+// last column there until something is written.
+func (e *LineEditor) settle() {
+	if e.settled || e.Prompt == nil {
+		return
+	}
+	e.settled = true
+	if p := e.at(e.cursor); p.col == 0 && p.row > 0 {
+		e.Echo(" \r")
+	}
+}
+
+// tail writes the line from where the prompt ends and puts the cursor at its
+// place in it.
+func (e *LineEditor) tail(prompt string, cols int) string {
+	at := e.layout(prompt, cols)
+	s := string(e.buf)
+	end := at[len(e.buf)]
+	if end.col == 0 && end.row > 0 {
+		// The space takes the row a filled one leaves the cursor before,
+		// and \r returns to its start, deferred wrap or not.
+		s += " \r"
+	}
+	return s + moveCursor(end, at[e.cursor])
+}
+
+// Redisplay draws the line after a prompt the host has just written at the
+// start of a row, as after Ctrl+L.
+func (e *LineEditor) Redisplay() {
+	if e.Prompt == nil {
+		e.redraw()
+		return
+	}
+	e.settled = true
+	e.Echo(e.tail(e.Prompt(), e.cols()))
+}
+
+// Refresh draws the prompt and line again where they are, as after the
+// terminal is resized.
+func (e *LineEditor) Refresh() {
+	if e.Prompt == nil {
+		e.redraw()
+		return
+	}
+	e.refresh(e.at(e.cursor))
+}
+
+// refresh draws the prompt and line again, the cursor being at from.
+func (e *LineEditor) refresh(from cell) {
+	if e.Prompt == nil {
+		e.redraw()
+		return
+	}
+	prompt, cols := e.Prompt(), e.cols()
+	e.settled = true
+	e.Echo(moveCursor(from, cell{0, from.col}) + "\r\x1b[J" + PromptText(prompt) + e.tail(prompt, cols))
+}
+
+// change applies f to the line and draws the result.
+func (e *LineEditor) change(f func()) {
+	var from cell
+	if e.Prompt != nil {
+		from = e.at(e.cursor)
+	}
+	f()
+	e.refresh(from)
+}
+
+// moveTo puts the cursor before rune i of the line.
+func (e *LineEditor) moveTo(i int) {
+	if e.Prompt == nil {
+		e.cursor = i
+		e.redraw()
+		return
+	}
+	at := e.layout(e.Prompt(), e.cols())
+	if s := moveCursor(at[e.cursor], at[i]); s != "" {
+		e.Echo(s)
+	}
+	e.cursor = i
+}
+
 func (e *LineEditor) redraw() {
 	if e.Redraw != nil {
 		e.Redraw(string(e.buf), len(e.buf)-e.cursor)
@@ -79,6 +209,7 @@ func (e *LineEditor) redraw() {
 // Input feeds terminal input (the OnData stream) into the editor.
 func (e *LineEditor) Input(data string) {
 	for _, r := range data {
+		e.settle()
 		switch e.esc {
 		case 1: // after ESC
 			if r == '[' || r == 'O' {
@@ -102,6 +233,9 @@ func (e *LineEditor) Input(data string) {
 		case 0x1b: // ESC
 			e.esc = 1
 		case '\r', '\n':
+			if e.Prompt != nil {
+				e.moveTo(len(e.buf))
+			}
 			e.Echo("\r\n")
 			line := string(e.buf)
 			e.Reset()
@@ -110,15 +244,21 @@ func (e *LineEditor) Input(data string) {
 			}
 		case 0x7f, '\b': // backspace
 			if e.cursor > 0 {
-				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
-				e.cursor--
-				if e.cursor == len(e.buf) {
+				if e.Prompt == nil && e.cursor == len(e.buf) {
+					e.buf = e.buf[:e.cursor-1]
+					e.cursor--
 					e.Echo("\b \b")
-				} else {
-					e.redraw()
+					break
 				}
+				e.change(func() {
+					e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+					e.cursor--
+				})
 			}
 		case 0x03: // Ctrl+C
+			if e.Prompt != nil {
+				e.moveTo(len(e.buf))
+			}
 			e.Echo("^C\r\n")
 			e.Reset()
 			if e.Interrupt != nil {
@@ -133,90 +273,108 @@ func (e *LineEditor) Input(data string) {
 				e.ClearScreen()
 			}
 		case 0x01: // Ctrl+A: home
-			e.cursor = 0
-			e.redraw()
+			e.moveTo(0)
 		case 0x05: // Ctrl+E: end
-			e.cursor = len(e.buf)
-			e.redraw()
+			e.moveTo(len(e.buf))
 		case 0x15: // Ctrl+U: kill to start
-			e.buf = append([]rune{}, e.buf[e.cursor:]...)
-			e.cursor = 0
-			e.redraw()
+			e.change(func() {
+				e.buf = append([]rune{}, e.buf[e.cursor:]...)
+				e.cursor = 0
+			})
 		case 0x0b: // Ctrl+K: kill to end
-			e.buf = e.buf[:e.cursor]
-			e.redraw()
+			e.change(func() { e.buf = e.buf[:e.cursor] })
 		case 0x17: // Ctrl+W: delete word back
-			i := e.cursor
-			for i > 0 && e.buf[i-1] == ' ' {
-				i--
-			}
-			for i > 0 && e.buf[i-1] != ' ' {
-				i--
-			}
-			e.buf = append(e.buf[:i], e.buf[e.cursor:]...)
-			e.cursor = i
-			e.redraw()
+			e.change(func() {
+				i := e.cursor
+				for i > 0 && e.buf[i-1] == ' ' {
+					i--
+				}
+				for i > 0 && e.buf[i-1] != ' ' {
+					i--
+				}
+				e.buf = append(e.buf[:i], e.buf[e.cursor:]...)
+				e.cursor = i
+			})
 		case '\t':
 			e.completeWord()
 		default:
 			if r >= 32 {
-				if e.cursor == len(e.buf) {
-					e.buf = append(e.buf, r)
-					e.cursor++
-					e.Echo(string(r))
-				} else {
-					e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
-					e.cursor++
-					e.redraw()
-				}
+				e.insert([]rune{r})
 			}
 		}
 	}
+}
+
+// insert puts rs into the line at the cursor.
+func (e *LineEditor) insert(rs []rune) {
+	if e.cursor < len(e.buf) {
+		e.change(func() {
+			e.buf = append(e.buf[:e.cursor], append(append([]rune{}, rs...), e.buf[e.cursor:]...)...)
+			e.cursor += len(rs)
+		})
+		return
+	}
+	e.buf = append(e.buf, rs...)
+	e.cursor += len(rs)
+	s := string(rs)
+	if e.Prompt != nil {
+		if end := e.at(e.cursor); end.col == 0 && end.row > 0 {
+			s += " \r" // see tail
+		}
+	}
+	e.Echo(s)
 }
 
 func (e *LineEditor) handleCSI(seq string) {
 	switch seq {
 	case "A": // up: previous history
 		if e.histIdx > 0 {
-			if e.histIdx == len(e.history) {
-				e.histSave = string(e.buf)
-			}
-			e.histIdx--
-			e.buf = []rune(e.history[e.histIdx])
-			e.cursor = len(e.buf)
-			e.redraw()
+			e.change(func() {
+				if e.histIdx == len(e.history) {
+					e.histSave = string(e.buf)
+				}
+				e.histIdx--
+				e.buf = []rune(e.history[e.histIdx])
+				e.cursor = len(e.buf)
+			})
 		}
 	case "B": // down: next history
 		if e.histIdx < len(e.history) {
-			e.histIdx++
-			if e.histIdx == len(e.history) {
-				e.buf = []rune(e.histSave)
-			} else {
-				e.buf = []rune(e.history[e.histIdx])
-			}
-			e.cursor = len(e.buf)
-			e.redraw()
+			e.change(func() {
+				e.histIdx++
+				if e.histIdx == len(e.history) {
+					e.buf = []rune(e.histSave)
+				} else {
+					e.buf = []rune(e.history[e.histIdx])
+				}
+				e.cursor = len(e.buf)
+			})
 		}
 	case "C": // right
 		if e.cursor < len(e.buf) {
-			e.cursor++
-			e.Echo("\x1b[C")
+			if e.Prompt == nil {
+				e.cursor++
+				e.Echo("\x1b[C")
+				break
+			}
+			e.moveTo(e.cursor + 1)
 		}
 	case "D": // left
 		if e.cursor > 0 {
-			e.cursor--
-			e.Echo("\x1b[D")
+			if e.Prompt == nil {
+				e.cursor--
+				e.Echo("\x1b[D")
+				break
+			}
+			e.moveTo(e.cursor - 1)
 		}
 	case "H": // home
-		e.cursor = 0
-		e.redraw()
+		e.moveTo(0)
 	case "F": // end
-		e.cursor = len(e.buf)
-		e.redraw()
+		e.moveTo(len(e.buf))
 	case "3~": // delete
 		if e.cursor < len(e.buf) {
-			e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
-			e.redraw()
+			e.change(func() { e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...) })
 		}
 	}
 }
@@ -239,19 +397,12 @@ func (e *LineEditor) completeWord() {
 		return
 	}
 
-	insert := func(s string) {
-		rs := []rune(s)
-		e.buf = append(e.buf[:e.cursor], append(rs, e.buf[e.cursor:]...)...)
-		e.cursor += len(rs)
-		e.redraw()
-	}
-
 	if len(candidates) == 1 {
 		completion := candidates[0][len(word):]
 		if !strings.HasSuffix(candidates[0], "/") {
 			completion += " "
 		}
-		insert(completion)
+		e.insert([]rune(completion))
 		return
 	}
 
@@ -263,10 +414,18 @@ func (e *LineEditor) completeWord() {
 		}
 	}
 	if len(common) > len(word) {
-		insert(common[len(word):])
+		e.insert([]rune(common[len(word):]))
 		return
 	}
 	// no progress: list the candidates
-	e.Echo("\r\n" + strings.Join(candidates, "  ") + "\r\n")
-	e.redraw()
+	if e.Prompt == nil {
+		e.Echo("\r\n" + strings.Join(candidates, "  ") + "\r\n")
+		e.redraw()
+		return
+	}
+	cursor := e.cursor
+	e.moveTo(len(e.buf))
+	e.cursor = cursor
+	prompt := e.Prompt()
+	e.Echo("\r\n" + strings.Join(candidates, "  ") + "\r\n" + PromptText(prompt) + e.tail(prompt, e.cols()))
 }

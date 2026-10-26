@@ -33,7 +33,7 @@ class SkycoinGoldenTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun load(name: String): String =
-        javaClass.getResourceAsStream("/$name")!!.bufferedReader().readText()
+        SkycoinVectors.read("src/cipher/testsuite/testdata/$name")
 
     private val inputHashes: List<ByteArray> by lazy {
         json.decodeFromString(GoldenHashes.serializer(), load("input-hashes.golden"))

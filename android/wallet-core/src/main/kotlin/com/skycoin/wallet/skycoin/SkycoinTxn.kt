@@ -2,8 +2,11 @@ package com.skycoin.wallet.skycoin
 
 import com.skycoin.wallet.Hashes
 import com.skycoin.wallet.Secp256k1
+import com.skycoin.wallet.hexToBytes
 import com.skycoin.wallet.toHex
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * The Skycoin transaction and its exact wire encoding (skyencoder output,
@@ -90,6 +93,54 @@ class SkycoinTxn {
     fun txidHex(): String = Hashes.sha256(serialize()).toHex()
 
     fun serializeHex(): String = serialize().toHex()
+
+    /** The same transaction with every signature zeroed, as an unsigned transaction is written. */
+    fun unsignedHex(): String {
+        val copy = SkycoinTxn()
+        copy.inputs.addAll(inputs)
+        copy.outputs.addAll(outputs)
+        repeat(inputs.size) { copy.sigs.add(ByteArray(65)) }
+        copy.updateHeader()
+        return copy.serializeHex()
+    }
+
+    /** True when every input carries a signature. */
+    fun isSigned(): Boolean = sigs.size == inputs.size && sigs.none { s -> s.all { it == 0.toByte() } }
+
+    companion object {
+        /**
+         * Reads the wire encoding back. Refuses trailing bytes, a length
+         * field that disagrees, and an inner hash that does not match the
+         * inputs and outputs, so a mangled paste fails here and not at a node.
+         */
+        fun decode(hex: String): SkycoinTxn {
+            val bytes = runCatching { hex.trim().hexToBytes() }.getOrNull()
+                ?: throw IllegalArgumentException("not a hex transaction")
+            val r = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            fun need(n: Long) = require(n <= r.remaining()) { "transaction ends early" }
+            fun take(n: Int) = ByteArray(n).also { need(n.toLong()); r.get(it) }
+            fun count(size: Int): Int {
+                need(4)
+                return r.int.also { require(it >= 0) { "transaction ends early" }; need(it.toLong() * size) }
+            }
+            val txn = SkycoinTxn()
+            need(4 + 1)
+            txn.length = r.int.toLong() and 0xffffffffL
+            txn.type = r.get().toInt() and 0xff
+            txn.innerHash = take(32)
+            repeat(count(65)) { txn.sigs.add(take(65)) }
+            repeat(count(32)) { txn.inputs.add(take(32)) }
+            repeat(count(1 + 20 + 8 + 8)) {
+                val version = r.get().toInt() and 0xff
+                val key = take(20)
+                txn.outputs.add(Output(key, version, r.long.toULong(), r.long.toULong()))
+            }
+            require(!r.hasRemaining()) { "bytes after the transaction" }
+            require(txn.length == bytes.size.toLong()) { "length field does not match" }
+            require(txn.innerHash.contentEquals(txn.hashInner())) { "inner hash does not match" }
+            return txn
+        }
+    }
 
     private class LeWriter {
         private val out = ByteArrayOutputStream()

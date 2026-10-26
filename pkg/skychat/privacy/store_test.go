@@ -90,3 +90,41 @@ func TestRejectsMalformedKeys(t *testing.T) {
 		t.Errorf("nil store: %v, want Allow", got)
 	}
 }
+
+func TestUnaccept(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "privacy.json")
+	s := open(t, file)
+	if err := s.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Accept(alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Verdict(alice, false); got != Allow {
+		t.Fatalf("accepted: %v, want Allow", got)
+	}
+	if err := s.Unaccept(alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Verdict(alice, false); got != Request {
+		t.Fatalf("after unaccept: %v, want Request", got)
+	}
+	// A block is the stronger decision and survives an unaccept.
+	if err := s.SetBlocked(alice, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Unaccept(alice); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Verdict(alice, false); got != Reject {
+		t.Fatalf("blocked after unaccept: %v, want Reject", got)
+	}
+	// The revocation is on disk, not just in memory.
+	reopened := open(t, file)
+	if got := reopened.Verdict(alice, false); got != Reject {
+		t.Fatalf("reopened: %v, want Reject", got)
+	}
+	if got := reopened.Verdict(bob, false); got != Request {
+		t.Fatalf("reopened stranger: %v, want Request", got)
+	}
+}

@@ -24,10 +24,16 @@ type allTransportsWireEntry struct {
 // routingEntries is what routers need: the transports that exist now, with
 // the latency and throughput routes are weighed by.
 func routingEntries(ctx context.Context, st store.Store) ([]*transport.Entry, error) {
+	var (
+		entries []*transport.Entry
+		err     error
+	)
 	if qs, ok := st.(interface {
 		GetAllTransportsWithLatency(context.Context, bool) ([]*transport.Entry, error)
 	}); ok {
-		return qs.GetAllTransportsWithLatency(ctx, false)
+		entries, err = qs.GetAllTransportsWithLatency(ctx, false)
+	} else {
+		entries, err = st.GetAllTransports(ctx, false)
 	}
-	return st.GetAllTransports(ctx, false)
+	return transport.Routable(entries), err
 }

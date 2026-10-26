@@ -47,6 +47,15 @@ the name the visitor asked for, so the web server picks the site. A Caddy site
 block for `status.skywire.dev` then also answers
 `http://status.skywire.dev.<base32-pk>.skynet/`.
 
+The landing page links each site the web server serves. With Caddy on the same
+machine the visor reads them from Caddy's admin API, at its default address
+`127.0.0.1:2019`. For another web server, name them with `--site`, which can
+be repeated:
+
+```
+skywire cli serve vhost add '*' --to 127.0.0.1:80 --preserve-host --site example.com --site blog.example.com
+```
+
 ## A port
 
 ```
@@ -58,6 +67,19 @@ service, not only HTTP, and `--to` can name another machine on your network,
 such as `192.168.1.20:5432`. `--label` lists it on your visor's landing page.
 
 `serve add 80 --to …` sets the website of the bare name itself.
+
+## The visor's own page
+
+The landing page, `/health` and the visor's other pages are always at
+`http://<base32-pk>.skynet/.skywire/`, even when the bare name shows a
+website. They can also have a name or a port of their own:
+
+```
+skywire cli serve vhost add landing --visor-pages   # http://landing.<base32-pk>.skynet/
+skywire cli serve add 8000 --visor-pages            # http://<base32-pk>.skynet:8000/
+```
+
+`http://<base32-pk>.skynet/.skywire/sites` lists the visor's sites as JSON.
 
 ## Who can reach it
 

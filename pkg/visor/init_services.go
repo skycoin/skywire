@@ -498,8 +498,13 @@ type vstreamConn struct {
 func (c *vstreamConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
 }
-func (c *vstreamConn) RemoteAddr() net.Addr {
-	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+
+// RemoteAddr names the peer by its PK, so a handler that gates on the caller
+// (the logserver's /pty, a whitelisted forwarded port) can tell who it is.
+func (c *vstreamConn) RemoteAddr() net.Addr { return skynetPeerAddr(c.RemotePK()) }
+
+func skynetPeerAddr(pk cipher.PubKey) net.Addr {
+	return appnet.Addr{Net: appnet.TypeSkynet, PubKey: pk}
 }
 func (c *vstreamConn) SetDeadline(_ time.Time) error      { return nil }
 func (c *vstreamConn) SetReadDeadline(_ time.Time) error  { return nil }
@@ -595,6 +600,10 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 	log.Debugf("Received ClientMsg: port=%d (raw JSON: %s)", cMsg.Port, string(buf[:n]))
+
+	if cMsg.PK != "" && handOffHosted(log, remoteConn, v, cMsg) {
+		return
+	}
 
 	// First check the service registry — this is the preferred path
 	// that dispatches directly to the handler without a localhost
@@ -835,10 +844,18 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 
 type clientMsg struct {
 	Port int `json:"port"`
+	// PK names a service this visor hosts under its own key. Empty means
+	// the visor itself.
+	PK string `json:"pk,omitempty"`
 }
 
 type serverReply struct {
 	Error *string `json:"error,omitempty"`
+	// PK echoes clientMsg.PK once its stream is handed to that service, so
+	// a caller can tell a host that understood the request from an older one.
+	PK string `json:"pk,omitempty"`
+	// Sig is the service's signature naming this visor as its host.
+	Sig string `json:"sig,omitempty"`
 }
 
 func initPing(ctx context.Context, v *Visor, log *logging.Logger) error {

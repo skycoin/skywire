@@ -1085,7 +1085,7 @@ func ackReason(ack chunkAck) string {
 // is the expected one and is not the chunk's verdict — the sink's status is.
 func endBodyWriter(st net.Conn, werr <-chan error) {
 	_ = st.Close() //nolint:errcheck,gosec
-	<-werr
+	<-werr         //nolint:errcheck
 }
 
 // chunkURI is the browser's own request-URI with the session id and object size

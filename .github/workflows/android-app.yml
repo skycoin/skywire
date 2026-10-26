@@ -12,6 +12,8 @@ on:
     paths:
       - 'android/**'
       - '.github/workflows/android-app.yml'
+      # A skycoin bump changes the golden files the wallet tests read.
+      - 'go.mod'
 
 # A new push to the same PR makes the previous run irrelevant.
 concurrency:

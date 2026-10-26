@@ -14,7 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 )
 
-//go:generate go run ../../../internal/rpcgen -type RPC=registerNodeRPC,TCPRPC=registerTCPRPC,UDPRPC=registerUDPRPC,RootRPC=registerRootRPC,DMSGRPC=registerDMSGRPC -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../../internal/rpcgen -type RPC=registerNodeRPC,TCPRPC=registerTCPRPC,UDPRPC=registerUDPRPC,RootRPC=registerRootRPC,DMSGRPC=registerDMSGRPC -o rpc_register.go
 
 // wrap the RPC
 type rpcServer struct {

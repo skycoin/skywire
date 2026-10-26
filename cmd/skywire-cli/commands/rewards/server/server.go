@@ -1163,6 +1163,12 @@ func buildRouter() http.Handler {
 					flush(w)
 					return
 				}
+				// The pool share files carry the reward xpub beside the visor key, IP and UUID.
+				if (err6 == nil || err7 == nil) && !isWhitelisted(r) {
+					w.WriteHeader(http.StatusNotFound)
+					flush(w)
+					return
+				}
 				if err1 == nil || err2 == nil || err5 == nil ||
 					err6 == nil || err7 == nil || err8 == nil || err9 == nil {
 					filetoserve, err := script.File(wd + `/hist/` + r.PathValue("date")).Bytes()

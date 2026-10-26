@@ -215,3 +215,63 @@ func TestReadWriterXKPattern(t *testing.T) {
 	assert.Equal(t, 3, n)
 	assert.Equal(t, []byte("bar"), buf)
 }
+
+// yamuxTimeout is an error like yamux's ErrTimeout: a timeout that does not
+// say it is temporary.
+type yamuxTimeout struct{}
+
+func (yamuxTimeout) Error() string   { return "i/o deadline reached" }
+func (yamuxTimeout) Timeout() bool   { return true }
+func (yamuxTimeout) Temporary() bool { return false }
+
+// timeoutOnceConn fails its next Read with yamuxTimeout when armed.
+type timeoutOnceConn struct {
+	net.Conn
+	armed bool
+}
+
+func (c *timeoutOnceConn) Read(b []byte) (int, error) {
+	if c.armed {
+		c.armed = false
+		return 0, yamuxTimeout{}
+	}
+	return c.Conn.Read(b)
+}
+
+// TestReadWriterTimeoutIsNotFatal checks a read that times out leaves the
+// stream readable, as net.Conn requires. net/http times out a read on purpose
+// when it hijacks a connection, so a stuck timeout broke websockets over dmsg.
+func TestReadWriterTimeoutIsNotFatal(t *testing.T) {
+	pkI, skI := cipher.GenerateKeyPair()
+	pkR, skR := cipher.GenerateKeyPair()
+	nI, err := KKAndSecp256k1(Config{LocalPK: pkI, LocalSK: skI, RemotePK: pkR, Initiator: true})
+	require.NoError(t, err)
+	nR, err := KKAndSecp256k1(Config{LocalPK: pkR, LocalSK: skR, RemotePK: pkI})
+	require.NoError(t, err)
+
+	connI, connR := net.Pipe()
+	wrapped := &timeoutOnceConn{Conn: connR}
+	rwI := NewReadWriter(connI, nI)
+	rwR := NewReadWriter(wrapped, nR)
+
+	errCh := make(chan error)
+	go func() { errCh <- rwR.Handshake(time.Second) }()
+	require.NoError(t, rwI.Handshake(time.Second))
+	require.NoError(t, <-errCh)
+
+	wrapped.armed = true
+	buf := make([]byte, 3)
+	_, err = rwR.Read(buf)
+	var nErr net.Error
+	require.ErrorAs(t, err, &nErr)
+	require.True(t, nErr.Timeout())
+
+	go func() {
+		_, err := rwI.Write([]byte("foo"))
+		errCh <- err
+	}()
+	n, err := rwR.Read(buf)
+	require.NoError(t, err)
+	require.NoError(t, <-errCh)
+	assert.Equal(t, []byte("foo"), buf[:n])
+}

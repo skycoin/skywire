@@ -7,10 +7,12 @@
 // between their own visors. Each visor marks such transports itself — a peer
 // it reaches at a private address or at its own public IP is on its own
 // network (transport.ManagedTransport.SameNetwork) — and TPD keeps that mark
-// on the transport's day (DailyEdgeBandwidth.SameNetwork). When a day settles,
-// TPD reduces it to per-visor totals without the marked transports: a ~50 KB
-// day, where shipping every transport to the reward host to judge there cost
-// ~9 MB.
+// on the transport's day (DailyEdgeBandwidth.SameNetwork). A visor cannot mark
+// a peer whose address it does not see, such as over webrtc, so TPD also
+// leaves out a transport whose two edges the address resolver sees at one
+// public IP. When a day settles, TPD reduces it to per-visor totals without
+// those transports: a ~50 KB day, where shipping every transport to the reward
+// host to judge there cost ~9 MB.
 package store
 
 // VisorBWDayPrefix is the per-visor bandwidth feed's sub-tree; a settled day
@@ -26,7 +28,7 @@ type VisorBWDay struct {
 	Date    string `json:"date"`
 	// Transports is how many transports moved bytes that day, and
 	// SameNetworkExcluded how many of them were left out because an edge
-	// marked the other as on its own network.
+	// marked the other as on its own network or both share a public IP.
 	Transports          int `json:"transports"`
 	SameNetworkExcluded int `json:"same_network_excluded"`
 	// Unverified is how many transports only one edge reported that day. Their
@@ -75,8 +77,9 @@ func bothReported(d DailyEdgeBandwidth) bool { return reported(d.A) && reported(
 func reported(e *EdgeBandwidth) bool { return e != nil && (e.Sent > 0 || e.Recv > 0) }
 
 // ComputeVisorBW reduces one day's per-transport records to per-visor sent
-// bytes by type, leaving out transports marked same-network that day.
-func ComputeVisorBW(records []TransportMetric, date string) VisorBWDay {
+// bytes by type, leaving out transports marked same-network that day and,
+// where samePublicIP is not nil, those whose edges it reports share an IP.
+func ComputeVisorBW(records []TransportMetric, date string, samePublicIP func(a, b string) bool) VisorBWDay {
 	out := VisorBWDay{Version: VisorBWVersion, Date: date, Visors: map[string]map[string]uint64{}}
 	add := func(pk, typ string, n uint64) {
 		if n == 0 {
@@ -112,7 +115,7 @@ func ComputeVisorBW(records []TransportMetric, date string) VisorBWDay {
 			continue
 		}
 		out.Transports++
-		if sameNetwork {
+		if sameNetwork || (samePublicIP != nil && samePublicIP(tp.Edges[0], tp.Edges[1])) {
 			out.SameNetworkExcluded++
 			continue
 		}

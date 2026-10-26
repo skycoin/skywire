@@ -61,7 +61,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// JSON here is the package-level jsoniter config declared in whitelist.go,
+// JSON here is the package-level fastjson codec declared in whitelist.go,
 // not encoding/json — the package already binds that name.
 
 // Endpoint and media types.

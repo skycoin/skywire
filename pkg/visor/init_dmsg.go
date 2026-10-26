@@ -238,16 +238,7 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// (dmsgDC) that self-evicted on the dmsg servers.
 	httpC := &http.Client{}
 	directOnly := v.conf.Dmsg != nil && v.conf.Dmsg.DirectOnly
-	// When LookupCXO is enabled, front the discovery client with a
-	// resolver that serves peer entries from the local CXO
-	// clients-by-server snapshot (no per-lookup dmsg Noise handshake),
-	// falling back to HTTP on a miss. nil resolver leaves the dmsg
-	// client's discovery chain unchanged.
-	var entryResolve dmsgdisc.EntryResolveFunc
-	if v.conf.Dmsg != nil && v.conf.Dmsg.LookupCXO {
-		entryResolve = v.newDmsgEntryCXOResolver()
-	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, entryResolve, v.MasterLogger())
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, v.MasterLogger())
 	selfOnly := dmsgConf.Server != nil && dmsgConf.Server.Enabled && dmsgConf.Server.ConfigPath == "" &&
 		!dmsgc.SkipSelfServer(v.conf.PK, &dmsgConf)
 	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
@@ -419,11 +410,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 }
 
 // dmsgServersCacheRefreshInterval is how often the cache is refreshed
-// from dmsg-discovery once dmsgC is up. 5m is short enough that the
-// cache converges on the live state within a few minutes of a server
-// rotating its address, long enough that the refresh isn't a load
-// concern on dmsgd.
-const dmsgServersCacheRefreshInterval = 5 * time.Minute
+// from dmsg-discovery once dmsgC is up. The cache seeds the next start;
+// live dials resolve servers through discovery, so it can lag. Each
+// refresh opens a fresh dmsg stream, a handshake on dmsg discovery, so
+// keep it rare.
+const dmsgServersCacheRefreshInterval = 30 * time.Minute
 
 // refreshDmsgServersCacheLoop runs until ctx is canceled, refreshing
 // v.dmsgServersCache from dmsg-discovery's all_servers endpoint at a
@@ -486,20 +477,16 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
 	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
 	refresh := func() {
-		entries, source := v.dmsgServersFromCXO(), "cxo"
-		if len(entries) == 0 {
-			var err error
-			if entries, err = dc.AllServers(ctx); err != nil {
-				cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
-				return
-			}
-			source = "http"
+		entries, err := dc.AllServers(ctx)
+		if err != nil {
+			cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
+			return
 		}
 		if err := v.dmsgServersCache.Replace(entries); err != nil {
 			cacheLog.WithError(err).Warn("Failed to write dmsg-servers cache file")
 			return
 		}
-		cacheLog.WithField("count", len(entries)).WithField("source", source).Debug("dmsg-servers cache refreshed")
+		cacheLog.WithField("count", len(entries)).Debug("dmsg-servers cache refreshed")
 	}
 	refresh()
 	t := time.NewTicker(dmsgServersCacheRefreshInterval)
@@ -696,6 +683,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	if len(v.conf.EmbeddedServices) > 0 {
 		lsAPI.SetStatusPage(v.statusBoard())
 	}
+	lsAPI.SetVisorStatusPage(http.HandlerFunc(v.serveVisorStatus), v.configuredHypervisors)
 	v.initLock.Unlock()
 
 	// The dmsg HTTP port serves one mux: the log server at / and any
@@ -715,7 +703,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
-	lsAPI.SetHomePage(v.homePage)
+	lsAPI.SetHomePage(v.homePageFor)
 	// Related nodes (managed visors + configured hypervisors) — shown as
 	// links to authenticated callers on the landing page.
 	lsAPI.SetRelatedNodesProvider(v)

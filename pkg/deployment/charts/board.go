@@ -3,6 +3,7 @@ package charts
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -23,10 +24,18 @@ type Board struct {
 	// Summary, when set, is a table shown before the sections.
 	Summary func() *Table
 	Log     logrus.FieldLogger
+	// Separate keeps each section's process charts in it, for sections that
+	// are separate processes, such as the visors of a hypervisor.
+	Separate bool
 
 	mu    sync.Mutex
 	cache map[string]cached
 }
+
+// NoteError is a section's render error that the board shows in its place.
+type NoteError string
+
+func (e NoteError) Error() string { return string(e) }
 
 // Section is one service on a Board.
 type Section struct {
@@ -63,10 +72,22 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	if bd.Sections != nil {
 		sections = bd.Sections()
 	}
+	// Sections render at once, since each may wait on another process.
 	built := make([]builtSection, len(sections))
-	var process builtSection
+	var wg sync.WaitGroup
 	for i, s := range sections {
-		built[i] = bd.build(ctx, s, rg, now)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			built[i] = bd.build(ctx, s, rg, now)
+		}()
+	}
+	wg.Wait()
+	var process builtSection
+	for i := range sections {
+		if bd.Separate {
+			continue
+		}
 		var own, rest []Chart
 		for _, c := range built[i].content.Charts {
 			if c.Process {
@@ -99,6 +120,7 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 // builtSection is one section of a board, rendered but not yet written.
 type builtSection struct {
 	title, about, note string
+	links              []Link
 	starts             []Start
 	content            Content
 }
@@ -114,12 +136,17 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 		out.about = s.Page.About
 	}
 	if s.Page != nil {
+		out.links = s.Page.Links
 		var err error
 		if out.content, out.starts, err = s.Page.content(ctx, rg, now); err != nil {
 			if bd.Log != nil {
 				bd.Log.WithError(err).WithField("service", out.title).Warn("charts section render failed")
 			}
 			out.note = "Charts unavailable right now."
+			var ne NoteError
+			if errors.As(err, &ne) {
+				out.note = string(ne)
+			}
 		}
 	}
 	return out
@@ -127,10 +154,31 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 
 func (s builtSection) write(b *bytes.Buffer, id, chartPrefix string) {
 	fmt.Fprintf(b, "<section class='svc' id='%s'><h2 class='svc'>%s</h2>", id, html.EscapeString(s.title))
-	writeIntro(b, s.about, s.starts, nil)
+	writeIntro(b, s.about, s.starts, s.links)
 	if s.note != "" {
 		fmt.Fprintf(b, "<p class='note'>%s</p>", html.EscapeString(s.note))
 	}
 	writeContent(b, s.content, chartPrefix)
 	b.WriteString("</section>")
+}
+
+// Extras serves the Extra pages of the board's sections at their paths and
+// 404 for any other path. Mount it at "/" beside the board.
+func (bd *Board) Extras() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bd.Sections != nil {
+			for _, s := range bd.Sections() {
+				if s.Page == nil {
+					continue
+				}
+				for _, e := range s.Page.Extra {
+					if e.Path == r.URL.Path {
+						e.Handler.ServeHTTP(w, r)
+						return
+					}
+				}
+			}
+		}
+		http.NotFound(w, r)
+	})
 }

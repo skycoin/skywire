@@ -61,8 +61,9 @@ func TestRenderHomePage(t *testing.T) {
 	assert.Contains(t, page, tpdPK.Hex())
 	assert.Contains(t, page, selfPK.Hex())
 
-	// The self alias is in the "This visor" group, ahead of the service group.
-	assert.Less(t, strings.Index(page, "This visor"), strings.Index(page, "Deployment services"))
+	// Deployment services come first, then this visor's own tab.
+	assert.Less(t, strings.Index(page, `id="tab-dep"`), strings.Index(page, "Deployment services</h2>"))
+	assert.Less(t, strings.Index(page, `id="tab-hv"`), strings.Index(page, "This visor</h2>"))
 }
 
 func TestRenderHomePageServiceEndpoints(t *testing.T) {
@@ -151,7 +152,7 @@ func TestServeHomeInProcess(t *testing.T) {
 func TestHomePageListsVisorsByBase32Name(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
-	page := string(RenderHomePageWithVisors(nil, ".skynet", cipher.PubKey{}, []cipher.PubKey{a, b}))
+	page := string(RenderHomePageWith(nil, ".skynet", cipher.PubKey{}, &HomeLists{Visors: []cipher.PubKey{a, b}}))
 	if !strings.Contains(page, "Visors (2)") {
 		t.Fatal("no visors heading with the count")
 	}
@@ -160,4 +161,24 @@ func TestHomePageListsVisorsByBase32Name(t *testing.T) {
 			t.Fatalf("no .skynet link for %s", pk.Hex())
 		}
 	}
+}
+
+// The second tab lists this visor and those it manages, each with its own
+// pages and a button that fetches its sites.
+func TestHomePageManagedVisors(t *testing.T) {
+	self, _ := cipher.GenerateKeyPair()
+	managed, _ := cipher.GenerateKeyPair()
+	page := string(RenderHomePageWith(nil, ".skynet", self, &HomeLists{Managed: []cipher.PubKey{managed}}))
+	assert.Contains(t, page, "This hypervisor (2)")
+	assert.Contains(t, page, "Managed visors (1)")
+	for _, pk := range []cipher.PubKey{self, managed} {
+		host := pk.DNSLabel() + ".skynet"
+		assert.Contains(t, page, `data-host="`+host+`"`)
+		assert.Contains(t, page, `href="http://`+host+`/.skywire/"`)
+	}
+	assert.Contains(t, page, `class="vrow self" data-host="`+self.DNSLabel()+`.skynet"`)
+
+	page = string(RenderHomePageWith(nil, ".skynet", self, nil))
+	assert.Contains(t, page, ">This visor<")
+	assert.NotContains(t, page, "Managed visors")
 }

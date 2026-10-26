@@ -112,6 +112,9 @@ func OpenStore(path string) (*Store, error) {
 var ErrSchemaMismatch = errors.New("stats: schema version mismatch")
 
 // Close releases the bbolt file handle.
+// DB is the store's database, for other local telemetry kept beside it.
+func (s *Store) DB() *bbolt.DB { return s.db }
+
 func (s *Store) Close() error {
 	return s.db.Close()
 }

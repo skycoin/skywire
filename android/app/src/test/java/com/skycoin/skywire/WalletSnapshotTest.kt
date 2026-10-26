@@ -72,8 +72,9 @@ class WalletSnapshotTest {
 
     // --- what a refresh folds into the cache ---------------------------------
 
-    private fun balance(coins: ULong) = WalletBalance(
+    private fun balance(coins: ULong, perAddress: Map<String, ULong> = emptyMap()) = WalletBalance(
         confirmed = coins, predicted = coins, hours = 0u, spendableOutputs = 1,
+        perAddress = perAddress,
     )
 
     private fun record(txid: String) = TxRecord(
@@ -132,5 +133,27 @@ class WalletSnapshotTest {
         val merged = mergeSnapshot(balance(0u), emptyList(), null, 2_000)
         assertTrue(merged.txs.isEmpty())
         assertFalse(merged.historyBehind)
+    }
+
+    @Test
+    fun aRefreshReplacesThePerAddressSplitWithItsOwn() {
+        // The split belongs to the balance it came with: a new balance's
+        // map replaces the old one whole, so an address emptied by a send
+        // does not keep showing the coins that left it.
+        val previous = WalletSnapshot(perAddress = mapOf("old" to 9u), fetchedAtMs = 1_000)
+        val merged = mergeSnapshot(
+            balance(50u, perAddress = mapOf("a" to 30u, "b" to 20u)),
+            null,
+            previous,
+            2_000,
+        )
+        assertEquals(mapOf("a" to 30uL, "b" to 20uL), merged.perAddress)
+    }
+
+    @Test
+    fun aCacheWrittenBeforePerAddressExistedDecodesEmpty() {
+        val legacy = """{"confirmed":42,"predicted":42,"txs":[],"fetchedAtMs":1700000000000}"""
+        val snap = json.decodeFromString(WalletSnapshot.serializer(), legacy)
+        assertTrue(snap.perAddress.isEmpty())
     }
 }

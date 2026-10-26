@@ -21,9 +21,7 @@ func visorWithDmsg(discovery, discoveryDmsg string) *Visor {
 // TestDmsgdCXOPeerFallsBackToDiscovery is the live bug this fixes. On a
 // dmsg-only deployment the discovery PK lives in `discovery` (already a
 // dmsg:// URL) and `discovery_dmsg` is unset. Reading only the latter made the
-// clients-by-server feed spec fail with "no DMSG-D CXO peer", so enabling
-// dmsg.lookup_cxo silently did nothing and every peer lookup fell back to HTTP
-// — the feature was unreachable in the deployment it ships against.
+// clients-by-server feed spec fail with "no DMSG-D CXO peer".
 func TestDmsgdCXOPeerFallsBackToDiscovery(t *testing.T) {
 	v := visorWithDmsg("dmsg://"+testDmsgdPK+":80", "")
 	pk, ok := dmsgdCXOPeer(v)

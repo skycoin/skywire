@@ -19,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/0magnet/sh/v3/expand"
+	"github.com/0magnet/sh/v3/internal"
 	"github.com/0magnet/sh/v3/syntax"
 )
 
@@ -118,8 +119,6 @@ func IsBuiltin(name string) bool {
 	return false
 }
 
-// TODO: atoi is duplicated in the expand package.
-
 // atoi is like [strconv.ParseInt](s, 10, 64), but it ignores errors and trims whitespace.
 func atoi(s string) int64 {
 	s = strings.TrimSpace(s)
@@ -156,6 +155,13 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		exit.code = code
 		return exit
 	}
+	// checkVar fails the builtin after a variable error, which is
+	// already reported; see [Runner.varErr].
+	checkVar := func(err error) {
+		if err != nil {
+			exit.code = 1
+		}
+	}
 	// The builtin and command builtins jump back here to run another builtin,
 	// as recursing could overflow the stack with a long chain of them.
 dispatch:
@@ -166,15 +172,15 @@ dispatch:
 	case "help":
 		return r.runHelp(args)
 	case "jobs":
-		return r.runJobs(args)
+		return r.jobsBuiltin(args)
 	case "kill":
-		return r.runKill(args)
+		return r.killBuiltin(args)
 	case "disown":
-		return r.runDisown(args)
+		return r.disownBuiltin(args)
 	case "fg":
-		return r.runFg(ctx, args)
+		return r.fgBuiltin(ctx, args)
 	case "bg":
-		return r.runBg(args)
+		return r.bgBuiltin(args)
 	case "enable":
 		return r.runEnable(args)
 	case "compgen":
@@ -256,14 +262,16 @@ dispatch:
 		if n < 0 {
 			return failf(1, "shift: %d: shift count out of range\n", n)
 		}
-		if n >= len(r.Params) {
-			r.Params = nil
-		} else {
-			r.Params = r.Params[n:]
+		if n > len(r.Params) {
+			// Like Bash, fail silently and leave the parameters alone.
+			exit.code = 1
+			break
 		}
+		r.Params = r.Params[n:]
 	case "unset":
 		vars := true
 		funcs := true
+		nameref := false
 	unsetOpts:
 		for i, arg := range args {
 			switch arg {
@@ -271,6 +279,8 @@ dispatch:
 				funcs = false
 			case "-f":
 				vars = false
+			case "-n":
+				nameref = true
 			default:
 				args = args[i:]
 				break unsetOpts
@@ -279,10 +289,14 @@ dispatch:
 
 		for _, arg := range args {
 			if name, sub, ok := cutElemSubscript(arg); vars && ok {
-				r.unsetElem(name, sub)
+				checkVar(r.unsetElem(name, sub))
+				if r.stop(ctx) {
+					break // an error in the subscript
+				}
 			} else if vars && r.lookupVar(arg).Declared() {
-				r.delVar(arg)
+				checkVar(r.delVar(arg, nameref))
 			} else if _, ok := r.Funcs[arg]; ok && funcs {
+				r.unshareFuncs()
 				delete(r.Funcs, arg)
 			}
 		}
@@ -402,49 +416,37 @@ dispatch:
 		}
 		if len(args) == 0 {
 			// Note that "wait" without arguments always returns exit status zero.
-			for _, bg := range r.bgProcs {
-				if bg.disowned {
-					continue
-				}
-				if !bg.await(ctx) {
-					return exitStatus{code: 130}
+			for i := range r.bgProcs {
+				if bg := &r.bgProcs[i]; !bg.hidden {
+					if !waitDone(ctx, bg.done, &exit) {
+						return exit
+					}
+					bg.hidden = true
 				}
 			}
-			// Waiting for a job reaps it, as in bash, so that a later jobs
-			// does not list what has already been accounted for.
-			for _, bg := range r.jobList() {
-				r.reapBgProc(bg)
+			for _, done := range r.pipeProcSubsts {
+				if !waitDone(ctx, done, &exit) {
+					return exit
+				}
 			}
+			r.pipeProcSubsts = nil
 			break
 		}
 		for _, arg := range args {
 			var bg *bgProc
 			if strings.HasPrefix(arg, "%") {
-				// bash's wait takes a job specification as well as a PID.
-				//
-				// It answers 127 here, as it does for a PID that names no
-				// child; the PID path above answers 1 instead, which is a
-				// divergence that predates job control and has a test of its
-				// own, so it is left alone rather than changed in passing.
-				found, err := r.jobSpec(arg)
-				if err != nil {
-					r.errJobSpec("wait", arg, err)
-					return exitStatus{code: 127}
+				var err error
+				if bg, err = r.findJob(arg); err != nil {
+					return failf(127, "wait: %v\n", err)
 				}
-				bg = found
-			} else {
-				found, ok := r.lookupBgProc(arg)
-				if !ok {
-					return failf(1, "wait: pid %s is not a child of this shell\n", arg)
-				}
-				bg = found
+			} else if bg, _ = r.lookupBgProc(arg); bg == nil {
+				return failf(1, "wait: pid %s is not a child of this shell\n", arg)
 			}
-			if !bg.await(ctx) {
-				return exitStatus{code: 130}
+			if !waitDone(ctx, bg.done, &exit) {
+				return exit
 			}
-			exit = bg.finalExit()
-			// Waiting for a job reaps it, as in bash.
-			r.reapBgProc(bg)
+			exit = *bg.exit
+			bg.hidden = true
 		}
 	case "builtin":
 		if len(args) < 1 {
@@ -550,7 +552,7 @@ dispatch:
 		if !r.enterCall(name, &r.evalDepth) {
 			return r.exit
 		}
-		r.stmts(ctx, file.Stmts)
+		r.scriptStmts(ctx, file.Stmts)
 		r.evalDepth--
 		exit = r.exit
 	case "source", ".":
@@ -596,7 +598,7 @@ dispatch:
 		// parameters.
 		r.sourceSetParams = false
 		r.inSource = true // know that we're inside a sourced script.
-		r.stmts(ctx, file.Stmts)
+		r.scriptStmts(ctx, file.Stmts)
 
 		// If we modified the parameters and the sourced file didn't
 		// explicitly set them, we restore the old ones.
@@ -827,11 +829,12 @@ dispatch:
 			}
 			// Use -1 as max to get all fields without joining the last ones.
 			values := expand.ReadFields(r.ecfg, string(line), -1, raw)
-			r.setVar(arrayName, expand.Variable{
+			arrayName, _ = r.resolveName(arrayName)
+			checkVar(r.setVar(arrayName, expand.Variable{
 				Set:  true,
 				Kind: expand.Indexed,
 				List: values,
-			})
+			}))
 		} else if len(args) == 0 {
 			// Bare "read" assigns the whole line to REPLY without any
 			// trimming, only discarding backslash escapes unless raw.
@@ -849,7 +852,7 @@ dispatch:
 				}
 				val = sb.String()
 			}
-			r.setVarString(shellReplyVar, val)
+			checkVar(r.setVarString(shellReplyVar, val))
 		} else {
 			values := expand.ReadFields(r.ecfg, string(line), len(args), raw)
 			for i, name := range args {
@@ -857,7 +860,7 @@ dispatch:
 				if i < len(values) {
 					val = values[i]
 				}
-				r.setVarString(name, val)
+				checkVar(r.setVarString(name, val))
 			}
 		}
 
@@ -892,8 +895,11 @@ dispatch:
 
 		opt, optarg, done := r.optState.next(optstr, args)
 
-		r.setVarString(name, string(opt))
-		r.delVar("OPTARG")
+		if r.setVarString(name, string(opt)) != nil {
+			exit.code = 2
+			return exit
+		}
+		r.delVar("OPTARG", false)
 		switch {
 		case opt == '?' && diagnostics && !done:
 			r.errf("getopts: illegal option -- %q\n", optarg)
@@ -1023,6 +1029,7 @@ dispatch:
 				words = append(words, w)
 			}
 
+			r.unshareAlias()
 			if r.alias == nil {
 				r.alias = make(map[string]alias)
 			}
@@ -1032,6 +1039,7 @@ dispatch:
 			}
 		}
 	case "unalias":
+		r.unshareAlias()
 		for _, name := range args {
 			delete(r.alias, name)
 		}
@@ -1131,7 +1139,8 @@ dispatch:
 		if err := scanner.Err(); err != nil {
 			return failf(2, "%s: unable to read, %v\n", name, err)
 		}
-		r.setVar(arrayName, vr)
+		arrayName, _ = r.resolveName(arrayName)
+		checkVar(r.setVar(arrayName, vr))
 
 	default:
 		return failf(2, "%s: unsupported builtin\n", name)
@@ -1244,12 +1253,13 @@ func absPath(dir, path string) string {
 	if path == "" {
 		return ""
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(dir, path)
+	ps := internal.PathsFor(dir)
+	if !ps.IsAbs(path) {
+		path = ps.Join(dir, path)
 	}
 	// Note that [filepath.Join] cleans its result, but an already absolute
 	// path needs cleaning too, such as turning "/a/../b" into "/b".
-	return filepath.Clean(path)
+	return ps.Clean(path)
 }
 
 func (r *Runner) absPath(path string) string {

@@ -21,7 +21,6 @@ import (
 
 	"github.com/ccding/go-stun/stun"
 
-	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/logging"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -99,7 +98,7 @@ func (v *Visor) reachDecl() arfeed.ReachDecl {
 }
 
 // runReachDeclLoop keeps the reach leaf current until ctx ends.
-func runReachDeclLoop(ctx context.Context, v *Visor, pub *treestore.Publisher, log *logging.Logger) {
+func runReachDeclLoop(ctx context.Context, v *Visor, pub regLeafSink, log *logging.Logger) {
 	var last []byte
 	put := func() {
 		b, err := json.Marshal(v.reachDecl())

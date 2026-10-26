@@ -67,7 +67,8 @@ func TestTelemetryShardAppliedOnceHeartbeatPaced(t *testing.T) {
 	if sink.bandwidths != 4 {
 		t.Fatalf("changed shard inside the window: bandwidths=%d, want 4 (held)", sink.bandwidths)
 	}
-	// ...and applied once the window has passed.
+	// ...and applied once the window has passed. The row that did not change
+	// since it was last written is not written again.
 	agg.pace.mu.Lock()
 	for _, e := range agg.pace.m {
 		e.applied = e.applied.Add(-telemetryApplyEvery)
@@ -75,7 +76,7 @@ func TestTelemetryShardAppliedOnceHeartbeatPaced(t *testing.T) {
 	agg.pace.mu.Unlock()
 	entries[0].SentBytes = 600
 	agg.dispatchTelemetryShard(path, telemetrywire.EncodeShard(shard, entries), a)
-	if sink.bandwidths != 6 {
-		t.Fatalf("changed shard after the window: bandwidths=%d, want 6", sink.bandwidths)
+	if sink.bandwidths != 5 {
+		t.Fatalf("changed shard after the window: bandwidths=%d, want 5", sink.bandwidths)
 	}
 }

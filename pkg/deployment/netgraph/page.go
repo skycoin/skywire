@@ -27,6 +27,11 @@ type Page struct {
 	// Marks, when set, colors some visors by key, and Legend names the colors.
 	Marks  func(ctx context.Context) map[string]string
 	Legend []Mark
+	// Groups, when set, gives one key to visors that belong together. The
+	// page shows group numbers and sizes, never the keys, and GroupsAre says
+	// what a group shares, such as "one public IP".
+	Groups    func(ctx context.Context) map[string]string
+	GroupsAre string
 
 	mu    sync.Mutex
 	at    time.Time
@@ -69,7 +74,11 @@ func (p *Page) render(ctx context.Context) ([]byte, error) {
 	if p.graph != nil {
 		prev = p.graph.Positions()
 	}
-	g := Build(links, prev)
+	var groups map[string]string
+	if p.Groups != nil {
+		groups = p.Groups(ctx)
+	}
+	g := Build(links, prev, groups)
 	p.graph, p.at = g, time.Now()
 	var marks map[string]string
 	if p.Marks != nil {
@@ -99,9 +108,13 @@ func (p *Page) write(g *Graph, at time.Time, marks map[string]string) []byte {
 		Y     []float32 `json:"y"`
 		Deg   []int     `json:"d"`
 		Color []string  `json:"c,omitempty"`
+		Group []int     `json:"g,omitempty"`
 		Edges string    `json:"e"`
 	}
 	d := data{Types: g.Types, Nodes: g.Nodes, Deg: g.Degree, Edges: packEdges(g.Edges)}
+	if g.Groups > 0 {
+		d.Group = g.Group
+	}
 	if len(marks) > 0 {
 		d.Color = make([]string, len(g.Nodes))
 		for i, k := range g.Nodes {
@@ -121,6 +134,15 @@ func (p *Page) write(g *Graph, at time.Time, marks map[string]string) []byte {
 	fmt.Fprintf(&b, "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>%s</title><style>%s</style></head><body>", title, graphCSS)
 	fmt.Fprintf(&b, "<header><div><h1>%s</h1><p class='sub'>%d visors, %d visor pairs, %d transports. Laid out <time data-t='%d'>%s UTC</time>.</p>",
 		title, len(g.Nodes), len(g.Edges), g.Transports, at.UnixMilli(), at.UTC().Format("2006-01-02 15:04"))
+	if g.Groups > 0 {
+		in := 0
+		for _, gr := range g.Group {
+			if gr >= 0 {
+				in++
+			}
+		}
+		fmt.Fprintf(&b, "<p class='sub'>%d visors in %d circled groups, each on %s.</p>", in, g.Groups, html.EscapeString(p.GroupsAre))
+	}
 	if p.Back != "" {
 		fmt.Fprintf(&b, "<p class='sub'><a href='%s'>Charts</a></p>", html.EscapeString(p.Back))
 	}
@@ -164,11 +186,16 @@ function say(s){status.textContent=s}
 var adj=null;function neighbors(){if(adj)return adj;adj=[];for(var i=0;i<n;i++)adj.push([]);for(var e=0;e<m;e++){adj[A[e]].push(e);adj[B[e]].push(e)}return adj}
 function first(mk){for(var t=0;t<G.t.length;t++)if(on[t]&&mk>>t&1)return t;return -1}
 var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(i=0;i<n;i++){x0=Math.min(x0,G.x[i]);x1=Math.max(x1,G.x[i]);y0=Math.min(y0,G.y[i]);y1=Math.max(y1,G.y[i])}
+function gr(i){return G.g?G.g[i]:-1}
+var GPAL=['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#ff9f1c','#2ec4b6','#f15bb5','#9ef01a','#00bbf9'];function gcol(g){return GPAL[g%GPAL.length]}
 var SPACE=8192,pad=SPACE*0.1,sc=(SPACE-2*pad)/Math.max(x1-x0,y1-y0,1e-9);
 var pos=new Float32Array(n*2),size=new Float32Array(n),pcol=new Array(n);
-for(i=0;i<n;i++){pos[2*i]=pad+(G.x[i]-x0)*sc;pos[2*i+1]=pad+(G.y[i]-y0)*sc;size[i]=Math.min(7,2+Math.sqrt(G.d[i])/6);if(G.c&&G.c[i])size[i]=Math.max(size[i],5.5);pcol[i]=(G.c&&G.c[i])||'#dfe5ef'}
+for(i=0;i<n;i++){pos[2*i]=pad+(G.x[i]-x0)*sc;pos[2*i+1]=pad+(G.y[i]-y0)*sc;size[i]=Math.min(7,2+Math.sqrt(G.d[i])/6);if(G.c&&G.c[i])size[i]=Math.max(size[i],5.5);pcol[i]=(G.c&&G.c[i])||(gr(i)>=0?gcol(gr(i)):'#dfe5ef')}
+function bounds(){if(!G.g)return [];var sx=[],sy=[],sn=[],r=[],out=[],g;for(i=0;i<n;i++){g=G.g[i];if(g<0)continue;sx[g]=(sx[g]||0)+pos[2*i];sy[g]=(sy[g]||0)+pos[2*i+1];sn[g]=(sn[g]||0)+1}
+for(i=0;i<n;i++){g=G.g[i];if(g<0)continue;r[g]=Math.max(r[g]||0,Math.hypot(pos[2*i]-sx[g]/sn[g],pos[2*i+1]-sy[g]/sn[g]))}
+for(g=0;g<sn.length;g++)if(sn[g])out.push({x:sx[g]/sn[g],y:sy[g]/sn[g],r:Math.max(r[g]+8,12),color:gcol(g),label:sn[g]+' visors',flag:''});return out}
 function payload(){var idx=[],lc=[];for(var e=0;e<m;e++){var t=first(M[e]);if(t<0)continue;idx.push(A[e],B[e]);lc.push(col[t])}
-var w=new Float32Array(lc.length);w.fill(0.6);return {positions:pos,pointColors:pcol,pointSizes:size,links:new Float32Array(idx),linkColors:lc,linkWidths:w,grouped:!physics.checked,boundaries:[]}}
+var w=new Float32Array(lc.length);w.fill(0.6);return {positions:pos,pointColors:pcol,pointSizes:size,links:new Float32Array(idx),linkColors:lc,linkWidths:w,grouped:!physics.checked,boundaries:physics.checked?[]:bounds()}}
 var gl=null,physics=document.getElementById('physics');
 function show(){if(!gl)return;gl.setData(payload());if(sel>=0)gl.selectIdx(sel)}
 var tb=document.getElementById('types');G.t.forEach(function(t,i){var l=document.createElement('label');
@@ -179,6 +206,7 @@ function info(i,x,y){if(i<0){tip.hidden=true;return}var per=G.t.map(function(){r
 es.forEach(function(e){for(var t=0;t<G.t.length;t++)if(M[e]>>t&1)per[t]++});
 var h='<div class=k>'+G.k[i]+'</div><div><span>transports</span><b>'+G.d[i]+'</b></div><div><span>peers</span><b>'+es.length+'</b></div>';
 G.t.forEach(function(t,j){if(per[j])h+='<div><span>'+t+' peers</span><b>'+per[j]+'</b></div>'});
+if(gr(i)>=0){var gs=0;for(var j=0;j<n;j++)if(G.g[j]===G.g[i])gs++;h+='<div><span>visors in its group</span><b>'+gs+'</b></div>'}
 tip.innerHTML=h;tip.hidden=false;if(x||y){tip.style.left=Math.min(x+14,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=Math.min(y+14,innerHeight-tip.offsetHeight-8)+'px'}else{tip.style.left='24px';tip.style.top='24px'}}
 function onEvent(kind,i,x,y){switch(kind){case 'click':sel=i;info(i,x,y);break;case 'bgclick':sel=-1;info(-1);break;
 case 'over':info(i,x,y);break;case 'out':if(sel<0)info(-1);if(gl)gl.selectIdx(sel);break;case 'simend':say('');break}}

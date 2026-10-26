@@ -1,8 +1,13 @@
 package transport
 
 import (
+	"bytes"
 	"encoding/binary"
+	"fmt"
+	"io"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -160,34 +165,50 @@ func TestVStreamRelayRejects(t *testing.T) {
 }
 
 // TestVStreamRelayTerminatesLocally covers a relay SYN whose destination is
-// this visor: it terminates locally, attributed to the true origin.
+// this visor: the stream is held back until the origin's Noise handshake,
+// so an origin that never sends one is dropped and never accepted.
 func TestVStreamRelayTerminatesLocally(t *testing.T) {
+	shortRelayHandshake(t)
 	tmR := newTestManager(t)
 	apk, ask := cipher.GenerateKeyPair()
 	mtRA, _ := servingTransport(t, tmR, apk, types.STCPR)
+	rec := &linkTransport{memTransport: newMemTransport(), pkts: make(chan []byte, 16)}
+	mtRA.setTransport(rec)
 	muxR := NewVStreamMux(tmR, routing.SkynetForwardPacket, logging.MustGetLogger("relay-test"))
 
-	dst := tmR.Conf.PubKey // destination is this visor
+	dst := tmR.Conf.PubKey
 	muxR.HandlePacket(buildRelaySyn(t, 5, apk, ask, dst, 5, false), mtRA)
-
-	s, err := muxR.Accept()
-	require.NoError(t, err)
-	require.Equal(t, apk, s.RemotePK(), "locally-terminated relayed stream is attributed to the origin")
 	require.Equal(t, int64(0), muxR.relayCount.Load(), "local termination is not a relay leg")
+
+	accepted := make(chan *VStream, 1)
+	go func() {
+		if s, err := muxR.Accept(); err == nil {
+			accepted <- s
+		}
+	}()
+	select {
+	case s := <-accepted:
+		t.Fatalf("relayed stream from %s accepted without a handshake", s.RemotePK())
+	case <-time.After(3 * relayE2ETimeout):
+	}
+	require.Eventually(t, func() bool { return len(rec.frames()) > 0 }, time.Second, 10*time.Millisecond)
+	frames := rec.frames()
+	requireRefused(t, frames[len(frames)-1], 5)
 }
 
 // TestVStreamDialThroughRelay covers the originator side: it emits a valid
-// signed relay SYN (Relay set, Relayed unset) over the relay transport.
+// signed relay SYN (Relay set, Relayed unset) over the relay transport, and
+// fails when no Noise handshake comes back.
 func TestVStreamDialThroughRelay(t *testing.T) {
+	shortRelayHandshake(t)
 	tmA := newTestManager(t)
 	rpk := mustPK(t)
 	_, memAR := servingTransport(t, tmA, rpk, types.STCPR)
 	muxA := NewVStreamMux(tmA, routing.SkynetForwardPacket, logging.MustGetLogger("relay-test"))
 	bpk := mustPK(t)
 
-	s, err := muxA.DialThroughRelay(rpk, bpk, "app")
-	require.NoError(t, err)
-	require.Equal(t, bpk, s.RemotePK())
+	_, err := muxA.DialThroughRelay(rpk, bpk, "app")
+	require.Error(t, err, "no destination answered the handshake")
 
 	syn := parseVStream(t, memAR.written)
 	require.NotZero(t, syn.flags&VStreamFlagRelay)
@@ -195,6 +216,131 @@ func TestVStreamDialThroughRelay(t *testing.T) {
 	require.Equal(t, tmA.Conf.PubKey, syn.senderPK)
 	require.Equal(t, bpk, syn.dstPK)
 	require.NoError(t, cipher.VerifyPubKeySignedPayload(tmA.Conf.PubKey, syn.sig, relaySigPayload(syn.originID, tmA.Conf.PubKey, bpk)))
+}
+
+// TestVStreamRelayIsEndToEnd runs origin A through relay R to destination B
+// over linked transports. Data arrives intact both ways, B attributes the
+// stream to A, and nothing R forwards carries the plaintext.
+func TestVStreamRelayIsEndToEnd(t *testing.T) {
+	tmA, tmR, tmB := newTestManager(t), newTestManager(t), newTestManager(t)
+	log := logging.MustGetLogger("relay-e2e-test")
+	muxA := NewVStreamMux(tmA, routing.SkynetForwardPacket, log)
+	muxR := NewVStreamMux(tmR, routing.SkynetForwardPacket, log)
+	muxB := NewVStreamMux(tmB, routing.SkynetForwardPacket, log)
+	linkAR := linkMuxes(t, tmA, muxA, tmR, muxR)
+	linkRB := linkMuxes(t, tmR, muxR, tmB, muxB)
+
+	ping, pong := []byte("ping across the relay"), []byte("pong across the relay")
+	got := make(chan []byte, 1)
+	errs := make(chan error, 1)
+	go func() {
+		s, err := muxB.Accept()
+		if err != nil {
+			errs <- err
+			return
+		}
+		if s.RemotePK() != tmA.Conf.PubKey {
+			errs <- fmt.Errorf("stream attributed to %s, want the origin", s.RemotePK())
+			return
+		}
+		buf := make([]byte, len(ping))
+		if _, err := io.ReadFull(s, buf); err != nil {
+			errs <- err
+			return
+		}
+		got <- buf
+		_, err = s.Write(pong)
+		errs <- err
+	}()
+
+	s, err := muxA.DialThroughRelay(tmR.Conf.PubKey, tmB.Conf.PubKey, "app")
+	require.NoError(t, err)
+	require.NotNil(t, s.e2e)
+	_, err = s.Write(ping)
+	require.NoError(t, err)
+	require.Equal(t, ping, <-got)
+	require.NoError(t, <-errs)
+	back := make([]byte, len(pong))
+	_, err = io.ReadFull(s, back)
+	require.NoError(t, err)
+	require.Equal(t, pong, back)
+
+	for _, l := range []*linkTransport{linkAR, linkRB} {
+		for _, frame := range l.frames() {
+			require.False(t, bytes.Contains(frame, ping) || bytes.Contains(frame, pong),
+				"a frame crossing the relay carries plaintext")
+		}
+	}
+}
+
+// TestVStreamRelayRefusedFailsFast: a relay with no transport to the
+// destination answers with a FIN, so the origin's handshake ends at once.
+func TestVStreamRelayRefusedFailsFast(t *testing.T) {
+	tmA, tmR := newTestManager(t), newTestManager(t)
+	log := logging.MustGetLogger("relay-e2e-test")
+	muxA := NewVStreamMux(tmA, routing.SkynetForwardPacket, log)
+	muxR := NewVStreamMux(tmR, routing.SkynetForwardPacket, log)
+	linkMuxes(t, tmA, muxA, tmR, muxR)
+
+	start := time.Now()
+	_, err := muxA.DialThroughRelay(tmR.Conf.PubKey, mustPK(t), "app")
+	require.Error(t, err)
+	require.Less(t, time.Since(start), relayE2ETimeout/2, "a refused relay must not wait out the handshake")
+}
+
+func shortRelayHandshake(t *testing.T) {
+	t.Helper()
+	prev := relayE2ETimeout
+	relayE2ETimeout = 200 * time.Millisecond
+	t.Cleanup(func() { relayE2ETimeout = prev })
+}
+
+// linkTransport delivers every packet written on one side to the peer mux,
+// in order, as a transport between two visors would.
+type linkTransport struct {
+	*memTransport
+	pkts chan []byte
+	mu   sync.Mutex
+	log  [][]byte
+}
+
+func (l *linkTransport) Write(p []byte) (int, error) {
+	b := append([]byte(nil), p...)
+	l.mu.Lock()
+	l.log = append(l.log, b)
+	l.mu.Unlock()
+	l.pkts <- b
+	return len(p), nil
+}
+
+func (l *linkTransport) frames() [][]byte {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([][]byte(nil), l.log...)
+}
+
+// linkMuxes joins managers x and y with a transport each way. It returns the
+// link that carries x's writes.
+func linkMuxes(t *testing.T, tmX *Manager, muxX *VStreamMux, tmY *Manager, muxY *VStreamMux) *linkTransport {
+	t.Helper()
+	mtXY, _ := servingTransport(t, tmX, tmY.Conf.PubKey, types.STCPR)
+	mtYX, _ := servingTransport(t, tmY, tmX.Conf.PubKey, types.STCPR)
+	xy := &linkTransport{memTransport: newMemTransport(), pkts: make(chan []byte, 256)}
+	yx := &linkTransport{memTransport: newMemTransport(), pkts: make(chan []byte, 256)}
+	mtXY.setTransport(xy)
+	mtYX.setTransport(yx)
+	pump := func(l *linkTransport, to *VStreamMux, on *ManagedTransport) {
+		for p := range l.pkts {
+			to.HandlePacket(routing.Packet(p), on)
+		}
+	}
+	go pump(xy, muxY, mtYX)
+	go pump(yx, muxX, mtXY)
+	t.Cleanup(func() {
+		close(xy.pkts)
+		close(yx.pkts)
+	})
+	return xy
 }
 
 // requireRefused checks that the relay answered the origin's SYN with a FIN on

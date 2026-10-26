@@ -1621,10 +1621,14 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	return nil, err
 }
 
+// proxyListenAddr is where the tests start skysocks-client. Its default is
+// loopback (#5710), which the test runner outside the container cannot dial.
+const proxyListenAddr = ":1080"
+
 func (env *TestEnv) NewProxyClient(clientNode, user, password string) (*http.Client, error) {
 	auth := proxy.Auth{User: user, Password: password}
 
-	pDialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("%s:1080", clientNode), &auth, proxy.Direct)
+	pDialer, err := proxy.SOCKS5("tcp", clientNode+proxyListenAddr, &auth, proxy.Direct)
 	if err != nil {
 		return nil, err
 	}

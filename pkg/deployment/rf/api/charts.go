@@ -112,7 +112,7 @@ func (a *API) collectCharts(ctx context.Context, c *rfCharts) (map[string]float6
 		v[chartFoundPrefix+strconv.Itoa(n)] = float64(cur.perPair[n] - prev.perPair[n])
 	}
 	if a.graphCache != nil {
-		if g := a.graphCache.Get(); g != nil {
+		if g := a.graphCache.Current(); g != nil {
 			visors, tps := g.Size()
 			v[chartGraphVisors] = float64(visors)
 			v[chartGraphTps] = float64(tps)

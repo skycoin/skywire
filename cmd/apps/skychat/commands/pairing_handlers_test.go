@@ -965,3 +965,55 @@ func TestRegisterPairHTTPHandlers_DisabledRegistersNothing(t *testing.T) {
 		})
 	}
 }
+
+func TestPairing_IsConsentNotAName(t *testing.T) {
+	withPrivacyStore(t)
+	withContactStore(t)
+	if err := privacyStore.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
+	peer := mustPK(t)
+
+	// The initiator chose the peer: their messages need no approval.
+	withPairHandlerEnv(t, &pairHandlersAPI{})
+	rr := httptest.NewRecorder()
+	pairRootHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost, "/pair",
+		strings.NewReader(`{"peer_pk":"`+peer.Hex()+`"}`)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("post /pair: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !privacyStore.Accepted(peer.Hex()) {
+		t.Fatal("the initiator did not accept the peer")
+	}
+
+	// The accepter consented too, and a name would outlive deleting the chat.
+	other := mustPK(t)
+	pendingPut(other)
+	rr = httptest.NewRecorder()
+	pairInvitesItemHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost,
+		"/pair/invites/"+other.Hex()+"/accept", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("accept: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !privacyStore.Accepted(other.Hex()) {
+		t.Fatal("the accepter did not accept the peer")
+	}
+	for _, pk := range []string{peer.Hex(), other.Hex()} {
+		if got := contactStore.Name(pk); got != "" {
+			t.Fatalf("pairing named %s %q", pk, got)
+		}
+	}
+
+	// A decline lets nobody in.
+	stranger := mustPK(t)
+	pendingPut(stranger)
+	rr = httptest.NewRecorder()
+	pairInvitesItemHandler(context.Background())(rr, httptest.NewRequest(http.MethodPost,
+		"/pair/invites/"+stranger.Hex()+"/decline", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("decline: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if privacyStore.Accepted(stranger.Hex()) {
+		t.Fatal("a declined peer was accepted")
+	}
+}

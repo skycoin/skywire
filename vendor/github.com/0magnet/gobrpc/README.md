@@ -1,26 +1,21 @@
 # gobrpc
 
-`net/rpc`, except it also compiles for TinyGo's `js/wasm` target.
+`net/rpc`, except it also compiles under TinyGo.
 
 Go's `net/rpc` imports `net/http` (for its `HandleHTTP` helper), and `net/http`
 does not build under TinyGo. That one import is enough to make the whole
-package unavailable — even if you only ever call `ServeConn` and never touch
-HTTP.
+package unavailable, even if you only ever call `ServeConn`.
 
-This package is an API shim:
-
-- **Native builds** alias straight to `net/rpc`. Same types, same wire format,
-  same concurrency semantics — it *is* the standard library, so there is no
-  behavioural change and nothing new to trust.
-- **TinyGo builds** alias to `gobimpl`, a dependency-free reimplementation that
-  speaks the **identical** gob wire protocol.
+This package aliases `gobimpl`, a dependency-free reimplementation that speaks
+the **identical** gob wire protocol. The same code runs under both Go and
+TinyGo, so a program behaves the same whichever compiler built it.
 
 ```
 request:   gob(Request{ServiceMethod, Seq})         then gob(args)
 response:  gob(Response{ServiceMethod, Seq, Error}) then gob(reply)
 ```
 
-Because the framing is the same, a TinyGo client talks to a stdlib `net/rpc`
+Because the framing is the same, a gobrpc client talks to a stdlib `net/rpc`
 server and vice versa, with nothing in between. `gobimpl`'s tests assert this
 by connecting `gobimpl` to `net/rpc` in both directions over a `net.Pipe`.
 
@@ -31,11 +26,6 @@ go get github.com/0magnet/gobrpc
 ```
 
 ## Use
-
-Change the import and the client side is the same everywhere. The server side
-differs in how methods are registered, because TinyGo cannot run `net/rpc`'s
-reflection dispatch (it cannot enumerate or call methods). On native builds, use
-`Register`:
 
 ```go
 import "github.com/0magnet/gobrpc"
@@ -49,8 +39,9 @@ var reply int
 err := c.Call("Arith.Multiply", Args{7, 8}, &reply)
 ```
 
-Under TinyGo, register a reflection-free handler with `HandleFunc` instead. It
-decodes exactly one gob argument and returns the reply:
+`Register` uses reflection to find methods, which TinyGo cannot do. Code that
+must also build under TinyGo registers a reflection-free handler with
+`HandleFunc` instead. It decodes exactly one gob argument and returns the reply:
 
 ```go
 srv := gobrpc.NewServer()
@@ -66,22 +57,22 @@ go srv.ServeConn(conn)
 
 `HandleCall` is the same but takes a `DecodeFunc` that decodes the argument and
 returns a `CallFunc`; the call then runs in its own goroutine, so a blocking call
-does not hold up the connection. `HandlerFunc`, `CallFunc`, `DecodeFunc`,
-`HandleFunc` and `HandleCall` exist only in TinyGo builds. The wire format is
-unchanged, so a `HandleFunc` server still serves a stdlib `net/rpc` client.
+does not hold up the connection. The wire format is unchanged, so a
+`HandleFunc` server still serves a stdlib `net/rpc` client.
 
 Exposed surface: `NewClient`, `NewServer`, `Dial`, `Client.Go/Call/Close`,
-`Server.Register/RegisterName/ServeConn`, the `Call` value, `ServerError` and
-`ErrShutdown`. On native builds these are type aliases and vars pointing at `net/rpc`, so `gobrpc.Client`
-*is* `rpc.Client` and the two are interchangeable.
+`Server.Register/RegisterName/HandleFunc/HandleCall/ServeConn`, the `Call`
+value, `ServerError` and `ErrShutdown`. These are distinct from the `net/rpc`
+types, so a `gobrpc.Client` cannot be passed where an `*rpc.Client` is wanted.
 
-Anything outside that subset — `HandleHTTP`, `ServeCodec`, custom codecs — is
+Anything outside that subset (`HandleHTTP`, `ServeCodec`, custom codecs) is
 deliberately absent, because it is what pulls `net/http` back in.
+
 
 ## gobimpl
 
 `github.com/0magnet/gobrpc/gobimpl` is usable on its own if you want the
-reimplementation unconditionally. It imports only `encoding/gob`, `reflect`,
+reimplementation directly. It imports only `encoding/gob`, `reflect`,
 `net`, `io`, `errors`, `strings` and `sync` — all TinyGo-portable — so it
 compiles in both worlds. Its tests (`gobimpl/gobimpl_test.go`) run on native. It
 also has `Server.Accept(net.Listener)`, and its `Register` is reflection-based, so

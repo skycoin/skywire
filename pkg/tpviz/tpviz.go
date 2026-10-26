@@ -439,7 +439,8 @@ func NewServer(cfg Config) *Server {
 	}
 	// Load the embedded GeoIP DB for full-fleet country grouping (best-effort:
 	// without it, country grouping falls back to the SD's registered-service geo).
-	if db, err := geoip2.OpenBytes(geoip.EmbeddedDB()); err != nil {
+	// The shared reader is memory-mapped, keeping the 59 MB database off the heap.
+	if db, err := geoip.Shared(); err != nil {
 		s.log.WithError(err).Warn("GeoIP DB unavailable — country grouping limited to service-discovery geo")
 	} else {
 		s.geoDB = db

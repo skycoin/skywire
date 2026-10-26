@@ -96,6 +96,8 @@ type Manager struct {
 	// for none. tones holds the ones peers we called play, by peer.
 	ownTone *tone
 	tones   map[cipher.PubKey]*tone
+	// blocked are the callers whose calls ring out unseen, see SetBlocked.
+	blocked map[cipher.PubKey]bool
 }
 
 // dialingCall is an outbound invite in flight, or — for DialOutcomeLinger
@@ -275,6 +277,10 @@ func (m *Manager) dial(ctx context.Context, callID string, peer cipher.PubKey) (
 // explicit Answer/Decline or the ring timeout. On accept it replies SigAccept
 // and starts a media Session over the same conn.
 func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
+	if m.isBlocked(inv.FromPK) {
+		m.ringUnseen(inv, conn)
+		return
+	}
 	if m.cfg.ManualAnswer {
 		// Watched, so that a caller hanging up mid-ring stops the ring here
 		// and now instead of leaving it to run out the timeout. Everything
@@ -318,6 +324,45 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		return
 	}
 	m.accept(inv, conn)
+}
+
+// SetBlocked replaces the callers whose calls never ring here. The owner of
+// the block list (skychat) hands it over, since this side has none of its own.
+func (m *Manager) SetBlocked(pks []cipher.PubKey) {
+	blocked := make(map[cipher.PubKey]bool, len(pks))
+	for _, pk := range pks {
+		blocked[pk] = true
+	}
+	m.mu.Lock()
+	m.blocked = blocked
+	m.mu.Unlock()
+}
+
+func (m *Manager) isBlocked(pk cipher.PubKey) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.blocked[pk]
+}
+
+// ringUnseen answers a blocked caller the way an unanswered call is answered:
+// it rings for them, without our tone, and ends as "no answer". Nothing rings here.
+func (m *Manager) ringUnseen(inv Sig, conn net.Conn) {
+	w := watchRing(conn)
+	var ringSent <-chan struct{}
+	if inv.Progress {
+		ringSent = m.sendRinging(w, Sig{Type: SigRinging, CallID: inv.CallID, FromPK: m.cfg.LocalPK})
+	}
+	m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).Info("voice: call from a blocked peer, not ringing")
+	timeout := time.NewTimer(ringTimeout)
+	defer timeout.Stop()
+	select {
+	case <-w.gone:
+	case <-timeout.C:
+		if announced(ringSent) {
+			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
+		}
+	}
+	_ = w.Close() //nolint:errcheck
 }
 
 // ringOutcome is how a ring ended.

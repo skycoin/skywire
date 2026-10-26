@@ -14,16 +14,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxosub"
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
+	"github.com/skycoin/skywire/pkg/deployment/tpd/routingfeed"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // compactVisorSummaryLeaf mirrors the per-visor uptime leaf the TPD publisher
@@ -182,35 +179,15 @@ func (s *Server) tryCXOTransports() ([]byte, bool) {
 	mgr.AcquireForTab(CXOTabCLITransports)
 	defer mgr.ReleaseForTab(CXOTabCLITransports)
 
-	var entries []*transport.Entry
-	mgr.Walk(CXOFeedTPDRouting, "routing/", func(_ string, body []byte) bool {
-		entries = append(entries, routingShardEntries(body)...)
+	r := routingfeed.NewReader()
+	mgr.Walk(CXOFeedTPDRouting, routingfeed.Prefix, func(path string, body []byte) bool {
+		r.Add(path, body)
 		return true
 	})
+	entries := r.Entries()
 	if len(entries) == 0 {
 		return nil, false
 	}
 	out, err := json.Marshal(entries)
 	return out, err == nil
-}
-
-// routingShardEntries decodes one leaf of TPD's routing feed (gzipped JSON,
-// see tpdapi.RoutingCXOPublisher) and recomputes the derivable t_id the
-// publisher drops. A leaf that does not decode yields nothing.
-func routingShardEntries(body []byte) []*transport.Entry {
-	var shard []*transport.Entry
-	if err := json.Unmarshal(cxoutils.Gunzip(body), &shard); err != nil {
-		return nil
-	}
-	out := shard[:0]
-	for _, e := range shard {
-		if e == nil {
-			continue
-		}
-		if e.ID == (uuid.UUID{}) {
-			e.ID = transport.MakeTransportID(e.Edges[0], e.Edges[1], e.Type)
-		}
-		out = append(out, e)
-	}
-	return out
 }

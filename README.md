@@ -432,7 +432,7 @@ Direct transports between visors come in two types: **STCPR**
 (Skywire TCP Relay) and **SUDPH** (Skywire UDP Hole-punching).
 An [automatic transport creation mechanism](pkg/visor/autoconnect.go),
 enabled by default, establishes STCPR transports to
-[public visors](https://sd.skycoin.com/api/services?type=visor)
+public visors (`skywire cli pv`, which reads service discovery at `dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=visor`)
 and SUDPH transports to visors connected to those public visors,
 populating each visor with enough transports for multi-hop
 routing. Routes are set up by trusted route-setup nodes that
@@ -478,8 +478,8 @@ Full reference: [docs/skywire/cli/](docs/skywire/cli/README.md).
 ### Skywire Apps
 
 Server-side apps auto-register in the
-[proxy server](https://sd.skycoin.com/api/services?type=proxy) /
-[VPN server](https://sd.skycoin.com/api/services?type=vpn)
+proxy server (`skywire cli proxy list`) /
+VPN server (`skywire cli vpn list`)
 service discovery on startup; clients dial them by pubkey over a
 direct or multi-hop route.
 

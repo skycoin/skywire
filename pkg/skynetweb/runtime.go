@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"time"
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
@@ -118,6 +119,10 @@ type Config struct {
 	// Stats, when non-nil, is updated for every request.
 	// Optional; no collection happens when nil.
 	Stats *Stats
+
+	// Requests, when non-nil, records every .skynet dial with the path the
+	// dialer reports, for the status pages.
+	Requests *proxystatus.RequestLog
 
 	// TLSMITM enables on-the-fly TLS termination for browser
 	// connections to <pk>.skynet on the TLSPort, using LeafMinter to
@@ -426,7 +431,21 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					return &tcpAddrConn{Conn: c}, nil
 				}
 
-				done := cfg.Stats.RecordRequest()
+				statsDone := cfg.Stats.RecordRequest()
+				start := time.Now()
+				dialCtx, note := proxystatus.WithPathNote(dialCtx)
+				done := func(err error) {
+					statsDone(err)
+					r := proxystatus.Request{At: start, Layer: "skynet", Host: origHost, Port: hport,
+						Path: "skynet " + note.String(), DialMS: time.Since(start).Milliseconds()}
+					if note.String() == "" {
+						r.Path = "skynet"
+					}
+					if err != nil {
+						r.Err = err.Error()
+					}
+					cfg.Requests.Add(r)
+				}
 				log.WithField("pk", dest.Hex()).
 					WithField("port", hport).
 					WithField("hops", len(route)).
@@ -650,4 +669,44 @@ func parsePKLabel(label string) (cipher.PubKey, error) {
 		}
 		return pk, nil
 	}
+}
+
+// PerformServiceHandshake is PerformHandshake for a service that host runs
+// under the service's own key. It names the service, and accepts the stream
+// only when host echoes it and shows the service's signature naming host.
+func PerformServiceHandshake(conn net.Conn, port uint16, service, host cipher.PubKey) error {
+	readyBuf := make([]byte, 1)
+	if _, err := conn.Read(readyBuf); err != nil {
+		return fmt.Errorf("skynet handshake: read ready byte: %w", err)
+	}
+	req, err := json.Marshal(skynet.ClientMsg{Port: int(port), PK: service.String()})
+	if err != nil {
+		return fmt.Errorf("skynet handshake: marshal request: %w", err)
+	}
+	if _, err := conn.Write(req); err != nil {
+		return fmt.Errorf("skynet handshake: send request: %w", err)
+	}
+	respBuf := make([]byte, 32*1024)
+	n, err := conn.Read(respBuf)
+	if err != nil {
+		return fmt.Errorf("skynet handshake: read reply: %w", err)
+	}
+	var reply skynet.ServerReply
+	if err := json.Unmarshal(respBuf[:n], &reply); err != nil {
+		return fmt.Errorf("skynet handshake: parse reply: %w", err)
+	}
+	if reply.Error != nil {
+		return fmt.Errorf("skynet server error: %s", *reply.Error)
+	}
+	if reply.PK != service.String() {
+		return fmt.Errorf("skynet handshake: %s does not host %s", host, service)
+	}
+	var sig cipher.Sig
+	if err := sig.UnmarshalText([]byte(reply.Sig)); err != nil {
+		return fmt.Errorf("skynet handshake: %s sent no proof it hosts %s: %w", host, service, err)
+	}
+	if err := skynet.VerifyHosted(service, host, sig); err != nil {
+		return fmt.Errorf("skynet handshake: %s is not attested as host of %s: %w", host, service, err)
+	}
+	return nil
 }

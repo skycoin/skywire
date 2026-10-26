@@ -55,4 +55,16 @@ func TestRouter(t *testing.T) {
 	w = do(http.MethodGet, "/skycoin-rewards/hist/2026-1-1/json", "")
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid date format")
+
+	// Pool share files hold reward xpubs, so only whitelisted keys may fetch them.
+	require.NoError(t, os.MkdirAll(filepath.Join(wd, "hist"), 0o750))
+	for _, name := range []string{"2026-01-01_pool1_shares.csv", "2026-01-01_pool2_shares.csv"} {
+		require.NoError(t, os.WriteFile(filepath.Join(wd, "hist", name), []byte("xpubtest\n"), 0o600))
+		other, _ := cipher.GenerateKeyPair()
+		require.Equal(t, http.StatusNotFound, do(http.MethodGet, "/skycoin-rewards/hist/"+name, other.Hex()+":80").Code)
+		require.Equal(t, http.StatusNotFound, do(http.MethodGet, "/skycoin-rewards/hist/"+name, "").Code)
+		w = do(http.MethodGet, "/skycoin-rewards/hist/"+name, pk.Hex()+":80")
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "xpubtest\n", w.Body.String())
+	}
 }

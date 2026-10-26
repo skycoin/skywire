@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -381,3 +382,8 @@ var _ visorapi.API = (*proxiedVisorAPI)(nil)
 // Suppress unused-import warnings on the doc-only imports.
 var _ context.Context
 var _ json.RawMessage
+
+// RewardAddressExposure is chain data, so the hypervisor's own visor answers it.
+func (p *proxiedVisorAPI) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
+	return p.hvAPI.RewardAddressExposure(addr)
+}

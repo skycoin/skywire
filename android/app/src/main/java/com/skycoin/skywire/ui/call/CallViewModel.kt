@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.call
 
 import android.app.Application
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -10,11 +11,15 @@ import android.media.ToneGenerator
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.DialState
 import com.skycoin.skywire.api.OutgoingCall
+import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.core.VoiceCalls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /** What the call screen draws. */
 data class CallUiState(
@@ -46,6 +52,8 @@ data class CallUiState(
     val speakerphone: Boolean = false,
     /** `m:ss`, counted from when this device saw the call connect. */
     val elapsed: String = "0:00",
+    /** The picture the other side publishes, once it has been fetched. */
+    val avatar: ImageBitmap? = null,
 )
 
 /**
@@ -60,6 +68,8 @@ data class CallUiState(
 class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
+    private val skychat = SkychatApi.get(app)
+    private var avatarFor: String? = null
     private val audioManager =
         app.getSystemService(Application.AUDIO_SERVICE) as AudioManager
 
@@ -134,6 +144,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
                         micMuted = if (calls.busy) it.micMuted else false,
                     )
                 }
+                syncAvatar(mutable.value.peerPk)
                 // Ring only for a call coming IN, and only here: the point of
                 // the full-screen UI is that it, not a notification, is the
                 // call. A call we are placing rings at the other end.
@@ -361,7 +372,25 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     /** The operator's name for the key when there is one — see VoiceCalls. */
     private fun short(pk: String) = VoiceCalls.displayName(pk)
 
+    private fun syncAvatar(pk: String?) {
+        if (pk == avatarFor) return
+        avatarFor = pk
+        mutable.update { it.copy(avatar = pk?.let(avatars::get)) }
+        if (pk == null || avatars.containsKey(pk)) return
+        viewModelScope.launch {
+            val url = SkychatProfile.baseUrl(SkychatProfile.DEFAULT_PORT)
+            val image = skychat.peerAvatar(url, pk)
+                ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                ?.asImageBitmap()
+                ?: return@launch
+            avatars[pk] = image
+            if (avatarFor == pk) mutable.update { it.copy(avatar = image) }
+        }
+    }
+
     private companion object {
+        /** Fetched avatars by key, so the next call with the same peer shows it at once. */
+        val avatars = ConcurrentHashMap<String, ImageBitmap>()
         const val TAG = "SkywireVoice"
         const val RINGBACK_VOLUME = 80
         const val RINGBACK_FILE = "ringback.audio"

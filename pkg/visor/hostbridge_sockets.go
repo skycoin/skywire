@@ -7,10 +7,12 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/hostbridge"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 // hostBridgeSockets gives the transport carriers sockets on the host bridge's
@@ -482,3 +484,51 @@ func (h hostBridgeHost) DialTimeout(network, addr string, timeout time.Duration)
 	defer cancel()
 	return h.s.DialContext(ctx, network, addr)
 }
+
+// hostBridgeVPN lends a browser visor's vpn-client a TUN and the routing
+// table of the bridge's host (vpn.HostNetwork).
+type hostBridgeVPN struct{ s *hostBridgeSockets }
+
+func (h hostBridgeVPN) TUN(ctx context.Context) (vpn.TUNDevice, error) {
+	c, err := h.s.current()
+	if err != nil {
+		return nil, err
+	}
+	t, err := c.TUN(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &hostTUN{TUN: t}, nil
+}
+
+func (h hostBridgeVPN) Net(ctx context.Context, cmd string, args ...string) (string, error) {
+	c, err := h.s.current()
+	if err != nil {
+		return "", err
+	}
+	return c.Net(ctx, cmd, args...)
+}
+
+// hostTUN is dead once its session ends, so the client opens another.
+type hostTUN struct {
+	*hostbridge.TUN
+	dead atomic.Bool
+}
+
+func (t *hostTUN) Read(p []byte) (int, error) {
+	n, err := t.TUN.Read(p)
+	if err != nil {
+		t.dead.Store(true)
+	}
+	return n, err
+}
+
+func (t *hostTUN) Write(p []byte) (int, error) {
+	n, err := t.TUN.Write(p)
+	if err != nil {
+		t.dead.Store(true)
+	}
+	return n, err
+}
+
+func (t *hostTUN) Dead() bool { return t.dead.Load() }

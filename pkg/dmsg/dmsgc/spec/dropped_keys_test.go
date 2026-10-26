@@ -17,13 +17,12 @@ import (
 // reads back as unset no matter what the operator wrote is worse than no knob.
 func TestDmsgConfigKeepsVisorWideKeys(t *testing.T) {
 	const raw = `{"discovery":"http://dmsgd","sessions_count":2,` +
-		`"direct_only":true,"relay_max_streams":64,"lookup_cxo":true}`
+		`"direct_only":true,"relay_max_streams":64}`
 
 	var c DmsgConfig
 	require.NoError(t, json.Unmarshal([]byte(raw), &c))
 	require.True(t, c.DirectOnly, "direct_only must survive unmarshal")
 	require.Equal(t, 64, c.RelayMaxStreams, "relay_max_streams must survive unmarshal")
-	require.True(t, c.LookupCXO)
 
 	out, err := json.Marshal(c)
 	require.NoError(t, err)
@@ -32,7 +31,6 @@ func TestDmsgConfigKeepsVisorWideKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(out, &back))
 	require.True(t, back.DirectOnly, "direct_only must survive a round trip")
 	require.Equal(t, 64, back.RelayMaxStreams, "relay_max_streams must survive a round trip")
-	require.True(t, back.LookupCXO)
 }
 
 // The zero values stay absent, so a config that never set them does not grow

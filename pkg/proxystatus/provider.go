@@ -204,7 +204,10 @@ type Snapshot struct {
 	// default every other host takes. Skywire surface only; empty when no
 	// rule is set.
 	DomainRoutes []DomainRoute `json:"domain_routes,omitempty"`
-	Note         string        // optional human note (e.g. why a section is empty)
+	// Requests are the resolving proxies' recent requests, newest first: every
+	// layer's on the skywire surface, the layer's own on dmsg and skynet.
+	Requests []Request `json:"requests,omitempty"`
+	Note     string    // optional human note (e.g. why a section is empty)
 }
 
 // Layer is the live state of one resolving-proxy layer (dmsg_web on :4445,

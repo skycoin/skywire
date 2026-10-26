@@ -211,7 +211,7 @@ func (pk PubKey) Type() string {
 // directly into a freshly-allocated buffer instead of going through
 // `[]byte(pk.Hex())`, which would round-trip through an intermediate
 // string allocation. Halves the per-marshal allocation in the
-// jsoniter / dmsg-discovery hot path that serializes lots of PKs.
+// dmsg-discovery hot path that serializes lots of PKs.
 func (pk PubKey) MarshalText() ([]byte, error) {
 	out := make([]byte, hex.EncodedLen(len(pk)))
 	hex.Encode(out, pk[:])

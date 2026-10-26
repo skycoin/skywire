@@ -806,6 +806,8 @@ var genConfigCmd = &cobra.Command{
 
 		configureHypervisor(log)
 		keepPersistentTransports()
+		keepAutoconnect()
+		keepTCPNotSentLowat()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1737,6 +1739,22 @@ func keepPersistentTransports() {
 		if pt.NetType != tptypes.WS {
 			conf.PersistentTransports = append(conf.PersistentTransports, pt)
 		}
+	}
+}
+
+// keepAutoconnect carries the autoconnect limits over a regenerate: they are
+// set live with config set and have no skywire.conf variable.
+func keepAutoconnect() {
+	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+		conf.Transport.Autoconnect = oldConfCache.Transport.Autoconnect
+	}
+}
+
+// keepTCPNotSentLowat carries transport.tcp_notsent_lowat over a regenerate:
+// it is set live with config set and has no skywire.conf variable.
+func keepTCPNotSentLowat() {
+	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+		conf.Transport.TCPNotSentLowat = oldConfCache.Transport.TCPNotSentLowat
 	}
 }
 
@@ -2876,11 +2894,11 @@ var (
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
-		"cliaddr": "CLIADDR",
-		"loglvl":  "LOGLVL",
-		"hvaddr":  "HVHTTPADDR",
-		"timeout": "SHUTDOWNTIMEOUT",
-		"reward":  "REWARDSKYADDR",
+		"cliaddr":    "CLIADDR",
+		"loglvl":     "LOGLVL",
+		"hvaddr":     "HVHTTPADDR",
+		"timeout":    "SHUTDOWNTIMEOUT",
+		"rewardaddr": "REWARDSKYADDR",
 		// The resolvers' string knobs, for the same reason as the two bools
 		// above: an upstream or a bind address that cannot round-trip is a
 		// chain that comes back up pointing somewhere else, or nowhere.

@@ -36,7 +36,7 @@ import (
 )
 
 // jsonDecode is a tiny wrapper over encoding/json that doesn't
-// require importing dmsgpty's jsoniter alias just for this one call.
+// require importing dmsgpty's codec alias just for this one call.
 func jsonDecode(r io.Reader, v interface{}) error {
 	return json.NewDecoder(r).Decode(v)
 }

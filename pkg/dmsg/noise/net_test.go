@@ -7,11 +7,11 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/rpc"
 	"sync"
 	"testing"
 	"time"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/flynn/noise"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"

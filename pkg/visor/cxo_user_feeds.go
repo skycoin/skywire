@@ -336,6 +336,7 @@ func (v *Visor) CXOFeedStates() []visorapi.CXOFeedState {
 	tplistPub := v.tplistCXOPub
 	regPub := v.regCXOPub
 	sdRegPub := v.sdRegCXOPub
+	registrations := append([]string(nil), v.systemFeedServices...)
 	users := make([]*cxoUserFeed, 0, len(v.cxoUserFeeds))
 	for _, fd := range v.cxoUserFeeds {
 		users = append(users, fd)
@@ -356,6 +357,7 @@ func (v *Visor) CXOFeedStates() []visorapi.CXOFeedState {
 			CurrentLeaves: &cls,
 			Allowlist:     allow,
 			Denied:        denied,
+			Registrations: registrations,
 		})
 	}
 	// The dedicated tp-list discovery feed (a second CXO node under the

@@ -46,6 +46,10 @@ That program prints the block above.
   logic, and hangs at the same rows as the right branches.
 - `Node.Cols` holds trailing columns for that node's row, padded into an aligned
   block across every right-side line.
+- `Node.Above` is a line of text drawn above the node's row, in its label
+  column. The parent's trunk runs past it and it does not widen the columns.
+- The root may carry `Left` (one label, drawn left of it) and `Cols`, aligned
+  with everyone else's columns.
 
 ## Options
 
@@ -60,12 +64,13 @@ defaults shown above.
 | `AlignColumns` | Column block alignment |
 | `StyleCell` | `func(text string, kind CellKind) string`, called per cell after layout |
 | `HeaderLeft`, `HeaderLabel`, `HeaderCols` | When any is set, a header row of column labels above the root, aligned with the columns beneath it |
+| `SpineLeft`, `SpineLabel`, `SpineCols` | Labels on the line between the root and its first child: over the left blocks, the labels and the columns |
 
 `StyleCell` is the reason layout and styling are separable: geometry is computed
 from the plain text first, so returning ANSI-wrapped or HTML-wrapped text does
 not shift alignment. `CellKind` distinguishes the root (`CellRoot`), right labels
-(`CellLabel`), trailing columns (`CellColumn`), left blocks (`CellLeft`) and the
-header row's three fields (`CellHeaderLeft`, `CellHeaderLabel`, `CellHeaderColumn`).
+(`CellLabel`), `Above` lines (`CellAbove`), trailing columns (`CellColumn`), left
+blocks (`CellLeft`) and the header row's and spine line's three fields (`CellHeaderLeft`, `CellHeaderLabel`, `CellHeaderColumn`).
 
 ## Notes
 

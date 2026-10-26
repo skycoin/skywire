@@ -166,7 +166,7 @@ func TestServer_Serve_WhitelistAdmits(t *testing.T) {
 
 	_ = cliSide.Close() //nolint:errcheck
 	require.NoError(t, s.Close())
-	<-errCh
+	<-errCh //nolint:errcheck
 }
 
 // Serve returns nil immediately when the server is already closed.

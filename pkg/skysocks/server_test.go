@@ -88,6 +88,6 @@ func TestProxy(t *testing.T) {
 	require.NoError(t, client.Close())
 	require.NoError(t, srv.Close())
 
-	<-errChan2
-	<-errChan
+	<-errChan2 //nolint:errcheck
+	<-errChan  //nolint:errcheck
 }

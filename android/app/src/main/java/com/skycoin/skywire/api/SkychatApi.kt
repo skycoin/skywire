@@ -35,6 +35,12 @@ class SkychatApi private constructor(context: Context) {
         .callTimeout(6, TimeUnit.SECONDS)
         .build()
 
+    // A profile lookup reaches the peer itself, which skychat gives up to 20 s.
+    private val profileClient = client.newBuilder()
+        .readTimeout(25, TimeUnit.SECONDS)
+        .callTimeout(25, TimeUnit.SECONDS)
+        .build()
+
     /** The device-local password the gate is configured with. */
     suspend fun password(): String = secrets.skychatPassword()
 
@@ -82,6 +88,29 @@ class SkychatApi private constructor(context: Context) {
             }
         }.getOrDefault(emptyMap())
     }
+
+    /**
+     * The avatar [pk] publishes, as image bytes, or null when it has none or
+     * cannot be reached. Skychat asks the peer over the network, so it can take seconds.
+     */
+    suspend fun peerAvatar(baseUrl: String, pk: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            profileClient.newCall(
+                Request.Builder()
+                    .url(baseUrl.trimEnd('/') + "/profile/peer?pk=" + pk)
+                    .header("Authorization", authorization())
+                    .build(),
+            ).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val uri = json.decodeFromString(PeerProfile.serializer(), resp.body.string()).avatar
+                uri.substringAfter("base64,", "").takeIf { it.isNotEmpty() }
+                    ?.let { java.util.Base64.getDecoder().decode(it) }
+            }
+        }.getOrNull()
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class PeerProfile(val avatar: String = "")
 
     /**
      * The unread estimate skychat keeps for surfaces that are not the page —

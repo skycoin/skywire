@@ -35,6 +35,6 @@ func TestServeCloseOverlapRace(t *testing.T) {
 			t.Fatalf("Close: %v", cerr)
 		}
 		wg.Wait()
-		<-serveErr
+		<-serveErr //nolint:errcheck
 	}
 }

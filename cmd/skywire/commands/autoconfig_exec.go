@@ -1,11 +1,11 @@
-//go:build !js
+//go:build !js && !android
 
 // Package commands cmd/skywire/commands/autoconfig_exec.go c4-vis-cli
 //
 // Native half of the autoconfig process-management seam. On a real OS
 // autoconfig delegates to subprocesses (this same binary re-invoked
 // for config gen / reward / -v) and to systemctl for the service
-// lifecycle. The js/wasm twin (autoconfig_exec_js.go) has neither
+// lifecycle. The js/wasm twin (autoconfig_exec_inproc.go) has neither
 // subprocesses nor an init system: it re-enters the command tree
 // in-process and starts the visor in the foreground.
 package commands

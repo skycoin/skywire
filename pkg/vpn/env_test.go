@@ -73,6 +73,15 @@ func TestParseIP(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "1.2.3.4", ip.String())
 	})
+
+	for _, addr := range []string{"2001:db8::1", "[2001:db8::1]:3478", "https://[2001:db8::1]:443/wt"} {
+		t.Run("IPv6 "+addr, func(t *testing.T) {
+			ip, ok, err := ParseIP(addr)
+			require.NoError(t, err)
+			require.True(t, ok)
+			require.Equal(t, "2001:db8::1", ip.String())
+		})
+	}
 }
 
 func TestIPFromEnv(t *testing.T) {

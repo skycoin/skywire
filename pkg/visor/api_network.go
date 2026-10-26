@@ -693,6 +693,10 @@ func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
 	}
 	var sites []logserver.Vhost
 	for _, vh := range fp.Vhosts {
+		if vh.VisorPages && vh.Name != "" && vh.Name != logserver.AnyVhost {
+			sites = append(sites, logserver.Vhost{Name: vh.Name, Names: vh.Names(), Whitelist: vh.Whitelist, VisorPages: true})
+			continue
+		}
 		target, err := url.Parse("http://" + vh.ProxyAddr)
 		if err != nil || vh.Name == "" || target.Host == "" {
 			log.WithField("vhost", vh.Name).WithField("proxy_addr", vh.ProxyAddr).Warn("Skipping an invalid vhost")
@@ -703,6 +707,7 @@ func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
 			Names:     vh.Names(),
 			Handler:   buildReverseProxy(log, target, vh.PreserveHost),
 			Whitelist: vh.Whitelist,
+			Sites:     v.vhostSiteList(vh, target.Hostname(), log),
 		})
 	}
 	if len(sites) > 0 {
@@ -731,6 +736,10 @@ func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport s
 			log.WithField("peer", pk).Warn("Rejected: peer not in whitelist")
 			return
 		}
+	}
+	if fp != nil && fp.VisorPages {
+		v.serveOwnPages(conn)
+		return
 	}
 	// ProxyAddr wins when set so users can forward to an arbitrary
 	// IP:port instead of localhost:localPort.

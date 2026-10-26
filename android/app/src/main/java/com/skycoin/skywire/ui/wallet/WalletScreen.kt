@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -70,12 +72,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.addressScanPending
+import com.skycoin.skywire.wallet.exposedWithCoins
+import com.skycoin.skywire.wallet.usdText
+import com.skycoin.wallet.Amounts
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -167,6 +173,11 @@ fun WalletScreen(
                     if (state.active?.addressScanPending == true && !state.refreshing) {
                         ScanPendingBanner()
                     }
+                    if (state.coin.kind == CoinKind.SKY_FIBER && state.snapshot?.exposedWithCoins?.isNotEmpty() == true) {
+                        ExposedBanner()
+                    }
+                    if (state.node?.synced == false) NodeBanner(stringResource(R.string.wallet_node_syncing))
+                    if (state.node?.connections == 0) NodeBanner(stringResource(R.string.wallet_node_no_peers))
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -323,12 +334,25 @@ fun WalletScreen(
                             Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            stringResource(R.string.wallet_node_row),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.wallet_node_row),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            // As skycoin-web's node status bar: whether the node answers, and how far it is.
+                            val height = state.node?.height
+                            Text(
+                                when {
+                                    !state.nodeReachable -> stringResource(R.string.wallet_node_status_down)
+                                    height != null -> stringResource(R.string.wallet_node_status_ok, Amounts.groupThousands(height.toString()))
+                                    else -> stringResource(R.string.wallet_node_status_checking)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (state.nodeReachable) CONNECTED_GREEN else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
                         Text(
                             state.coin.nodeUrl.substringAfter("://"),
                             style = MaterialTheme.typography.bodyMedium,
@@ -468,6 +492,14 @@ private fun BalanceHeader(state: WalletUiState) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             }
         }
+        state.usdPrice?.let { price ->
+            Text(
+                stringResource(R.string.wallet_usd_value, coin.usdText(snapshot?.confirmed ?: 0uL, price)),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         Text(
             text = when (coin.kind) {
                 CoinKind.BTC -> stringResource(R.string.wallet_btc_sub, snapshot?.spendableOutputs ?: 0)
@@ -527,6 +559,44 @@ private fun ScanPendingBanner() {
         Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = PENDING_AMBER)
         Text(
             stringResource(R.string.wallet_scan_pending),
+            style = MaterialTheme.typography.bodySmall,
+            color = PENDING_AMBER,
+        )
+    }
+}
+
+/** The node is behind or alone, so what it says may be out of date, as skycoin-web's header warns. */
+@Composable
+private fun NodeBanner(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PENDING_AMBER.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(Icons.Outlined.Sync, null, Modifier.size(16.dp), tint = PENDING_AMBER)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = PENDING_AMBER)
+    }
+}
+
+/** Coins sit at addresses whose public keys are on the chain, as skycoin-web warns. */
+@Composable
+private fun ExposedBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(PENDING_AMBER.copy(alpha = 0.12f))
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Icon(Icons.Outlined.WarningAmber, null, Modifier.size(16.dp), tint = PENDING_AMBER)
+        Text(
+            stringResource(R.string.wallet_exposed_banner),
             style = MaterialTheme.typography.bodySmall,
             color = PENDING_AMBER,
         )

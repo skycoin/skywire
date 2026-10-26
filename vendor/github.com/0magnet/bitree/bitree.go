@@ -33,6 +33,10 @@ type Node struct {
 	Right []*Node
 	Left  []*Node
 	Cols  []string
+	// Above, if set, is a line of text drawn above the node's row in its label
+	// column. The parent's trunk runs past it, and it takes no part in column
+	// alignment.
+	Above string
 }
 
 // CellKind identifies the semantic role of a cell passed to StyleCell.
@@ -56,6 +60,8 @@ const (
 	CellHeaderLabel
 	// CellHeaderColumn is a label-header row trailing column label.
 	CellHeaderColumn
+	// CellAbove is a node's Above line.
+	CellAbove
 )
 
 // GlyphSet is the set of box-drawing glyphs used by the renderer. The zero
@@ -122,6 +128,13 @@ type Options struct {
 	HeaderLeft  string
 	HeaderLabel string
 	HeaderCols  []string
+	// SpineLeft, SpineLabel and SpineCols label the line between the root and
+	// its first child: SpineLeft over the left blocks, SpineLabel over the
+	// children's labels and SpineCols over their trailing columns. They are
+	// styled as CellHeaderLeft, CellHeaderLabel and CellHeaderColumn.
+	SpineLeft  string
+	SpineLabel string
+	SpineCols  []string
 }
 
 func (o Options) hasHeader() bool {
@@ -197,6 +210,7 @@ type rline struct {
 	prefix string
 	label  string
 	cols   []string
+	above  bool
 }
 
 func (r rline) treeWidth() int { return dispWidth(r.prefix) + dispWidth(r.label) }
@@ -204,7 +218,11 @@ func (r rline) treeWidth() int { return dispWidth(r.prefix) + dispWidth(r.label)
 // rightLayout renders node as a standard downward tree flowing rightward. The
 // node's label is row 0; each right child hangs below with ├──/└── connectors.
 func rightLayout(node *Node, g GlyphSet) []rline {
-	out := []rline{{prefix: "", label: node.Label, cols: node.Cols}}
+	var out []rline
+	if node.Above != "" {
+		out = append(out, rline{label: node.Above, above: true})
+	}
+	out = append(out, rline{prefix: "", label: node.Label, cols: node.Cols})
 	h := g.Horizontal
 	for i, child := range node.Right {
 		last := i == len(node.Right)-1
@@ -217,12 +235,19 @@ func rightLayout(node *Node, g GlyphSet) []rline {
 			cont = g.Vertical + "   "       // "│   "
 		}
 		sub := rightLayout(child, g)
+		headAt := 0
+		if sub[0].above {
+			headAt = 1
+		}
 		for j, s := range sub {
 			p := cont
-			if j == 0 {
+			switch {
+			case j < headAt:
+				p = g.Vertical + "   " // the trunk runs past the child's Above line
+			case j == headAt:
 				p = head
 			}
-			out = append(out, rline{prefix: p + s.prefix, label: s.label, cols: s.cols})
+			out = append(out, rline{prefix: p + s.prefix, label: s.label, cols: s.cols, above: s.above})
 		}
 	}
 	return out
@@ -354,27 +379,36 @@ func Render(root *Node, opts Options) string {
 		// carries a left-side summary block.
 		up := true
 		down := i < nRoutes-1
+		// An Above line comes first; the route's junction and left block start on
+		// the row after it.
+		at := 0
+		if rlines[0].above {
+			at = 1
+		}
 		n := len(rlines)
-		if len(llines) > n {
-			n = len(llines)
+		if at+len(llines) > n {
+			n = at + len(llines)
 		}
 		rows := make([]row, n)
 		for r := 0; r < n; r++ {
 			var rw row
-			if r < len(llines) {
-				rw.left = llines[r]
-				rw.hasLeft = len(route.Left) > 0 && r == 0
+			if r >= at && r-at < len(llines) {
+				rw.left = llines[r-at]
+				rw.hasLeft = len(route.Left) > 0 && r == at
 			}
 			if r < len(rlines) {
 				rw.right = rlines[r]
 				rw.hasRight = true
 			}
-			if r == 0 {
+			switch {
+			case r == at:
 				rw.anchor = true
 				rw.spine = spineGlyph(g, up, down, len(route.Left) > 0)
-			} else if down {
+			case r < at:
 				rw.spine = g.Vertical
-			} else {
+			case down:
+				rw.spine = g.Vertical
+			default:
 				rw.spine = " "
 			}
 			rows[r] = rw
@@ -387,6 +421,15 @@ func Render(root *Node, opts Options) string {
 	// into leftWidth here (before the spine column is derived).
 	if opts.hasHeader() {
 		if dw := dispWidth(opts.HeaderLeft); dw > leftWidth {
+			leftWidth = dw
+		}
+	}
+	rootLeft := ""
+	if len(root.Left) > 0 {
+		rootLeft = root.Left[0].Label
+	}
+	for _, l := range []string{rootLeft, opts.SpineLeft} {
+		if dw := dispWidth(l); dw > leftWidth {
 			leftWidth = dw
 		}
 	}
@@ -407,7 +450,7 @@ func Render(root *Node, opts Options) string {
 	}
 	for _, rows := range routes {
 		for _, rw := range rows {
-			if !rw.hasRight {
+			if !rw.hasRight || rw.right.above {
 				continue
 			}
 			if tw := rw.right.treeWidth(); tw > treeWidth {
@@ -422,6 +465,18 @@ func Render(root *Node, opts Options) string {
 		}
 		foldCols(opts.HeaderCols)
 	}
+	// The root label starts one cell left of the routes' right text, which
+	// carries a 3-cell arm, so its columns need 4 more cells of tree.
+	if len(root.Cols) > 0 {
+		if tw := dispWidth(root.Label) - 4; tw > treeWidth {
+			treeWidth = tw
+		}
+		foldCols(root.Cols)
+	}
+	if tw := dispWidth(opts.SpineLabel); tw > treeWidth {
+		treeWidth = tw
+	}
+	foldCols(opts.SpineCols)
 
 	gutter := strings.Repeat(" ", opts.LeftGutter)
 	sep := opts.colSep()
@@ -432,10 +487,24 @@ func Render(root *Node, opts Options) string {
 		b.WriteString(strings.TrimRight(s, " "))
 		b.WriteByte('\n')
 	}
-
-	// spineCol is the 0-based column of the spine glyph: gutter + left field +
-	// the joining space + the 2-cell arm.
-	spineCol := opts.LeftGutter + leftWidth + 1 + 2
+	colText := func(cols []string, kind CellKind) string {
+		var s string
+		for ci, c := range cols {
+			s += sep
+			cell := opts.style(c, kind)
+			if pad := colW[ci] - dispWidth(c); pad > 0 {
+				cell += strings.Repeat(" ", pad)
+			}
+			s += cell
+		}
+		return s
+	}
+	padTo := func(plain string, styled string, w int) string {
+		if pad := w - dispWidth(plain); pad > 0 {
+			return styled + strings.Repeat(" ", pad)
+		}
+		return styled
+	}
 
 	// Optional label-header row: a template/legend shaped like a data row, drawn
 	// above the root. It uses a horizontal pass-through (g.Horizontal) at the spine
@@ -469,9 +538,20 @@ func Render(root *Node, opts Options) string {
 	// spine. Read without the left summary branches this is a normal downward
 	// tree: the source PK at top, hop chains hanging below it in the same PK
 	// column, so the root aligns with the other PKs instead of floating centered.
-	rootCol := spineCol
-	writeLine(strings.Repeat(" ", rootCol) + opts.style(root.Label, CellRoot))
-	writeLine(strings.Repeat(" ", spineCol) + g.Vertical)
+	rootArm := "   "
+	if rootLeft != "" {
+		rootArm = " " + h + h
+	}
+	rootLine := gutter + opts.style(padLeft(rootLeft, leftWidth), CellLeft) + rootArm + opts.style(root.Label, CellRoot)
+	if len(root.Cols) > 0 {
+		rootLine = padTo(root.Label, rootLine, treeWidth+4) + colText(root.Cols, CellColumn)
+	}
+	writeLine(rootLine)
+	spineLine := gutter + opts.style(padLeft(opts.SpineLeft, leftWidth), CellHeaderLeft) + "   " + g.Vertical
+	if opts.SpineLabel != "" || len(opts.SpineCols) > 0 {
+		spineLine += "   " + padTo(opts.SpineLabel, opts.style(opts.SpineLabel, CellHeaderLabel), treeWidth) + colText(opts.SpineCols, CellHeaderColumn)
+	}
+	writeLine(spineLine)
 
 	for _, rows := range routes {
 		for _, rw := range rows {
@@ -497,7 +577,11 @@ func Render(root *Node, opts Options) string {
 				} else {
 					rprefix = "   "
 				}
-				tree := rprefix + rw.right.prefix + opts.style(rw.right.label, CellLabel)
+				kind := CellLabel
+				if rw.right.above {
+					kind = CellAbove
+				}
+				tree := rprefix + rw.right.prefix + opts.style(rw.right.label, kind)
 				// pad tree to treeWidth+3 (prefix adds 3) using plain width.
 				plainW := 3 + rw.right.treeWidth()
 				if pad := (treeWidth + 3) - plainW; pad > 0 {

@@ -29,6 +29,7 @@ import (
 	miekgdns "github.com/miekg/dns"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 func run(t *testing.T, name string, args ...string) {
@@ -62,7 +63,7 @@ func TestRedirectNetns(t *testing.T) {
 		gotScheme string
 		gotPort   uint16
 	)
-	dial := func(_ context.Context, scheme string, _ cipher.PubKey, port uint16) (net.Conn, error) {
+	dial := func(_ context.Context, scheme string, _ cipher.PubKey, port uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 		gotScheme, gotPort = scheme, port
 		return net.Dial("tcp", upAddr)
 	}

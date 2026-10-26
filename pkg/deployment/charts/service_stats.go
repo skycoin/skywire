@@ -50,6 +50,8 @@ const maxTimings = 4096
 // API and each CXO feed), and HTTP requests by endpoint and status.
 type ServiceStats struct {
 	name string
+	// view is set on a ServiceStats that only draws another process's samples.
+	view bool
 
 	mu      sync.Mutex
 	clients []*dmsg.Client
@@ -80,6 +82,12 @@ func NewServiceStats(name string) *ServiceStats {
 	inProcess.mu.Unlock()
 	return &ServiceStats{name: name, names: map[uint16]string{}, prevNet: map[string]dmsg.PortTraffic{},
 		reqs: map[string]float64{}, codes: map[string]float64{}, out: map[string]float64{}, vers: map[string]float64{}}
+}
+
+// NewStatsView draws the samples another process's ServiceStats took, such as
+// a visor's on its hypervisor's page. It collects nothing.
+func NewStatsView(name string) *ServiceStats {
+	return &ServiceStats{name: name, view: true}
 }
 
 // sharedBy names every service running in this process when there is more
@@ -285,7 +293,9 @@ func (s *ServiceStats) Charts(f *Frame, from, to time.Time) []Chart {
 		return Chart{Title: title, Note: note, Kind: kind, From: from, To: to, Times: f.Times, Format: format, Series: series}
 	}
 	process := "this service's process"
-	if shared := sharedBy(); shared != "" {
+	if s.view {
+		process = "the " + s.name + "'s process"
+	} else if shared := sharedBy(); shared != "" {
 		process = "the process the " + shared + " share"
 	}
 	out := []Chart{

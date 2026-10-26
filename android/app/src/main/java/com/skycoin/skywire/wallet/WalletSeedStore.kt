@@ -52,11 +52,28 @@ class WalletSeedStore(private val context: Context) {
 
     suspend fun deleteSeed(walletId: String) {
         mutex.withLock {
-            store.edit { it.remove(seedKey(walletId)) }
+            store.edit {
+                it.remove(seedKey(walletId))
+                it.remove(passphraseKey(walletId))
+            }
         }
     }
 
+    /** The BIP 39 passphrase, sealed like the phrase; an empty one is not stored. */
+    suspend fun putPassphrase(walletId: String, passphrase: String) {
+        if (passphrase.isEmpty()) return
+        mutex.withLock {
+            store.edit { it[passphraseKey(walletId)] = encrypt(passphrase) }
+        }
+    }
+
+    /** Empty when the wallet has none. */
+    suspend fun passphrase(walletId: String): String = mutex.withLock {
+        store.data.first()[passphraseKey(walletId)]?.let { decrypt(it) }.orEmpty()
+    }
+
     private fun seedKey(walletId: String) = stringPreferencesKey("seed_$walletId")
+    private fun passphraseKey(walletId: String) = stringPreferencesKey("passphrase_$walletId")
 
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }

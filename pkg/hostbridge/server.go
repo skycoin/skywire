@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,6 +46,8 @@ type Server struct {
 	ids    atomic.Uint64
 	mu     sync.Mutex
 	paired Pairing
+	// tuns are the devices this bridge opened, the only ones opNet sets up.
+	tuns map[string]bool
 }
 
 // NewServer returns a bridge with the given policy. An empty token is refused
@@ -210,6 +213,11 @@ func (s *Server) serveStream(sess *yamux.Session, st net.Conn) {
 			}
 			_, _ = pc.WriteTo(buf[:n], net.UDPAddrFromAddrPort(ap)) //nolint:errcheck
 		}
+	case opTUN:
+		s.serveTUN(st, br)
+	case opNet:
+		res, err := s.netOp(network, addr)
+		_ = writeReply(st, err, res, "") //nolint:errcheck
 	}
 }
 
@@ -245,4 +253,104 @@ func pipe(st net.Conn, sr io.Reader, c net.Conn) {
 	if err == nil {
 		<-done
 	}
+}
+
+// serveTUN opens a TUN device and moves packets between it and the stream
+// until either ends. Closing the device deletes it and every route through
+// it, so the host's routing falls back when the tab goes away.
+func (s *Server) serveTUN(st net.Conn, br *bufio.Reader) {
+	t, err := openTUN()
+	if err != nil {
+		_ = writeReply(st, err, "", "") //nolint:errcheck
+		return
+	}
+	s.mu.Lock()
+	if s.tuns == nil {
+		s.tuns = map[string]bool{}
+	}
+	s.tuns[t.Name()] = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.tuns, t.Name())
+		s.mu.Unlock()
+	}()
+	if writeReply(st, nil, t.Name(), "") != nil {
+		t.release()
+		return
+	}
+	s.logf("opened %s", t.Name())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer st.Close() //nolint:errcheck
+		buf := make([]byte, maxDatagram)
+		for {
+			n, err := t.Read(buf)
+			if err != nil {
+				return
+			}
+			if writePacket(st, buf[:n]) != nil {
+				return
+			}
+		}
+	}()
+	buf := make([]byte, maxDatagram)
+	for {
+		n, err := readPacket(br, buf)
+		if err != nil {
+			break
+		}
+		_, _ = t.Write(buf[:n]) //nolint:errcheck
+	}
+	_ = t.Close() //nolint:errcheck
+	<-done
+	t.release()
+	s.logf("closed %s", t.Name())
+}
+
+// netOp runs one opNet request. args are space separated.
+func (s *Server) netOp(cmd, args string) (string, error) {
+	f := strings.Fields(args)
+	switch {
+	case cmd == "gateway":
+		return defaultGateway()
+	case cmd == "resolve" && len(f) == 1:
+		return resolve4(f[0])
+	case cmd == "setup" && len(f) == 3:
+		s.mu.Lock()
+		ours := s.tuns[f[0]]
+		s.mu.Unlock()
+		if !ours {
+			return "", errors.New("hostbridge: " + f[0] + " is not a device this bridge opened")
+		}
+		mtu, err := strconv.Atoi(f[2])
+		if err != nil {
+			return "", err
+		}
+		return "", tunSetup(f[0], f[1], mtu)
+	case cmd == "route" && len(f) == 3:
+		s.logf("route %s %s via %s", f[0], f[1], f[2])
+		return "", route(f[0], f[1], f[2])
+	}
+	return "", errors.New("hostbridge: bad request")
+}
+
+// resolve4 looks a name up on the host, as the browser beside it does, and
+// returns its IPv4 addresses.
+func resolve4(name string) (string, error) {
+	ips, err := net.LookupIP(name)
+	if err != nil {
+		return "", err
+	}
+	var v4 []string
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			v4 = append(v4, ip.String())
+		}
+	}
+	if len(v4) == 0 {
+		return "", errors.New("hostbridge: no IPv4 address for " + name)
+	}
+	return strings.Join(v4, " "), nil
 }

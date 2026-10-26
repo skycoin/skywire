@@ -575,6 +575,16 @@ func isSecureURL(addr string) bool {
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
+	if srv := inProcessServer(entry.Static); srv != nil && ce.conf.Callbacks.OnSessionDial(CarrierInProcess, "pipe") == nil {
+		dSes, ierr := ce.dialSessionInProcess(srv, entry)
+		if ierr == nil {
+			ce.log.WithField("remote_pk", entry.Static).Info("in-process stream session initial")
+			return ce.finishDialedSession(ctx, dSes, CarrierInProcess, "pipe", entry)
+		}
+		ce.conf.Callbacks.OnSessionDisconnect(CarrierInProcess, "pipe", ierr)
+		ce.log.WithError(ierr).WithField("remote_pk", entry.Static).Debug("In-process session failed; dialing over the network")
+	}
+
 	// Pick the carrier from the client's ordered Carriers preference: the first
 	// listed carrier the server advertises wins; empty/no-match falls back to the
 	// default (QUIC when advertised, else TCP). The chosen carrier is dialed below

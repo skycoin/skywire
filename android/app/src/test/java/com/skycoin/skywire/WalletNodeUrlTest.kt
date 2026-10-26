@@ -37,7 +37,7 @@ class WalletNodeUrlTest {
 
     @Test
     fun anAddressTheUserSetWins() {
-        val moved = fiber.withNodeOverride(mapOf("fiber-1" to "http://10.0.0.5:6420"))
+        val moved = fiber.withNodeOverride(mapOf("fiber-1" to listOf("http://10.0.0.5:6420")))
         assertEquals("http://10.0.0.5:6420", moved.nodeUrl)
         // Nothing else about the coin moves with it.
         assertEquals(fiber.id, moved.id)
@@ -47,7 +47,7 @@ class WalletNodeUrlTest {
 
     @Test
     fun anotherCoinsOverrideIsNotThisOnes() {
-        assertSame(fiber, fiber.withNodeOverride(mapOf("SKY" to "http://elsewhere")))
+        assertSame(fiber, fiber.withNodeOverride(mapOf("SKY" to listOf("http://elsewhere"))))
     }
 
     @Test
@@ -55,18 +55,18 @@ class WalletNodeUrlTest {
         // Clearing the field is how "go back to the default" is expressed, and
         // an entry that survived as whitespace must not point the wallet at
         // nothing.
-        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to "")))
-        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to "   ")))
+        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to listOf(""))))
+        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to listOf("   "))))
     }
 
     @Test
     fun anOverrideEqualToTheShippedAddressChangesNothing() {
-        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to "https://node.example")))
+        assertSame(fiber, fiber.withNodeOverride(mapOf("fiber-1" to listOf("https://node.example"))))
     }
 
     @Test
     fun bitcoinsNodeMovesLikeAnyOther() {
-        val moved = CoinSpec.BTC.withNodeOverride(mapOf("BTC" to "https://blockstream.info"))
+        val moved = CoinSpec.BTC.withNodeOverride(mapOf("BTC" to listOf("https://blockstream.info")))
         assertEquals("https://blockstream.info", moved.nodeUrl)
         assertNull(moved.indexerUrl)
     }
@@ -75,7 +75,7 @@ class WalletNodeUrlTest {
     fun theEthereumIndexerMovesOnItsOwn() {
         // Balances come from the node and history from the indexer, so each
         // has to land where it was asked to, and nowhere else.
-        val node = CoinSpec.ETH.withNodeOverride(mapOf("ETH" to "https://rpc.example"))
+        val node = CoinSpec.ETH.withNodeOverride(mapOf("ETH" to listOf("https://rpc.example")))
         assertEquals("https://rpc.example", node.nodeUrl)
         assertEquals(CoinSpec.ETH_INDEXER, node.indexerUrl)
 
@@ -88,8 +88,9 @@ class WalletNodeUrlTest {
     fun aTokenIsMovedByItsOwnId() {
         // USDT shares ETH's endpoints when shipped, but a choice made on the
         // ETH screen is not one made for USDT.
-        val ethOnly = mapOf("ETH" to "https://rpc.example")
-        assertSame(CoinSpec.USDT, CoinSpec.USDT.withNodeOverride(ethOnly, ethOnly))
+        val ethOnly = mapOf("ETH" to listOf("https://rpc.example"))
+        val ethOnlyIndexer = mapOf("ETH" to "https://rpc.example")
+        assertSame(CoinSpec.USDT, CoinSpec.USDT.withNodeOverride(ethOnly, ethOnlyIndexer))
         val usdt = CoinSpec.USDT.withNodeOverride(emptyMap(), mapOf("USDT" to "https://scout.example"))
         assertEquals("https://scout.example", usdt.indexerUrl)
     }

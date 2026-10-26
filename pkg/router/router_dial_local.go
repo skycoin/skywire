@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -113,7 +114,8 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	// The bulk snapshot is a single fetch (cached, see tpd_cache.go),
 	// so the same data costs one round-trip per TTL instead of one
 	// per hop per dial.
-	if len(misses) > 0 && r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil && r.tpdCache != nil {
+	if len(misses) > 0 && r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil && r.tpdCache != nil &&
+		routersettings.DialLocalGraph.Bool() {
 		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports, versionProbe(r.tm.Conf.DiscoveryClient))
 		if err != nil {
 			// snap is non-nil when a prior snapshot was served stale;
@@ -148,6 +150,34 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	return func(id uuid.UUID) float64 { return latencyCache[id] },
 		func(id uuid.UUID) string { return typeCache[id] },
 		func(id uuid.UUID) float64 { return throughputCache[id] }
+}
+
+// errLocalGraphOff is calculateLocalRoutes' answer for a multi-hop route on a
+// visor that does not hold the transport graph (dial.local_graph off).
+var errLocalGraphOff = errors.New("local route calculation is off on this visor (dial.local_graph): no direct transport to the destination")
+
+// localTransportGraph is the transport graph local calculation searches: the
+// cached snapshot, or a fetch of its own on a router without the cache. gen is
+// the snapshot's generation for the route memo, zero without the cache.
+func (r *router) localTransportGraph(ctx context.Context, dc transport.DiscoveryClient) (g localBFSGraph, all []*transport.Entry, gen uint64, err error) {
+	if !routersettings.DialLocalGraph.Bool() {
+		return g, nil, 0, errLocalGraphOff
+	}
+	if r.tpdCache != nil {
+		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
+		if snap == nil {
+			// Cold-cache failure only: a stale snapshot is returned non-nil.
+			return g, nil, 0, fmt.Errorf("failed to fetch transport discovery data: %w", serr)
+		}
+		g = localBFSGraph{byEdge: snap.byEdge, latencyByID: snap.latencyByID, typeByID: snap.typeByID, throughputByID: snap.throughputByID}
+		return g, snap.entries, snap.gen, nil
+	}
+	all, err = dc.GetAllTransports(ctx)
+	if err != nil {
+		return g, nil, 0, fmt.Errorf("failed to fetch transport discovery data: %w", err)
+	}
+	g.byEdge, g.latencyByID, g.typeByID, g.throughputByID = deriveTransportLookups(all)
+	return g, all, 0, nil
 }
 
 // directRoute returns a 1-hop route over an existing OPEN local transport to dst,
@@ -415,36 +445,15 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// sort per call — enough to peg the single js/wasm thread in GC. When
 	// there is no cache (tpdCache == nil, tests / bare router) we derive the
 	// same lookups locally from a direct fetch.
-	var (
-		allEntries       []*transport.Entry
-		transportsByEdge map[cipher.PubKey][]*transport.Entry
-		tpLatencyMs      map[uuid.UUID]float64
-		tpTypeOf         map[uuid.UUID]string
-		tpThroughput     map[uuid.UUID]float64
-		snapGen          uint64 // TPD-snapshot generation, for the local-route memo (zero on the no-cache path)
-	)
-	if r.tpdCache != nil {
-		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports, versionProbe(dc))
-		if snap == nil {
-			// Cold-cache failure only — a stale snapshot would be
-			// returned non-nil. Nothing to compute routes from.
-			log.WithError(serr).Warn("Failed to fetch all transports for route calculation")
-			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", serr)
-		}
-		allEntries = snap.entries
-		transportsByEdge = snap.byEdge
-		tpLatencyMs = snap.latencyByID
-		tpTypeOf = snap.typeByID
-		tpThroughput = snap.throughputByID
-		snapGen = snap.gen
-	} else {
-		allEntries, err = dc.GetAllTransports(ctx)
-		if err != nil {
+	// Past the direct-transport check, local calculation needs the whole graph.
+	g, allEntries, snapGen, err := r.localTransportGraph(ctx, dc)
+	if err != nil {
+		if !errors.Is(err, errLocalGraphOff) {
 			log.WithError(err).Warn("Failed to fetch all transports for route calculation")
-			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
 		}
-		transportsByEdge, tpLatencyMs, tpTypeOf, tpThroughput = deriveTransportLookups(allEntries)
+		return nil, nil, err
 	}
+	transportsByEdge, tpLatencyMs, tpTypeOf, tpThroughput := g.byEdge, g.latencyByID, g.typeByID, g.throughputByID
 	log.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 
 	// For self-ping, try 2-hop route through any available transport partner

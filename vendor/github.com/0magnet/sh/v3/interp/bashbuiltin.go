@@ -300,13 +300,11 @@ func (r *Runner) compgenWords(ctx context.Context, action compgenAction, word st
 		out = append(out, r.compgenPaths(ctx, word, action == "directory")...)
 	case "job":
 		for _, bg := range r.jobList() {
-			out = append(out, bg.cmd)
+			out = append(out, jobText(bg))
 		}
 	case "signal":
-		// Walked rather than ranged over a table, so the names are the
-		// platform's own; see signalName in os_unix.go.
-		for num := 1; num <= maxSignal; num++ {
-			if name := signalName(num); name != "" {
+		for _, name := range signalNames {
+			if name != "" {
 				out = append(out, "SIG"+name)
 			}
 		}

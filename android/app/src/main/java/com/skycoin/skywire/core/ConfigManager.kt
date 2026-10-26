@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -324,6 +325,15 @@ class ConfigManager(
                 }
             }
             putObject("dmsgscp") { put("disabled", JsonPrimitive(true)) }
+            // The wallet reaches nodes named <pk>.dmsg through the visor's own
+            // resolver. Any app on the phone can reach a loopback port, so it
+            // relays .dmsg only and shows the visor's own page as a stranger would.
+            putObject("dmsg_web") {
+                put("enable", JsonPrimitive(true))
+                put("proxy_port", JsonPrimitive(DmsgWeb.PORT))
+                put("upstream_socks", JsonPrimitive("none"))
+                put("self_loopback_authenticated", JsonPrimitive(false))
+            }
         }
         paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), edited))
     }
@@ -627,11 +637,23 @@ class ConfigManager(
 
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
-            val process = ProcessBuilder(argv)
-                .directory(paths.dataDir)
-                .redirectErrorStream(true)
-                .apply { environment().putAll(coreEnv(paths)) }
-                .start()
+            // The command runs in dataDir, which a fresh install has not made
+            // until Connect, so "Replace secret key" before it could not spawn.
+            paths.ensureDirs()
+            val process = try {
+                ProcessBuilder(argv)
+                    .directory(paths.dataDir)
+                    .redirectErrorStream(true)
+                    .apply { environment().putAll(coreEnv(paths)) }
+                    .start()
+            } catch (e: IOException) {
+                // Named by the binary: the last argument of `config pk` is the secret key.
+                return@withContext CommandResult(
+                    exitCode = -1,
+                    output = "${File(argv.first()).name}: ${e.message}",
+                    timedOut = false,
+                )
+            }
             supervisorScope {
                 val output = StringBuilder()
                 val reader = launch {
@@ -687,6 +709,11 @@ private inline fun JsonObject.edit(block: MutableMap<String, kotlinx.serializati
     val map = toMutableMap()
     map.block()
     return JsonObject(map)
+}
+
+/** The visor's .dmsg resolver as the phone runs it: a SOCKS5 listener on loopback. */
+object DmsgWeb {
+    const val PORT = 4445
 }
 
 private inline fun MutableMap<String, kotlinx.serialization.json.JsonElement>.putObject(

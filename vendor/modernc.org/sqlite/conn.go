@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -26,6 +27,22 @@ type conn struct {
 	// Context handling can cause conn.Close and conn.interrupt to be invoked
 	// concurrently.
 	sync.Mutex
+
+	// waitCtx is the context of the call in progress on this connection, if
+	// it has one, so that a wait for a shared-cache lock in retry ends once
+	// it is done. Calls on a connection do not overlap, but they nest, e.g.
+	// preparing inside an exec, so each restores the outer call's.
+	waitCtx context.Context
+
+	// canceled is set once the context of the call in progress is done, see
+	// interruptOnDone. canceledRegistered records that cancellationFlags
+	// holds it for db.
+	canceled           atomic.Int32
+	canceledRegistered bool
+
+	// waitingForLock is set while retry waits for a shared-cache lock, so
+	// that tests can see the wait.
+	waitingForLock atomic.Bool
 
 	writeTimeFormat   string
 	beginMode         string
@@ -229,8 +246,9 @@ func (c *conn) applyTimezone(t time.Time) time.Time {
 // writeTimeFormats are the names and formats supported
 // by the `_time_format` DSN query param.
 var writeTimeFormats = map[string]string{
-	"sqlite":   parseTimeFormats[0],
-	"datetime": "2006-01-02 15:04:05",
+	"sqlite":              parseTimeFormats[0],
+	"datetime":            "2006-01-02 15:04:05",
+	"string_no_monotonic": "2006-01-02 15:04:05.999999999 -0700 MST",
 }
 
 func (c *conn) formatTime(t time.Time) string {
@@ -448,9 +466,16 @@ func (c *conn) step(pstmt uintptr) (int, error) {
 	}
 }
 
+// retry waits until the connection holding the shared-cache lock that made
+// pstmt, or the statement being prepared when pstmt is 0, return
+// SQLITE_LOCKED_SHAREDCACHE releases it. busy_timeout does not apply to that
+// code, so the wait is not bounded by it; it ends early, with the context's
+// error, once the context of the call (waitCtx) is done, also if it is done
+// before the wait begins.
 func (c *conn) retry(pstmt uintptr) error {
 	mu := mutexAlloc(c.tls)
-	(*mutex)(unsafe.Pointer(mu)).Lock()
+	m := (*mutex)(unsafe.Pointer(mu))
+	m.Lock()
 	rc := sqlite3.Xsqlite3_unlock_notify(
 		c.tls,
 		c.db,
@@ -460,14 +485,45 @@ func (c *conn) retry(pstmt uintptr) error {
 		mu,
 	)
 	if rc == sqlite3.SQLITE_LOCKED { // Deadlock, see https://www.sqlite.org/c3ref/unlock_notify.html
-		(*mutex)(unsafe.Pointer(mu)).Unlock()
+		m.Unlock()
 		mutexFree(c.tls, mu)
 		return c.errstr(rc)
 	}
 
-	(*mutex)(unsafe.Pointer(mu)).Lock()
-	(*mutex)(unsafe.Pointer(mu)).Unlock()
+	// The callback or, once the context is done, ctxWake unlocks m, which
+	// ends the wait. context.AfterFunc runs ctxWake at once if the context
+	// is done already.
+	ctx := c.waitCtx
+	var ctxWoke bool
+	var ctxWakeDone chan struct{}
+	var stop func() bool
+	if ctx != nil && ctx.Done() != nil {
+		ctxWakeDone = make(chan struct{})
+		stop = context.AfterFunc(ctx, func() {
+			ctxWoke = m.wake()
+			close(ctxWakeDone)
+		})
+	}
+
+	c.waitingForLock.Store(true)
+	m.Lock()
+	c.waitingForLock.Store(false)
+
+	// A ctxWake that has started may still use m, so it is waited for
+	if stop != nil && !stop() {
+		<-ctxWakeDone
+	}
+
+	// Cancels the callback if the context ended the wait, and in any case
+	// returns only once no callback is running: SQLite invokes it, and
+	// handles this call, under the same mutex, so mu can be freed
+	sqlite3.Xsqlite3_unlock_notify(c.tls, c.db, 0, 0)
 	mutexFree(c.tls, mu)
+
+	if ctxWoke {
+		return ctx.Err()
+	}
+
 	if pstmt != 0 {
 		sqlite3.Xsqlite3_reset(c.tls, pstmt)
 	}
@@ -1015,6 +1071,11 @@ func (c *conn) Close() (err error) {
 	defer c.Unlock()
 
 	if c.db != 0 {
+		unregisterAuthorizer(c.db)
+		unregisterHooks(c.db)
+		cancellationFlags.Delete(c.db)
+		busyConns.Delete(c.db)
+		c.canceledRegistered = false
 		if err := c.closeV2(c.db); err != nil {
 			return err
 		}
@@ -1178,8 +1239,36 @@ func (c *conn) Prepare(query string) (ds driver.Stmt, err error) {
 }
 
 func (c *conn) prepare(ctx context.Context, query string) (s driver.Stmt, err error) {
-	//TODO use ctx
-	return newStmt(c, query)
+	return c.newStmtContext(ctx, query)
+}
+
+// newStmtContext is newStmt for a call with a context: preparing a statement
+// can wait for a shared-cache lock, or for a lock under busy_timeout, and
+// either wait ends early, with ctx.Err(), once ctx is done. Only the waits
+// watch ctx, see retry and busyHandler.
+func (c *conn) newStmtContext(ctx context.Context, query string) (*stmt, error) {
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+	}
+
+	prevWaitCtx := c.waitCtx
+	c.waitCtx = ctx
+	defer func() { c.waitCtx = prevWaitCtx }()
+
+	if ctx != nil && ctx.Done() != nil {
+		c.ensureBusyHandler()
+	}
+	s, err := newStmt(c, query)
+	if err != nil && ctx != nil && ctx.Err() != nil {
+		// A wait for a lock that the context ended, see busyHandler, or any
+		// other failure once the context is done: report the context
+		return nil, ctx.Err()
+	}
+	return s, err
 }
 
 // Queryer is an optional interface that may be implemented by a Conn.
@@ -1200,9 +1289,9 @@ func (c *conn) Query(query string, args []driver.Value) (dr driver.Rows, err err
 }
 
 func (c *conn) query(ctx context.Context, query string, args []driver.NamedValue) (r driver.Rows, err error) {
-	// Use newStmt directly. c.prepare wraps this, but we need the concrete *stmt type
+	// Use newStmtContext directly. c.prepare wraps this, but we need the concrete *stmt type
 	// to manipulate the handle ownership below.
-	s, err := newStmt(c, query)
+	s, err := c.newStmtContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

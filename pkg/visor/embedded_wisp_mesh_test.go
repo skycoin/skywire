@@ -12,6 +12,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
@@ -93,7 +94,7 @@ func TestWispMeshEgress(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	var mu sync.Mutex
 	var dialed []meshDialRecord
-	gw, err := meshgw.New(func(_ context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+	gw, err := meshgw.New(func(_ context.Context, scheme string, dest cipher.PubKey, port uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 		mu.Lock()
 		dialed = append(dialed, meshDialRecord{scheme, dest, port})
 		mu.Unlock()
@@ -150,7 +151,7 @@ func TestWispMeshEgress(t *testing.T) {
 // TestWispIPv6LookupsGetNoAnswer: the guest network is IPv4 only, so an IPv6
 // lookup is answered empty here and never reaches the exit.
 func TestWispIPv6LookupsGetNoAnswer(t *testing.T) {
-	gw, err := meshgw.New(func(context.Context, string, cipher.PubKey, uint16) (net.Conn, error) {
+	gw, err := meshgw.New(func(context.Context, string, cipher.PubKey, uint16, []skynetweb.RouteLabel) (net.Conn, error) {
 		return nil, errors.New("no mesh")
 	}, wispMeshCIDR, nil, nil)
 	if err != nil {

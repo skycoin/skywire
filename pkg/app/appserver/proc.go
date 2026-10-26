@@ -191,7 +191,6 @@ func (p *Proc) InjectConn(conn net.Conn) bool {
 func (p *Proc) AwaitConn() bool {
 	<-p.connCh
 	rpcS := rpc.NewServer()
-	// TinyGo builds register reflection-free handlers, see rpc_register_tinygo.go.
 	if err := registerIngressRPC(rpcS, p.conf.ProcKey.String(), p.rpcGW); err != nil {
 		panic(err)
 	}

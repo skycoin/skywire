@@ -106,5 +106,6 @@ func openSkyDNSTun() (TUNDevice, error) {
 // to the tun. A resolved restart forgets them while the tun stays up.
 func skyDNSZonesSet() bool {
 	out, err := osutil.RunWithResult("resolvectl", "domain", SkyDNSTunName)
-	return err == nil && strings.Contains(string(out), "~dmsg") && strings.Contains(string(out), "~skynet")
+	return err == nil && strings.Contains(string(out), "~dmsg") && strings.Contains(string(out), "~skynet") &&
+		strings.Contains(string(out), "~skywire")
 }

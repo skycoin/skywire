@@ -136,8 +136,8 @@ func testMuxOverStcprTriangle(t *testing.T, env *TestEnv) {
 	// visors right now. Start the session, then reshape the live route
 	// group to two legs with the runtime mux control.
 	startCmd := fmt.Sprintf(
-		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --internal --timeout %d",
-		visorC, serverPK, muxClientStartTimeoutSec,
+		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --addr %s --internal --timeout %d",
+		visorC, serverPK, proxyListenAddr, muxClientStartTimeoutSec,
 	)
 	startOut, startErr := env.Exec(startCmd)
 	require.NoErrorf(t, startErr, "proxy start failed: %s", startOut)

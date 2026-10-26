@@ -10,6 +10,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/0magnet/bottle/vnet"
 
@@ -163,6 +164,16 @@ func (p *visorStatusProvider) skywireSnapshot() proxystatus.Snapshot {
 	})
 	if len(snap.Consumers) == 0 {
 		snap.Note = appendNote(snap.Note, "nothing on this visor holds a route or a direct stream right now")
+	}
+	// Every resolving proxy's requests, and the dmsg sessions the .dmsg ones
+	// may have gone through.
+	snap.Requests = p.v.requestLog.Recent("")
+	sessions := make(chan []proxystatus.DmsgSession, 1)
+	go func() { sessions <- p.dmsgSessions() }()
+	select {
+	case snap.Sessions = <-sessions:
+	case <-time.After(statusFillBudget):
+		snap.Note = appendNote(snap.Note, "dmsg session collection timed out after "+statusFillBudget.String()+" — section omitted")
 	}
 	return snap
 }

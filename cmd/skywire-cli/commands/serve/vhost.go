@@ -19,6 +19,8 @@ var (
 	vhostAliases      []string
 	vhostWhitelist    string
 	vhostPreserveHost bool
+	vhostVisorPages   bool
+	vhostSites        []string
 )
 
 func init() {
@@ -26,6 +28,8 @@ func init() {
 	vhostAddCmd.Flags().StringSliceVar(&vhostAliases, "alias", nil, "another Host name for the site, e.g. status.skywire.dev (repeatable)")
 	vhostAddCmd.Flags().StringVar(&vhostWhitelist, "whitelist", "", "comma-separated PKs allowed to reach the site (empty = everyone)")
 	vhostAddCmd.Flags().BoolVar(&vhostPreserveHost, "preserve-host", false, "send the name the site was asked by (e.g. status.skywire.dev) as the Host, not the service's address")
+	vhostAddCmd.Flags().BoolVar(&vhostVisorPages, "visor-pages", false, "serve the visor's own pages, its landing page at /, under this name instead of --to")
+	vhostAddCmd.Flags().StringSliceVar(&vhostSites, "site", nil, "a name the service serves, linked from the landing page (repeatable; a * vhost to a local Caddy lists its own)")
 	vhostCmd.AddCommand(vhostAddCmd, vhostRmCmd, vhostLsCmd)
 	RootCmd.AddCommand(vhostCmd)
 }
@@ -42,7 +46,8 @@ var vhostCmd = &cobra.Command{
 		"bare name's own website is `serve add 80 --to ...`. Bare `vhost` lists them.",
 	Example: `  serve vhost add status --to 8092
   serve vhost add '*' --to 80 --preserve-host   # every other name to Caddy
-  serve add 80 --to 8080                         # the bare <pk>.skynet's own site`,
+  serve add 80 --to 8080                         # the bare <pk>.skynet's own site
+  serve vhost add landing --visor-pages          # this visor's own page at landing.<pk>.skynet`,
 	Run: func(cmd *cobra.Command, _ []string) { listVhosts(cmd) },
 }
 
@@ -58,15 +63,22 @@ var vhostAddCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := strings.ToLower(args[0])
-		if vhostTo == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to is required"))
+		if (vhostTo == "") == !vhostVisorPages {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("give one of --to and --visor-pages"))
 		}
-		host, p, err := splitTo(vhostTo)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
+		if vhostVisorPages && name == "*" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--visor-pages needs a name, not *"))
 		}
-		if host == "" {
-			host = "127.0.0.1"
+		var proxyAddr string
+		if !vhostVisorPages {
+			host, p, err := splitTo(vhostTo)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
+			}
+			if host == "" {
+				host = "127.0.0.1"
+			}
+			proxyAddr = fmt.Sprintf("%s:%d", host, p)
 		}
 		wl, err := parsePKs(vhostWhitelist)
 		if err != nil {
@@ -75,9 +87,11 @@ var vhostAddCmd = &cobra.Command{
 		vh := visorapi.Vhost{
 			Name:         name,
 			Aliases:      vhostAliases,
-			ProxyAddr:    fmt.Sprintf("%s:%d", host, p),
+			ProxyAddr:    proxyAddr,
 			Whitelist:    wl,
 			PreserveHost: vhostPreserveHost,
+			VisorPages:   vhostVisorPages,
+			Sites:        vhostSites,
 		}
 		updateVhosts(cmd, func(vs []visorapi.Vhost) ([]visorapi.Vhost, error) {
 			var out []visorapi.Vhost
@@ -96,7 +110,7 @@ var vhostAddCmd = &cobra.Command{
 			}
 			return append(out, vh), nil
 		})
-		internal.PrintOutput(cmd.Flags(), vh, fmt.Sprintf("vhost %s -> %s\n", name, vh.ProxyAddr))
+		internal.PrintOutput(cmd.Flags(), vh, fmt.Sprintf("vhost %s -> %s\n", name, vhostTarget(vh)))
 	},
 }
 
@@ -183,7 +197,7 @@ func listVhosts(cmd *cobra.Command) {
 		if n := len(v.Whitelist); n > 0 {
 			wl = fmt.Sprintf("%d PK(s)", n)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", v.Name, dashIfEmpty(strings.Join(v.Aliases, ",")), v.ProxyAddr, wl) //nolint:errcheck,gosec
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", v.Name, dashIfEmpty(strings.Join(v.Aliases, ",")), vhostTarget(v), wl) //nolint:errcheck,gosec
 	}
 	tw.Flush() //nolint:errcheck,gosec
 	internal.PrintOutput(cmd.Flags(), vs, buf.String())
@@ -220,4 +234,12 @@ func vhostsOn(cmd *cobra.Command, rpcClient visorapi.API, port int) []visorapi.V
 		}
 	}
 	return nil
+}
+
+// vhostTarget is where a vhost's requests go, as the listing shows it.
+func vhostTarget(v visorapi.Vhost) string {
+	if v.VisorPages {
+		return "landing page"
+	}
+	return v.ProxyAddr
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 func TestReconcileThrottle_Plan(t *testing.T) {
@@ -322,4 +323,24 @@ func TestReconcileAbsentDeletesWhenOtherListingIsOld(t *testing.T) {
 	require.NoError(t, api.ReconcileTransportsFromCXO(ctx, nil, a, "v"))
 	_, err := base.GetTransportByID(ctx, e.ID)
 	require.ErrorIs(t, err, store.ErrTransportNotFound)
+}
+
+// A local link's label is written when it changes: its one reporter, the
+// host, labels it to say whether the service reads the system feed.
+func TestReconcileThrottle_LocalLabel(t *testing.T) {
+	th := newReconcileThrottle(200*time.Second, 45*time.Second)
+	host, _ := cipher.GenerateKeyPair()
+	svc, _ := cipher.GenerateKeyPair()
+	e := transport.MakeEntry(host, svc, tptypes.LOCAL, transport.LabelAutomatic)
+	t0 := time.Date(2026, 10, 17, 15, 0, 0, 0, time.UTC)
+
+	reg, _, _ := th.plan(t0, []*transport.Entry{&e})
+	require.Len(t, reg, 1)
+	reg, _, _ = th.plan(t0.Add(20*time.Second), []*transport.Entry{&e})
+	require.Empty(t, reg, "unchanged")
+
+	labeled := e
+	labeled.Label = transport.LabelSysFeed
+	reg, _, _ = th.plan(t0.Add(40*time.Second), []*transport.Entry{&labeled})
+	require.Equal(t, []*transport.Entry{&labeled}, reg, "a new label on a local link is written")
 }

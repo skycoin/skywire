@@ -26,6 +26,7 @@ func newFeedForTest(m *Manager) *managedFeed {
 func markSynced(f *managedFeed) {
 	f.snapMu.Lock()
 	f.lastSyncAt = time.Now()
+	f.filled = true
 	f.snapMu.Unlock()
 }
 
@@ -107,5 +108,20 @@ func TestWaitForFirstSyncIsSafeOnNilAndUnknownFeed(t *testing.T) {
 	m := NewManager(Deps{}, 0)
 	if m.WaitForFirstSync(context.Background(), FeedTPDMetrics, 300*time.Millisecond) {
 		t.Error("unknown feed reported a sync")
+	}
+}
+
+// Leaves salvaged from a broken fill are a snapshot, but not a sync: the
+// wait must not report one, or a part of the tree is read as all of it.
+func TestWaitForFirstSyncIgnoresAPartialFill(t *testing.T) {
+	m := NewManager(Deps{}, 0)
+	f := newFeedForTest(m)
+	f.snapMu.Lock()
+	f.snapshot = map[string][]byte{"metrics/day/2026-09-16/part/0000": []byte("[]")}
+	f.lastSyncAt = time.Now()
+	f.snapMu.Unlock()
+
+	if m.WaitForFirstSync(context.Background(), FeedTPDMetrics, 300*time.Millisecond) {
+		t.Fatal("WaitForFirstSync reported a sync for a feed holding only salvaged leaves")
 	}
 }

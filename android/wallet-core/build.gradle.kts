@@ -33,3 +33,14 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
 }
+
+// The Skycoin vectors are skycoin's own golden files, read from the module
+// at the version go.mod pins, so a skycoin change reaches these tests.
+val skycoinDir = providers.exec {
+    workingDir = rootProject.projectDir.parentFile
+    commandLine("go", "mod", "download", "-json", "github.com/skycoin/skycoin")
+}.standardOutput.asText.map { Regex("\"Dir\":\\s*\"([^\"]+)\"").find(it)!!.groupValues[1] }
+
+tasks.test {
+    systemProperty("skycoin.dir", skycoinDir.get())
+}

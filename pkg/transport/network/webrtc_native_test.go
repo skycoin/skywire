@@ -30,8 +30,8 @@ func TestWebRTCCarrier_RoundTrip(t *testing.T) {
 	var aErr, bErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); aConn, aErr = webrtcDial(ctx, sigA, nil) }()
-	go func() { defer wg.Done(); bConn, bErr = webrtcAccept(ctx, sigB, nil) }()
+	go func() { defer wg.Done(); aConn, aErr = webrtcDial(ctx, sigA, nil, nil) }()
+	go func() { defer wg.Done(); bConn, bErr = webrtcAccept(ctx, sigB, nil, nil) }()
 	wg.Wait()
 
 	if aErr != nil {
@@ -83,8 +83,8 @@ func TestWebRTCCarrier_LargePayload(t *testing.T) {
 	var aErr, bErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); aConn, aErr = webrtcDial(ctx, sigA, nil) }()
-	go func() { defer wg.Done(); bConn, bErr = webrtcAccept(ctx, sigB, nil) }()
+	go func() { defer wg.Done(); aConn, aErr = webrtcDial(ctx, sigA, nil, nil) }()
+	go func() { defer wg.Done(); bConn, bErr = webrtcAccept(ctx, sigB, nil, nil) }()
 	wg.Wait()
 	if aErr != nil || bErr != nil {
 		t.Fatalf("carrier setup: dial=%v accept=%v", aErr, bErr)

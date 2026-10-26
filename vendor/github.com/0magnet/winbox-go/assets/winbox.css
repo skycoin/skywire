@@ -72,6 +72,8 @@ body > .wb-body{
   background-size: 100%;
   background-position: center;
 }
+/* Side and bottom handles sit outside the window so they never cover content
+   such as a scrollbar. The top ones overlap the title bar. */
 .wb-n {
   position: absolute;
   top: -5px;
@@ -84,7 +86,7 @@ body > .wb-body{
 .wb-e {
   position: absolute;
   top: 0;
-  right: -5px;
+  right: -10px;
   bottom: 0;
   width: 10px;
   cursor: w-resize;
@@ -92,7 +94,7 @@ body > .wb-body{
 }
 .wb-s {
   position: absolute;
-  bottom: -5px;
+  bottom: -10px;
   left: 0;
   right: 0;
   height: 10px;
@@ -102,7 +104,7 @@ body > .wb-body{
 .wb-w {
   position: absolute;
   top: 0;
-  left: -5px;
+  left: -10px;
   bottom: 0;
   width: 10px;
   cursor: w-resize;
@@ -128,19 +130,19 @@ body > .wb-body{
 }
 .wb-sw {
   position: absolute;
-  bottom: -5px;
-  left: -5px;
-  width: 15px;
-  height: 15px;
+  bottom: -10px;
+  left: -10px;
+  width: 10px;
+  height: 10px;
   cursor: ne-resize;
   z-index: 2;
 }
 .wb-se {
   position: absolute;
-  bottom: -5px;
-  right: -5px;
-  width: 15px;
-  height: 15px;
+  bottom: -10px;
+  right: -10px;
+  width: 10px;
+  height: 10px;
   cursor: nw-resize;
   z-index: 2;
 }

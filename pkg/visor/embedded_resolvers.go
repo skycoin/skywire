@@ -86,6 +86,7 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 				v.services.SelfDial, v.services.SelfDialAs, cfg, rlog)
 			rt.statusProvider = v.proxyStatusProvider()
 			v.wireLocalResolverPublish(rt)
+			v.wireResolverRequests(rt)
 			er.skynet = rt
 		} else {
 			if v.dmsgC == nil {
@@ -111,6 +112,7 @@ func initEmbeddedResolvers(ctx context.Context, v *Visor, log *logging.Logger) e
 				v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, rlog)
 			rt.statusProvider = v.proxyStatusProvider()
 			v.wireLocalResolverPublish(rt)
+			v.wireResolverRequests(rt)
 			if resolverC == v.dmsgC {
 				rt.skynetDial = v.dmsgWebSkynetDial
 				rt.homePage = v.homePage

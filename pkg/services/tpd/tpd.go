@@ -26,7 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
-	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
@@ -187,6 +186,9 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	if la, ok := st.(interface{ SetLeafArchive(string) }); ok {
 		la.SetLeafArchive(filepath.Join(storeDataPath, "leaves"))
 	}
+	if ua, ok := st.(interface{ SetUptimeArchive(string) }); ok {
+		ua.SetUptimeArchive(filepath.Join(storeDataPath, "tp-uptime"))
+	}
 	tpdAPI := api.New(logger, st, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
 	s.chartsAPI.Store(tpdAPI)
 	tpdAPI.SetEntryTimeout(cfg.EntryTimeout.Std())
@@ -321,10 +323,7 @@ func (s *service) Run(ctx context.Context) error {
 	if cfg.ChartsAddr != "" {
 		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
 		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage),
-				charts.Extra{Path: "/graph", Handler: http.HandlerFunc(tpdAPI.GraphPage)},
-				charts.Extra{Path: "/graph/engine.wasm", Handler: http.HandlerFunc(netgraph.EngineWasm)},
-				charts.Extra{Path: "/graph/engine.js", Handler: http.HandlerFunc(netgraph.EngineLoader)}); err != nil {
+			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage), tpdAPI.ChartsExtra()...); err != nil {
 				logger.WithError(err).Error("charts listener failed")
 			}
 		}()
@@ -335,6 +334,14 @@ func (s *service) Run(ctx context.Context) error {
 		tpdAPI.SetDmsgDiscovery(&http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}, dmsgDiscDmsg)
 		if mgr := dmsgdFeed(h.DmsgClient, dmsgDiscDmsg, logger); mgr != nil {
 			tpdAPI.SetDmsgDiscoveryFeed(mgr)
+			defer mgr.Close()
+		}
+		arDmsg := cfg.AddressResolverDmsg
+		if arDmsg == "" {
+			arDmsg = dmsg.Prod.AddressResolver
+		}
+		if mgr := arBindingsFeed(h.DmsgClient, arDmsg, logger); mgr != nil {
+			tpdAPI.SetARBindingsFeed(mgr)
 			defer mgr.Close()
 		}
 	}
@@ -365,8 +372,9 @@ func (s *service) startCXO(
 	sink := &aggregatorSink{Store: st, api: tpdAPI}
 	s.cxo.StartAggregator(ctx, host, logger, "telemetry", skyenv.DmsgCXOPort, func(n *node.Node) (services.Aggregator, error) {
 		return cxoaggregator.New(dmsgC, sk, sink, cxoaggregator.Config{
-			Node:   n,
-			Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+			Node:                n,
+			Logger:              logging.MustGetLogger("tpd-cxo-aggregator"),
+			TelemetryApplyEvery: time.Duration(s.cfg.TelemetryApplyEvery),
 		})
 	})
 	// The visors' DEDICATED tp-list feed (opt-in on the visor side): its
@@ -385,7 +393,11 @@ func (s *service) startCXO(
 	s.cxo.AddPublisher(ctx, logger, "metrics", skyenv.DmsgTPDMetricsCXOPort, mp, err)
 	up, err := api.StartUptimeCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "uptime", skyenv.DmsgTPDUptimeCXOPort, up, err)
-	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
+	rp, err := api.StartRoutingCXOPublisher(ctx, tpdAPI, dmsgC, sk, api.RoutingFeedConfig{
+		Every:         time.Duration(s.cfg.RoutingPublishEvery),
+		SnapshotEvery: s.cfg.RoutingSnapshotEvery,
+		Smoothing:     api.RoutingSmoothing{LatencyWindow: s.cfg.RoutingLatencyWindow, Hysteresis: s.cfg.RoutingHysteresis},
+	}, logger)
 	s.cxo.AddPublisher(ctx, logger, "routing", skyenv.DmsgTPDRoutingCXOPort, rp, err)
 	sp, err := api.StartStatsCXOPublisher(ctx, tpdAPI, dmsgC, sk, logger)
 	s.cxo.AddPublisher(ctx, logger, "stats", skyenv.DmsgTPDStatsCXOPort, sp, err)
@@ -480,6 +492,27 @@ func dmsgdFeed(dmsgC *dmsg.Client, discURL string, log *logging.Logger) *cxosub.
 		Log: log,
 	}, 0)
 	mgr.Pin(cxosub.FeedDMSGDClientsByServer)
+	return mgr
+}
+
+// arBindingsFeed subscribes to the address resolver's bindings feed at arURL,
+// or returns nil when arURL names no dmsg peer.
+func arBindingsFeed(dmsgC *dmsg.Client, arURL string, log *logging.Logger) *cxosub.Manager {
+	pk := cmdutil.PKFromDmsgURL(arURL)
+	if pk.Null() {
+		return nil
+	}
+	mgr := cxosub.NewManager(cxosub.Deps{
+		Dmsg: func() *dmsg.Client { return dmsgC },
+		FeedSpec: func(f cxosub.Feed) (cipher.PubKey, uint16, string, error) {
+			if f != cxosub.FeedARBindings {
+				return cipher.PubKey{}, 0, "", fmt.Errorf("feed %s is not held here", cxosub.FeedString(f))
+			}
+			return pk, skyenv.DmsgARBindingsCXOPort, "", nil
+		},
+		Log: log,
+	}, 0)
+	mgr.Pin(cxosub.FeedARBindings)
 	return mgr
 }
 

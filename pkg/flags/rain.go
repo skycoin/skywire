@@ -102,7 +102,9 @@ func eachDeepestFirst(c *cobra.Command, fn func(*cobra.Command)) {
 //   - SKYWIRE_NO_HELP_RAIN, for someone who wants the colors without this.
 //
 // Not a terminal at all — a pipe, a redirect, `--help | less`, a --help pasted
-// into a bug report — is handled inside backdrop, along with NO_COLOR.
+// into a bug report — is decided here from the command's own output
+// (cmdutil.Terminal), along with NO_COLOR, rather than by backdrop, which only
+// sees the process's stdout. A command run in a shell's tab has its own.
 //
 // Machine mode is checked here rather than relied upon by ordering. cliout's
 // own help wrapper and this one are installed in different init functions, and
@@ -111,9 +113,12 @@ func rainOptions(cmd *cobra.Command) backdrop.Options {
 	plainHelpMu.Lock()
 	plain := plainHelp
 	plainHelpMu.Unlock()
+	colorTerm, cols := helpTerminal()
 
 	return backdrop.Options{
-		Off: plain || cliout.MachineMode(cmd) || os.Getenv(NoRainEnv) != "",
+		Off:   plain || !colorTerm || cliout.MachineMode(cmd) || os.Getenv(NoRainEnv) != "",
+		Force: true,
+		Width: cols,
 
 		// Let the rain through the layout's own gaps.
 		//

@@ -302,11 +302,14 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	// requested backfill responses patch an existing message — both skipped).
 	// Best-effort — a persistence failure never blocks delivery.
 	if offer.Group == "" && !wasRequested {
+		// ID is the transfer id, the one name both ends share, so a delete
+		// for everyone reaches this record on either side.
 		msg := history.Message{
 			Peer:       peer.Hex(),
 			Outgoing:   dir == xfer.Outgoing,
 			Text:       ev.Text,
 			Timestamp:  time.Now().UTC(),
+			ID:         offer.ID,
 			FileID:     offer.ID,
 			FileName:   offer.Name,
 			FileSize:   offer.Size,

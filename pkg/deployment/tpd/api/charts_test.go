@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -175,4 +176,52 @@ func TestServerRoles(t *testing.T) {
 	srv.Close()
 	api.dmsgRoles.Load().at = time.Time{}
 	require.Equal(t, roles, api.serverRoles(context.Background()), "a failed refresh keeps the last answer")
+}
+
+// A host's board serves the graph and its engine beside TPD's section,
+// as the visor's status page does.
+func TestBoardServesGraph(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	mock := newTestStore(t)
+	api := New(nil, mock, nonces, false, tpdiscmetrics.NewEmpty(), "", "")
+	api.StartCharts(ctx, charts.NewMemoryStore(), logging.MustGetLogger("test"))
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, &transport.SignedEntry{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}}))
+	api.refreshTransportsCache(ctx, logging.MustGetLogger("test"))
+
+	bd := &charts.Board{Title: "Skywire deployment services", Sections: func() []charts.Section {
+		return []charts.Section{{Page: api.Charts()}}
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/{$}", bd)
+	mux.Handle("/", bd.Extras())
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	get := func(path string) (int, string) {
+		resp, err := noRedirect.Get(srv.URL + path)
+		require.NoError(t, err)
+		defer resp.Body.Close() //nolint:errcheck
+		var sb strings.Builder
+		_, err = io.Copy(&sb, resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, sb.String()
+	}
+	code, body := get("/")
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, body, "<a href='graph'>Network graph</a>")
+	code, body = get("/graph")
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, body, "2 visors, 1 visor pairs, 1 transports")
+	code, body = get("/graph/engine.js")
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, body, "globalThis.Go")
+	code, _ = get("/graph/engine.wasm")
+	require.Contains(t, []int{http.StatusOK, http.StatusFound}, code)
+	code, _ = get("/nope")
+	require.Equal(t, http.StatusNotFound, code)
 }

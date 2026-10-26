@@ -187,3 +187,32 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// TestHelpWidthFitsANarrowTerminal: help keeps its 80 columns everywhere but
+// on a terminal narrower than that, a phone's, where each long line would
+// otherwise be wrapped a second time by the terminal.
+func TestHelpWidthFitsANarrowTerminal(t *testing.T) {
+	for _, c := range []struct{ cols, want int }{{0, HelpWidth}, {51, 51}, {200, HelpWidth}} {
+		asTerminal(t, c.cols)
+		if got := helpWidth(); got != c.want {
+			t.Errorf("on %d columns help is %d wide, want %d", c.cols, got, c.want)
+		}
+	}
+}
+
+// TestNothingExceedsANarrowTerminal: on a terminal too narrow for a column of
+// descriptions beside the flags, a phone's, they go under them and still fit.
+func TestNothingExceedsANarrowTerminal(t *testing.T) {
+	const cols = 51
+	asTerminal(t, cols)
+	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
+	fs.String("via", "", "remote visor target — dmsg://<pk> or `skynet://<pk>`")
+	fs.String("jq", "", "filter JSON output through a jq/gojq expression (implies --json)")
+	fs.BoolP("bv", "b", false, "print runtime/debug.BuildInfo.Main.Version")
+
+	for _, l := range strings.Split(FlagBlock(fs), "\n") {
+		if len(l) > cols {
+			t.Errorf("line is %d wide on a %d column terminal: %q", len(l), cols, l)
+		}
+	}
+}

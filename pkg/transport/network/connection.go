@@ -267,6 +267,8 @@ func (c *transport) ConnDetails() ConnDetails {
 	}
 	if rd, ok := c.rawConn.(rawConnDetailer); ok {
 		rd.rawConnDetails(&d)
+	} else {
+		d.Link = linkStats(c.rawConn)
 	}
 	return d
 }

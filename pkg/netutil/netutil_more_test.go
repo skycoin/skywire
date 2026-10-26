@@ -257,7 +257,7 @@ func TestCopyReadWriteCloser(t *testing.T) {
 	// Closing one external end ends the copy.
 	_ = a1.Close() //nolint
 	select {
-	case <-errCh:
+	case <-errCh: //nolint:errcheck
 	case <-time.After(3 * time.Second):
 		t.Fatal("CopyReadWriteCloser did not return after a side closed")
 	}

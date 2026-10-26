@@ -82,7 +82,7 @@ func TestSelfOnlyVisorDmsgClientBecomesReady(t *testing.T) {
 
 	require.NoError(t, initDmsgHTTP(ctx, v, log))
 	ebc := appevent.NewBroadcaster(log, time.Second)
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, ebc, v.conf.Dmsg, &http.Client{}, v.dClient, false, nil, mLog)
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, ebc, v.conf.Dmsg, &http.Client{}, v.dClient, false, mLog)
 	go dmsgC.Serve(ctx)
 	t.Cleanup(func() { _ = dmsgC.Close() }) //nolint:errcheck
 

@@ -25,7 +25,7 @@ import (
 // ErrRemoteRemovalNotAllowed is returned when a remote caller tries to remove a transport.
 var ErrRemoteRemovalNotAllowed = errors.New("transport removal not allowed via remote interface")
 
-//go:generate go run ../../../../internal/rpcgen -type SetupRPCGateway=registerSetupRPCGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../../../internal/rpcgen -type SetupRPCGateway=registerSetupRPCGateway -o rpc_register.go
 
 // SetupRPCGateway handles RPC requests from remote visors over dmsg.
 type SetupRPCGateway struct {

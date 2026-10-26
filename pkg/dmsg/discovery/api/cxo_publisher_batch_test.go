@@ -13,12 +13,13 @@ import (
 )
 
 // newTestPub builds a publisher with only the in-memory state map wired,
-// so stateSet / encodeClientsBatch can be exercised without a live
+// so stateSet and markDirty can be exercised without a live
 // treestore.Publisher (pub stays nil; these helpers never touch it).
 func newTestPub() *ClientsByServerCXOPublisher {
 	return &ClientsByServerCXOPublisher{
 		state:        make(map[cipher.PubKey]map[cipher.PubKey][]byte),
 		pendingDirty: make(map[cipher.PubKey]struct{}),
+		present:      make(map[cipher.PubKey]bool),
 	}
 }
 
@@ -73,42 +74,11 @@ func TestBatchLeafCountIsPerServer(t *testing.T) {
 	}
 	t.Logf("pairs=%d collapsed to %d server leaves", pairs, len(p.state))
 
-	// Every server leaf must decode back to exactly its client set.
-	total := 0
-	for srv, clients := range p.state {
-		blob := encodeClientsBatch(clients)
-		version, payload, ok := cxoutils.UnframeGzip(blob)
-		if !ok || version != clientsByServerBatchVersion {
-			t.Fatalf("unframe server %s: ok=%v version=%d", srv.Hex(), ok, version)
-		}
-		var entries []*disc.Entry
-		if err := json.Unmarshal(payload, &entries); err != nil {
-			t.Fatalf("decode server %s: %v", srv.Hex(), err)
-		}
-		if len(entries) != len(clients) {
-			t.Fatalf("server %s: decoded %d entries, want %d", srv.Hex(), len(entries), len(clients))
-		}
-		total += len(entries)
-	}
-	if total != pairs {
-		t.Fatalf("sum of decoded entries = %d, want %d pairs", total, pairs)
-	}
-}
-
-// TestBatchEncodeDeterministic pins that an unchanged client set
-// re-encodes to identical bytes (sorted by client PK), so a re-Put is a
-// CXO wire no-op.
-func TestBatchEncodeDeterministic(t *testing.T) {
-	p := newTestPub()
-	srv, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 20; i++ {
-		clientPK, _ := cipher.GenerateKeyPair()
-		p.stateSet(srv, clientPK, mustEntry(t, clientPK, []cipher.PubKey{srv}))
-	}
-	a := encodeClientsBatch(p.state[srv])
-	b := encodeClientsBatch(p.state[srv])
-	if string(a) != string(b) {
-		t.Fatal("encodeClientsBatch not deterministic for an unchanged set")
+	// A leaf only marks the server: version 2, no client entries, so a
+	// version 1 reader skips it and asks over HTTP.
+	version, payload, ok := cxoutils.UnframeGzip(presenceLeaf)
+	if !ok || version != clientsByServerPresenceVersion || len(payload) != 0 {
+		t.Fatalf("presence leaf: ok=%v version=%d payload=%d bytes", ok, version, len(payload))
 	}
 }
 

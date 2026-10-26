@@ -39,6 +39,42 @@ import (
 // subcommand's subtree rather than the root's, matching the intuition
 // of `help <subcmd>`.
 func InstallHelp(root *cobra.Command) {
+	installHelpCmd(root)
+
+	// `<root> tree` prints the command hierarchy and nothing else — the same
+	// rendering as `help -t`, reachable as a verb because that is how people
+	// look for it. Hidden, since it duplicates a flag that is already
+	// documented; discoverability is not the point, muscle memory is.
+	//
+	// Installed here rather than on one root so every command group gets it
+	// at its own level: `skywire tree` shows everything, `skywire cli tree`
+	// shows the CLI subtree.
+	// A command group with its own `tree` (visor ping tree) keeps it.
+	prev := findChild(root, "tree")
+	if prev != nil && prev.Annotations[helpTreeAnnotation] == "" {
+		return
+	}
+	if prev != nil {
+		root.RemoveCommand(prev)
+	}
+	root.AddCommand(&cobra.Command{
+		Use:         "tree",
+		Annotations: map[string]string{helpTreeAnnotation: "1"},
+		Short:       "print the subcommand tree",
+		Hidden:      true,
+		Args:        cobra.NoArgs,
+		Run: func(cmd *cobra.Command, _ []string) {
+			// One value, two renderings: the ASCII tree is Node.Human, so the
+			// text and JSON forms cannot describe different trees.
+			if err := cliout.Print(cmd, clihelp.TreeOf(cmd.Parent())); err != nil {
+				fmt.Fprintln(os.Stderr, err) //nolint:errcheck
+			}
+		},
+	})
+}
+
+// installHelpCmd installs the `help` half of InstallHelp, without `tree`.
+func installHelpCmd(root *cobra.Command) {
 	var recursive, tree, doc bool
 	helpCmd := &cobra.Command{
 		Use:   "help [command]",
@@ -99,41 +135,10 @@ Modes (mutually exclusive):
 	}
 	root.SetHelpCommand(helpCmd)
 	root.AddCommand(helpCmd)
-
-	// `<root> tree` prints the command hierarchy and nothing else — the same
-	// rendering as `help -t`, reachable as a verb because that is how people
-	// look for it. Hidden, since it duplicates a flag that is already
-	// documented; discoverability is not the point, muscle memory is.
-	//
-	// Installed here rather than on one root so every command group gets it
-	// at its own level: `skywire tree` shows everything, `skywire cli tree`
-	// shows the CLI subtree.
-	// A command group with its own `tree` (visor ping tree) keeps it.
-	prev := findChild(root, "tree")
-	if prev != nil && prev.Annotations[helpTreeAnnotation] == "" {
-		return
-	}
-	if prev != nil {
-		root.RemoveCommand(prev)
-	}
-	root.AddCommand(&cobra.Command{
-		Use:         "tree",
-		Annotations: map[string]string{helpTreeAnnotation: "1"},
-		Short:       "print the subcommand tree",
-		Hidden:      true,
-		Args:        cobra.NoArgs,
-		Run: func(cmd *cobra.Command, _ []string) {
-			// One value, two renderings: the ASCII tree is Node.Human, so the
-			// text and JSON forms cannot describe different trees.
-			if err := cliout.Print(cmd, clihelp.TreeOf(cmd.Parent())); err != nil {
-				fmt.Fprintln(os.Stderr, err) //nolint:errcheck
-			}
-		},
-	})
 }
 
 // InstallHelpTree installs the flag-aware `help` on root and on every command
-// beneath it that has subcommands of its own.
+// beneath it.
 //
 // Without it, `help` is a real command only on the few roots InstallHelp was
 // called on, and at any greater depth it only appears to work: cobra prints a
@@ -141,22 +146,15 @@ Modes (mutually exclusive):
 // `visor zzzz` are the same code path. The flags are the tell — `visor help -t`
 // fails with "unknown shorthand flag: 't'" because nothing is parsing them.
 //
-// Descendants get it only if they have visible subcommands of their own. A
-// leaf takes positional arguments, and giving it a `help` child would capture
-// an argument that was meant for it; a parent that already prints help for an
-// unrecognized argument loses nothing by having the word resolve properly
-// instead. Root is exempt from that rule — a binary's own root gets `help`
-// whether or not it has subcommands, which is what InstallHelp has always
-// done for it.
+// Root and every parent get the full InstallHelp, `help` and `tree`. A
+// runnable leaf gets `help` alone, so `help` reaches everywhere `--help`
+// does. Without it a leaf took the word as a positional argument, and
+// `skywire visor help` started a visor. A leaf that really wants the word
+// as an argument still gets it with `cmd -- help`, since cobra stops looking
+// for subcommands at `--`.
 //
-// That leaves the commands which are both a parent and runnable, where the
-// word is genuinely ambiguous, and the answer there is the POSIX one rather
-// than a special case: `cmd -- help` passes it through as an argument. Cobra
-// stops looking for subcommands at `--` (stripFlags breaks out of its loop),
-// so the argument reaches the command and is rejected or used on its own
-// terms. Sniffing for args[0] == "help" somewhere instead would claim the
-// word just as firmly, only in a place with no flags parsed and no way to
-// opt out.
+// Commands with DisableFlagParsing are skipped. They pass `--help` through
+// to their own handling, and `help` goes the same way.
 //
 // Call it once the tree is assembled, and before anything that wraps help
 // functions (InitRain, tui.Install), so the commands it adds are wrapped too.
@@ -168,12 +166,21 @@ func installHelpTree(c *cobra.Command, isRoot bool) {
 	// Snapshot the children first: InstallHelp adds `help` and `tree` to c,
 	// and recursing into those would be pointless at best.
 	children := append([]*cobra.Command(nil), c.Commands()...)
-	if isRoot || c.HasAvailableSubCommands() {
+	switch {
+	case isRoot || c.HasAvailableSubCommands():
 		InstallHelp(c)
+	case c.Runnable() && !c.DisableFlagParsing && !isHelpCmd(c):
+		installHelpCmd(c)
 	}
 	for _, sub := range children {
 		installHelpTree(sub, false)
 	}
+}
+
+// isHelpCmd reports whether c is a `help` or `tree` added by InstallHelp,
+// which a repeat InstallHelpTree call finds among the children.
+func isHelpCmd(c *cobra.Command) bool {
+	return c.Name() == "help" || c.Annotations[helpTreeAnnotation] != ""
 }
 
 // findChild returns the direct child of c matching name, or nil.

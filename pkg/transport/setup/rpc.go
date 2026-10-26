@@ -13,7 +13,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-//go:generate go run ../../../internal/rpcgen -type TransportGateway=registerTransportGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../../internal/rpcgen -type TransportGateway=registerTransportGateway -o rpc_register.go
 
 // TransportGateway that exposes methods to be used via RPC
 type TransportGateway struct {

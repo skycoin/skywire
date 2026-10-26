@@ -45,6 +45,8 @@ func TestTodayMetricsRereadsOnlyWhatMoved(t *testing.T) {
 	e1 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}
 	e2 := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "sudph"}
 	require.NoError(t, s.RegisterTransportsBatch(ctx, cipher.PubKey{}, []*transport.SignedEntry{{Entry: e1}, {Entry: e2}}))
+	seedPrev(t, s, e1.ID.String(), a)
+	seedPrev(t, s, e2.ID.String(), a)
 	require.NoError(t, s.UpdateBandwidth(ctx, e1.ID.String(), a, 100, 0, "stcpr"))
 	require.NoError(t, s.UpdateBandwidth(ctx, e2.ID.String(), a, 10, 0, "sudph"))
 

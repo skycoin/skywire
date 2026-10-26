@@ -60,7 +60,7 @@ const sctpReceiveBufferBytes = 16 * 1024 * 1024
 
 // newWebRTCAPI builds a pion API with detached DataChannels (so we get an
 // io.ReadWriteCloser to adapt to net.Conn instead of pion's callback model).
-func newWebRTCAPI() *webrtc.API {
+func newWebRTCAPI(mux ice.UDPMux) *webrtc.API {
 	se := webrtc.SettingEngine{}
 	se.DetachDataChannels()
 	// A write waits until SCTP takes the previous one, as a TCP write waits on
@@ -89,6 +89,13 @@ func newWebRTCAPI() *webrtc.API {
 	// 127.0.0.1), so the local dev loop and the usual WAN case are untouched; the
 	// narrow same-LAN-browser case is not worth 38% of the process.
 	se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	// Without these every PeerConnection bound a socket, and a reader, on each
+	// docker, veth and tunnel address. 46 transports held ~1000 UDP sockets.
+	se.SetInterfaceFilter(keepICEInterface)
+	se.SetIPFilter(keepICEIP)
+	if mux != nil {
+		se.SetICEUDPMux(mux)
+	}
 	// Empty MediaEngine: skywire uses WebRTC for DATA CHANNELS ONLY, never audio/
 	// video, so registering no codecs keeps the negotiated SDP media-free.
 	//
@@ -196,9 +203,9 @@ func pumpRemoteSignals(ctx context.Context, pc *webrtc.PeerConnection, sc *signa
 // webrtcDial is the OFFERER: create the peer connection + DataChannel, send the
 // offer over sc, apply the answer + remote candidates, and return once the
 // DataChannel is open and detached to a net.Conn.
-func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
-	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(iceURLs))
+func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
+	pc, err := newWebRTCAPI(iceDialMux.get()).NewPeerConnection(webrtcConfig(iceURLs))
 	if err != nil {
 		return nil, fmt.Errorf("webrtc: new peer connection: %w", err)
 	}
@@ -242,9 +249,9 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 
 // webrtcAccept is the ANSWERER: wait for the offer on sc, answer it, and return
 // the DataChannel (delivered via pc.OnDataChannel) once open and detached.
-func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
-	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(iceURLs))
+func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
+	pc, err := newWebRTCAPI(iceAcceptMux.get()).NewPeerConnection(webrtcConfig(iceURLs))
 	if err != nil {
 		return nil, fmt.Errorf("webrtc: new peer connection: %w", err)
 	}
@@ -502,35 +509,65 @@ func (c *dcConn) Close() error {
 	return nil
 }
 
-func (c *dcConn) LocalAddr() net.Addr  { return webrtcAddr{} }
-func (c *dcConn) RemoteAddr() net.Addr { return webrtcAddr{} }
+// LocalAddr and RemoteAddr are the selected ICE candidate pair, so that
+// same-network checks see the peer's IP as they do for TCP. Before a pair is
+// selected they are the opaque webrtcAddr.
+func (c *dcConn) LocalAddr() net.Addr {
+	if p := c.selectedPair(); p != nil && p.Local != nil {
+		return candidateUDPAddr(p.Local)
+	}
+	return webrtcAddr{}
+}
 
-// rawConnDetails contributes the webrtc-specific connection metadata to
-// a ConnDetails: the selected ICE candidate pair's local/remote
-// endpoints (the addresses the DataChannel actually flows between —
-// dcConn.RemoteAddr() is only the opaque "webrtc-datachannel"
-// placeholder). Best-effort: before the pair is nominated (or if pion
-// can't report it) the placeholder is left in place. The DTLS
-// fingerprint is not exposed by pion's public API and is left as a
-// known gap. Called by transport.ConnDetails via the pre-noise rawConn.
-func (c *dcConn) rawConnDetails(d *ConnDetails) {
+func (c *dcConn) RemoteAddr() net.Addr {
+	if p := c.selectedPair(); p != nil && p.Remote != nil {
+		return candidateUDPAddr(p.Remote)
+	}
+	return webrtcAddr{}
+}
+
+func candidateUDPAddr(cand *webrtc.ICECandidate) net.Addr {
+	ip := net.ParseIP(cand.Address)
+	if ip == nil {
+		return webrtcAddr{}
+	}
+	return &net.UDPAddr{IP: ip, Port: int(cand.Port)}
+}
+
+func (c *dcConn) selectedPair() *webrtc.ICECandidatePair {
 	if c.pc == nil {
-		return
+		return nil
 	}
 	sctp := c.pc.SCTP()
 	if sctp == nil {
-		return
+		return nil
 	}
 	dtls := sctp.Transport()
 	if dtls == nil {
-		return
+		return nil
 	}
 	ice := dtls.ICETransport()
 	if ice == nil {
-		return
+		return nil
 	}
 	pair, err := ice.GetSelectedCandidatePair()
-	if err != nil || pair == nil {
+	if err != nil {
+		return nil
+	}
+	return pair
+}
+
+// rawConnDetails contributes the selected ICE candidate pair's endpoints to a
+// ConnDetails. The DTLS fingerprint is not exposed by pion's public API.
+func (c *dcConn) rawConnDetails(d *ConnDetails) {
+	if c.pc != nil {
+		if sctp := c.pc.SCTP(); sctp != nil {
+			s := sctp.Stats()
+			d.Link = &LinkStats{SRTTMs: s.SmoothedRoundTripTime * 1000, CwndBytes: uint64(s.CongestionWindow)}
+		}
+	}
+	pair := c.selectedPair()
+	if pair == nil {
 		return
 	}
 	if pair.Remote != nil {

@@ -655,6 +655,10 @@ type Stats struct {
 	Feeds int
 	// LocalRoots counts Roots taken through Ingest.
 	LocalRoots uint64
+	// Consumers are the services in this process taking registrations off
+	// the system feeds, and Delivered counts what was handed to them.
+	Consumers []string
+	Delivered uint64
 }
 
 // Stats reports the aggregator's current state.

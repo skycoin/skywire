@@ -101,7 +101,7 @@ func TestSpliceEOFClosesPeer(t *testing.T) {
 	_ = a2.Close() //nolint:errcheck
 
 	select {
-	case <-done:
+	case <-done: //nolint:errcheck
 	case <-time.After(2 * time.Second):
 		t.Fatalf("splice did not return after one side closed")
 	}

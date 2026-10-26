@@ -7,10 +7,14 @@ import (
 
 // InstallDNS registers `.dmsg` and `.skynet` zone handlers on the router's DNS
 // mux so queries for those names resolve to leased synthetic IPs. Everything
-// else is left to the mux's existing handlers (the router's normal DNS).
+// else is left to the mux's existing handlers (the router's normal DNS). With a
+// local dial set, `.skywire` answers status.skywire as well.
 func (g *Gateway) InstallDNS(mux *dns.ServeMux) {
 	mux.HandleFunc("dmsg.", g.dnsHandler("dmsg"))
 	mux.HandleFunc("skynet.", g.dnsHandler("skynet"))
+	if g.local != nil {
+		mux.HandleFunc("skywire.", g.dnsHandler("skywire"))
+	}
 }
 
 func (g *Gateway) dnsHandler(scheme string) dns.HandlerFunc {

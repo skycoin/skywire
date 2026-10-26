@@ -31,6 +31,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   pk = '';
   label = '';
   rewardsAddress = '';
+  // Set when the reward address has spent, so its public key is on chain.
+  exposure: { spent: boolean; balance: string } | null = null;
+  private exposureAddress = '';
 
   history: RewardDay[] = [];
   loading = false;
@@ -49,6 +52,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   private dataSub!: Subscription;
   private saveRewardsSubscription!: Subscription;
   private rewardRulesSubscription!: Subscription;
+  private exposureSub?: Subscription;
 
   constructor(
     private http: HttpClient,
@@ -72,6 +76,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     // Pull the current reward address from the live node feed.
     this.nodeSub = NodeComponent.currentNode.subscribe(node => {
       this.rewardsAddress = node?.rewardsAddress || '';
+      this.checkExposure();
       this.changeDetectorRef.markForCheck();
     });
     this.loadHistory();
@@ -82,6 +87,30 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.dataSub?.unsubscribe();
     this.saveRewardsSubscription?.unsubscribe();
     this.rewardRulesSubscription?.unsubscribe();
+    this.exposureSub?.unsubscribe();
+  }
+
+  // Asks the visor whether the reward address has sent coins before. Only runs when the address changes.
+  private checkExposure() {
+    if (this.rewardsAddress === this.exposureAddress) {
+      return;
+    }
+    this.exposureAddress = this.rewardsAddress;
+    this.exposure = null;
+    this.exposureSub?.unsubscribe();
+    if (!this.rewardsAddress || this.rewardsAddressIsXpub) {
+      return;
+    }
+    this.exposureSub = this.nodeService.getRewardsAddressExposure(this.pk, this.rewardsAddress).subscribe({
+      next: (e: any) => {
+        this.exposure = e;
+        this.changeDetectorRef.markForCheck();
+      },
+      // A node that cannot be reached leaves the warning off rather than guessing.
+      error: () => {
+        this.exposureAddress = '';
+      },
+    });
   }
 
   loadHistory() {

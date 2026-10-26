@@ -20,14 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// The package-wide `json` var (jsoniter.ConfigFastest) lives in
-// interface_native.go now — TinyGo's stdlib can't link encoding/json's
-// reflect runtime helpers, and jsoniter pulls encoding/json
-// transitively. Entry's Sign/VerifySignature also moved to a
-// !js-tagged file (entry_native.go); under js no code path in this
-// package calls Marshal/Unmarshal so the var is genuinely unused
-// there.
-
 // EntryReader provides read-only access to discovery entries.
 type EntryReader interface {
 	Entry(context.Context, cipher.PubKey) (*Entry, error)

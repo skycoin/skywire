@@ -172,6 +172,21 @@ func TestResolve_StatusMapping(t *testing.T) {
 			&sender, map[string]string{"type": "stcpr", "pk": receiver.Hex()}))
 		require.Equal(t, http.StatusNotFound, rec.Code)
 	})
+
+	t.Run("store unavailable -> 503 with a body", func(t *testing.T) {
+		a := newTestAPI(t)
+		ts := &toggleStore{Store: a.store}
+		ts.failing.Store(true)
+		a.store = ts
+		rec := httptest.NewRecorder()
+		a.resolve(rec, authReq(t, http.MethodGet, "/resolve/stcpr/"+receiver.Hex(), nil,
+			&sender, map[string]string{"type": "stcpr", "pk": receiver.Hex()}))
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		require.Equal(t, "2", rec.Header().Get("Retry-After"))
+		var body Error
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		require.Equal(t, "address store unavailable", body.Error)
+	})
 }
 
 // ---- bind ------------------------------------------------------------------

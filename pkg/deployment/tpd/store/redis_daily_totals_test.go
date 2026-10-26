@@ -32,6 +32,13 @@ func newTestRedisStore(t *testing.T) *redisStore {
 	return s
 }
 
+// seedPrev stores a zero snapshot for reporter's counters on id, as a live
+// transport's first report leaves, so the test's reports are deltas from it.
+func seedPrev(t *testing.T, s *redisStore, id string, reporter cipher.PubKey) {
+	t.Helper()
+	require.NoError(t, s.client.HSet(context.Background(), s.bandwidthPrevKey(id, reporter.Hex()), "sent", 0, "recv", 0).Err())
+}
+
 func netDaily(t *testing.T, s *redisStore) map[string]string {
 	t.Helper()
 	h, err := s.client.HGetAll(context.Background(), s.netDailyKey(time.Now().UTC().Format(MetricsDateFormat))).Result()
@@ -47,6 +54,9 @@ func TestDailyTotalsBandwidthIsSumOfTransportMaxima(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	tp1, tp2 := uuid.New().String(), uuid.New().String()
+	seedPrev(t, s, tp1, a)
+	seedPrev(t, s, tp1, b)
+	seedPrev(t, s, tp2, a)
 
 	require.NoError(t, s.UpdateBandwidth(ctx, tp1, a, 100, 50, "stcpr")) // tp1 A=150
 	require.NoError(t, s.UpdateBandwidth(ctx, tp1, b, 120, 20, "stcpr")) // tp1 B=140, max 150
@@ -90,7 +100,9 @@ func TestGetNetworkMetricsReadsCompleteDaysFromTotals(t *testing.T) {
 	s := newTestRedisStore(t)
 	ctx := context.Background()
 	a, _ := cipher.GenerateKeyPair()
-	require.NoError(t, s.UpdateBandwidth(ctx, uuid.New().String(), a, 300, 200, "sudph"))
+	id := uuid.New().String()
+	seedPrev(t, s, id, a)
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 300, 200, "sudph"))
 
 	// The first report marks today as the start, so today is not complete.
 	day := time.Now().UTC().Format(MetricsDateFormat)
@@ -109,8 +121,8 @@ func TestGetNetworkMetricsReadsCompleteDaysFromTotals(t *testing.T) {
 	require.EqualValues(t, 500, resp.Cumulative.ByType["sudph"].Bandwidth)
 }
 
-// A reporter's last counters outlive a TPD restart, so a later report counts
-// only what moved and not the transport's whole lifetime again.
+// A reporter's last counters outlive a gap in its reports, so a later report
+// counts only what moved and not the transport's whole lifetime again.
 func TestBandwidthPrevOutlivesRestart(t *testing.T) {
 	s := newTestRedisStore(t)
 	ctx := context.Background()
@@ -121,10 +133,39 @@ func TestBandwidthPrevOutlivesRestart(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, bandwidthPrevTTL, ttl, float64(time.Minute))
 
-	// Fifteen minutes on, the old ten minute TTL would have dropped it.
-	require.NoError(t, s.client.Expire(ctx, s.bandwidthPrevKey(id, a.Hex()), bandwidthPrevTTL-15*time.Minute).Err())
+	// Six hours on, the old six hour TTL would have dropped it.
+	require.NoError(t, s.client.Expire(ctx, s.bandwidthPrevKey(id, a.Hex()), bandwidthPrevTTL-6*time.Hour).Err())
 	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 1100, 600, "stcpr"))
 	sent, err := s.client.HGet(ctx, s.bandwidthDailyKey(id, time.Now().UTC()), a.Hex()+":sent").Int64()
 	require.NoError(t, err)
-	require.EqualValues(t, 1100, sent, "the second report adds 100, not 1100")
+	require.EqualValues(t, 100, sent, "only the second report's 100 moved")
+}
+
+// A report with no snapshot to subtract is a lifetime total and credits
+// nothing. Both edges of a transport losing theirs at once used to re-credit
+// days of traffic to each, which min(sent, recv) cannot catch.
+func TestBandwidthNoPrevCreditsNothing(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	id := uuid.New().String()
+	seedPrev(t, s, id, a)
+	seedPrev(t, s, id, b)
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 400, 10, "webrtc"))
+	require.NoError(t, s.UpdateBandwidth(ctx, id, b, 10, 400, "webrtc"))
+
+	require.NoError(t, s.client.Del(ctx, s.bandwidthPrevKey(id, a.Hex()), s.bandwidthPrevKey(id, b.Hex())).Err())
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 40_000, 1_000, "webrtc"))
+	require.NoError(t, s.UpdateBandwidth(ctx, id, b, 1_000, 40_000, "webrtc"))
+	h, err := s.client.HGetAll(ctx, s.bandwidthDailyKey(id, time.Now().UTC())).Result()
+	require.NoError(t, err)
+	require.Equal(t, "400", h[a.Hex()+":sent"])
+	require.Equal(t, "400", h[b.Hex()+":recv"])
+	require.Equal(t, "410", netDaily(t, s)["bandwidth"])
+
+	require.NoError(t, s.UpdateBandwidth(ctx, id, a, 40_100, 1_000, "webrtc"))
+	h, err = s.client.HGetAll(ctx, s.bandwidthDailyKey(id, time.Now().UTC())).Result()
+	require.NoError(t, err)
+	require.Equal(t, "500", h[a.Hex()+":sent"], "later reports count from the new snapshot")
 }

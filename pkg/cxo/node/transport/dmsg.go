@@ -38,6 +38,10 @@ type DMSGFactory struct {
 	// to the dmsg listener queue when handshake processing falls behind.
 	MaxPendingAccepts int
 
+	// Dial, when set, replaces the dmsg dial in Connect: a visor sets it to
+	// reach a deployment service over skynet through its host first.
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
+
 	dmsgC *dmsg.Client
 	port  uint16
 
@@ -91,7 +95,11 @@ func (f *DMSGFactory) Address() string {
 // (*DMSG).ConnectPK wrapper threads its caller's ctx through here.
 func (f *DMSGFactory) Connect(ctx context.Context, remotePK cipher.PubKey) (*Connection, error) {
 	addr := dmsg.Addr{PK: remotePK, Port: f.port}
-	conn, err := f.dmsgC.Dial(ctx, addr)
+	dial := f.dmsgC.Dial
+	if f.Dial != nil {
+		dial = f.Dial
+	}
+	conn, err := dial(ctx, addr)
 	if err != nil {
 		return nil, fmt.Errorf("dmsg dial %v: %w", addr, err)
 	}

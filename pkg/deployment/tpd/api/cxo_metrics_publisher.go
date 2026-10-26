@@ -66,10 +66,8 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// fastJSON is jsoniter's fastest config. The metrics feed marshals one record per
-// transport per day, and that marshal — not the compression — is where its
-// allocations go; the stdlib encoder's reflection is the slower half of a
-// publish measured at a third of this service's CPU (2026-09-11).
+// fastJSON is the shared codec. The metrics feed marshals one record per
+// transport per day; encoding/json takes about 30 ms for 13000 records here.
 var fastJSON = fastjson.JSON
 
 const (
@@ -80,7 +78,7 @@ const (
 
 	// metricsTick is the cadence of the current day's leaf. Each tick
 	// re-encodes and re-gzips the whole day (~2.8 CPU-s on prod01), but a
-	// transport's telemetry reaches the store at most once per 5 minutes
+	// transport's telemetry reaches the store at most once per 15 minutes
 	// (cxoaggregator telemetryApplyEvery), so a faster tick mostly
 	// republishes the same numbers.
 	metricsTick = 5 * time.Minute

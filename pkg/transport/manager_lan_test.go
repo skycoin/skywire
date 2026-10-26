@@ -217,14 +217,49 @@ func TestManagedTransportSameNetwork(t *testing.T) {
 		typ  types.Type
 		want bool
 	}{
-		{"192.168.1.20", types.STCPR, true}, // private: only reachable over the LAN
-		{"1.2.3.4", types.SUDPH, true},      // our own public IP: NAT hairpin
-		{"5.6.7.8", types.STCPR, true},      // one of our interface addresses
-		{"1.2.3.9", types.STCPR, false},     // same /24, another host
-		{"9.9.9.9", types.STCPR, false},     // elsewhere
+		{"192.168.1.20", types.STCPR, true},  // private: only reachable over the LAN
+		{"1.2.3.4", types.SUDPH, true},       // our own public IP: NAT hairpin
+		{"5.6.7.8", types.STCPR, true},       // one of our interface addresses
+		{"1.2.3.9", types.STCPR, false},      // same /24, another host
+		{"9.9.9.9", types.STCPR, false},      // elsewhere
+		{"192.168.1.20", types.WEBRTC, true}, // the selected ICE candidate
+		{"9.9.9.9", types.WEBRTC, false},
 		{"192.168.1.20", types.DMSG, false}, // a dmsg peer's address is unknown by design
 	} {
 		require.Equal(t, c.want, at(c.ip, c.typ).SameNetwork(self, local), "%s over %s", c.ip, c.typ)
 	}
 	require.True(t, at("10.0.0.2", types.STCPR).SameNetwork(nil, nil), "a private endpoint needs no public IP to judge")
+}
+
+// TestManagerPublishTPDListHosted: the transport list carries the local links
+// to hosted services, which TPD reads back as entries this visor is an edge
+// of, and the shutdown publish withdraws them with the rest.
+func TestManagerPublishTPDListHosted(t *testing.T) {
+	tm := newTestManager(t)
+	self := tm.Conf.PubKey
+	svc := mustPK(t)
+	cap := &captureLeafPub{}
+	tm.SetTPDLeafPublisher(cap)
+	tm.SetHostedEntries(func() []*Entry {
+		e := MakeEntry(self, svc, types.LOCAL, LabelAutomatic)
+		return []*Entry{&e}
+	})
+	real := MakeEntry(self, mustPK(t), types.STCPR, LabelAutomatic)
+	in := []*Entry{&real}
+
+	var got struct {
+		Compact []CompactEntry `json:"c"`
+	}
+	tm.publishTPDList(in)
+	require.Len(t, in, 1, "the caller's slice is not appended to")
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
+	require.Len(t, got.Compact, 2)
+	back := EntryFromCompact(self, got.Compact[1])
+	require.Equal(t, types.LOCAL, back.Type)
+	require.Equal(t, MakeTransportID(self, svc, types.LOCAL), back.ID)
+	require.GreaterOrEqual(t, back.EdgeIndex(self), 0)
+
+	tm.publishTPDList(nil)
+	require.NoError(t, json.Unmarshal(cxoutils.Gunzip(cap.body), &got))
+	require.Empty(t, got.Compact)
 }

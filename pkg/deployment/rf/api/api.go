@@ -103,8 +103,9 @@ func (a *API) log(r *http.Request) logrus.FieldLogger {
 // GraphCache.ShareFrom). Call before StartGraphCache.
 func (a *API) ShareTransportsFrom(url string) { a.graphCache.ShareFrom(url) }
 
-// StartGraphCache keeps one shared full-network graph warm in the background so
-// route requests no longer each build a per-source graph by walking the store.
+// StartGraphCache builds one shared full-network graph, which route requests
+// then rebuild when they find it stale, so they no longer each build a
+// per-source graph by walking the store.
 // Bound to ctx (the server lifecycle); until the first build lands, requests fall
 // back to the per-source build. Call once at server start.
 func (a *API) StartGraphCache(ctx context.Context) {

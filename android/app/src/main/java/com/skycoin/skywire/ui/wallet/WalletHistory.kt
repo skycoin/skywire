@@ -24,14 +24,17 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,10 +58,8 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CachedTx
 import com.skycoin.skywire.wallet.historyBehind
+import com.skycoin.skywire.wallet.usdText
 import com.skycoin.wallet.Amounts
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 private enum class TxFilter { ALL, SENT, RECEIVED, PENDING }
@@ -74,6 +75,8 @@ fun WalletHistoryScreen(
     val state by viewModel.uiState.collectAsState()
     val coin = state.coin
     var filter by remember { mutableStateOf(TxFilter.ALL) }
+    var addressSheet by remember { mutableStateOf(false) }
+    val address = state.historyAddress
 
     val txs = state.snapshot?.txs.orEmpty().filter {
         when (filter) {
@@ -81,7 +84,7 @@ fun WalletHistoryScreen(
             TxFilter.SENT -> !it.incoming
             TxFilter.RECEIVED -> it.incoming
             TxFilter.PENDING -> !it.confirmed
-        }
+        } && (address == null || address in it.own)
     }
     val groups = txs.groupBy { dayLabel(it.timestamp) }
 
@@ -101,6 +104,10 @@ fun WalletHistoryScreen(
                     FilterChipButton(stringResource(R.string.wallet_filter_sent), filter == TxFilter.SENT) { filter = TxFilter.SENT }
                     FilterChipButton(stringResource(R.string.wallet_filter_received), filter == TxFilter.RECEIVED) { filter = TxFilter.RECEIVED }
                     FilterChipButton(stringResource(R.string.wallet_filter_pending), filter == TxFilter.PENDING) { filter = TxFilter.PENDING }
+                    FilterChipButton(
+                        address?.let(::shortAddress) ?: stringResource(R.string.wallet_history_all_addresses),
+                        address != null,
+                    ) { addressSheet = true }
                 }
             }
 
@@ -139,7 +146,7 @@ fun WalletHistoryScreen(
                             stringResource(
                                 when {
                                     unfetched -> R.string.wallet_history_unfetched_body
-                                    filter == TxFilter.ALL -> R.string.wallet_history_empty_all
+                                    filter == TxFilter.ALL && address == null -> R.string.wallet_history_empty_all
                                     else -> R.string.wallet_history_empty_filter
                                 },
                                 coin.ticker,
@@ -190,6 +197,54 @@ fun WalletHistoryScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (addressSheet) {
+        HistoryAddressSheet(viewModel = viewModel, onDismiss = { addressSheet = false })
+    }
+}
+
+/** Picks which of the wallet's addresses the history shows. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistoryAddressSheet(viewModel: WalletViewModel, onDismiss: () -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+    val wallet = state.active ?: return
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        LazyColumn(Modifier.padding(bottom = 24.dp)) {
+            item {
+                Text(
+                    stringResource(R.string.wallet_history_address_pick),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+            val choices = listOf<String?>(null) + wallet.receiveAddresses + wallet.changeAddresses
+            items(choices.size) { i ->
+                val addr = choices[i]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.filterHistoryBy(addr)
+                            onDismiss()
+                        }
+                        .padding(horizontal = 20.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        addr?.let(::shortAddress) ?: stringResource(R.string.wallet_history_all_addresses),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (addr == state.historyAddress) FontWeight.Bold else FontWeight.Normal,
+                        color = if (addr == state.historyAddress) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
                 }
             }
         }
@@ -301,11 +356,17 @@ fun WalletTxScreen(
                         first = true,
                     )
                     DetailRow(stringResource(R.string.wallet_tx_wallet), state.active?.name ?: "—")
-                    DetailRow(
-                        stringResource(R.string.wallet_tx_date),
-                        Instant.ofEpochSecond(tx.timestamp).atZone(ZoneId.systemDefault())
-                            .format(DateTimeFormatter.ofPattern("d MMMM, HH:mm")),
-                    )
+                    if (tx.own.isNotEmpty()) {
+                        DetailRow(
+                            stringResource(if (tx.incoming) R.string.wallet_tx_received_at else R.string.wallet_tx_sent_from),
+                            tx.own.joinToString("\n"),
+                        )
+                    }
+                    DetailRow(stringResource(R.string.wallet_tx_date), fullDateTime(tx.timestamp))
+                    state.usdPrice?.let { price ->
+                        // Today's price, not the price on the day: skycoin-web says the same.
+                        DetailRow(stringResource(R.string.wallet_tx_usd_now), stringResource(R.string.wallet_usd_value, coin.usdText(tx.amount, price)))
+                    }
                     DetailRow(stringResource(R.string.wallet_tx_fee), feeText(coin, tx.fee))
                     DetailRow(
                         stringResource(R.string.wallet_tx_confirmations),
@@ -389,7 +450,13 @@ private fun DetailRow(label: String, value: String, first: Boolean = false) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        // A long value (a full address) wraps in its own column, clear of the label.
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).padding(start = 16.dp),
+        )
     }
 }

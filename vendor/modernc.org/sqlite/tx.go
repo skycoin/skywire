@@ -7,8 +7,8 @@ package sqlite // import "modernc.org/sqlite"
 import (
 	"context"
 	"database/sql/driver"
+	"sync/atomic"
 
-	"modernc.org/libc"
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
@@ -58,22 +58,40 @@ func (t *tx) Rollback() (err error) {
 	return t.exec(context.Background(), "rollback")
 }
 
+// exec runs sql, a BEGIN, COMMIT or ROLLBACK, through the statement path, so
+// that with a shared cache it waits for the lock held by another connection,
+// as an executed BEGIN does, rather than failing at once with
+// SQLITE_LOCKED_SHAREDCACHE, and ends that wait once ctx is done. Unlike
+// conn.exec, it reports a statement that has run as a success even if ctx
+// is done by then: a BEGIN that took effect must reach database/sql as a
+// transaction, which it then rolls back for the done context.
 func (t *tx) exec(ctx context.Context, sql string) (err error) {
-	psql, err := libc.CString(sql)
+	s, err := t.c.newStmtContext(ctx, sql)
 	if err != nil {
 		return err
 	}
 
-	defer t.c.free(psql)
-	//TODO use t.conn.ExecContext() instead
+	defer func() {
+		if err2 := s.Close(); err2 != nil && err == nil {
+			err = err2
+		}
+	}()
+
+	if s.pstmt == 0 { // Not a single statement, which BEGIN, COMMIT and ROLLBACK are
+		_, err = s.exec(ctx, nil)
+		return err
+	}
 
 	if ctx != nil && ctx.Done() != nil {
-		defer interruptOnDone(ctx, t.c, nil)()
+		var done int32
+		defer interruptOnDone(ctx, t.c, &done)()
+		defer func() {
+			if err != nil && (atomic.LoadInt32(&done) != 0 || t.c.canceled.Load() != 0) {
+				err = ctx.Err()
+			}
+		}()
 	}
 
-	if rc := sqlite3.Xsqlite3_exec(t.c.tls, t.c.db, psql, 0, 0, 0); rc != sqlite3.SQLITE_OK {
-		return t.c.errstr(rc)
-	}
-
-	return nil
+	_, err = t.c.step(s.pstmt)
+	return err
 }

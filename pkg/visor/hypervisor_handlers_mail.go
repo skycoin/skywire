@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -112,8 +113,17 @@ func (hv *Hypervisor) deleteMailMessage() http.HandlerFunc {
 	})
 }
 
+// mailSendWriteTimeout matches the phone app's budget for one send
+// (mailClient in android/.../api/VisorApi.kt).
+const mailSendWriteTimeout = 5 * time.Minute
+
 func (hv *Hypervisor) postMailSend() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		// The answer comes after delivery, and a large mail over dmsg outlasts
+		// the server's 10s WriteTimeout, which drops the reply to a sent mail.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(mailSendWriteTimeout)); err != nil {
+			hv.log(r).WithError(err).Debug("mail send: could not extend write deadline")
+		}
 		var msg skymail.Outgoing
 		if err := httputil.ReadJSON(r, &msg); err != nil {
 			if err != io.EOF {

@@ -121,7 +121,10 @@ internal object DexWebView {
         // the theme here keeps a light-mode load from flashing the page's
         // built-in navy while its stylesheet arrives.
         override fun onPageCommitVisible(view: WebView, url: String) {
-            if (url != "about:blank") applyTheme(view, isDark())
+            if (url != "about:blank") {
+                applyTheme(view, isDark())
+                applyLanguage(view)
+            }
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -130,6 +133,7 @@ internal object DexWebView {
             if (url != "about:blank") {
                 applyTheme(view, isDark())
                 applyPhoneStyles(view)
+                applyLanguage(view)
             }
         }
 
@@ -144,6 +148,29 @@ internal object DexWebView {
             if (request.isForMainFrame) onError(error.description.toString())
         }
     }
+
+    /**
+     * Translate the page, which ships English only, into the app's language
+     * from assets/skydex-i18n.json. Runs once per document.
+     */
+    fun applyLanguage(view: WebView) {
+        val lang = view.context.getString(R.string.chat_page_lang)
+        if (lang.isEmpty()) return
+        val pack = i18nPacks(view.context).optJSONObject(lang) ?: return
+        view.evaluateJavascript("${i18nScript(view.context)}($pack);", null)
+    }
+
+    private var packs: JSONObject? = null
+    private var script: String? = null
+
+    private fun i18nPacks(context: Context): JSONObject =
+        packs ?: JSONObject(readAsset(context, "skydex-i18n.json")).also { packs = it }
+
+    private fun i18nScript(context: Context): String =
+        script ?: readAsset(context, "skydex-i18n.js").also { script = it }
+
+    private fun readAsset(context: Context, name: String): String =
+        context.assets.open(name).bufferedReader().use { it.readText() }
 
     /**
      * Put the page in the app's theme. The trading UI ships one theme — dark

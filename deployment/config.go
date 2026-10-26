@@ -3,8 +3,8 @@
 // The init() that populates Prod and ProdConf lives
 // in two build-tag-gated files: config_native.go (//go:build !js)
 // unmarshals the embedded services-config.json via encoding/json
-// with SKYDEPLOY override support; config_js.go (//go:build js)
-// copies from static Go literals in data_static_js.go (generated
+// with SKYDEPLOY override support; config_static.go (//go:build js)
+// copies from static Go literals in data_static.go (generated
 // from the same JSON by deployment/internal/gen — see that
 // package's doc for the why-and-how). Reason for the split:
 // encoding/json pulls reflect.unsafe_New / mapassign / etc. that
@@ -49,7 +49,7 @@ var ServicesJSON []byte
 // encoding/json, which compiles under TinyGo 0.41) so consumers like
 // pkg/dmsg/dmsg's InitConfig can unmarshal the embedded config on every target,
 // including a TinyGo dmsg client. The native init() in config_native.go and the
-// static-literal init() in config_js.go both populate Prod; this type is
+// static-literal init() in config_static.go both populate Prod; this type is
 // just the shared shape they (and dmsg) decode into.
 type EnvServices struct {
 	Prod json.RawMessage `json:"prod"`
@@ -295,7 +295,7 @@ var ProdConf Conf
 
 // init() that populates Prod and ProdConf lives in
 // the build-tag-gated config_native.go (!js, uses encoding/json
-// + SKYDEPLOY override) and config_js.go (js, copies from the
+// + SKYDEPLOY override) and config_static.go (js, copies from the
 // generated static literals). See the package doc above for the
 // rationale on the split.
 

@@ -23,6 +23,7 @@ import (
 	"net"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -43,6 +44,22 @@ func (v *Visor) wireLocalResolverPublish(rt localResolverPublisher) {
 		return
 	}
 	rt.setLocalPublish(v.publishLocalResolver, v.unpublishLocalResolver)
+}
+
+// statusRequestsKept is how many recent resolver requests the status pages
+// can show.
+const statusRequestsKept = 200
+
+// requestRecorder is a resolver runtime that records its requests.
+type requestRecorder interface {
+	setRequestLog(*proxystatus.RequestLog)
+}
+
+// wireResolverRequests has rt record its requests in the visor's shared log.
+func (v *Visor) wireResolverRequests(rt requestRecorder) {
+	if rt != nil {
+		rt.setRequestLog(v.requestLog)
+	}
 }
 
 func (v *Visor) publishLocalResolver(svc appnet.LocalService, serve func(net.Conn)) {

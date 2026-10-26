@@ -33,6 +33,9 @@ type TelemetryUpdate struct {
 	// SameNetwork: the reporter marked the peer as on its own network, so
 	// the transport's bytes that day are not paid for.
 	SameNetwork bool
+	// At is when the report arrived. The daily hashes are dated by it, so a
+	// row held across UTC midnight counts on the day it was sent. Zero means now.
+	At time.Time
 }
 
 // TelemetryBatchStore is implemented by stores that apply telemetry in
@@ -61,10 +64,10 @@ func (s *redisStore) ApplyTelemetry(ctx context.Context, updates []TelemetryUpda
 		// idempotent against a repeat (bandwidth is a delta against the
 		// stored previous counters, latency a delta against the stored
 		// latest), so the batch is simply run again once loaded.
-		if lerr := bandwidthScript.Load(ctx, s.client).Err(); lerr != nil {
+		if lerr := bandwidthBatchScript.Load(ctx, s.client).Err(); lerr != nil {
 			return lerr
 		}
-		if lerr := latencyScript.Load(ctx, s.client).Err(); lerr != nil {
+		if lerr := latencyBatchScript.Load(ctx, s.client).Err(); lerr != nil {
 			return lerr
 		}
 		err = s.applyTelemetry(ctx, updates)
@@ -74,7 +77,6 @@ func (s *redisStore) ApplyTelemetry(ctx context.Context, updates []TelemetryUpda
 
 func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpdate) error {
 	now := time.Now().UTC()
-	date := now.Format(MetricsDateFormat)
 
 	// Current throughput peaks, for the peak-preserving max.
 	var tputKeys []string
@@ -93,28 +95,38 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 		}
 	}
 
+	// Rows are dated by when they arrived (TelemetryUpdate.At), and grouped
+	// so each reporter's rows of one day share one bandwidth script and each
+	// day's latencies one latency script.
+	type bwGroup struct {
+		reporter string
+		day      time.Time
+		rows     []int
+	}
+	var groups []*bwGroup
+	byReporterDay := make(map[string]*bwGroup)
+	latRows := make(map[string][]int)
+	var latDates []string
 	pipe := s.client.Pipeline()
-	bw := make(map[int]*redis.Cmd, len(updates))
 	for i, u := range updates {
-		idStr := u.ID.String()
+		at := u.dayOf(now)
+		date := at.Format(MetricsDateFormat)
 		if u.Reporter != (cipher.PubKey{}) {
 			reporterHex := u.Reporter.Hex()
-			keys := []string{
-				s.bandwidthPrevKey(idStr, reporterHex),
-				s.bandwidthDailyKey(idStr, now),
-				s.visorAllKey(),
-				s.visorBandwidthDailyKey(reporterHex, now),
-				s.netDailyKey(date),
-				s.netDailySinceKey(),
+			gk := reporterHex + date
+			g := byReporterDay[gk]
+			if g == nil || len(g.rows) == maxScriptRows {
+				g = &bwGroup{reporter: reporterHex, day: at}
+				byReporterDay[gk] = g
+				groups = append(groups, g)
 			}
-			bw[i] = bandwidthScript.EvalSha(ctx, pipe, keys,
-				reporterHex, u.Sent, u.Recv, now.Unix(), typeOrUnknown(u.Type),
-				bandwidthPrevTTLSeconds, historyTTLSeconds, int64((400*24*time.Hour)/time.Second), date, s.bandwidthDailyTTLFor())
+			g.rows = append(g.rows, i)
 			if u.SameNetwork {
 				// Marked on the day's hash itself, beside the counters it
 				// qualifies; it lives exactly as long as they do.
-				pipe.HSet(ctx, keys[1], sameNetworkField, "1")
-				pipe.Expire(ctx, keys[1], time.Duration(s.bandwidthDailyTTLFor())*time.Second)
+				daily := s.bandwidthDailyKey(u.ID.String(), at)
+				pipe.HSet(ctx, daily, sameNetworkField, "1")
+				pipe.Expire(ctx, daily, time.Duration(s.bandwidthDailyTTLFor())*time.Second)
 			}
 		}
 		if j, ok := tputIdx[i]; ok {
@@ -136,13 +148,43 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			}
 			if raw, err := json.Marshal(rec); err == nil {
 				pipe.Set(ctx, s.latencyKey(u.ID), string(raw), latencyTTL)
-				latencyScript.EvalSha(ctx, pipe,
-					[]string{s.netLatencyKey(date), s.netDailyKey(date)},
-					idStr, strconv.FormatFloat(u.LatAvg, 'f', -1, 64), typeOrUnknown(u.Type), historyTTLSeconds)
-				s.today.markDirty(u.ID)
+				if _, ok := latRows[date]; !ok {
+					latDates = append(latDates, date)
+				}
+				latRows[date] = append(latRows[date], i)
 			}
 		}
 	}
+
+	bw := make([]*redis.Cmd, len(groups))
+	for gi, g := range groups {
+		date := g.day.Format(MetricsDateFormat)
+		keys := []string{s.visorAllKey(), s.visorBandwidthDailyKey(g.reporter, g.day), s.netDailyKey(date), s.netDailySinceKey()}
+		args := []interface{}{g.reporter, now.Unix(), bandwidthPrevTTLSeconds, historyTTLSeconds,
+			int64((400 * 24 * time.Hour) / time.Second), date, s.bandwidthDailyTTLFor()}
+		for _, i := range g.rows {
+			u := updates[i]
+			idStr := u.ID.String()
+			keys = append(keys, s.bandwidthPrevKey(idStr, g.reporter), s.bandwidthDailyKey(idStr, g.day))
+			args = append(args, u.Sent, u.Recv, typeOrUnknown(u.Type))
+		}
+		bw[gi] = bandwidthBatchScript.EvalSha(ctx, pipe, keys, args...)
+	}
+	for _, date := range latDates {
+		rows := latRows[date]
+		for len(rows) > 0 {
+			n := min(len(rows), maxScriptRows)
+			args := []interface{}{historyTTLSeconds}
+			for _, i := range rows[:n] {
+				u := updates[i]
+				args = append(args, u.ID.String(), strconv.FormatFloat(u.LatAvg, 'f', -1, 64), typeOrUnknown(u.Type))
+				s.today.markDirty(u.ID)
+			}
+			latencyBatchScript.EvalSha(ctx, pipe, []string{s.netLatencyKey(date), s.netDailyKey(date)}, args...)
+			rows = rows[n:]
+		}
+	}
+
 	cmds, err := pipe.Exec(ctx)
 	if err != nil {
 		for _, c := range cmds {
@@ -152,9 +194,15 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 		}
 		return err
 	}
-	for i, c := range bw {
-		if moved, err := c.Int(); err == nil && moved == 1 {
-			s.today.markDirty(updates[i].ID)
+	for gi, c := range bw {
+		moved, err := c.Int64Slice()
+		if err != nil {
+			continue
+		}
+		for j, m := range moved {
+			if m == 1 && j < len(groups[gi].rows) {
+				s.today.markDirty(updates[groups[gi].rows[j]].ID)
+			}
 		}
 	}
 	for _, u := range updates {
@@ -166,6 +214,15 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 		}
 	}
 	return nil
+}
+
+// dayOf is the time the row is dated by: when it arrived, or now when that
+// is unset or later than now.
+func (u TelemetryUpdate) dayOf(now time.Time) time.Time {
+	if u.At.IsZero() || u.At.After(now) {
+		return now
+	}
+	return u.At.UTC()
 }
 
 // ApplyTelemetry implements TelemetryBatchStore with the single-item writes.

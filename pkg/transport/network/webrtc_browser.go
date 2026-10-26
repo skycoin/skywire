@@ -206,8 +206,8 @@ func pumpRemoteSignals(ctx context.Context, pc js.Value, sc *signalConn, onOffer
 // webrtcDial is the OFFERER: create the peer connection + DataChannel, send the
 // offer over the signaling stream, apply the answer + remote candidates, and
 // return once the DataChannel is open.
-func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
+func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
 	pc, err := newPeerConnection(iceServersJS(iceURLs))
 	if err != nil {
 		return nil, err
@@ -247,8 +247,8 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 
 // webrtcAccept is the ANSWERER: wait for the offer on the signaling stream, answer
 // it, and return the DataChannel (delivered via pc.ondatachannel) once open.
-func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string) (net.Conn, error) {
-	sc := &signalConn{rwc: signal}
+func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string, announce func(string)) (net.Conn, error) {
+	sc := newSignalConn(signal, iceURLs, announce)
 	pc, err := newPeerConnection(iceServersJS(iceURLs))
 	if err != nil {
 		return nil, err

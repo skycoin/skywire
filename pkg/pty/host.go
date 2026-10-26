@@ -466,7 +466,7 @@ func dmsgEndpoints(h *Host) (mux hostMux) {
 	return mux
 }
 
-//go:generate go run ../../internal/rpcgen -type WhitelistGateway=registerWhitelistGateway,LocalPtyGateway=registerLocalPtyGateway,ProxiedPtyGateway=registerProxiedPtyGateway,sessionPtyGateway=registerSessionPtyGateway -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../internal/rpcgen -type WhitelistGateway=registerWhitelistGateway,LocalPtyGateway=registerLocalPtyGateway,ProxiedPtyGateway=registerProxiedPtyGateway,sessionPtyGateway=registerSessionPtyGateway -o rpc_register.go
 
 func handleWhitelist(h *Host) handleFunc {
 	//	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {

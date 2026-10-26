@@ -71,7 +71,8 @@ func Walk(node Node, f func(Node) bool) {
 		walkList(node.Do, f)
 		walkComments(node.DoLast, f)
 	case *WordIter:
-		Walk(node.Name, f)
+		walkNilable(node.Name, f)
+		walkList(node.Names, f)
 		walkList(node.Items, f)
 	case *CStyleLoop:
 		walkNilable(node.Init, f)
@@ -84,6 +85,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Name, f)
 		walkList(node.Names, f)
 		Walk(node.Body, f)
+		walkList(node.Args, f)
 	case *Word:
 		walkList(node.Parts, f)
 	case *Lit:
@@ -98,6 +100,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Param, f)
 		walkNilable(node.NestedParam, f)
 		walkNilable(node.Index, f)
+		walkList(node.Subscripts, f)
 		if node.Slice != nil {
 			walkNilable(node.Slice.Offset, f)
 			walkNilable(node.Slice.Length, f)
@@ -130,6 +133,9 @@ func Walk(node Node, f func(Node) bool) {
 		if node.X != nil {
 			Walk(node.X, f)
 		}
+	case *CallArithm:
+		Walk(node.Name, f)
+		walkList(node.Args, f)
 	case *ParenTest:
 		Walk(node.X, f)
 	case *CaseClause:
@@ -150,6 +156,7 @@ func Walk(node Node, f func(Node) bool) {
 	case *TestClause:
 		Walk(node.X, f)
 	case *DeclClause:
+		walkList(node.Assigns, f)
 		walkList(node.Args, f)
 	case *ArrayExpr:
 		walkList(node.Elems, f)

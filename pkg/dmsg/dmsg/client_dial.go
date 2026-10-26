@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -23,8 +24,25 @@ func (ce *Client) Listen(port uint16) (*Listener, error) {
 		lis.close()
 		return nil, ErrPortOccupied
 	}
-	lis.addCloseCallback(doneFn)
+	localListeners.Store(lis.addr, lis)
+	lis.addCloseCallback(func() {
+		localListeners.CompareAndDelete(lis.addr, lis)
+		doneFn()
+	})
 	return lis, nil
+}
+
+// localListeners holds every listener of the dmsg clients in this process.
+var localListeners sync.Map // Addr -> *Listener
+
+// LocalListener returns the listener a dmsg client in this process holds on
+// addr, so a host visor can hand a service a connection it took in itself.
+func LocalListener(addr Addr) (*Listener, bool) {
+	v, ok := localListeners.Load(addr)
+	if !ok {
+		return nil, false
+	}
+	return v.(*Listener), true
 }
 
 // Dial wraps DialStream to output net.Conn instead of *Stream.

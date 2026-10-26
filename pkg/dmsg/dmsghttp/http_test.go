@@ -146,7 +146,7 @@ func startHTTPServer(t *testing.T, results chan httpServerResult, lis net.Listen
 		defer cancel()
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 		_ = lis.Close()       //nolint:errcheck
-		<-errCh
+		<-errCh               //nolint:errcheck
 	})
 }
 

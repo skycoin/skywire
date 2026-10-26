@@ -325,7 +325,7 @@ func ncSpliceStdio(conn net.Conn) error {
 		done <- err
 	}()
 	first := <-done
-	<-done
+	<-done //nolint:errcheck
 	if first == nil || errors.Is(first, io.EOF) || errors.Is(first, net.ErrClosed) {
 		return nil
 	}

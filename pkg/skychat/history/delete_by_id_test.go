@@ -87,6 +87,30 @@ func TestDeleteByID_DeletesInboundMessages(t *testing.T) {
 	})
 }
 
+// A file row stored before it carried its transfer id as ID is still named
+// by its FileID, so a delete of an older file reaches it.
+func TestDeleteByID_MatchesAnOlderFileRowByFileID(t *testing.T) {
+	peer := "03bbb" + strings.Repeat("0", 61)
+	bothStores(t, func(t *testing.T, s Store) {
+		if err := s.Append(Message{
+			Peer: peer, Text: "clip.mp4", FileID: "xfer-1", Timestamp: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+		found, err := s.DeleteByID(peer, "xfer-1")
+		if err != nil || !found {
+			t.Fatalf("DeleteByID = %v, %v; want true, nil", found, err)
+		}
+		msgs, err := s.ListByPeer(peer, 0)
+		if err != nil {
+			t.Fatalf("ListByPeer: %v", err)
+		}
+		if len(msgs) != 0 {
+			t.Errorf("msgs = %+v, want empty", msgs)
+		}
+	})
+}
+
 // A delete can name a message this side never persisted (persistence was
 // off when it arrived, or the record aged out). That's a miss, not an
 // error — the live tombstone still applies.

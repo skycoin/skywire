@@ -7,18 +7,23 @@ package clilog
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
@@ -69,23 +74,55 @@ Gated by the remote visor's survey_whitelist.`,
 			path += "?" + url.Values{"level": {args[1]}, "ttl": {levelTTL.String()}}.Encode()
 		}
 
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-		defer cancel()
-
-		hc, cleanup, err := dmsgHTTPClient(ctx, 30*time.Second)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer cleanup()
-
 		var st logLevelOutput
-		if err := doSurveyJSON(ctx, hc, method, pk, path, &st); err != nil {
-			log.Fatal(err)
+		if ok, err := localVisorLogLevel(cmd, pk, method, path, &st); ok {
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+			defer cancel()
+
+			hc, cleanup, err := dmsgHTTPClient(ctx, 30*time.Second)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer cleanup()
+
+			if err := doSurveyJSON(ctx, hc, method, pk, path, &st); err != nil {
+				log.Fatal(err)
+			}
 		}
 		if err := cliout.Print(cmd, st); err != nil {
 			log.Fatal(err)
 		}
 	},
+}
+
+// localVisorLogLevel sends the request through the local visor when pk is
+// that visor, so it arrives from the visor's own key rather than an
+// ephemeral one its survey whitelist does not name. ok is false otherwise.
+func localVisorLogLevel(cmd *cobra.Command, pk cipher.PubKey, method, path string, v any) (ok bool, err error) {
+	rc, err := clirpc.ClientQuiet(cmd.Flags())
+	if err != nil {
+		return false, nil
+	}
+	defer rc.Close() //nolint:errcheck,gosec
+	ov, err := rc.Overview()
+	if err != nil || ov.PubKey != pk {
+		return false, nil
+	}
+	resp, err := rc.DmsgHTTP(visorapi.DmsgHTTPRequest{
+		URL:    fmt.Sprintf("dmsg://%s:80%s", pk, path),
+		Method: method,
+	})
+	if err != nil {
+		return true, fmt.Errorf("%s %s through the local visor: %w", method, path, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return true, fmt.Errorf("%s %s returned status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(resp.Body)))
+	}
+	return true, json.Unmarshal(resp.Body, v)
 }
 
 // logLevelOutput is the visor's reply, printed as-is under --json and as one

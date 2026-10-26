@@ -27,9 +27,18 @@ type homeVisorCache struct {
 	at   time.Time
 }
 
-// homePage renders the directory for suffix (".skynet" or ".dmsg").
-func (v *Visor) homePage(suffix string) []byte {
-	return dmsgweb.RenderHomePageWithVisors(v.browseAliases(), suffix, v.conf.PK, v.meshVisors())
+// homePage renders the directory for suffix (".skynet" or ".dmsg") for this
+// visor's own user.
+func (v *Visor) homePage(suffix string) []byte { return v.homePageFor(suffix, true) }
+
+// homePageFor renders the directory, with the visors this one manages only
+// for its own user.
+func (v *Visor) homePageFor(suffix string, ownUser bool) []byte {
+	lists := &dmsgweb.HomeLists{Visors: v.meshVisors()}
+	if ownUser {
+		lists.Managed = v.ManagedVisors()
+	}
+	return dmsgweb.RenderHomePageWith(v.browseAliases(), suffix, v.conf.PK, lists)
 }
 
 // meshVisors returns the visors bound with the address resolver, sorted by

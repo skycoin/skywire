@@ -66,12 +66,12 @@ func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, 
 
 	// A one-hop route over a transport this visor already holds needs neither
 	// the route finder nor the oracle: either would only name that transport.
-	// baseMinHops is 1 only when nothing (per dial or visor-wide min_hops) asked
-	// for more than one hop, so a min_hops=3 visor never gets one here. A
+	// Several callers pass the visor-wide floor as baseMinHops and the per-dial
+	// one in opts, so both must allow one hop. A
 	// diversify dial whose sibling already holds that transport falls through
 	// to find another first hop. With no live transport the dial falls through
 	// too, since EnsureDirectTransport may still be creating one (#4552).
-	if src != dst && baseMinHops == 1 {
+	if src != dst && baseMinHops == 1 && opts.EffectiveMinHops(true) <= 1 && opts.EffectiveMinHops(false) <= 1 {
 		if hop, ok := r.directHop(src, dst); ok {
 			fwd := []routing.Hop{hop}
 			if opts != nil && opts.DiversifyTransports && r.firstHopExcluded(fwd, opts) {

@@ -64,6 +64,7 @@
               "bignumber.js",
               "chart.js",
               "bip39",
+              "jsqr",
               "buffer",
               "base64-js",
               "ieee754"

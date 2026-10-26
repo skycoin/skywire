@@ -22,6 +22,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // fakeUpstream answers every name with 192.0.2.7, or fails when told to.
@@ -53,7 +54,7 @@ type meshDial struct {
 	dials []string
 }
 
-func (d *meshDial) dial(_ context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+func (d *meshDial) dial(_ context.Context, scheme string, dest cipher.PubKey, port uint16, _ []skynetweb.RouteLabel) (net.Conn, error) {
 	d.mu.Lock()
 	d.dials = append(d.dials, scheme+"|"+dest.Hex()+"|"+netip.AddrPortFrom(netip.IPv4Unspecified(), port).String())
 	d.mu.Unlock()

@@ -16,7 +16,7 @@ import (
 // observable.
 func newTestDCConn(t *testing.T) (*dcConn, *webrtc.PeerConnection) {
 	t.Helper()
-	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(nil))
+	pc, err := newWebRTCAPI(nil).NewPeerConnection(webrtcConfig(nil))
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestDCConnCloseReleasesPeerConnection(t *testing.T) {
 // resource where a double Close was already a known hazard (see
 // TestDCConnCloseDoesNotDoubleCloseSignal).
 func TestDCConnReleaseIsIdempotent(t *testing.T) {
-	pc, err := newWebRTCAPI().NewPeerConnection(webrtcConfig(nil))
+	pc, err := newWebRTCAPI(nil).NewPeerConnection(webrtcConfig(nil))
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)
 	}

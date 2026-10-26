@@ -26,6 +26,12 @@ func TestRedisStore(t *testing.T) {
 	clean()
 	t.Cleanup(clean)
 
+	testStore(t, st)
+}
+
+// testStore checks a Store that starts empty against what every backend must do.
+func testStore(t *testing.T, st Store) {
+	ctx := context.Background()
 	base := time.Date(2026, 10, 6, 10, 0, 0, 0, time.UTC)
 	for i := 0; i < 24; i++ {
 		require.NoError(t, st.Add(ctx, Sample{At: base.Add(time.Duration(i) * Interval), V: map[string]float64{"a": float64(i)}}))

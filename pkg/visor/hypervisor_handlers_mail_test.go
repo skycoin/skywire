@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -20,11 +21,39 @@ import (
 
 type mailSendAPI struct {
 	visorapi.API
-	res *skymail.SendResult
-	err error
+	res   *skymail.SendResult
+	err   error
+	delay time.Duration
 }
 
-func (a mailSendAPI) MailSend(skymail.Outgoing) (*skymail.SendResult, error) { return a.res, a.err }
+func (a mailSendAPI) MailSend(skymail.Outgoing) (*skymail.SendResult, error) {
+	time.Sleep(a.delay)
+	return a.res, a.err
+}
+
+// A delivery that outlasts the server's WriteTimeout still gets its answer.
+// A dropped reply reads as a failed send, and the user sends the mail again.
+func TestMailSendOutlastsWriteTimeout(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	hv := &Hypervisor{
+		c:        visorconfig.HypervisorConfig{PK: pk},
+		visor:    &Visor{opts: Options{NoCSRF: true}},
+		mu:       new(sync.RWMutex),
+		selfConn: Conn{API: mailSendAPI{res: &skymail.SendResult{MessageID: "<x@y.dmsg>"}, delay: 300 * time.Millisecond}},
+	}
+	r := httputil.NewRouter()
+	hv.mailRoutes(r)
+	srv := httptest.NewUnstartedServer(r)
+	srv.Config.WriteTimeout = 100 * time.Millisecond
+	srv.Start()
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/visors/"+pk.Hex()+"/mail/send", "application/json",
+		strings.NewReader(`{"to":["bob@z.dmsg"],"body":"x"}`))
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck,gosec
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
 
 // A send that reached nobody still names each recipient and why, so a
 // client can show which address failed rather than a bare error.

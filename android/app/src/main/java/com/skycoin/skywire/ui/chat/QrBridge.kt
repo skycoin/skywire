@@ -4,11 +4,7 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.MultiFormatReader
-import com.google.zxing.RGBLuminanceSource
-import com.google.zxing.common.HybridBinarizer
+import com.skycoin.skywire.ui.components.decodeQr
 
 /**
  * QR decoding for the chat page, done by the host.
@@ -58,25 +54,18 @@ class QrBridge {
             }
             val width = bitmap.width
             val height = bitmap.height
-            val pixels = IntArray(width * height)
-            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            bitmap.recycle()
-
-            val source = RGBLuminanceSource(width, height, pixels)
-            val reader = MultiFormatReader()
-            // TRY_HARDER because these are photographs of screens and frames
-            // from a moving camera, not clean renders: the extra passes are
-            // what find a code that is slightly rotated or out of focus, and
-            // the cost lands on one frame every fifth of a second.
-            val hints = mapOf(DecodeHintType.TRY_HARDER to true)
-            val text = reader.decode(BinaryBitmap(HybridBinarizer(source)), hints).text.orEmpty()
+            // The TRY_HARDER cost lands on one frame every fifth of a second.
+            val text = decodeQr(bitmap).also { bitmap.recycle() }
+            if (text == null) {
+                // "No code in this frame" arrives many times a second while
+                // scanning, so nothing here is logged above debug.
+                Log.d(TAG, "no QR in frame")
+                return ""
+            }
             Log.i(TAG, "decoded ${width}x$height -> ${text.length} chars")
             text
         } catch (e: Exception) {
-            // NotFoundException is the ordinary "no code in this frame" answer
-            // and arrives many times a second while scanning, so nothing here
-            // is logged above debug.
-            Log.d(TAG, "no QR in frame: ${e.javaClass.simpleName}")
+            Log.d(TAG, "frame did not decode: ${e.javaClass.simpleName}")
             ""
         }
     }

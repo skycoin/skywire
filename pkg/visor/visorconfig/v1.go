@@ -630,8 +630,8 @@ type SkymailConfig struct {
 	// (outside it, because the wasm visor never persists local/).
 	Dir string `json:"dir,omitempty"`
 	// MaxMessageSize, MaxTotalSize (bytes, Inbox and Sent together) and
-	// MaxAge bound what the mailbox keeps: 0 means the default (1 MiB,
-	// 16 MiB, 7 days), a negative value no bound.
+	// MaxAge bound what the mailbox keeps: 0 means the default (10 MiB,
+	// 64 MiB, 7 days), a negative value no bound.
 	MaxMessageSize int64    `json:"max_message_size,omitempty"`
 	MaxTotalSize   int64    `json:"max_total_size,omitempty"`
 	MaxAge         Duration `json:"max_age,omitempty"`
@@ -644,11 +644,18 @@ type Transport struct {
 	AddressResolver     string `json:"address_resolver"`
 	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"` // DMSG-HTTP URL for address resolver
 	PublicAutoconnect   bool   `json:"public_autoconnect"`
+	// Autoconnect limits the transports public autoconnect dials. Unset, it
+	// keeps the built-in limits and two links per pair of sites for sudph.
+	Autoconnect Autoconnect `json:"autoconnect,omitzero"`
 	// HypervisorAutoconnect gates the background dialing of a direct (stcpr/sudph)
 	// transport to each configured hypervisor. A nil pointer means "on" (default),
 	// so configs written before this field existed keep the prior always-on
 	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
-	HypervisorAutoconnect *bool           `json:"hypervisor_autoconnect,omitempty"`
+	HypervisorAutoconnect *bool `json:"hypervisor_autoconnect,omitempty"`
+	// TCPNotSentLowat caps the unsent bytes the kernel holds for each stcpr or
+	// stcp transport (TCP_NOTSENT_LOWAT). Unset is 128 KiB, 0 is the kernel's
+	// default. Linux and Android only; it applies to transports opened after it.
+	TCPNotSentLowat       *int            `json:"tcp_notsent_lowat,omitempty"`
 	TransportSetupPKs     []cipher.PubKey `json:"transport_setup"`
 	UserTransportSetupPKs []cipher.PubKey `json:"user_transport_setup,omitempty"` // user-added keys, preserved across config refresh
 	TPSetupSK             *cipher.SecKey  `json:"tps_sk,omitempty"`

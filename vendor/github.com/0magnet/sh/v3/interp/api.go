@@ -64,7 +64,7 @@ type Runner struct {
 
 	// writeEnv overlays [Runner.Env] so that we can write environment variables
 	// as an overlay.
-	writeEnv expand.WriteEnviron
+	writeEnv *overlayEnviron
 
 	// Dir specifies the working directory of the command, which must be an
 	// absolute path. It can only be set via [Dir].
@@ -75,7 +75,8 @@ type Runner struct {
 	// slash-separated paths with a volume prefix such as C:/foo or //srv/share,
 	// treating backslashes only as escapes, and convert at the OS boundary.
 	// Environment values imported from the OS stay as-is; see the TODO on
-	// [expand.Config.ReadDir2] for the globbing side.
+	// [expand.Config.ReadDir2] for the globbing side. [internal.PathsFor]
+	// already applies this model to a virtual filesystem's Unix paths.
 	Dir string
 
 	// tempDir is either $TMPDIR from [Runner.Env], or [os.TempDir].
@@ -107,6 +108,10 @@ type Runner struct {
 	Funcs map[string]*syntax.Stmt
 
 	alias map[string]alias
+
+	// sharedFuncs and sharedAlias are set when Funcs and alias are shared
+	// with a parent shell; see [Runner.subshell].
+	sharedFuncs, sharedAlias bool
 
 	// callHandler is a function allowing to replace a simple command's
 	// arguments. It may be nil.
@@ -142,10 +147,9 @@ type Runner struct {
 	// substitutions. It must be non-nil.
 	procSubstHandler ProcSubstHandlerFunc
 
-	// procSubstUses counts the users which may still open each process
-	// substitution expanded by the statements being run here or by a parent:
-	// the statement itself, and any background subshells started meanwhile.
-	procSubstUses []*sync.WaitGroup
+	// holds are held by the statements being run here or by a parent;
+	// see [stmtHold]. Only a background subshell acquires its own.
+	holds []*stmtHold
 
 	// procSubsts tracks this runner's active process substitutions;
 	// see [procSubstRegistry]. It must be non-nil.
@@ -212,44 +216,34 @@ type Runner struct {
 	//
 	// Note that each shell only tracks its direct children;
 	// subshells do not share nor inherit the background PIDs they can wait for.
-	//
-	// Finished jobs are dropped from here once jobs or wait has reported
-	// them, as bash reaps them; see [Runner.reapBgProc]. Pointers rather than
-	// values so that removing one does not move the others.
-	bgProcs []*bgProc
+	bgProcs []bgProc
 
-	// lastBg is the most recent entry appended to bgProcs, kept so that $!
-	// still expands after the job it named has been reaped.
-	lastBg *bgProc
+	// bgJobs counts the goroutines for background shells and process
+	// substitutions, which may outlive [Runner.Run]; see [Runner.WaitBackground].
+	// Copies made via [Runner.Subshell] have their own, as they may start
+	// jobs while this runner waits, and so does a job, to wait for the jobs
+	// started within it. It must be non-nil.
+	bgJobs *sync.WaitGroup
 
-	// bgProcSeq numbers the fake PIDs in [bgProc.id]. It counts every
-	// background shell ever started by this runner, rather than the length of
-	// bgProcs, so that reaping cannot hand out an id twice.
-	bgProcSeq int
+	// jobsCtx, when non-nil, is the context which ends background jobs
+	// instead of the one given to Run; see [BackgroundContext].
+	jobsCtx context.Context
 
-	// jobsBase is the context every background job started by this shell
-	// descends from. A job must not die because the statement which started
-	// it is done, and in particular a job nested inside another job outlives
-	// the one that started it, as in bash. A non-interactive shell's Run call
-	// bounds it, so an embedder which cancels that still reaps every job, and
-	// an interactive one keeps its jobs across lines.
-	jobsBase context.Context
-
-	// inSubshell marks a runner made by [Runner.subshell], which takes
-	// jobsBase from its parent rather than from the Run it is given.
-	inSubshell bool
+	// pipeProcSubsts holds the done channels of the process substitutions
+	// started by the last command of a pipeline, which runs in a subshell.
+	// They are not jobs of this shell, but a plain wait still waits for them.
+	pipeProcSubsts []chan struct{}
 
 	// bgStarted is non-nil when this runner is a background subshell
 	// whose statement may amount to starting one external program;
 	// the runner reports through it once via [Runner.reportBgStart].
 	bgStarted chan int
 
-	opts runnerOpts
+	// bgDropHolds is set on a background job until its statement has set
+	// its standard streams; see [Runner.dropUnusedHolds].
+	bgDropHolds bool
 
-	// interactive records the [Interactive] option: whether the runner
-	// behaves like an interactive shell. Among other things, it decides
-	// whether background jobs are detached from the statement's context.
-	interactive bool
+	opts runnerOpts
 
 	origDir    string
 	origParams []string
@@ -273,7 +267,7 @@ type Runner struct {
 	// keptFiles holds the files opened by redirections which were kept
 	// by "exec", to be closed when the shell or subshell exits.
 	// TODO: close a file once "exec" replaces it, like other shells do.
-	keptFiles []io.Closer
+	keptFiles []*stmtHold
 
 	// disabledBuiltins holds the names turned off by `enable -n`, which are
 	// then looked up as external commands like bash does.
@@ -303,6 +297,10 @@ type exitStatus struct {
 	exiting   bool // whether the current shell is exiting
 	fatalExit bool // whether the current shell is exiting due to a fatal error; err below must not be nil
 
+	// discarding is set along with exiting when an error abandons the
+	// commands being run without exiting the shell; see [Runner.scriptStmts].
+	discarding bool
+
 	// err holds the error information for a non-zero exit status code or fatal error.
 	// Used so that running a single statement with a custom handler
 	// which returns a non-fatal Go error, such as a Go error wrapping [NewExitStatus],
@@ -329,6 +327,17 @@ func (e *exitStatus) oneIf(b bool) {
 	if b {
 		e.code = 1
 	}
+}
+
+// discard fails the current command and abandons the rest of its line,
+// unless the shell is already exiting.
+func (e *exitStatus) discard() {
+	if e.exiting && !e.discarding {
+		return
+	}
+	e.code = 1
+	e.exiting = true
+	e.discarding = true
 }
 
 func (e *exitStatus) fatal(err error) {
@@ -377,87 +386,30 @@ type bgProc struct {
 	// Read it via [Runner.bgProcID].
 	id string
 
+	// procSubst is set for a process substitution rather than a job.
+	procSubst bool
+
 	// started, when non-nil, delivers the report from [Runner.reportBgStart]:
 	// the process ID when the background statement started exactly one
 	// external program, and zero otherwise.
 	started chan int
 
-	// cmd is the source text of the backgrounded statement, as the jobs
-	// builtin prints it.
-	cmd string
+	// The fields below are only set for jobs; see jobs.go.
 
-	// substitution marks the shells behind process substitutions, which bash
-	// does not list as jobs either. They have no job number, cannot be named
-	// by a job spec, and a bare wait does not wait for them.
-	//
-	// A separate field rather than testing cmd == "": an empty command string
-	// is a plausible thing to have for other reasons, and every place that
-	// asked "is this a real job" was really asking this.
-	substitution bool
-
-	// cancel stops the background shell. A job here is a goroutine rather
-	// than an operating system process, so the kill builtin cancels its
-	// context instead of sending a signal.
-	cancel context.CancelFunc
-
-	// signal is the name of the signal kill delivered, so that jobs can
-	// report Terminated rather than Done.
-	signal string
-
-	// disowned jobs are hidden from jobs and are not waited for by a bare
-	// wait, as after bash's disown.
-	disowned bool
-
-	// num is the job number that the builtins print and accept, such as the 2
-	// in `[2]+`. It is assigned when the job starts and never changes, since
-	// bash leaves the numbers of the other jobs alone when one is reaped.
-	num int
-
-	// reaped marks a finished job that jobs or wait has already reported. It
-	// is hidden from every builtin from then on, and the next background job
-	// drops it from the table; see [Runner.reapBgProc].
-	reaped bool
+	num      int                     // the job number, starting at 1
+	stmt     *syntax.Stmt            // the statement run in the background
+	cancel   context.CancelCauseFunc // used by kill, as a job is a goroutine
+	hidden   bool                    // disowned, or finished and reported
+	notified bool                    // listed as running; see jobs -n
 }
 
-// newBgProc returns a background job with the next fake PID and job number.
-//
-// It also drops any jobs already reaped, which is the only place the table
-// shrinks; doing it here keeps it bounded by the jobs still worth reporting,
-// which matters for a long-lived interactive shell.
-func (r *Runner) newBgProc() *bgProc {
-	r.bgProcs = slices.DeleteFunc(r.bgProcs, func(bg *bgProc) bool {
-		return bg.reaped
-	})
-	// bash gives a new job the number after the highest one in the table, and
-	// starts again from one once the table is empty. Note that this is not
-	// the lowest free number: with job 1 reaped and job 2 still running, the
-	// next job is 3 and not 1.
-	num := 0
-	for _, bg := range r.bgProcs {
-		if !bg.substitution && bg.num > num {
-			num = bg.num
-		}
-	}
-	r.bgProcSeq++
-	return &bgProc{
+// newBgProc returns a background job with the next fake PID.
+func (r *Runner) newBgProc() bgProc {
+	return bgProc{
 		done: make(chan struct{}),
 		exit: new(exitStatus),
-		id:   "g" + strconv.Itoa(r.bgProcSeq),
-		num:  num + 1,
+		id:   "g" + strconv.Itoa(len(r.bgProcs)+1),
 	}
-}
-
-// reapBgProc drops a finished job from the table, as bash does once jobs or
-// wait has reported it. The entry is only marked here and removed by the next
-// [Runner.newBgProc], so that a job the caller still holds stays valid.
-//
-// The caller must have seen the job finish — waited on done, or read running
-// as false and reported it as finished in the same breath. Re-reading it here
-// would reap a job that had just been listed as Running.
-func (r *Runner) reapBgProc(bg *bgProc) {
-	bg.reaped = true
-	// Nothing can name this job again, so let go of what it held.
-	bg.cancel, bg.cmd = nil, ""
 }
 
 // bgProcID returns what $! expands to for a background job,
@@ -477,15 +429,10 @@ func (r *Runner) bgProcID(bg *bgProc) string {
 func (r *Runner) lookupBgProc(arg string) (*bgProc, bool) {
 	// Iterate backwards so that, if the OS reused a PID,
 	// we find the most recent background job.
-	for _, bg := range slices.Backward(r.bgProcs) {
-		if r.bgProcID(bg) == arg {
+	for i := range slices.Backward(r.bgProcs) {
+		if bg := &r.bgProcs[i]; r.bgProcID(bg) == arg {
 			return bg, true
 		}
-	}
-	// A reaped job is gone from the table, but bash still answers for the one
-	// $! names, so that `p=$!; jobs; wait $p` works.
-	if r.lastBg != nil && r.bgProcID(r.lastBg) == arg {
-		return r.lastBg, true
 	}
 	return nil, false
 }
@@ -511,6 +458,7 @@ func New(opts ...RunnerOption) (*Runner, error) {
 		accessHandler:        DefaultAccessHandler(),
 		procSubstHandler:     DefaultProcSubstHandler(),
 		procSubsts:           &procSubstRegistry{},
+		bgJobs:               new(sync.WaitGroup),
 
 		// Options like Params("-o") may print before StdIO is applied.
 		stdout: io.Discard,
@@ -614,14 +562,29 @@ func History(list func() []string, clear func()) RunnerOption {
 }
 
 // Interactive configures the interpreter to behave like an interactive shell,
-// akin to Bash. It enables the expansion of aliases, and detaches background
-// jobs from the context of the statement that started them, so that a job
-// outlives its command line the way it would in an interactive shell; see
-// [Runner.StopJobs] for how such jobs end.
+// akin to Bash. Currently, this only enables the expansion of aliases,
+// but later on it should also change other behavior.
 func Interactive(enabled bool) RunnerOption {
 	return func(r *Runner) error {
 		r.opts[optExpandAliases] = enabled
-		r.interactive = enabled
+		return nil
+	}
+}
+
+// BackgroundContext sets the context which background jobs follow, so that they
+// outlive the context given to [Runner.Run], such as one for each line typed at
+// an interactive prompt. Like in an interactive shell, interrupting a command
+// then stops neither the jobs it started nor those started earlier.
+// The jobs still see the values of the context given to Run.
+//
+// To stop the jobs, including disowned ones, cancel ctx and call
+// [Runner.WaitBackground]. They exit with status 129, like jobs sent SIGHUP
+// when a terminal hangs up.
+// Process substitutions still follow the context given to Run, as they are
+// part of the command which uses them.
+func BackgroundContext(ctx context.Context) RunnerOption {
+	return func(r *Runner) error {
+		r.jobsCtx = ctx
 		return nil
 	}
 }
@@ -995,6 +958,11 @@ var bashOptsTable = [...]bashOpt{
 		supported:    true,
 	},
 	{
+		name:         "lastpipe",
+		defaultState: false,
+		supported:    true,
+	},
+	{
 		name:         "nocaseglob",
 		defaultState: false,
 		supported:    true,
@@ -1061,7 +1029,6 @@ var bashOptsTable = [...]bashOpt{
 		name:         "interactive_comments",
 		defaultState: true,
 	},
-	{name: "lastpipe"},
 	{name: "lithist"},
 	{name: "localvar_inherit"},
 	{name: "localvar_unset"},
@@ -1106,6 +1073,7 @@ const (
 	optExpandAliases
 	optExtGlob
 	optGlobStar
+	optLastPipe
 	optNoCaseGlob
 	optNullGlob
 )
@@ -1117,6 +1085,11 @@ const (
 // multiple programs non-incrementally. Not calling Reset between each run will
 // mean that the shell state will be kept, including variables, options, and the
 // current directory.
+//
+// Background jobs keep running, like those of a shell which exited, but they
+// are no longer known to builtins such as jobs or kill. To stop or join them,
+// cancel the context given to [Runner.Run], or the one given to
+// [BackgroundContext], and call [Runner.WaitBackground].
 func (r *Runner) Reset() {
 	if !r.usedNew {
 		panic("use interp.New to construct a Runner")
@@ -1150,10 +1123,6 @@ func (r *Runner) Reset() {
 		// Clean it as we will later do a string prefix match.
 		r.tempDir = filepath.Clean(r.tempDir)
 	}
-	// A detached background job would survive the reset with its cancel func
-	// dropped, leaving it running with no way to reach it, so end them all
-	// first; a fresh shell has no jobs.
-	r.StopJobs(context.Background())
 	// reset the internal state
 	*r = Runner{
 		umask:                0o022,
@@ -1170,6 +1139,9 @@ func (r *Runner) Reset() {
 		procSubsts:           r.procSubsts,
 		historyList:          r.historyList,
 		historyClear:         r.historyClear,
+		bgJobs:               r.bgJobs,
+		jobsCtx:              r.jobsCtx,
+		holds:                r.holds, // only set mid-statement, for a nested shell
 
 		// These can be set by functions like [Dir] or [Params], but
 		// builtins can overwrite them; reset the fields to whatever the
@@ -1193,8 +1165,6 @@ func (r *Runner) Reset() {
 
 		dirStack: r.dirStack[:0],
 		usedNew:  r.usedNew,
-
-		interactive: r.interactive,
 	}
 	// Ensure we stop referencing any pointers before we reuse bgProcs.
 	clear(r.bgProcs)
@@ -1343,25 +1313,13 @@ func IsExitStatus(err error) (status uint8, ok bool) {
 //
 // Calling Run on an entire [*File] implies an exit, meaning that an exit trap may
 // run.
+//
+// Run does not wait for background shells or process substitutions, which may
+// keep running after it returns, writing output and holding the files they
+// inherited open; see [Runner.WaitBackground].
 func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
 	if !r.didReset {
 		r.Reset()
-	}
-	if !r.inSubshell {
-		// Jobs belong to the shell rather than to one statement, and this Run
-		// call is the shell for as long as it lasts.
-		//
-		// An interactive shell runs each command line under its own context,
-		// and a job outlives the line that started it. In bash the interrupt
-		// which ends a foreground command leaves the background jobs alone. So
-		// an interactive runner keeps its jobs across Run calls, and they end
-		// via kill, [Runner.StopJobs], or the shell going away. Anywhere else
-		// jobs still die with the caller's context, so that an embedder
-		// bounding a script with a timeout does not leak them.
-		r.jobsBase = ctx
-		if r.interactive {
-			r.jobsBase = context.WithoutCancel(ctx)
-		}
 	}
 	r.fillExpandConfig(ctx)
 	r.exit = exitStatus{}
@@ -1369,13 +1327,15 @@ func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
 	switch node := node.(type) {
 	case *syntax.File:
 		r.filename = node.Name
-		r.stmts(ctx, node.Stmts)
+		r.scriptStmts(ctx, node.Stmts)
 	case *syntax.Stmt:
 		r.stmt(ctx, node)
+		r.endDiscard()
 	case syntax.Command:
-		n := len(r.procSubstUses)
+		n := len(r.holds)
 		r.cmd(ctx, node)
-		r.releaseProcSubsts(n) // a bare Command bypasses stmt
+		r.releaseHolds(n) // a bare Command bypasses stmt
+		r.endDiscard()
 	default:
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
@@ -1416,6 +1376,35 @@ func (r *Runner) Exited() bool {
 	return r.exit.exiting
 }
 
+// unshareFuncs copies Funcs if they are shared with a parent shell.
+func (r *Runner) unshareFuncs() {
+	if r.sharedFuncs {
+		r.Funcs = maps.Clone(r.Funcs)
+		r.sharedFuncs = false
+	}
+}
+
+// unshareAlias copies alias if it is shared with a parent shell.
+func (r *Runner) unshareAlias() {
+	if r.sharedAlias {
+		r.alias = maps.Clone(r.alias)
+		r.sharedAlias = false
+	}
+}
+
+// WaitBackground waits for all background shells and process substitutions
+// started by this runner or its subshells. Unlike the wait builtin, it covers
+// jobs started by subshells such as `(cmd &)`, and it does not affect the exit
+// status. It does not cover processes left behind by external programs,
+// nor the jobs of copies made via [Runner.Subshell].
+//
+// Call it after [Runner.Run] returns. To stop the jobs rather than wait for
+// them to finish, cancel the context given to Run first, or the one given to
+// [BackgroundContext] if set.
+func (r *Runner) WaitBackground() {
+	r.bgJobs.Wait()
+}
+
 // Subshell makes a copy of the given [Runner], suitable for use concurrently
 // with the original. The copy will have the same environment, including
 // variables and functions, but they can all be modified without affecting the
@@ -1427,11 +1416,15 @@ func (r *Runner) Exited() bool {
 // To replace e.g. stdin/out/err, do [StdIO](r.stdin, r.stdout, r.stderr)(r) on
 // the copy.
 func (r *Runner) Subshell() *Runner {
-	return r.subshell(true)
+	r2 := r.subshell(true)
+	r2.bgJobs = new(sync.WaitGroup)
+	r2.holds = nil // no statement is in progress, and a copy never releases
+	return r2
 }
 
 // subshell is like [Runner.Subshell], but allows skipping some allocations and copies
 // when creating subshells which will not be used concurrently with the parent shell.
+// A subshell which may outlive the current statement must use [Runner.bgSubshell].
 // TODO(v4): rename Subshell to Clone, making its deep copy explicit and
 // leaving room for exposing this cheaper variant under a name of its own,
 // if a use case for it ever appears.
@@ -1455,10 +1448,14 @@ func (r *Runner) subshell(background bool) *Runner {
 		accessHandler:        r.accessHandler,
 		procSubstHandler:     r.procSubstHandler,
 		procSubsts:           r.procSubsts,
+		bgJobs:               r.bgJobs,
+		jobsCtx:              r.jobsCtx,
 		stdin:                r.stdin,
 		stdout:               r.stdout,
 		stderr:               r.stderr,
 		filename:             r.filename,
+		inFunc:               r.inFunc,
+		inSource:             r.inSource,
 		opts:                 r.opts,
 		usedNew:              r.usedNew,
 		exit:                 r.exit,
@@ -1466,20 +1463,26 @@ func (r *Runner) subshell(background bool) *Runner {
 		callDepth:            r.callDepth,
 		evalDepth:            r.evalDepth,
 		stmtDepth:            r.stmtDepth,
-		procSubstUses:        slices.Clip(r.procSubstUses),
-		jobsBase:             r.jobsBase,
-		inSubshell:           true,
+		holds:                r.inheritedHolds(),
 		historyList:          r.historyList,
 		historyClear:         r.historyClear,
 
 		origStdout: r.origStdout, // used for process substitutions
 	}
 	r2.disabledBuiltins = maps.Clone(r.disabledBuiltins)
-	r2.writeEnv = newOverlayEnviron(r.writeEnv, background)
-	// Funcs are copied, since they might be modified.
-	r2.Funcs = maps.Clone(r.Funcs)
+	// Variables, funcs, and aliases might be modified. A subshell which
+	// does not run alongside the parent shell only copies them once it
+	// first modifies them.
+	r2.Funcs, r2.alias = r.Funcs, r.alias
+	r2.sharedFuncs, r2.sharedAlias = true, true
+	if background {
+		r2.writeEnv = r.writeEnv.clone()
+		r2.unshareFuncs()
+		r2.unshareAlias()
+	} else {
+		r2.writeEnv = r.writeEnv.share()
+	}
 	r2.Vars = make(map[string]expand.Variable)
-	r2.alias = maps.Clone(r.alias)
 
 	r2.dirStack = append(r2.dirBootstrap[:0], r.dirStack...)
 	r2.fillExpandConfig(r.ectx)

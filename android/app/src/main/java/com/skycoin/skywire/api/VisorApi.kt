@@ -102,11 +102,16 @@ class VisorApi(context: Context) {
     /**
      * For sending mail, which the visor delivers before it answers: a dmsg
      * dial and an SMTP exchange per recipient, and a skynet route setup for a
-     * .skynet address.
+     * .skynet address. The budget has to outlast the slowest relay worth
+     * waiting for — the visor finishes a delivery this side gave up on, so
+     * an early timeout reads a sent mail as failed.
      */
     private val mailClient = client.newBuilder()
-        .readTimeout(90, TimeUnit.SECONDS)
-        .callTimeout(95, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.MINUTES)
+        .callTimeout(5, TimeUnit.MINUTES)
+        // A send must never be replayed: OkHttp's silent retry on a stale
+        // pooled connection would deliver the same mail twice.
+        .retryOnConnectionFailure(false)
         .build()
 
     private val sessionMutex = Mutex()
