@@ -87,6 +87,17 @@ final class MailClientTests: XCTestCase {
         XCTAssertEqual(body["to"] as? [String], [to])
     }
 
+    /// A send waits as long as the visor may take to deliver: five minutes, not the
+    /// usual request budget, because the visor finishes what this side gives up on.
+    func testASendWaitsFiveMinutes() async throws {
+        let recorder = TimeoutRecorder(LoopbackTransport(origin: server.origin))
+        client = CoreClient(transport: recorder) { CoreClientTests.password }
+        let to = try XCTUnwrap(Fixture.named("mail-status").decode(MailStatus.self).myAddress)
+        _ = try await client.mailSend(MailOutgoing(to: [to], subject: "Fixture", body: "x"))
+        let sends = recorder.timeouts.filter { $0.path.hasSuffix("/mail/send") }
+        XCTAssertEqual(sends.map(\.timeout), [5 * 60])
+    }
+
     /// Nobody got it (502): a result naming the reason, not a throw.
     func testARefusedSendIsAResult() async throws {
         visor.serveVariant("mail-send-refused")
@@ -123,5 +134,27 @@ final class MailClientTests: XCTestCase {
     func testDelete() async throws {
         try await client.mailDelete(MailFolder.inbox, id: recordedID)
         XCTAssertEqual(visor.served.last, "mail-delete")
+    }
+}
+
+/// A transport that notes each request's own timeout and passes it on.
+private final class TimeoutRecorder: RequestTransport, @unchecked Sendable {
+    private let inner: any RequestTransport
+    private let lock = NSLock()
+    private var recorded: [(path: String, timeout: TimeInterval?)] = []
+
+    init(_ inner: any RequestTransport) { self.inner = inner }
+
+    var timeouts: [(path: String, timeout: TimeInterval?)] { lock.withLock { recorded } }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        lock.withLock { recorded.append((request.path, request.timeout)) }
+        return try await inner.send(request)
+    }
+
+    func stream(_ request: HTTPRequest) async throws -> HTTPStream { try await inner.stream(request) }
+
+    func upload(_ request: HTTPRequest, producing: @escaping @Sendable (OutputStream) -> Void) async throws -> HTTPStream {
+        try await inner.upload(request, producing: producing)
     }
 }

@@ -231,7 +231,9 @@ final class MailModel: ObservableObject {
     }
 
     func send() {
-        guard let current = draft, let app else { return }
+        // The button's disabled state lags this by a frame; a second tap in
+        // that window would send the mail twice, and nothing dedupes it.
+        guard let current = draft, let app, !sending else { return }
         let to = Self.parseRecipients(current.to)
         let cc = Self.parseRecipients(current.cc)
         let bad = (to + cc).filter { $0.address == nil }.map(\.typed)
@@ -264,6 +266,10 @@ final class MailModel: ObservableObject {
                     lastSend = result
                 }
                 await refreshNow()
+            } catch let error as URLError where error.code == .timedOut {
+                // Not a verdict: the visor answers only after delivering and
+                // keeps going without us, so the mail may still arrive.
+                notice = L10n.text("mail_send_unknown")
             } catch {
                 notice = L10n.format("mail_send_failed", error.localizedDescription)
             }
