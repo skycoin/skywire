@@ -13,6 +13,7 @@ struct WalletSendView: View {
     @State private var scanning = false
     @State private var picking = false
     @State private var photo: PhotosPickerItem?
+    @State private var advancedOpen = false
 
     var body: some View {
         WalletScreen(title: Text("wallet_send_title")) {
@@ -97,6 +98,7 @@ struct WalletSendView: View {
                             .accessibilityIdentifier("wallet-send-bulk")
                         }
                         .padding(.top, 10)
+                        AdvancedOptions(open: $advancedOpen) { advanced }
                     }
 
 
@@ -153,6 +155,9 @@ struct WalletSendView: View {
                 }
                 .padding(.horizontal, 20)
             }
+            // A long form: scrolling puts the keyboard away rather than leaving it over the
+            // fields further down.
+            .scrollDismissesKeyboard(.immediately)
         }
         .task { await model.loadFeePresets() }
         .onChange(of: model.active?.id) { id in
@@ -231,6 +236,43 @@ struct WalletSendView: View {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     }
 
+    /// The fiber send's less common choices: where change goes and the hours share.
+    @ViewBuilder private var advanced: some View {
+        SendLabel(text: L10n.text("wallet_send_change"))
+        HStack(spacing: 0) {
+            BareField(placeholder: L10n.text("wallet_send_change_auto"), text: Binding(
+                get: { model.send.changeAddress },
+                set: { model.send.changeAddress = $0.trimmingCharacters(in: .whitespaces); model.send.plan = nil; model.send.planError = nil }
+            ), identifier: "wallet-send-change")
+            Button { dialogs.presentSheet { ChangeSheet().environmentObject(model) } } label: { Text("wallet_send_change_select") }
+                .buttonStyle(.skyText)
+                .accessibilityIdentifier("wallet-send-change-select")
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .background(Color.skyContainerHighest, in: .sky(14))
+        .padding(.top, 9)
+        Text("wallet_send_change_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
+        // Automatic hours only: hours typed by hand say exactly what each destination gets.
+        let manualHours = !model.send.hoursText.trimmingCharacters(in: .whitespaces).isEmpty
+        SendLabel(text: L10n.text("wallet_send_share")).padding(.top, 20)
+        HStack(spacing: 12) {
+            SkySlider(value: Binding(
+                get: { Double(model.send.sharePercent) },
+                set: { model.send.sharePercent = min(100, max(10, Int($0.rounded()))); model.send.plan = nil }
+            ), range: 10...100)
+            .disabled(manualHours)
+            .opacity(manualHours ? 0.38 : 1)
+            .accessibilityLabel(Text("wallet_send_share"))
+            .accessibilityIdentifier("wallet-send-share")
+            Text(verbatim: L10n.format("wallet_send_share_value", model.send.sharePercent))
+                .skyText(.bodyLarge, bold: true)
+                .frame(width: 52, alignment: .trailing)
+        }
+        Text(manualHours ? L10n.key("wallet_send_share_manual") : L10n.key("wallet_send_share_note"))
+            .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+    }
+
     private var maxButton: some View {
         Button {
             let max = model.sendMaxAmount()
@@ -273,6 +315,78 @@ struct WalletSendView: View {
         case .eth: L10n.text("wallet_max_note_eth")
         case .erc20: L10n.text("wallet_max_note_erc20")
         case .skyFiber: L10n.format("wallet_max_note_fiber", model.coin.ticker)
+        }
+    }
+}
+
+/// The fiber send's less common choices, folded away until asked for.
+private struct AdvancedOptions<Content: View>: View {
+    @Binding var open: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { open.toggle() } label: {
+                HStack {
+                    Text("wallet_send_advanced").skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    MaterialIcon(open ? MI.outlinedKeyboardArrowUp : MI.outlinedKeyboardArrowDown, size: 18)
+                        .foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle(layer: .skyOnSurface))
+            .accessibilityIdentifier("wallet-send-advanced")
+            if open {
+                VStack(alignment: .leading, spacing: 0) { content }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+            }
+        }
+        .background(Color.skySurfaceVariant, in: .sky(14))
+        .clipShape(.sky(14))
+        .padding(.top, 14)
+    }
+}
+
+/// Picks the change address from the wallet's own addresses.
+private struct ChangeSheet: View {
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        if let wallet = model.active {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("wallet_send_change").skyText(.titleMedium).padding(.horizontal, 20).padding(.bottom, 8)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(wallet.receiveAddresses.enumerated()), id: \.offset) { index, address in
+                            Button {
+                                model.send.changeAddress = address
+                                model.send.plan = nil
+                                model.send.planError = nil
+                                dialogs.dismissSheet()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Text(verbatim: "\(index + 1)").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 16, alignment: .leading)
+                                    Text(verbatim: shortAddress(address)).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 13)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressStyle(layer: .skyOnSurface))
+                            .accessibilityIdentifier("wallet-change-\(index + 1)")
+                        }
+                    }
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, 24)
         }
     }
 }
@@ -756,6 +870,9 @@ private struct ReviewSheet: View {
                 (L10n.text("wallet_review_amount"), "\(coin.amountText(plan.amount)) \(coin.ticker)"),
             ] + each + [
                 (L10n.text("wallet_hours_burned"), hoursText(plan.fee)),
+            ] + (!model.send.changeAddress.isEmpty && plan.changeAmount > 0
+                ? [(L10n.text("wallet_review_change_to"), plan.changeAddress.map { shortAddress($0) } ?? "")]
+                : []) + [
                 (L10n.format("wallet_review_balance_after", coin.ticker), coin.amountText(confirmed >= plan.amount ? confirmed - plan.amount : 0)),
                 (L10n.text("wallet_review_hours_after"), hoursText(hoursNow - min(hoursNow, spent))),
             ]

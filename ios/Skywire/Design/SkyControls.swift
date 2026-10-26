@@ -369,6 +369,9 @@ struct SkySlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     @GestureState private var pressed = false
+    /// The drag's direction once it has moved: horizontal moves the handle, vertical is left
+    /// to the scroll view around it, as Android's Slider does. Nil before the first move.
+    @State private var horizontal: Bool?
 
     var body: some View {
         GeometryReader { geometry in
@@ -392,15 +395,27 @@ struct SkySlider: View {
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
+            // Simultaneous, so a vertical drag that starts on the track still scrolls the page.
+            .simultaneousGesture(DragGesture(minimumDistance: 0)
                 .updating($pressed) { _, state, _ in state = true }
                 .onChanged { drag in
-                    let f = min(max((drag.location.x - 2) / max(1, width - 4), 0), 1)
-                    value = range.lowerBound + f * span
+                    let dx = abs(drag.translation.width), dy = abs(drag.translation.height)
+                    if horizontal == nil, max(dx, dy) > 6 { horizontal = dx >= dy }
+                    if horizontal == true { value = Self.value(at: drag.location.x, width: width, range: range) }
+                }
+                .onEnded { drag in
+                    // A tap (no move) puts the handle where it landed.
+                    if horizontal == nil { value = Self.value(at: drag.location.x, width: width, range: range) }
+                    horizontal = nil
                 })
         }
         .frame(height: 44)
         .accessibilityRepresentation { Slider(value: $value, in: range) }
+    }
+
+    private static func value(at x: CGFloat, width: CGFloat, range: ClosedRange<Double>) -> Double {
+        let f = min(max((x - 2) / max(1, width - 4), 0), 1)
+        return range.lowerBound + f * (range.upperBound - range.lowerBound)
     }
 }
 

@@ -483,11 +483,13 @@ final class WalletStore: ObservableObject {
     // MARK: Send
 
     /// Build and price a send. `fromAddress` spends only that address's outputs, `inputs` only
-    /// the outputs picked, `hoursTo` sends exactly that many hours, and `more` adds destinations
-    /// after the first (fiber chains).
+    /// the outputs picked, `hoursTo` sends exactly that many hours, `more` adds destinations
+    /// after the first, `changeAddress` says where change goes and `shareFactor` how much of
+    /// the hours left after the burn automatic hours send on (fiber chains).
     func plan(
         walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool,
-        fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil, more: [Recipient] = []
+        fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil, more: [Recipient] = [],
+        changeAddress: String? = nil, shareFactor: Decimal? = nil
     ) async throws -> TxPlan {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
@@ -503,8 +505,8 @@ final class WalletStore: ObservableObject {
             inputs: inputs.isEmpty ? nil : inputs,
             hoursTo: hoursTo,
             more: more.map { Recipient(address: $0.address.trimmingCharacters(in: .whitespacesAndNewlines), amount: $0.amount, hours: $0.hours) },
-            changeAddress: nil,
-            shareFactor: nil,
+            changeAddress: changeAddress.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 },
+            shareFactor: shareFactor,
             feeLevel: nil
         )
     }
@@ -516,6 +518,24 @@ final class WalletStore: ObservableObject {
         let core = try core(for: spec)
         let signed = try await offMain { try core.signTx(seed: KeySource(mnemonic: seed), plan: plan) }
         let txid = try await core.broadcast(signed)
+
+        // A fresh change address the plan sent change to is the wallet's next one on its change
+        // chain; it holds coins now, so the wallet keeps it.
+        if let change = plan.changeAddress, !meta.receiveAddresses.contains(change), !meta.changeAddresses.contains(change) {
+            let receiveCount = meta.receiveAddresses.count
+            let changeCount = meta.changeAddresses.count + 1
+            let grown = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) }
+            if grown.change.last == change {
+                mutate { reg in
+                    reg.wallets = reg.wallets.map { w in
+                        guard w.id == walletId else { return w }
+                        var kept = w
+                        kept.changeAddresses = grown.change
+                        return kept
+                    }
+                }
+            }
+        }
 
         // A Bitcoin plan that paid change to a fresh chain address makes that
         // address part of the wallet the moment the transaction exists.
