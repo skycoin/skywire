@@ -26,9 +26,9 @@ struct WalletSendView: View {
                             set: { model.send.to = $0; model.send.planError = nil }
                         ), identifier: "wallet-send-to")
                         Button {
-                            if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                                model.send.to = pasted
-                                model.send.planError = nil
+                            // A pasted code is read as a scanned one: an address, or a payment request.
+                            if let pasted = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), !pasted.isEmpty {
+                                take(pasted)
                             }
                         } label: { Text("wallet_paste") }
                         .buttonStyle(.skyText)
@@ -227,14 +227,21 @@ struct WalletSendView: View {
         }
     }
 
-    /// A scanned code as the recipient: plain addresses and bitcoin:/skycoin: style URIs, the part
-    /// after the scheme and before any query (and before an EIP-681 "@chain").
+    /// A scanned or pasted code: an address, or a payment request whose amount and hours fill
+    /// the form too. A token transfer for another contract fills nothing and says why.
     private func take(_ raw: String) {
-        var address = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let colon = address.lastIndex(of: ":") { address = String(address[address.index(after: colon)...]) }
-        if let query = address.firstIndex(of: "?") { address = String(address[..<query]) }
-        if let at = address.firstIndex(of: "@") { address = String(address[..<at]) }
-        model.send.to = address
+        let fill = model.coin.readScan(raw)
+        if fill.wrongToken {
+            model.send.planError = L10n.format("wallet_scan_wrong_token", model.coin.ticker)
+            return
+        }
+        if let address = fill.address, !address.isEmpty { model.send.to = address }
+        if let amount = fill.amountText {
+            model.send.amountText = amount
+            model.send.sendMax = false
+        }
+        if let hours = fill.hoursText { model.send.hoursText = hours }
+        model.send.plan = nil
         model.send.planError = nil
     }
 
