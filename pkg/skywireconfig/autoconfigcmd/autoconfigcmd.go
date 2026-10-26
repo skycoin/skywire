@@ -356,7 +356,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.Version, "version", "", "custom version override for testing — writes VERSION in skywire.conf")
 
 	// --- Visor public/private + autoconnect ---
-	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "skycoin reward address or xpub key — writes REWARDSKYADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "reward account xpub (BIP44, account level) — writes REWARDSKYADDR in skywire.conf")
 	cmd.Flags().BoolVar(&v.Public, "public", false, "publicize visor in service discovery — writes VISORISPUBLIC=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoPublic, "no-public", false, "unpublish visor from service discovery — writes VISORISPUBLIC=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PublicIP, "publicip", false, "display visor IP in service discovery — writes DISPLAYNODEIP=true in skywire.conf")

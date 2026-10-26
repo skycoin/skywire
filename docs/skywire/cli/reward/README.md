@@ -15,8 +15,9 @@ reward address setting
 	  reward lookup     query the reward server for a PK's payout history
 	  reward rules      display the mainnet reward eligibility rules
 
-	Sets the skycoin reward address or xpub key for the visor.
-	Accepts either a skycoin address or a BIP44 account-level xpub key.
+	Sets the reward account xpub for the visor: a BIP44 account-level
+	xpub, so each reward goes to a fresh address. A single skycoin
+	address is no longer accepted; one set earlier still works.
 	The address is written to the root of the default 'local' directory
 	specified in the visor's config.
 
