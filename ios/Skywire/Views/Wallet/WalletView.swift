@@ -133,6 +133,11 @@ struct WalletHome: View {
         if model.active?.addressScanPending == true && !model.refreshing {
             WalletBanner(text: L10n.text("wallet_scan_pending")).padding(.top, 18)
         }
+        // Coins sit at addresses whose public keys are on the chain, as skycoin-web warns.
+        if model.coin.kind == .skyFiber && !(model.snapshot?.exposedWithCoins.isEmpty ?? true) {
+            WalletBanner(text: L10n.text("wallet_exposed_banner"), icon: MI.outlinedWarningAmber).padding(.top, 18)
+                .accessibilityIdentifier("wallet-exposed-banner")
+        }
         HStack(spacing: 12) {
             Button { model.path.append(.receive) } label: { actionLabel(MI.outlinedArrowDownward, L10n.key("wallet_receive")) }
                 .buttonStyle(.tonal)

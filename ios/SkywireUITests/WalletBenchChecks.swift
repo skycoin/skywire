@@ -269,6 +269,27 @@ final class WalletBenchChecks: XCTestCase {
         attachScreenshot(app, "bench-request-pasted")
     }
 
+    /// An address that has sent coins has its public key on the chain: with coins left on it the
+    /// wallet warns, and the addresses sheet marks it.
+    func testExposedAddressWarning() throws {
+        let app = try benchWallet()
+        XCTAssertFalse(app.descendants(matching: .any)["wallet-exposed-banner"].exists, "a fresh bench wallet is not exposed")
+        openSend(to: addresses[2], amount: "1", app)
+        app.buttons["wallet-send-from"].tap()
+        tapWhenUp("wallet-from-2", in: app)
+        try signAndSend(app)
+        // The send's own refresh brings the history that names the address.
+        let banner = app.descendants(matching: .any)["wallet-exposed-banner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 60), "no warning for coins left at an address that sent")
+        attachScreenshot(app, "bench-exposed")
+        app.buttons["wallet-receive"].tap()
+        app.buttons["wallet-other-addresses"].tap()
+        let second = app.buttons["wallet-address-2"]
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.label.contains("still holds some"), second.label)
+        XCTAssertFalse(app.buttons["wallet-address-1"].label.contains("Has sent coins"), "address 1 never sent")
+    }
+
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
     private func offline(_ button: String, _ app: XCUIApplication) {
         let open = app.buttons[button]

@@ -330,6 +330,15 @@ struct WalletSnapshot: Codable, Equatable, Sendable {
     /// arrived.
     var historyBehind: Bool { historyFetchedAtMs < fetchedAtMs }
 
+    /// The wallet's addresses that have sent coins. A spend puts the address's public key on the
+    /// chain, where a future quantum computer could use it to take what is still there or sent
+    /// there later. Read from the history the wallet already holds; skycoin-web asks the node per
+    /// address for the same.
+    var exposedAddresses: Set<String> { Set(txs.filter { !$0.incoming }.flatMap(\.own)) }
+
+    /// Exposed addresses that still hold coins: the ones worth moving.
+    var exposedWithCoins: Set<String> { exposedAddresses.filter { (perAddress[$0] ?? 0) > 0 } }
+
     var balance: WalletBalance {
         WalletBalance(confirmed: confirmed, predicted: predicted, hours: hours, spendableOutputs: spendableOutputs, perAddress: perAddress)
     }

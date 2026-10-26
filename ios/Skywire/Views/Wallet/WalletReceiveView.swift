@@ -30,6 +30,12 @@ struct WalletReceiveView: View {
                             .skyText(.bodyMedium)
                             .foregroundStyle(Color.skyOnSurfaceVariant)
                             .multilineTextAlignment(.center)
+                        if model.coin.kind == .skyFiber && (model.snapshot?.exposedAddresses.contains(address) ?? false) {
+                            Text("wallet_receive_exposed").skyText(.bodySmall).foregroundStyle(Color.skyWarning)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("wallet-receive-exposed")
+                        }
                         QRCodeImage(content: shared)
                             .frame(width: 220, height: 220)
                             .clipShape(RoundedRectangle(cornerRadius: SkyRadius.small))
@@ -152,6 +158,7 @@ private struct AddressSheet: View {
     var body: some View {
         if let wallet = model.active {
             let perAddress = model.snapshot?.perAddress ?? [:]
+            let exposed = model.coin.kind == .skyFiber ? model.snapshot?.exposedAddresses ?? [] : []
             VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: L10n.format("wallet_addresses_in", wallet.name)).skyText(.titleMedium).padding(.horizontal, 20)
                 Text("wallet_addresses_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
@@ -175,7 +182,7 @@ private struct AddressSheet: View {
                             let held = perAddress[address]
                             // The address being shown stays, so hiding never takes away what is on screen.
                             if !(hideEmpty && (held ?? 0) == 0 && index != model.receiveIndex) {
-                                row(index, address, held: held)
+                                row(index, address, held: held, exposed: exposed.contains(address))
                             }
                         }
                     }
@@ -193,7 +200,7 @@ private struct AddressSheet: View {
         }
     }
 
-    private func row(_ index: Int, _ address: String, held: UInt64?) -> some View {
+    private func row(_ index: Int, _ address: String, held: UInt64?, exposed: Bool) -> some View {
         HStack(spacing: 12) {
             Button {
                 model.receiveIndex = index
@@ -208,6 +215,11 @@ private struct AddressSheet: View {
                         } else if (held ?? 0) == 0 {
                             // With coins on it the balance line says more than "never used" ever could.
                             Text("wallet_address_unused").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                        }
+                        if exposed {
+                            Text((held ?? 0) > 0 ? L10n.key("wallet_address_exposed_funded") : L10n.key("wallet_address_exposed"))
+                                .skyText(.bodySmall).foregroundStyle(Color.skyWarning)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
