@@ -15,6 +15,8 @@ struct SendState {
     var utxos: [UtxoRecord] = []
     /// Hours for the recipient as typed; blank = the automatic split. Fiber only.
     var hoursText = ""
+    /// Destinations after the first. Fiber only.
+    var extra: [DestDraft] = []
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -24,6 +26,7 @@ struct SendState {
     var sentTxid: String?
     var sentAmount: UInt64 = 0
     var sentTo = ""
+    var sentCount = 1
 }
 
 /// The create/restore flow in progress — the phrase lives only here, in memory.
@@ -369,6 +372,40 @@ final class WalletModel: ObservableObject {
         send.fromAddress.map { snapshot?.perAddress[$0] ?? 0 } ?? snapshot?.confirmed ?? 0
     }
 
+    // MARK: More destinations (fiber)
+
+    func addDestination() {
+        send.extra.append(DestDraft())
+        send.sendMax = false
+        send.plan = nil
+    }
+
+    func updateDestination(_ index: Int, _ change: (inout DestDraft) -> Void) {
+        guard send.extra.indices.contains(index) else { return }
+        change(&send.extra[index])
+        send.plan = nil
+        send.planError = nil
+    }
+
+    func removeDestination(_ index: Int) {
+        guard send.extra.indices.contains(index) else { return }
+        send.extra.remove(at: index)
+        send.plan = nil
+        send.planError = nil
+    }
+
+    /// Bulk send replaces every destination, the first one included.
+    func applyBulk(_ destinations: [DestDraft]) {
+        guard let first = destinations.first else { return }
+        send.to = first.address
+        send.amountText = first.amountText
+        send.hoursText = first.hoursText
+        send.extra = Array(destinations.dropFirst())
+        send.sendMax = false
+        send.plan = nil
+        send.planError = nil
+    }
+
     func toggleInput(_ uxid: String) {
         if send.inputs.contains(uxid) { send.inputs.remove(uxid) } else { send.inputs.insert(uxid) }
         send.plan = nil
@@ -412,6 +449,26 @@ final class WalletModel: ObservableObject {
             }
             hoursTo = hours
         }
+        var more: [Recipient] = []
+        for (index, draft) in request.extra.enumerated() where coin.kind == .skyFiber {
+            let coins = Amounts.parse(Self.amountInput(draft.amountText), exponent: coin.exponent).flatMap { $0 > 0 ? $0 : nil }
+            let typed = draft.hoursText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hours = typed.isEmpty ? nil : UInt64(typed)
+            let problem: String? = if coins == nil {
+                L10n.format("wallet_send_dest_invalid_amount", index + 2)
+            } else if !typed.isEmpty && hours == nil {
+                L10n.text("wallet_send_invalid_hours")
+            } else if (hours == nil) != (hoursTo == nil) {
+                L10n.text("wallet_send_hours_mixed")
+            } else {
+                nil
+            }
+            if let problem {
+                send.planError = problem
+                return
+            }
+            more.append(Recipient(address: draft.address.trimmingCharacters(in: .whitespacesAndNewlines), amount: coins ?? 0, hours: hours))
+        }
         send.planning = true
         send.planError = nil
         action { [self] in
@@ -424,7 +481,8 @@ final class WalletModel: ObservableObject {
                     sendMax: request.sendMax,
                     fromAddress: coin.isEthFamily ? nil : request.fromAddress,
                     inputs: coin.kind == .skyFiber ? request.inputs : [],
-                    hoursTo: hoursTo
+                    hoursTo: hoursTo,
+                    more: more
                 )
                 send.planning = false
                 send.plan = plan
@@ -464,6 +522,7 @@ final class WalletModel: ObservableObject {
                 send.sentTxid = txid
                 send.sentAmount = plan.amount
                 send.sentTo = plan.toAddress
+                send.sentCount = plan.recipients.count
                 refreshNow()
                 onSent()
             } catch {

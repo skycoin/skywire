@@ -483,10 +483,11 @@ final class WalletStore: ObservableObject {
     // MARK: Send
 
     /// Build and price a send. `fromAddress` spends only that address's outputs, `inputs` only
-    /// the outputs picked, `hoursTo` sends exactly that many hours (fiber chains).
+    /// the outputs picked, `hoursTo` sends exactly that many hours, and `more` adds destinations
+    /// after the first (fiber chains).
     func plan(
         walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool,
-        fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil
+        fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil, more: [Recipient] = []
     ) async throws -> TxPlan {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
@@ -501,7 +502,7 @@ final class WalletStore: ObservableObject {
             fromAddress: from?.isEmpty == false ? from : nil,
             inputs: inputs.isEmpty ? nil : inputs,
             hoursTo: hoursTo,
-            more: [],
+            more: more.map { Recipient(address: $0.address.trimmingCharacters(in: .whitespacesAndNewlines), amount: $0.amount, hours: $0.hours) },
             changeAddress: nil,
             shareFactor: nil,
             feeLevel: nil

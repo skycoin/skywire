@@ -18052,6 +18052,35 @@
         }
       }
     },
+    "wallet_result_body_many" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ is on its way to the destinations you chose. It stays pending until the network confirms it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ va de camino a los destinos que elegiste. Sigue pendiente hasta que la red la confirme."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ est en route vers les destinations choisies. Elle reste en attente jusqu’à sa confirmation par le réseau."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ 正在发往你选择的收款方。在网络确认之前，交易一直处于待确认状态。"
+          }
+        }
+      }
+    },
     "wallet_result_done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18425,6 +18454,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "到 %2$@ 网络上的 %1$@。在你确认之前不会签名。"
+          }
+        }
+      }
+    },
+    "wallet_review_dest_many" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "to the addresses below on the %1$@ network. Nothing is signed until you confirm."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a las direcciones de abajo en la red %1$@. No se firma nada hasta que confirmes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vers les adresses ci-dessous sur le réseau %1$@. Rien n’est signé avant votre confirmation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "到 %1$@ 网络上的下列地址。在你确认之前不会签名。"
           }
         }
       }
@@ -19038,6 +19096,35 @@
         }
       }
     },
+    "wallet_send_add_destination" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add destination"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir destino"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter une destination"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加收款方"
+          }
+        }
+      }
+    },
     "wallet_send_amount" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19092,6 +19179,209 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可用 %1$@ %2$@"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bulk send"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envío múltiple"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoi groupé"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量发送"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_apply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use these destinations"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar estos destinos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser ces destinations"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用这些收款方"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_body" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One destination per line: the address, the amount and, if you like, the coin hours, separated by commas. Set hours on every line or on none."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un destino por línea: la dirección, la cantidad y, si quieres, las horas de moneda, separadas por comas. Pon horas en todas las líneas o en ninguna."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une destination par ligne : l’adresse, le montant et, si vous voulez, les Coin Hours, séparés par des virgules. Indiquez des heures sur toutes les lignes ou sur aucune."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一个收款方：地址、金额，以及可选的币时，用逗号分隔。要么每行都写币时，要么都不写。"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is no text to read."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay texto que leer."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il n’y a aucun texte à lire."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可读取的文本。"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "address, 1.5, 10"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dirección, 1.5, 10"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "adresse, 1.5, 10"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地址, 1.5, 10"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_line" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Line %1$lld needs an address and an amount, and optionally coin hours, separated by commas."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La línea %1$lld necesita una dirección y una cantidad, y opcionalmente horas de moneda, separadas por comas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ligne %1$lld doit contenir une adresse et un montant, et éventuellement des Coin Hours, séparés par des virgules."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$lld 行需要地址和金额（币时可选），用逗号分隔。"
+          }
+        }
+      }
+    },
+    "wallet_send_bulk_mixed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Line %1$lld sets coin hours differently from the lines before it. Set them on every line or on none."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La línea %1$lld pone las horas de moneda de forma distinta a las anteriores. Ponlas en todas las líneas o en ninguna."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La ligne %1$lld indique les Coin Hours autrement que les lignes précédentes. Indiquez-les sur toutes les lignes ou sur aucune."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$lld 行的币时写法与前面的行不同。要么每行都写，要么都不写。"
           }
         }
       }
@@ -19212,6 +19502,93 @@
         }
       }
     },
+    "wallet_send_dest_hours_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coin hours (optional)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Horas de moneda (opcional)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coin Hours (facultatif)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "币时（可选）"
+          }
+        }
+      }
+    },
+    "wallet_send_dest_invalid_amount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination %1$lld: enter a valid amount."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destino %1$lld: escribe una cantidad válida."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination %1$lld : saisissez un montant valide."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收款方 %1$lld：请输入有效金额。"
+          }
+        }
+      }
+    },
+    "wallet_send_destination" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination %1$lld"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destino %1$lld"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination %1$lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收款方 %1$lld"
+          }
+        }
+      }
+    },
     "wallet_send_from" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19328,6 +19705,35 @@
         }
       }
     },
+    "wallet_send_hours_mixed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set the coin hours for every destination, or for none."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pon las horas de moneda en todos los destinos o en ninguno."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indiquez les Coin Hours pour chaque destination, ou pour aucune."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要么为每个收款方都填写币时，要么都不填。"
+          }
+        }
+      }
+    },
     "wallet_send_invalid_amount" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19382,6 +19788,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "币时数值无效。"
+          }
+        }
+      }
+    },
+    "wallet_send_remove_destination" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove destination"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar destino"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer la destination"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除收款方"
           }
         }
       }
