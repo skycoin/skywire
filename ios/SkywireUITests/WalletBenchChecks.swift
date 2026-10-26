@@ -50,7 +50,7 @@ final class WalletBenchChecks: XCTestCase {
         app.buttons["wallet-addresses-hide-empty"].tap()
 
         app.buttons["wallet-address-actions-1"].tap()
-        app.buttons["Unspent outputs"].tap()
+        tapWhenUp("Unspent outputs", in: app)
         let outputs = app.descendants(matching: .any).matching(identifier: "wallet-output")
         let three = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 3"), object: outputs)
         XCTAssertEqual(XCTWaiter().wait(for: [three], timeout: 15), .completed, "address 1 should list its three outputs")
@@ -60,7 +60,7 @@ final class WalletBenchChecks: XCTestCase {
         app.buttons["wallet-other-addresses"].tap()
         // The sheet is still rising; a tap now lands a row lower.
         tapWhenUp("wallet-address-actions-2", in: app)
-        app.buttons["History"].tap()
+        tapWhenUp("History", in: app)
         let chip = app.buttons["wallet-history-address"]
         XCTAssertTrue(chip.waitForExistence(timeout: 5))
         XCTAssertEqual(chip.label, "\(addresses[1].prefix(8))…\(addresses[1].suffix(6))")
@@ -70,7 +70,7 @@ final class WalletBenchChecks: XCTestCase {
                        "the history shows another address's transaction")
         attachScreenshot(app, "bench-history-of-address")
         chip.tap()
-        app.buttons["All addresses"].tap()
+        tapWhenUp("All addresses", in: app)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "10.000")).firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -82,7 +82,7 @@ final class WalletBenchChecks: XCTestCase {
         // From the second address: its 4 SKY is all that is available, and only it pays.
         openSend(to: addresses[2], amount: "1", app)
         app.buttons["wallet-send-from"].tap()
-        app.buttons["wallet-from-2"].tap()
+        tapWhenUp("wallet-from-2", in: app)
         XCTAssertTrue(app.staticTexts["Available 4.000 SKY"].waitForExistence(timeout: 5), "Available does not follow the address")
         attachScreenshot(app, "bench-send-from")
         try signAndSend(app)
@@ -156,6 +156,43 @@ final class WalletBenchChecks: XCTestCase {
         let pasted = try lastTransaction()
         XCTAssertEqual(pasted.outputs.first { $0.dst == addresses[2] }?.hours, 4)
         XCTAssertEqual(pasted.outputs.first { $0.dst == addresses[1] && $0.coins == "2.000000" }?.hours, 3)
+    }
+
+    /// Advanced: the change goes to a chosen address of the wallet, and the hours share sends
+    /// every hour left after the burn on to the destination.
+    func testChangeAddressAndHoursShare() throws {
+        let app = try benchWallet()
+        openSend(to: addresses[2], amount: "1", app)
+        let advanced = app.buttons["wallet-send-advanced"]
+        scroll(to: advanced, in: app)
+        advanced.tap()
+        let select = app.buttons["wallet-send-change-select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
+        select.tap()
+        tapWhenUp("wallet-change-2", in: app)
+        let picked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", addresses[1]), object: app.textFields["wallet-send-change"])
+        XCTAssertEqual(XCTWaiter().wait(for: [picked], timeout: 5), .completed, "the picked address is not the change address")
+        let value = app.staticTexts["50%"]
+        scroll(to: value, in: app)
+        // Drag the handle from the middle past the right end, which is just left of the 52 pt
+        // value and the 12 pt gap before it; the track starts at the card's 36 pt inset. (The
+        // slider's accessibility stand-in has a frame of its own, so this goes by the drawing.)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let end = value.frame.maxX - 52 - 12
+        let rowY = value.frame.midY
+        origin.withOffset(CGVector(dx: (36 + end) / 2, dy: value.frame.midY))
+            .press(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: end + 30, dy: value.frame.midY)))
+        XCTAssertTrue(app.staticTexts["100%"].waitForExistence(timeout: 3), "the share did not reach 100 %")
+        attachScreenshot(app, "bench-advanced")
+        // Up the page from above the slider, so the swipe is the page's.
+        for _ in 0..<3 where !app.buttons["wallet-send-review"].isHittable {
+            origin.withOffset(CGVector(dx: 200, dy: 260)).press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 200, dy: 0)))
+        }
+        try signAndSend(app, screenshot: "bench-review-change")
+        let sent = try lastTransaction()
+        let change = try XCTUnwrap(sent.outputs.first { $0.dst == addresses[1] }, "no change to the chosen address")
+        XCTAssertEqual(change.hours, 0, "a 100 % share left hours in the change")
+        XCTAssertGreaterThan(sent.outputs.first { $0.dst == addresses[2] }?.hours ?? 0, 0)
     }
 
     // MARK: Bench

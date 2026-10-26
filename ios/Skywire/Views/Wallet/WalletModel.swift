@@ -17,6 +17,10 @@ struct SendState {
     var hoursText = ""
     /// Destinations after the first. Fiber only.
     var extra: [DestDraft] = []
+    /// Where change goes; blank keeps the automatic choice. Fiber only.
+    var changeAddress = ""
+    /// Percent of the hours left after the burn that automatic hours send on, 10 to 100. Fiber only.
+    var sharePercent = 50
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -482,7 +486,9 @@ final class WalletModel: ObservableObject {
                     fromAddress: coin.isEthFamily ? nil : request.fromAddress,
                     inputs: coin.kind == .skyFiber ? request.inputs : [],
                     hoursTo: hoursTo,
-                    more: more
+                    more: more,
+                    changeAddress: coin.kind == .skyFiber ? request.changeAddress : nil,
+                    shareFactor: coin.kind == .skyFiber ? Decimal(request.sharePercent) / 100 : nil
                 )
                 send.planning = false
                 send.plan = plan
