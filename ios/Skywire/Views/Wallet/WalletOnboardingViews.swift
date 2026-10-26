@@ -259,39 +259,54 @@ private struct WordChips: View {
     }
 }
 
-/// Lays children out left to right, wrapping when a row is full (a 24-word phrase's chips).
+/// Lays children out left to right, wrapping when a row is full (a 24-word phrase's chips,
+/// the mail screen's buttons); `centered` centres each row, as Compose's FlowRow can.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
+    var lineSpacing: CGFloat?
+    var centered = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x > 0 && x + size.width > width {
-                y += rowHeight + spacing
-                x = 0
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            widest = max(widest, x - spacing)
-        }
-        return CGSize(width: min(widest, width), height: y + rowHeight)
+        let lines = rows(subviews, width: width)
+        let widest = lines.map(\.width).max() ?? 0
+        let height = lines.map(\.height).reduce(0, +) + CGFloat(max(0, lines.count - 1)) * (lineSpacing ?? spacing)
+        return CGSize(width: centered && width.isFinite ? width : min(widest, width), height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX {
-                y += rowHeight + spacing
-                x = bounds.minX
-                rowHeight = 0
+        var y = bounds.minY
+        for line in rows(subviews, width: bounds.width) {
+            var x = centered ? bounds.minX + (bounds.width - line.width) / 2 : bounds.minX
+            for index in line.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y + (line.height - size.height) / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
             }
-            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+            y += line.height + (lineSpacing ?? spacing)
         }
+    }
+
+    private struct Line {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func rows(_ subviews: Subviews, width: CGFloat) -> [Line] {
+        var lines: [Line] = []
+        var line = Line()
+        for (index, view) in subviews.enumerated() {
+            let size = view.sizeThatFits(.unspecified)
+            if !line.indices.isEmpty && line.width + spacing + size.width > width {
+                lines.append(line)
+                line = Line()
+            }
+            line.width += (line.indices.isEmpty ? 0 : spacing) + size.width
+            line.height = max(line.height, size.height)
+            line.indices.append(index)
+        }
+        if !line.indices.isEmpty { lines.append(line) }
+        return lines
     }
 }

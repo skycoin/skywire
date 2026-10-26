@@ -46,6 +46,41 @@ final class MailChecks: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 20), .completed, "the deleted message is still listed")
     }
 
+    /// A long press starts a batch; select all, invert and deselect move it, and the
+    /// batch delete asks first and then removes every picked message.
+    func testBatchSelectAndDelete() {
+        let app = connectedApp(arguments: Self.english)
+        let address = openMail(app)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let first = "Batch A \(stamp)", second = "Batch B \(stamp)"
+        send(app, to: address, subject: first, body: "One.")
+        send(app, to: address, subject: second, body: "Two.")
+        let rowA = mailRow(app, first), rowB = mailRow(app, second)
+        XCTAssertTrue(rowA.waitForExistence(timeout: 30) && rowB.waitForExistence(timeout: 30), "the messages never arrived")
+        let listed = app.buttons.matching(identifier: "mail-row").count
+
+        rowA.press(forDuration: 1.0)
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5), "a long press picked nothing")
+        XCTAssertFalse(app.buttons["mail-write"].exists, "Write stays up during a batch")
+        app.buttons["mail-invert"].tap()
+        XCTAssertTrue(app.staticTexts["\(listed - 1) selected"].waitForExistence(timeout: 5), "invert did not flip the picks")
+        app.buttons["mail-select-all"].tap()
+        XCTAssertTrue(app.staticTexts["\(listed) selected"].waitForExistence(timeout: 5), "select all left some out")
+        app.buttons["mail-deselect-all"].tap()
+        XCTAssertTrue(app.buttons["mail-write"].waitForExistence(timeout: 5), "deselect all did not end the batch")
+
+        rowA.press(forDuration: 1.0)
+        rowB.tap()
+        XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5), "a tap during a batch did not pick")
+        snap("mail-batch")
+        app.buttons["mail-delete-selected"].tap()
+        tapWhenUp("Delete", in: app)
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: rowA)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 20), .completed, "the batch was not deleted")
+        XCTAssertFalse(rowB.exists, "the second picked message is still listed")
+        XCTAssertTrue(app.buttons["mail-write"].waitForExistence(timeout: 5), "the batch did not end after the delete")
+    }
+
     /// The settings switch turns the mailbox off and on again.
     func testMailboxTurnsOffAndOn() {
         let app = connectedApp(arguments: Self.english)
