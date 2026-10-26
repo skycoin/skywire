@@ -21,6 +21,8 @@ struct SendState {
     var changeAddress = ""
     /// Percent of the hours left after the burn that automatic hours send on, 10 to 100. Fiber only.
     var sharePercent = 50
+    /// The tip offered. Ethereum family only.
+    var ethLevel = FeeLevel.normal
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -488,7 +490,8 @@ final class WalletModel: ObservableObject {
                     hoursTo: hoursTo,
                     more: more,
                     changeAddress: coin.kind == .skyFiber ? request.changeAddress : nil,
-                    shareFactor: coin.kind == .skyFiber ? Decimal(request.sharePercent) / 100 : nil
+                    shareFactor: coin.kind == .skyFiber ? Decimal(request.sharePercent) / 100 : nil,
+                    feeLevel: coin.isEthFamily ? request.ethLevel : nil
                 )
                 send.planning = false
                 send.plan = plan
