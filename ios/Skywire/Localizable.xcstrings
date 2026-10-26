@@ -17878,6 +17878,35 @@
         }
       }
     },
+    "wallet_node_no_peers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The node has no connections to other nodes. What it shows may be out of date."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nodo no tiene conexiones con otros nodos. Lo que muestra puede estar desactualizado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nœud n’a aucune connexion avec d’autres nœuds. Ce qu’il affiche peut être dépassé."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点服务器没有连接到其他节点，显示的内容可能已过时。"
+          }
+        }
+      }
+    },
     "wallet_node_other_coin" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18019,6 +18048,122 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内置 · 兜底"
+          }
+        }
+      }
+    },
+    "wallet_node_status_checking" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprobando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vérification…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查…"
+          }
+        }
+      }
+    },
+    "wallet_node_status_down" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unreachable"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin conexión"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Injoignable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接"
+          }
+        }
+      }
+    },
+    "wallet_node_status_ok" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected · block %1$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectado · bloque %1$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecté · bloc %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已连接 · 区块 %1$@"
+          }
+        }
+      }
+    },
+    "wallet_node_syncing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The node is still synchronizing with the network. The balance and history shown may not be up to date."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nodo aún se está sincronizando con la red. Puede que el saldo y el historial no estén al día."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nœud se synchronise encore avec le réseau. Le solde et l’historique affichés peuvent ne pas être à jour."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点服务器仍在与网络同步，显示的余额和交易记录可能不是最新的。"
           }
         }
       }
@@ -22224,6 +22369,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$lld%%"
+          }
+        }
+      }
+    },
+    "wallet_send_syncing_confirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The node is still synchronizing, so the balance shown may be wrong. Continue anyway?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nodo aún se está sincronizando, así que el saldo puede ser incorrecto. ¿Continuar de todos modos?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nœud se synchronise encore, le solde affiché peut donc être faux. Continuer quand même ?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点服务器仍在同步，显示的余额可能不准确。仍要继续吗？"
           }
         }
       }

@@ -139,7 +139,12 @@ struct WalletSendView: View {
                     Button {
                         // The keyboard would squeeze the review sheet, which grows with each destination.
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        model.buildPlan { openReview() }
+                        // skycoin-web asks first when the node is still syncing: the balance may not be its last.
+                        if model.node?.synced == false {
+                            dialogs.showCustom { SyncingConfirm { model.buildPlan { openReview() } } }
+                        } else {
+                            model.buildPlan { openReview() }
+                        }
                     } label: {
                         HStack(spacing: 10) {
                             if model.send.planning { MaterialSpinner(size: 16, stroke: 2, color: .skyOnSurface.opacity(0.38)) }
@@ -1040,6 +1045,29 @@ private struct QRScannerSheet: UIViewControllerRepresentable {
                     return
                 }
             }
+        }
+    }
+}
+
+/// Android's text-only AlertDialog: the node is still syncing, review anyway or go back.
+private struct SyncingConfirm: View {
+    @EnvironmentObject private var dialogs: SkyDialogs
+    let onReview: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_send_syncing_confirm").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+            HStack(spacing: 8) {
+                Spacer()
+                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
+                Button {
+                    dialogs.dismiss()
+                    onReview()
+                } label: { Text("wallet_review") }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier("wallet-syncing-review")
+            }
+            .padding(.top, 24)
         }
     }
 }

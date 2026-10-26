@@ -76,7 +76,7 @@ struct WalletHome: View {
                             // Which node the coin is on, shown: "why will this not sync" is often here.
                             WalletNavRow(icon: MI.outlinedDns, title: L10n.key("wallet_node_row"),
                                          value: model.coin.nodeUrl.components(separatedBy: "://").last ?? model.coin.nodeUrl,
-                                         valueMaxWidth: 150) { model.path.append(.node) }
+                                         valueMaxWidth: 150, status: nodeStatus) { model.path.append(.node) }
                                 .padding(.top, 10)
                                 .accessibilityIdentifier("wallet-node-row")
                         }
@@ -85,6 +85,13 @@ struct WalletHome: View {
                 }
             }
         }
+    }
+
+    /// As skycoin-web's node status bar: whether the node answers, and how far it is.
+    private var nodeStatus: (text: String, color: Color) {
+        if !model.nodeReachable { return (L10n.text("wallet_node_status_down"), .skyError) }
+        guard let height = model.node?.height else { return (L10n.text("wallet_node_status_checking"), .skySuccess) }
+        return (L10n.format("wallet_node_status_ok", Amounts.groupThousands(String(height))), .skySuccess)
     }
 
     private func openCoins() {
@@ -137,6 +144,15 @@ struct WalletHome: View {
         if model.coin.kind == .skyFiber && !(model.snapshot?.exposedWithCoins.isEmpty ?? true) {
             WalletBanner(text: L10n.text("wallet_exposed_banner"), icon: MI.outlinedWarningAmber).padding(.top, 18)
                 .accessibilityIdentifier("wallet-exposed-banner")
+        }
+        // The node is behind or alone, so what it says may be out of date.
+        if model.node?.synced == false {
+            WalletBanner(text: L10n.text("wallet_node_syncing"), icon: MI.outlinedSync).padding(.top, 18)
+                .accessibilityIdentifier("wallet-node-syncing")
+        }
+        if model.node?.connections == 0 {
+            WalletBanner(text: L10n.text("wallet_node_no_peers"), icon: MI.outlinedSync).padding(.top, 18)
+                .accessibilityIdentifier("wallet-node-no-peers")
         }
         HStack(spacing: 12) {
             Button { model.path.append(.receive) } label: { actionLabel(MI.outlinedArrowDownward, L10n.key("wallet_receive")) }
