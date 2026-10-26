@@ -489,7 +489,7 @@ final class WalletStore: ObservableObject {
     func plan(
         walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool,
         fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil, more: [Recipient] = [],
-        changeAddress: String? = nil, shareFactor: Decimal? = nil
+        changeAddress: String? = nil, shareFactor: Decimal? = nil, feeLevel: FeeLevel? = nil
     ) async throws -> TxPlan {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
@@ -507,7 +507,7 @@ final class WalletStore: ObservableObject {
             more: more.map { Recipient(address: $0.address.trimmingCharacters(in: .whitespacesAndNewlines), amount: $0.amount, hours: $0.hours) },
             changeAddress: changeAddress.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 },
             shareFactor: shareFactor,
-            feeLevel: nil
+            feeLevel: feeLevel
         )
     }
 

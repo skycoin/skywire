@@ -726,14 +726,24 @@ private struct FiberFeeCard: View {
     }
 }
 
-/// The gas card: EIP-1559 prices itself, so this shows rather than asks: the worst-case fee once
-/// a plan exists, and where that money comes from on a token send.
+/// The gas card: three tips, as skycoin-web offers, then the worst-case fee once a plan exists and
+/// where that money comes from on a token send. No slider: the tip is the one honest knob, and
+/// three steps of it are enough.
 private struct EthFeeCard: View {
     @EnvironmentObject private var model: WalletModel
 
     var body: some View {
         let plan = model.send.plan
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                FeeChoice(name: L10n.key("wallet_fee_economy"), note: L10n.key("wallet_fee_eth_slow"), selected: model.send.ethLevel == .slow,
+                          identifier: "wallet-fee-slow") { pick(.slow) }
+                FeeChoice(name: L10n.key("wallet_fee_normal"), note: L10n.key("wallet_fee_eth_normal"), selected: model.send.ethLevel == .normal,
+                          identifier: "wallet-fee-normal") { pick(.normal) }
+                FeeChoice(name: L10n.key("wallet_fee_priority"), note: L10n.key("wallet_fee_eth_fast"), selected: model.send.ethLevel == .fast,
+                          identifier: "wallet-fee-fast") { pick(.fast) }
+            }
+            .padding(.bottom, 18)
             FeeLine(label: L10n.text("wallet_fee_network"),
                     value: plan.map { "\(Amounts.format($0.fee, exponent: 9, minDecimals: 6)) ETH" } ?? L10n.text("wallet_fee_at_review"))
             if let plan, let gas = plan.vsize {
@@ -743,6 +753,36 @@ private struct EthFeeCard: View {
             Text(model.coin.kind == .erc20 ? L10n.key("wallet_fee_note_erc20") : L10n.key("wallet_fee_note_eth"))
                 .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 12)
         }
+    }
+
+    private func pick(_ level: FeeLevel) {
+        model.send.ethLevel = level
+        model.send.plan = nil
+    }
+}
+
+/// A fee step: its name, a quiet line under it, the secondary container when chosen.
+private struct FeeChoice: View {
+    let name: LocalizedStringKey
+    let note: LocalizedStringKey
+    let selected: Bool
+    var identifier: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text(name).skyText(.labelLarge).foregroundStyle(selected ? Color.skyPrimary : Color.skyOnSurfaceVariant)
+                Text(note).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 6)
+            .background(selected ? Color.skySecondaryContainer : Color.skyContainerHighest, in: .sky(11))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 11))))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(identifier ?? "")
     }
 }
 
@@ -775,21 +815,10 @@ private struct BtcFeeCard: View {
     }
 
     private func preset(_ name: LocalizedStringKey, _ eta: LocalizedStringKey, _ rate: Int) -> some View {
-        let selected = rate == model.send.feeRate
-        return Button {
+        FeeChoice(name: name, note: eta, selected: rate == model.send.feeRate) {
             model.send.feeRate = rate
             model.send.plan = nil
-        } label: {
-            VStack(spacing: 2) {
-                Text(name).skyText(.labelLarge).foregroundStyle(selected ? Color.skyPrimary : Color.skyOnSurfaceVariant)
-                Text(eta).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 11)
-            .padding(.horizontal, 6)
-            .background(selected ? Color.skySecondaryContainer : Color.skyContainerHighest, in: .sky(11))
         }
-        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 11))))
     }
 }
 

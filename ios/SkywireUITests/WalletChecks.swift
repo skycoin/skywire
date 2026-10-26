@@ -191,5 +191,47 @@ final class WalletChecks: XCTestCase {
         removeWallet(eth, app)
         selectCoin("SKY", app)
     }
-}
 
+    /// Ethereum offers three tips, as skycoin-web does; picking one is what the plan prices, and an
+    /// empty account is refused at review rather than signed.
+    func testEthereumFeeLevels() throws {
+        let words = Bip39.newMnemonic().split(separator: " ").map(String.init)
+        let phrase = words.joined(separator: " ")
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        openTab(.wallet, in: app)
+        selectCoin("ETH", app)
+        startRestore(app)
+        typePhrase(words, app)
+        app.buttons["wallet-restore-action"].tap()
+        let eth = try EthCrypto.address(pubCompressed: EthCrypto.key(EthCrypto.accountKey(mnemonic: phrase), index: 0).pubKey())
+        let send = app.buttons["wallet-send"]
+        XCTAssertTrue(waitEnabled(send, timeout: 180), "the Ethereum node did not answer")
+        send.tap()
+        let normal = app.buttons["wallet-fee-normal"], fast = app.buttons["wallet-fee-fast"], slow = app.buttons["wallet-fee-slow"]
+        scroll(to: fast, in: app)
+        XCTAssertTrue(normal.isSelected, "Normal is not the default")
+        fast.tap()
+        XCTAssertTrue(fast.isSelected && !normal.isSelected)
+        slow.tap()
+        XCTAssertTrue(slow.isSelected && !fast.isSelected)
+        attachScreenshot(app, "wallet-eth-fees")
+        let to = app.textFields["wallet-send-to"]
+        scroll(to: to, in: app)
+        to.tap()
+        to.typeText(eth)
+        let amount = app.textFields["wallet-send-amount"]
+        amount.tap()
+        amount.typeText("0.001")
+        let review = app.buttons["wallet-send-review"]
+        scroll(to: review, in: app)
+        review.tap()
+        XCTAssertTrue(app.staticTexts["wallet-send-error"].waitForExistence(timeout: 60), "planning an empty account gave no answer")
+        back(app)
+        removeWallet(eth, app)
+        selectCoin("USDT", app)
+        removeWallet(eth, app)
+        selectCoin("SKY", app)
+    }
+}
