@@ -33,15 +33,17 @@ reward address setting
 	XPUB KEY SETUP (BIP44 wallets)
 
 	When using an xpub key, you must provide the account-level xpub
-	(BIP44 path: m/44'/coin'/account'). This is NOT the same as the
-	external chain xpub shown in the Skycoin web wallet GUI.
+	(BIP44 path: m/44'/coin'/account', depth 3), the parent of both the
+	external and change chains. A chain xpub (path 0/0 or 0/1, depth 4)
+	is not accepted.
 
-	The Skycoin web wallet displays the external chain xpub (path 0/0,
-	depth 4). The reward and login systems require the account-level
-	xpub (path 0, depth 3) which is the parent of both the external
-	and change chains.
+	The desktop wallet and skycoin-web show it for each bip44 wallet
+	account as "Account xPub", next to the two chain xpubs. Copy it and
+	set it with:
 
-	To export the correct xpub from a bip44 wallet using the CLI:
+	  skywire cli reward ACCOUNT_XPUB
+
+	Without the GUI, export it from a bip44 wallet with the CLI:
 
 	  1. Start a skycoin node with seed API enabled:
 	     skywire skycoin daemon --enable-api-sets="INSECURE_WALLET_SEED"
@@ -53,7 +55,7 @@ reward address setting
 	     You must use --path=0 for the account-level xpub (CORRECT).
 
 	  3. Set the reward address:
-	     skywire reward ACCOUNT_XPUB
+	     skywire cli reward ACCOUNT_XPUB
 
 	BIP44 key hierarchy:
 
