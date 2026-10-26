@@ -56,6 +56,9 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &m.dmsgC)
 	m.routerListener = maker("router_listener", initRouterListener, &m.dmsgC)
 	m.rt = maker("router", initRouter, &m.tr, &m.dmsgC, &m.dmsgHTTP, &m.embRouteSetup, &m.routerListener)
+	// The wallet reaches a node named <pk>.dmsg through this resolver's SOCKS5
+	// listener, which the phone profile turns on for .dmsg names only.
+	m.embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &m.dmsgC)
 	m.launch = maker("launcher", initLauncher, &m.ebc, &m.disc, &m.dmsgC, &m.tr, &m.rt, &m.embDmsgWeb, &m.embSkynetWeb, &m.embResolvers, &m.skymail)
 	// cli carries remote management (dmsg visor-RPC) as well as the local
 	// RPC listener, which the phone profile switches off (cli_addr "").
@@ -107,7 +110,6 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.dmsgServerLatency = dropped("dmsg_server_latency")
 	m.embTPS = dropped("embedded_tps")
 	m.embRouteSetup = dropped("embedded_route_setup")
-	m.embDmsgWeb = dropped("embedded_dmsgweb")
 	m.embWisp = dropped("embedded_wisp")
 	m.hostBridge = dropped("host_bridge")
 	m.embFwdProxy = dropped("dmsg_forward_proxy")
