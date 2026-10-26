@@ -86,6 +86,12 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// USD prices in the wallet, off until asked for (Android: WalletPrices.PREF_KEY).
+    var walletUsdPrices: Bool {
+        get { defaults.bool(forKey: Keys.walletUsdPrices) }
+        set { set(newValue, Keys.walletUsdPrices) }
+    }
+
     /// Whether the user left the core connected, so a relaunch (after a
     /// force-quit, or iOS ending the suspended app) connects again, as
     /// Android's sticky core service comes back after its process dies.
@@ -129,6 +135,7 @@ final class AppSettings: ObservableObject {
         static let appLockEnabled = "app_lock_enabled"
         static let configEncrypted = "config_encrypted"
         static let themeMode = "theme_mode"
+        static let walletUsdPrices = WalletPrices.prefKey
         /// M1's key, kept so a phone that had the spike connects again.
         static let wantsConnected = "core.wantsConnected"
     }

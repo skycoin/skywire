@@ -27,11 +27,12 @@ struct SettingsView: View {
                     DnsCard(model: model).scrollPlaceItem(3)
                     RemoteCard(model: model).scrollPlaceItem(4)
                     AppLockCard().scrollPlaceItem(5)
-                    ThemeCard().scrollPlaceItem(6)
-                    LanguageCard().scrollPlaceItem(7)
-                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(8)
-                    UpdatesCard().scrollPlaceItem(9)
-                    AboutCard(model: model).scrollPlaceItem(10)
+                    WalletPricesCard().scrollPlaceItem(6)
+                    ThemeCard().scrollPlaceItem(7)
+                    LanguageCard().scrollPlaceItem(8)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(9)
+                    UpdatesCard().scrollPlaceItem(10)
+                    AboutCard(model: model).scrollPlaceItem(11)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -437,6 +438,20 @@ private struct AppLockCard: View {
             if await lock.confirm(reason: reason) {
                 settings.appLockEnabled = enabled
             }
+        }
+    }
+}
+
+/// USD prices in the wallet, as skycoin-web shows them, off until asked for: fetching them tells
+/// the price service this phone's address and which coins it looks at.
+private struct WalletPricesCard: View {
+    @EnvironmentObject private var settings: AppSettings
+
+    var body: some View {
+        SectionCard {
+            SwitchRow(title: L10n.key("settings_wallet_prices"), hint: L10n.key("settings_wallet_prices_hint"),
+                      isOn: Binding(get: { settings.walletUsdPrices }, set: { settings.walletUsdPrices = $0 }),
+                      identifier: "settings-wallet-prices")
         }
     }
 }

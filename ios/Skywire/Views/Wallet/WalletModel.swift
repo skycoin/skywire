@@ -23,6 +23,8 @@ struct SendState {
     var sharePercent = 50
     /// The tip offered. Ethereum family only.
     var ethLevel = FeeLevel.normal
+    /// The amount field holds US dollars, converted at the current price.
+    var usdMode = false
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -92,6 +94,8 @@ final class WalletModel: ObservableObject {
     @Published private(set) var node: NodeInfo?
     /// False when the last node check got no answer.
     @Published private(set) var nodeReachable = true
+    /// One of the coin in US dollars, when the user turned prices on and the coin has one.
+    @Published private(set) var usdPrice: Double?
     /// A one-line outcome or refusal, shown briefly over the screen.
     @Published var message: String?
 
@@ -125,6 +129,13 @@ final class WalletModel: ObservableObject {
         let sameWallet = self.active?.id == active?.id
 
         self.coins = coins
+        // Another coin, however it was chosen (adding one selects it): the last coin's node and
+        // price are not this one's.
+        if coin.id != self.coin.id {
+            node = nil
+            nodeReachable = true
+            usdPrice = nil
+        }
         self.coin = coin
         let shipped = store.defaultCoins[coin.id]
         defaultNodeUrl = shipped?.nodeUrl ?? coin.nodeUrl
@@ -152,6 +163,8 @@ final class WalletModel: ObservableObject {
     /// While the tab is on screen: refresh now and every 30 seconds after.
     func run() async {
         visible = true
+        // Turned off in Settings while the tab was away: no price stays on screen.
+        if !WalletPrices.enabled { usdPrice = nil }
         startRefreshing()
         while !Task.isCancelled {
             do { try await Task.sleep(for: .seconds(3600)) } catch { break }
@@ -187,6 +200,7 @@ final class WalletModel: ObservableObject {
                 }
                 self.refreshing = false
                 await self.checkNodeStatus()
+                await self.refreshPrice()
                 do { try await Task.sleep(for: Self.refreshInterval) } catch { break }
             }
             self?.refreshing = false
@@ -200,6 +214,17 @@ final class WalletModel: ObservableObject {
         if Task.isCancelled || self.coin.id != coin.id { return }
         node = info
         nodeReachable = info != nil
+    }
+
+    /// The coin's USD price, when the user turned prices on; a failed fetch keeps the last one.
+    private func refreshPrice() async {
+        guard WalletPrices.enabled, let id = coin.priceId else {
+            usdPrice = nil
+            return
+        }
+        let price = try? await WalletPrices.usd(id)
+        if Task.isCancelled || coin.priceId != id || !WalletPrices.enabled { return }
+        usdPrice = price ?? usdPrice
     }
 
     func messageShown() { message = nil }
@@ -236,8 +261,6 @@ final class WalletModel: ObservableObject {
         store.setSelectedCoin(coinId)
         send = SendState()
         receiveIndex = 0
-        node = nil
-        nodeReachable = true
     }
 
     // MARK: Node details (fiber)
@@ -496,9 +519,13 @@ final class WalletModel: ObservableObject {
         let coin = coin
         let request = send
         let amount: UInt64
+        // In USD mode the field holds dollars; the plan is always in the coin.
+        let coinText = request.usdMode
+            ? usdPrice.flatMap { coin.coinTextFromUsd(Self.amountInput(request.amountText), price: $0) } ?? ""
+            : Self.amountInput(request.amountText)
         if request.sendMax {
             amount = 0
-        } else if let parsed = Amounts.parse(Self.amountInput(request.amountText), exponent: coin.exponent) {
+        } else if let parsed = Amounts.parse(coinText, exponent: coin.exponent) {
             amount = parsed
         } else {
             send.planError = L10n.text("wallet_send_invalid_amount")

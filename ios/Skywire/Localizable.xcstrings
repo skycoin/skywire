@@ -11154,6 +11154,64 @@
         }
       }
     },
+    "settings_wallet_prices" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prices in US dollars"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precios en dólares"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prix en dollars US"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以美元显示价格"
+          }
+        }
+      }
+    },
+    "settings_wallet_prices_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show wallet balances and amounts in USD too. Prices come from coinpaprika.com, which then sees this phone's internet address and which coins you look at. Off by default."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra también los saldos y cantidades de la billetera en USD. Los precios vienen de coinpaprika.com, que así ve la dirección de internet de este teléfono y qué monedas miras. Desactivado por defecto."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche aussi les soldes et montants du portefeuille en USD. Les prix viennent de coinpaprika.com, qui voit alors l’adresse internet de ce téléphone et les pièces que vous consultez. Désactivé par défaut."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时以美元显示钱包余额和金额。价格来自 coinpaprika.com，它会因此看到这部手机的网络地址以及你查看的币种。默认关闭。"
+          }
+        }
+      }
+    },
     "skydns_ios_pending" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23906,6 +23964,35 @@
         }
       }
     },
+    "wallet_tx_usd_now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Value now"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valor actual"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valeur actuelle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前价值"
+          }
+        }
+      }
+    },
     "wallet_tx_wallet" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23960,6 +24047,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "交易 ID 已复制"
+          }
+        }
+      }
+    },
+    "wallet_usd_value" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %1$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %1$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %1$@"
           }
         }
       }

@@ -231,6 +231,10 @@ struct WalletTxView: View {
             detail(tx.incoming ? L10n.key("wallet_tx_from") : L10n.key("wallet_tx_to"), tx.party.map { shortAddress($0) } ?? "—", first: true)
             detail(L10n.key("wallet_tx_wallet"), model.active?.name ?? "—")
             detail(L10n.key("wallet_tx_date"), wallFormat("d MMMM, HH:mm", Date(timeIntervalSince1970: TimeInterval(tx.timestamp))))
+            if let price = model.usdPrice {
+                // Today's price, not the price on the day: skycoin-web says the same.
+                detail(L10n.key("wallet_tx_usd_now"), L10n.format("wallet_usd_value", model.coin.usdText(tx.amount, price: price)))
+            }
             detail(L10n.key("wallet_tx_fee"), feeText(model.coin, tx.fee))
             detail(L10n.key("wallet_tx_confirmations"),
                    tx.confirmed ? Amounts.groupThousands(String(tx.confirmations)) : L10n.text("wallet_tx_confirmations_pending"))

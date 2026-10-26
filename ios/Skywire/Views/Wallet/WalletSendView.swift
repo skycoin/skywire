@@ -70,13 +70,26 @@ struct WalletSendView: View {
                             get: { model.send.amountText },
                             set: { model.send.amountText = $0; model.send.sendMax = false; model.send.planError = nil }
                         ), style: .headlineSmall, keyboard: .decimalPad, identifier: "wallet-send-amount")
-                        Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                        // With a price, the amount can be typed in US dollars, as skycoin-web allows.
+                        if let price = model.usdPrice {
+                            Button { toggleUsd(price) } label: {
+                                Text(verbatim: model.send.usdMode ? "USD" : model.coin.ticker).skyText(.labelLarge, bold: true)
+                            }
+                            .buttonStyle(.skyText)
+                            .accessibilityIdentifier("wallet-send-currency")
+                        } else {
+                            Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                        }
                         if model.send.extra.isEmpty { maxButton }
                     }
                     .padding(.leading, 4)
                     .padding(.trailing, 12)
                     .background(Color.skySurfaceVariant, in: .sky(14))
                     .padding(.top, 9)
+                    if let other = otherCurrency {
+                        Text(verbatim: other).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 6)
+                            .accessibilityIdentifier("wallet-send-converted")
+                    }
                     if model.send.extra.isEmpty {
                         Text(verbatim: maxNote).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
                     }
@@ -304,12 +317,37 @@ struct WalletSendView: View {
         .padding(.top, 14)
     }
 
+    /// The amount in the other currency: dollars under a coin amount, the coin under dollars.
+    private var otherCurrency: String? {
+        guard let price = model.usdPrice else { return nil }
+        let coin = model.coin
+        let typed = WalletModel.amountInput(model.send.amountText)
+        if model.send.usdMode {
+            return coin.coinTextFromUsd(typed, price: price).map { "≈ \($0) \(coin.ticker)" }
+        }
+        return Amounts.parse(typed, exponent: coin.exponent).map { L10n.format("wallet_usd_value", coin.usdText($0, price: price)) }
+    }
+
+    /// Switches the field between the coin and dollars, converting what is typed.
+    private func toggleUsd(_ price: Double) {
+        let coin = model.coin
+        let typed = WalletModel.amountInput(model.send.amountText).trimmingCharacters(in: .whitespaces)
+        let converted = model.send.usdMode
+            ? (typed.isEmpty ? nil : coin.coinTextFromUsd(typed, price: price))
+            : Amounts.parse(typed, exponent: coin.exponent).map { coin.usdPlain($0, price: price) }
+        model.send.usdMode.toggle()
+        model.send.amountText = converted ?? ""
+        model.send.sendMax = false
+        model.send.plan = nil
+    }
+
     private var maxButton: some View {
         Button {
             let max = model.sendMaxAmount()
             model.send.amountText = Amounts.format(max, exponent: model.coin.exponent, minDecimals: model.coin.displayDecimals)
                 .replacingOccurrences(of: ",", with: "")
             model.send.sendMax = true
+            model.send.usdMode = false
             model.send.planError = nil
         } label: { Text("wallet_max") }
         .buttonStyle(.skyText)
@@ -850,6 +888,10 @@ private struct ReviewSheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("wallet_review_title").skyText(.titleMedium)
                 Text(verbatim: "\(coin.amountText(plan.amount)) \(coin.ticker)").skyText(.headlineMedium).padding(.top, 16)
+                if let price = model.usdPrice {
+                    Text(verbatim: L10n.format("wallet_usd_value", coin.usdText(plan.amount, price: price)))
+                        .skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
                 // The network is the coin's own chain: Skycoin, this fiber coin's, Bitcoin or Ethereum.
                 Text(verbatim: plan.recipients.count > 1
                     ? L10n.format("wallet_review_dest_many", coin.name)
