@@ -17327,6 +17327,35 @@
         }
       }
     },
+    "wallet_node_add" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add node"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir nodo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter un nœud"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加节点"
+          }
+        }
+      }
+    },
     "wallet_node_body" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17414,60 +17443,60 @@
         }
       }
     },
-    "wallet_node_default" : {
+    "wallet_node_down" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Go back to %1$@"
+            "value" : "Move later, lower priority"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Volver a %1$@"
+            "value" : "Atrasar, menos prioridad"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Revenir à %1$@"
+            "value" : "Descendre, moindre priorité"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "恢复为 %1$@"
+            "value" : "后移，降低优先级"
           }
         }
       }
     },
-    "wallet_node_default_all" : {
+    "wallet_node_duplicate" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Go back to the shipped addresses"
+            "value" : "That address is already in the list."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Volver a las direcciones de la app"
+            "value" : "Esa dirección ya está en la lista."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Revenir aux adresses livrées"
+            "value" : "Cette adresse est déjà dans la liste."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "恢复为应用自带的地址"
+            "value" : "该地址已在列表中。"
           }
         }
       }
@@ -17530,60 +17559,89 @@
         }
       }
     },
-    "wallet_node_hint_btc" : {
+    "wallet_node_invalid" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An Esplora API, such as mempool.space, blockstream.info or your own electrs."
+            "value" : "Not an http(s) address."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una API Esplora, como mempool.space, blockstream.info o tu propio electrs."
+            "value" : "No es una dirección http(s)."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Une API Esplora, comme mempool.space, blockstream.info ou votre propre electrs."
+            "value" : "Ce n’est pas une adresse http(s)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esplora 接口，例如 mempool.space、blockstream.info 或你自建的 electrs。"
+            "value" : "不是 http(s) 地址。"
           }
         }
       }
     },
-    "wallet_node_hint_eth" : {
+    "wallet_node_list_hint" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An Ethereum JSON-RPC endpoint."
+            "value" : "Requests try these addresses in order — the first is the highest priority, and the shipped node is the fallback."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un punto de acceso JSON-RPC de Ethereum."
+            "value" : "Las peticiones prueban estas direcciones en orden: la primera es la de mayor prioridad, y el nodo de fábrica es el último recurso."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un point de terminaison JSON-RPC Ethereum."
+            "value" : "Les requêtes essaient ces adresses dans l’ordre — la première a la plus haute priorité, et le nœud livré sert de repli."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以太坊 JSON-RPC 接口。"
+            "value" : "请求会按顺序尝试这些地址——排在最前的优先级最高，内置节点作为兜底。"
+          }
+        }
+      }
+    },
+    "wallet_node_remove" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove this node"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar este nodo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer ce nœud"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此节点"
           }
         }
       }
@@ -17646,31 +17704,31 @@
         }
       }
     },
-    "wallet_node_save_all" : {
+    "wallet_node_shipped" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Use these addresses"
+            "value" : "Shipped · fallback"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Usar estas direcciones"
+            "value" : "De fábrica · último recurso"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Utiliser ces adresses"
+            "value" : "Livré · repli"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用这些地址"
+            "value" : "内置 · 兜底"
           }
         }
       }
@@ -17700,6 +17758,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "节点"
+          }
+        }
+      }
+    },
+    "wallet_node_up" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move earlier, higher priority"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adelantar, más prioridad"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monter, plus haute priorité"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前移，提高优先级"
           }
         }
       }

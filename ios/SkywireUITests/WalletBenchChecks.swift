@@ -421,6 +421,34 @@ final class WalletBenchChecks: XCTestCase {
         removeWallet(restored, app)
     }
 
+    /// A coin's nodes are a list: added at the end, moved, removed, and the first is the one the
+    /// balance screen names. Both addresses here reach the fake node.
+    func testNodeListOrder() throws {
+        let app = try benchWallet()
+        openNode(app)
+        XCTAssertEqual(listedNodes(app), [node])
+        let other = node.replacingOccurrences(of: "127.0.0.1", with: "localhost")
+        addNode(other, app)
+        XCTAssertTrue(app.staticTexts["wallet-node-2"].waitForExistence(timeout: 15), "the second node was not added")
+        addNode(node + "/", app)
+        XCTAssertTrue(app.staticTexts["wallet-node-error"].waitForExistence(timeout: 5), "a node already listed was taken again")
+        XCTAssertFalse(app.buttons["wallet-node-up-1"].isEnabled)
+        XCTAssertFalse(app.buttons["wallet-node-down-2"].isEnabled)
+        app.buttons["wallet-node-up-2"].tap()
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", other), object: app.staticTexts["wallet-node-1"])
+        XCTAssertEqual(XCTWaiter().wait(for: [moved], timeout: 5), .completed, "the second node did not move up")
+        XCTAssertEqual(listedNodes(app), [other, node])
+        attachScreenshot(app, "bench-node-list")
+        back(app)
+        XCTAssertTrue(nodeRow(app).label.contains("localhost:6420"), nodeRow(app).label)
+        XCTAssertTrue(waitEnabled(app.buttons["wallet-send"], timeout: 60), "the wallet stopped reading after the move")
+        openNode(app)
+        app.buttons["wallet-node-remove-1"].tap()
+        let back1 = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", node), object: app.staticTexts["wallet-node-1"])
+        XCTAssertEqual(XCTWaiter().wait(for: [back1], timeout: 5), .completed, "the removed node is still first")
+        XCTAssertEqual(listedNodes(app), [node])
+    }
+
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
     private func offline(_ button: String, _ app: XCUIApplication) {
         let open = app.buttons[button]
@@ -480,13 +508,12 @@ final class WalletBenchChecks: XCTestCase {
         return found
     }
 
-    /// The coin's node is the fake one.
+    /// The coin's node is the fake one, alone.
     private func useBenchNode(_ app: XCUIApplication) {
-        let row = nodeRow(app)
-        if row.label.contains(node.replacingOccurrences(of: "http://", with: "")) { return }
-        openNode(app)
-        replaceText("wallet-node-url", with: node, app)
-        app.buttons["wallet-node-save"].tap()
+        openShippedNode(app)
+        addNode(node, app)
+        XCTAssertTrue(app.staticTexts["wallet-node-1"].waitForExistence(timeout: 15), "the fake node was not added")
+        back(app)
     }
 
     /// The fake node's funding again, and the wallet refreshed onto it.

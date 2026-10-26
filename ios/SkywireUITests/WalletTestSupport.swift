@@ -15,16 +15,31 @@ extension XCTestCase {
         let row = nodeRow(app)
         scroll(to: row, in: app)
         row.tap()
-        XCTAssertTrue(app.textFields["wallet-node-url"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["wallet-node-add-url"].waitForExistence(timeout: 5))
     }
 
-    /// The node screen on the shipped addresses, whatever an earlier run left.
+    /// The node screen with none of the user's nodes, whatever an earlier run left.
     func openShippedNode(_ app: XCUIApplication) {
         openNode(app)
-        if app.buttons["wallet-node-default"].exists {
-            tapWhenUp("wallet-node-default", in: app)
-            openNode(app)
+        let remove = app.buttons["wallet-node-remove-1"]
+        while remove.exists {
+            remove.tap()
+            usleep(400_000)
         }
+    }
+
+    /// From the node screen: the address typed and added at the end of the list.
+    func addNode(_ url: String, _ app: XCUIApplication) {
+        let field = app.textFields["wallet-node-add-url"]
+        scroll(to: field, in: app)
+        field.tap()
+        field.typeText(url)
+        app.buttons["wallet-node-add"].tap()
+    }
+
+    /// The user's nodes as the node screen lists them, in order.
+    func listedNodes(_ app: XCUIApplication) -> [String] {
+        (1...10).map { app.staticTexts["wallet-node-\($0)"] }.prefix { $0.exists }.map(\.label)
     }
 
     func replaceText(_ identifier: String, with text: String, _ app: XCUIApplication) {

@@ -9,7 +9,8 @@ struct WalletRegistry: Codable, Equatable, Sendable {
     /// Every user-added coin, fiber chains and tokens alike (Android's
     /// `fiber_coins`, a key that predates tokens).
     var userCoins: [CoinSpec] = []
-    /// Coin id → the node address the user set.
+    /// Coin id → the user's node addresses in priority order, newline-joined (Android's stored
+    /// form), so a value from the single-node days is a list of one.
     var nodeUrls: [String: String] = [:]
     /// Coin id → the history indexer the user set (the Ethereum family).
     var indexerUrls: [String: String] = [:]
@@ -18,6 +19,11 @@ struct WalletRegistry: Codable, Equatable, Sendable {
     var activeWallets: [String: String] = [:]
 
     init() {}
+
+    /// The user's node lists by coin id.
+    var nodeLists: [String: [String]] {
+        nodeUrls.mapValues { $0.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+    }
 
     enum CodingKeys: String, CodingKey { case wallets, userCoins, nodeUrls, indexerUrls, selectedCoin, activeWallets }
 
@@ -98,7 +104,7 @@ final class WalletStore: ObservableObject {
     /// user fiber coins in the order added, then the other built-ins, then
     /// user tokens in the order added.
     var coins: [CoinSpec] {
-        shippedCoins.map { $0.withNodeOverride(registry.nodeUrls, indexerOverrides: registry.indexerUrls) }
+        shippedCoins.map { $0.withNodeOverride(registry.nodeLists, indexerOverrides: registry.indexerUrls) }
     }
 
     /// Each coin before any override, by id: what "use the default" restores.
@@ -113,19 +119,21 @@ final class WalletStore: ObservableObject {
 
     func coin(_ id: String) -> CoinSpec? { coins.first { $0.id == id } }
 
-    /// Point a coin at a different node, or hand it back to the shipped one
-    /// with a blank `url`; `indexerUrl` does the same for the Ethereum
-    /// family's history indexer, and nil leaves it as it is. Any address scan
-    /// waiting on a back-off is released: the whole point of changing the node
-    /// is that the old one was not answering.
-    func setNodeUrl(coinId: String, url: String, indexerUrl: String? = nil) throws {
-        let node = try Self.checkedUrl(url)
+    /// Set a coin's node addresses in priority order, the first asked first; an empty list hands
+    /// the coin back to its shipped address. `indexerUrl` does the same for the Ethereum family's
+    /// history indexer, and nil leaves it as it is. Any address scan waiting on a back-off is
+    /// released: the whole point of changing the node is that the old one was not answering.
+    func setNodeUrls(coinId: String, urls: [String], indexerUrl: String? = nil) throws {
         let indexer = try indexerUrl.map(Self.checkedUrl)
         // The shipped address is stored as nothing, so a later release that
         // ships another one is not held to this one.
         let shipped = defaultCoins[coinId]
+        var nodes: [String] = []
+        for url in try urls.map(Self.checkedUrl) where !url.isEmpty && url != shipped?.nodeUrl && !nodes.contains(url) {
+            nodes.append(url)
+        }
         mutate { reg in
-            reg.nodeUrls[coinId] = node == shipped?.nodeUrl || node.isEmpty ? nil : node
+            reg.nodeUrls[coinId] = nodes.isEmpty ? nil : nodes.joined(separator: "\n")
             if let indexer {
                 reg.indexerUrls[coinId] = indexer == shipped?.indexerUrl || indexer.isEmpty ? nil : indexer
             }
@@ -205,19 +213,23 @@ final class WalletStore: ObservableObject {
     }
 
     func core(for spec: CoinSpec) throws -> any WalletCore {
+        // More than one address to ask: the client walks them in the stored order, which is what
+        // the node screen means by priority.
+        let failover = spec.tryNodes.count > 1 ? NodeFailover(spec.tryNodes) : nil
         switch spec.kind {
         case .skyFiber:
-            return try SkyFiberWalletCore(nodeURL: spec.nodeUrl, session: session)
+            return try SkyFiberWalletCore(nodeURL: spec.nodeUrl, session: session, failover: failover)
         case .btc:
-            return try BtcWalletCore(esploraURL: spec.nodeUrl, session: session)
+            return try BtcWalletCore(esploraURL: spec.nodeUrl, session: session, failover: failover)
         case .eth:
-            return try EthWalletCore(rpcURL: spec.nodeUrl, indexerURL: spec.indexerUrl, session: session)
+            return try EthWalletCore(rpcURL: spec.nodeUrl, indexerURL: spec.indexerUrl, session: session, failover: failover)
         case .erc20:
             guard let contract = spec.contract else { throw WalletStoreError("token \(spec.id) has no contract address") }
             return try EthWalletCore(
                 rpcURL: spec.nodeUrl,
                 indexerURL: spec.indexerUrl,
                 session: session,
+                failover: failover,
                 token: EthWalletCore.Erc20Token(contract: contract, decimals: spec.tokenDecimals ?? CoinSpec.defaultTokenDecimals)
             )
         }
@@ -640,7 +652,7 @@ final class WalletStore: ObservableObject {
         try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
-    private static func isHTTPURL(_ text: String) -> Bool {
+    static func isHTTPURL(_ text: String) -> Bool {
         guard let url = URL(string: text), let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty
         else { return false }

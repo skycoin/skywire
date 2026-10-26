@@ -86,6 +86,8 @@ final class WalletModel: ObservableObject {
     @Published private(set) var defaultNodeUrl = ""
     /// The same for the Ethereum family's history indexer; nil for coins without one.
     @Published private(set) var defaultIndexerUrl: String?
+    /// The user's node addresses for this coin, in priority order, without the shipped fallback.
+    @Published private(set) var nodeUrls: [String] = []
     /// A one-line outcome or refusal, shown briefly over the screen.
     @Published var message: String?
 
@@ -123,6 +125,7 @@ final class WalletModel: ObservableObject {
         let shipped = store.defaultCoins[coin.id]
         defaultNodeUrl = shipped?.nodeUrl ?? coin.nodeUrl
         defaultIndexerUrl = shipped?.indexerUrl ?? coin.indexerUrl
+        nodeUrls = coin.nodeUrls.filter { $0 != defaultNodeUrl }
         allWallets = wallets
         self.coinWallets = coinWallets
         self.active = active
@@ -221,14 +224,13 @@ final class WalletModel: ObservableObject {
         receiveIndex = 0
     }
 
-    /// Point the selected coin at a different node, or hand it back to the
-    /// shipped one with a blank `url`; `indexerUrl` likewise, for coins that
-    /// have one. The next refresh uses them.
-    func setNodeUrl(_ url: String, indexerUrl: String?, onDone: @escaping () -> Void) {
+    /// Save the selected coin's node list: every add, remove and move lands here at once, so the
+    /// order on screen is the order the wallet asks in. An empty list hands the coin back to its
+    /// shipped address; `indexerUrl` moves the Ethereum family's indexer, nil leaving it as it is.
+    func saveNodeUrls(_ urls: [String], indexerUrl: String? = nil) {
         action { [self] in
-            try store.setNodeUrl(coinId: coin.id, url: url, indexerUrl: indexerUrl)
+            try store.setNodeUrls(coinId: coin.id, urls: urls, indexerUrl: indexerUrl)
             stale = false
-            onDone()
             refreshNow()
         }
     }

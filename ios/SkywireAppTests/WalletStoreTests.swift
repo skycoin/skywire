@@ -146,32 +146,44 @@ final class WalletStoreTests: XCTestCase {
     }
 
     func testNodeOverride() throws {
-        try store.setNodeUrl(coinId: "SKY", url: " http://192.168.1.5:6420/ ")
+        try store.setNodeUrls(coinId: "SKY", urls: [" http://192.168.1.5:6420/ "])
         XCTAssertEqual(store.coin("SKY")?.nodeUrl, "http://192.168.1.5:6420")
+        XCTAssertEqual(store.coin("SKY")?.tryNodes, ["http://192.168.1.5:6420", "https://node.skycoin.com"])
         XCTAssertEqual(store.defaultCoins["SKY"]?.nodeUrl, "https://node.skycoin.com")
-        try store.setNodeUrl(coinId: "SKY", url: "")
+        try store.setNodeUrls(coinId: "SKY", urls: [])
         XCTAssertEqual(store.coin("SKY")?.nodeUrl, "https://node.skycoin.com")
-        XCTAssertThrowsError(try store.setNodeUrl(coinId: "SKY", url: "ftp://node.example"))
+        XCTAssertThrowsError(try store.setNodeUrls(coinId: "SKY", urls: ["ftp://node.example"]))
+    }
+
+    /// The list is kept in its order, without the shipped address or repeats, newline-joined as
+    /// Android stores it, so a value from the single-node days reads as a list of one.
+    func testANodeListKeepsItsOrder() throws {
+        try store.setNodeUrls(coinId: "SKY", urls: ["https://b.example", "https://node.skycoin.com", "https://a.example/", "https://b.example"])
+        XCTAssertEqual(store.registry.nodeUrls["SKY"], "https://b.example\nhttps://a.example")
+        XCTAssertEqual(store.coin("SKY")?.tryNodes, ["https://b.example", "https://a.example", "https://node.skycoin.com"])
+        var old = WalletRegistry()
+        old.nodeUrls["SKY"] = "http://10.0.0.5:6420"
+        XCTAssertEqual(old.nodeLists["SKY"], ["http://10.0.0.5:6420"])
     }
 
     /// Every coin's node moves, the Ethereum family's indexer with it when asked, and the shipped
-    /// address is stored as nothing so a later release is not held to it (Android: setNodeUrl).
+    /// address is stored as nothing so a later release is not held to it (Android: setNodeUrls).
     func testNodeAndIndexerOverride() throws {
-        try store.setNodeUrl(coinId: "BTC", url: "https://blockstream.info/api")
+        try store.setNodeUrls(coinId: "BTC", urls: ["https://blockstream.info/api"])
         XCTAssertEqual(store.coin("BTC")?.nodeUrl, "https://blockstream.info/api")
         XCTAssertNil(store.coin("BTC")?.indexerUrl)
 
-        try store.setNodeUrl(coinId: "ETH", url: "https://rpc.example", indexerUrl: "https://scout.example/")
+        try store.setNodeUrls(coinId: "ETH", urls: ["https://rpc.example"], indexerUrl: "https://scout.example/")
         XCTAssertEqual(store.coin("ETH")?.nodeUrl, "https://rpc.example")
         XCTAssertEqual(store.coin("ETH")?.indexerUrl, "https://scout.example")
         XCTAssertEqual(store.coin("USDT"), CoinSpec.usdt, "a choice made for ETH does not move USDT")
-        XCTAssertThrowsError(try store.setNodeUrl(coinId: "ETH", url: "https://rpc.example", indexerUrl: "scout"))
+        XCTAssertThrowsError(try store.setNodeUrls(coinId: "ETH", urls: ["https://rpc.example"], indexerUrl: "scout"))
 
         // nil leaves the indexer as it is.
-        try store.setNodeUrl(coinId: "ETH", url: "https://rpc2.example", indexerUrl: nil)
+        try store.setNodeUrls(coinId: "ETH", urls: ["https://rpc2.example"], indexerUrl: nil)
         XCTAssertEqual(store.coin("ETH")?.indexerUrl, "https://scout.example")
 
-        try store.setNodeUrl(coinId: "ETH", url: CoinSpec.ethNode, indexerUrl: CoinSpec.ethIndexer)
+        try store.setNodeUrls(coinId: "ETH", urls: [CoinSpec.ethNode], indexerUrl: CoinSpec.ethIndexer)
         XCTAssertEqual(store.coin("ETH"), CoinSpec.eth)
         XCTAssertNil(store.registry.nodeUrls["ETH"])
         XCTAssertNil(store.registry.indexerUrls["ETH"])
@@ -186,7 +198,7 @@ final class WalletStoreTests: XCTestCase {
     }
 
     func testAnAddressTheUserSetWins() {
-        let moved = fiber.withNodeOverride(["fiber-1": "http://10.0.0.5:6420"])
+        let moved = fiber.withNodeOverride(["fiber-1": ["http://10.0.0.5:6420"]])
         XCTAssertEqual(moved.nodeUrl, "http://10.0.0.5:6420")
         XCTAssertEqual(moved.id, fiber.id)
         XCTAssertEqual(moved.ticker, fiber.ticker)
@@ -194,22 +206,26 @@ final class WalletStoreTests: XCTestCase {
     }
 
     func testAnotherCoinsOverrideIsNotThisOnes() {
-        XCTAssertEqual(fiber.withNodeOverride(["SKY": "http://elsewhere"]), fiber)
+        XCTAssertEqual(fiber.withNodeOverride(["SKY": ["http://elsewhere"]]), fiber)
     }
 
     func testBlankAndWhitespaceMeanTheShippedAddress() {
-        XCTAssertEqual(fiber.withNodeOverride(["fiber-1": ""]), fiber)
-        XCTAssertEqual(fiber.withNodeOverride(["fiber-1": "   "]), fiber)
+        XCTAssertEqual(fiber.withNodeOverride(["fiber-1": [""]]), fiber)
+        XCTAssertEqual(fiber.withNodeOverride(["fiber-1": ["   "]]), fiber)
+    }
+
+    func testAnOverrideEqualToTheShippedAddressChangesNothing() {
+        XCTAssertEqual(fiber.withNodeOverride(["fiber-1": ["https://node.example"]]), fiber)
     }
 
     func testBitcoinsNodeMovesLikeAnyOther() {
-        let moved = CoinSpec.btc.withNodeOverride(["BTC": "https://blockstream.info"])
+        let moved = CoinSpec.btc.withNodeOverride(["BTC": ["https://blockstream.info"]])
         XCTAssertEqual(moved.nodeUrl, "https://blockstream.info")
         XCTAssertNil(moved.indexerUrl)
     }
 
     func testTheEthereumIndexerMovesOnItsOwn() {
-        let node = CoinSpec.eth.withNodeOverride(["ETH": "https://rpc.example"])
+        let node = CoinSpec.eth.withNodeOverride(["ETH": ["https://rpc.example"]])
         XCTAssertEqual(node.nodeUrl, "https://rpc.example")
         XCTAssertEqual(node.indexerUrl, CoinSpec.ethIndexer)
         let indexer = CoinSpec.eth.withNodeOverride([:], indexerOverrides: ["ETH": "https://scout.example"])
@@ -218,8 +234,7 @@ final class WalletStoreTests: XCTestCase {
     }
 
     func testATokenIsMovedByItsOwnId() {
-        let ethOnly = ["ETH": "https://rpc.example"]
-        XCTAssertEqual(CoinSpec.usdt.withNodeOverride(ethOnly, indexerOverrides: ethOnly), CoinSpec.usdt)
+        XCTAssertEqual(CoinSpec.usdt.withNodeOverride(["ETH": ["https://rpc.example"]], indexerOverrides: ["ETH": "https://rpc.example"]), CoinSpec.usdt)
         let usdt = CoinSpec.usdt.withNodeOverride([:], indexerOverrides: ["USDT": "https://scout.example"])
         XCTAssertEqual(usdt.indexerUrl, "https://scout.example")
     }
@@ -230,6 +245,31 @@ final class WalletStoreTests: XCTestCase {
 
     func testABlankIndexerMeansTheShippedOne() {
         XCTAssertEqual(CoinSpec.eth.withNodeOverride([:], indexerOverrides: ["ETH": "  "]), CoinSpec.eth)
+    }
+
+    // Android's WalletNodeOrderTest.
+
+    func testWithoutOwnNodesTheShippedAddressStandsAlone() {
+        let spec = CoinSpec.sky.withNodeOverride(["SKY": []])
+        XCTAssertEqual(spec, CoinSpec.sky, "an empty list changes nothing")
+        XCTAssertEqual(spec.tryNodes, [CoinSpec.sky.nodeUrl])
+    }
+
+    func testEarlierMeansHigherPriority() {
+        let spec = CoinSpec.sky.withNodeOverride(["SKY": ["https://mine.example", "http://lan:8080"]])
+        XCTAssertEqual(spec.nodeUrl, "https://mine.example", "the first node is the one in force")
+        XCTAssertEqual(spec.tryNodes, ["https://mine.example", "http://lan:8080", CoinSpec.sky.nodeUrl],
+                       "the shipped address rides behind the list as the fallback")
+    }
+
+    func testNamingTheShippedAddressDoesNotDuplicateIt() {
+        let spec = CoinSpec.sky.withNodeOverride(["SKY": [CoinSpec.sky.nodeUrl, "https://mine.example"]])
+        XCTAssertEqual(spec.tryNodes, ["https://mine.example", CoinSpec.sky.nodeUrl], "the fallback is never duplicated and always last")
+    }
+
+    func testBlanksAreDropped() {
+        let spec = CoinSpec.sky.withNodeOverride(["SKY": ["", "  ", "https://mine.example"]])
+        XCTAssertEqual(spec.tryNodes, ["https://mine.example", CoinSpec.sky.nodeUrl])
     }
 
     func testTheShippedNodesAreEncrypted() {
