@@ -80,6 +80,7 @@ nav:
   - Command Reference: skywire/README.md
   - Apps:
       - Overview: apps-overview.md
+      - Android App: android/user-guide.md
       - PTY:
           - pty/README.md
           - pty/skywire-pty.md
