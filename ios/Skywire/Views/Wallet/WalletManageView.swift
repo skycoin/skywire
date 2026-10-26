@@ -312,9 +312,12 @@ struct WalletAddCoinView: View {
                         .skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
                         .padding(.top, 18)
                         .padding(.bottom, 24)
-                    LabeledField(label: L10n.key("wallet_add_coin_name"), hint: L10n.key("wallet_add_coin_name_hint"),
+                    // A fiber coin's node names its coin, so these may be left for it to fill.
+                    LabeledField(label: L10n.key("wallet_add_coin_name"),
+                                 hint: kind == .fiber ? L10n.key("wallet_add_coin_from_node") : L10n.key("wallet_add_coin_name_hint"),
                                  text: $name, identifier: "wallet-add-name")
-                    LabeledField(label: L10n.key("wallet_add_coin_ticker"), hint: L10n.key("wallet_add_coin_ticker_hint"),
+                    LabeledField(label: L10n.key("wallet_add_coin_ticker"),
+                                 hint: kind == .fiber ? L10n.key("wallet_add_coin_from_node") : L10n.key("wallet_add_coin_ticker_hint"),
                                  text: $ticker, identifier: "wallet-add-ticker")
                     iconRow
                     if kind == .fiber {
@@ -357,8 +360,9 @@ struct WalletAddCoinView: View {
 
     private var complete: Bool {
         let filled = { (s: String) in !s.trimmingCharacters(in: .whitespaces).isEmpty }
-        guard filled(name), filled(ticker) else { return false }
-        return kind == .fiber ? filled(node) : filled(contract) && filled(decimals)
+        // A fiber coin's name and ticker may come from its node.
+        if kind == .fiber { return filled(node) }
+        return filled(name) && filled(ticker) && filled(contract) && filled(decimals)
     }
 
     private func kindChip(_ label: LocalizedStringKey, _ value: AddCoinKind) -> some View {
@@ -432,9 +436,11 @@ private struct LabeledField: View {
 /// the screen holds that address too, saved on its own.
 struct WalletNodeView: View {
     @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
     @State private var add = ""
     @State private var indexer = ""
     @State private var error: String?
+    @State private var checking = false
 
     var body: some View {
         let coin = model.coin
@@ -463,9 +469,11 @@ struct WalletNodeView: View {
                         Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 6)
                             .accessibilityIdentifier("wallet-node-error")
                     }
-                    Button { addNode() } label: { Text("wallet_node_add").frame(maxWidth: .infinity) }
+                    Button { addNode() } label: {
+                        Text(checking ? L10n.key("wallet_node_checking") : L10n.key("wallet_node_add")).frame(maxWidth: .infinity)
+                    }
                         .buttonStyle(FilledButtonStyle(height: 50))
-                        .disabled(Self.typed(add).isEmpty)
+                        .disabled(Self.typed(add).isEmpty || checking)
                         .padding(.top, 10)
                         .accessibilityIdentifier("wallet-node-add")
                     NodeTransportNote(url: Self.typed(add))
@@ -503,8 +511,26 @@ struct WalletNodeView: View {
         } else if url == model.defaultNodeUrl || model.nodeUrls.contains(url) {
             error = L10n.text("wallet_node_duplicate")
         } else {
-            add = ""
-            model.saveNodeUrls(model.nodeUrls + [url])
+            // Asked first, as skycoin-web does: a node that does not answer, or is too old, never
+            // joins the list the wallet asks in.
+            error = nil
+            checking = true
+            let coin = model.coin
+            Task {
+                let result = await model.checkNode(url)
+                checking = false
+                switch result {
+                case .success(let info):
+                    dialogs.showCustom {
+                        NodeCheckDialog(coin: coin, info: info) {
+                            add = ""
+                            model.saveNodeUrls(model.nodeUrls + [url])
+                        }
+                    }
+                case .failure(let refused):
+                    error = refused.message
+                }
+            }
         }
     }
 
@@ -521,6 +547,53 @@ struct WalletNodeView: View {
         var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasSuffix("/") { trimmed.removeLast() }
         return trimmed
+    }
+}
+
+/// What a node reports about itself, as skycoin-web shows it before switching to it.
+private struct NodeCheckDialog: View {
+    @EnvironmentObject private var dialogs: SkyDialogs
+    let coin: CoinSpec
+    let info: NodeInfo
+    let onUse: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_node_check_title").skyText(.headlineSmall).foregroundStyle(Color.skyOnSurface)
+            VStack(alignment: .leading, spacing: 0) {
+                row(L10n.key("wallet_node_check_coin"), info.coinName ?? coin.name)
+                if let version = info.version { row(L10n.key("wallet_node_check_version"), version) }
+                if let height = info.height { row(L10n.key("wallet_node_check_height"), Amounts.groupThousands(String(height))) }
+                if let burn = info.burnFactor { row(L10n.key("wallet_node_check_burn"), "1/\(burn)") }
+                if let pubkey = info.pubkey { row(L10n.key("wallet_node_check_pubkey"), shortAddress(pubkey, head: 10, tail: 8)) }
+                // A fiber node answers for its own chain; another coin's node would show that chain's balances.
+                if coin.kind == .skyFiber, let other = info.coinName, other.lowercased() != coin.name.lowercased() {
+                    Text(verbatim: L10n.format("wallet_node_other_coin", other, coin.name))
+                        .skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 10)
+                        .accessibilityIdentifier("wallet-node-other-coin")
+                }
+            }
+            .padding(.top, 16)
+            HStack(spacing: 8) {
+                Spacer()
+                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
+                Button {
+                    dialogs.dismiss()
+                    onUse()
+                } label: { Text("wallet_node_check_use") }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier("wallet-node-check-use")
+            }
+            .padding(.top, 24)
+        }
+    }
+
+    private func row(_ label: LocalizedStringKey, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).frame(maxWidth: .infinity, alignment: .leading)
+            Text(verbatim: value).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface).fixedSize()
+        }
+        .padding(.vertical, 6)
     }
 }
 

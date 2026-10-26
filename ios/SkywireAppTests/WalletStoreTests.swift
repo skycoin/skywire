@@ -100,10 +100,24 @@ final class WalletStoreTests: XCTestCase {
 
     /// A fiber coin is its own chain: no mirroring between them.
     func testFiberCoinsDoNotShareWallets() async throws {
-        let coin = try store.addFiberCoin(name: "Test fiber", ticker: "tfc", nodeUrl: "https://fiber.example/", icon: nil)
+        let coin = try store.addFiberCoin(name: "Test fiber", ticker: "tfc", nodeUrl: "https://fiber.example/", info: NodeInfo(), icon: nil)
         XCTAssertEqual(coin.nodeUrl, "https://fiber.example")
         _ = try await store.addWallet(.sky, name: "", mnemonic: Self.phrase, restored: false)
         XCTAssertTrue(store.wallets.allSatisfy { $0.coinId == "SKY" })
+    }
+
+    /// A blank name or ticker is the node's, as skycoin-web takes them, and the explorer link is
+    /// the one the node names; with nothing typed and nothing from the node, the add is refused.
+    func testAFiberCoinIsNamedByItsNode() throws {
+        let info = NodeInfo(coinName: "Testcoin", ticker: "tst", explorerURL: "https://explorer.test")
+        let coin = try store.addFiberCoin(name: " ", ticker: "", nodeUrl: "https://fiber.example", info: info, icon: nil)
+        XCTAssertEqual(coin.name, "Testcoin")
+        XCTAssertEqual(coin.ticker, "TST")
+        XCTAssertEqual(coin.explorerTxUrl, "https://explorer.test/app/transaction/%s")
+        let typed = try store.addFiberCoin(name: "Mine", ticker: "MN", nodeUrl: "https://fiber.example", info: info, icon: nil)
+        XCTAssertEqual(typed.name, "Mine")
+        XCTAssertEqual(typed.ticker, "MN")
+        XCTAssertThrowsError(try store.addFiberCoin(name: "", ticker: "", nodeUrl: "https://fiber.example", info: NodeInfo(), icon: nil))
     }
 
     /// A coin holding wallets is refused (removing it would cascade into
@@ -111,7 +125,7 @@ final class WalletStoreTests: XCTestCase {
     /// the selection moves off it.
     func testCoinRemovalRules() async throws {
         XCTAssertThrowsError(try store.removeUserCoin("SKY"))
-        let coin = try store.addFiberCoin(name: "Test fiber", ticker: "TFC", nodeUrl: "https://fiber.example", icon: nil)
+        let coin = try store.addFiberCoin(name: "Test fiber", ticker: "TFC", nodeUrl: "https://fiber.example", info: NodeInfo(), icon: nil)
         store.setSelectedCoin(coin.id)
         let meta = try await store.addWallet(coin, name: "", mnemonic: Self.phrase, restored: false)
         XCTAssertThrowsError(try store.removeUserCoin(coin.id)) { error in

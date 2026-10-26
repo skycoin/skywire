@@ -427,10 +427,26 @@ final class WalletBenchChecks: XCTestCase {
         let app = try benchWallet()
         openNode(app)
         XCTAssertEqual(listedNodes(app), [node])
+        // Asked first: one that does not answer never joins the list.
+        addNode("http://127.0.0.1:1", app, use: false)
+        let error = app.staticTexts["wallet-node-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 30), "an unreachable node was not refused")
+        XCTAssertTrue(error.label.contains("not possible to connect"), error.label)
+        replaceText("wallet-node-add-url", with: "", app)
+
         let other = node.replacingOccurrences(of: "127.0.0.1", with: "localhost")
-        addNode(other, app)
+        let field = app.textFields["wallet-node-add-url"]
+        field.typeText(other)
+        app.buttons["wallet-node-add"].tap()
+        let accept = app.buttons["wallet-node-check-use"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 30), "no node properties")
+        XCTAssertTrue(app.staticTexts["Skycoin"].exists, "the properties do not name the node's coin")
+        XCTAssertTrue(app.staticTexts["1,000"].exists, "the properties do not show the last block")
+        XCTAssertFalse(app.staticTexts["wallet-node-other-coin"].exists, "a Skycoin node was called another coin's")
+        attachScreenshot(app, "bench-node-check")
+        accept.tap()
         XCTAssertTrue(app.staticTexts["wallet-node-2"].waitForExistence(timeout: 15), "the second node was not added")
-        addNode(node + "/", app)
+        addNode(node + "/", app, use: false)
         XCTAssertTrue(app.staticTexts["wallet-node-error"].waitForExistence(timeout: 5), "a node already listed was taken again")
         XCTAssertFalse(app.buttons["wallet-node-up-1"].isEnabled)
         XCTAssertFalse(app.buttons["wallet-node-down-2"].isEnabled)
@@ -447,6 +463,36 @@ final class WalletBenchChecks: XCTestCase {
         let back1 = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", node), object: app.staticTexts["wallet-node-1"])
         XCTAssertEqual(XCTWaiter().wait(for: [back1], timeout: 5), .completed, "the removed node is still first")
         XCTAssertEqual(listedNodes(app), [node])
+    }
+
+    /// A fiber coin added with its name and ticker left blank takes them from its node.
+    func testAFiberCoinIsNamedByItsNode() throws {
+        try bench("reset")
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        openTab(.wallet, in: app)
+        app.buttons["wallet-coin-chip"].tap()
+        tapWhenUp("wallet-add-coin", in: app)
+        let field = app.textFields["wallet-add-node"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        scroll(to: field, in: app)
+        field.tap()
+        field.typeText(node)
+        XCTAssertTrue(app.buttons["wallet-add-save"].isEnabled, "a fiber coin still needs a name and ticker typed")
+        attachScreenshot(app, "bench-add-coin-from-node")
+        app.buttons["wallet-add-save"].tap()
+        let chip = app.buttons["wallet-coin-chip"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 30), "the coin was not added")
+
+        chip.tap()
+        let added = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "wallet-coin-fiber-")).firstMatch
+        XCTAssertTrue(added.waitForExistence(timeout: 5), "no fiber coin in the list")
+        XCTAssertTrue(added.label.hasPrefix("Skycoin"), added.label)
+        // Its remove button is the row's last control.
+        added.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        tapWhenUp("Remove", in: app)
+        XCTAssertTrue(waitGone(added, timeout: 10), "the coin was not removed")
     }
 
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
