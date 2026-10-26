@@ -436,7 +436,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
 
 	// Reward address
-	skyenvStringVar(genConfigCmd.Flags(), &rewardSkyAddr, "rewardaddr", "${REWARDSKYADDR}", "skycoin reward address or xpub key")
+	skyenvStringVar(genConfigCmd.Flags(), &rewardSkyAddr, "rewardaddr", "${REWARDSKYADDR}", "reward account xpub (BIP44, account level)")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -1583,9 +1583,14 @@ func configureLauncher(log *logging.Logger) {
 		conf.RewardSystemDmsg = deployment.Prod.RewardSystemDmsg
 	}
 	if rewardSkyAddr != "" {
-		canonical, _, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
+		canonical, isXpub, err := rewardconfig.ValidateRewardAddress(rewardSkyAddr)
 		if err != nil {
 			log.WithError(err).Fatal("Invalid reward address")
+		}
+		// An existing REWARDSKYADDR still applies, so a regen never drops an
+		// operator's address, but a new one should be an xpub.
+		if !isXpub {
+			log.Warn(rewardconfig.ErrSingleAddress)
 		}
 		conf.RewardAddress = canonical
 	}

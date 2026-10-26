@@ -247,7 +247,8 @@ const envfileTemplate = `#
 
 ### Rewards #############################################################
 
-#--	Skycoin reward address or xpub key
+#--	Reward account xpub (BIP44, account level). A single address set
+#	earlier still works, but a new one must be an xpub.
 #REWARDSKYADDR=''
 
 ### Apps ################################################################
