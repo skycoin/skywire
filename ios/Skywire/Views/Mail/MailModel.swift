@@ -2,7 +2,7 @@ import CoreClient
 import Foundation
 import UniformTypeIdentifiers
 
-/// A file picked for the draft, read in full: a Skymail message is 1 MiB by default.
+/// A file picked for the draft, read in full: a SkyMail message is 10 MiB by default.
 struct DraftAttachment: Equatable {
     let name: String
     let mime: String
@@ -53,7 +53,7 @@ final class MailModel: ObservableObject {
     @Published var share: SharedFile?
 
     static let pollInterval: Duration = .seconds(15)
-    static let defaultMaxMessage: Int64 = 1 << 20
+    static let defaultMaxMessage: Int64 = 10 << 20
     /// The text and headers that ride along with the attachments.
     static let envelopeBytes: Int64 = 16 * 1024
 
@@ -203,9 +203,13 @@ final class MailModel: ObservableObject {
         guard var current = draft else { return }
         let limit = status.map(\.limits.maxMessageSize).flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultMaxMessage
         let all = current.attachments + picked
-        // Base64 grows a file by a third, and the text and headers ride along.
-        if Int64(all.reduce(0) { $0 + $1.bytes.count }) * 4 / 3 + Self.envelopeBytes > limit {
-            notice = L10n.format("mail_attachments_too_big", Self.formatBytes(limit))
+        // The wire size is what the receiver enforces. The text and headers
+        // ride along in the envelope allowance.
+        let encoded = all.reduce(Self.envelopeBytes) { $0 + Self.attachmentWireSize(Int64($1.bytes.count)) }
+        if encoded > limit {
+            // Whole KB on both sides: in MB a mail just over 1 MB and the 1 MB
+            // limit both read "1.0 MB".
+            notice = L10n.format("mail_attachments_too_big", Self.kilobytes(encoded), Self.kilobytes(limit))
             return
         }
         current.attachments = all
@@ -349,6 +353,18 @@ final class MailModel: ObservableObject {
         guard let bytes = try? Data(contentsOf: url) else { return nil }
         let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
         return DraftAttachment(name: url.lastPathComponent, mime: mime, bytes: bytes)
+    }
+
+    /// The bytes an attachment of `count` bytes takes in the sent mail: base64 in 76-column
+    /// lines, each ending CRLF, as compose in pkg/skymail/send.go writes it.
+    static func attachmentWireSize(_ count: Int64) -> Int64 {
+        let encoded = (count + 2) / 3 * 4
+        return encoded + 2 * max(1, (encoded + 75) / 76)
+    }
+
+    /// A byte count in whole KB, rounded up and grouped in the app's language.
+    static func kilobytes(_ count: Int64) -> String {
+        ((count + 1023) / 1024).formatted(.number.locale(L10n.locale)) + " KB"
     }
 
     /// A byte count as a person reads it, in the app's language (Android: ui/mail formatBytes).

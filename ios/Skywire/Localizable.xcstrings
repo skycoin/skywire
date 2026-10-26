@@ -122,19 +122,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         }
       }
@@ -2905,19 +2905,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Everything your visor can run, in one place. A tile opens the app’s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages, Skymail sends mail between visors and Fleet watches the visors you run elsewhere. A greyed tile is not built yet."
+            "value" : "Everything your visor can run, in one place. A tile opens the app’s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages, SkyMail sends mail between visors and Fleet watches the visors you run elsewhere. A greyed tile is not built yet."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, Skymail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido."
+            "value" : "Todo lo que tu nodo puede ejecutar, en un solo sitio. Cada icono abre la pantalla de su app; el nodo sigue funcionando por debajo de la que estés mirando.\n\nSkySOCKS y SkyVPN mandan el tráfico de otras apps por la red, SkyDEX opera, SkyChat envía mensajes, SkyMail lleva correo entre nodos y Flota vigila los nodos que ejecutas en otro sitio. Un icono en gris es algo que todavía no está construido."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，Skymail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。"
+            "value" : "你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，SkyMail 用于节点之间收发邮件，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。"
           }
         }
       }
@@ -2951,19 +2951,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail is e-mail between visors. Your visor keeps a mailbox at an address made from its public key, and mail is carried over Skywire, encrypted, with the sender’s key proved by the network rather than by a mail server.\n\nIt does not reach ordinary e-mail, and a visor that is offline cannot be written to: mail goes out at once and nothing retries. Use the .dmsg address from a phone; a .skynet address needs a route, which a phone rarely has.\n\nMail is kept on this phone, up to the size and age limits in the mailbox settings."
+            "value" : "SkyMail is e-mail between visors. Your visor keeps a mailbox at an address made from its public key, and mail is carried over Skywire, encrypted, with the sender’s key proved by the network rather than by a mail server.\n\nIt does not reach ordinary e-mail, and a visor that is offline cannot be written to: mail goes out at once and nothing retries. Use the .dmsg address from a phone; a .skynet address needs a route, which a phone rarely has.\n\nMail is kept on this phone, up to the size and age limits in the mailbox settings."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón."
+            "value" : "SkyMail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。"
+            "value" : "SkyMail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。"
           }
         }
       }
@@ -2974,19 +2974,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail"
+            "value" : "SkyMail"
           }
         }
       }
@@ -3158,19 +3158,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send."
+            "value" : "Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas doce palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar."
+            "value" : "Skycoin, las Fibercoins que comparten su software de nodo y Bitcoin, todas en manos de claves que se generan en este teléfono y nunca salen de él. Skywire nunca las ve y nunca se envían a la red.\n\nLas palabras de recuperación son la billetera. Cualquiera que las lea puede gastar las monedas desde cualquier dispositivo sin tu teléfono, y si las pierdes nadie puede recuperarte la billetera: ni nosotros, ni nadie.\n\nLos saldos y el historial vienen del nodo al que apunta cada moneda, así que una moneda cuyo nodo no se alcanza muestra su último saldo conocido y no permite enviar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。"
+            "value" : "Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。"
           }
         }
       }
@@ -4646,19 +4646,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anyone on Skywire can write to this address, and any name before the @ reaches you. Skymail travels only on the Skywire network: it does not reach ordinary e-mail."
+            "value" : "Anyone on Skywire can write to this address, and any name before the @ reaches you. SkyMail travels only on the Skywire network: it does not reach ordinary e-mail."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cualquiera en Skywire puede escribirte a esta dirección, y cualquier nombre antes de la @ te llega. Skymail viaja solo por la red Skywire: no llega al correo electrónico común."
+            "value" : "Cualquiera en Skywire puede escribirte a esta dirección, y cualquier nombre antes de la @ te llega. SkyMail viaja solo por la red Skywire: no llega al correo electrónico común."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skywire 上的任何人都能给这个地址写信，@ 前面写什么名字都能送到你这里。Skymail 只在 Skywire 网络里传递，不会送到普通电子邮箱。"
+            "value" : "Skywire 上的任何人都能给这个地址写信，@ 前面写什么名字都能送到你这里。SkyMail 只在 Skywire 网络里传递，不会送到普通电子邮箱。"
           }
         }
       }
@@ -4692,19 +4692,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "That is not a public key or a Skymail address."
+            "value" : "That is not a public key or a SkyMail address."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No es una clave pública ni una dirección de Skymail."
+            "value" : "No es una clave pública ni una dirección de SkyMail."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这不是公钥，也不是 Skymail 地址。"
+            "value" : "这不是公钥，也不是 SkyMail 地址。"
           }
         }
       }
@@ -4715,19 +4715,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A public key or a Skymail address"
+            "value" : "A public key or a SkyMail address"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una clave pública o una dirección de Skymail"
+            "value" : "Una clave pública o una dirección de SkyMail"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "公钥或 Skymail 地址"
+            "value" : "公钥或 SkyMail 地址"
           }
         }
       }
@@ -4876,19 +4876,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Too large: a message can be about %1$@, attachments included."
+            "value" : "These attachments become %1$@ in transit — a message can be about %2$@."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Demasiado grande: un mensaje puede ocupar unos %1$@, adjuntos incluidos."
+            "value" : "Estos adjuntos ocupan %1$@ en tránsito; un mensaje puede ser de unos %2$@."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "太大了：一封邮件连同附件大约只能有 %1$@。"
+            "value" : "这些附件在传输时会膨胀到 %1$@，而一封邮件大约只能有 %2$@。"
           }
         }
       }
@@ -4899,19 +4899,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Not a Skymail address: %1$@"
+            "value" : "Not a SkyMail address: %1$@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No es una dirección de Skymail: %1$@"
+            "value" : "No es una dirección de SkyMail: %1$@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不是 Skymail 地址：%1$@"
+            "value" : "不是 SkyMail 地址：%1$@"
           }
         }
       }
@@ -5842,19 +5842,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A Skymail address, or a visor’s public key"
+            "value" : "A SkyMail address, or a visor’s public key"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una dirección de Skymail o la clave pública de un nodo"
+            "value" : "Una dirección de SkyMail o la clave pública de un nodo"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Skymail 地址，或节点的公钥"
+            "value" : "SkyMail 地址，或节点的公钥"
           }
         }
       }
@@ -12433,19 +12433,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enter an existing 12 word phrase"
+            "value" : "Enter an existing 12 or 24 word phrase"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Introduce una frase de 12 palabras que ya tengas"
+            "value" : "Introduce una frase de 12 o 24 palabras que ya tengas"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "输入已有的 12 个助记词"
+            "value" : "输入已有的 12 或 24 个助记词"
           }
         }
       }
@@ -13192,19 +13192,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The keys stored here are deleted. If you do not have the twelve recovery words written down, the coins in this wallet cannot be reached again by anyone, including you."
+            "value" : "The keys stored here are deleted. If you do not have the recovery words written down, the coins in this wallet cannot be reached again by anyone, including you."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Las claves guardadas aquí se borran. Si no tienes apuntadas las doce palabras de recuperación, nadie podrá volver a alcanzar las monedas de esta billetera, tú incluido."
+            "value" : "Las claves guardadas aquí se borran. Si no tienes apuntadas las palabras de recuperación, nadie podrá volver a alcanzar las monedas de esta billetera, tú incluido."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本机保存的密钥会被删除。如果你没有抄下那十二个助记词，这个钱包里的币将再也无人能够动用，包括你自己。"
+            "value" : "本机保存的密钥会被删除。如果你没有抄下这些助记词，这个钱包里的币将再也无人能够动用，包括你自己。"
           }
         }
       }
@@ -13376,19 +13376,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This phrase fails its checksum. One of the twelve words is wrong or out of order."
+            "value" : "This phrase fails its checksum. One of the words is wrong or out of order."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta frase no pasa su suma de verificación. Una de las doce palabras está mal o fuera de orden."
+            "value" : "Esta frase no pasa su suma de verificación. Una de las palabras está mal o fuera de orden."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这组助记词校验不通过。十二个词中有一个写错了，或者顺序不对。"
+            "value" : "这组助记词校验不通过。其中有一个词写错了，或者顺序不对。"
           }
         }
       }
@@ -13445,19 +13445,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Word %1$lld of %2$lld"
+            "value" : "Word %1$lld of %2$@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Palabra %1$lld de %2$lld"
+            "value" : "Palabra %1$lld de %2$@"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "第 %1$lld 个词，共 %2$lld 个"
+            "value" : "第 %1$lld 个词，共 %2$@ 个"
           }
         }
       }
@@ -13491,19 +13491,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Only %1$lld of 12 words entered. A seed is restored in full or not at all."
+            "value" : "A seed has 12 or 24 words, and this one has %1$lld. It is restored in full or not at all."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Solo has introducido %1$lld de 12 palabras. Una semilla se restaura entera o no se restaura."
+            "value" : "Una semilla tiene 12 o 24 palabras, y esta tiene %1$lld. Se restaura entera o no se restaura."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "12 个词只输入了 %1$lld 个。助记词必须完整输入，否则无法恢复。"
+            "value" : "助记词有 12 或 24 个词，这里有 %1$lld 个。必须完整输入，否则无法恢复。"
           }
         }
       }
@@ -13744,19 +13744,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Anyone who reads these twelve words can move every coin in %1$@, from any device, without your phone. Only reveal them somewhere no one can see your screen."
+            "value" : "Anyone who reads these words can move every coin in %1$@, from any device, without your phone. Only reveal them somewhere no one can see your screen."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cualquiera que lea estas doce palabras puede mover todas las monedas de %1$@, desde cualquier dispositivo y sin tu teléfono. Muéstralas solo donde nadie pueda ver tu pantalla."
+            "value" : "Cualquiera que lea estas palabras puede mover todas las monedas de %1$@, desde cualquier dispositivo y sin tu teléfono. Muéstralas solo donde nadie pueda ver tu pantalla."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "任何人读到这十二个助记词，都能在任意设备上转走 %1$@ 中的全部币，不需要你的手机。只在没有人能看到你屏幕的地方查看它们。"
+            "value" : "任何人读到这些助记词，都能在任意设备上转走 %1$@ 中的全部币，不需要你的手机。只在没有人能看到你屏幕的地方查看它们。"
           }
         }
       }
@@ -14181,19 +14181,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Write these twelve words down in order and keep them offline. Anyone who has them can spend your coins."
+            "value" : "Write these words down in order and keep them offline. Anyone who has them can spend your coins."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apunta estas doce palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas."
+            "value" : "Apunta estas palabras en orden y guárdalas sin conexión. Cualquiera que las tenga puede gastar tus monedas."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按顺序抄下这十二个助记词，并离线保存。拿到它们的人就能花掉你的币。"
+            "value" : "按顺序抄下这些助记词，并离线保存。拿到它们的人就能花掉你的币。"
           }
         }
       }
