@@ -544,6 +544,49 @@ final class WalletBenchChecks: XCTestCase {
 
     private func shortAddress(_ address: String) -> String { "\(address.prefix(8))…\(address.suffix(6))" }
 
+    /// With "Prices in US dollars" on, the balance shows its USD value, an amount can be typed in
+    /// dollars and is sent as the coin amount it shows, and the review shows the value. The price is
+    /// coinpaprika's, live.
+    func testUsdPrices() throws {
+        let app = try benchWallet()
+        setUsdPrices(true, app)
+        defer { setUsdPrices(false, app) }
+        openTab(.wallet, in: app)
+        let usd = app.staticTexts["wallet-balance-usd"]
+        XCTAssertTrue(usd.waitForExistence(timeout: 60), "no USD value on the balance")
+        XCTAssertTrue(usd.label.hasPrefix("≈ $"), usd.label)
+
+        openSend(to: addresses[2], amount: "1", app)
+        let converted = app.staticTexts["wallet-send-converted"]
+        XCTAssertTrue(converted.waitForExistence(timeout: 5))
+        XCTAssertTrue(converted.label.hasPrefix("≈ $"), converted.label)
+        app.buttons["wallet-send-currency"].tap()
+        XCTAssertEqual(app.buttons["wallet-send-currency"].label, "USD")
+        replaceText("wallet-send-amount", with: "0.05", app)
+        let sky = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label ENDSWITH %@", " SKY"), object: converted)
+        XCTAssertEqual(XCTWaiter().wait(for: [sky], timeout: 5), .completed, converted.label)
+        // "≈ 0.724 SKY": what the dollars buy, rounded down to SKY's three decimals.
+        let coins = converted.label.replacingOccurrences(of: "≈ ", with: "").replacingOccurrences(of: " SKY", with: "")
+        attachScreenshot(app, "bench-usd-send")
+        try signAndSend(app, screenshot: "bench-usd-review")
+        let sent = try lastTransaction()
+        XCTAssertEqual(sent.outputs.first { $0.dst == addresses[2] }.flatMap { Double($0.coins) }, Double(coins),
+                       "the send was not the coin amount the dollars showed")
+    }
+
+    private func setUsdPrices(_ on: Bool, _ app: XCUIApplication) {
+        openTab(.settings, in: app)
+        let toggle = app.switches["settings-wallet-prices"]
+        scroll(to: toggle, in: app)
+        let value = on ? "1" : "0"
+        for _ in 0..<3 where toggle.value as? String != value {
+            toggle.tap()
+            let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: toggle)
+            _ = XCTWaiter().wait(for: [moved], timeout: 5)
+        }
+        XCTAssertEqual(toggle.value as? String, value, "the price switch did not turn \(on ? "on" : "off")")
+    }
+
     /// A fiber coin added with its name and ticker left blank takes them from its node.
     func testAFiberCoinIsNamedByItsNode() throws {
         try bench("reset")

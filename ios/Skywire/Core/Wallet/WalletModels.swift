@@ -32,6 +32,8 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
     /// User-added coins: the file name of the badge picked at creation
     /// (CoinIcons); nil falls back to ticker letters.
     var icon: String?
+    /// The coin's id at coinpaprika, for a USD price; nil when it has none there. Built-ins only.
+    var priceId: String?
     /// The node addresses requests try, in order; empty until the user names their own.
     /// `nodeUrl` is always the first of them. Derived from the registry, never stored here.
     var nodeUrls: [String] = []
@@ -39,7 +41,7 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
     init(
         id: String, name: String, ticker: String, kind: CoinKind, nodeUrl: String,
         explorerTxUrl: String? = nil, builtIn: Bool = false, contract: String? = nil,
-        tokenDecimals: Int? = nil, indexerUrl: String? = nil, icon: String? = nil
+        tokenDecimals: Int? = nil, indexerUrl: String? = nil, icon: String? = nil, priceId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -52,6 +54,7 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         self.tokenDecimals = tokenDecimals
         self.indexerUrl = indexerUrl
         self.icon = icon
+        self.priceId = priceId
     }
 
     enum CodingKeys: String, CodingKey {
@@ -148,7 +151,8 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         // most wants kept apart: which addresses belong together.
         nodeUrl: "https://node.skycoin.com",
         explorerTxUrl: "https://explorer.skycoin.com/app/transaction/%s",
-        builtIn: true
+        builtIn: true,
+        priceId: "sky-skycoin"
     )
     static let btc = CoinSpec(
         id: "BTC",
@@ -157,7 +161,8 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         kind: .btc,
         nodeUrl: "https://mempool.space",
         explorerTxUrl: "https://mempool.space/tx/%s",
-        builtIn: true
+        builtIn: true,
+        priceId: "btc-bitcoin"
     )
     static let eth = CoinSpec(
         id: "ETH",
@@ -167,7 +172,8 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         nodeUrl: ethNode,
         explorerTxUrl: "\(ethIndexer)/tx/%s",
         builtIn: true,
-        indexerUrl: ethIndexer
+        indexerUrl: ethIndexer,
+        priceId: "eth-ethereum"
     )
     static let usdt = CoinSpec(
         id: "USDT",
@@ -179,7 +185,8 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         builtIn: true,
         contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
         tokenDecimals: 6,
-        indexerUrl: ethIndexer
+        indexerUrl: ethIndexer,
+        priceId: "usdt-tether"
     )
 
     /// Keyless public endpoints; both are user-replaceable per token.

@@ -131,6 +131,11 @@ struct WalletHome: View {
                 Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
                 if model.refreshing { MaterialSpinner(size: 14, stroke: 2) }
             }
+            if let price = model.usdPrice {
+                Text(verbatim: L10n.format("wallet_usd_value", model.coin.usdText(model.snapshot?.confirmed ?? 0, price: price)))
+                    .skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 4)
+                    .accessibilityIdentifier("wallet-balance-usd")
+            }
             Text(verbatim: subLine).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 9)
         }
         .padding(.top, 22)
