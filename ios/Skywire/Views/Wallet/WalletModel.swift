@@ -224,6 +224,17 @@ final class WalletModel: ObservableObject {
         receiveIndex = 0
     }
 
+    /// Checks a node before it joins the selected coin's list: what it reports, or why it will not do.
+    func checkNode(_ url: String) async -> Result<NodeInfo, WalletStoreError> {
+        do {
+            return .success(try await store.checkNode(coin, url: url))
+        } catch let refused as WalletStoreError {
+            return .failure(refused)
+        } catch {
+            return .failure(WalletStoreError(L10n.text("wallet_node_unreachable")))
+        }
+    }
+
     /// Save the selected coin's node list: every add, remove and move lands here at once, so the
     /// order on screen is the order the wallet asks in. An empty list hands the coin back to its
     /// shipped address; `indexerUrl` moves the Ethereum family's indexer, nil leaving it as it is.
@@ -253,11 +264,10 @@ final class WalletModel: ObservableObject {
         }
     }
 
+    /// Adds a fiber coin once its node answers; a blank name or ticker comes from the node.
     func addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?, onDone: @escaping () -> Void) {
         action { [self] in
-            guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_name_required")) }
-            guard !ticker.trimmingCharacters(in: .whitespaces).isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_ticker_required")) }
-            let spec = try store.addFiberCoin(name: name, ticker: ticker, nodeUrl: nodeUrl, icon: icon)
+            let spec = try await store.addFiberCoin(name: name, ticker: ticker, nodeUrl: nodeUrl, icon: icon)
             store.setSelectedCoin(spec.id)
             onDone()
         }

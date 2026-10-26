@@ -149,16 +149,55 @@ final class WalletStore: ObservableObject {
         return trimmed
     }
 
-    func addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?) throws -> CoinSpec {
-        var url = nodeUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        if url.hasSuffix("/") { url.removeLast() }
-        guard Self.isHTTPURL(url) else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
+    /// Asks `url` about itself as a node for `coin`, alone, with none of the coin's other nodes
+    /// behind it. A node the wallet must not use is refused with the reason; an unreachable one
+    /// throws the transport's error.
+    func checkNode(_ coin: CoinSpec, url: String) async throws -> NodeInfo {
+        var spec = coin
+        spec.nodeUrl = url
+        spec.nodeUrls = []
+        let info = try await core(for: spec).nodeInfo()
+        switch info.problem {
+        case .tooOld: throw WalletStoreError(L10n.text("wallet_node_too_old"))
+        case .wrongChain: throw WalletStoreError(L10n.text("wallet_node_wrong_chain"))
+        case nil: return info
+        }
+    }
+
+    /// Adds a fiber coin once its node has answered, as skycoin-web does. A blank name or ticker
+    /// is taken from what the node says about its coin, and so is the block explorer link.
+    func addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?) async throws -> CoinSpec {
+        let url = try Self.checkedUrl(nodeUrl)
+        guard !url.isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
+        let info: NodeInfo
+        do {
+            info = try await checkNode(CoinSpec(id: "", name: "", ticker: "", kind: .skyFiber, nodeUrl: url), url: url)
+        } catch let refused as WalletStoreError {
+            throw refused
+        } catch {
+            throw WalletStoreError(L10n.text("wallet_node_unreachable"))
+        }
+        return try addFiberCoin(name: name, ticker: ticker, nodeUrl: url, info: info, icon: icon)
+    }
+
+    /// The save after the check: `info` is what the node said about itself.
+    func addFiberCoin(name: String, ticker: String, nodeUrl: String, info: NodeInfo, icon: String?) throws -> CoinSpec {
+        let url = try Self.checkedUrl(nodeUrl)
+        guard !url.isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTicker = ticker.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coinName = trimmedName.isEmpty ? info.coinName ?? "" : trimmedName
+        let coinTicker = (trimmedTicker.isEmpty ? info.ticker ?? "" : trimmedTicker).uppercased()
+        guard !coinName.isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_name_required")) }
+        guard !coinTicker.isEmpty else { throw WalletStoreError(L10n.text("wallet_add_coin_ticker_required")) }
         let spec = CoinSpec(
             id: "fiber-\(Self.shortID(8))",
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            ticker: ticker.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+            name: coinName,
+            ticker: coinTicker,
             kind: .skyFiber,
             nodeUrl: url,
+            // The Skycoin explorer's transaction page; fiber coins run the same explorer.
+            explorerTxUrl: info.explorerURL.map { "\($0)/app/transaction/%s" },
             icon: icon
         )
         mutate { $0.userCoins.append(spec) }

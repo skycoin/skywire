@@ -28,13 +28,19 @@ extension XCTestCase {
         }
     }
 
-    /// From the node screen: the address typed and added at the end of the list.
-    func addNode(_ url: String, _ app: XCUIApplication) {
+    /// From the node screen: the address typed, checked, and with `use` its properties accepted,
+    /// which adds it at the end of the list.
+    func addNode(_ url: String, _ app: XCUIApplication, use: Bool = true) {
         let field = app.textFields["wallet-node-add-url"]
         scroll(to: field, in: app)
         field.tap()
         field.typeText(url)
         app.buttons["wallet-node-add"].tap()
+        guard use else { return }
+        let accept = app.buttons["wallet-node-check-use"]
+        let error = app.staticTexts["wallet-node-error"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 30), "the node check did not pass: \(error.exists ? error.label : "no answer")")
+        accept.tap()
     }
 
     /// The user's nodes as the node screen lists them, in order.
