@@ -271,13 +271,14 @@ final class WalletModel: ObservableObject {
 
     // MARK: Create and restore
 
-    /// Begin the create flow for the selected coin: a fresh phrase and the
-    /// three positions the quiz asks for.
-    func startCreate() {
+    /// Begin the create flow for the selected coin: a fresh phrase of `words` words and the three
+    /// positions the quiz asks for.
+    func startCreate(words: Int = 12) {
         var rng = SystemRandomNumberGenerator()
-        var pool = Array(1...12)
+        let seed = Bip39.newMnemonic(entropyBits: words == 24 ? 256 : 128)
+        var pool = Array(1...seed.split(separator: " ").count)
         let positions = (0..<3).map { _ in pool.remove(at: Int.random(in: 0..<pool.count, using: &rng)) }.sorted()
-        draft = DraftState(coin: coin, seed: Bip39.newMnemonic(entropyBits: 128), quizPositions: positions)
+        draft = DraftState(coin: coin, seed: seed, quizPositions: positions)
     }
 
     func startRestore() {
@@ -304,12 +305,13 @@ final class WalletModel: ObservableObject {
         return wrong
     }
 
-    /// The phrase is validated by the restore screen before this is called.
-    func restoreWallet(_ phrase: String, onDone: @escaping () -> Void) {
+    /// The phrase is validated by the restore screen before this is called. `legacy` is a
+    /// checksum-less phrase the user chose to restore anyway.
+    func restoreWallet(_ phrase: String, legacy: Bool = false, onDone: @escaping () -> Void) {
         let coin = draft.coin
         action { [self] in
             restoring = true
-            _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: phrase, restored: true)
+            _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: phrase, restored: true, legacy: legacy)
             draft = DraftState()
             restoring = false
             onDone()

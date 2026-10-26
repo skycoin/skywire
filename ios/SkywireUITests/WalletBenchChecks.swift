@@ -307,6 +307,53 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertTrue(app.staticTexts["Addresses saved"].waitForExistence(timeout: 10), "the save was not confirmed")
     }
 
+    /// A new wallet can have a 24-word phrase, and an older wallet's 24-word seed without a
+    /// checksum restores once the user confirms it.
+    func testTwentyFourWordsAndAnOlderSeed() throws {
+        let app = try benchWallet()
+        openWallets(app)
+        app.buttons["wallet-manage-create"].tap()
+        let length = app.buttons["24 words"]
+        XCTAssertTrue(length.waitForExistence(timeout: 5))
+        length.tap()
+        let words = try readSeedWords(app)
+        XCTAssertEqual(words.count, 24)
+        XCTAssertTrue(Bip39.validate(words.joined(separator: " ")), "the 24 words are not a valid phrase")
+        attachScreenshot(app, "bench-24-words")
+        let next = app.buttons["wallet-seed-continue"]
+        scroll(to: next, in: app)
+        next.tap()
+        let positions = (1...24).filter { app.textFields["wallet-quiz-\($0)"].waitForExistence(timeout: $0 == 1 ? 5 : 0.2) }
+        XCTAssertEqual(positions.count, 3)
+        for pos in positions {
+            let field = app.textFields["wallet-quiz-\(pos)"]
+            field.tap()
+            field.typeText(words[pos - 1])
+        }
+        app.buttons["wallet-quiz-activate"].tap()
+        let created = try skycoinAddress(words)
+        XCTAssertEqual(try receiveAddress(app, timeout: 30), created, "the 24-word wallet receives elsewhere")
+        back(app)
+        removeWallet(created, app)
+
+        // 24 list words with no checksum: an older Skycoin wallet's seed.
+        let older = Array(repeating: "abandon", count: 24)
+        XCTAssertFalse(Bip39.validate(older.joined(separator: " ")))
+        startRestore(app)
+        typePhrase(older, app)
+        app.buttons["wallet-restore-action"].tap()
+        let error = app.staticTexts["wallet-restore-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(error.label.contains("no checksum"), error.label)
+        XCTAssertEqual(app.buttons["wallet-restore-action"].label, "Restore anyway")
+        attachScreenshot(app, "bench-restore-anyway")
+        app.buttons["wallet-restore-action"].tap()
+        let restored = try skycoinAddress(older)
+        XCTAssertEqual(try receiveAddress(app, timeout: 60), restored, "the older seed restored to another address")
+        back(app)
+        removeWallet(restored, app)
+    }
+
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
     private func offline(_ button: String, _ app: XCUIApplication) {
         let open = app.buttons[button]
