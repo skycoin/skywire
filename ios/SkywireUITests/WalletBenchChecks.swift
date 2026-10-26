@@ -465,6 +465,36 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertEqual(listedNodes(app), [node])
     }
 
+    /// The node row says whether the node answers and its last block; a node behind its peers or
+    /// alone gets a banner each, and Review asks first while the node is still syncing.
+    func testNodeStatusAndSyncing() throws {
+        let app = try benchWallet()
+        let connected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Connected · block 1,000"), object: nodeRow(app))
+        XCTAssertEqual(XCTWaiter().wait(for: [connected], timeout: 60), .completed, nodeRow(app).label)
+        XCTAssertFalse(app.descendants(matching: .any)["wallet-node-syncing"].exists)
+
+        try bench("node?syncing=1&connections=0")
+        selectCoin("BTC", app)
+        selectCoin("SKY", app)
+        let syncing = app.descendants(matching: .any)["wallet-node-syncing"]
+        XCTAssertTrue(syncing.waitForExistence(timeout: 60), "no banner while the node syncs")
+        XCTAssertTrue(app.descendants(matching: .any)["wallet-node-no-peers"].exists, "no banner for a node without peers")
+        attachScreenshot(app, "bench-node-syncing")
+
+        openSend(to: addresses[2], amount: "1", app)
+        let review = app.buttons["wallet-send-review"]
+        scroll(to: review, in: app)
+        review.tap()
+        let anyway = app.buttons["wallet-syncing-review"]
+        XCTAssertTrue(anyway.waitForExistence(timeout: 5), "Review did not ask first while the node syncs")
+        XCTAssertFalse(app.buttons["wallet-review-sign"].exists)
+        attachScreenshot(app, "bench-syncing-confirm")
+        anyway.tap()
+        XCTAssertTrue(app.buttons["wallet-review-sign"].waitForExistence(timeout: 30), "no review after the confirm")
+        closeSheet(app)
+        try bench("reset")
+    }
+
     /// A fiber coin added with its name and ticker left blank takes them from its node.
     func testAFiberCoinIsNamedByItsNode() throws {
         try bench("reset")

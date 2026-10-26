@@ -88,6 +88,10 @@ final class WalletModel: ObservableObject {
     @Published private(set) var defaultIndexerUrl: String?
     /// The user's node addresses for this coin, in priority order, without the shipped fallback.
     @Published private(set) var nodeUrls: [String] = []
+    /// The coin's node as it last answered; nil before it has, or when it did not.
+    @Published private(set) var node: NodeInfo?
+    /// False when the last node check got no answer.
+    @Published private(set) var nodeReachable = true
     /// A one-line outcome or refusal, shown briefly over the screen.
     @Published var message: String?
 
@@ -182,10 +186,20 @@ final class WalletModel: ObservableObject {
                     if self.active?.id == walletId { self.stale = true }
                 }
                 self.refreshing = false
+                await self.checkNodeStatus()
                 do { try await Task.sleep(for: Self.refreshInterval) } catch { break }
             }
             self?.refreshing = false
         }
+    }
+
+    /// The node status line: asked with each refresh, as skycoin-web polls its node's health.
+    private func checkNodeStatus() async {
+        let coin = coin
+        let info = try? await store.nodeStatus(coin)
+        if Task.isCancelled || self.coin.id != coin.id { return }
+        node = info
+        nodeReachable = info != nil
     }
 
     func messageShown() { message = nil }
@@ -222,6 +236,8 @@ final class WalletModel: ObservableObject {
         store.setSelectedCoin(coinId)
         send = SendState()
         receiveIndex = 0
+        node = nil
+        nodeReachable = true
     }
 
     /// Checks a node before it joins the selected coin's list: what it reports, or why it will not do.

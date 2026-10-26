@@ -164,6 +164,11 @@ final class WalletStore: ObservableObject {
         }
     }
 
+    /// What the coin's node, through its usual list, says about itself now.
+    func nodeStatus(_ coin: CoinSpec) async throws -> NodeInfo {
+        try await core(for: coin).nodeInfo()
+    }
+
     /// Adds a fiber coin once its node has answered, as skycoin-web does. A blank name or ticker
     /// is taken from what the node says about its coin, and so is the block explorer link.
     func addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?) async throws -> CoinSpec {

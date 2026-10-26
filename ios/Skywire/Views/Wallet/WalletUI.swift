@@ -334,13 +334,21 @@ struct WalletNavRow: View {
     let title: LocalizedStringKey
     var value: String? = nil
     var valueMaxWidth: CGFloat? = nil
+    /// A line under the title, in its own colour (the node's state).
+    var status: (text: String, color: Color)? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 MaterialIcon(icon, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
-                Text(title).skyText(.bodyLarge, bold: true).frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).skyText(.bodyLarge, bold: true)
+                    if let status {
+                        Text(verbatim: status.text).skyText(.bodySmall).foregroundStyle(status.color)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if let value {
                     Text(verbatim: value).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).lineLimit(1)
                         .frame(maxWidth: valueMaxWidth, alignment: .trailing)
