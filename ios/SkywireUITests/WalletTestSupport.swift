@@ -90,6 +90,21 @@ extension XCTestCase {
         XCTAssertTrue(app.buttons["wallet-restore-word-\(words.count)"].waitForExistence(timeout: 5), "not every word was taken")
     }
 
+    /// Continue from the backup, the three asked words typed, and Activate.
+    func passQuiz(_ words: [String], _ app: XCUIApplication) {
+        let next = app.buttons["wallet-seed-continue"]
+        scroll(to: next, in: app)
+        next.tap()
+        let positions = (1...words.count).filter { app.textFields["wallet-quiz-\($0)"].waitForExistence(timeout: $0 == 1 ? 5 : 0.2) }
+        XCTAssertEqual(positions.count, 3)
+        for pos in positions {
+            let field = app.textFields["wallet-quiz-\(pos)"]
+            field.tap()
+            field.typeText(words[pos - 1])
+        }
+        app.buttons["wallet-quiz-activate"].tap()
+    }
+
     /// Opens Receive from the balance screen and reads the address on it.
     func receiveAddress(_ app: XCUIApplication, timeout: TimeInterval = 20) throws -> String {
         let receive = app.buttons["wallet-receive"]

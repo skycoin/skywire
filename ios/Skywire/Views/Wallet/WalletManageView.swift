@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+import WalletCore
 
 /// The selected coin's wallets (Android: ui/wallet/WalletManage.kt): switch, rename, reveal,
 /// remove, add.
@@ -116,6 +117,15 @@ struct WalletManageView: View {
                     dialogs.dismissSheet()
                     exportTarget = wallet
                 }
+                if wallet.derivation == .bip44 {
+                    SheetAction(icon: MI.outlinedKey, title: L10n.key("wallet_xpub_action"), subtitle: L10n.key("wallet_xpub_action_sub"),
+                                identifier: "wallet-action-xpub") {
+                        dialogs.dismissSheet()
+                        if let keys = model.extendedPublicKeys(wallet.id) {
+                            dialogs.showCustom { XpubDialog(keys: keys) }
+                        }
+                    }
+                }
                 SheetAction(icon: MI.outlinedDeleteOutline, title: L10n.key("wallet_remove_action"), subtitle: L10n.key("wallet_remove_action_sub"),
                             destructive: true, identifier: "wallet-action-remove") {
                     dialogs.dismissSheet()
@@ -190,6 +200,7 @@ struct WalletRevealView: View {
     @EnvironmentObject private var model: WalletModel
     let walletId: String
     @State private var seed: String?
+    @State private var passphrase = ""
     @State private var unavailable = false
     @State private var secondsLeft = 120
 
@@ -214,6 +225,18 @@ struct WalletRevealView: View {
                         Text("wallet_seed_unavailable").skyText(.bodyLarge).foregroundStyle(Color.skyError)
                     } else if let seed {
                         SeedGrid(words: seed.split(separator: " ").map(String.init))
+                        // A wallet made with a passphrase needs it as much as the words to be restored.
+                        if !passphrase.isEmpty {
+                            Text(verbatim: L10n.text("wallet_passphrase_reveal_label").uppercased())
+                                .skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 18)
+                            Text(verbatim: passphrase).skyText(.bodyLarge, bold: true)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 13)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.skySurfaceVariant, in: .sky(12))
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("wallet-reveal-passphrase")
+                        }
                         Text(verbatim: L10n.format("wallet_reveal_autohide_ios", String(format: "%d:%02d", secondsLeft / 60, secondsLeft % 60)))
                             .skyText(.bodySmall)
                             .foregroundStyle(Color.skyOnSurfaceVariant)
@@ -238,6 +261,7 @@ struct WalletRevealView: View {
                 return
             }
             seed = model.revealSeed(walletId)
+            passphrase = model.revealPassphrase(walletId)
             unavailable = seed == nil
             guard seed != nil else { return }
             while secondsLeft > 0 {
@@ -246,11 +270,15 @@ struct WalletRevealView: View {
             }
             close()
         }
-        .onDisappear { seed = nil }
+        .onDisappear {
+            seed = nil
+            passphrase = ""
+        }
     }
 
     private func close() {
         seed = nil
+        passphrase = ""
         if case .reveal = model.path.last { model.path.removeLast() }
     }
 }
@@ -529,5 +557,53 @@ struct AddressesDocument: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: Data(text.utf8))
+    }
+}
+
+/// A BIP 44 wallet's account xpub and its receive and change chain xpubs; a tap copies one.
+private struct XpubDialog: View {
+    @EnvironmentObject private var dialogs: SkyDialogs
+    let keys: ExtendedPublicKeys
+    @State private var copied: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_xpub_action").skyText(.headlineSmall).foregroundStyle(Color.skyOnSurface)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("wallet_xpub_note").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                    let rows = [(L10n.text("wallet_xpub_account"), keys.account), (L10n.text("wallet_xpub_receive"), keys.receive),
+                                (L10n.text("wallet_xpub_change"), keys.change)]
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        let (label, xpub) = row
+                        Text(verbatim: label.uppercased()).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 14)
+                        Button {
+                            UIPasteboard.general.string = xpub
+                            copied = xpub
+                        } label: {
+                            Text(verbatim: xpub).skyText(.bodySmall, mono: true).foregroundStyle(Color.skyOnSurface)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(Color.skyContainerHighest, in: .sky(10))
+                        }
+                        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 10))))
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("wallet-xpub-\(index)")
+                        if copied == xpub {
+                            Text("wallet_xpub_copied").skyText(.bodySmall).foregroundStyle(Color.skyPrimary).padding(.top, 4)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 420)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 16)
+            HStack {
+                Spacer()
+                Button { dialogs.dismiss() } label: { Text("wallet_done") }.buttonStyle(.skyText)
+            }
+            .padding(.top, 24)
+        }
     }
 }

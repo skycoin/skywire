@@ -7,6 +7,7 @@ import WalletCore
 /// The phrase backup: the numbered grid, covered whenever it could be captured, no copy.
 struct WalletSeedView: View {
     @EnvironmentObject private var model: WalletModel
+    @State private var passphraseAgain = ""
 
     var body: some View {
         WalletScreen(title: Text("wallet_seed_title")) {
@@ -19,13 +20,16 @@ struct WalletSeedView: View {
                     SkySegmentedRow(items: [12, 24], selected: words.count, label: {
                         Text($0 == 24 ? L10n.key("wallet_seed_words_24") : L10n.key("wallet_seed_words_12"))
                     }, onSelect: { count in
-                        if count != words.count { model.startCreate(words: count) }
+                        if count != words.count { model.startCreate(words: count, keepChoices: true) }
                     })
                     .padding(.top, 16)
                     .accessibilityIdentifier("wallet-seed-length")
+                    DerivationChoice()
                     SeedGrid(words: words).padding(.top, 20)
+                    PassphraseFields(confirm: true, again: $passphraseAgain)
                     Button { model.path.append(.verify) } label: { Text("wallet_seed_continue").frame(maxWidth: .infinity) }
                         .buttonStyle(FilledButtonStyle(height: 52))
+                        .disabled(!PassphraseFields.usable(model.draft, confirm: true, again: passphraseAgain))
                         .padding(.top, 28)
                         .padding(.bottom, 24)
                         .accessibilityIdentifier("wallet-seed-continue")
@@ -34,6 +38,73 @@ struct WalletSeedView: View {
             }
         }
         .modifier(SeedPrivacy())
+    }
+}
+
+/// Two kinds of wallet, as skycoin-web offers them: for fiber coins the classic deterministic one
+/// or BIP 44, for Bitcoin native segwit or legacy P2PKH. The phrase is the same; the addresses are
+/// not, so a restore has to name the kind the wallet was made as.
+struct DerivationChoice: View {
+    @EnvironmentObject private var model: WalletModel
+
+    var body: some View {
+        let kind = model.draft.coin.kind
+        if kind == .skyFiber || kind == .btc {
+            let btc = kind == .btc
+            VStack(alignment: .leading, spacing: 8) {
+                Text(verbatim: L10n.text("wallet_derivation_title").uppercased()).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                SkySegmentedRow(items: [Derivation.standard, .bip44], selected: model.draft.derivation, label: { d in
+                    switch (btc, d) {
+                    case (true, .bip44): Text("wallet_derivation_btc_legacy")
+                    case (true, _): Text("wallet_derivation_btc_segwit")
+                    case (false, .bip44): Text("wallet_derivation_bip44")
+                    case (false, _): Text("wallet_derivation_standard")
+                    }
+                }, onSelect: model.setDraftDerivation)
+                .accessibilityIdentifier("wallet-derivation")
+                Text(btc ? L10n.key("wallet_derivation_note_btc") : L10n.key("wallet_derivation_note"))
+                    .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+            .padding(.top, 18)
+        }
+    }
+}
+
+/// The optional BIP 39 passphrase, as skycoin-web offers it. Every wallet but the classic fiber
+/// one runs the phrase through BIP 39, and there it changes every key. Creating asks for it twice,
+/// since a typo would lose the wallet.
+struct PassphraseFields: View {
+    @EnvironmentObject private var model: WalletModel
+    let confirm: Bool
+    @Binding var again: String
+
+    /// Whether what is typed can be used: no passphrase where it has no part, or a confirmed one.
+    static func usable(_ draft: DraftState, confirm: Bool, again: String) -> Bool {
+        !applies(draft) || !confirm || draft.passphrase == again
+    }
+
+    static func applies(_ draft: DraftState) -> Bool {
+        !(draft.coin.kind == .skyFiber && draft.derivation == .standard)
+    }
+
+    var body: some View {
+        let draft = model.draft
+        if Self.applies(draft) {
+            let mismatch = confirm && draft.passphrase != again && !again.isEmpty
+            VStack(alignment: .leading, spacing: 8) {
+                Text(verbatim: L10n.text("wallet_passphrase_title").uppercased()).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                SkyOutlinedTextField(placeholder: L10n.key("wallet_passphrase_hint"),
+                                     text: Binding(get: { model.draft.passphrase }, set: model.setDraftPassphrase),
+                                     identifier: "wallet-passphrase", radius: SkyRadius.small, secure: true)
+                if confirm && !draft.passphrase.isEmpty {
+                    SkyOutlinedTextField(placeholder: L10n.key("wallet_passphrase_confirm"), text: $again, isError: mismatch,
+                                         identifier: "wallet-passphrase-again", radius: SkyRadius.small, secure: true)
+                }
+                Text(mismatch ? L10n.key("wallet_passphrase_mismatch") : L10n.key("wallet_passphrase_note"))
+                    .skyText(.bodySmall).foregroundStyle(mismatch ? Color.skyError : Color.skyOnSurfaceVariant)
+            }
+            .padding(.top, 22)
+        }
     }
 }
 
@@ -113,6 +184,11 @@ struct WalletVerifyView: View {
 /// Restore: word by word with wordlist suggestions, or one paste of the whole phrase.
 struct WalletRestoreView: View {
     @EnvironmentObject private var model: WalletModel
+    @State private var noAgain = ""
+    /// A classic fiber wallet takes any text as its seed; skycoin-web allows it after a warning.
+    @State private var customMode = false
+    @State private var customText = ""
+    @State private var customAccepted = false
     @State private var words: [String] = []
     @State private var input = ""
     @State private var error: String?
@@ -135,6 +211,8 @@ struct WalletRestoreView: View {
                             .accessibilityIdentifier("wallet-restore-paste")
                     }
                     ProgressBar(value: Double(words.count) / Double(target)).padding(.top, 6)
+                    DerivationChoice()
+                    PassphraseFields(confirm: false, again: $noAgain)
                     if let error {
                         HStack(alignment: .top, spacing: 9) {
                             MaterialIcon(MI.outlinedErrorOutline, size: 16)
@@ -148,58 +226,108 @@ struct WalletRestoreView: View {
                         .padding(.top, 16)
                         .accessibilityIdentifier("wallet-restore-error")
                     }
-                    // Android's FlowRow keeps its 18 pt top padding even with no chips.
-                    WordChips(words: words) { words.remove(at: $0); legacyOffer = false }.padding(.top, 18)
-                    SkyOutlinedTextField(placeholder: L10n.key("wallet_restore_hint"), text: $input,
-                                         identifier: "wallet-restore-input", radius: SkyRadius.small)
-                        .onSubmit { addWord(input) }
-                        .onChange(of: input) { new in
-                            if new.hasSuffix(" ") && !new.trimmingCharacters(in: .whitespaces).isEmpty {
-                                addWord(new)
-                            } else {
-                                error = nil
-                                legacyOffer = false
-                            }
-                        }
-                        .padding(.top, 16)
-                    let suggestions = input.trimmingCharacters(in: .whitespaces).isEmpty ? [] : Bip39.suggestions(prefix: input, limit: 4)
-                    if !suggestions.isEmpty {
-                        HStack(spacing: 8) {
-                            ForEach(suggestions, id: \.self) { word in
-                                Button { addWord(word) } label: {
-                                    Text(verbatim: word).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyPrimary)
-                                        .padding(.horizontal, 14).padding(.vertical, 9)
-                                        .background(Color.skySecondaryContainer, in: .sky(18))
-                                }
-                                .buttonStyle(PressStyle())
-                            }
-                        }
-                        .padding(.top, 12)
+                    if customMode && anyText {
+                        customSeed
+                    } else {
+                        wordEntry
                     }
-                    Text("wallet_restore_wordlist_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 14)
-                    Button { finish() } label: {
-                        HStack(spacing: 10) {
-                            if model.restoring {
-                                MaterialSpinner(size: 16, stroke: 2, color: .skyOnSurface.opacity(0.38))
-                                Text("wallet_restore_scanning")
-                            } else {
-                                // The second press of the same button is the confirmation: the
-                                // offer above it says what is being agreed to.
-                                Text(legacyOffer ? L10n.key("wallet_restore_anyway") : L10n.key("wallet_restore_action"))
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(FilledButtonStyle(height: 52))
-                    .disabled(model.restoring)
-                    .padding(.top, 26)
-                    .accessibilityIdentifier("wallet-restore-action")
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
             }
         }
         .modifier(SeedPrivacy())
+    }
+
+    private var anyText: Bool { model.draft.coin.kind == .skyFiber && model.draft.derivation == .standard }
+
+    /// A non-standard seed: exactly as it was written, after a warning the user accepts.
+    @ViewBuilder private var customSeed: some View {
+        SkyOutlinedTextField(placeholder: L10n.key("wallet_restore_custom_hint"),
+                             text: Binding(get: { customText }, set: { customText = $0; customAccepted = false }),
+                             identifier: "wallet-restore-custom", radius: SkyRadius.small, minLines: 2)
+            .padding(.top, 18)
+        Text("wallet_restore_custom_warning").skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 12)
+        Button { customAccepted.toggle() } label: {
+            HStack(spacing: 8) {
+                SkyCheckbox(checked: customAccepted)
+                Text("wallet_restore_custom_accept").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface))
+        .padding(.top, 8)
+        .accessibilityAddTraits(customAccepted ? .isSelected : [])
+        .accessibilityIdentifier("wallet-restore-custom-accept")
+        Button {
+            // Exactly as typed: no trimming or case folding, since every byte is part of the seed.
+            model.restoreWallet(customText, exact: true) { model.path.removeAll() }
+        } label: {
+            Text(model.restoring ? L10n.key("wallet_restore_scanning") : L10n.key("wallet_restore_action")).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(FilledButtonStyle(height: 52))
+        .disabled(!customAccepted || customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.restoring)
+        .padding(.top, 18)
+        .accessibilityIdentifier("wallet-restore-custom-action")
+        Button { customMode = false } label: { Text("wallet_restore_custom_back").frame(maxWidth: .infinity) }
+            .buttonStyle(.skyText)
+            .padding(.top, 6)
+    }
+
+    @ViewBuilder private var wordEntry: some View {
+        // Android's FlowRow keeps its 18 pt top padding even with no chips.
+        WordChips(words: words) { words.remove(at: $0); legacyOffer = false }.padding(.top, 18)
+        SkyOutlinedTextField(placeholder: L10n.key("wallet_restore_hint"), text: $input,
+                             identifier: "wallet-restore-input", radius: SkyRadius.small)
+            .onSubmit { addWord(input) }
+            .onChange(of: input) { new in
+                if new.hasSuffix(" ") && !new.trimmingCharacters(in: .whitespaces).isEmpty {
+                    addWord(new)
+                } else {
+                    error = nil
+                    legacyOffer = false
+                }
+            }
+            .padding(.top, 16)
+        let suggestions = input.trimmingCharacters(in: .whitespaces).isEmpty ? [] : Bip39.suggestions(prefix: input, limit: 4)
+        if !suggestions.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(suggestions, id: \.self) { word in
+                    Button { addWord(word) } label: {
+                        Text(verbatim: word).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyPrimary)
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(Color.skySecondaryContainer, in: .sky(18))
+                    }
+                    .buttonStyle(PressStyle())
+                }
+            }
+            .padding(.top, 12)
+        }
+        Text("wallet_restore_wordlist_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 14)
+        Button { finish() } label: {
+            HStack(spacing: 10) {
+                if model.restoring {
+                    MaterialSpinner(size: 16, stroke: 2, color: .skyOnSurface.opacity(0.38))
+                    Text("wallet_restore_scanning")
+                } else {
+                    // The second press of the same button is the confirmation: the
+                    // offer above it says what is being agreed to.
+                    Text(legacyOffer ? L10n.key("wallet_restore_anyway") : L10n.key("wallet_restore_action"))
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(FilledButtonStyle(height: 52))
+        .disabled(model.restoring)
+        .padding(.top, 26)
+        .accessibilityIdentifier("wallet-restore-action")
+        if anyText {
+            Button { customMode = true } label: { Text("wallet_restore_custom_open").frame(maxWidth: .infinity) }
+                .buttonStyle(.skyText)
+                .padding(.top, 6)
+                .accessibilityIdentifier("wallet-restore-custom-open")
+        }
     }
 
     /// Takes what was typed as words: one, or several when a phrase is typed or pasted whole.
@@ -236,7 +364,7 @@ struct WalletRestoreView: View {
             // seeds, and refusing them strands those wallets. Offer the restore with the typo risk
             // said plainly; 12-word phrases were never written without a checksum. Only the fiber
             // chains derive from the phrase itself.
-            let legacy = words.count == 24 && Bip39.legacyWords(phrase) && model.draft.coin.kind == .skyFiber
+            let legacy = words.count == 24 && Bip39.legacyWords(phrase) && anyText
             if legacy && legacyOffer {
                 legacyOffer = false
                 model.restoreWallet(phrase, legacy: true) { model.path.removeAll() }

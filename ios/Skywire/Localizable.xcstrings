@@ -15326,6 +15326,209 @@
         }
       }
     },
+    "wallet_derivation_bip44" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIP44 (HD)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIP44 (HD)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIP44 (HD)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIP44（HD）"
+          }
+        }
+      }
+    },
+    "wallet_derivation_btc_legacy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legacy"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heredado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ancien format"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传统地址"
+          }
+        }
+      }
+    },
+    "wallet_derivation_btc_segwit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native SegWit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SegWit nativo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SegWit natif"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原生隔离见证"
+          }
+        }
+      }
+    },
+    "wallet_derivation_note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deterministic is the classic Skycoin wallet. BIP44 keeps change on separate addresses. The same phrase gives different addresses in each, so restore it as the type it was made as."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Determinista es la billetera clásica de Skycoin. BIP44 guarda el cambio en direcciones aparte. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déterministe est le portefeuille Skycoin classique. BIP44 garde la monnaie sur des adresses à part. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确定性是经典的 Skycoin 钱包。BIP44 把找零放在单独的地址上。同一组助记词在两种类型下生成的地址不同，恢复时请选择创建时的类型。"
+          }
+        }
+      }
+    },
+    "wallet_derivation_note_btc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Native SegWit addresses start with bc1q and cost less to spend. Legacy addresses start with 1, for wallets and services that only know those. The same phrase gives different addresses in each, so restore it as the type it was made as."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las direcciones SegWit nativas empiezan por bc1q y cuesta menos gastar desde ellas. Las heredadas empiezan por 1, para billeteras y servicios que solo conocen esas. La misma frase da direcciones distintas en cada una, así que restáurala con el tipo con el que se creó."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les adresses SegWit natives commencent par bc1q et coûtent moins cher à dépenser. Les adresses de l’ancien format commencent par 1, pour les portefeuilles et services qui ne connaissent qu’elles. La même phrase donne des adresses différentes dans chacun, restaurez-la donc avec le type avec lequel elle a été créée."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原生隔离见证地址以 bc1q 开头，花费时手续费更低。传统地址以 1 开头，适用于只支持这类地址的钱包和服务。同一组助记词在两种类型下生成的地址不同，恢复时请选择创建时的类型。"
+          }
+        }
+      }
+    },
+    "wallet_derivation_standard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deterministic"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Determinista"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déterministe"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确定性"
+          }
+        }
+      }
+    },
+    "wallet_derivation_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallet type"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipo de billetera"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type de portefeuille"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "钱包类型"
+          }
+        }
+      }
+    },
     "wallet_done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17994,6 +18197,180 @@
         }
       }
     },
+    "wallet_passphrase_confirm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type the passphrase again"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe la frase de contraseña otra vez"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisissez de nouveau la phrase secrète"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再次输入密码"
+          }
+        }
+      }
+    },
+    "wallet_passphrase_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passphrase"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frase de contraseña"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phrase secrète"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码"
+          }
+        }
+      }
+    },
+    "wallet_passphrase_mismatch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The two passphrases differ."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las dos frases de contraseña no coinciden."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les deux phrases secrètes diffèrent."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "两次输入的密码不一致。"
+          }
+        }
+      }
+    },
+    "wallet_passphrase_note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An extra secret on top of the words. Restoring the wallet needs both, and a different passphrase opens a different, empty wallet. Leave it empty for none."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un secreto más además de las palabras. Para restaurar la billetera hacen falta las dos cosas, y otra frase de contraseña abre otra billetera vacía. Déjala vacía si no quieres ninguna."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un secret en plus des mots. La restauration du portefeuille demande les deux, et une autre phrase secrète ouvre un autre portefeuille, vide. Laissez-la vide pour n’en avoir aucune."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在助记词之外再加一层密码。恢复钱包时两者都需要，换一个密码会打开另一个空钱包。不需要就留空。"
+          }
+        }
+      }
+    },
+    "wallet_passphrase_reveal_label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seed passphrase"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frase de contraseña"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phrase secrète"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助记词密码"
+          }
+        }
+      }
+    },
+    "wallet_passphrase_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seed passphrase (optional)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frase de contraseña (opcional)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phrase secrète (facultative)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助记词密码（可选）"
+          }
+        }
+      }
+    },
     "wallet_paste" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18831,6 +19208,151 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这组助记词校验不通过。其中有一个词写错了，或者顺序不对。"
+          }
+        }
+      }
+    },
+    "wallet_restore_custom_accept" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with the non-standard seed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar con la semilla no estándar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuer avec la graine non standard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续使用非标准种子"
+          }
+        }
+      }
+    },
+    "wallet_restore_custom_back" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the word list instead"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar la lista de palabras"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser plutôt la liste de mots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改用单词列表"
+          }
+        }
+      }
+    },
+    "wallet_restore_custom_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The seed, exactly as it was written"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La semilla, exactamente como se escribió"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La graine, exactement telle qu’elle a été écrite"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "种子，完全按当初写下的样子输入"
+          }
+        }
+      }
+    },
+    "wallet_restore_custom_open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use a non-standard seed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar una semilla no estándar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser une graine non standard"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用非标准种子"
+          }
+        }
+      }
+    },
+    "wallet_restore_custom_warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is not a 12 or 24 word recovery phrase. Older Skycoin wallets took any text as a seed, and every letter, capital and space counts. A typo restores a different, empty wallet. Only use this if your wallet really was made from such a seed."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto no es una frase de recuperación de 12 o 24 palabras. Las billeteras antiguas de Skycoin aceptaban cualquier texto como semilla, y cuenta cada letra, mayúscula y espacio. Un error restaura otra billetera vacía. Úsalo solo si tu billetera de verdad se creó con una semilla así."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce n’est pas une phrase de récupération de 12 ou 24 mots. Les anciens portefeuilles Skycoin acceptaient n’importe quel texte comme graine, et chaque lettre, majuscule et espace compte. Une faute restaure un autre portefeuille, vide. N’utilisez ceci que si votre portefeuille a vraiment été créé avec une telle graine."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是 12 或 24 个词的助记词。早期的 Skycoin 钱包接受任意文本作为种子，每个字母、大小写和空格都算数。输错一处就会恢复出另一个空钱包。只有当你的钱包确实是用这样的种子创建时才使用此项。"
           }
         }
       }
@@ -22452,6 +22974,209 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "钱包"
+          }
+        }
+      }
+    },
+    "wallet_xpub_account" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuenta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compte"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账户"
+          }
+        }
+      }
+    },
+    "wallet_xpub_action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extended public keys"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claves públicas extendidas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clés publiques étendues"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扩展公钥"
+          }
+        }
+      }
+    },
+    "wallet_xpub_action_sub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lets a watch-only tool see every address of this wallet. It cannot spend."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permite a una herramienta de solo lectura ver todas las direcciones de esta billetera. No puede gastar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permet à un outil en lecture seule de voir toutes les adresses de ce portefeuille. Il ne peut pas dépenser."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让只读工具查看本钱包的所有地址。它无法花费。"
+          }
+        }
+      }
+    },
+    "wallet_xpub_change" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change chain"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cadena de cambio"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaîne de monnaie"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找零链"
+          }
+        }
+      }
+    },
+    "wallet_xpub_copied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copied"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copiée"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制"
+          }
+        }
+      }
+    },
+    "wallet_xpub_note" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with these keys can see all of this wallet's addresses and balances, but cannot spend. Tap one to copy it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quien tenga estas claves puede ver todas las direcciones y saldos de esta billetera, pero no gastar. Toca una para copiarla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quiconque a ces clés peut voir toutes les adresses et les soldes de ce portefeuille, sans pouvoir dépenser. Touchez-en une pour la copier."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拿到这些公钥的人可以看到本钱包的所有地址和余额，但无法花费。点按即可复制。"
+          }
+        }
+      }
+    },
+    "wallet_xpub_receive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive chain"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cadena de recepción"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaîne de réception"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收款链"
           }
         }
       }

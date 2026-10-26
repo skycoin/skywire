@@ -40,6 +40,11 @@ struct DraftState {
     var coin = CoinSpec.sky
     var seed: String?
     var quizPositions: [Int] = []
+    /// The kind of wallet being made: fiber coins offer BIP 44 beside their classic wallet,
+    /// Bitcoin legacy beside native segwit.
+    var derivation = Derivation.standard
+    /// The optional BIP 39 passphrase, held in memory only until the wallet is saved.
+    var passphrase = ""
 }
 
 /// The wallet tab's screens, pushed on its navigation stack.
@@ -272,14 +277,20 @@ final class WalletModel: ObservableObject {
     // MARK: Create and restore
 
     /// Begin the create flow for the selected coin: a fresh phrase of `words` words and the three
-    /// positions the quiz asks for.
-    func startCreate(words: Int = 12) {
+    /// positions the quiz asks for. A new length keeps the wallet type and passphrase chosen.
+    func startCreate(words: Int = 12, keepChoices: Bool = false) {
+        let derivation = keepChoices ? draft.derivation : .standard
+        let passphrase = keepChoices ? draft.passphrase : ""
         var rng = SystemRandomNumberGenerator()
         let seed = Bip39.newMnemonic(entropyBits: words == 24 ? 256 : 128)
         var pool = Array(1...seed.split(separator: " ").count)
         let positions = (0..<3).map { _ in pool.remove(at: Int.random(in: 0..<pool.count, using: &rng)) }.sorted()
-        draft = DraftState(coin: coin, seed: seed, quizPositions: positions)
+        draft = DraftState(coin: coin, seed: seed, quizPositions: positions, derivation: derivation, passphrase: passphrase)
     }
+
+    func setDraftDerivation(_ derivation: Derivation) { draft.derivation = derivation }
+
+    func setDraftPassphrase(_ passphrase: String) { draft.passphrase = passphrase }
 
     func startRestore() {
         draft = DraftState(coin: coin, seed: nil, quizPositions: [])
@@ -295,8 +306,10 @@ final class WalletModel: ObservableObject {
         })
         if wrong.isEmpty {
             let coin = draft.coin
+            let derivation = draft.derivation, passphrase = draft.passphrase
             action { [self] in
-                _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: seed, restored: false)
+                _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: seed, restored: false,
+                                              derivation: derivation, passphrase: passphrase)
                 draft = DraftState()
                 message = nil
                 onActivated()
@@ -306,12 +319,14 @@ final class WalletModel: ObservableObject {
     }
 
     /// The phrase is validated by the restore screen before this is called. `legacy` is a
-    /// checksum-less phrase the user chose to restore anyway.
-    func restoreWallet(_ phrase: String, legacy: Bool = false, onDone: @escaping () -> Void) {
+    /// checksum-less phrase the user chose to restore anyway; `exact` a non-standard seed, as typed.
+    func restoreWallet(_ phrase: String, legacy: Bool = false, exact: Bool = false, onDone: @escaping () -> Void) {
         let coin = draft.coin
+        let derivation = draft.derivation, passphrase = draft.passphrase
         action { [self] in
             restoring = true
-            _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: phrase, restored: true, legacy: legacy)
+            _ = try await store.addWallet(coin, name: defaultWalletName(coin), mnemonic: phrase, restored: true, legacy: legacy,
+                                          derivation: derivation, passphrase: passphrase, exact: exact)
             draft = DraftState()
             restoring = false
             onDone()
@@ -583,5 +598,13 @@ final class WalletModel: ObservableObject {
 
     func revealSeed(_ walletId: String) -> String? {
         try? store.revealSeed(walletId)
+    }
+
+    func revealPassphrase(_ walletId: String) -> String {
+        (try? store.revealPassphrase(walletId)) ?? ""
+    }
+
+    func extendedPublicKeys(_ walletId: String) -> ExtendedPublicKeys? {
+        try? store.extendedPublicKeys(walletId: walletId)
     }
 }

@@ -244,28 +244,39 @@ final class WalletStore: ObservableObject {
     /// address rather than failing the restore — but says so, in
     /// `addressScanAtMs`, so the probe is retried until it lands.
     /// `legacy` is a checksum-less 24-word phrase the user chose to restore anyway: the older
-    /// Skycoin wallets wrote seeds that way.
-    func addWallet(_ spec: CoinSpec, name: String, mnemonic: String, restored: Bool, legacy: Bool = false) async throws -> WalletMeta {
+    /// Skycoin wallets wrote seeds that way. `derivation` and `passphrase` say how keys come from
+    /// the phrase; `exact` takes a classic fiber wallet's non-standard seed as typed.
+    func addWallet(
+        _ spec: CoinSpec, name: String, mnemonic: String, restored: Bool, legacy: Bool = false,
+        derivation: Derivation = .standard, passphrase: String = "", exact: Bool = false
+    ) async throws -> WalletMeta {
         let core = try core(for: spec)
-        let seed = Self.normalizeSeed(mnemonic)
-        guard core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed)) else {
+        // A non-standard seed is its exact text: case and spacing are part of what is hashed.
+        let seed = exact ? mnemonic : Self.normalizeSeed(mnemonic)
+        let anyText = exact && !seed.isEmpty && derivation == .standard && core.takesAnySeed()
+        guard core.validateSeed(seed) || (legacy && core.acceptsLegacySeed(seed)) || anyText else {
             throw WalletStoreError(L10n.text("wallet_seed_invalid"))
         }
+        // The classic fiber wallet hashes the phrase itself; a passphrase has no part in it.
+        let pass = spec.kind == .skyFiber && derivation == .standard ? "" : passphrase
+        let keys = KeySource(mnemonic: seed, passphrase: pass, derivation: derivation)
 
         // nil means the question could not be put, which is different from
         // "the answer is one address" — a fresh phrase genuinely has one and
         // is settled, a restore that could not reach the node is not.
-        let scan: (receive: Int, change: Int)? = restored ? (try? await core.scanUsed(seed: KeySource(mnemonic: seed))) : (1, 0)
+        let scan: (receive: Int, change: Int)? = restored ? (try? await core.scanUsed(seed: keys)) : (1, 0)
         let counts = scan ?? (1, 0)
         let scannedAt: Int64 = scan != nil ? nowMs() : 0
-        let book = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: counts.receive, changeCount: counts.change) }
+        let book = try await offMain { try core.deriveAddresses(seed: keys, receiveCount: counts.receive, changeCount: counts.change) }
 
         // This coin may already hold this exact account — most likely because
         // mirroring put it there and the user restored the phrase under the
         // sibling anyway. Two entries for one address would show the same
         // balance twice, so the existing one is adopted instead of duplicated.
         let head = book.receive.first
-        if let already = registry.wallets.first(where: { $0.coinId == spec.id && head != nil && $0.receiveAddresses.first == head }) {
+        if let already = registry.wallets.first(where: {
+            $0.coinId == spec.id && head != nil && $0.receiveAddresses.first == head && $0.derivation == derivation
+        }) {
             // A restore that scanned further than the mirror knew about is the
             // one thing worth carrying over.
             let longer = book.receive.count > already.receiveAddresses.count
@@ -292,14 +303,16 @@ final class WalletStore: ObservableObject {
             createdAtMs: nowMs(),
             receiveAddresses: book.receive,
             changeAddresses: book.change,
-            addressScanAtMs: scannedAt
+            addressScanAtMs: scannedAt,
+            derivation: derivation
         )
         try seeds.putSeed(meta.id, seed)
+        try seeds.putPassphrase(meta.id, pass)
         mutate { reg in
             reg.wallets.append(meta)
             reg.activeWallets[spec.id] = meta.id
         }
-        if spec.isEthFamily { try mirrorIntoEthFamily(meta, seed: seed, book: book, exceptCoin: spec.id) }
+        if spec.isEthFamily { try mirrorIntoEthFamily(meta, seed: seed, passphrase: pass, book: book, exceptCoin: spec.id) }
         return meta
     }
 
@@ -309,9 +322,9 @@ final class WalletStore: ObservableObject {
     /// who has entered their phrase for ETH is asked for it again for each
     /// token. `book` is passed rather than re-derived, so "the mirror has
     /// identical addresses" is true by construction.
-    private func mirrorIntoEthFamily(_ source: WalletMeta, seed: String, book: AddressBook, exceptCoin: String) throws {
+    private func mirrorIntoEthFamily(_ source: WalletMeta, seed: String, passphrase: String, book: AddressBook, exceptCoin: String) throws {
         for sibling in coins where sibling.isEthFamily && sibling.id != exceptCoin {
-            try mirrorWallet(sibling, name: source.name, createdAtMs: source.createdAtMs, seed: seed,
+            try mirrorWallet(sibling, name: source.name, createdAtMs: source.createdAtMs, seed: seed, passphrase: passphrase,
                              book: book, addressScanAtMs: source.addressScanAtMs)
         }
     }
@@ -322,7 +335,7 @@ final class WalletStore: ObservableObject {
     /// addresses' answer.
     @discardableResult
     private func mirrorWallet(
-        _ coin: CoinSpec, name: String, createdAtMs: Int64, seed: String, book: AddressBook, addressScanAtMs: Int64
+        _ coin: CoinSpec, name: String, createdAtMs: Int64, seed: String, passphrase: String, book: AddressBook, addressScanAtMs: Int64
     ) throws -> WalletMeta? {
         guard let head = book.receive.first else { return nil }
         if registry.wallets.contains(where: { $0.coinId == coin.id && $0.receiveAddresses.first == head }) { return nil }
@@ -340,6 +353,7 @@ final class WalletStore: ObservableObject {
         // shared by reference) would let deleting any one wallet strand the
         // others.
         try seeds.putSeed(meta.id, seed)
+        try seeds.putPassphrase(meta.id, passphrase)
         mutate { reg in
             reg.wallets.append(meta)
             // Only if that coin has nothing selected yet: arriving at a coin
@@ -362,6 +376,7 @@ final class WalletStore: ObservableObject {
             guard let seed = try? seeds.seed(existing.id) else { continue }
             _ = try? mirrorWallet(
                 token, name: existing.name, createdAtMs: existing.createdAtMs, seed: seed,
+                passphrase: (try? seeds.passphrase(existing.id)) ?? "",
                 book: AddressBook(receive: existing.receiveAddresses, change: existing.changeAddresses),
                 addressScanAtMs: existing.addressScanAtMs
             )
@@ -403,13 +418,28 @@ final class WalletStore: ObservableObject {
     /// check (WalletAuth).
     func revealSeed(_ id: String) throws -> String? { try seeds.seed(id) }
 
+    /// The passphrase in the clear, empty when there is none: gated like `revealSeed`.
+    func revealPassphrase(_ id: String) throws -> String { try seeds.passphrase(id) }
+
+    /// What the wallet's keys come from, unsealed; nil when the phrase cannot be read.
+    private func keys(_ meta: WalletMeta) throws -> KeySource? {
+        guard let seed = try seeds.seed(meta.id) else { return nil }
+        return KeySource(mnemonic: seed, passphrase: try seeds.passphrase(meta.id), derivation: meta.derivation)
+    }
+
+    /// The wallet's extended public keys, for a watch-only view; nil where the wallet has none.
+    func extendedPublicKeys(walletId: String) throws -> ExtendedPublicKeys? {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId), let keys = try keys(meta) else { return nil }
+        return try core(for: spec).extendedPublicKeys(seed: keys)
+    }
+
     func newReceiveAddress(walletId: String) async throws -> String {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
-        guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        guard let keys = try keys(meta) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         let core = try core(for: spec)
         let receiveCount = meta.receiveAddresses.count + 1
         let changeCount = meta.changeAddresses.count
-        let book = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) }
+        let book = try await offMain { try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) }
         mutate { reg in
             reg.wallets = reg.wallets.map { w in
                 guard w.id == walletId else { return w }
@@ -463,15 +493,15 @@ final class WalletStore: ObservableObject {
         guard meta.addressScanPending else { return meta }
         let now = nowMs()
         if now < scanRetryAfter[meta.id] ?? 0 { return meta }
-        guard let seed = try? seeds.seed(meta.id) else { return meta }
-        guard let scanned = try? await core.scanUsed(seed: KeySource(mnemonic: seed)) else {
+        guard let keys = try? keys(meta) else { return meta }
+        guard let scanned = try? await core.scanUsed(seed: keys) else {
             scanRetryAfter[meta.id] = now + Self.scanRetryBackoffMs
             return meta
         }
         scanRetryAfter[meta.id] = nil
         let receiveCount = max(scanned.receive, meta.receiveAddresses.count)
         let changeCount = max(scanned.change, meta.changeAddresses.count)
-        guard let book = try? await offMain({ try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) })
+        guard let book = try? await offMain({ try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) })
         else { return meta }
         let settled = settledAddresses(meta, scanned: book, nowMs: nowMs())
         mutate { reg in reg.wallets = reg.wallets.map { $0.id == settled.id ? settled : $0 } }
@@ -496,10 +526,10 @@ final class WalletStore: ObservableObject {
         changeAddress: String? = nil, shareFactor: Decimal? = nil, feeLevel: FeeLevel? = nil
     ) async throws -> TxPlan {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
-        guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        guard let keys = try keys(meta) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         let from = fromAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
         return try await core(for: spec).buildTx(
-            seed: KeySource(mnemonic: seed),
+            seed: keys,
             book: AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses),
             toAddress: toAddress.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amount,
@@ -518,9 +548,9 @@ final class WalletStore: ObservableObject {
     /// Sign locally and broadcast; returns the network's txid.
     func signAndBroadcast(walletId: String, plan: TxPlan) async throws -> String {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
-        guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        guard let keys = try keys(meta) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         let core = try core(for: spec)
-        let signed = try await offMain { try core.signTx(seed: KeySource(mnemonic: seed), plan: plan) }
+        let signed = try await offMain { try core.signTx(seed: keys, plan: plan) }
         let txid = try await core.broadcast(signed)
 
         // A fresh change address the plan sent change to is the wallet's next one on its change
@@ -528,7 +558,7 @@ final class WalletStore: ObservableObject {
         if let change = plan.changeAddress, !meta.receiveAddresses.contains(change), !meta.changeAddresses.contains(change) {
             let receiveCount = meta.receiveAddresses.count
             let changeCount = meta.changeAddresses.count + 1
-            let grown = try await offMain { try core.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: changeCount) }
+            let grown = try await offMain { try core.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: changeCount) }
             if grown.change.last == change {
                 mutate { reg in
                     reg.wallets = reg.wallets.map { w in
@@ -547,7 +577,7 @@ final class WalletStore: ObservableObject {
             let index = btc.consumedChangeIndex(signed)
             if index >= 0, index == meta.changeAddresses.count {
                 let receiveCount = meta.receiveAddresses.count
-                let book = try await offMain { try btc.deriveAddresses(seed: KeySource(mnemonic: seed), receiveCount: receiveCount, changeCount: index + 1) }
+                let book = try await offMain { try btc.deriveAddresses(seed: keys, receiveCount: receiveCount, changeCount: index + 1) }
                 mutate { reg in
                     reg.wallets = reg.wallets.map { w in
                         guard w.id == walletId else { return w }
@@ -570,9 +600,9 @@ final class WalletStore: ObservableObject {
     /// Signs a raw transaction made elsewhere with this wallet's keys. Nothing is broadcast.
     func signRaw(walletId: String, rawHex: String) async throws -> String {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
-        guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        guard let keys = try keys(meta) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
         let book = AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses)
-        return try await core(for: spec).signRaw(seed: KeySource(mnemonic: seed), book: book, rawHex: rawHex).rawHex
+        return try await core(for: spec).signRaw(seed: keys, book: book, rawHex: rawHex).rawHex
     }
 
     /// Broadcasts a raw signed transaction through the wallet's coin node; returns the txid.

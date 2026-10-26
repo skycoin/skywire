@@ -320,17 +320,7 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertEqual(words.count, 24)
         XCTAssertTrue(Bip39.validate(words.joined(separator: " ")), "the 24 words are not a valid phrase")
         attachScreenshot(app, "bench-24-words")
-        let next = app.buttons["wallet-seed-continue"]
-        scroll(to: next, in: app)
-        next.tap()
-        let positions = (1...24).filter { app.textFields["wallet-quiz-\($0)"].waitForExistence(timeout: $0 == 1 ? 5 : 0.2) }
-        XCTAssertEqual(positions.count, 3)
-        for pos in positions {
-            let field = app.textFields["wallet-quiz-\(pos)"]
-            field.tap()
-            field.typeText(words[pos - 1])
-        }
-        app.buttons["wallet-quiz-activate"].tap()
+        passQuiz(words, app)
         let created = try skycoinAddress(words)
         XCTAssertEqual(try receiveAddress(app, timeout: 30), created, "the 24-word wallet receives elsewhere")
         back(app)
@@ -350,6 +340,83 @@ final class WalletBenchChecks: XCTestCase {
         app.buttons["wallet-restore-action"].tap()
         let restored = try skycoinAddress(older)
         XCTAssertEqual(try receiveAddress(app, timeout: 60), restored, "the older seed restored to another address")
+        back(app)
+        removeWallet(restored, app)
+    }
+
+    /// A BIP 44 wallet with a passphrase: the passphrase is typed twice, the wallet receives on
+    /// the BIP 44 address it gives, the reveal shows it beside the words, and the wallet has
+    /// extended public keys. Then a non-standard seed restores exactly as typed.
+    func testBip44PassphraseAndANonStandardSeed() throws {
+        let app = try benchWallet()
+        openWallets(app)
+        app.buttons["wallet-manage-create"].tap()
+        let bip44 = app.buttons["BIP44 (HD)"]
+        XCTAssertTrue(bip44.waitForExistence(timeout: 5))
+        bip44.tap()
+        let words = try readSeedWords(app)
+        let pass = app.secureTextFields["wallet-passphrase"]
+        scroll(to: pass, in: app)
+        pass.tap()
+        pass.typeText("pw")
+        let again = app.secureTextFields["wallet-passphrase-again"]
+        XCTAssertTrue(again.waitForExistence(timeout: 5), "no second passphrase field")
+        again.tap()
+        again.typeText("px")
+        XCTAssertTrue(app.staticTexts["The two passphrases differ."].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["wallet-seed-continue"].isEnabled, "Continue with two passphrases that differ")
+        again.typeText(XCUIKeyboardKey.delete.rawValue + "w")
+        XCTAssertTrue(waitEnabled(app.buttons["wallet-seed-continue"], timeout: 5))
+        attachScreenshot(app, "bench-bip44-passphrase")
+        passQuiz(words, app)
+
+        let phrase = words.joined(separator: " ")
+        let core = try SkyFiberWalletCore(nodeURL: node)
+        let expected = try core.deriveAddresses(seed: KeySource(mnemonic: phrase, passphrase: "pw", derivation: .bip44),
+                                                receiveCount: 1, changeCount: 0).receive[0]
+        XCTAssertNotEqual(expected, try skycoinAddress(words))
+        XCTAssertEqual(try receiveAddress(app, timeout: 30), expected, "the BIP 44 wallet receives elsewhere")
+        back(app)
+
+        openWallets(app)
+        app.buttons["wallet-row-\(expected)"].tap()
+        tapWhenUp("wallet-action-reveal", in: app)
+        answeringFaceID {
+            XCTAssertTrue(app.staticTexts["seed-word-1"].waitForExistence(timeout: 20), "the phrase never showed after Face ID")
+        }
+        let shown = app.staticTexts["wallet-reveal-passphrase"]
+        scroll(to: shown, in: app)
+        XCTAssertEqual(shown.label, "pw", "the reveal does not show the passphrase")
+        // The Face ID sheet is still fading out.
+        sleep(1)
+        attachScreenshot(app, "bench-bip44-reveal")
+        app.buttons["wallet-reveal-hide"].tap()
+
+        app.buttons["wallet-row-\(expected)"].tap()
+        tapWhenUp("wallet-action-xpub", in: app)
+        let account = app.buttons["wallet-xpub-0"]
+        XCTAssertTrue(account.waitForExistence(timeout: 5), "no extended public keys")
+        XCTAssertTrue(account.label.hasPrefix("xpub"), account.label)
+        XCTAssertTrue(app.buttons["wallet-xpub-2"].label.hasPrefix("xpub"))
+        attachScreenshot(app, "bench-bip44-xpub")
+        tapWhenUp("Done", in: app)
+        back(app)
+        removeWallet(expected, app)
+
+        // A classic wallet's seed that was never a phrase: taken exactly as typed.
+        let seed = "My  Old Seed"
+        startRestore(app)
+        tapWhenUp("wallet-restore-custom-open", in: app)
+        let field = app.textFields["wallet-restore-custom"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText(seed)
+        XCTAssertFalse(app.buttons["wallet-restore-custom-action"].isEnabled, "the restore ran before the warning was accepted")
+        app.buttons["wallet-restore-custom-accept"].tap()
+        attachScreenshot(app, "bench-non-standard-seed")
+        app.buttons["wallet-restore-custom-action"].tap()
+        let restored = SkycoinCrypto.addressFromPubKey(try SkycoinCrypto.generateKeyPairs(seed: Array(seed.utf8), count: 1)[0].public)
+        XCTAssertEqual(try receiveAddress(app, timeout: 60), restored, "the non-standard seed restored to another address")
         back(app)
         removeWallet(restored, app)
     }
