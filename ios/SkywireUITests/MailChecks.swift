@@ -81,6 +81,59 @@ final class MailChecks: XCTestCase {
         XCTAssertTrue(app.buttons["mail-write"].waitForExistence(timeout: 5), "the batch did not end after the delete")
     }
 
+    /// Save contact on a message names its sender in the lists; the contacts screen edits and
+    /// deletes it, and the composer's picker offers it.
+    func testContactsSaveEditPickDelete() {
+        let app = connectedApp(arguments: Self.english)
+        let address = openMail(app)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let subject = "Contact \(stamp)", name = "Me \(stamp)"
+        send(app, to: address, subject: subject, body: "Save me.")
+        let row = mailRow(app, subject)
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the message never arrived")
+        row.tap()
+        let save = app.buttons["mail-save-contact"]
+        XCTAssertTrue(save.waitForExistence(timeout: 15), "no Save contact on a verified message")
+        snap("mail-message-buttons")
+        save.tap()
+        let nameField = app.textFields["mail-contact-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "no contact dialog")
+        nameField.tap()
+        nameField.typeText(name)
+        tapWhenUp("Save", in: app)
+        // The From line now reads the saved name, with the address as written under it.
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5), "the open message does not use the saved name")
+        goBack(app)
+        XCTAssertTrue(mailRow(app, name).waitForExistence(timeout: 5), "the inbox row does not use the saved name")
+
+        app.buttons["mail-write"].tap()
+        app.buttons["mail-pick-contact"].tap()
+        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 5), "the picker does not offer the contact")
+        app.buttons[name].tap()
+        let to = app.textFields["mail-to"]
+        XCTAssertEqual((to.value as? String)?.lowercased(), address.lowercased(), "the picked contact did not fill To")
+        app.buttons["mail-pick-contact"].tap()
+        app.buttons["Manage contacts"].tap()
+        let contact = app.descendants(matching: .any).matching(identifier: "mail-contact")
+            .matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
+        XCTAssertTrue(contact.waitForExistence(timeout: 5), "the contacts screen does not list it")
+        snap("mail-contacts")
+
+        app.buttons["mail-contact-edit"].firstMatch.tap()
+        let edit = app.textFields["mail-contact-name"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        edit.typeText(" edited")
+        tapWhenUp("Save", in: app)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "mail-contact")
+            .matching(NSPredicate(format: "label CONTAINS %@", "\(name) edited")).firstMatch.waitForExistence(timeout: 5),
+            "the edit did not stick")
+        app.buttons["mail-contact-delete"].firstMatch.tap()
+        tapWhenUp("Delete", in: app)
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: contact)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed, "the contact was not deleted")
+    }
+
     /// The settings switch turns the mailbox off and on again.
     func testMailboxTurnsOffAndOn() {
         let app = connectedApp(arguments: Self.english)

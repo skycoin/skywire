@@ -54,6 +54,9 @@ final class MailModel: ObservableObject {
     @Published private(set) var busy = false
     /// Message ids picked in the folder shown, for a batch delete.
     @Published private(set) var selection: Set<String> = []
+    /// SkyMail's own address book, sorted by name.
+    @Published private(set) var contacts: [MailContact] = []
+    @Published private(set) var contactsOpen = false
     /// A one-off line for the snackbar, cleared once shown.
     @Published var notice: String?
     @Published var share: SharedFile?
@@ -64,11 +67,12 @@ final class MailModel: ObservableObject {
     static let envelopeBytes: Int64 = 16 * 1024
 
     private var app: AppModel?
+    private var contactBook: MailContacts?
 
     var messages: [MailSummary]? { folder == MailFolder.sent ? sent : inbox }
     var myAddress: String? { status?.myAddress }
     /// An inner view is up (a draft, the settings or a message): back steps out of it first.
-    var inner: Bool { draft != nil || settingsOpen || open != nil }
+    var inner: Bool { contactsOpen || draft != nil || settingsOpen || open != nil }
     var selecting: Bool { !selection.isEmpty }
 
     // MARK: Loop
@@ -76,6 +80,10 @@ final class MailModel: ObservableObject {
     /// Runs while the screen is up and its key holds (`.task(id: app.connected)`).
     func run(_ app: AppModel) async {
         self.app = app
+        // Read on every start: a replaced identity cleared the book with the rest of local/.
+        let book = MailContacts(file: app.paths.localDir.appendingPathComponent(MailContacts.fileName))
+        contactBook = book
+        contacts = book.load()
         guard app.connected else { return }
         while !Task.isCancelled {
             await refreshNow()
@@ -291,9 +299,10 @@ final class MailModel: ObservableObject {
         draft?.attachments.remove(at: index)
     }
 
-    /// A contact's address appended to To.
-    func addRecipient(_ pk: String) {
-        guard var current = draft, let address = SkymailAddress.of(pk, suffix: current.suffix) else { return }
+    /// A picked address appended to To, on the draft's network.
+    func addRecipient(address: String) {
+        guard var current = draft else { return }
+        let address = SkymailAddress.withNetwork(address, suffix: current.suffix)
         var to = current.to.trimmingCharacters(in: .whitespacesAndNewlines)
         while to.hasSuffix(",") { to.removeLast() }
         current.to = [to, address].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -344,6 +353,46 @@ final class MailModel: ObservableObject {
                 notice = L10n.format("mail_send_failed", error.localizedDescription)
             }
         }
+    }
+
+    // MARK: Contacts
+
+    func openContacts() {
+        contactsOpen = true
+    }
+
+    func closeContacts() {
+        contactsOpen = false
+    }
+
+    /// Saves a contact, or edits the one at `replacing`: an address or a bare key.
+    func saveContact(name: String, address: String, replacing: String? = nil) {
+        guard let clean = SkymailAddress.recipient(address) else {
+            notice = L10n.format("mail_bad_address", address.trimmingCharacters(in: .whitespacesAndNewlines))
+            return
+        }
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        changeContacts(done: L10n.text("mail_contact_saved")) { try $0.put(MailContact(name: name, address: clean), replacing: replacing) }
+    }
+
+    func deleteContact(_ address: String) {
+        changeContacts(done: nil) { try $0.remove(address) }
+    }
+
+    private func changeContacts(done: String?, _ change: (MailContacts) throws -> [MailContact]) {
+        guard let contactBook else { return }
+        do {
+            contacts = try change(contactBook)
+            if let done { notice = done }
+        } catch {
+            notice = L10n.format("mail_contact_failed", error.localizedDescription)
+        }
+    }
+
+    /// The saved contact for a key, when there is one.
+    func contact(forPK pk: String) -> MailContact? {
+        contacts.first { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() == pk.lowercased() }
     }
 
     // MARK: Settings
@@ -399,6 +448,7 @@ final class MailModel: ObservableObject {
             folder = MailFolder.inbox
             draft = nil
             settingsOpen = false
+            contactsOpen = false
             selection = []
             open(MailFolder.inbox, summary)
         }

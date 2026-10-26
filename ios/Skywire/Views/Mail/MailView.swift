@@ -16,6 +16,9 @@ struct MailView: View {
         VStack(spacing: 0) {
             SkyTopBar(title: title, onBack: stepBack, help: .mail) {
                 if listView && !model.selecting {
+                    SquareBarButton(icon: MI.roundedContacts) { model.openContacts() }
+                        .accessibilityLabel(Text("mail_contacts"))
+                        .accessibilityIdentifier("mail-contacts")
                     SquareBarButton(icon: MI.roundedSettings) { model.openSettings() }
                         .accessibilityLabel(Text("mail_settings_title"))
                         .accessibilityIdentifier("mail-settings")
@@ -49,6 +52,7 @@ struct MailView: View {
     }
 
     private var title: Text {
+        if model.contactsOpen { return Text("mail_contacts") }
         if model.draft != nil { return Text("mail_compose_title") }
         if model.settingsOpen { return Text("mail_settings_title") }
         if model.selecting && model.open == nil { return Text(verbatim: L10n.format("mail_selected_count", model.selection.count)) }
@@ -58,7 +62,9 @@ struct MailView: View {
     private var listView: Bool { !model.inner && app.connected }
 
     private func stepBack() {
-        if model.draft != nil {
+        if model.contactsOpen {
+            model.closeContacts()
+        } else if model.draft != nil {
             model.discardDraft()
         } else if model.settingsOpen {
             model.closeSettings()
@@ -78,6 +84,8 @@ struct MailView: View {
                 .foregroundStyle(Color.skyOnSurfaceVariant)
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.contactsOpen {
+            MailContactsView(model: model)
         } else if model.draft != nil {
             MailComposeView(model: model)
         } else if model.settingsOpen {
@@ -132,7 +140,11 @@ private struct MailFolderView: View {
                     .padding(.horizontal, 4)
             } else {
                 ForEach(messages) { message in
-                    MailRow(message: message, sent: sent, selecting: model.selecting,
+                    MailRow(message: message, sent: sent,
+                            name: sent
+                                ? MailText.displayAddress(message.to, contacts: model.contacts)
+                                : MailText.displayAddress(message.from, contacts: model.contacts, pk: message.peerPK),
+                            selecting: model.selecting,
                             selected: model.selection.contains(message.id),
                             onOpen: { model.open(model.folder, message) },
                             onToggle: { model.toggleSelect(message.id) })
@@ -209,6 +221,7 @@ private struct MailboxOffCard: View {
 private struct MailRow: View {
     let message: MailSummary
     let sent: Bool
+    let name: String
     let selecting: Bool
     let selected: Bool
     let onOpen: () -> Void
@@ -226,7 +239,7 @@ private struct MailRow: View {
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 6) {
-                        Text(verbatim: MailText.displayAddress(sent ? message.to : message.from))
+                        Text(verbatim: name)
                             .skyText(.bodyLarge, bold: unread)
                             // Read mail steps back in colour as well as weight: weight
                             // alone reads as no difference at all on a phone.
@@ -365,8 +378,11 @@ private struct MailMessageView: View {
     }
 
     @ViewBuilder private func body(_ open: OpenMail, _ message: MailMessage) -> some View {
-        HeaderLine(label: Text("mail_from"), value: message.from)
-        if open.folder == MailFolder.inbox {
+        let inbox = open.folder == MailFolder.inbox
+        HeaderLine(label: Text("mail_from"),
+                   value: MailText.displayAddress(message.from, contacts: model.contacts, pk: inbox ? message.peerPK : ""),
+                   raw: message.from)
+        if inbox {
             VerifiedLine(verified: message.fromVerified, peerPK: message.peerPK)
         }
         HeaderLine(label: Text("mail_to"), value: message.to)
@@ -401,13 +417,28 @@ private struct MailMessageView: View {
                 }
             }
         }
-        HStack(spacing: 8) {
+        // Wraps: Reply, Save contact and Delete do not fit one line on a narrow phone.
+        FlowLayout(spacing: 8) {
             if open.folder == MailFolder.inbox {
                 Button { model.reply() } label: {
                     Label { Text("mail_reply") } icon: { MaterialIcon(MI.roundedReply, size: 18) }
                 }
                 .buttonStyle(.filled)
                 .accessibilityIdentifier("mail-reply")
+            }
+            let party = Self.party(open, message)
+            if SkymailAddress.pk(ofAddress: party.address) != nil {
+                Button {
+                    dialogs.showCustom {
+                        MailContactDialog(title: Text("mail_save_contact"), name: party.name, address: party.address) { name, address in
+                            model.saveContact(name: name, address: address)
+                        }
+                    }
+                } label: {
+                    Label { Text("mail_save_contact") } icon: { MaterialIcon(MI.roundedPersonAdd, size: 18) }
+                }
+                .buttonStyle(.outlined)
+                .accessibilityIdentifier("mail-save-contact")
             }
             Button { confirmDelete() } label: {
                 Label { Text("mail_delete") } icon: { MaterialIcon(MI.roundedDelete, size: 18) }
@@ -419,6 +450,21 @@ private struct MailMessageView: View {
         .padding(.top, 20)
     }
 
+    /// Who Save contact saves: Inbox the sender, Sent the first recipient, with the name the
+    /// mail gave them. An unverified From line names whoever typed it, so the key the transport
+    /// proved wins there.
+    static func party(_ open: OpenMail, _ message: MailMessage) -> (name: String, address: String) {
+        let raw = open.folder == MailFolder.sent
+            ? String(message.to.split(separator: ",", omittingEmptySubsequences: false).first ?? "")
+            : message.from
+        let written = MailText.bareAddress(raw)
+        let name = raw.firstIndex(of: "<").map {
+            raw[..<$0].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        } ?? ""
+        let address = open.folder == MailFolder.sent || message.fromVerified ? written : (SkymailAddress.of(message.peerPK) ?? "")
+        return (name, address)
+    }
+
     private func confirmDelete() {
         dialogs.show(SkyDialog(message: Text("mail_delete_confirm"), actions: [
             SkyDialog.Action(label: Text("cancel")),
@@ -427,17 +473,133 @@ private struct MailMessageView: View {
     }
 }
 
+/// One header; `raw`, when it says more than `value`, is shown under it as written.
 private struct HeaderLine: View {
     let label: Text
     let value: String
+    var raw: String?
 
     var body: some View {
+        let differs = raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) != value } ?? false
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             label.skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 56, alignment: .leading)
-            Text(verbatim: value).skyText(.bodySmall).foregroundStyle(Color.skyOnSurface).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: value).skyText(.bodySmall, bold: differs).foregroundStyle(Color.skyOnSurface)
+                if differs, let raw {
+                    Text(verbatim: raw).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+            }
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// A contact's name and address, new or edited.
+private struct MailContactDialog: View {
+    let title: Text
+    let name: String
+    let address: String
+    let save: (String, String) -> Void
+    @State private var nameText = ""
+    @State private var addressText = ""
+
+    var body: some View {
+        DialogFrame(title: title, confirm: L10n.key("mail_save"),
+                    enabled: !nameText.trimmingCharacters(in: .whitespaces).isEmpty
+                        && !addressText.trimmingCharacters(in: .whitespaces).isEmpty,
+                    onConfirm: { save(nameText, addressText) }) {
+            VStack(spacing: 8) {
+                SkyOutlinedTextField(label: L10n.key("mail_contact_name"), text: $nameText, notch: .skyContainerHigh,
+                                     identifier: "mail-contact-name", prose: true)
+                SkyOutlinedTextField(label: L10n.key("mail_to_hint"), text: $addressText, notch: .skyContainerHigh,
+                                     identifier: "mail-contact-address")
+            }
+        }
+        .onAppear {
+            nameText = name
+            addressText = address
+        }
+    }
+}
+
+/// SkyMail's own contacts: add, edit and delete without a message to start from.
+private struct MailContactsView: View {
+    @ObservedObject var model: MailModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 4) {
+                Button {
+                    dialogs.showCustom {
+                        MailContactDialog(title: Text("mail_contact_add"), name: "", address: "") { name, address in
+                            model.saveContact(name: name, address: address)
+                        }
+                    }
+                } label: {
+                    Label { Text("mail_contact_add") } icon: { MaterialIcon(MI.roundedPersonAdd, size: 18) }
+                }
+                .buttonStyle(.tonal)
+                .accessibilityIdentifier("mail-contact-add")
+                if model.contacts.isEmpty {
+                    Text("mail_no_contacts").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 12)
+                }
+                ForEach(model.contacts, id: \.address) { contact in
+                    row(contact)
+                    SkyDivider()
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private func row(_ contact: MailContact) -> some View {
+        HStack(spacing: 0) {
+            Text(verbatim: String(contact.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                .skyText(.titleMedium)
+                .foregroundStyle(Color.skyOnPrimaryContainer)
+                .frame(width: 36, height: 36)
+                .background(Color.skyPrimaryContainer, in: Circle())
+            // The name and the address must not read as two lines of one thing.
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: contact.name).skyText(.titleMedium, bold: true).foregroundStyle(Color.skyOnSurface).lineLimit(1)
+                HStack(spacing: 4) {
+                    MaterialIcon(MI.roundedAlternateEmail, size: 14)
+                    Text(verbatim: MailText.shortAddress(contact.address.trimmingCharacters(in: .whitespaces)))
+                        .skyText(.bodySmall, mono: true)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+            .padding(.vertical, 8)
+            .padding(.leading, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("mail-contact")
+            Button {
+                dialogs.showCustom {
+                    MailContactDialog(title: Text("mail_contact_edit"), name: contact.name, address: contact.address) { name, address in
+                        model.saveContact(name: name, address: address, replacing: contact.address)
+                    }
+                }
+            } label: {
+                MaterialIcon(MI.roundedEdit).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 48)
+            }
+            .accessibilityLabel(Text("mail_contact_edit"))
+            .accessibilityIdentifier("mail-contact-edit")
+            Button {
+                dialogs.show(SkyDialog(message: Text(verbatim: L10n.format("mail_contact_delete_confirm", contact.name)), actions: [
+                    SkyDialog.Action(label: Text("cancel")),
+                    SkyDialog.Action(label: Text("mail_delete")) { model.deleteContact(contact.address) },
+                ]))
+            } label: {
+                MaterialIcon(MI.roundedDelete).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 48)
+            }
+            .accessibilityLabel(Text("mail_delete"))
+            .accessibilityIdentifier("mail-contact-delete")
+        }
     }
 }
 
@@ -480,22 +642,18 @@ private struct MailComposeView: View {
     @State private var picking = false
 
     var body: some View {
-        let book = VoiceCalls.shared.addressBook
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 0) {
                     SkyOutlinedTextField(label: L10n.key("mail_to"), text: binding(\.to), identifier: "mail-to",
                                          supporting: Text("mail_to_hint"))
-                    if !book.isEmpty {
-                        Menu {
-                            ForEach(book.sorted { $0.value.lowercased() < $1.value.lowercased() }, id: \.key) { pk, name in
-                                Button { model.addRecipient(pk) } label: { Text(verbatim: name) }
-                            }
-                        } label: {
-                            MaterialIcon(MI.roundedContacts).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 56)
-                        }
-                        .accessibilityLabel(Text("mail_contacts"))
+                    // The picker is the way out of copy-paste, so it stays reachable even with
+                    // nothing to pick yet.
+                    Menu { picker } label: {
+                        MaterialIcon(MI.roundedContacts).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 56)
                     }
+                    .accessibilityLabel(Text("mail_contacts"))
+                    .accessibilityIdentifier("mail-pick-contact")
                 }
                 if showCc || !(model.draft?.cc.isEmpty ?? true) {
                     SkyOutlinedTextField(label: L10n.key("mail_cc"), text: binding(\.cc), identifier: "mail-cc")
@@ -532,7 +690,7 @@ private struct MailComposeView: View {
                 .buttonStyle(.outlined)
                 .disabled(model.sending)
                 if let result = model.lastSend {
-                    SendResultCard(result: result)
+                    SendResultCard(result: result, contacts: model.contacts)
                 }
                 Text("mail_send_note").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                 Button { model.send() } label: {
@@ -558,6 +716,31 @@ private struct MailComposeView: View {
         }
     }
 
+    /// SkyMail's contacts, then SkyChat's names for keys not saved here, then the way to edit them.
+    @ViewBuilder private var picker: some View {
+        ForEach(model.contacts, id: \.address) { contact in
+            Button { model.addRecipient(address: contact.address) } label: { Text(verbatim: contact.name) }
+        }
+        let saved = Set(model.contacts.compactMap { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() })
+        let chat = VoiceCalls.shared.addressBook
+            .filter { !saved.contains($0.key.lowercased()) }
+            .sorted { $0.value.lowercased() < $1.value.lowercased() }
+        if !chat.isEmpty {
+            Section(L10n.text("mail_contacts_from_skychat")) {
+                ForEach(chat, id: \.key) { pk, name in
+                    if let address = SkymailAddress.of(pk) {
+                        Button { model.addRecipient(address: address) } label: { Text(verbatim: name) }
+                    }
+                }
+            }
+        }
+        if model.contacts.isEmpty && chat.isEmpty {
+            Text("mail_no_contacts")
+        }
+        Divider()
+        Button { model.openContacts() } label: { Text("mail_contacts_manage") }
+    }
+
     private func binding(_ field: WritableKeyPath<MailDraft, String>) -> Binding<String> {
         Binding(get: { model.draft?[keyPath: field] ?? "" }, set: { model.draft?[keyPath: field] = $0 })
     }
@@ -565,12 +748,13 @@ private struct MailComposeView: View {
 
 private struct SendResultCard: View {
     let result: MailSendResult
+    let contacts: [MailContact]
 
     var body: some View {
         SectionCard {
             Text("mail_result_title").skyText(.titleSmall)
             ForEach(Array(result.recipients.enumerated()), id: \.offset) { _, recipient in
-                Text(verbatim: MailText.displayAddress(recipient.rcpt)).skyText(.bodyMedium).padding(.top, 6)
+                Text(verbatim: MailText.displayAddress(recipient.rcpt, contacts: contacts)).skyText(.bodyMedium).padding(.top, 6)
                 Text(verbatim: recipient.error.isEmpty
                     ? L10n.format("mail_result_delivered", recipient.via)
                     : L10n.format("mail_result_failed", recipient.error))
@@ -666,24 +850,40 @@ private struct MailSettingsView: View {
 // MARK: Helpers
 
 enum MailText {
-    /// An address short enough to read: the display name when there is one, a
-    /// SkyChat contact's name for the key, or the address with its key cut.
+    /// What to call a mail party: the user's own name for the key (SkyMail, then SkyChat) before
+    /// the name the mail carries, else the address with its key cut. `pk` is the key the transport
+    /// proved, which a From line cannot forge.
     @MainActor
-    static func displayAddress(_ raw: String) -> String {
+    static func displayAddress(_ raw: String, contacts: [MailContact] = [], pk: String = "") -> String {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = bareAddress(text)
+        if let key = pk.isEmpty ? SkymailAddress.pk(ofAddress: address) : pk {
+            if let contact = contacts.first(where: { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() == key.lowercased() }) {
+                return contact.name
+            }
+            if let name = VoiceCalls.shared.addressBook[key.lowercased()] ?? VoiceCalls.shared.addressBook[key], !name.isEmpty {
+                return name
+            }
+        }
         if let open = text.firstIndex(of: "<") {
             let name = text[..<open].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
             if !name.isEmpty { return name }
         }
-        var address = text
-        if let open = text.firstIndex(of: "<") {
-            address = String(text[text.index(after: open)...])
+        return shortAddress(address)
+    }
+
+    /// The address inside `Name <address>`, or the text itself.
+    static func bareAddress(_ raw: String) -> String {
+        var address = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let open = address.firstIndex(of: "<") {
+            address = String(address[address.index(after: open)...])
             if let close = address.firstIndex(of: ">") { address = String(address[..<close]) }
-            address = address.trimmingCharacters(in: .whitespaces)
         }
-        if let pk = SkymailAddress.pk(ofAddress: address), let name = VoiceCalls.shared.addressBook[pk], !name.isEmpty {
-            return name
-        }
+        return address.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The address itself with its key cut, never a name for it.
+    static func shortAddress(_ address: String) -> String {
         guard let at = address.firstIndex(of: "@") else { return address }
         let local = address[..<at]
         let domain = address[address.index(after: at)...]
