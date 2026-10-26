@@ -538,6 +538,26 @@ final class WalletModel: ObservableObject {
         }
     }
 
+    // MARK: Offline transactions (fiber)
+
+    /// The planned send unsigned, or nil when there is no plan.
+    func unsignedHex() -> String? {
+        guard let active, let plan = send.plan else { return nil }
+        return try? store.unsignedHex(walletId: active.id, plan: plan)
+    }
+
+    func signRaw(_ rawHex: String) async throws -> String {
+        guard let active else { throw WalletStoreError("unknown wallet") }
+        return try await store.signRaw(walletId: active.id, rawHex: rawHex)
+    }
+
+    func broadcastRaw(_ rawHex: String) async throws -> String {
+        guard let active else { throw WalletStoreError("unknown wallet") }
+        let txid = try await store.broadcastRaw(walletId: active.id, rawHex: rawHex)
+        refreshNow()
+        return txid
+    }
+
     // MARK: Wallets
 
     func useWallet(_ walletId: String) {

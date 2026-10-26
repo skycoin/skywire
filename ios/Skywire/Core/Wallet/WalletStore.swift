@@ -557,6 +557,26 @@ final class WalletStore: ObservableObject {
         return txid
     }
 
+    /// The plan's transaction unsigned, for signing on another device.
+    func unsignedHex(walletId: String, plan: TxPlan) throws -> String? {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
+        return try core(for: spec).unsignedHex(plan)
+    }
+
+    /// Signs a raw transaction made elsewhere with this wallet's keys. Nothing is broadcast.
+    func signRaw(walletId: String, rawHex: String) async throws -> String {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
+        guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        let book = AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses)
+        return try await core(for: spec).signRaw(seed: KeySource(mnemonic: seed), book: book, rawHex: rawHex).rawHex
+    }
+
+    /// Broadcasts a raw signed transaction through the wallet's coin node; returns the txid.
+    func broadcastRaw(walletId: String, rawHex: String) async throws -> String {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
+        return try await core(for: spec).broadcastRaw(rawHex)
+    }
+
     // MARK: Storage
 
     private func mutate(_ change: (inout WalletRegistry) -> Void) {

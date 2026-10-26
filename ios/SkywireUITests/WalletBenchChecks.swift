@@ -195,6 +195,59 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertGreaterThan(sent.outputs.first { $0.dst == addresses[2] }?.hours ?? 0, 0)
     }
 
+    /// Offline: the review gives the planned send unsigned, Sign a transaction signs it here behind
+    /// Face ID without sending, and Broadcast sends the signed one; the fake node accepts it.
+    func testUnsignedSignAndBroadcastOffline() throws {
+        let app = try benchWallet()
+        openSend(to: addresses[2], amount: "1", app)
+        let review = app.buttons["wallet-send-review"]
+        scroll(to: review, in: app)
+        review.tap()
+        let unsigned = app.buttons["wallet-review-unsigned"]
+        XCTAssertTrue(unsigned.waitForExistence(timeout: 30), "no review")
+        tapWhenUp("wallet-review-unsigned", in: app)
+        let hex = app.staticTexts["wallet-raw-hex"]
+        XCTAssertTrue(hex.waitForExistence(timeout: 5), "no unsigned transaction")
+        let unsignedHex = hex.label
+        attachScreenshot(app, "bench-unsigned")
+        app.buttons["wallet-raw-copy"].tap()
+        tapWhenUp("Done", in: app)
+
+        let advanced = app.buttons["wallet-send-advanced"]
+        scroll(to: advanced, in: app)
+        advanced.tap()
+        offline("wallet-offline-sign", app)
+        answeringFaceID {
+            app.buttons["wallet-offline-run"].tap()
+            XCTAssertTrue(app.staticTexts["wallet-raw-hex"].waitForExistence(timeout: 20), "the transaction was not signed")
+        }
+        let signedHex = app.staticTexts["wallet-raw-hex"].label
+        // An unsigned Skycoin transaction carries empty signature slots: the same length, other bytes.
+        XCTAssertEqual(signedHex.count, unsignedHex.count)
+        XCTAssertNotEqual(signedHex, unsignedHex, "the signed transaction carries no signature")
+        attachScreenshot(app, "bench-signed")
+        app.buttons["wallet-raw-copy"].tap()
+        tapWhenUp("Done", in: app)
+        XCTAssertNil(try? lastTransaction(), "signing offline sent the transaction")
+
+        offline("wallet-offline-broadcast", app)
+        app.buttons["wallet-offline-run"].tap()
+        let sent = app.staticTexts["wallet-offline-sent"]
+        XCTAssertTrue(sent.waitForExistence(timeout: 20), "the signed transaction was not broadcast")
+        let txid = try lastTransaction().txid
+        XCTAssertTrue(sent.label.contains(txid), "the dialog names \(sent.label), the node accepted \(txid)")
+        attachScreenshot(app, "bench-broadcast")
+    }
+
+    /// Opens an offline dialog from Advanced and pastes what the app copied last.
+    private func offline(_ button: String, _ app: XCUIApplication) {
+        let open = app.buttons[button]
+        scroll(to: open, in: app)
+        open.tap()
+        tapWhenUp("wallet-offline-paste", in: app)
+        XCTAssertTrue(waitEnabled(app.buttons["wallet-offline-run"], timeout: 5), "nothing was pasted")
+    }
+
     // MARK: Bench
 
     /// The app on SKY with the bench phrase's wallet, its node pointed at the fake one, refreshed.
