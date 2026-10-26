@@ -1,6 +1,9 @@
 package com.skycoin.skywire.core
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -57,6 +60,30 @@ class SkywirePaths(context: Context) {
      */
     val binDir: File = File(dataDir, "bin")
 
+    /**
+     * The device as the hardware survey describes it, passed to the core as
+     * `SKYWIRE_ANDROID_DEVICE`: an app cannot read the DMI tables, machine-id
+     * or real MACs a linux survey uses. ANDROID_ID is fixed per device, user
+     * and signing key; the core hashes it into the survey's machine id.
+     */
+    val deviceJson: String = JSONObject().apply {
+        put("android_id", Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "")
+        put("manufacturer", Build.MANUFACTURER)
+        put("brand", Build.BRAND)
+        put("model", Build.MODEL)
+        put("device", Build.DEVICE)
+        put("product", Build.PRODUCT)
+        put("board", Build.BOARD)
+        put("hardware", Build.HARDWARE)
+        put("fingerprint", Build.FINGERPRINT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            put("soc_manufacturer", Build.SOC_MANUFACTURER)
+            put("soc_model", Build.SOC_MODEL)
+        }
+        put("release", Build.VERSION.RELEASE)
+        put("sdk", Build.VERSION.SDK_INT)
+    }.toString()
+
     /** TMPDIR for the child — os.TempDir() must be app-writable. */
     val tmpDir: File = File(context.cacheDir, "skywire-tmp")
 
@@ -81,6 +108,7 @@ class SkywirePaths(context: Context) {
  * socket it hands descriptors out on. `SKYWIRE_ANDROID_VPN_SHARE_SOCKET` is
  * where it collects the VPN hotspot's connections ([VpnHotspot]). The leading
  * `@` is Go's spelling of the abstract namespace both are bound in.
+ * `SKYWIRE_ANDROID_DEVICE` feeds the hardware survey ([SkywirePaths.deviceJson]).
  */
 internal fun coreEnv(paths: SkywirePaths): Map<String, String> = mapOf(
     "HOME" to paths.dataDir.absolutePath,
@@ -88,4 +116,5 @@ internal fun coreEnv(paths: SkywirePaths): Map<String, String> = mapOf(
     "SKYWIRE_ANDROID_API_LEVEL" to android.os.Build.VERSION.SDK_INT.toString(),
     "SKYWIRE_ANDROID_VPN_SOCKET" to "@" + SkyVpnService.SOCKET_NAME,
     "SKYWIRE_ANDROID_VPN_SHARE_SOCKET" to "@" + VpnHotspot.SOCKET_NAME,
+    "SKYWIRE_ANDROID_DEVICE" to paths.deviceJson,
 )

@@ -98,11 +98,13 @@ type rewardData struct {
 type surveyData struct {
 	IPAddr  string `json:"ip_address"`
 	SkyAddr string `json:"skycoin_address"`
+	GOOS    string `json:"go_os"`
 	Arch    string `json:"go_arch"`
 	UUID    string `json:"uuid"`
 	SysInfo struct {
 		Node struct {
 			Hypervisor string `json:"hypervisor"`
+			MachineID  string `json:"machineid"`
 		} `json:"node"`
 		Network []struct {
 			Name       string `json:"name"`
@@ -130,7 +132,16 @@ func parseSurvey(path string) (*surveyData, error) {
 }
 
 // extractInterfaces returns the interface list string and MAC addresses from a survey.
+// Android hides real MACs from apps, so an Android survey is keyed on its machine id,
+// which the app derives from ANDROID_ID.
 func extractInterfaces(s *surveyData) (ifc string, macs []string) {
+	if s.GOOS == "android" {
+		if id := s.SysInfo.Node.MachineID; id != "" {
+			b, _ := json.Marshal([]map[string]string{{"ifname": "android", "address": id}}) //nolint:errcheck
+			return string(b), []string{"android:" + id}
+		}
+		return "", []string{""}
+	}
 	// Try ip_addr first (non-loopback)
 	type ifcEntry struct {
 		Address string `json:"address"`
