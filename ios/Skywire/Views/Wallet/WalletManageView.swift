@@ -1,11 +1,14 @@
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The selected coin's wallets (Android: ui/wallet/WalletManage.kt): switch, rename, reveal,
 /// remove, add.
 struct WalletManageView: View {
     @EnvironmentObject private var model: WalletModel
     @EnvironmentObject private var dialogs: SkyDialogs
+    /// The wallet whose addresses the system's save dialog is writing.
+    @State private var exportTarget: WalletMeta?
 
     var body: some View {
         WalletScreen(title: Text("wallet_wallets_title")) {
@@ -34,6 +37,19 @@ struct WalletManageView: View {
                     Spacer().frame(height: 14)
                 }
                 .padding(.horizontal, 20)
+            }
+        }
+        // The system's own save dialog: the user picks the place, and the app needs no access to
+        // the files around it.
+        .fileExporter(isPresented: Binding(get: { exportTarget != nil }, set: { if !$0 { exportTarget = nil } }),
+                      document: AddressesDocument(text: exportTarget.map(addressesCsv) ?? ""),
+                      contentType: .commaSeparatedText,
+                      defaultFilename: "\(exportTarget?.name ?? "addresses").csv") { result in
+            exportTarget = nil
+            if case .success = result {
+                dialogs.snackbar(Text("wallet_export_done"))
+            } else if case let .failure(error) = result, (error as? CocoaError)?.code != .userCancelled {
+                dialogs.snackbar(Text("wallet_export_failed"))
             }
         }
     }
@@ -94,6 +110,11 @@ struct WalletManageView: View {
                             identifier: "wallet-action-reveal") {
                     dialogs.dismissSheet()
                     model.path.append(.reveal(wallet.id))
+                }
+                SheetAction(icon: MI.outlinedFileDownload, title: L10n.key("wallet_export_action"), subtitle: L10n.key("wallet_export_action_sub"),
+                            identifier: "wallet-action-export") {
+                    dialogs.dismissSheet()
+                    exportTarget = wallet
                 }
                 SheetAction(icon: MI.outlinedDeleteOutline, title: L10n.key("wallet_remove_action"), subtitle: L10n.key("wallet_remove_action_sub"),
                             destructive: true, identifier: "wallet-action-remove") {
@@ -487,5 +508,26 @@ struct WalletNodeView: View {
 
     private func popNode() {
         if model.path.last == .node { model.path.removeLast() }
+    }
+}
+
+/// Saved addresses: one per line, receive then change, as skycoin-web writes them. No keys.
+func addressesCsv(_ wallet: WalletMeta) -> String {
+    (wallet.receiveAddresses + wallet.changeAddresses).joined(separator: "\n")
+}
+
+/// The CSV the save dialog writes.
+struct AddressesDocument: FileDocument {
+    static let readableContentTypes: [UTType] = [.commaSeparatedText]
+    let text: String
+
+    init(text: String) { self.text = text }
+
+    init(configuration: ReadConfiguration) throws {
+        text = configuration.file.regularFileContents.map { String(decoding: $0, as: UTF8.self) } ?? ""
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
     }
 }

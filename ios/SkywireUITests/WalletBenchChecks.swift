@@ -290,6 +290,23 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertFalse(app.buttons["wallet-address-1"].label.contains("Has sent coins"), "address 1 never sent")
     }
 
+    /// Save addresses hands a CSV of every address to the system's save dialog, and says when it
+    /// was written.
+    func testSaveAddresses() throws {
+        let app = try benchWallet()
+        openWallets(app)
+        app.buttons["wallet-row-\(addresses[0])"].tap()
+        tapWhenUp("wallet-action-export", in: app)
+        let save = app.buttons["Save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 15), "no save dialog")
+        attachScreenshot(app, "bench-save-addresses")
+        save.tap()
+        // Saving over an earlier run's file asks first, in a system alert.
+        let replace = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Replace"]
+        if replace.waitForExistence(timeout: 6) { replace.tap() }
+        XCTAssertTrue(app.staticTexts["Addresses saved"].waitForExistence(timeout: 10), "the save was not confirmed")
+    }
+
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
     private func offline(_ button: String, _ app: XCUIApplication) {
         let open = app.buttons[button]

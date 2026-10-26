@@ -29,3 +29,11 @@ final class WalletSnapshotTests: XCTestCase {
         XCTAssertEqual(again.txs.first?.own, ["a2"])
     }
 }
+
+/// Saved addresses: one per line, receive then change (Android: WalletAddressesCsvTest).
+final class WalletAddressesCsvTests: XCTestCase {
+    func testEveryAddressOnItsOwnLine() {
+        let wallet = WalletMeta(id: "w", coinId: "BTC", name: "BTC", createdAtMs: 0, receiveAddresses: ["r1", "r2"], changeAddresses: ["c1"])
+        XCTAssertEqual(addressesCsv(wallet), "r1\nr2\nc1")
+    }
+}
