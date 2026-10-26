@@ -21,24 +21,28 @@ import (
 // path, the autoconfig flag whose variable holds it and the flag text for a
 // value.
 var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
-	"is_public":                 boolFlag("public"),
-	"log_level":                 stringFlag("loglvl"),
-	"hypervisors":               pkListFlag("hvpks"),
-	"pty.whitelist":             pkListFlag("dmsgpty-pks"),
-	"routing.min_hops":          uintFlag("min-hops"),
-	"routing.calculate_routes":  boolFlag("calculate-routes"),
-	"routing.mux_fec":           boolFlag("mux-fec"),
-	"flight_recorder":           boolFlag("flight-recorder"),
-	"hypervisor.ui_disable":     boolFlag("hv-ui-disable"),
-	"reward_address":            stringFlag("rewardaddr"),
-	"hypervisor.enable":         boolFlag("ishv"),
-	"hypervisor.enable_auth":    boolFlag("hv-auth"),
-	"dmsg_web.enable":           boolFlag("dmsgweb"),
-	"dmsg_web.proxy_addr":       stringFlag("dmsgweb-addr"),
-	"dmsg_web.upstream_socks":   stringFlag("dmsgweb-upstream"),
-	"skynet_web.enable":         boolFlag("skynetweb"),
-	"skynet_web.proxy_addr":     stringFlag("skynetweb-addr"),
-	"skynet_web.upstream_socks": stringFlag("skynetweb-upstream"),
+	"is_public":                          boolFlag("public"),
+	"log_level":                          stringFlag("loglvl"),
+	"hypervisors":                        pkListFlag("hvpks"),
+	"pty.whitelist":                      pkListFlag("dmsgpty-pks"),
+	"routing.min_hops":                   uintFlag("min-hops"),
+	"routing.calculate_routes":           boolFlag("calculate-routes"),
+	"routing.mux_fec":                    boolFlag("mux-fec"),
+	"flight_recorder":                    boolFlag("flight-recorder"),
+	"hypervisor.ui_disable":              boolFlag("hv-ui-disable"),
+	"reward_address":                     stringFlag("rewardaddr"),
+	"hypervisor.enable":                  boolFlag("ishv"),
+	"hypervisor.enable_auth":             boolFlag("hv-auth"),
+	"dmsg_web.enable":                    boolFlag("dmsgweb"),
+	"dmsg_web.proxy_addr":                stringFlag("dmsgweb-addr"),
+	"dmsg_web.upstream_socks":            stringFlag("dmsgweb-upstream"),
+	"skynet_web.enable":                  boolFlag("skynetweb"),
+	"skynet_web.proxy_addr":              stringFlag("skynetweb-addr"),
+	"skynet_web.upstream_socks":          stringFlag("skynetweb-upstream"),
+	"memory_limit":                       stringFlag("memory-limit"),
+	"transport.autoconnect.max_total":    intFlag("autoconn-max-total"),
+	"transport.autoconnect.site_links":   optIntFlag("autoconn-site-links"),
+	"transport.autoconnect.max_per_type": mapIntFlag("autoconn-max-per-type"),
 	"transport.public_autoconnect": func(nv reflect.Value) (string, string) {
 		return "disable-public-autoconn", strconv.FormatBool(!nv.Bool())
 	},
@@ -64,6 +68,33 @@ func stringFlag(flag string) func(reflect.Value) (string, string) {
 
 func uintFlag(flag string) func(reflect.Value) (string, string) {
 	return func(nv reflect.Value) (string, string) { return flag, strconv.FormatUint(nv.Uint(), 10) }
+}
+
+func intFlag(flag string) func(reflect.Value) (string, string) {
+	return func(nv reflect.Value) (string, string) { return flag, strconv.FormatInt(nv.Int(), 10) }
+}
+
+// optIntFlag gives an empty value for an unset *int, which unsets the variable.
+func optIntFlag(flag string) func(reflect.Value) (string, string) {
+	return func(nv reflect.Value) (string, string) {
+		if nv.Kind() != reflect.Pointer || nv.IsNil() {
+			return flag, ""
+		}
+		return flag, strconv.FormatInt(nv.Elem().Int(), 10)
+	}
+}
+
+// mapIntFlag writes a map[string]int as sorted key=count pairs.
+func mapIntFlag(flag string) func(reflect.Value) (string, string) {
+	return func(nv reflect.Value) (string, string) {
+		m, _ := nv.Interface().(map[string]int) //nolint:errcheck
+		pairs := make([]string, 0, len(m))
+		for k, n := range m {
+			pairs = append(pairs, k+"="+strconv.Itoa(n))
+		}
+		sort.Strings(pairs)
+		return flag, strings.Join(pairs, ",")
+	}
 }
 
 func pkListFlag(flag string) func(reflect.Value) (string, string) {

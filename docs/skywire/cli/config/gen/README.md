@@ -71,6 +71,10 @@ skywire cli config gen
       --dmsgscp-root string                  directory dmsgscp serves (local/scp-root when empty)
       --no-stats                             do not keep or publish local telemetry
       --stats-retention int                  days of local telemetry to keep (30 when 0)
+      --memory-limit string                  Go memory limit of the visor, none, auto or a size like 256MiB (none when empty)
+      --autoconn-max-total int               cap on transports autoconnect dials of all types, 0 for no cap (-1 leaves it as it was) (default -1)
+      --autoconn-site-links int              transports kept between two sites, 0 for no limit (-1 leaves the default of 2) (default -1)
+      --autoconn-max-per-type string         cap on transports autoconnect dials per type, like sudph=40,webrtc=10
   -i, --ishv                                 local hypervisor configuration
       --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
   -j, --hvpks string                         list of public keys to add as hypervisor
