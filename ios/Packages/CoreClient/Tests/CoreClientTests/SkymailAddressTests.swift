@@ -29,6 +29,19 @@ final class SkymailAddressTests: XCTestCase {
         XCTAssertNil(SkymailAddress.label(String(pc.dropLast(2))))
     }
 
+    /// The composer's dmsg or skynet choice moves every SkyMail address written, and only those.
+    func testTheNetworkMovesEveryAddress() {
+        let written = "mail@\(pcLabel).dmsg, Bob <bob@host.\(phoneLabel).DMSG>; bob@example.com"
+        XCTAssertEqual(
+            SkymailAddress.withNetwork(written, suffix: SkymailAddress.skynet),
+            "mail@\(pcLabel).skynet, Bob <bob@host.\(phoneLabel).skynet>; bob@example.com"
+        )
+        XCTAssertEqual(SkymailAddress.withNetwork("mail@\(pcLabel).skynet", suffix: SkymailAddress.dmsg), "mail@\(pcLabel).dmsg")
+        XCTAssertEqual(SkymailAddress.recipient(pc, suffix: SkymailAddress.skynet), "mail@\(pcLabel).skynet")
+        // An address typed in full keeps the network it was written for.
+        XCTAssertEqual(SkymailAddress.recipient("bob@\(pcLabel).dmsg", suffix: SkymailAddress.skynet), "bob@\(pcLabel).dmsg")
+    }
+
     func testNotHexIsNotAKey() {
         XCTAssertNil(SkymailAddress.label("+" + String(pc.dropFirst())))
         XCTAssertNil(SkymailAddress.pk(ofLabel: String(phoneLabel.dropLast()) + "1"))

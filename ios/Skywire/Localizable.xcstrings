@@ -6210,6 +6210,29 @@
         }
       }
     },
+    "mail_via_hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。"
+          }
+        }
+      }
+    },
     "mail_write" : {
       "extractionState" : "manual",
       "localizations" : {
