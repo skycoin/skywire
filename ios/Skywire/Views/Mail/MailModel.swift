@@ -48,6 +48,8 @@ final class MailModel: ObservableObject {
     @Published private(set) var settingsOpen = false
     /// A settings change or a delete is in flight.
     @Published private(set) var busy = false
+    /// Message ids picked in the folder shown, for a batch delete.
+    @Published private(set) var selection: Set<String> = []
     /// A one-off line for the snackbar, cleared once shown.
     @Published var notice: String?
     @Published var share: SharedFile?
@@ -63,6 +65,7 @@ final class MailModel: ObservableObject {
     var myAddress: String? { status?.myAddress }
     /// An inner view is up (a draft, the settings or a message): back steps out of it first.
     var inner: Bool { draft != nil || settingsOpen || open != nil }
+    var selecting: Bool { !selection.isEmpty }
 
     // MARK: Loop
 
@@ -78,7 +81,9 @@ final class MailModel: ObservableObject {
     }
 
     func selectFolder(_ folder: String) {
+        // A selection belongs to the folder it was made in.
         self.folder = folder
+        selection = []
         Task { await refreshNow() }
     }
 
@@ -165,6 +170,50 @@ final class MailModel: ObservableObject {
     /// The share sheet closed: its copy of the attachment goes.
     func shareDone(_ file: SharedFile) {
         try? FileManager.default.removeItem(at: file.url.deletingLastPathComponent())
+    }
+
+    // MARK: Batch selection
+
+    func toggleSelect(_ id: String) {
+        if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
+    }
+
+    func selectAll() {
+        guard let ids = messages?.map(\.id) else { return }
+        selection = Set(ids)
+    }
+
+    /// Flips the picks within the folder shown.
+    func invertSelection() {
+        guard let ids = messages?.map(\.id) else { return }
+        selection = Set(ids).subtracting(selection)
+    }
+
+    func clearSelection() {
+        selection = []
+    }
+
+    /// Deletes every picked message in the folder shown, one call each.
+    func deleteSelected() {
+        guard !busy, !selection.isEmpty, let app else { return }
+        let folder = self.folder
+        let ids = Array(selection)
+        busy = true
+        Task {
+            var failed = 0
+            for id in ids {
+                do { try await app.client.mailDelete(folder, id: id) } catch { failed += 1 }
+            }
+            let gone = Set(ids)
+            if folder == MailFolder.inbox { inbox = inbox?.filter { !gone.contains($0.id) } }
+            if folder == MailFolder.sent { sent = sent?.filter { !gone.contains($0.id) } }
+            selection = []
+            busy = false
+            notice = failed == 0
+                ? L10n.format("mail_batch_deleted", ids.count)
+                : L10n.format("mail_batch_delete_failed", failed, ids.count)
+            await refreshNow()
+        }
     }
 
     // MARK: Writing
@@ -329,6 +378,7 @@ final class MailModel: ObservableObject {
             folder = MailFolder.inbox
             draft = nil
             settingsOpen = false
+            selection = []
             open(MailFolder.inbox, summary)
         }
         if summary != nil || inbox != nil { MailRouter.shared.handled(link) }

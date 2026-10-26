@@ -120,6 +120,12 @@
       "en": "Packet tunnel",
       "zh-Hans": "数据包隧道",
       "es": "Túnel de paquetes"
+    },
+    "mail_select_ios": {
+      "en": "Select",
+      "zh-Hans": "选择",
+      "es": "Seleccionar",
+      "fr": "Sélectionner"
     }
   },
   "InfoPlist": {

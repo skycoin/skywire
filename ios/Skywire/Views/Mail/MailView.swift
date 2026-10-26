@@ -15,7 +15,7 @@ struct MailView: View {
     var body: some View {
         VStack(spacing: 0) {
             SkyTopBar(title: title, onBack: stepBack, help: .mail) {
-                if listView {
+                if listView && !model.selecting {
                     SquareBarButton(icon: MI.roundedSettings) { model.openSettings() }
                         .accessibilityLabel(Text("mail_settings_title"))
                         .accessibilityIdentifier("mail-settings")
@@ -23,12 +23,15 @@ struct MailView: View {
             }
             ZStack(alignment: .bottomTrailing) {
                 content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                if listView && model.status?.running == true {
+                if listView && !model.selecting && model.status?.running == true {
                     ExtendedFab(icon: MI.roundedEdit, label: Text("mail_write")) { model.compose() }
                         .padding(16)
                         .accessibilityIdentifier("mail-write")
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if listView && model.selecting { MailSelectionBar(model: model) }
         }
         .background(Color.skyBackground)
         .task(id: app.connected) { await model.run(app) }
@@ -48,6 +51,7 @@ struct MailView: View {
     private var title: Text {
         if model.draft != nil { return Text("mail_compose_title") }
         if model.settingsOpen { return Text("mail_settings_title") }
+        if model.selecting && model.open == nil { return Text(verbatim: L10n.format("mail_selected_count", model.selection.count)) }
         return Text("app_skymail")
     }
 
@@ -60,6 +64,8 @@ struct MailView: View {
             model.closeSettings()
         } else if model.open != nil {
             model.closeMessage()
+        } else if model.selecting {
+            model.clearSelection()
         } else {
             navigator.back()
         }
@@ -126,7 +132,10 @@ private struct MailFolderView: View {
                     .padding(.horizontal, 4)
             } else {
                 ForEach(messages) { message in
-                    MailRow(message: message, sent: sent) { model.open(model.folder, message) }
+                    MailRow(message: message, sent: sent, selecting: model.selecting,
+                            selected: model.selection.contains(message.id),
+                            onOpen: { model.open(model.folder, message) },
+                            onToggle: { model.toggleSelect(message.id) })
                 }
             }
         } else {
@@ -200,50 +209,127 @@ private struct MailboxOffCard: View {
 private struct MailRow: View {
     let message: MailSummary
     let sent: Bool
-    let action: () -> Void
+    let selecting: Bool
+    let selected: Bool
+    let onOpen: () -> Void
+    let onToggle: () -> Void
+    @State private var pressed = false
 
     var body: some View {
         let unread = !sent && !message.seen
         VStack(spacing: 0) {
-            Button(action: action) {
-                HStack(spacing: 0) {
+            HStack(spacing: 0) {
+                if selecting {
+                    MailCheckbox(checked: selected)
+                } else {
                     Circle().fill(unread ? Color.skyPrimary : Color.clear).frame(width: 10, height: 10)
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 6) {
-                            Text(verbatim: MailText.displayAddress(sent ? message.to : message.from))
-                                .skyText(.bodyLarge, bold: unread)
-                                // Read mail steps back in colour as well as weight: weight
-                                // alone reads as no difference at all on a phone.
-                                .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
-                                .lineLimit(1)
-                            if !sent && !message.fromVerified {
-                                MaterialIcon(MI.roundedWarning, size: 14)
-                                    .foregroundStyle(Color.skyError)
-                                    .accessibilityLabel(Text("mail_unverified"))
-                            }
-                        }
-                        Group {
-                            if message.subject.isEmpty { Text("mail_no_subject") } else { Text(verbatim: message.subject) }
-                        }
-                        .skyText(.bodyMedium, bold: unread)
-                        .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
-                        .lineLimit(1)
-                    }
-                    .padding(.leading, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(verbatim: MailText.shortDate(message.date))
-                        .skyText(.labelSmall)
-                        .foregroundStyle(Color.skyOnSurfaceVariant)
-                        .padding(.leading, 8)
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 4)
-                .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 6) {
+                        Text(verbatim: MailText.displayAddress(sent ? message.to : message.from))
+                            .skyText(.bodyLarge, bold: unread)
+                            // Read mail steps back in colour as well as weight: weight
+                            // alone reads as no difference at all on a phone.
+                            .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
+                            .lineLimit(1)
+                        if !sent && !message.fromVerified {
+                            MaterialIcon(MI.roundedWarning, size: 14)
+                                .foregroundStyle(Color.skyError)
+                                .accessibilityLabel(Text("mail_unverified"))
+                        }
+                    }
+                    Group {
+                        if message.subject.isEmpty { Text("mail_no_subject") } else { Text(verbatim: message.subject) }
+                    }
+                    .skyText(.bodyMedium, bold: unread)
+                    .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
+                    .lineLimit(1)
+                }
+                .padding(.leading, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(verbatim: MailText.shortDate(message.date))
+                    .skyText(.labelSmall)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.leading, 8)
             }
-            .buttonStyle(PressStyle(layer: .skyOnSurface))
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .overlay(Rectangle().fill(Color.skyOnSurface.opacity(pressed ? 0.10 : 0)))
+            // A long press starts a batch and picks this message; taps pick too
+            // while a batch is open.
+            .onTapGesture { if selecting { onToggle() } else { onOpen() } }
+            .onLongPressGesture(minimumDuration: 0.5) { onToggle() } onPressingChanged: { pressed = $0 }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { if selecting { onToggle() } else { onOpen() } }
+            .accessibilityAction(named: Text("mail_select_ios")) { onToggle() }
             .accessibilityIdentifier("mail-row")
             SkyDivider()
         }
+    }
+}
+
+/// Material 3's checkbox, 18 points in a 24 point box: a filled square with a tick when picked.
+private struct MailCheckbox: View {
+    let checked: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2)
+                .strokeBorder(checked ? Color.skyPrimary : Color.skyOnSurfaceVariant, lineWidth: 2)
+                .background(RoundedRectangle(cornerRadius: 2).fill(checked ? Color.skyPrimary : Color.clear))
+                .frame(width: 18, height: 18)
+            if checked {
+                MaterialIcon(MI.filledCheck, size: 16).foregroundStyle(Color.skyOnPrimary)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The batch actions, shown while messages are picked. The verbs wrap rather than truncate:
+/// in Spanish and French the three of them outrun a phone's width in one row.
+private struct MailSelectionBar: View {
+    @ObservedObject var model: MailModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        let listed = model.messages?.count ?? 0
+        VStack(spacing: 0) {
+            SkyDivider()
+            FlowLayout(spacing: 4, lineSpacing: 0, centered: true) {
+                Button { model.selectAll() } label: { Text("mail_select_all") }
+                    .buttonStyle(.skyText)
+                    .disabled(model.selection.count >= listed)
+                    .accessibilityIdentifier("mail-select-all")
+                Button { model.invertSelection() } label: { Text("mail_invert_selection") }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier("mail-invert")
+                Button { model.clearSelection() } label: { Text("mail_deselect_all") }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier("mail-deselect-all")
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            Button { confirmDelete() } label: {
+                Text(verbatim: L10n.format("mail_delete_selected", model.selection.count)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.filled)
+            .disabled(model.busy)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .accessibilityIdentifier("mail-delete-selected")
+        }
+        .background(Color.skyBackground)
+    }
+
+    private func confirmDelete() {
+        dialogs.show(SkyDialog(message: Text(verbatim: L10n.format("mail_batch_delete_confirm", model.selection.count)), actions: [
+            SkyDialog.Action(label: Text("cancel")),
+            SkyDialog.Action(label: Text("mail_delete")) { model.deleteSelected() },
+        ]))
     }
 }
 
