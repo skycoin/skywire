@@ -207,12 +207,14 @@ private struct MailRow: View {
         VStack(spacing: 0) {
             Button(action: action) {
                 HStack(spacing: 0) {
-                    Circle().fill(unread ? Color.skyPrimary : Color.clear).frame(width: 8, height: 8)
+                    Circle().fill(unread ? Color.skyPrimary : Color.clear).frame(width: 10, height: 10)
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 6) {
                             Text(verbatim: MailText.displayAddress(sent ? message.to : message.from))
                                 .skyText(.bodyLarge, bold: unread)
-                                .foregroundStyle(Color.skyOnSurface)
+                                // Read mail steps back in colour as well as weight: weight
+                                // alone reads as no difference at all on a phone.
+                                .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
                                 .lineLimit(1)
                             if !sent && !message.fromVerified {
                                 MaterialIcon(MI.roundedWarning, size: 14)
@@ -224,7 +226,7 @@ private struct MailRow: View {
                             if message.subject.isEmpty { Text("mail_no_subject") } else { Text(verbatim: message.subject) }
                         }
                         .skyText(.bodyMedium, bold: unread)
-                        .foregroundStyle(Color.skyOnSurface)
+                        .foregroundStyle(unread ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
                         .lineLimit(1)
                     }
                     .padding(.leading, 10)
