@@ -112,6 +112,13 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 		case <-publicServiceTimer.C:
 			publicServiceTimer.Reset(PublicServiceDelay)
 
+			// Under resource pressure, dial nothing new once the visor has the two
+			// transports it needs to stay reachable.
+			if v.pressure.busy.Load() && len(a.tm.GetTransportsByLabel(transport.LabelAutomatic)) >= 2 {
+				a.log.Debug("Under resource pressure, skipping autoconnect")
+				continue
+			}
+
 			a.log.Infoln("Fetching public visors")
 
 			// fetch public visors

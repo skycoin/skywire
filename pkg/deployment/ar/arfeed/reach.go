@@ -76,6 +76,11 @@ const (
 // confirmation.
 const InboundRecent = 24 * time.Hour
 
+// AcceptsNone is the whole Accepts list of a visor taking no new automatic
+// transports. Every type is then Unreachable to autoconnect, also on visors
+// that predate it, so the visor also leaves Inbound out.
+const AcceptsNone = "none"
+
 // InboundGranularity is the resolution Inbound times are published at. Coarse
 // on purpose: a visor accepting transports all day must not rewrite its record
 // every time it does.
