@@ -9,8 +9,9 @@ package skyenv
 var DefaultDmsgCarriers []string
 
 // DefaultHypervisorHTTPAddr is the platform default bind address for
-// the hypervisor web UI.
-const DefaultHypervisorHTTPAddr = ":8000"
+// the hypervisor web UI. Loopback only: the UI controls every managed visor,
+// shells included. HVHTTPADDR=':8000' serves it on the LAN.
+const DefaultHypervisorHTTPAddr = "127.0.0.1:8000"
 
 // DefaultHypervisorDeskAddr is the platform default bind address for the
 // desk — the wasm-visor hypervisor UI — served as its own listener beside
@@ -18,4 +19,4 @@ const DefaultHypervisorHTTPAddr = ":8000"
 // skycoin-web's default host port (SKYCOINWEBADDR), and it is also the
 // port the docs take on the tab's virtual loopback (vnet:8002), so a
 // desk there read as the same thing from inside and outside the tab.
-const DefaultHypervisorDeskAddr = ":8010"
+const DefaultHypervisorDeskAddr = "127.0.0.1:8010"

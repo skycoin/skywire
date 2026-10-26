@@ -525,7 +525,7 @@ var envMap = map[string]EnvMapping{
 	"ws-peer": {Key: "WSPEERS", Format: EnvFormatBashArray},
 	"ishv":    {Key: "ISHYPERVISOR", Format: EnvFormatBool},
 	"no-ishv": {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
-	"hvdeskaddr": {Key: "HVDESKADDR", Format: EnvFormatString, Default: ":8010",
+	"hvdeskaddr": {Key: "HVDESKADDR", Format: EnvFormatString, Default: "127.0.0.1:8010",
 		Note: "Only affects a visor that serves the hypervisor web UI — ISHYPERVISOR=true, or enabled later with `skywire cli visor hv enable`."},
 	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
 	"no-pk-endpoint": {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},

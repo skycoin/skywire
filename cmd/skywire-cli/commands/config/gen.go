@@ -260,7 +260,7 @@ func init() {
 
 	// Hypervisor and security flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
-	skyenvStringVar(genConfigCmd.Flags(), &hvDeskAddr, "hvdeskaddr", "${HVDESKADDR}", "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)")
+	skyenvStringVar(genConfigCmd.Flags(), &hvDeskAddr, "hvdeskaddr", "${HVDESKADDR}", "hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default 127.0.0.1:8010)")
 	gHiddenFlags = append(gHiddenFlags, "hvdeskaddr")
 	msg = "list of public keys to add as hypervisor"
 	if scriptExecArray("${HYPERVISORPKS[@]}") != "" {
