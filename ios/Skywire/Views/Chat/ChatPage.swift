@@ -30,6 +30,7 @@ final class ChatPage: NSObject, ObservableObject {
     /// The address loaded, without the theme query.
     private var loadedURL: URL?
     private var loadedLang: String?
+    private var fullscreen: NSKeyValueObservation?
     private var dark = false
     private var password: String?
     /// The responsiveness ping in flight, and whether it has been reported late.
@@ -57,6 +58,11 @@ final class ChatPage: NSObject, ObservableObject {
         // Persistent: Saved Messages, the tab choice and the notification
         // preferences live in the page's localStorage.
         configuration.websiteDataStore = .default()
+        // The page's video viewer asks for real full screen (Android's
+        // WebChromeClient custom view); without this it stays inside the tab.
+        if #available(iOS 16.4, *) {
+            configuration.preferences.isElementFullscreenEnabled = true
+        }
         let content = configuration.userContentController
         content.addUserScript(WKUserScript(source: Self.consoleScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.addUserScript(WKUserScript(source: Self.noZoomScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -66,6 +72,11 @@ final class ChatPage: NSObject, ObservableObject {
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = self
         view.uiDelegate = self
+        fullscreen = view.observe(\.fullscreenState, options: [.new]) { view, _ in
+            MainActor.assumeIsolated {
+                Orientation.setVideoFullScreen(view.fullscreenState == .enteringFullscreen || view.fullscreenState == .inFullscreen)
+            }
+        }
         // The swipe from the left edge steps back through the page's own
         // history (a conversation open over the list, a video full screen),
         // as Android's back gesture does.
@@ -117,6 +128,8 @@ final class ChatPage: NSObject, ObservableObject {
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         self.webView = nil
+        fullscreen = nil
+        Orientation.setVideoFullScreen(false)
         loadedURL = nil
         loadedLang = nil
         ready = false

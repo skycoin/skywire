@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct SkywireApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var app: AppModel
     @StateObject private var lock = AppLock()
     @StateObject private var router = ChatRouter.shared

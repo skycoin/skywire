@@ -41,6 +41,46 @@ final class ChatChecks: XCTestCase {
         keep(page.debugDescription, named: "video-thread-tree")
     }
 
+    /// A video message plays full screen from its corner button and turns with the phone,
+    /// while the rest of the app stays upright: closing the video brings the app back to
+    /// portrait with the phone still on its side (Android: the video viewer, v0.0.6).
+    func testVideoPlaysFullScreenAndTurns() {
+        let app = connectedApp(arguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        openTab(.chat, in: app)
+        let page = chatPage(app)
+        page.staticTexts["Saved Messages"].firstMatch.tap()
+        let voice = page.buttons["Voice message"].firstMatch
+        let video = page.buttons["Video message"].firstMatch
+        XCTAssertTrue(voice.waitForExistence(timeout: 10) || video.exists, "no record button")
+        if voice.exists { voice.tap() }
+        XCTAssertTrue(video.waitForExistence(timeout: 5), "the tap did not switch to video")
+        let before = page.buttons.matching(NSPredicate(format: "label == %@", "Play video message")).count
+        video.press(forDuration: 3.5)
+        let takes = page.buttons.matching(NSPredicate(format: "label == %@", "Play video message"))
+        let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > %d", before), object: takes)
+        XCTAssertEqual(XCTWaiter().wait(for: [landed], timeout: 15), .completed, "the take did not land in the thread")
+        let window = app.windows.firstMatch
+        XCTAssertGreaterThan(window.frame.height, window.frame.width)
+        // The full-screen button sits inside the round player, itself a button, so
+        // accessibility folds it in: tap its corner (top 10 %, right 10 %, 30 of 200 px).
+        let take = takes.element(boundBy: takes.count - 1)
+        take.coordinate(withNormalizedOffset: CGVector(dx: 0.825, dy: 0.175)).tap()
+        sleep(2)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        sleep(2)
+        snap("video-full-screen-landscape")
+        let landscape = app.windows.firstMatch.frame
+        XCTAssertGreaterThan(landscape.width, landscape.height, "the full-screen video did not turn with the phone")
+        let close = app.buttons["Close video"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "no close button on the full-screen video")
+        close.tap()
+        sleep(2)
+        snap("video-closed-phone-on-side")
+        let after = app.windows.firstMatch.frame
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertGreaterThan(after.height, after.width, "the app stayed on its side after the video closed")
+    }
+
     /// Leaving the Chat tab and coming back keeps the page where it was: a
     /// thread left open is still open (G3 re-review: the page was torn down
     /// and loaded again on every return, back on the chat list).
