@@ -19,6 +19,7 @@ func TestMeshStatusSurface(t *testing.T) {
 		{"status-skysocks.haltingstate.net", proxystatus.SurfaceSkysocks, true},
 		{"status-dmsg.haltingstate.net", proxystatus.SurfaceDmsg, true},
 		{"status-skynet.haltingstate.net", proxystatus.SurfaceSkynet, true},
+		{"status-skywire.haltingstate.net", proxystatus.SurfaceSkywire, true},
 		{"STATUS-SkySocks.haltingstate.net", proxystatus.SurfaceSkysocks, true},
 		{"status-skysocks.haltingstate.net:8443", "", false}, // caller strips port; a raw :port here is not matched
 		{"status-unknown.haltingstate.net", "", false},

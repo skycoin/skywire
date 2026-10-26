@@ -15,10 +15,12 @@ import (
 
 type fakeCarrierSession struct {
 	carrier string
+	dialed  string
 	remote  net.Addr
 }
 
 func (s fakeCarrierSession) Carrier() string         { return s.carrier }
+func (s fakeCarrierSession) CarrierAddr() string     { return s.dialed }
 func (s fakeCarrierSession) RemoteTCPAddr() net.Addr { return s.remote }
 
 // The vpn-client is handed every dmsg server it must keep reachable outside
@@ -42,4 +44,20 @@ func TestVPNDirectDmsgAddr(t *testing.T) {
 		require.False(t, ok, "would have handed the vpn-client %q to resolve", remote.String())
 		require.Empty(t, addr)
 	})
+
+	t.Run("a browser WebSocket gives the host it dialed", func(t *testing.T) {
+		addr, ok := vpnDirectDmsgAddr(fakeCarrierSession{
+			carrier: dmsg.CarrierWS,
+			dialed:  "wss://dmsg1.skywire.dev/dmsg",
+			remote:  wsAddr{},
+		})
+		require.True(t, ok)
+		require.Equal(t, "dmsg1.skywire.dev:443", addr)
+	})
 }
+
+// wsAddr is the address a browser WebSocket reports.
+type wsAddr struct{}
+
+func (wsAddr) Network() string { return "websocket" }
+func (wsAddr) String() string  { return "websocket/unknown-addr" }

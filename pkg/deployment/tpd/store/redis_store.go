@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -56,9 +57,9 @@ type LatencyRecord struct {
 // leaf read it, and a day's history lives in the per-day hash (see
 // redis_daily_totals.go). It used to be kept 35 days, so a transport long
 // gone — ~8 in 9 of those seen in that window — kept its metrics for a
-// month: over a million keys. Thirty minutes rides out missed report
-// cycles.
-const latencyTTL = 30 * time.Minute
+// month: over a million keys. An hour rides out a missed report cycle at
+// the aggregator's 15 min apply window.
+const latencyTTL = time.Hour
 
 // ThroughputRecord is the durable per-transport PEAK-goodput snapshot
 // persisted at transport-discovery:tput:<id>. Bps is the passively
@@ -92,6 +93,11 @@ type redisStore struct {
 	live liveSet
 	// leafArchive keeps settled metrics leaves on disk (leaf_archive.go).
 	leafArchive string
+	// uptimeArchive keeps settled per-transport uptime timelines on disk
+	// (tp_timeline_archive.go).
+	uptimeArchive string
+	// archivedTimelineDays caches the dates known to be archived.
+	archivedTimelineDays sync.Map
 	// archived caches decoded archived days for older bandwidth (bw_archive.go).
 	archived archivedDayCache
 }

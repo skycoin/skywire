@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -104,11 +106,38 @@ func (m *CachedMinter) For(host string) (*tls.Certificate, error) {
 	if c, ok := m.cache[host]; ok && m.fresh(c) {
 		return c, nil
 	}
-	fresh, err := m.mint(host)
+	fresh, err := m.mint(&x509.Certificate{DNSNames: []string{host}})
 	if err != nil {
 		return nil, err
 	}
 	m.cache[host] = fresh
+	return fresh, nil
+}
+
+// IPMinter is optionally implemented by a LeafMinter that can also issue a
+// leaf for an IP address, such as the one SkyDNS serves DNS over HTTPS on.
+type IPMinter interface {
+	ForIP(ip netip.Addr) (*tls.Certificate, error)
+}
+
+// ForIP returns a leaf whose only name is ip, which must be in the CA's
+// permitted IP ranges (RFC 5280 section 4.2.1.10).
+func (m *CachedMinter) ForIP(ip netip.Addr) (*tls.Certificate, error) {
+	if !m.permittedIP(ip) {
+		return nil, fmt.Errorf("skynetca: ip %s is outside the CA's permitted ranges", ip)
+	}
+	key := "ip:" + ip.String()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if c, ok := m.cache[key]; ok && m.fresh(c) {
+		return c, nil
+	}
+	fresh, err := m.mint(&x509.Certificate{IPAddresses: []net.IP{ip.AsSlice()}})
+	if err != nil {
+		return nil, err
+	}
+	m.cache[key] = fresh
 	return fresh, nil
 }
 
@@ -137,7 +166,22 @@ func (m *CachedMinter) permitted(host string) bool {
 	return false
 }
 
-func (m *CachedMinter) mint(host string) (*tls.Certificate, error) {
+// permittedIP mirrors the CA's IP constraints. A CA minted before they
+// existed has none and permits any IP, as it did then.
+func (m *CachedMinter) permittedIP(ip netip.Addr) bool {
+	if len(m.ca.PermittedIPRanges) == 0 {
+		return true
+	}
+	for _, r := range m.ca.PermittedIPRanges {
+		if r.Contains(ip.AsSlice()) {
+			return true
+		}
+	}
+	return false
+}
+
+// mint signs a leaf for the names in tmpl.
+func (m *CachedMinter) mint(tmpl *x509.Certificate) (*tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate leaf key: %w", err)
@@ -148,23 +192,20 @@ func (m *CachedMinter) mint(host string) (*tls.Certificate, error) {
 	}
 
 	now := time.Now().UTC()
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		// Subject.CommonName intentionally omitted. X.520
-		// ub-common-name caps it at 64 chars; a skynet host like
-		// "<subdomain>.<53-char-base32-pk>.skynet" easily exceeds
-		// that when the subdomain is non-trivial (e.g.
-		// "magnetosphere.net.<53>.skynet" = 78 chars). Strict
-		// X.509 parsers reject the cert outright. Browsers have
-		// ignored CN since 2017 (Chrome) / Firefox followed —
-		// SAN is the source of truth.
-		Subject:     pkix.Name{},
-		DNSNames:    []string{host},
-		NotBefore:   now.Add(-1 * time.Hour),
-		NotAfter:    now.Add(m.opts.Validity),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
+	tmpl.SerialNumber = serial
+	// Subject.CommonName intentionally omitted. X.520
+	// ub-common-name caps it at 64 chars; a skynet host like
+	// "<subdomain>.<53-char-base32-pk>.skynet" easily exceeds
+	// that when the subdomain is non-trivial (e.g.
+	// "magnetosphere.net.<53>.skynet" = 78 chars). Strict
+	// X.509 parsers reject the cert outright. Browsers have
+	// ignored CN since 2017 (Chrome) / Firefox followed —
+	// SAN is the source of truth.
+	tmpl.Subject = pkix.Name{}
+	tmpl.NotBefore = now.Add(-1 * time.Hour)
+	tmpl.NotAfter = now.Add(m.opts.Validity)
+	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+	tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, m.ca, &key.PublicKey, m.caKey)
 	if err != nil {
 		return nil, fmt.Errorf("sign leaf: %w", err)

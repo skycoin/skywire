@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.BuildConfig
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
 import com.skycoin.skywire.core.DnsServer
@@ -72,6 +73,7 @@ import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.findFragmentActivity
 import com.skycoin.skywire.ui.components.shortPk
+import com.skycoin.skywire.wallet.WalletPrices
 import kotlinx.coroutines.launch
 
 /**
@@ -234,6 +236,7 @@ fun SettingsScreen(
                     onDismiss = viewModel::dismissBatteryPrompt,
                 )
             }
+            item { WalletPricesCard() }
             item { ThemeCard(state, viewModel::setThemeMode) }
             item {
                 LanguageCard(state) { language ->
@@ -749,6 +752,34 @@ private fun AppLockCard(
     }
 }
 
+/**
+ * USD prices in the wallet, as skycoin-web shows them, off until asked for:
+ * fetching them tells the price service this device's address and which
+ * coins it looks at.
+ */
+@Composable
+private fun WalletPricesCard() {
+    val context = LocalContext.current
+    val prefs = remember(context) { AppPreferences(context) }
+    val on by prefs.boolean(WalletPrices.PREF_KEY).collectAsState(initial = false)
+    val scope = rememberCoroutineScope()
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_wallet_prices), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_wallet_prices_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = on, onCheckedChange = { wanted -> scope.launch { prefs.putBoolean(WalletPrices.PREF_KEY, wanted) } })
+        }
+    }
+}
+
 @Composable
 private fun ThemeCard(state: SettingsUiState, onPick: (ThemeMode) -> Unit) {
     SectionCard {
@@ -814,6 +845,7 @@ private fun languageLabel(language: AppLanguage): Int = when (language) {
     AppLanguage.ENGLISH -> R.string.settings_language_en
     AppLanguage.CHINESE_SIMPLIFIED -> R.string.settings_language_zh_cn
     AppLanguage.SPANISH -> R.string.settings_language_es
+    AppLanguage.FRENCH -> R.string.settings_language_fr
 }
 
 @Composable

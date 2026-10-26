@@ -38,6 +38,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -82,9 +83,10 @@ const (
 	// downloading a bulk snapshot to reduce it locally.
 	FeedTPDStats
 	// FeedTPDRouting is TPD's routing feed: the transports that exist
-	// now with their latency and throughput, one leaf per visor
-	// (routing/<pk>). What visors route on; a change ships only the
-	// shards it touched.
+	// now with their latency and throughput, as a snapshot of one leaf
+	// per visor (routing/<pk>) plus the deltas since it
+	// (routing/delta/<seq>). What visors route on; read it with
+	// routingfeed.Reader.
 	FeedTPDRouting
 	// FeedARReach is the address resolver's reach feed: per peer, whether it
 	// can actually be transported by each type (reach/<h>, 16 leaves). What
@@ -172,12 +174,6 @@ const (
 	// geo.country(pk) can resolve multihop intermediates that
 	// advertise themselves as proxy/vpn/visor services.
 	TabRoutingPolicy
-	// TabDmsgEntryLookup is the visor's dmsg-entry-lookup-over-CXO
-	// consumer. Held for the lifetime of the dmsg client so the
-	// clients-by-server snapshot stays warm, letting peer entry
-	// lookups resolve from CXO instead of a fresh HTTP-over-dmsg
-	// Noise handshake. HTTP stays the fallback on a snapshot miss.
-	TabDmsgEntryLookup
 	// TabNetworkStats is the consumer of TPD's network-aggregate
 	// stats feed (`cli tp net-stats`, `cli visor cxo fetch tpd-stats
 	// …`, dashboards charting the by-type counts over time). Its own
@@ -213,7 +209,6 @@ var tabFeedDeps = map[Tab][]Feed{
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDRouting},
 	TabRoutingPolicy:     {FeedSDServices},
-	TabDmsgEntryLookup:   {FeedDMSGDClientsByServer},
 	TabNetworkStats:      {FeedTPDStats},
 	TabTransportMetrics:  {FeedTPDMetrics},
 	TabARResolve:         {FeedARBindings},
@@ -228,6 +223,9 @@ type Deps struct {
 	// startup or when DMSG is disabled). Called fresh on each sync so
 	// the manager always uses the current client.
 	Dmsg func() *dmsg.Client
+	// Dial, when set, is how subscribers reach publishers instead of a plain
+	// dmsg dial (treestore.SubConfig.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
 	// FeedSpec resolves a feed to its (publisher PK, CXO dmsg port,
 	// TreeStore path prefix). Returns an error when the publisher
 	// isn't configured — meaning the feed can never sync until the
@@ -266,7 +264,10 @@ type managedFeed struct {
 	snapMu     sync.RWMutex
 	snapshot   map[string][]byte
 	lastSyncAt time.Time
-	lastErr    error // sticky last error from syncOnce; cleared on success
+	// filled is set once a sync came from a whole Root rather than from a
+	// partial-fill salvage. WaitForFirstSync waits for it.
+	filled  bool
+	lastErr error // sticky last error from syncOnce; cleared on success
 	// lastSyncCachePaths / lastSyncCacheKeys: discriminator for empty
 	// snapshots (publisher sent empty Root vs manager-side filter
 	// dropped everything). Captured in syncOnce right before
@@ -806,9 +807,22 @@ func (m *Manager) LastSync(feed Feed) time.Time {
 	return f.lastSyncAt
 }
 
+func (m *Manager) filled(feed Feed) bool {
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	m.mu.Unlock()
+	if !ok || f == nil {
+		return false
+	}
+	f.snapMu.RLock()
+	defer f.snapMu.RUnlock()
+	return f.filled
+}
+
 // WaitForFirstSync blocks until the feed has completed at least one sync
-// cycle, or until timeout elapses or ctx is canceled. Reports whether a
-// sync completed.
+// cycle from a whole Root, or until timeout elapses or ctx is canceled.
+// Reports whether such a sync completed. Leaves salvaged from a broken
+// fill do not count, since they are a part of the tree that looks whole.
 //
 // A caller that has just AcquireFor'd a feed and found its cache empty
 // cannot tell "this feed is empty" from "the first fill is still in
@@ -829,7 +843,7 @@ func (m *Manager) WaitForFirstSync(ctx context.Context, feed Feed, timeout time.
 	if m == nil {
 		return false
 	}
-	if !m.LastSync(feed).IsZero() {
+	if m.filled(feed) {
 		return true
 	}
 	deadline := time.Now().Add(timeout)
@@ -842,7 +856,7 @@ func (m *Manager) WaitForFirstSync(ctx context.Context, feed Feed, timeout time.
 			return false
 		case <-time.After(pollEvery):
 		}
-		if !m.LastSync(feed).IsZero() {
+		if m.filled(feed) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -1020,11 +1034,24 @@ func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error 
 	sub, err := treestore.NewSubscriber(dmsgC, peerPK, treestore.SubConfig{
 		InMemoryDB: true,
 		DmsgPort:   port,
+		Dial:       m.deps.Dial,
 	})
 	if err != nil {
 		return fmt.Errorf("create subscriber: %w", err)
 	}
 	sub.SetPrefixes([]string{prefix})
+	// A Root whose tree is incomplete locally stays that way for this store,
+	// so return and let cycleLoop start over with a fresh subscriber.
+	incomplete := make(chan error, 1)
+	sub.OnFillError(func(err error) {
+		f.recordErr(err)
+		if errors.Is(err, treestore.ErrIncompleteRoot) {
+			select {
+			case incomplete <- err:
+			default:
+			}
+		}
+	})
 	defer func() { _ = sub.Close() }() //nolint:errcheck
 
 	// Buffered(1) so a burst of Roots coalesces into a single pending
@@ -1063,6 +1090,8 @@ firstRoot:
 			f.recordErr(fmt.Errorf("still waiting for the first Root after %s", syncTimeout))
 		case <-giveUp.C:
 			return fmt.Errorf("no Root after %s", node.MaxTotalFillTime+syncTimeout)
+		case err := <-incomplete:
+			return err
 		case <-ctx.Done():
 			return nil
 		}
@@ -1074,6 +1103,8 @@ firstRoot:
 			return nil
 		case <-updateCh:
 			m.walkIntoSnapshot(sub, prefix, f)
+		case err := <-incomplete:
+			return err
 		}
 	}
 }
@@ -1089,12 +1120,14 @@ func (m *Manager) walkIntoSnapshot(sub *treestore.Subscriber, prefix string, f *
 		return true
 	})
 	cacheSize, cacheKeys := sub.CacheSizeAndSampleKeys(5)
+	filled, fillErr := sub.FillState()
 	f.snapMu.Lock()
 	f.snapshot = snapshot
 	f.lastSyncAt = time.Now()
 	f.lastSyncCachePaths = cacheSize
 	f.lastSyncCacheKeys = cacheKeys
-	f.lastErr = nil
+	f.lastErr = fillErr
+	f.filled = filled
 	f.snapMu.Unlock()
 }
 
@@ -1124,12 +1157,14 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	sub, err := treestore.NewSubscriber(dmsgC, peerPK, treestore.SubConfig{
 		InMemoryDB: true,
 		DmsgPort:   port,
+		Dial:       m.deps.Dial,
 	})
 	if err != nil {
 		f.recordErr(fmt.Errorf("create subscriber: %w", err))
 		return
 	}
 	sub.SetPrefixes([]string{prefix})
+	sub.OnFillError(f.recordErr)
 
 	rootCh := make(chan struct{}, 1)
 	sub.OnUpdate(func(_ []treestore.UpdateEvent) {
@@ -1170,6 +1205,7 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	// snapshot copy dropped everything; both 0 means the publisher's
 	// Root was structurally empty.
 	cacheSize, cacheKeys := sub.CacheSizeAndSampleKeys(5)
+	filled, fillErr := sub.FillState()
 	_ = sub.Close() //nolint:errcheck
 
 	f.snapMu.Lock()
@@ -1177,7 +1213,8 @@ func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
 	f.lastSyncAt = time.Now()
 	f.lastSyncCachePaths = cacheSize
 	f.lastSyncCacheKeys = cacheKeys
-	f.lastErr = nil
+	f.lastErr = fillErr
+	f.filled = filled
 	f.snapMu.Unlock()
 }
 

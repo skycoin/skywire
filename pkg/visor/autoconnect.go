@@ -182,16 +182,27 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 3:  SUDPH to other connected visors (non-public visors only)
 			// Phase 4:  WebRTC LAST-RESORT fallback to peers no direct carrier reached
 
+			// Per-type dial caps: transport.autoconnect.max_per_type, else the
+			// built-in ones (0 = none).
 			const maxPublicVisors = 5 // Connect to up to 5 public visors
 			const maxWEBRTC = 20      // Max WebRTC transports to other (webrtc-capable) visors
+			ac := v.conf.AutoconnectSettings()
+			capSTCPR := ac.Cap(string(tptypes.STCPR), 0)
+			capSUDPH := ac.Cap(string(tptypes.SUDPH), 0)
+			capSQUICR := ac.Cap(string(tptypes.QUIC), 0) // squicr also has a per-cycle budget, below
+			capSWSR := ac.Cap(string(tptypes.WS), maxPublicVisors)
+			capWEBRTC := ac.Cap(string(tptypes.WEBRTC), maxWEBRTC)
 			// A visor without stcpr (a browser) has swtr as its best carrier, so it
 			// holds as many of those as webrtc rather than the native handful.
-			maxSWTR := maxPublicVisors
+			builtinSWTR := maxPublicVisors
 			if !localSupportsSTCPR {
-				maxSWTR = maxWEBRTC
+				builtinSWTR = maxWEBRTC
 			}
+			capSWTR := ac.Cap(string(tptypes.WT), builtinSWTR)
 
-			// Count existing automatic transports by type and remote PK
+			// Count existing automatic transports by type and remote PK. Every one
+			// counts against a duplicate dial; only those this visor dialed count
+			// against the caps.
 			countSTCPR := 0
 			countSUDPH := 0
 			countSQUICR := 0
@@ -205,6 +216,9 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					existingByPK[remotePK] = make(map[tptypes.Type]bool)
 				}
 				existingByPK[remotePK][autoconnTP.Type()] = true
+				if !autoconnTP.IsInitiator() {
+					continue
+				}
 				switch autoconnTP.Type() {
 				case tptypes.STCPR:
 					countSTCPR++
@@ -226,6 +240,32 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			reach := a.loadReach(ctx, v)
 			selfNAT := v.selfNAT()
 
+			// limit is a phase's maxCount for a type with count already dialed:
+			// at most perCycle new dials (0 = no budget), the type's cap and
+			// transport.autoconnect.max_total. ok is false when the total is used up.
+			used := func() int {
+				return countSTCPR + countSUDPH + countSQUICR + countWEBRTC + countSWTR + countSWSR
+			}
+			limit := func(capT, count, perCycle int) (int, bool) {
+				m := 0
+				if perCycle > 0 {
+					m = count + perCycle
+				}
+				if capT > 0 && (m == 0 || capT < m) {
+					m = capT
+				}
+				if ac.MaxTotal > 0 {
+					left := ac.MaxTotal - used()
+					if left <= 0 {
+						return 0, false
+					}
+					if m == 0 || count+left < m {
+						m = count + left
+					}
+				}
+				return m, true
+			}
+
 			// Track which public visors we connect to
 			connectedPublicVisors := make([]cipher.PubKey, 0, maxPublicVisors)
 
@@ -237,12 +277,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// visor that got a sudph never got stcpr or squicr — and a black-holed
 			// sudph (a UDP dial cannot fail) was all it ever had.
 			autoTPs := a.tm.GetTransportsByLabel(transport.LabelAutomatic)
+			// siteSkipped are the peers the site limit leaves to their siblings.
+			siteSkipped := map[cipher.PubKey]bool{}
 
 			// Phase 1: STCPR to every public visor that lacks one.
-			if localSupportsSTCPR {
+			if n, ok := limit(capSTCPR, countSTCPR, 0); localSupportsSTCPR && ok {
 				a.log.Debug("Phase 1: Connecting to public visors via STCPR")
 				phase1, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.STCPR, autoTPs), tptypes.STCPR,
-					existingByPK, reach, selfNAT, 0, 0, 0, true)
+					existingByPK, reach, selfNAT, n, countSTCPR, 0, true)
 				if err != nil {
 					return err
 				}
@@ -274,10 +316,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 2: QUIC (squicr) to public visors that lack one — a second
 			// carrier family next to stcpr so route setup has a real per-hop choice.
 			// Budgeted per cycle so the peer count grows gradually.
-			if localSupportsSQUICR {
+			if n, ok := limit(capSQUICR, countSQUICR, maxPublicVisors); localSupportsSQUICR && ok {
 				a.log.Debug("Phase 2: Connecting to public visors via QUIC (squicr)")
 				phase2, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicatesOfType(addrs, tptypes.QUIC, autoTPs), tptypes.QUIC,
-					existingByPK, reach, selfNAT, maxPublicVisors, 0, 0, false)
+					existingByPK, reach, selfNAT, n, countSQUICR, 0, false)
 				if err != nil {
 					return err
 				}
@@ -286,10 +328,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			// Phase 2b: SUDPH to public visors that still have NO direct transport
 			// after the stcpr and squicr phases (re-read: those phases just added some).
-			if localSupportsSUDPH {
+			if n, ok := limit(capSUDPH, countSUDPH, 0); localSupportsSUDPH && ok {
 				a.log.Debug("Phase 2b: Connecting to direct-unreachable public visors via SUDPH")
-				phase2b, err := a.connectByReach(ctx, v.conf.PK, a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic)), tptypes.SUDPH,
-					existingByPK, reach, selfNAT, 0, 0, reachExplorePerCycle, false)
+				targets, skipped := a.filterBySite(v, tptypes.SUDPH, a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic)), reach)
+				for pk := range skipped {
+					siteSkipped[pk] = true
+				}
+				phase2b, err := a.connectByReach(ctx, v.conf.PK, targets, tptypes.SUDPH,
+					existingByPK, reach, selfNAT, n, countSUDPH, reachExplorePerCycle, false)
 				if err != nil {
 					return err
 				}
@@ -301,11 +347,14 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// connectByReach drops those without a live UDP control connection at
 			// the AR or with a NAT class this visor cannot punch to, and dials the
 			// ones that recently accepted a sudph first.
-			sudphPeers := a.nonPublicPeers(v.conf.PK, reachPeers(reach, arfeed.TypeSUDPH), addrs)
-			if localSupportsSUDPH && !visorIsPublic && len(sudphPeers) > 0 {
+			sudphPeers, skipped := a.filterBySite(v, tptypes.SUDPH, a.nonPublicPeers(v.conf.PK, reachPeers(reach, arfeed.TypeSUDPH), addrs), reach)
+			for pk := range skipped {
+				siteSkipped[pk] = true
+			}
+			if n, ok := limit(capSUDPH, countSUDPH, 0); localSupportsSUDPH && !visorIsPublic && len(sudphPeers) > 0 && ok {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
 				phase3, err := a.connectByReach(ctx, v.conf.PK, sudphPeers, tptypes.SUDPH,
-					existingByPK, reach, selfNAT, 0, countSUDPH, reachExplorePerCycle, false)
+					existingByPK, reach, selfNAT, n, countSUDPH, reachExplorePerCycle, false)
 				if err != nil {
 					return err
 				}
@@ -366,8 +415,12 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 						if len(pending) == 0 {
 							continue
 						}
+						n, ok := limit(capSWTR, countSWTR, 0)
+						if !ok {
+							break
+						}
 						phaseWT, err := a.connectByReach(ctx, v.conf.PK, pending, tptypes.WT,
-							existingByPK, reach, selfNAT, maxSWTR, countSWTR, reachExplorePerCycle, false)
+							existingByPK, reach, selfNAT, n, countSWTR, reachExplorePerCycle, false)
 						if err != nil {
 							return err
 						}
@@ -384,10 +437,10 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 							wsTargets = append(wsTargets, pk)
 						}
 					}
-					if len(wsTargets) > 0 {
+					if n, ok := limit(capSWSR, countSWSR, 0); len(wsTargets) > 0 && ok {
 						a.log.Debug("Phase 3c: Connecting to direct-unreachable public visors via WS (swsr)")
 						phaseWS, err := a.connectByReach(ctx, v.conf.PK, wsTargets, tptypes.WS,
-							existingByPK, reach, selfNAT, maxPublicVisors, countSWSR, reachExplorePerCycle, false)
+							existingByPK, reach, selfNAT, n, countSWSR, reachExplorePerCycle, false)
 						if err != nil {
 							return err
 						}
@@ -419,19 +472,20 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				}
 				var webrtcTargets []cipher.PubKey
 				for _, pk := range connectedPublicVisors {
-					if !hasDirect[pk] && !hasWebRTC[pk] {
+					if !hasDirect[pk] && !hasWebRTC[pk] && !siteSkipped[pk] {
 						webrtcTargets = append(webrtcTargets, pk)
 					}
 				}
 				for _, pk := range a.nonPublicPeers(v.conf.PK, reachPeers(reach, arfeed.TypeWEBRTC), addrs) {
-					if !hasDirect[pk] && !hasWebRTC[pk] {
+					if !hasDirect[pk] && !hasWebRTC[pk] && !siteSkipped[pk] {
 						webrtcTargets = append(webrtcTargets, pk)
 					}
 				}
-				if len(webrtcTargets) > 0 {
+				webrtcTargets, _ = a.filterBySite(v, tptypes.WEBRTC, webrtcTargets, reach)
+				if n, ok := limit(capWEBRTC, countWEBRTC, 0); len(webrtcTargets) > 0 && ok {
 					a.log.Debug("Phase 4: WebRTC fallback to direct-unreachable visors")
 					phase4, err := a.connectByReach(ctx, v.conf.PK, webrtcTargets, tptypes.WEBRTC,
-						existingByPK, reach, selfNAT, maxWEBRTC, countWEBRTC, reachExplorePerCycle, false)
+						existingByPK, reach, selfNAT, n, countWEBRTC, reachExplorePerCycle, false)
 					if err != nil {
 						return err
 					}
@@ -445,7 +499,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				WithField("swtr", countSWTR).WithField("swsr", countSWSR).
 				WithField("public_visors", len(connectedPublicVisors)).
 				Debug("Public autoconnect cycle completed")
-			if !localSupportsSTCPR && localSupportsWT && countSWTR < maxSWTR {
+			if !localSupportsSTCPR && localSupportsWT && (capSWTR == 0 || countSWTR < capSWTR) {
 				publicServiceTimer.Reset(browserAutoconnectRetry)
 			}
 		}

@@ -3,9 +3,11 @@ package transport
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,31 +26,40 @@ type Frame struct {
 	Body []byte
 }
 
-// Connection wraps a net.Conn with channel-based message I/O.
-// Messages are length-prefixed (4 bytes, big-endian).
+// maxFrameSize bounds an inbound frame.
+const maxFrameSize = 64 * 1024 * 1024
+
+// ErrInterrupted is returned by ReadFrame after Interrupt or Close.
+var ErrInterrupted = errors.New("cxo transport: read interrupted")
+
+// interruptDrainTimeout bounds how long Interrupt waits for queued frames.
+const interruptDrainTimeout = 10 * time.Second
+
+// Connection wraps a net.Conn with length-prefixed (4 bytes, big-endian)
+// message I/O. The owner reads frames with ReadFrame. Outbound frames go
+// through a queue that a writer goroutine drains only while it is non-empty,
+// so an idle connection holds no goroutine of its own.
 type Connection struct {
 	conn  net.Conn
 	isTCP bool
 
-	mu     sync.RWMutex
-	closed bool
+	mu          sync.RWMutex
+	closed      bool
+	interrupted bool
 
-	in   chan []byte
-	out  chan Frame
-	done chan struct{}
+	rmu     sync.Mutex // one ReadFrame at a time keeps frames whole
+	out     chan Frame
+	writing atomic.Bool
+	done    chan struct{}
 }
 
 func newConnection(conn net.Conn, isTCP bool) *Connection {
-	c := &Connection{
+	return &Connection{
 		conn:  conn,
 		isTCP: isTCP,
-		in:    make(chan []byte, 256),
 		out:   make(chan Frame, 256),
 		done:  make(chan struct{}),
 	}
-	go c.readLoop()
-	go c.writeLoop()
-	return c
 }
 
 // GetRemoteAddr returns the remote address of the connection.
@@ -68,7 +79,7 @@ func (c *Connection) IsClosed() bool {
 	return c.closed
 }
 
-// Close closes the connection and its channels.
+// Close closes the connection.
 func (c *Connection) Close() {
 	c.mu.Lock()
 	if c.closed {
@@ -76,96 +87,147 @@ func (c *Connection) Close() {
 		return
 	}
 	c.closed = true
-	c.mu.Unlock()
-
-	// Force-unblock any read parked in readLoop's io.ReadFull BEFORE closing.
-	// When the remote peer vanishes without a FIN/RST (the common dmsg
-	// half-dead-stream case), the underlying Read never returns an error and
-	// net.Conn.Close() does NOT reliably interrupt an in-flight Read — only a
-	// read deadline does (dmsg honors SetReadDeadline even when Close cannot
-	// wake the reader). Without this, readLoop never returns, its deferred
-	// close(c.in) never runs, the owning CXO Conn.receiveMsg stays blocked
-	// waiting on c.in, and Conn.run leaks forever on await.Wait(). That leak
-	// accumulated tens of thousands of goroutines and multi-GB RSS on the
-	// transport-discovery CXO node despite the idle watchdog correctly calling
-	// Close() — the Close just never reached the stuck reader.
+	// Force-unblock a read parked in io.ReadFull BEFORE closing. When the
+	// remote peer vanishes without a FIN/RST (the common dmsg half-dead-stream
+	// case), net.Conn.Close() does NOT reliably interrupt an in-flight Read,
+	// only a read deadline does. Without this the owning CXO Conn.run never
+	// returns, which once leaked tens of thousands of goroutines and multi-GB
+	// RSS on the transport-discovery CXO node. Under mu so a ReadFrame timeout
+	// cannot clear it.
 	c.conn.SetReadDeadline(time.Now()) //nolint:errcheck,gosec
-	c.conn.Close()                     //nolint:errcheck,gosec
+	c.mu.Unlock()
+	c.conn.Close() //nolint:errcheck,gosec
 	close(c.done)
 }
 
-// GetChanOut returns the send channel.
+// Interrupt makes a blocked or later ReadFrame return ErrInterrupted. Frames
+// already queued are written first, then the connection closes, since some
+// carriers (a VStream over skywire transports) ignore read deadlines.
+func (c *Connection) Interrupt() {
+	c.mu.Lock()
+	if c.closed || c.interrupted {
+		c.mu.Unlock()
+		return
+	}
+	c.interrupted = true
+	c.conn.SetReadDeadline(time.Now()) //nolint:errcheck,gosec
+	c.mu.Unlock()
+	if !c.writing.Load() {
+		c.Close()
+		return
+	}
+	// A writer stuck on a dead stream must not keep the reader parked.
+	time.AfterFunc(interruptDrainTimeout, c.Close)
+}
+
+func (c *Connection) isInterrupted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.interrupted
+}
+
+func (c *Connection) setReadDeadline(t time.Time) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.closed || c.interrupted {
+		return ErrInterrupted
+	}
+	return c.conn.SetReadDeadline(t)
+}
+
+// ReadFrame reads one frame. A timeout above zero bounds the read and returns
+// an error satisfying os.IsTimeout when it passes. A failed read closes the
+// connection, since a partly read frame leaves the stream unusable, except
+// after Interrupt, which leaves writes to the owner.
+func (c *Connection) ReadFrame(timeout time.Duration) ([]byte, error) {
+	c.rmu.Lock()
+	defer c.rmu.Unlock()
+	b, err := c.readFrame(timeout)
+	if err != nil {
+		c.mu.RLock()
+		stopped := c.closed || c.interrupted
+		c.mu.RUnlock()
+		if stopped {
+			return nil, ErrInterrupted
+		}
+		c.Close()
+	}
+	return b, err
+}
+
+func (c *Connection) readFrame(timeout time.Duration) ([]byte, error) {
+	if timeout > 0 {
+		if err := c.setReadDeadline(time.Now().Add(timeout)); err != nil {
+			return nil, err
+		}
+		defer c.setReadDeadline(time.Time{}) //nolint:errcheck
+	}
+	var header [4]byte
+	if _, err := io.ReadFull(c.conn, header[:]); err != nil {
+		return nil, err
+	}
+	length := binary.BigEndian.Uint32(header[:])
+	if length == 0 || length > maxFrameSize {
+		return nil, errors.New("cxo transport: invalid frame length")
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(c.conn, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+// GetChanOut returns the send queue. Call Kick after each successful send.
 func (c *Connection) GetChanOut() chan<- Frame {
 	return c.out
 }
 
-// GetChanIn returns the receive channel.
-func (c *Connection) GetChanIn() <-chan []byte {
-	return c.in
-}
-
-func (c *Connection) readLoop() {
-	// On any exit (read error, peer drop, size violation) tear down
-	// the whole Connection so the paired writeLoop's `<-c.done`
-	// select unblocks. Without this, a passive remote-side drop
-	// leaves writeLoop parked in the select forever — Close is
-	// only called from upper layers, and not every code path that
-	// loses a peer reaches one. Close is idempotent so the paired
-	// defer in writeLoop is safe.
-	defer c.Close()
-	defer close(c.in)
-
-	header := make([]byte, 4)
-	for {
-		if _, err := io.ReadFull(c.conn, header); err != nil {
-			return
-		}
-		length := binary.BigEndian.Uint32(header)
-		if length == 0 || length > 64*1024*1024 { // 64MB max message size
-			return
-		}
-		payload := make([]byte, length)
-		if _, err := io.ReadFull(c.conn, payload); err != nil {
-			return
-		}
-
-		select {
-		case c.in <- payload:
-		case <-c.done:
-			return
-		}
+// Kick starts the writer unless one is running.
+func (c *Connection) Kick() {
+	if c.writing.CompareAndSwap(false, true) {
+		go c.writeLoop()
 	}
 }
 
 func (c *Connection) writeLoop() {
-	// Mirrors readLoop's defer: tear down the Connection on any
-	// exit so the paired readLoop's io.ReadFull unblocks (via the
-	// underlying conn.Close inside Close). Close is idempotent.
-	defer c.Close()
-
 	for {
 		select {
-		case f, ok := <-c.out:
-			if !ok {
+		case f := <-c.out:
+			if err := c.writeFrame(f); err != nil {
+				// writing stays set, so no new writer starts on a dead conn.
+				c.Close()
 				return
-			}
-			// One small prefix write (4-byte length + Head) then the Body.
-			// The Body is written from its own (possibly shared) backing
-			// array with no copy — the whole point of the Frame split. Wire
-			// bytes are identical to the old [length][Head||Body] form.
-			prefix := make([]byte, 4+len(f.Head))
-			binary.BigEndian.PutUint32(prefix, uint32(len(f.Head)+len(f.Body))) //nolint:gosec
-			copy(prefix[4:], f.Head)
-			if _, err := c.conn.Write(prefix); err != nil {
-				return
-			}
-			if len(f.Body) > 0 {
-				if _, err := c.conn.Write(f.Body); err != nil {
-					return
-				}
 			}
 		case <-c.done:
 			return
+		default:
+			c.writing.Store(false)
+			// A frame queued after the empty check but before the Store saw
+			// writing set and did not start a writer: take it over.
+			if len(c.out) == 0 || !c.writing.CompareAndSwap(false, true) {
+				if c.isInterrupted() {
+					c.Close()
+				}
+				return
+			}
 		}
 	}
+}
+
+// writeFrame writes one small prefix (4-byte length + Head) then the Body,
+// from its own (possibly shared) backing array with no copy. Wire bytes are
+// identical to the old [length][Head||Body] form.
+func (c *Connection) writeFrame(f Frame) error {
+	prefix := make([]byte, 4+len(f.Head))
+	binary.BigEndian.PutUint32(prefix, uint32(len(f.Head)+len(f.Body))) //nolint:gosec
+	copy(prefix[4:], f.Head)
+	if _, err := c.conn.Write(prefix); err != nil {
+		return err
+	}
+	if len(f.Body) > 0 {
+		if _, err := c.conn.Write(f.Body); err != nil {
+			return err
+		}
+	}
+	return nil
 }

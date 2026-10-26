@@ -57,7 +57,7 @@ func CopyReadWriteCloser(conn1, conn2 io.ReadWriteCloser) error {
 	// will clean themselves up asynchronously (the buffered channel allows
 	// the late send to succeed without blocking).
 	select {
-	case <-done:
+	case <-done: //nolint:errcheck
 	case <-time.After(2 * time.Second):
 	}
 

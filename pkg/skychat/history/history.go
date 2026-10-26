@@ -89,6 +89,12 @@ type Message struct {
 	ForwardFrom string `json:"forward_from,omitempty"`
 }
 
+// hasID reports whether id names m. A file stored before its record carried
+// the transfer id as ID is named by its FileID.
+func (m *Message) hasID(id string) bool {
+	return m.ID == id || (m.ID == "" && m.FileID == id)
+}
+
 // GroupMessage is a single group-chat message record. Mirrors Message
 // but indexed by group ID + sender PK instead of a single peer PK. Stored
 // in a parallel bucket so 1:1 queries don't accidentally see group

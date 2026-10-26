@@ -363,8 +363,9 @@ const (
 	// SkysocksClientPort is the skysocks-client app dmsg port
 	SkysocksClientPort uint16 = 13
 
-	// SkysocksClientAddr is the default port the socks5 proxy client serves on
-	SkysocksClientAddr = ":1080"
+	// SkysocksClientAddr is where the socks5 proxy client serves by default. It
+	// is loopback so the proxy, and the exit it reaches, are not offered to the LAN.
+	SkysocksClientAddr = "127.0.0.1:1080"
 
 	// SkysocksClientTunnels is the default number of independent tunnels the
 	// socks5 proxy client stripes connections across (--tunnels). Two, so a

@@ -12,8 +12,24 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+func TestWhitelistAuthAdmitsOwnKey(t *testing.T) {
+	listed, _ := cipher.GenerateKeyPair()
+	own, _ := cipher.GenerateKeyPair()
+	other, _ := cipher.GenerateKeyPair()
+	h := whitelistAuth([]cipher.PubKey{listed}, func() string { return own.String() },
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	for pk, want := range map[cipher.PubKey]int{listed: http.StatusOK, own: http.StatusOK, other: http.StatusUnauthorized} {
+		req := httptest.NewRequest(http.MethodGet, "/debug/loglevel", nil)
+		req.RemoteAddr = pk.String() + ":80"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		require.Equal(t, want, rec.Code)
+	}
+}
 
 type fakeLogLevelController struct {
 	level   logrus.Level

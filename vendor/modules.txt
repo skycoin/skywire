@@ -3,6 +3,10 @@
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
 fyne.io/systray/internal/generated/notifier
+# gioui.org/shader v1.0.9
+## explicit; go 1.16
+gioui.org/shader
+gioui.org/shader/gio
 # github.com/0magnet/afero v1.15.1-0.20261003211811-482680d00992
 ## explicit; go 1.26.0
 github.com/0magnet/afero
@@ -20,7 +24,7 @@ github.com/0magnet/bbolt
 github.com/0magnet/bbolt/errors
 github.com/0magnet/bbolt/internal/common
 github.com/0magnet/bbolt/internal/freelist
-# github.com/0magnet/bitree v0.0.1-0.20261013220920-4ff5e8123aaf
+# github.com/0magnet/bitree v0.0.1-0.20261019212016-c15975be5d89
 ## explicit; go 1.25.0
 github.com/0magnet/bitree
 # github.com/0magnet/bottle v0.0.1-0.20261013221653-12057b62ab20
@@ -37,7 +41,7 @@ github.com/0magnet/coloredcobra
 # github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 ## explicit; go 1.26.0
 github.com/0magnet/cosmos-go
-# github.com/0magnet/desk v0.0.3-0.20261014102802-0dc854720e7a
+# github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 ## explicit; go 1.26.6
 github.com/0magnet/desk
 github.com/0magnet/desk/dom
@@ -69,12 +73,59 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
+# github.com/0magnet/gio v0.10.4-0.20261023140628-7d7b8fd5abcc
+## explicit; go 1.24.0
+github.com/0magnet/gio/app
+github.com/0magnet/gio/app/internal/ibus
+github.com/0magnet/gio/app/internal/windows
+github.com/0magnet/gio/app/internal/xkb
+github.com/0magnet/gio/app/permission/foreground
+github.com/0magnet/gio/f32
+github.com/0magnet/gio/font
+github.com/0magnet/gio/font/gofont
+github.com/0magnet/gio/font/opentype
+github.com/0magnet/gio/gesture
+github.com/0magnet/gio/gpu
+github.com/0magnet/gio/gpu/internal/d3d11
+github.com/0magnet/gio/gpu/internal/driver
+github.com/0magnet/gio/gpu/internal/metal
+github.com/0magnet/gio/gpu/internal/opengl
+github.com/0magnet/gio/gpu/internal/vulkan
+github.com/0magnet/gio/internal/byteslice
+github.com/0magnet/gio/internal/cocoainit
+github.com/0magnet/gio/internal/d3d11
+github.com/0magnet/gio/internal/debug
+github.com/0magnet/gio/internal/egl
+github.com/0magnet/gio/internal/f32
+github.com/0magnet/gio/internal/f32color
+github.com/0magnet/gio/internal/fling
+github.com/0magnet/gio/internal/gl
+github.com/0magnet/gio/internal/ops
+github.com/0magnet/gio/internal/scene
+github.com/0magnet/gio/internal/stroke
+github.com/0magnet/gio/internal/vk
+github.com/0magnet/gio/io/clipboard
+github.com/0magnet/gio/io/event
+github.com/0magnet/gio/io/input
+github.com/0magnet/gio/io/key
+github.com/0magnet/gio/io/pointer
+github.com/0magnet/gio/io/semantic
+github.com/0magnet/gio/io/system
+github.com/0magnet/gio/io/transfer
+github.com/0magnet/gio/layout
+github.com/0magnet/gio/op
+github.com/0magnet/gio/op/clip
+github.com/0magnet/gio/op/paint
+github.com/0magnet/gio/text
+github.com/0magnet/gio/unit
+github.com/0magnet/gio/widget
+github.com/0magnet/gio/widget/material
 # github.com/0magnet/go-dsp v0.0.1-0.20261013221717-1ec76fa9affb
 ## explicit; go 1.23.0
 github.com/0magnet/go-dsp/dsputils
 github.com/0magnet/go-dsp/fft
 github.com/0magnet/go-dsp/window
-# github.com/0magnet/gobrpc v0.0.1-0.20261013220947-4909bbf965ba
+# github.com/0magnet/gobrpc v0.0.1-0.20261023160255-9d9e8694d21a
 ## explicit; go 1.25.0
 github.com/0magnet/gobrpc
 github.com/0magnet/gobrpc/gobimpl
@@ -118,9 +169,14 @@ github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 ## explicit; go 1.25
 github.com/0magnet/plot-go
-# github.com/0magnet/progkit v0.0.0-20261014102810-e820dc41a887
+# github.com/0magnet/progkit v0.0.0-20261024094515-51a7330475eb
 ## explicit; go 1.26.6
 github.com/0magnet/progkit
+# github.com/0magnet/progterm v0.0.0-20261024094609-2e1f4c86cbec
+## explicit; go 1.27.1
+github.com/0magnet/progterm/gioterm
+github.com/0magnet/progterm/glterm
+github.com/0magnet/progterm/x11term
 # github.com/0magnet/realorigin v0.2.4-0.20261013224605-2a5caf0f6585
 ## explicit; go 1.26.0
 github.com/0magnet/realorigin
@@ -129,7 +185,7 @@ github.com/0magnet/realorigin
 github.com/0magnet/router7/pkg/dhcp4d
 github.com/0magnet/router7/pkg/dns
 github.com/0magnet/router7/pkg/teelogger
-# github.com/0magnet/sh/v3 v3.13.2-0.20261004194540-aa2d6e4a31a5
+# github.com/0magnet/sh/v3 v3.13.2-0.20261024150911-145e01c63128
 ## explicit; go 1.26.0
 github.com/0magnet/sh/v3/expand
 github.com/0magnet/sh/v3/fileutil
@@ -141,10 +197,6 @@ github.com/0magnet/sh/v3/syntax
 # github.com/0magnet/spheregraph v0.0.1-0.20261013221036-b8e448a97be5
 ## explicit; go 1.25.0
 github.com/0magnet/spheregraph
-# github.com/0magnet/sysinfo v1.1.4-0.20261006160455-a3ceeeb4eaed
-## explicit; go 1.23
-github.com/0magnet/sysinfo
-github.com/0magnet/sysinfo/cpuid
 # github.com/0magnet/termanim v0.0.1-0.20261013224625-c801aece6dff
 ## explicit; go 1.26.0
 github.com/0magnet/termanim/canvas
@@ -162,7 +214,7 @@ github.com/0magnet/webrtc/v4/internal/mux
 github.com/0magnet/webrtc/v4/internal/util
 github.com/0magnet/webrtc/v4/pkg/media
 github.com/0magnet/webrtc/v4/pkg/rtcerr
-# github.com/0magnet/websh v0.0.1-0.20261013225449-0d54b04ae8e4
+# github.com/0magnet/websh v0.0.1-0.20261024151553-9917e7f9f7c8
 ## explicit; go 1.26.6
 github.com/0magnet/websh/childtty
 github.com/0magnet/websh/console
@@ -170,12 +222,13 @@ github.com/0magnet/websh/progressive
 github.com/0magnet/websh/shell
 github.com/0magnet/websh/shell/browser
 github.com/0magnet/websh/shell/sed
+github.com/0magnet/websh/term
 github.com/0magnet/websh/web
 github.com/0magnet/websh/widget
 # github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 ## explicit; go 1.26.0
 github.com/0magnet/wfdrive/bidi
-# github.com/0magnet/winbox-go v0.0.1-0.20261013224642-cc4224c41a9c
+# github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 ## explicit; go 1.26.0
 github.com/0magnet/winbox-go
 # github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
@@ -399,8 +452,8 @@ github.com/flynn/noise
 ## explicit; go 1.23
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
-# github.com/gabriel-vasile/mimetype v1.4.15
-## explicit; go 1.21
+# github.com/gabriel-vasile/mimetype v1.4.16
+## explicit; go 1.24
 github.com/gabriel-vasile/mimetype
 github.com/gabriel-vasile/mimetype/internal/cdf
 github.com/gabriel-vasile/mimetype/internal/charset
@@ -471,6 +524,21 @@ github.com/go-redis/redis/v8/internal/pool
 github.com/go-redis/redis/v8/internal/proto
 github.com/go-redis/redis/v8/internal/rand
 github.com/go-redis/redis/v8/internal/util
+# github.com/go-text/typesetting v0.3.5
+## explicit; go 1.19
+github.com/go-text/typesetting/bidi
+github.com/go-text/typesetting/di
+github.com/go-text/typesetting/font
+github.com/go-text/typesetting/font/cff
+github.com/go-text/typesetting/font/cff/interpreter
+github.com/go-text/typesetting/font/opentype
+github.com/go-text/typesetting/font/opentype/tables
+github.com/go-text/typesetting/fontscan
+github.com/go-text/typesetting/harfbuzz
+github.com/go-text/typesetting/internal/unicodedata
+github.com/go-text/typesetting/language
+github.com/go-text/typesetting/segmenter
+github.com/go-text/typesetting/shaping
 # github.com/go-viper/mapstructure/v2 v2.5.0
 ## explicit; go 1.18
 github.com/go-viper/mapstructure/v2
@@ -480,7 +548,7 @@ github.com/go-viper/mapstructure/v2/internal/errors
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
-# github.com/gomarkdown/markdown v0.0.0-20261011113952-f83953680332
+# github.com/gomarkdown/markdown v0.0.0-20261022144421-6c848fa1b723
 ## explicit; go 1.22
 github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
@@ -585,6 +653,10 @@ github.com/jaypipes/ghw/pkg/watchdog
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
+# github.com/jezek/xgb v1.3.1
+## explicit; go 1.11
+github.com/jezek/xgb
+github.com/jezek/xgb/xproto
 # github.com/jfreymuth/pulse v0.1.3
 ## explicit; go 1.12
 github.com/jfreymuth/pulse
@@ -609,9 +681,10 @@ github.com/klauspost/compress/internal/regmask
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/klauspost/cpuid/v2 v2.4.0
+# github.com/klauspost/cpuid/v2 v2.4.1
 ## explicit; go 1.24.0
 github.com/klauspost/cpuid/v2
+github.com/klauspost/cpuid/v2/topology
 # github.com/klauspost/reedsolomon v1.14.2
 ## explicit; go 1.24
 github.com/klauspost/reedsolomon
@@ -728,7 +801,7 @@ github.com/peterh/liner
 # github.com/pion/datachannel v1.6.3
 ## explicit; go 1.24.0
 github.com/pion/datachannel
-# github.com/pion/dtls/v3 v3.1.12
+# github.com/pion/dtls/v3 v3.1.15
 ## explicit; go 1.24.0
 github.com/pion/dtls/v3
 github.com/pion/dtls/v3/internal/ciphersuite
@@ -751,7 +824,7 @@ github.com/pion/dtls/v3/pkg/protocol/alert
 github.com/pion/dtls/v3/pkg/protocol/extension
 github.com/pion/dtls/v3/pkg/protocol/handshake
 github.com/pion/dtls/v3/pkg/protocol/recordlayer
-# github.com/pion/ice/v4 v4.4.7
+# github.com/pion/ice/v4 v4.4.8
 ## explicit; go 1.24.0
 github.com/pion/ice/v4
 github.com/pion/ice/v4/internal/atomic
@@ -759,9 +832,10 @@ github.com/pion/ice/v4/internal/fakenet
 github.com/pion/ice/v4/internal/netutil
 github.com/pion/ice/v4/internal/stun
 github.com/pion/ice/v4/internal/taskloop
-# github.com/pion/interceptor v0.1.49
+# github.com/pion/interceptor v0.1.51
 ## explicit; go 1.24.0
 github.com/pion/interceptor
+github.com/pion/interceptor/internal/cc
 github.com/pion/interceptor/internal/ntp
 github.com/pion/interceptor/internal/rtpbuffer
 github.com/pion/interceptor/internal/sequencenumber
@@ -782,10 +856,10 @@ github.com/pion/mdns/v2
 # github.com/pion/randutil v0.1.0
 ## explicit; go 1.14
 github.com/pion/randutil
-# github.com/pion/rtcp v1.2.19
+# github.com/pion/rtcp v1.2.20
 ## explicit; go 1.24.0
 github.com/pion/rtcp
-# github.com/pion/rtp v1.10.5
+# github.com/pion/rtp v1.10.6
 ## explicit; go 1.24.0
 github.com/pion/rtp
 github.com/pion/rtp/codecs
@@ -815,7 +889,7 @@ github.com/pion/transport/v5/reuseport
 github.com/pion/transport/v5/stdnet
 github.com/pion/transport/v5/utils/xor
 github.com/pion/transport/v5/vnet
-# github.com/pion/turn/v5 v5.1.2
+# github.com/pion/turn/v5 v5.1.3
 ## explicit; go 1.24.0
 github.com/pion/turn/v5
 github.com/pion/turn/v5/internal/allocation
@@ -824,13 +898,13 @@ github.com/pion/turn/v5/internal/client
 github.com/pion/turn/v5/internal/ipnet
 github.com/pion/turn/v5/internal/proto
 github.com/pion/turn/v5/internal/server
-# github.com/pires/go-proxyproto v0.15.0
-## explicit; go 1.25.0
+# github.com/pires/go-proxyproto v0.16.0
+## explicit; go 1.26.9
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pkg/sftp v1.13.11
+# github.com/pkg/sftp v1.13.12
 ## explicit; go 1.25.0
 github.com/pkg/sftp
 github.com/pkg/sftp/internal/encoding/ssh/filexfer
@@ -853,15 +927,15 @@ github.com/prometheus/client_model/go
 ## explicit; go 1.26.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.22.0
-## explicit; go 1.25.0
+# github.com/prometheus/procfs v0.23.0
+## explicit; go 1.26.0
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/parsers
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.63.0
+# github.com/quic-go/quic-go v0.64.1
 ## explicit; go 1.26.0
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -921,14 +995,14 @@ github.com/shirou/gopsutil/v3/process
 # github.com/shoenig/go-m1cpu v0.2.4
 ## explicit; go 1.26
 github.com/shoenig/go-m1cpu
-# github.com/shopspring/decimal v1.5.0
+# github.com/shopspring/decimal v1.6.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
 # github.com/sirupsen/logrus v1.10.2
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261015015950-aaca77af9c9c
+# github.com/skycoin/skycoin v0.28.7-0.20261022015045-3b3712d25ce0
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -966,8 +1040,8 @@ github.com/skycoin/skycoin/src/daemon/gnet
 github.com/skycoin/skycoin/src/daemon/pex
 github.com/skycoin/skycoin/src/daemon/strand
 github.com/skycoin/skycoin/src/electrum
+github.com/skycoin/skycoin/src/eth
 github.com/skycoin/skycoin/src/fiber
-github.com/skycoin/skycoin/src/gui
 github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
@@ -1167,6 +1241,10 @@ github.com/yuin/goldmark/util
 # github.com/yusufpapurcu/wmi v1.2.4
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
+# github.com/zcalusic/sysinfo v1.2.1
+## explicit; go 1.27
+github.com/zcalusic/sysinfo
+github.com/zcalusic/sysinfo/cpuid
 # go.opentelemetry.io/auto/sdk v1.2.1
 ## explicit; go 1.24.0
 go.opentelemetry.io/auto/sdk
@@ -1210,7 +1288,7 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.starlark.net v0.0.0-20261012215802-edf86ebe07b2
+# go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 ## explicit; go 1.25.0
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
@@ -1252,14 +1330,39 @@ golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e
 ## explicit; go 1.26.0
 golang.org/x/exp/constraints
+# golang.org/x/exp/shiny v0.0.0-20261014143641-f0251eb4aa3e
+## explicit; go 1.26.0
+golang.org/x/exp/shiny/iconvg
+golang.org/x/exp/shiny/iconvg/internal/gradient
+golang.org/x/exp/shiny/materialdesign/icons
 # golang.org/x/image v0.47.0
 ## explicit; go 1.26.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
+golang.org/x/image/draw
+golang.org/x/image/font
+golang.org/x/image/font/gofont/gobold
+golang.org/x/image/font/gofont/gobolditalic
+golang.org/x/image/font/gofont/goitalic
+golang.org/x/image/font/gofont/gomedium
+golang.org/x/image/font/gofont/gomediumitalic
+golang.org/x/image/font/gofont/gomono
+golang.org/x/image/font/gofont/gomonobold
+golang.org/x/image/font/gofont/gomonobolditalic
+golang.org/x/image/font/gofont/gomonoitalic
+golang.org/x/image/font/gofont/goregular
+golang.org/x/image/font/gofont/gosmallcaps
+golang.org/x/image/font/gofont/gosmallcapsitalic
+golang.org/x/image/font/opentype
+golang.org/x/image/font/sfnt
 golang.org/x/image/internal/safemath
+golang.org/x/image/math/f32
+golang.org/x/image/math/f64
+golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
 golang.org/x/image/tiff/lzw
+golang.org/x/image/vector
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
@@ -1303,6 +1406,7 @@ golang.org/x/term
 # golang.org/x/text v0.43.0
 ## explicit; go 1.26.0
 golang.org/x/text/encoding
+golang.org/x/text/encoding/charmap
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/encoding/unicode
@@ -1328,7 +1432,7 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20261012220534-4341edf3f941
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b
 ## explicit; go 1.26.0
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.84.0
@@ -1442,7 +1546,7 @@ gopkg.in/telebot.v3
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# gvisor.dev/gvisor v0.0.0-20261014212059-ddc37c698141
+# gvisor.dev/gvisor v0.0.0-20261017122056-1b7906fdee8c
 ## explicit; go 1.27.2
 gvisor.dev/gvisor/pkg/atomicbitops
 gvisor.dev/gvisor/pkg/bits
@@ -1489,7 +1593,7 @@ gvisor.dev/gvisor/pkg/waiter
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
-# modernc.org/libc v1.78.0
+# modernc.org/libc v1.79.0
 ## explicit; go 1.26.0
 modernc.org/libc
 modernc.org/libc/errno
@@ -1523,7 +1627,7 @@ modernc.org/mathutil
 # modernc.org/memory v1.12.1
 ## explicit; go 1.23.0
 modernc.org/memory
-# modernc.org/sqlite v1.60.1
+# modernc.org/sqlite v1.61.0
 ## explicit; go 1.26.0
 modernc.org/sqlite
 modernc.org/sqlite/lib

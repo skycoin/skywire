@@ -71,6 +71,9 @@ import com.skycoin.skywire.ui.hub.HubScreen
 import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
+import com.skycoin.skywire.ui.navigation.TAB_ORDER
+import com.skycoin.skywire.ui.navigation.tabSwipe
+import com.skycoin.skywire.ui.navigation.tabSwipeHeld
 import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
@@ -80,6 +83,7 @@ import com.skycoin.skywire.ui.socks.SocksScreen
 import com.skycoin.skywire.ui.vpn.VpnScreen
 import com.skycoin.skywire.ui.wallet.WalletAddCoinScreen
 import com.skycoin.skywire.ui.wallet.WalletHistoryScreen
+import com.skycoin.skywire.ui.wallet.WalletNodeInfoScreen
 import com.skycoin.skywire.ui.wallet.WalletManageScreen
 import com.skycoin.skywire.ui.wallet.WalletNodeScreen
 import com.skycoin.skywire.ui.wallet.WalletReceiveScreen
@@ -180,7 +184,15 @@ fun SkywireApp() {
             // keyboard inset it is measured from.
             modifier = Modifier
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
+                .consumeWindowInsets(innerPadding)
+                .tabSwipe(enabled = currentRoute in TAB_ORDER && !tabSwipeHeld.value) { next ->
+                    val at = TAB_ORDER.indexOf(currentRoute)
+                    when (val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)) {
+                        null -> Unit
+                        Routes.HUB -> navController.navigateToHub()
+                        else -> navController.navigateToTab(to)
+                    }
+                },
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
@@ -218,7 +230,10 @@ fun SkywireApp() {
                     onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
                     onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
                     onSend = { navController.navigate(Routes.WALLET_SEND) { launchSingleTop = true } },
-                    onHistory = { navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true } },
+                    onHistory = {
+                        walletViewModel.filterHistoryBy(null)
+                        navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true }
+                    },
                     onTx = { txid -> navController.navigate(Routes.walletTx(txid)) { launchSingleTop = true } },
                     onWallets = { navController.navigate(Routes.WALLET_WALLETS) { launchSingleTop = true } },
                     onNode = { navController.navigate(Routes.WALLET_NODE) { launchSingleTop = true } },
@@ -250,6 +265,10 @@ fun SkywireApp() {
             composable(Routes.WALLET_RECEIVE) {
                 WalletReceiveScreen(
                     viewModel = walletViewModel,
+                    onHistory = { address ->
+                        walletViewModel.filterHistoryBy(address)
+                        navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true }
+                    },
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -270,6 +289,7 @@ fun SkywireApp() {
                     viewModel = walletViewModel,
                     onDone = { navController.popBackStack(Routes.WALLET, inclusive = false) },
                     onHistory = {
+                        walletViewModel.filterHistoryBy(null)
                         navController.navigate(Routes.WALLET_HISTORY) {
                             launchSingleTop = true
                             popUpTo(Routes.WALLET) { inclusive = false }
@@ -297,6 +317,13 @@ fun SkywireApp() {
             }
             composable(Routes.WALLET_NODE) {
                 WalletNodeScreen(
+                    viewModel = walletViewModel,
+                    onDetails = { navController.navigate(Routes.WALLET_NODE_INFO) { launchSingleTop = true } },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_NODE_INFO) {
+                WalletNodeInfoScreen(
                     viewModel = walletViewModel,
                     onBack = { navController.popBackStack() },
                 )

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/rpc"
 	"testing"
 
+	rpc "github.com/0magnet/gobrpc"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"

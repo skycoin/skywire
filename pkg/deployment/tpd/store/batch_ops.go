@@ -144,7 +144,7 @@ func (s *redisStore) RecordTransportHeartbeats(ctx context.Context, entries []*t
 		pipe.SAdd(ctx, onlineKey, idStr)
 		tlKey := tpUptimeTimelineKey(idStr, date)
 		pipe.SetBit(ctx, tlKey, slot, 1)
-		pipe.Expire(ctx, tlKey, tpUptimeTimelineTTL)
+		s.expireTimeline(ctx, pipe, tlKey, date)
 		written = append(written, e.ID)
 	}
 	if len(written) == 0 {

@@ -15,10 +15,12 @@ import (
 	"maps"
 	"math"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/0magnet/sh/v3/expand"
@@ -92,28 +94,23 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			}
 			r.procSubsts.add(psf)
 
-			r2 := r.subshell(true)
-			r2.holdProcSubsts()
+			r2 := r.bgSubshell()
 			// Nothing may ever open the process substitution,
 			// so it is only waited on while it may still be used.
 			openCtx, cancel := context.WithCancel(ctx)
-			users := new(sync.WaitGroup)
-			users.Add(1) // done once the statement is done
-			go func() { users.Wait(); cancel() }()
-			r.procSubstUses = append(r.procSubstUses, users)
+			r.hold(cancelCloser(cancel), nil)
 			stdout := r.origStdout
 			// TODO: note that `man bash` mentions that `wait` only waits for the last
 			// process substitution as long as it is $!; the logic here would mean we wait for all of them.
 			bg := r.newBgProc()
-			bg.substitution = true
+			bg.procSubst = true
 			r.bgProcs = append(r.bgProcs, bg)
-			r.lastBg = bg
-			go func() {
+			r.bgJobs.Go(func() {
 				defer func() {
 					*bg.exit = r2.exit
 					close(bg.done)
 				}()
-				defer r2.releaseProcSubsts(0)
+				defer r2.releaseHolds(0)
 				defer func() {
 					r.procSubsts.remove(psf)
 					if psf.Cleanup == nil {
@@ -148,9 +145,10 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 					// Should only happen if we forgot a case above.
 					panic(fmt.Sprintf("unexpected process substitution operator: %q", ps.Op))
 				}
+				r2.dropUnusedHolds(len(r2.holds))
 				r2.stmts(ctx, ps.Stmts)
 				r2.exitSubshell()
-			}()
+			})
 			return psf.Path, nil
 		},
 	}
@@ -193,26 +191,47 @@ func (r *Runner) expandErr(err error) {
 	if err == nil {
 		return
 	}
-	errMsg := err.Error()
-	fmt.Fprintln(r.stderr, errMsg)
+	fmt.Fprintln(r.stderr, err)
 	_, unsetParam := errors.AsType[expand.UnsetParameterError](err)
+	_, fatal := errors.AsType[internal.FatalError](err)
 	switch {
-	case unsetParam, errMsg == "invalid indirect expansion":
-		// TODO: These errors are treated as fatal by bash.
-		// Make the error type reflect that.
+	case unsetParam:
+		// Like in Bash, ${x?} and nounset exit a non-interactive shell.
 		r.exit.code = 1
 		r.exit.exiting = true
-	case errors.Is(err, errReadOnly):
-		// Like in bash, assigning to a read-only variable fails
-		// the command at hand without exiting the shell.
-		r.exit.code = 1
+	case fatal, errors.Is(err, errReadOnly):
+		// Others abandon the current commands, including an expansion
+		// which assigns to a read-only variable, like ${i=3} or $((i=3)).
+		r.exit.discard()
 	}
 }
 
-func (r *Runner) arithm(expr syntax.ArithmExpr) int {
+// arithm evaluates an arithmetic expression, reporting any error, which is
+// returned too.
+func (r *Runner) arithm(expr syntax.ArithmExpr) (int, error) {
 	n, err := expand.Arithm(r.ecfg, expr)
+	_, expandErr := errors.AsType[internal.ArithmExpandError](err)
+	_, fatal := errors.AsType[internal.FatalError](err)
+	if expandErr || fatal {
+		// Expanding a word like ${x:?msg} fails like in any expansion,
+		// as does an error in a subscript like a[1/0].
+		r.expandErr(err)
+	} else if err != nil {
+		// Unlike an expansion, the arithmetic command ((i=3)) and let
+		// fail without exiting the shell when evaluating the expression.
+		r.errf("%v\n", err)
+		r.exit.code = 1
+	}
+	return n, err
+}
+
+// subscript evaluates the subscript of an indexed array element, like i+1
+// in a[i+1]=x. Like in Bash, an error doing so abandons the current commands.
+func (r *Runner) subscript(expr syntax.ArithmExpr) (int, error) {
+	n, err := expand.Arithm(r.ecfg, expr)
+	err = internal.Fatal(err)
 	r.expandErr(err)
-	return n
+	return n, err
 }
 
 func (r *Runner) fields(words ...*syntax.Word) []string {
@@ -251,12 +270,14 @@ func (e expandEnv) Get(name string) expand.Variable {
 }
 
 func (e expandEnv) Set(name string, vr expand.Variable) error {
-	return e.r.setVarErr(name, vr)
+	return e.r.setVarIn(name, vr, declPlain)
 }
 
 func (e expandEnv) Each(fn func(name string, vr expand.Variable) bool) {
 	e.r.writeEnv.Each(fn)
 }
+
+var _ expand.WriteEnviron = (*overlayEnviron)(nil)
 
 var todoPos syntax.Pos // for handlerCtx callers where we don't yet have a position
 
@@ -291,7 +312,7 @@ func (r *Runner) errf(format string, a ...any) {
 
 func (r *Runner) stop(ctx context.Context) bool {
 	// Some traps trigger on exit, so we do want those to run.
-	if !r.handlingTrap && (r.exit.returning || r.exit.exiting) {
+	if r.exit.discarding || !r.handlingTrap && (r.exit.returning || r.exit.exiting) {
 		return true
 	}
 	if err := ctx.Err(); err != nil {
@@ -319,26 +340,32 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 	}
 	r.stmtDepth++
 	defer func() { r.stmtDepth-- }()
-	defer r.releaseProcSubsts(len(r.procSubstUses))
 	r.exit = exitStatus{}
 	if st.Background || st.Disown {
-		r2 := r.subshell(true)
+		r2 := r.bgSubshell()
+		r2.bgJobs = new(sync.WaitGroup)
 		st2 := *st
 		st2.Background = false
 		st2.Disown = false
+		r2.bgDropHolds = true
 		bg := r.newBgProc()
-		// A job is a goroutine, so kill cancels its context rather than
-		// signalling a process. The context comes off jobsBase and not off the
-		// statement, so a job nested in another job is not cancelled when the
-		// outer one finishes.
-		jobsBase := r.jobsBase
-		if jobsBase == nil {
-			jobsBase = ctx
+		parent, stopAfter := ctx, func() bool { return false }
+		if r.jobsCtx != nil {
+			// The job outlives the statement, keeping only its values.
+			parent = context.WithoutCancel(ctx)
 		}
-		bgCtx, cancel := context.WithCancel(jobsBase)
-		bg.cmd = jobText(&st2)
-		bg.cancel = cancel
-		bg.disowned = st.Disown
+		bgCtx, cancel := context.WithCancelCause(parent)
+		if r.jobsCtx != nil {
+			// Like the SIGHUP which Bash sends its jobs when its terminal hangs up.
+			stopAfter = context.AfterFunc(r.jobsCtx, func() { cancel(killSignal(1)) })
+			r2.jobsCtx = nil // nested jobs follow the job which started them
+		}
+		bg.stmt, bg.cancel, bg.hidden = &st2, cancel, st.Disown
+		// Like Bash, follow the highest job still listed, starting again from 1.
+		bg.num = 1
+		for _, prev := range r.jobList() {
+			bg.num = max(bg.num, prev.num+1)
+		}
 		// A plain command call may amount to starting exactly one external
 		// program, in which case $! expands to its real PID like in other
 		// shells, which fork background statements as child processes.
@@ -350,42 +377,108 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 			r2.bgStarted = bg.started
 		}
 		r.bgProcs = append(r.bgProcs, bg)
-		r.lastBg = bg
-		r2.holdProcSubsts()
-		go func() {
-			defer cancel()
+		r.bgJobs.Go(func() {
 			r2.Run(bgCtx, &st2)
 			r2.reportBgStart(0) // in case we didn't get to start a program
 			r2.exitSubshell()
-			r2.releaseProcSubsts(0)
+			r2.releaseHolds(0)
+			if sig, ok := context.Cause(bgCtx).(killSignal); ok {
+				r2.exit = exitStatus{code: 128 + uint8(sig)} // like Bash
+			}
 			*bg.exit = r2.exit
 			close(bg.done)
-		}()
+			// The jobs started within this one, including those of its
+			// subshells, follow its context; release it once they are done.
+			// As each of them waits in turn, this covers all descendants.
+			r2.bgJobs.Wait()
+			stopAfter()
+			cancel(nil)
+		})
 	} else {
 		r.stmtSync(ctx, st)
 	}
 	r.lastExit = r.exit
 }
 
-// releaseProcSubsts releases the process substitutions
-// expanded since there were n of them, as their statement is done.
-func (r *Runner) releaseProcSubsts(n int) {
-	for _, users := range r.procSubstUses[n:] {
-		users.Done()
-	}
-	r.procSubstUses = slices.Delete(r.procSubstUses, n, len(r.procSubstUses))
+// stmtHold is a file opened by a redirection, or a process substitution which
+// may still be opened, shared by its statement, by exec, and by background
+// subshells. The last user to release it closes it.
+type stmtHold struct {
+	users  atomic.Int32
+	closer io.Closer
+
+	// file is the stdin, stdout, or stderr value which uses the hold,
+	// or nil to always keep it, as process substitutions are opened by path.
+	file any
 }
 
-// holdProcSubsts is called on a background subshell before it starts,
-// holding on to the process substitutions it inherits until it is done
-// and calls [Runner.releaseProcSubsts] with zero.
-func (r *Runner) holdProcSubsts() {
-	// Stop sharing the list with the parent, which releases its own
-	// process substitutions while the subshell may still be running.
-	r.procSubstUses = slices.Clone(r.procSubstUses)
-	for _, users := range r.procSubstUses {
-		users.Add(1)
+func (h *stmtHold) acquire() { h.users.Add(1) }
+
+func (h *stmtHold) release() {
+	if h.users.Add(-1) == 0 {
+		h.closer.Close()
 	}
+}
+
+// cancelCloser lets a process substitution be held like a file.
+type cancelCloser context.CancelFunc
+
+func (c cancelCloser) Close() error { c(); return nil }
+
+// hold records a new hold for the current statement.
+func (r *Runner) hold(closer io.Closer, file any) *stmtHold {
+	h := &stmtHold{closer: closer, file: file}
+	h.acquire()
+	r.holds = append(r.holds, h)
+	return h
+}
+
+// releaseHolds releases the holds recorded since there were n of them,
+// as their statement is done.
+func (r *Runner) releaseHolds(n int) {
+	for _, h := range r.holds[n:] {
+		h.release()
+	}
+	r.holds = slices.Delete(r.holds, n, len(r.holds))
+}
+
+// inheritedHolds returns the holds a subshell inherits, including exec's.
+func (r *Runner) inheritedHolds() []*stmtHold {
+	if len(r.keptFiles) == 0 {
+		return slices.Clip(r.holds)
+	}
+	return slices.Concat(r.holds, r.keptFiles)
+}
+
+// bgSubshell creates a background subshell which holds what it inherits
+// until it calls [Runner.releaseHolds] with zero.
+func (r *Runner) bgSubshell() *Runner {
+	r2 := r.subshell(true)
+	// Its own list, as the parent releases its holds while the subshell runs.
+	r2.holds = slices.Clone(r2.holds)
+	for _, h := range r2.holds {
+		h.acquire()
+	}
+	return r2
+}
+
+// dropUnusedHolds releases the holds before index n which a background
+// subshell does not use as stdin, stdout, or stderr, so that e.g. a FIFO's
+// reader can see EOF, and returns how many are left.
+func (r *Runner) dropUnusedHolds(n int) int {
+	kept := r.holds[:0]
+	for _, h := range r.holds[:n] {
+		switch {
+		case h.file == nil,
+			!reflect.ValueOf(h.file).Comparable(), // comparing it could panic
+			h.file == any(r.stdin), h.file == any(r.stdout), h.file == any(r.stderr):
+			kept = append(kept, h)
+		default:
+			h.release()
+		}
+	}
+	r.holds = slices.Delete(r.holds, len(kept), n)
+	return len(kept)
 }
 
 // reportBgStart is called by a background subshell once we first know whether
@@ -408,12 +501,14 @@ func (r *Runner) reportBgStart(pid int) {
 
 func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
-	var closers []io.Closer
+	n := len(r.holds)
+	defer func() { r.releaseHolds(n) }()
+	var files []*stmtHold // excluding process substitutions, for exec
 	if len(st.Redirs) > 0 {
 		r.reportBgStart(0) // opening a file may block
 	}
 	for _, rd := range st.Redirs {
-		cls, err := r.redir(ctx, rd)
+		h, err := r.redir(ctx, rd)
 		if err != nil {
 			if !r.exit.fatalExit {
 				// A fatal error from a handler is reported by [Runner.Run].
@@ -422,9 +517,14 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			r.exit.code = 1
 			break
 		}
-		if cls != nil {
-			closers = append(closers, cls)
+		if h != nil {
+			files = append(files, h)
 		}
+	}
+	if r.bgDropHolds {
+		// The job's own redirections may replace what it inherited.
+		r.bgDropHolds = false
+		n = r.dropUnusedHolds(n)
 	}
 	if r.exit.ok() && st.Cmd != nil {
 		r.cmd(ctx, st.Cmd)
@@ -436,6 +536,8 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			r.exit.clear()
 		}
 	} else if b, ok := st.Cmd.(*syntax.BinaryCmd); ok && (b.Op == syntax.AndStmt || b.Op == syntax.OrStmt) {
+	} else if r.exit.discarding {
+		// Abandoning the current commands skips the ERR trap.
 	} else if !r.exit.ok() && !r.noErrExit {
 		r.trapCallback(ctx, r.callbackErr, "error")
 		// If the "errexit" option is set and a command failed, exit the shell. Exceptions:
@@ -449,27 +551,30 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	}
 	if r.keepRedirs {
 		// The exec builtin made this statement's redirections apply to the
-		// shell itself, so don't undo them and keep their files open.
+		// shell itself, so don't undo them, and give it a hold on their files.
 		r.keepRedirs = false
-		r.keptFiles = append(r.keptFiles, closers...)
+		for _, h := range files {
+			h.acquire()
+		}
+		r.keptFiles = append(r.keptFiles, files...)
 	} else if len(st.Redirs) > 0 {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
-		for _, cls := range closers {
-			cls.Close()
-		}
 	}
 }
 
 // exitSubshell cleans up once a subshell is done, without exiting its parent.
 func (r *Runner) exitSubshell() {
 	r.exit.exiting = false
+	r.exit.discarding = false
+	r.exit.returning = false // a return only exits the subshell
 	r.closeKeptFiles()
 }
 
 // closeKeptFiles closes the files kept open by "exec", as the shell exits.
+// A background subshell which inherited one keeps it open until it is done.
 func (r *Runner) closeKeptFiles() {
-	for _, cls := range r.keptFiles {
-		cls.Close()
+	for _, h := range r.keptFiles {
+		h.release()
 	}
 	r.keptFiles = nil
 }
@@ -513,16 +618,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		if len(fields) == 0 {
 			for _, as := range cm.Assigns {
 				name := as.Name.Value
-
 				prev := r.lookupVar(name)
-				// Here we have a naked "foo=bar", so if we inherited a local var from a parent
-				// function we want to signal that we are modifying the parent var rather than
-				// creating a new local var via "local foo=bar".
-				// TODO: there is likely a better way to do this.
-				prev.Local = false
-
-				name, vr := r.assignVal(name, prev, as, "")
-				r.setVarWithIndex(prev, name, as.Index, vr)
+				name, vr, err := r.assignVal(name, prev, as, "")
+				if err == nil {
+					err = r.setVar(name, vr)
+				}
+				if err != nil {
+					// Like Bash, an assignment error such as writing to a
+					// read-only variable abandons the current commands.
+					r.exit.discard()
+					break
+				}
 
 				if !tracingEnabled {
 					continue
@@ -530,9 +636,9 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 
 				// Strangely enough, it seems like Bash prints original
 				// source for arrays, but the expanded value otherwise.
-				// Note that, unlike bash, we print neither the subscript
-				// in `x[i]=y` nor just the appended value in `x+=y`.
-				if as.Array != nil {
+				// We do the same for element assignments like `x[i]=y`,
+				// and unlike bash, we print the entire value in `x+=y`.
+				if as.Array != nil || as.Index != nil {
 					trace.expr(as)
 				} else if as.Value != nil {
 					trace.stringf("%s=%s", name, quoteBash(vr.String()))
@@ -548,36 +654,16 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			break
 		}
 
-		type restoreVar struct {
-			name string
-			vr   expand.Variable
-		}
-		var restores []restoreVar
-
-		for _, as := range cm.Assigns {
-			name := as.Name.Value
-			prev := r.lookupVar(name)
-			// Resolve any nameref so we can restore the original final value later on.
-			if n, v := prev.Resolve(r.writeEnv); n != "" {
-				name, prev = n, v
-			}
-
-			name, vr := r.assignVal(name, prev, as, "")
-			// Inline command vars are always exported.
-			vr.Exported = true
-
-			restores = append(restores, restoreVar{name, prev})
-
-			r.setVar(name, vr)
+		origEnv := r.writeEnv
+		if len(cm.Assigns) > 0 {
+			r.writeEnv = r.prefixAssigns(cm.Assigns)
 		}
 
 		trace.call(fields[0], fields[1:]...)
 		trace.newLineFlush()
 
 		r.call(ctx, cm.Args[0].Pos(), fields)
-		for _, restore := range restores {
-			r.setVar(restore.name, restore.vr)
-		}
+		r.writeEnv = origEnv
 	case *syntax.BinaryCmd:
 		switch cm.Op {
 		case syntax.AndStmt, syntax.OrStmt:
@@ -595,24 +681,46 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				return
 			}
 			r2 := r.subshell(true)
+			r2.inLoop = r.inLoop && pipeElemInLoop(cm.X)
 			r2.stdout = pw
 			if cm.Op == syntax.PipeAll {
 				r2.stderr = pw
 			} else {
 				r2.stderr = r.stderr
 			}
-			oldIn := r.stdin
-			r.stdin = pr
 			var wg sync.WaitGroup
 			wg.Go(func() {
 				r2.stmt(ctx, cm.X)
 				r2.exitSubshell()
 				pw.Close()
 			})
-			r.stmt(ctx, cm.Y)
+			if r.opts[optLastPipe] {
+				oldIn := r.stdin
+				r.stdin = pr
+				r.stmt(ctx, cm.Y)
+				r.stdin = oldIn
+			} else {
+				// Like Bash, the last command runs in a subshell too,
+				// so `cmd | read x` does not set x in the current shell.
+				r3 := r.subshell(false)
+				r3.inLoop = r.inLoop && pipeElemInLoop(cm.Y)
+				r3.stdin = pr
+				r3.stmt(ctx, cm.Y)
+				r3.exitSubshell()
+				r.exit = r3.exit
+				// Its background jobs are not the parent shell's,
+				// but keep waiting on any process substitutions it started.
+				// Forget those which finished, to not grow without bound.
+				r.pipeProcSubsts = slices.DeleteFunc(r.pipeProcSubsts, isDone)
+				for _, bg := range r3.bgProcs {
+					if bg.procSubst {
+						r.pipeProcSubsts = append(r.pipeProcSubsts, bg.done)
+					}
+				}
+				r.pipeProcSubsts = append(r.pipeProcSubsts, r3.pipeProcSubsts...)
+			}
 			pr.Close()
 			wg.Wait()
-			r.stdin = oldIn
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
 				r.exit = r2.exit
 			}
@@ -658,6 +766,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.ForClause:
 		switch y := cm.Loop.(type) {
 		case *syntax.WordIter:
+			if y.Name == nil { // e.g. zsh's multi-name for loops
+				r.errf("unsupported\n")
+				r.exit.code = 1
+				break
+			}
 			name := y.Name.Value
 			items := r.Params // for i; do ...
 
@@ -693,10 +806,13 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					reply := string(line)
 					r.setVarString(shellReplyVar, reply)
 
+					value := ""
 					if c, _ := strconv.Atoi(reply); c > 0 && c <= len(items) {
-						r.setVarString(name, items[c-1])
-					} else {
-						r.setVarString(name, "")
+						value = items[c-1]
+					}
+					if r.setVarString(name, value) != nil {
+						r.exit.code = 1
+						break
 					}
 
 					// execute commands until break or return is encountered
@@ -708,7 +824,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 
 			for _, field := range items {
-				r.setVarString(name, field)
+				var err error
+				if vr := r.lookupVar(name); vr.Kind != expand.NameRef {
+					err = r.setVar(name, expand.Variable{Set: true, Exported: vr.Exported, Kind: expand.String, Str: field})
+				} else {
+					// Like Bash, a nameref refers to each word in turn.
+					err = r.setNameRef(name, vr, field, false)
+				}
+				if err != nil {
+					r.exit.code = 1
+					break
+				}
 				trace.stringf("for %s in", y.Name.Value)
 				if inToken {
 					for _, item := range y.Items {
@@ -727,7 +853,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if y.Init != nil {
 				r.arithm(y.Init)
 			}
-			for y.Cond == nil || r.arithm(y.Cond) != 0 {
+			for {
+				if y.Cond != nil {
+					if n, _ := r.arithm(y.Cond); n == 0 {
+						break
+					}
+				}
 				if !r.exit.ok() || r.loopStmtsBroken(ctx, cm.Do) {
 					break
 				}
@@ -744,7 +875,8 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		}
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
-		r.exit.oneIf(r.arithm(cm.X) == 0)
+		n, _ := r.arithm(cm.X)
+		r.exit.oneIf(n == 0)
 	case *syntax.LetClause:
 		if tracingEnabled {
 			trace.string("let")
@@ -755,7 +887,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		}
 		var val int
 		for _, expr := range cm.Exprs {
-			val = r.arithm(expr)
+			var err error
+			if val, err = r.arithm(expr); err != nil {
+				break // like Bash, stop at the first error
+			}
 		}
 		r.exit.oneIf(val == 0)
 	case *syntax.CaseClause:
@@ -787,23 +922,32 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.exit.code = 1
 		}
 	case *syntax.DeclClause:
-		local, global := false, false
+		// Like Bash, the arguments are expanded and assigned outside of
+		// the temporary environment, which only provides the values of
+		// the variables it holds.
+		var temp *overlayEnviron
+		if len(cm.Assigns) > 0 {
+			temp = r.prefixAssigns(cm.Assigns)
+		}
+		scope := declPlain
 		named := false
 		var modes []string
 		valType := ""
 		declQuery := "" // "-f" or "-p" for query mode
 		switch cm.Variant.Value {
-		case "declare":
+		case "declare", "typeset":
 			// When used in a function, "declare" acts as "local"
 			// unless the "-g" option is used.
-			local = r.inFunc
+			if r.inFunc {
+				scope = declLocal
+			}
 		case "local":
 			if !r.inFunc {
 				r.errf("local: can only be used in a function\n")
 				r.exit.code = 1
 				return
 			}
-			local = true
+			scope = declLocal
 		case "export":
 			modes = append(modes, "-x")
 		case "readonly":
@@ -811,32 +955,42 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		case "nameref":
 			valType = "-n"
 		}
-	assignLoop:
+		flagsDone := false
 		for as := range r.flattenAssigns(cm.Args) {
-			fp := flagParser{remaining: []string{as.Name.Value}}
-			for fp.more() {
-				switch flag := fp.flag(); flag {
-				case "-x", "-r":
-					modes = append(modes, flag)
-				case "-a", "-A", "-n":
-					valType = flag
-				case "-g":
-					global = true
-				case "-f", "-p":
-					declQuery = flag
-				default:
-					r.errf("declare: invalid option %q\n", flag)
-					r.exit.code = 2
-					return
-				}
-				continue assignLoop
+			if r.stop(ctx) {
+				return // like Bash, an error abandons the rest
 			}
-			named = true
+			// Like Bash, flags are only parsed before the first name,
+			// and "--" ends them, so that a name may start with a dash.
+			if !flagsDone && as.Name.Value == "--" {
+				flagsDone = true
+				continue
+			}
+			if fp := (flagParser{remaining: []string{as.Name.Value}}); !flagsDone && fp.more() {
+				for fp.more() {
+					switch flag := fp.flag(); flag {
+					case "-x", "-r":
+						modes = append(modes, flag)
+					case "-a", "-A", "-n":
+						valType = flag
+					case "-g":
+						scope = declGlobal
+					case "-f", "-p":
+						declQuery = flag
+					default:
+						r.errf("declare: invalid option %q\n", flag)
+						r.exit.code = 2
+						return
+					}
+				}
+				continue
+			}
+			named, flagsDone = true, true
 			name := as.Name.Value
 			if !syntax.ValidName(name) {
 				r.errf("declare: invalid name %q\n", name)
 				r.exit.code = 1
-				return
+				continue
 			}
 			if declQuery == "-f" {
 				// declare -f name: print function definition.
@@ -852,9 +1006,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				}
 				continue
 			}
+			vr, inTemp := temp.own(name)
+			if !inTemp {
+				vr = r.lookupVar(name)
+			}
 			if declQuery == "-p" {
 				// declare -p name: print variable with attributes.
-				vr := r.lookupVar(name)
 				if !vr.Declared() {
 					r.errf("declare: %s: not found\n", name)
 					r.exit.code = 1
@@ -863,34 +1020,55 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.printDeclare(name, vr)
 				continue
 			}
-			vr := r.lookupVar(name)
-			if as.Naked {
-				// Like Bash, a new local variable starts without a value,
-				// inheriting only the export attribute.
-				newLocal := local && !global && !r.writeEnv.(*overlayEnviron).localInFunc(name)
-				if newLocal {
-					vr = expand.Variable{Exported: vr.Exported}
+			if inTemp {
+				// Like Bash, a temporary variable is discarded with its
+				// environment, unless it is exported, made read-only, or
+				// declared as a local variable which starts from its value.
+				if len(modes) == 0 && scope != declLocal {
+					continue
 				}
+			} else if as.Naked && valType != "-n" {
+				// Attributes apply to the variable a nameref refers to.
+				name, vr = r.resolveName(name)
+			}
+			// Like Bash, a new local variable starts without a value,
+			// inheriting only the export attribute.
+			newLocal := scope == declLocal && !inTemp && !r.writeEnv.localInFunc(name)
+			if newLocal {
+				vr = expand.Variable{Exported: vr.Exported}
+			}
+			if as.Naked {
 				switch {
-				case valType == "-A":
-					vr.Kind = expand.Associative
-				case valType == "-a" && (vr.Kind == expand.Unknown || vr.Kind == expand.String):
-					// Like Bash, a string value becomes the first element.
-					vr.List, vr.Indexes = indexedElems(vr)
-					vr.Kind, vr.Str = expand.Indexed, ""
+				case valType == "-n":
+					// A nameref without a target yet; assigning to it
+					// sets the target.
+					vr.Kind, vr.Str = expand.NameRef, ""
+				case valType == "-a" || valType == "-A":
+					var err error
+					if vr, err = r.convertKind(name, vr, valType); err != nil {
+						r.exit.code = 1
+						continue
+					}
 				case newLocal || !vr.Declared():
 					// Like Bash, declare a string variable without a value.
 					vr.Kind = expand.String
+				case inTemp:
+					// Keep the temporary value.
 				default:
 					vr.Kind = expand.KeepValue
 				}
 			} else {
-				name, vr = r.assignVal(name, vr, as, valType)
+				var err error
+				if name, vr, err = r.assignVal(name, vr, as, valType); err != nil {
+					r.exit.code = 1
+					continue
+				}
 			}
-			if global {
-				vr.Local = false
-			} else if local {
-				vr.Local = true
+			if vr.Kind == expand.NameRef && vr.Str != "" {
+				if r.checkNameRefTarget(cm.Variant.Value, name, vr.Str, false) != nil {
+					r.exit.code = 1
+					continue
+				}
 			}
 			for _, mode := range modes {
 				switch mode {
@@ -900,7 +1078,10 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 					vr.ReadOnly = true
 				}
 			}
-			r.setVar(name, vr)
+			if err := r.setVarIn(name, vr, scope); err != nil {
+				r.errf("%s: %v\n", cm.Variant.Value, err)
+				r.exit.code = 1
+			}
 		}
 		if !named {
 			r.listDecls(cm.Variant.Value == "local", modes, valType, declQuery)
@@ -982,15 +1163,14 @@ func (r *Runner) listDecls(local bool, modes []string, valType, declQuery string
 		// TODO: list variables and functions like Bash's `set` builtin.
 		return
 	}
-	oenv := r.writeEnv.(*overlayEnviron)
 	names := make(map[string]string) // normalized to original names
-	for name := range oenv.Each {
+	for name := range r.writeEnv.Each {
 		if syntax.ValidName(name) {
-			names[oenv.normalize(name)] = name
+			names[r.writeEnv.normalize(name)] = name
 		}
 	}
 	for _, name := range slices.Sorted(maps.Values(names)) {
-		if local && !oenv.localInFunc(name) {
+		if local && !r.writeEnv.localInFunc(name) {
 			continue
 		}
 		vr := r.lookupVar(name)
@@ -1054,8 +1234,45 @@ func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
 	}
 	oldExit, oldLastExit := r.exit, r.lastExit
 	r.lastExit = r.exit
-	r.stmts(ctx, file.Stmts)
+	r.scriptStmts(ctx, file.Stmts)
 	r.exit, r.lastExit = oldExit, oldLastExit // traps on EXIT or ERR should not modify the result
+}
+
+// pipeElemInLoop reports whether a pipeline element keeps the enclosing loop.
+// Like in Bash, a simple command does, so that break or continue only end
+// its subshell, whereas a compound command like { break; } does not.
+func pipeElemInLoop(st *syntax.Stmt) bool {
+	switch cm := st.Cmd.(type) {
+	case *syntax.CallExpr:
+		return true
+	case *syntax.BinaryCmd: // the elements of a longer pipeline
+		return cm.Op == syntax.Pipe || cm.Op == syntax.PipeAll
+	}
+	return false
+}
+
+// prefixAssigns returns a temporary environment for a command's prefix
+// assignments. Like in Bash, a function sees it as its caller's scope,
+// and each assignment after the first expands within it.
+func (r *Runner) prefixAssigns(assigns []*syntax.Assign) *overlayEnviron {
+	parent := r.writeEnv
+	temp := &overlayEnviron{parent: parent, kind: scopeTemp}
+	r.writeEnv = temp
+	for _, as := range assigns {
+		// The temporary variable starts from the string value,
+		// so that x+=y appends and arrays are replaced.
+		name, prev := r.resolveName(as.Name.Value)
+		scalar := expand.Variable{Set: prev.IsSet(), Kind: expand.String, Str: prev.String()}
+		name, vr, err := r.assignVal(name, scalar, as, "")
+		if err != nil {
+			continue
+		}
+		vr.Exported = true // always exported
+		// Like Bash, report any error and run the command anyway.
+		r.varErr(temp.set(name, vr))
+	}
+	r.writeEnv = parent
+	return temp
 }
 
 func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] {
@@ -1077,9 +1294,7 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 				if !ok {
 					as.Naked = true
 				} else {
-					as.Value = &syntax.Word{Parts: []syntax.WordPart{
-						&syntax.Lit{Value: val},
-					}}
+					as.Value = expandedWord(val)
 				}
 				if !yield(as) {
 					return
@@ -1136,6 +1351,39 @@ func (r *Runner) stmts(ctx context.Context, stmts []*syntax.Stmt) {
 	for _, stmt := range stmts {
 		r.stmt(ctx, stmt)
 	}
+}
+
+// scriptStmts runs the statements of a script, such as a file or the
+// argument to eval. Bash reads and runs a script one line at a time, and an
+// error such as assigning to a read-only variable abandons the commands
+// being run without exiting the shell, so we skip the rest of the line
+// and resume at the next one. With errexit, the shell exits instead.
+func (r *Runner) scriptStmts(ctx context.Context, stmts []*syntax.Stmt) {
+	for i := 0; i < len(stmts); i++ {
+		r.stmt(ctx, stmts[i])
+		if !r.endDiscard() {
+			continue
+		}
+		line := stmts[i].End().Line()
+		for i+1 < len(stmts) && stmts[i+1].Pos().Line() == line {
+			i++
+			line = stmts[i].End().Line()
+		}
+	}
+}
+
+// endDiscard stops abandoning commands after an error, reporting whether
+// the shell carries on rather than exit; see [Runner.scriptStmts].
+func (r *Runner) endDiscard() bool {
+	if !r.exit.discarding {
+		return false
+	}
+	r.exit.discarding = false
+	if r.opts[optErrExit] {
+		return false
+	}
+	r.exit.exiting = false
+	return true
 }
 
 func (r *Runner) hdocReader(rd *syntax.Redirect) (stdinFile, error) {
@@ -1239,7 +1487,8 @@ func hdocNeedsNewline(rd *syntax.Redirect) bool {
 	return !ok || !strings.HasSuffix(lit.Value, "\n")
 }
 
-func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, error) {
+// redir applies a redirection, returning a hold on the file it opened, if any.
+func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (*stmtHold, error) {
 	// Note that Hdoc is nil for an empty here-document.
 	if rd.Op == syntax.Hdoc || rd.Op == syntax.DashHdoc {
 		pr, err := r.hdocReader(rd)
@@ -1247,7 +1496,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 			return nil, err
 		}
 		r.stdin = pr
-		return pr, nil
+		return r.hold(pr, pr), nil
 	}
 
 	orig := &r.stdout
@@ -1279,7 +1528,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 			io.WriteString(pw, "\n")
 			pw.Close()
 		}()
-		return pr, nil
+		return r.hold(pr, pr), nil
 	case syntax.DplOut:
 		switch arg {
 		case "1":
@@ -1326,6 +1575,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 			return nil, err
 		}
 		r.stdin = stdin
+		return r.hold(f, stdin), nil
 	case syntax.RdrOut, syntax.AppOut:
 		*orig = f
 	case syntax.RdrAll, syntax.AppAll:
@@ -1334,7 +1584,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	default:
 		return nil, fmt.Errorf("unhandled redirect op: %v", rd.Op)
 	}
-	return f, nil
+	return r.hold(f, f), nil
 }
 
 func (r *Runner) loopStmtsBroken(ctx context.Context, stmts []*syntax.Stmt) bool {
@@ -1381,9 +1631,8 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 		r.inFunc = true
 
 		// Functions run in a nested scope.
-		// Note that [Runner.exec] below does something similar.
 		origEnv := r.writeEnv
-		r.writeEnv = &overlayEnviron{parent: r.writeEnv, funcScope: true}
+		r.writeEnv = &overlayEnviron{parent: r.writeEnv, kind: scopeFunc}
 
 		r.stmt(ctx, body)
 
@@ -1397,7 +1646,14 @@ func (r *Runner) call(ctx context.Context, pos syntax.Pos, args []string) {
 	}
 	if IsBuiltin(name) && !r.builtinDisabled(name) {
 		r.reportBgStart(0) // not one external program
-		r.exit = r.builtin(ctx, pos, name, args[1:])
+		exiting := r.exit.exiting
+		exit := r.builtin(ctx, pos, name, args[1:])
+		if r.exit.exiting && !exiting {
+			// An expansion error within the builtin, like in the subscript
+			// of `unset 'a[1/0]'`, abandons the line or exits the shell.
+			return
+		}
+		r.exit = exit
 		return
 	}
 	r.exec(ctx, pos, args)

@@ -458,8 +458,10 @@ func poolArbiterStepExcluding(g *RouteGroup, pool []*RouteGroup, now time.Time,
 	}
 	// Never strand the pool: what is left after this take must still cover the
 	// app's reserve. len(cands) counts only takeable siblings, so a pool whose
-	// members are all first-hop duplicates is already excluded.
+	// members are all first-hop duplicates is already excluded. A pool too small
+	// to spare one still gets the leg, dialed fresh like an empty pool.
 	if len(cands)-1 < g.mux.knInt(routersettings.PoolMinStandby) {
+		g.growAtHopLength(now, reason, grow)
 		return
 	}
 

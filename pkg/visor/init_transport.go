@@ -35,6 +35,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
+	"github.com/skycoin/skywire/pkg/vpn"
 )
 
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -432,8 +433,19 @@ func initStcprClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Debug("stcpr transport is not available in a browser; not started")
 		return nil
 	}
+	applyTCPNotSentLowat(v.conf.Transport.TCPNotSentLowat)
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
 	return nil
+}
+
+// applyTCPNotSentLowat sets transport.tcp_notsent_lowat for TCP transports
+// opened from now on, with nil meaning the default.
+func applyTCPNotSentLowat(n *int) {
+	if n == nil {
+		network.SetTCPNotSentLowat(network.DefaultTCPNotSentLowat)
+		return
+	}
+	network.SetTCPNotSentLowat(*n)
 }
 
 // initWSClient starts the WebSocket transport server. WS has no dedicated
@@ -656,6 +668,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.hostBridge.sockets.log = v.hostBridgeLog()
 		factory.Sockets = &v.hostBridge.sockets
 		vnet.SetHost(hostBridgeHost{&v.hostBridge.sockets})
+		vpn.SetHostNetwork(hostBridgeVPN{&v.hostBridge.sockets})
 	} else if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {
@@ -719,6 +732,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.initLock.Lock()
 	v.tpM = tpM
+	tpM.SetHostedEntries(v.hostedEntries)
 	v.initLock.Unlock()
 
 	// AR self-refresh: polls AR for our own STCPR / SUDPH bind state and

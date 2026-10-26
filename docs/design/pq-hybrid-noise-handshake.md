@@ -1,6 +1,6 @@
 # Post-Quantum Hybrid Noise Handshake (design sketch)
 
-Status: **DESIGN — not implemented.** Author-of-record: testing regime. Target: `crypto/mlkem` (Go 1.24 stdlib), our existing Noise_KK transport handshake.
+Status: **IMPLEMENTED.** Phase 1 #3121 and phase 2 #3125 (2026-06-16) added the hybrid ML-KEM-768 exchange to every Noise handshake; #5641 (2026-10-14) made it required, refusing classical-only peers. This document is the original design sketch. Target: `crypto/mlkem` (Go 1.24 stdlib), our existing Noise_KK transport handshake.
 
 ## 1. Motivation — Harvest Now, Decrypt Later (HNDL)
 

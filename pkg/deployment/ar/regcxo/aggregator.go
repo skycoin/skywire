@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/cxoaggregate"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
+	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -166,28 +167,44 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		return
 	}
 
+	consume(a.sink, a.log, reporter, cxoaggregate.PackLeaves(pack, &rootNode))
+}
+
+// NewFeedConsumer returns the consumer that ingests bindings a visor carries
+// on its system feed, for an address resolver in the same process as the
+// transport discovery (see cxoaggregate.RegisterFeedConsumer).
+func NewFeedConsumer(sink Sink, log *logging.Logger) cxoaggregate.FeedConsumer {
+	return cxoaggregate.FeedConsumer{
+		Service: sysfeed.AddressResolver,
+		Consume: func(reporter cipher.PubKey, leaf cxoaggregate.Leaves) { consume(sink, log, reporter, leaf) },
+	}
+}
+
+// consume decodes the per-type bind leaves and the reach leaf and ingests
+// them under reporter, the visor whose feed carried them.
+func consume(sink Sink, log *logging.Logger, reporter cipher.PubKey, get cxoaggregate.Leaves) {
 	for _, bl := range cxoBindLeaves {
-		leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, bl.name)
+		leaf, ok := get(bl.name)
 		if !ok || len(leaf) == 0 {
 			continue
 		}
 		var la addrresolver.LocalAddresses
 		if err := json.Unmarshal(leaf, &la); err != nil {
-			a.log.WithError(err).WithField("visor", reporter).WithField("type", bl.t).
+			log.WithError(err).WithField("visor", reporter).WithField("type", bl.t).
 				Debug(logTag + ": bind leaf decode failed")
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		a.sink.IngestBindFromCXO(ctx, reporter, bl.t, la)
+		sink.IngestBindFromCXO(ctx, reporter, bl.t, la)
 		cancel()
 	}
 
-	if leaf, ok := cxoaggregate.LeafByName(pack, &rootNode, reachLeaf); ok && len(leaf) > 0 {
+	if leaf, ok := get(reachLeaf); ok && len(leaf) > 0 {
 		var d arfeed.ReachDecl
 		if err := json.Unmarshal(leaf, &d); err != nil {
-			a.log.WithError(err).WithField("visor", reporter).Debug(logTag + ": reach leaf decode failed")
+			log.WithError(err).WithField("visor", reporter).Debug(logTag + ": reach leaf decode failed")
 		} else {
-			a.sink.IngestReachFromCXO(reporter, d)
+			sink.IngestReachFromCXO(reporter, d)
 		}
 	}
 }

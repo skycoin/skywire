@@ -7,49 +7,27 @@
 // AllClientsByServer / ClientsByServer expose over HTTP. This
 // publisher mirrors that as a TreeStore feed.
 //
-// # Wire shape: ONE batched leaf per server
+// # Wire shape: one presence leaf per server
 //
-// Each dmsg server gets exactly one leaf carrying that server's whole
-// delegated-client set:
+// Each dmsg server with at least one delegated client has one leaf:
 //
-//	clients-by-server/<server-pk>        // FrameGzip(v1, JSON []disc.Entry)
+//	clients-by-server/<server-pk>        // FrameGzip(v2, empty)
 //
-// Older builds published one leaf PER (server, client) PAIR at
-// clients-by-server/<server>/<client>/entry — O(#pairs), thousands of
-// tiny objects in one Root. A large deployment's Root then could not
-// finish filling over a subscriber's short-lived delivering dmsg conn
-// (only the top slice landed). Batching to one leaf per server drops
-// the object count to O(#servers) (~tens–120), which is what lets the
-// Root fill complete. The only consumers (the visor dmsg-entry lookup
-// resolver and tpviz's network visualizer) want server-grouped data, so
-// per-server batching loses no used addressability.
+// The leaf only says the server has clients; TPD uses that to mark the
+// servers hypervisors run for their LAN. It is written when a server gains
+// its first client and deleted when it loses its last, so client churn
+// does not touch the feed. Version 1 carried every client's entry, and
+// each change resent its server's whole list to every visor holding the
+// feed, 1.4 TB a day out of prod01. Who is delegated to which server is
+// on HTTP (GET /dmsg-discovery/servers/clients and /entry/{pk}).
 //
-// Encoding is JSON+gzip, not fixed-layout binary: a client's disc.Entry
-// carries a signature and a variable-length delegated-server list, so it
-// is the "awkward for binary" case — unlike telemetrywire's fixed 53-byte
-// rows. The per-server array is JSON-marshaled (entries sorted by client
-// PK so unchanged content re-encodes to identical bytes → a wire no-op on
-// CXO's content-addressed store), then framed with a leading version byte
-// and gzipped (cxoutils.FrameGzip). The version byte gates the format:
-// a bumped version is rejected cleanly by an old reader rather than
-// misparsed.
+// # Interop
 //
-// # Interop / deploy order
-//
-// Deploy is SERVICE-FIRST. A not-yet-upgraded reader walking the feed
-// looks for the OLD .../<client>/entry leaves, finds none under the new
-// batched shape, reports an empty snapshot, and falls back to HTTP — safe
-// degradation, never a wrong answer. Upgraded readers prefer the batched
-// leaf and still parse an OLD per-item leaf as a fallback, so either
-// publisher shape resolves.
-//
-// A deregistration is the ABSENCE of a client from its server's batched
-// leaf — there is no tombstone leaf class (the old per-(server,client)
-// tombstones were write-only across the codebase and leaked RAM in the
-// publisher's CXDS; observed 327 MB → 921 MB over 12h). Re-encoding a
-// server's single leaf on a membership change is far cheaper than the old
-// whole-tree churn: the tree is now O(#servers) leaves, so each publish
-// clones + encodes a tiny tree.
+// Readers of the version 1 lists (tpviz and the hypervisor's visualizer)
+// skip a version 2 leaf, find no entries
+// and fall back to HTTP. Server entries (servers/<pk>, serverfeed) and
+// leaf paths are unchanged, so the server list and TPD's roles still read
+// from the feed.
 //
 // Server entries are ignored by this publisher — a server PK is the
 // path-prefix bucket, not a member of the view.
@@ -68,7 +46,6 @@ package api
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,10 +61,15 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// clientsByServerBatchVersion is the wire-format version byte of the
-// batched per-server leaf body (FrameGzip). Bump on any breaking change
-// to the leaf encoding; readers reject other values and fall back.
-const clientsByServerBatchVersion = 1
+// clientsByServerPresenceVersion frames the per-server leaf, which now only
+// marks that the server has delegated clients. Version 1 carried every
+// client's entry, and every client's churn resent its server's whole list
+// to every subscriber (1.4 TB a day out of prod01). Version 1 readers skip
+// this leaf and ask over HTTP.
+const clientsByServerPresenceVersion = 2
+
+// presenceLeaf is the body of every per-server leaf.
+var presenceLeaf = cxoutils.FrameGzip(clientsByServerPresenceVersion, nil)
 
 // clientsByServerCXOBatchWindow coalesces the publisher's tree mutations before
 // it re-encodes + publishes the clients-by-server tree.
@@ -109,6 +91,10 @@ const clientsByServerBatchVersion = 1
 // publishers run 60s; this sits between that and the old 1s.)
 const clientsByServerCXOBatchWindow = 30 * time.Second
 
+// clientsByServerKeepRoots keeps about five minutes of Roots, so a subscriber
+// whose fill outlasts one publish can still fetch the objects it needs.
+const clientsByServerKeepRoots = 10
+
 // clientsByServerFlushWindow coalesces the per-server LEAF re-encode (sort +
 // concat + gzip in encodeClientsBatch) the way BatchWindow coalesces the
 // whole-tree publish. Without it, flushServers re-gzipped an affected server's
@@ -122,11 +108,7 @@ const clientsByServerCXOBatchWindow = 30 * time.Second
 // server's leaf is current in the tree before the 30s publish captures it.
 const clientsByServerFlushWindow = 3 * time.Second
 
-// json is the package-scope jsoniter.ConfigFastest value declared
-// in api.go. We reuse it here to avoid pulling in encoding/json
-// (which collides with the package-scope name) and to match the
-// performance characteristics of the rest of dmsg-discovery's
-// hot path.
+// json is the package-scope fastjson.JSON codec declared in api.go.
 var _ = json // referenced from api.go; reuse here
 
 // publishQueueDepth bounds in-flight publish operations. Sized for
@@ -164,6 +146,9 @@ type ClientsByServerCXOPublisher struct {
 	// bursty churn re-gzips each server at most once per window. Worker-only.
 	pendingDirty map[cipher.PubKey]struct{}
 
+	// present is the set of servers whose presence leaf is published. Worker-only.
+	present map[cipher.PubKey]bool
+
 	mu        sync.Mutex
 	lastError error
 }
@@ -182,6 +167,7 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 		Logger:      log,
 		InMemoryDB:  true, // recomputed from redis on every mutation
 		DmsgPort:    skyenv.DmsgDMSGDClientsByServerCXOPort,
+		KeepRoots:   clientsByServerKeepRoots,
 		BatchWindow: clientsByServerCXOBatchWindow, // coarse: this feed only drives network-viz; avoids per-second whole-tree re-encode (see const doc)
 	})
 	if err != nil {
@@ -197,6 +183,7 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 		state:        make(map[cipher.PubKey]map[cipher.PubKey][]byte),
 		servers:      make(map[cipher.PubKey]string),
 		pendingDirty: make(map[cipher.PubKey]struct{}),
+		present:      make(map[cipher.PubKey]bool),
 	}
 	p.wg.Add(1)
 	go p.run()
@@ -399,53 +386,32 @@ func (p *ClientsByServerCXOPublisher) stateDel(serverPK, clientPK cipher.PubKey)
 	}
 }
 
-// flushServers re-encodes and Puts the batched leaf for each dirty
-// server, or Deletes it (and drops the server from state) when the
-// server has no delegated clients left. CXO is content-addressed, so a
-// re-Put of an unchanged leaf is a wire no-op. Worker-only.
+// flushServers Puts the presence leaf for each dirty server that has gained
+// its first delegated client, and Deletes it (dropping the server from state)
+// when the server has none left. Worker-only.
 func (p *ClientsByServerCXOPublisher) flushServers(dirty map[cipher.PubKey]struct{}) {
 	for srv := range dirty {
 		clients := p.state[srv]
 		path := batchLeafPath(srv)
 		if len(clients) == 0 {
 			delete(p.state, srv)
+			delete(p.present, srv)
 			if err := p.pub.Delete(path); err != nil {
 				p.log.WithError(err).WithField("path", path).
 					Debug("Failed to delete emptied clients-by-server leaf")
 			}
 			continue
 		}
-		blob := encodeClientsBatch(clients)
-		if err := p.pub.Put(path, blob); err != nil {
-			p.log.WithError(err).WithField("path", path).Debug("Failed to publish clients-by-server batch leaf")
+		if p.present[srv] {
+			continue
+		}
+		if err := p.pub.Put(path, presenceLeaf); err != nil {
+			p.log.WithError(err).WithField("path", path).Debug("Failed to publish clients-by-server presence leaf")
 			p.recordError(err)
+			continue
 		}
+		p.present[srv] = true
 	}
-}
-
-// encodeClientsBatch serializes a server's client set into one batched
-// leaf body: a JSON array of the clients' disc.Entry objects, sorted by
-// client PK so an unchanged set re-encodes to identical bytes (a CXO
-// wire no-op), then version-framed + gzipped. The array is assembled by
-// concatenating the already-marshaled per-client entry bodies, so each
-// client is encoded exactly once (on the caller's goroutine, in
-// PublishSetEntry) rather than re-marshaled here.
-func encodeClientsBatch(clients map[cipher.PubKey][]byte) []byte {
-	pks := make([]cipher.PubKey, 0, len(clients))
-	for pk := range clients {
-		pks = append(pks, pk)
-	}
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
-	payload := make([]byte, 0, 2+len(pks)*256)
-	payload = append(payload, '[')
-	for i, pk := range pks {
-		if i > 0 {
-			payload = append(payload, ',')
-		}
-		payload = append(payload, clients[pk]...)
-	}
-	payload = append(payload, ']')
-	return cxoutils.FrameGzip(clientsByServerBatchVersion, payload)
 }
 
 func (p *ClientsByServerCXOPublisher) recordError(err error) {

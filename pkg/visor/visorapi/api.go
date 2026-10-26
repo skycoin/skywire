@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/netview"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
 // API is everything a visor answers over RPC. Callers that need one part of
@@ -83,6 +84,7 @@ type Node interface {
 	Ports() (map[string]PortDetail, error)
 	SetRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
+	RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error)
 	DeleteRewardAddress() error
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
@@ -246,6 +248,9 @@ type Chat interface {
 	VoiceSetRingback(tone VoiceRingback) error
 	// VoiceRingback returns this visor's own ringback tone.
 	VoiceRingback() (VoiceRingback, error)
+	// VoiceSetBlocked replaces the callers whose calls never ring here. Skychat
+	// owns the block list and hands it over.
+	VoiceSetBlocked(peers []cipher.PubKey) error
 	// VoiceDialRingback returns the ringback tone the peer of an outbound
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)
@@ -506,6 +511,7 @@ type Transports interface {
 	SetIsPublic(isPublic bool) error
 	GetIsPublic() bool
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
+	VisorCharts(args VisorChartsArgs) (*VisorCharts, error)
 	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
@@ -1337,6 +1343,9 @@ type ForwardedPort struct {
 	// header is only trustworthy if the backend is reachable ONLY through
 	// the visor (bind it to loopback); see docs/guides/skynet-website-auth.md.
 	InjectPK bool `json:"inject_pk,omitempty"`
+	// VisorPages serves the visor's own pages on this port instead of a local
+	// service.
+	VisorPages bool `json:"visor_pages,omitempty"`
 	// Vhosts are sites on port 80 chosen by the request's Host, each a local
 	// service reverse-proxied without Caddy. Set on the port 80 entry.
 	Vhosts []Vhost `json:"vhosts,omitempty"`
@@ -1353,6 +1362,11 @@ type Vhost struct {
 	// PreserveHost passes the request's Host to the backend, as for a port 80
 	// forward; by default the backend sees its own address.
 	PreserveHost bool `json:"preserve_host,omitempty"`
+	// VisorPages serves the visor's own pages under this name, without a backend.
+	VisorPages bool `json:"visor_pages,omitempty"`
+	// Sites are names the backend serves, linked from the landing page. A
+	// catch-all to a local Caddy adds the ones Caddy reports.
+	Sites []string `json:"sites,omitempty"`
 }
 
 // Names are the Host names v answers to, lower case.

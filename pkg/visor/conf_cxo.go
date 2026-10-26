@@ -48,6 +48,7 @@ func (v *Visor) startConfCXOSubscriber(ctx context.Context) {
 	}
 
 	sub, err := treestore.NewSubscriber(v.dmsgC, confPK, treestore.SubConfig{
+		Dial:       v.cxoDial,
 		Logger:     log,
 		InMemoryDB: true,
 		DmsgPort:   skyenv.DmsgConfCXOPort,

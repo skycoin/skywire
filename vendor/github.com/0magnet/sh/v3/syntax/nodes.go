@@ -469,17 +469,32 @@ func (*CStyleLoop) loopNode() {}
 // for clause. If InPos is an invalid position, the "in" token was missing, so
 // the iteration is over the shell's positional parameters.
 type WordIter struct {
+	// TODO(v4): join these, even if it's mildly annoying to non-Zsh users.
+
+	// Only one of these is set at a time.
 	Name  *Lit
+	Names []*Lit // When iterating with many names with [LangZsh].
+
 	InPos Pos // position of "in"
 	Items []*Word
 }
 
-func (w *WordIter) Pos() Pos { return w.Name.Pos() }
+func (w *WordIter) Pos() Pos {
+	if len(w.Names) > 0 {
+		return w.Names[0].Pos()
+	}
+	return w.Name.Pos()
+}
+
 func (w *WordIter) End() Pos {
 	if len(w.Items) > 0 {
 		return wordLastEnd(w.Items)
 	}
-	return posMax(w.Name.End(), posAddCol(w.InPos, 2))
+	last := w.Name
+	if len(w.Names) > 0 {
+		last = w.Names[len(w.Names)-1]
+	}
+	return posMax(last.End(), posAddCol(w.InPos, 2))
 }
 
 // CStyleLoop represents the behavior of a for clause similar to the C
@@ -505,6 +520,9 @@ type BinaryCmd struct {
 func (b *BinaryCmd) Pos() Pos { return b.X.Pos() }
 func (b *BinaryCmd) End() Pos { return b.Y.End() }
 
+// TODO(v4): consider a separate node for anonymous funcs, which run
+// immediately with Args rather than declaring anything.
+
 // FuncDecl represents the declaration of a function.
 type FuncDecl struct {
 	Position Pos
@@ -518,10 +536,19 @@ type FuncDecl struct {
 	Names []*Lit // When declaring many func names with [LangZsh].
 
 	Body *Stmt
+
+	// Args are the arguments to an anonymous func with [LangZsh],
+	// which runs immediately.
+	Args []*Word
 }
 
 func (f *FuncDecl) Pos() Pos { return f.Position }
-func (f *FuncDecl) End() Pos { return f.Body.End() }
+func (f *FuncDecl) End() Pos {
+	if len(f.Args) > 0 {
+		return wordLastEnd(f.Args)
+	}
+	return f.Body.End()
+}
 
 // Word represents a shell word, containing one or more word parts contiguous to
 // each other. The word is delimited by word boundaries, such as spaces,
@@ -663,9 +690,14 @@ type ParamExp struct {
 	// or either of those in a [*DblQuoted]. Only possible with [LangZsh].
 	NestedParam WordPart
 
-	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
+	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology,
+	// and merge it with Subscripts.
 
 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
+
+	// Subscripts holds any further subscripts after [ParamExp.Index],
+	// applied in order, as in ${a[1][2]}. Only possible with [LangZsh].
+	Subscripts []ArithmExpr
 
 	// Only one of these is set at a time.
 	// TODO(v4): consider joining these in a single "expansion" field/type,
@@ -684,7 +716,7 @@ func (p *ParamExp) simple() bool {
 	return p.Param != nil && p.Flags == nil &&
 		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
 		p.Split == OptUnset && p.GlobSubst == OptUnset && p.RcExpand == OptUnset &&
-		p.NestedParam == nil && p.Index == nil &&
+		p.NestedParam == nil && p.Index == nil && len(p.Subscripts) == 0 &&
 		len(p.Modifiers) == 0 && p.Slice == nil &&
 		p.Repl == nil && p.Names == 0 && p.Exp == nil
 }
@@ -766,7 +798,8 @@ func (a *ArithmCmd) End() Pos { return posAddCol(a.Right, 2) }
 
 // ArithmExpr represents all nodes that form arithmetic expressions.
 //
-// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm], and [*Word].
+// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm],
+// [*CallArithm], and [*Word].
 type ArithmExpr interface {
 	Node
 	arithmExprNode()
@@ -776,6 +809,7 @@ func (*BinaryArithm) arithmExprNode() {}
 func (*UnaryArithm) arithmExprNode()  {}
 func (*ParenArithm) arithmExprNode()  {}
 func (*FlagsArithm) arithmExprNode()  {}
+func (*CallArithm) arithmExprNode()   {}
 func (*Word) arithmExprNode()         {}
 
 // BinaryArithm represents a binary arithmetic expression.
@@ -847,6 +881,21 @@ func (z *FlagsArithm) End() Pos {
 	}
 	return posAddCol(z.Flags.End(), 1) // closing paren
 }
+
+// CallArithm represents a math function call in an arithmetic expression,
+// such as abs(-5) or atan(y, x). Each argument is an expression without
+// a top-level comma.
+//
+// This node will only appear with [LangZsh].
+type CallArithm struct {
+	Name           *Lit
+	Lparen, Rparen Pos
+
+	Args []ArithmExpr
+}
+
+func (c *CallArithm) Pos() Pos { return c.Name.Pos() }
+func (c *CallArithm) End() Pos { return posAddCol(c.Rparen, 1) }
 
 // CaseClause represents a case (switch) clause.
 type CaseClause struct {
@@ -941,20 +990,32 @@ type ParenTest struct {
 func (p *ParenTest) Pos() Pos { return p.Lparen }
 func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
 
+// TODO(v4): keep prefix assignments in one place shared with [CallExpr]
+// and [LetClause], as "a=b let x" is still a CallExpr.
+
 // DeclClause represents a Bash declare clause.
 //
 // Args can contain a mix of regular and naked assignments. The naked
 // assignments can represent either options or variable names.
 //
-// This node will only appear with [LangBash].
+// This node will only appear with [LangBash], [LangMirBSDKorn], and [LangZsh].
 type DeclClause struct {
 	// Variant is one of "declare", "local", "export", "readonly",
 	// "typeset", or "nameref".
 	Variant *Lit
 	Args    []*Assign
+
+	// Assigns are prefix assignments like in [CallExpr.Assigns],
+	// such as the "a=x" in "a=x declare b=y".
+	Assigns []*Assign
 }
 
-func (d *DeclClause) Pos() Pos { return d.Variant.Pos() }
+func (d *DeclClause) Pos() Pos {
+	if len(d.Assigns) > 0 {
+		return d.Assigns[0].Pos()
+	}
+	return d.Variant.Pos()
+}
 func (d *DeclClause) End() Pos {
 	if len(d.Args) > 0 {
 		return d.Args[len(d.Args)-1].End()
@@ -1077,17 +1138,14 @@ func (l *LetClause) End() Pos { return l.Exprs[len(l.Exprs)-1].End() }
 //
 // This node will only appear as a result of [SplitBraces].
 type BraceExp struct {
+	Lbrace, Rbrace Pos
+
 	Sequence bool // {x..y[..incr]} instead of {x,y[,...]}
 	Elems    []*Word
 }
 
-func (b *BraceExp) Pos() Pos {
-	return posAddCol(b.Elems[0].Pos(), -1)
-}
-
-func (b *BraceExp) End() Pos {
-	return posAddCol(wordLastEnd(b.Elems), 1)
-}
+func (b *BraceExp) Pos() Pos { return b.Lbrace }
+func (b *BraceExp) End() Pos { return posAddCol(b.Rbrace, 1) }
 
 // TestDecl represents the declaration of a Bats test function.
 type TestDecl struct {

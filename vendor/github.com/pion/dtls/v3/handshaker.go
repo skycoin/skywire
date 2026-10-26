@@ -312,14 +312,24 @@ func (s *handshakeFSM) wait(ctx context.Context, conn flightConn) (handshakeStat
 			}
 			if nextFlight == 0 {
 				if s.shouldRetransmitClientHello(state) {
-					s.backoffPeerRetransmit()
+					if s.currentFlight != flight2 {
+						s.backoffPeerRetransmit()
+					}
 
 					return handshakeSending, nil
 				}
 
 				break
 			}
-			if !state.isRetransmit {
+			if s.currentFlight == flight3 && nextFlight == flight3 {
+				// A new cookie doesn't bypass or reset the retry backoff.
+				select {
+				case <-retransmitTimer.C:
+					s.backoffRetransmit()
+				case <-ctx.Done():
+					return handshakeErrored, ctx.Err()
+				}
+			} else if !state.isRetransmit {
 				s.retransmitInterval = s.cfg.initialRetransmitInterval
 			}
 			s.cfg.log.Tracef(
@@ -378,6 +388,10 @@ func (s *handshakeFSM) backoffRetransmit() {
 // Allow the first repeated ClientHello to recover a lost response immediately.
 // After any retransmission, further repeats must wait for the backed-off interval.
 func (s *handshakeFSM) shouldRetransmitClientHello(state recvHandshakeState) bool {
+	if state.isClientHelloRetransmit && s.currentFlight == flight2 {
+		return true
+	}
+
 	return state.isClientHelloRetransmit &&
 		(s.currentFlight == flight4 || s.currentFlight == flight4b) &&
 		!time.Now().Before(s.peerRetransmitAfter)

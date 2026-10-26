@@ -47,6 +47,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -262,6 +263,10 @@ type Config struct {
 	// (hence separate ports) so the same visor PK doesn't deliver two
 	// different Roots to one node and flap its head.
 	DmsgPort uint16
+	// TelemetryApplyEvery is how often one edge's report of one transport is
+	// applied to the store (see telemetry_pace.go). Zero means 15 min. It can
+	// be changed later with SetTelemetryApplyEvery.
+	TelemetryApplyEvery time.Duration
 }
 
 // Aggregator is the CXO subscriber side of the visor-stats data path.
@@ -309,7 +314,11 @@ type Aggregator struct {
 	// paces uptime heartbeats (see telemetry_dedup.go).
 	tel telemetryState
 	// pace holds telemetry back to one apply per window (telemetry_pace.go).
-	pace    telemetryPacer
+	pace telemetryPacer
+	// ckPace holds checkpoint rows between open phases (checkpoints.go).
+	ckPace checkpointPacer
+	// ckClock replaces time.Now for the checkpoint phases in tests.
+	ckClock func() time.Time
 	runOnce sync.Once
 
 	// roots holds, per reporter, the tree hash of the last Root applied in
@@ -317,6 +326,12 @@ type Aggregator struct {
 	// rootIsRepeat). Guarded by rootsMu; zero value usable.
 	rootsMu sync.Mutex
 	roots   map[cipher.PubKey]appliedRoot
+
+	// hub hands the registration leaves on visors' system feeds to the
+	// services registered in this process (cxoaggregate.RegisterFeedConsumer).
+	hub cxoaggregate.Hub
+	// stopRunning ends this aggregator's count in cxoaggregate.AggregatorRunning.
+	stopRunning atomic.Pointer[func()]
 }
 
 // maxConcurrentIngest caps concurrent leaf dispatches and list reconciles.
@@ -425,6 +440,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 		lastList: make(map[skycipher.PubKey]cachedList),
 		ingest:   make(chan struct{}, maxConcurrentIngest),
 	}
+	a.pace.setWindow(conf.TelemetryApplyEvery)
 
 	core, err := cxoaggregate.New(dmsgC, sk, dmsgPort, cxoaggregate.Options{
 		ReconcileInterval: conf.ReconcileInterval,
@@ -534,12 +550,22 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 // Run starts the reconcile + cleanup loops. Returns immediately; they
 // run until ctx is canceled or Close is called. Idempotent.
 func (a *Aggregator) Run(ctx context.Context) {
-	a.runOnce.Do(func() { go a.flushPaced(ctx) })
+	a.runOnce.Do(func() {
+		stopped := cxoaggregate.AggregatorRunning()
+		a.stopRunning.Store(&stopped)
+		go a.flushPaced(ctx)
+		go a.runCheckpointFlush(ctx)
+	})
 	a.core.Run(ctx)
 }
 
 // Close stops the loops and tears down the CXO node. Idempotent.
-func (a *Aggregator) Close() error { return a.core.Close() }
+func (a *Aggregator) Close() error {
+	if f := a.stopRunning.Load(); f != nil {
+		(*f)()
+	}
+	return a.core.Close()
+}
 
 // FeedPK returns the aggregator's own PK — the value visors should
 // dial via dmsgT.ConnectPK to put a conn on this aggregator. By
@@ -602,6 +628,8 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
 		return
 	}
+	// Before the repeat check: an unchanged Root still refreshes registrations.
+	a.deliverRegistrations(r)
 	if rep := cipher.PubKey(r.Pub); rep != (cipher.PubKey{}) && a.rootIsRepeat(rep, r, time.Now()) {
 		return
 	}
@@ -809,6 +837,9 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 		a.log.WithError(err).WithField("visor", reporter).
 			Debug("CXO aggregator: targeted root node fetch failed")
 		return nil, "", false
+	}
+	if a.hub.Active() {
+		a.hub.Deliver(reporter, cxoaggregate.RegistrationLeaves(pack, &rootNode))
 	}
 	leaf, path, found := findDiscoveryLeaf(pack, &rootNode)
 	if !found || leaf == nil {
@@ -1117,8 +1148,8 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		}
 		k := telKey{id: e.ID, reporter: reporter}
 		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
-			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type)}
-		if s, ok := a.pace.offer(k, snap, now); ok {
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type), at: now}
+		for _, s := range a.pace.offer(k, snap, now) {
 			due = append(due, heldSnap{k: k, s: s})
 		}
 	}
@@ -1140,7 +1171,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	k := telKey{id: id, reporter: reporter}
 	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
 		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
-	if s, ok := a.pace.offer(k, s, time.Now()); ok {
+	for _, s := range a.pace.offer(k, s, time.Now()) {
 		a.applySnap(ctx, k, s)
 	}
 }
@@ -1296,7 +1327,31 @@ func parseTransportLeafByName(path, suffix string) (uuid.UUID, bool) {
 func (a *Aggregator) Ingest(r *registry.Root) { a.core.Ingest(r) }
 
 // Stats reports the aggregator's current state.
-func (a *Aggregator) Stats() cxoaggregate.Stats { return a.core.Stats() }
+func (a *Aggregator) Stats() cxoaggregate.Stats {
+	s := a.core.Stats()
+	if a.hub.Active() || a.hub.Delivered() > 0 {
+		s.Consumers, s.Delivered = cxoaggregate.FeedConsumerServices(), a.hub.Delivered()
+	}
+	return s
+}
+
+// deliverRegistrations hands the registration leaves of a Root in the store
+// to the services registered in this process.
+func (a *Aggregator) deliverRegistrations(r *registry.Root) {
+	reporter := cipher.PubKey(r.Pub)
+	if !a.hub.Active() || reporter.Null() {
+		return
+	}
+	pack, err := a.cxoNode.Container().Pack(r, treestore.Registry)
+	if err != nil {
+		return
+	}
+	var rootNode treestore.TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		return
+	}
+	a.hub.Deliver(reporter, cxoaggregate.RegistrationLeaves(pack, &rootNode))
+}
 
 // noChangeFullEvery is how often a feed whose Roots stop changing is still
 // applied in full: inside both the 5-minute registration TTL its transport

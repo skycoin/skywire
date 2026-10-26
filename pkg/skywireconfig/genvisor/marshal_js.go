@@ -30,6 +30,7 @@
 package genvisor
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1008,9 +1009,17 @@ func marshalTransport(w *strings.Builder, t *visorconfig.Transport, indent int) 
 	}
 	o.field("public_autoconnect")
 	writeBool(w, t.PublicAutoconnect)
+	if a := t.Autoconnect; a.SiteLinks != nil || a.SiteTypes != nil || a.MaxPerType != nil || a.MaxTotal != 0 {
+		o.field("autoconnect")
+		marshalAutoconnect(w, &a, o.indent+1)
+	}
 	if t.HypervisorAutoconnect != nil {
 		o.field("hypervisor_autoconnect")
 		writeBool(w, *t.HypervisorAutoconnect)
+	}
+	if t.TCPNotSentLowat != nil {
+		o.field("tcp_notsent_lowat")
+		writeInt(w, int64(*t.TCPNotSentLowat))
 	}
 	o.field("transport_setup")
 	writePubKeySlice(w, t.TransportSetupPKs, o.indent+1)
@@ -1448,6 +1457,37 @@ func marshalHostBridge(w *strings.Builder, s *visorconfig.HostBridgeConfig, inde
 		w.WriteByte('\n')
 		writeIndent(w, o.indent)
 		w.WriteByte(']')
+	}
+	o.close()
+}
+
+func marshalAutoconnect(w *strings.Builder, a *visorconfig.Autoconnect, indent int) {
+	o := newObj(w, indent)
+	if a.SiteLinks != nil {
+		o.field("site_links")
+		writeInt(w, int64(*a.SiteLinks))
+	}
+	if len(a.SiteTypes) > 0 {
+		o.field("site_types")
+		writeStringSlice(w, a.SiteTypes, o.indent+1)
+	}
+	if len(a.MaxPerType) > 0 {
+		o.field("max_per_type")
+		m := newObj(w, o.indent+1)
+		keys := make([]string, 0, len(a.MaxPerType))
+		for k := range a.MaxPerType {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m.field(k)
+			writeInt(w, int64(a.MaxPerType[k]))
+		}
+		m.close()
+	}
+	if a.MaxTotal != 0 {
+		o.field("max_total")
+		writeInt(w, int64(a.MaxTotal))
 	}
 	o.close()
 }

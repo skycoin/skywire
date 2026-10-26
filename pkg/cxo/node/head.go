@@ -127,10 +127,16 @@ func (n *nodeHead) node() *Node {
 }
 
 type failedRequest struct {
-	c   *Conn         // connection
-	seq uint64        // seq of the filling Root
-	key cipher.SHA256 // requested object
-	err error         // failed if the err is not nil
+	c    *Conn         // connection
+	fill uint64        // filler that made the request
+	seq  uint64        // seq of the filling Root
+	key  cipher.SHA256 // requested object
+	err  error         // failed if the err is not nil
+}
+
+type doneRequest struct {
+	c    *Conn  // connection
+	fill uint64 // filler that made the request
 }
 
 // handle local "fields" of the nodeHead
@@ -156,13 +162,17 @@ type fillHead struct {
 
 	cs knownRoots // conn -> known root objects (seq)
 
-	successq chan *Conn         // succeeded requests
+	successq chan doneRequest   // succeeded requests
 	failureq chan failedRequest // failed requests
 
 	rqo *list.List // request objects (cipher.SHA256)
 	fc  *list.List // connections to fill from (*Conn)
 
 	requesting int // number of running requests
+
+	// fill identifies the current filler. A reply to an earlier one must not
+	// touch requesting or fc, which closeFiller already reset.
+	fill uint64
 }
 
 func (n *nodeHead) handle() {
@@ -184,12 +194,13 @@ func (n *nodeHead) handle() {
 
 			ff: make(chan error), // filling error or nil (success)
 
-			successq: make(chan *Conn),         // release connection
+			successq: make(chan doneRequest),   // release connection
 			failureq: make(chan failedRequest), // failed requests
 		}
 
 		key cipher.SHA256
 		c   *Conn
+		dr  doneRequest
 		cr  connRoot
 		fc  failedRequest
 		err error // fillign failure or nil
@@ -201,9 +212,9 @@ func (n *nodeHead) handle() {
 
 			f.handleRequest(key)
 
-		case c = <-f.successq:
+		case dr = <-f.successq:
 
-			f.handleSuccess(c)
+			f.handleSuccess(dr)
 
 		case fc = <-f.failureq:
 
@@ -272,18 +283,18 @@ func (f *fillHead) handleRequest(key cipher.SHA256) {
 	f.triggerRequest()
 }
 
-func (f *fillHead) handleSuccess(c *Conn) {
-	f.node().Debugln(FillPin, "[fill] handleSuccess", c.String())
+func (f *fillHead) handleSuccess(dr doneRequest) {
+	f.node().Debugln(FillPin, "[fill] handleSuccess", dr.c.String())
 
-	f.requesting--
-	if f.fc == nil {
+	if dr.fill != f.fill || f.fc == nil {
 		// Same closeFiller race as handleRequest — production saw
 		// "panic: runtime error: invalid memory address" at the
 		// PushBack below until this guard landed.
 		return
 	}
-	f.rearmStall()   // progress: an object arrived, re-arm the stall timer
-	f.fc.PushBack(c) // push
+	f.requesting--
+	f.rearmStall()      // progress: an object arrived, re-arm the stall timer
+	f.fc.PushBack(dr.c) // push
 	f.triggerRequest()
 }
 
@@ -307,8 +318,6 @@ func (f *fillHead) rearmStall() {
 func (f *fillHead) handleRequestFailure(fr failedRequest) {
 	f.node().Debugln(FillPin, "[fill] handleRequestFailure", fr.c.String(),
 		fr.key.Hex()[:7])
-
-	f.requesting--
 
 	switch fr.err {
 	case ErrInvalidResponse:
@@ -334,9 +343,10 @@ func (f *fillHead) handleRequestFailure(fr failedRequest) {
 
 	}
 
-	if f.rqo == nil {
+	if fr.fill != f.fill || f.rqo == nil {
 		return // closeFiller race; see handleRequest
 	}
+	f.requesting--
 	f.rqo.PushFront(fr.key) // shift
 	f.triggerRequest()
 
@@ -475,6 +485,7 @@ func (f *fillHead) createFiller(cr connRoot) {
 	f.hardTc = f.hardT.C
 
 	f.r = cr
+	f.fill++
 	f.rq = make(chan cipher.SHA256, f.maxParallel())
 	f.f = f.node().c.Fill(cr.r, f.rq, f.maxParallel())
 
@@ -593,7 +604,7 @@ func (f *fillHead) tryRequest() (fatal bool) {
 	f.requesting++
 
 	f.await.Add(1) // nodeHead.await
-	go f.request(c, f.r.r.Seq, key)
+	go f.request(c, f.fill, f.r.r.Seq, key)
 
 	return fatal
 }
@@ -604,7 +615,7 @@ func (f *fillHead) node() *Node {
 }
 
 // (async) request object
-func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
+func (f *fillHead) request(c *Conn, fill, seq uint64, key cipher.SHA256) {
 	defer f.await.Done()
 
 	f.node().Debugf(FillPin, "[fill] request from [%s] %d %s", c.String(), seq,
@@ -621,7 +632,7 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 	// t.Skip'd the #3047 leak test).
 	if err != nil {
 		select {
-		case f.failureq <- failedRequest{c, seq, key, err}:
+		case f.failureq <- failedRequest{c, fill, seq, key, err}:
 		case <-f.closeq:
 		}
 		return
@@ -633,7 +644,7 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 
 		if rk != key {
 			select {
-			case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+			case f.failureq <- failedRequest{c, fill, seq, key, ErrInvalidResponse}:
 			case <-f.closeq:
 			}
 			return
@@ -646,20 +657,20 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 			// crashing the whole visor.
 			f.node().Errorf(err, "SetWanted for %s failed", key.Hex()[:7])
 			select {
-			case f.failureq <- failedRequest{c, seq, key, err}:
+			case f.failureq <- failedRequest{c, fill, seq, key, err}:
 			case <-f.closeq:
 			}
 			return
 		}
 
 		select {
-		case f.successq <- c:
+		case f.successq <- doneRequest{c, fill}:
 		case <-f.closeq:
 		}
 
 	default:
 		select {
-		case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+		case f.failureq <- failedRequest{c, fill, seq, key, ErrInvalidResponse}:
 		case <-f.closeq:
 		}
 	}
@@ -741,21 +752,14 @@ func (k knownRoots) removeKnown(c *Conn, seq uint64) {
 // Root objects of all peers
 func (k knownRoots) moveForward(seq uint64) {
 
-	var (
-		ks uint64
-		i  int
-	)
-
 	for c, known := range k {
 
-		for i, ks = range known {
-
-			if ks >= seq {
-				k[c] = append(known[:i], known[i+1:]...)
-				break
-			}
-
+		var i int
+		for i < len(known) && known[i] < seq {
+			i++
 		}
+
+		k[c] = known[i:] // addKnown keeps known sorted
 
 	}
 

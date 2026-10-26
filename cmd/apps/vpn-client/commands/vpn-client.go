@@ -48,6 +48,7 @@ var (
 	meshCACert   string
 	meshCAKey    string
 	meshAliases  []string
+	hostTUN      bool
 )
 
 // defaultMeshCADir is where the client mesh gateway persists its self-generated
@@ -71,6 +72,7 @@ func init() {
 	RootCmd.Flags().StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
 	RootCmd.Flags().StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path (empty = <local>/mesh-gateway-ca/ca.key)")
 	RootCmd.Flags().StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway friendly name → PK, as name=<pk> (repeatable); reach http://<name>.dmsg")
+	RootCmd.Flags().BoolVar(&hostTUN, "host", false, "browser visor: put the tunnel on the computer through the host bridge, which needs the rights a native vpn-client has")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -125,6 +127,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		fs.StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path")
 		fs.StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path")
 		fs.StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway alias name=<pk>")
+		fs.BoolVar(&hostTUN, "host", false, "tunnel on the bridge's host")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -252,6 +255,8 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		MinHops:      minHops,
 		DmsgFallback: dmsgFallback,
 	}
+	// A native client's tunnel is on its computer already.
+	vpnClientCfg.Host = hostTUN && runtime.GOOS == "js"
 
 	if meshGateway {
 		vpnClientCfg.MeshGateway = true

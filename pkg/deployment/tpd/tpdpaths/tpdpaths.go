@@ -7,11 +7,6 @@
 // VictoriaMetrics, which the mobile build cannot compile for iOS.
 package tpdpaths
 
-// Routing feed: one shard per visor, at RoutingPathPrefix + <pk hex>, the
-// transport list route calculation reads (see RoutingCXOPublisher in
-// pkg/deployment/tpd/api).
-const RoutingPathPrefix = "routing/"
-
 // Per-key feed: every visor's transports counted by type (see
 // PerKeyCXOPublisher in pkg/deployment/tpd/api).
 const PerKeyPath = "perkey/stats"

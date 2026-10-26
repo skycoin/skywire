@@ -21,6 +21,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
@@ -164,11 +165,14 @@ func writeDNSFrame(w io.Writer, b []byte) error {
 
 // wispMeshDial is the visor's dial for the mesh gateway: a .dmsg name as the
 // resolving proxy reaches it, a .skynet name as the desk browser does.
-func (v *Visor) wispMeshDial(ctx context.Context, scheme string, pk cipher.PubKey, port uint16) (net.Conn, error) {
+func (v *Visor) wispMeshDial(ctx context.Context, scheme string, pk cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
 	switch scheme {
 	case "dmsg":
 		if v.dmsgC == nil {
 			return nil, errors.New("dmsg: not up")
+		}
+		if len(route) > 0 {
+			return nil, errors.New("dmsg: this path takes no route labels")
 		}
 		return v.dialDmsgHTTP(ctx, "tcp", net.JoinHostPort(pk.Hex(), strconv.Itoa(int(port))))
 	case "skynet":
@@ -176,7 +180,7 @@ func (v *Visor) wispMeshDial(ctx context.Context, scheme string, pk cipher.PubKe
 			return nil, errors.New("skynet: not up")
 		}
 		d := &routerSkynetDialer{router: v.router, localPK: v.conf.PK, log: v.log, tpM: v.tpM, skynetMuxPtr: &v.skynetFwdMux}
-		return d.DialSkynet(ctx, pk, port, nil)
+		return d.DialSkynet(ctx, pk, port, route)
 	}
 	return nil, fmt.Errorf("unknown mesh scheme %q", scheme)
 }

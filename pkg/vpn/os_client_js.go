@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 )
 
 var errNoTUNOnJS = errors.New("vpn: no TUN device on js/wasm — the VPN server cannot run in a browser")
@@ -36,7 +37,11 @@ func releaseClientSysPrivileges(_ int) error {
 
 // SetupTUN configures the netstack "device" with the server-assigned tunnel
 // address — the js analogue of `ip addr add` + the default route.
-func (c *Client) SetupTUN(_, ipCIDR, _ string, _ int) error {
+func (c *Client) SetupTUN(ifcName, ipCIDR, _ string, mtu int) error {
+	if c.cfg.Host {
+		_, err := hostNetCall("setup", ifcName, ipCIDR, strconv.Itoa(mtu))
+		return err
+	}
 	t, ok := c.tun.(*netstackTUN)
 	if !ok {
 		return fmt.Errorf("vpn: SetupTUN on js expects the netstack device, have %T", c.tun)
@@ -44,14 +49,25 @@ func (c *Client) SetupTUN(_, ipCIDR, _ string, _ int) error {
 	return t.configure(ipCIDR)
 }
 
-// ChangeRoute is a successful no-op: the netstack's only route is the tunnel.
-func (c *Client) ChangeRoute(_, _ string) error { return nil }
+// ChangeRoute is a successful no-op for the netstack, whose only route is
+// the tunnel. A host tunnel changes the host's route.
+func (c *Client) ChangeRoute(ip, gateway string) error { return c.routeOnHost("change", ip, gateway) }
 
-// AddRoute is a successful no-op: the netstack's only route is the tunnel.
-func (c *Client) AddRoute(_, _ string) error { return nil }
+// AddRoute is a successful no-op for the netstack. A host tunnel adds the
+// route on the host.
+func (c *Client) AddRoute(ip, gateway string) error { return c.routeOnHost("add", ip, gateway) }
 
-// DeleteRoute is a successful no-op: there is no system routing table to clean.
-func (c *Client) DeleteRoute(_, _ string) error { return nil }
+// DeleteRoute is a successful no-op for the netstack. A host tunnel deletes
+// the route on the host.
+func (c *Client) DeleteRoute(ip, gateway string) error { return c.routeOnHost("del", ip, gateway) }
+
+func (c *Client) routeOnHost(op, ip, gateway string) error {
+	if !c.cfg.Host {
+		return nil
+	}
+	_, err := hostNetCall("route", op, ip, gateway)
+	return err
+}
 
 // RevertDNS is a no-op: no resolver was ever changed.
 func (c *Client) RevertDNS() {}

@@ -100,7 +100,10 @@ Builds:
     # package.json files are npm metadata that vendored Go modules carry.
     # The desktop's browse cookie jar (public suffix tables) and wallet page
     # (skycoin-lite wasm) are vendored too, and the mobile build has neither.
-    # Nor does it have the transport graph view's compiled wasm (netview).
+    # Nor does it have the transport graph view's compiled wasm (netview),
+    # the host bridge binaries only a browser visor embeds (hostbridge), or
+    # the web terminal's compiled websh (term): pkg/pty leaves it out under
+    # the mobile tag.
     scandelete:
       - pkg/geoip/GeoLite2-City.mmdb.gz
       - docs/examples/routing-policies/wasm/*/*.wasm
@@ -110,10 +113,8 @@ Builds:
       - vendor/golang.org/x/net/publicsuffix/data/children
       - vendor/github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo/skycoin-lite.wasm.gz
       - pkg/tpviz/netview/netview.wasm.gz
-    # A generated file the mobile binary embeds with go:embed, so it has to
-    # stay: the pty web terminal page, gzipped HTML.
-    scanignore:
-      - pkg/pty/term.html.gz
+      - pkg/hostbridge/dist/*.gz
+      - vendor/github.com/0magnet/websh/term/term.wasm.gz
     gradleprops:
       # Strips the in-app updater and REQUEST_INSTALL_PACKAGES: F-Droid
       # delivers the updates. See android/app/build.gradle.kts.

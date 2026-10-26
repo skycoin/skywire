@@ -48,7 +48,8 @@ func initEmbeddedServices(ctx context.Context, v *Visor, log *logging.Logger) er
 	if addr := v.conf.DeploymentStatusAddr; addr != "" {
 		log.WithField("addr", addr).Info("Serving the deployment status page")
 		go func() {
-			if err := charts.Serve(ctx, addr, v.statusBoard()); err != nil {
+			bd := v.statusBoard()
+			if err := charts.Serve(ctx, addr, bd, charts.Extra{Path: "/", Handler: bd.Extras()}); err != nil {
 				log.WithError(err).Error("deployment status listener failed")
 			}
 		}()
@@ -160,7 +161,9 @@ func (v *Visor) runOwnKeyService(ctx context.Context, es *embeddedService) {
 			es.running, es.startErr, es.current, es.cancel = true, nil, svc, cancel
 			es.mu.Unlock()
 			es.log.WithField("pk", es.ownPK).Info("Embedded service started on its own")
+			v.hostService(es)
 			err = svc.Run(runCtx)
+			v.unhostService(es.ownPK)
 		}
 		cancel()
 		es.mu.Lock()

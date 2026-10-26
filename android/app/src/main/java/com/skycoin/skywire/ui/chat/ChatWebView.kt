@@ -23,6 +23,7 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppLanguage
 import com.skycoin.skywire.core.ChatPageLog
 import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.webview.JsDialogChromeClient
@@ -256,6 +257,20 @@ internal object ChatWebView {
      * every open. Changes *after* that go through [applyTheme].
      */
     fun themeQuery(dark: Boolean): String = if (dark) "?theme=dark" else "?theme=light"
+
+    /**
+     * The language the same way, appended with "&" after the theme query. [resolved] is
+     * R.string.chat_page_lang, so "System" gives the page the language the app resolved.
+     */
+    fun langQuery(language: AppLanguage, resolved: String): String = when (language) {
+        AppLanguage.CHINESE_SIMPLIFIED -> "&lang=zh"
+        AppLanguage.SPANISH -> "&lang=es"
+        AppLanguage.FRENCH -> "&lang=fr"
+        AppLanguage.ENGLISH -> ""
+        AppLanguage.SYSTEM -> if (resolved in PAGE_LANGS) "&lang=$resolved" else ""
+    }
+
+    private val PAGE_LANGS = setOf("zh", "es", "fr")
 
     /**
      * Move the open page to the other theme, for when the app's own setting

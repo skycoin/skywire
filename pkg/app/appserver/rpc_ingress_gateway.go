@@ -72,7 +72,7 @@ func (e *RPCIOErr) ToError() error {
 	}
 }
 
-//go:generate go run ../../../internal/rpcgen -type RPCIngressGateway=registerIngressRPC -o rpc_register_tinygo.go -native rpc_register_native.go
+//go:generate go run ../../../internal/rpcgen -type RPCIngressGateway=registerIngressRPC -o rpc_register.go
 
 // RPCIngressGateway is a RPC interface for the app server.
 type RPCIngressGateway struct {

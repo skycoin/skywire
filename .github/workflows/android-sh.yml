@@ -1,0 +1,101 @@
+name: Skywire sh Android app
+
+# The skywire app: skywire sh in a Gio window, which starts the visor when
+# opened (make android-sh-apk). It targets the newest Android platform the SDK
+# manager offers, and is signed with its own release key; every release must
+# be, or Android will not update an installed copy. The release workflow calls
+# this for a tag and uploads the APK to the release; run by hand it builds the
+# branch and keeps the APK as a run artifact.
+
+permissions:
+  contents: write
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: release tag to build and upload to
+        required: true
+        type: string
+  workflow_dispatch:
+
+env:
+  GO_VERSION: 'stable'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install the newest Android platform and build tools
+        run: |
+          set -euo pipefail
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          list=$("$sdk" --list 2>/dev/null)
+          platform=$(grep -oE 'platforms[;/]android-[0-9]+(\.[0-9]+)? ' <<<"$list" | tr -d ' ' | tr / ';' | sort -u -t- -k2 -V | tail -1)
+          tools=$(grep -oE 'build-tools[;/][0-9]+\.[0-9]+\.[0-9]+ ' <<<"$list" | tr -d ' ' | tr / ';' | sort -u -t';' -k2 -V | tail -1)
+          echo "installing $platform $tools"
+          # yes answers the licence prompts and dies of SIGPIPE when the install
+          # is done, which pipefail would count as the step failing.
+          (yes || true) | "$sdk" --install "$platform" "$tools" >/dev/null
+
+      - name: Decode the signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_TERM_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::ANDROID_TERM_KEYSTORE_BASE64 is not set; the APK must be signed with the release key"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/skywire-term.jks"
+
+      - name: Build the APK
+        env:
+          GOGIO_SIGNPASS: ${{ secrets.ANDROID_TERM_KEYSTORE_PASSWORD }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TAG" ]; then
+            apk="skywire-${TAG}-android.apk"
+            set -- ANDROID_SH_VERSION="${TAG#v}" VERSION="$TAG"
+          else
+            apk="skywire-$(git describe --always --match 'v[0-9]*')-android.apk"
+            set --
+          fi
+          make android-sh-apk ANDROID_NDK_ROOT="$ANDROID_NDK_LATEST_HOME" \
+            ANDROID_SH_APK="$apk" ANDROID_SH_KEYSTORE="$RUNNER_TEMP/skywire-term.jks" "$@"
+          sha256sum "$apk" > "$apk.sha256"
+          echo "APK=$apk" >> "$GITHUB_ENV"
+
+      - name: Upload to the release
+        if: inputs.tag != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.tag }}" "$APK" "$APK.sha256" \
+            --repo ${{ github.repository }} \
+            --clobber
+
+      - name: Keep as a run artifact
+        if: inputs.tag == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.APK }}
+          path: ${{ env.APK }}

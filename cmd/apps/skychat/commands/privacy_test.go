@@ -149,3 +149,89 @@ func TestPrivacy_CallsFromBlockedPeersAreDeclined(t *testing.T) {
 		t.Errorf("declined = %v, want [c1]", fake.declined)
 	}
 }
+
+func TestPrivacy_UnacceptEndsConsent(t *testing.T) {
+	withPrivacyStore(t)
+	withContactStore(t)
+	if err := privacyStore.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
+	peer, _ := cipher.GenerateKeyPair()
+	post := func(body string) {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		privacyAcceptHandler(rr, httptest.NewRequest(http.MethodPost, "/privacy/accept", strings.NewReader(body)))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", body, rr.Code, rr.Body.String())
+		}
+	}
+
+	post(`{"pk":"` + peer.Hex() + `"}`)
+	if got := inboundVerdict(peer.Hex()); got != privacy.Allow {
+		t.Fatalf("accepted: %v, want Allow", got)
+	}
+
+	// Saving an empty name is not deleting the contact, and keeps the consent.
+	rr := httptest.NewRecorder()
+	contactsHandler(rr, httptest.NewRequest(http.MethodPost, "/contacts",
+		strings.NewReader(`{"pk":"`+peer.Hex()+`","name":""}`)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("empty name: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := inboundVerdict(peer.Hex()); got != privacy.Allow {
+		t.Fatalf("after an empty name: %v, want Allow", got)
+	}
+
+	// Deleting the chat or the contact ends it: the next message prompts.
+	post(`{"pk":"` + peer.Hex() + `","accepted":false}`)
+	if got := inboundVerdict(peer.Hex()); got != privacy.Request {
+		t.Fatalf("after unaccept: %v, want Request", got)
+	}
+
+	// A block is not softened by it.
+	if err := privacyStore.SetBlocked(peer.Hex(), true); err != nil {
+		t.Fatal(err)
+	}
+	post(`{"pk":"` + peer.Hex() + `","accepted":false}`)
+	if got := inboundVerdict(peer.Hex()); got != privacy.Reject {
+		t.Fatalf("blocked stays blocked: %v, want Reject", got)
+	}
+}
+
+type blockAPI struct {
+	visorAPIShim
+	pushes [][]cipher.PubKey
+}
+
+func (a *blockAPI) VoiceSetBlocked(peers []cipher.PubKey) error {
+	a.pushes = append(a.pushes, peers)
+	return nil
+}
+
+// The visor learns the block list on a change, and again each minute in case
+// it restarted, so a blocked caller never rings here.
+func TestPrivacy_BlockListReachesTheVisor(t *testing.T) {
+	withPrivacyStore(t)
+	prev := blockedPush
+	t.Cleanup(func() { blockedPush = prev })
+	blockedPush.list, blockedPush.at = nil, time.Time{}
+	fake := &blockAPI{}
+	withPairRPC(t, fake)
+
+	now := time.Now()
+	pushBlockedCallers(now)
+	blocked, _ := cipher.GenerateKeyPair()
+	if err := privacyStore.SetBlocked(blocked.Hex(), true); err != nil {
+		t.Fatal(err)
+	}
+	pushBlockedCallers(now.Add(time.Second))
+	pushBlockedCallers(now.Add(2 * time.Second))
+	pushBlockedCallers(now.Add(time.Second + blockedPushEvery))
+
+	if len(fake.pushes) != 3 {
+		t.Fatalf("pushes = %d, want 3 (first, the change, the minute refresh)", len(fake.pushes))
+	}
+	if got := fake.pushes[1]; len(got) != 1 || got[0] != blocked {
+		t.Fatalf("pushed %v, want [%s]", got, blocked.Hex())
+	}
+}

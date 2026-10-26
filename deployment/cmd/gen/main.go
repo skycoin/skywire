@@ -1,5 +1,5 @@
 // Package main reads ../../services-config.json and emits Go-literal
-// declarations for deployment.Prod and deployment.ProdConf into ../../data_static_js.go.
+// declarations for deployment.Prod and deployment.ProdConf into ../../data_static.go.
 //
 // Why a generator: the deployment package's runtime init() invokes
 // encoding/json on the embedded services-config.json to populate
@@ -13,8 +13,8 @@
 //   - config_native.go (!js)  json.Unmarshal-based init for
 //     non-WASM builds, with SKYDEPLOY
 //     override support.
-//   - config_js.go (js)       init that copies from data_static_js.
-//   - data_static_js.go (js)  static Go literals, generated here.
+//   - config_static.go (tinygo, js) init that copies from data_static.go.
+//   - data_static.go (tinygo, js)   static Go literals, generated here.
 //
 // Lives under deployment/cmd/gen (not deployment/internal/gen) per
 // project convention against `internal/` packages — those break
@@ -95,7 +95,7 @@ func main() {
 		log.Fatalf("services-config.json not found relative to cwd %s", wd)
 	}
 	jsonPath := filepath.Join(base, "services-config.json")
-	outPath := filepath.Join(base, "data_static_js.go")
+	outPath := filepath.Join(base, "data_static.go")
 
 	raw, err := os.ReadFile(jsonPath) //nolint:gosec // generator reads a known repo-relative input
 	if err != nil {
@@ -116,14 +116,14 @@ func main() {
 
 //go:build tinygo || js
 
-// Package deployment pkg/deployment/data_static_js.go
+// Package deployment pkg/deployment/data_static.go
 //
 // Static-data variant of the prod deployment bundle. The
 // non-WASM build path (config_native.go) populates deployment.Prod
 // by unmarshalling the embedded services-config.json at
 // init time; that drags encoding/json and the reflect runtime
 // helpers TinyGo can't link. Under js/wasm we use these literals
-// instead — config_js.go's init copies them into the public vars.
+// instead — config_static.go's init copies them into the public vars.
 //
 // Regenerate after editing services-config.json:
 //   go generate ./deployment/

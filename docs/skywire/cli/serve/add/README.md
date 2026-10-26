@@ -12,6 +12,7 @@ Examples:
   serve add 3000 --to 9000 --label "blog"
   serve add 5432 --to 192.168.1.20:5432           # forward to a LAN service
   serve add 8443 --to nas.local:443 --landing=false
+  serve add 8000 --visor-pages                    # this visor's own page at <pk>.skynet:8000
 
 ## Usage
 
@@ -30,6 +31,7 @@ skywire cli serve add <port>
       --preserve-host      for port-80 HTTP reverse-proxy: keep the original Host header instead of rewriting to --to target. Use when the backend (Caddy / nginx / traefik) dispatches its virtual hosts by Host (e.g. paired with the resolver's subdomain rewrite)
       --skynet             expose over skynet (sky-forwarding server) (default true)
       --to string          local target — host:port (e.g. 127.0.0.1:9883) or just a port (9883 → localhost:9883)
+      --visor-pages        serve the visor's own pages, its landing page at /, on this port instead of --to
       --whitelist string   comma-separated PKs allowed to access this port (empty = allow all)
 ```
 

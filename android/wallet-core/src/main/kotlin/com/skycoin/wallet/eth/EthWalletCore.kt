@@ -2,7 +2,12 @@ package com.skycoin.wallet.eth
 
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.Bip39
+import com.skycoin.wallet.FeeLevel
 import com.skycoin.wallet.FeePresets
+import com.skycoin.wallet.KeySource
+import com.skycoin.wallet.NodeInfo
+import com.skycoin.wallet.NodeProblem
+import com.skycoin.wallet.Recipient
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.TxRecord
@@ -10,6 +15,7 @@ import com.skycoin.wallet.WalletBalance
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.WalletException
 import okhttp3.OkHttpClient
+import java.math.BigDecimal
 import java.math.BigInteger
 
 /**
@@ -62,8 +68,8 @@ class EthWalletCore(
 
     override fun validateSeed(mnemonic: String): Boolean = Bip39.validate(mnemonic)
 
-    override fun deriveAddresses(seed: String, receiveCount: Int, changeCount: Int): AddressBook {
-        val account = EthCrypto.accountKey(seed)
+    override fun deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int): AddressBook {
+        val account = EthCrypto.accountKey(seed.mnemonic, seed.passphrase)
         return AddressBook(
             receive = (0 until receiveCount).map { EthCrypto.address(EthCrypto.key(account, it).pubKey()) },
             // An account chain has no change side: sends spend from one
@@ -74,8 +80,8 @@ class EthWalletCore(
 
     override fun validateAddress(address: String): Boolean = EthCrypto.isValidAddress(address)
 
-    override suspend fun scanUsed(seed: String): Pair<Int, Int> {
-        val account = EthCrypto.accountKey(seed)
+    override suspend fun scanUsed(seed: KeySource): Pair<Int, Int> {
+        val account = EthCrypto.accountKey(seed.mnemonic, seed.passphrase)
         var lastUsed = -1
         var i = 0
         var gap = 0
@@ -96,10 +102,12 @@ class EthWalletCore(
     override suspend fun balance(book: AddressBook): WalletBalance {
         var total = BigInteger.ZERO
         var funded = 0
+        val per = HashMap<String, ULong>()
         for (addr in book.receive) {
             val value = if (token == null) api.balanceWei(addr) else tokenBalanceRaw(addr)
             if (value.signum() > 0) funded++
             total += value
+            per[addr] = toBase(value)
         }
         val base = toBase(total)
         return WalletBalance(
@@ -109,6 +117,7 @@ class EthWalletCore(
             predicted = base,
             hours = null,
             spendableOutputs = funded,
+            perAddress = per,
         )
     }
 
@@ -147,6 +156,8 @@ class EthWalletCore(
                     // Always the ETH gas, in gwei — a token has no fee of its
                     // own, and the UI labels this line ETH on both cores.
                     fee = feeWei.takeIf { it.signum() > 0 }?.let(::weiToGwei),
+                    // The wallet's one account, whichever side of the transfer it is.
+                    own = listOf(addr),
                 )
             }
         }
@@ -154,6 +165,16 @@ class EthWalletCore(
     }
 
     /** EIP-1559 prices itself; there is no knob worth a card of presets. */
+    override suspend fun nodeInfo(): NodeInfo {
+        val id = api.chainId()
+        return NodeInfo(
+            coinName = "Ethereum",
+            ticker = "ETH",
+            height = api.blockNumber().toLong(),
+            problem = if (id != BigInteger.ONE) NodeProblem.WRONG_CHAIN else null,
+        )
+    }
+
     override suspend fun feePresets(): FeePresets? = null
 
     /**
@@ -168,13 +189,23 @@ class EthWalletCore(
     }
 
     override suspend fun buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: ULong,
         feeRate: Int?,
         sendMax: Boolean,
+        // One account per wallet: there is no second address to choose.
+        fromAddress: String?,
+        @Suppress("UNUSED_PARAMETER") inputs: Set<String>?,
+        @Suppress("UNUSED_PARAMETER") hoursTo: ULong?,
+        more: List<Recipient>,
+        changeAddress: String?,
+        @Suppress("UNUSED_PARAMETER") shareFactor: BigDecimal?,
+        feeLevel: FeeLevel?,
     ): TxPlan {
+        if (more.isNotEmpty()) throw WalletException.InvalidAmount("this chain sends to one destination at a time")
+        if (changeAddress != null) throw WalletException.InvalidAddress()
         val dest = EthCrypto.parseAddress(toAddress.trim()) ?: throw WalletException.InvalidAddress()
         if (!sendMax && amount == 0uL) throw WalletException.InvalidAmount("enter an amount to send")
 
@@ -188,7 +219,14 @@ class EthWalletCore(
             ?: throw WalletException.InsufficientBalance()
 
         val id = chainId ?: api.chainId().also { chainId = it }
-        val priority = api.maxPriorityFeePerGas()
+        // The tips skycoin's eth.FeePresets offers: the least, the node's
+        // suggestion (never below the least), and twice the suggestion.
+        val suggested = api.maxPriorityFeePerGas().max(MIN_TIP_WEI)
+        val priority = when (feeLevel) {
+            FeeLevel.SLOW -> MIN_TIP_WEI
+            FeeLevel.FAST -> suggested * BigInteger.valueOf(2)
+            else -> suggested
+        }
         // Twice the current base fee rides out the worst-case climb while
         // the send waits; anything unspent is never charged.
         val maxFee = api.baseFeePerGas() * BigInteger.valueOf(2) + priority
@@ -248,9 +286,9 @@ class EthWalletCore(
         )
     }
 
-    override fun signTx(seed: String, plan: TxPlan): SignedTx {
+    override fun signTx(seed: KeySource, plan: TxPlan): SignedTx {
         val payload = plan.payload as Payload
-        val key = EthCrypto.key(EthCrypto.accountKey(seed), payload.fromIndex)
+        val key = EthCrypto.key(EthCrypto.accountKey(seed.mnemonic, seed.passphrase), payload.fromIndex)
         val signed = EthTxn(
             chainId = payload.chainId,
             nonce = payload.nonce,
@@ -314,6 +352,9 @@ class EthWalletCore(
 
         /** A plain EOA transfer, exactly. */
         val GAS_TRANSFER: BigInteger = BigInteger.valueOf(21_000)
+
+        /** 0.1 gwei: some nodes suggest a zero tip, which block builders skip. */
+        val MIN_TIP_WEI: BigInteger = BigInteger.valueOf(100_000_000)
 
         /** Fallback when the node will not estimate a token transfer. */
         val GAS_TOKEN_TRANSFER: BigInteger = BigInteger.valueOf(100_000)

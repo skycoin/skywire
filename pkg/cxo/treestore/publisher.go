@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -38,6 +39,8 @@ import (
 // Put/Delete are safe; the publisher serializes its publish loop on
 // a single goroutine so encoding always sees a consistent snapshot.
 type Publisher struct {
+	// redial is PubConfig.Redial.
+	redial func(ctx context.Context, peer cipher.PubKey, addr net.Addr) bool
 	// lastRoot is the Root most recently published; publishHook, when set,
 	// receives every Root published after it (see SetPublishHook).
 	lastRoot    atomic.Pointer[registry.Root]
@@ -102,6 +105,9 @@ type Publisher struct {
 	// dropLeaves evicts a node's leaf bytes once it is published (see
 	// Config.DropPublishedLeaves).
 	dropLeaves bool
+
+	// keepRoots is how many Roots runCleanup keeps (see Config.KeepRoots).
+	keepRoots int
 
 	batchWindow  time.Duration
 	wakeup       chan struct{}
@@ -196,6 +202,11 @@ type Config struct {
 	// and settled, such as one per day.
 	DropPublishedLeaves bool
 
+	// KeepRoots is how many of the newest Roots the cleanup sweep keeps,
+	// so a subscriber still filling an older Root can fetch its objects.
+	// Zero or less keeps one.
+	KeepRoots int
+
 	// sharedAllow is set internally by NewWithDMSG when it builds the
 	// allowState before constructing the CXO node, so the OnSubscribeRemote
 	// closure and the resulting Publisher share the same state. Not
@@ -234,6 +245,16 @@ type PubConfig struct {
 
 	// DropPublishedLeaves, see Config.DropPublishedLeaves.
 	DropPublishedLeaves bool
+
+	// KeepRoots, see Config.KeepRoots.
+	KeepRoots int
+
+	// Dial, when set, is how the node dials peers instead of a plain dmsg
+	// dial (cxotransport.DMSGFactory.Dial).
+	Dial func(ctx context.Context, addr dmsg.Addr) (net.Conn, error)
+	// Redial, when set, is asked on each AnnounceTo about the live conn to the
+	// peer; true closes it so the announce dials again.
+	Redial func(ctx context.Context, peer cipher.PubKey, addr net.Addr) bool
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -281,6 +302,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		port = cxotransport.DefaultCXOPort
 	}
 	factory := cxotransport.NewDMSGFactory(dmsgC, port)
+	factory.Dial = conf.Dial
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
@@ -291,12 +313,14 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
+		KeepRoots:           conf.KeepRoots,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
 	}
 	p.ownsNode = true
+	p.redial = conf.Redial
 	return p, nil
 }
 
@@ -345,6 +369,7 @@ func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher
 		Logger:              conf.Logger,
 		sharedAllow:         allow,
 		DropPublishedLeaves: conf.DropPublishedLeaves,
+		KeepRoots:           conf.KeepRoots,
 	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
@@ -402,6 +427,7 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		cleanupDone:  make(chan struct{}),
 	}
 	p.dropLeaves = conf.DropPublishedLeaves
+	p.keepRoots = max(conf.KeepRoots, 1)
 	// Hydrate the in-memory tree from the previously-published Root on
 	// the underlying CXO node, if one exists. Without this, every
 	// process restart starts from an empty memNode — the next Put
@@ -735,6 +761,11 @@ func (p *Publisher) AnnounceTo(ctx context.Context, peerPK cipher.PubKey) error 
 	dmsgT := p.cxoNode.DMSG()
 	if dmsgT == nil {
 		return errors.New("treestore: publisher has no dmsg transport")
+	}
+	if p.redial != nil {
+		if addr, ok := dmsgT.PeerAddr(peerPK); ok && p.redial(ctx, peerPK, addr) {
+			dmsgT.Drop(peerPK)
+		}
 	}
 	_, err := dmsgT.ConnectPK(ctx, peerPK)
 	return err
@@ -1093,7 +1124,7 @@ const cleanupForceInterval = 10 * time.Minute
 
 func (p *Publisher) runCleanup() {
 	c := p.cxoNode.Container()
-	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
+	if err := cxoutils.RemoveRootObjects(c, p.keepRoots); err != nil {
 		p.log.WithError(err).Debug("treestore: RemoveRootObjects failed; will retry next publish")
 		return
 	}
@@ -1848,5 +1879,21 @@ func sweepUnreachable(conf *skyobject.Config, log *logging.Logger) {
 	if removed > 0 {
 		log.WithField("objects", removed).WithField("bytes", volume).WithField("took", time.Since(start)).
 			Info("treestore-pub: removed objects no stored Root reaches")
+	}
+}
+
+// PeerAddr returns the remote address of the feed's live conn to peerPK.
+func (p *Publisher) PeerAddr(peerPK cipher.PubKey) (net.Addr, bool) {
+	if p.cxoNode == nil || p.cxoNode.DMSG() == nil {
+		return nil, false
+	}
+	return p.cxoNode.DMSG().PeerAddr(peerPK)
+}
+
+// DropPeer closes the feed's conn to peerPK, so the next AnnounceTo dials it
+// again.
+func (p *Publisher) DropPeer(peerPK cipher.PubKey) {
+	if p.cxoNode != nil && p.cxoNode.DMSG() != nil {
+		p.cxoNode.DMSG().Drop(peerPK)
 	}
 }

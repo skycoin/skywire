@@ -33,6 +33,7 @@ type Pty struct {
 	cancel  context.CancelFunc
 	cols    int
 	rows    int
+	shown   string // the prompt last drawn
 	stop    sync.Once
 }
 
@@ -78,25 +79,24 @@ func (s *Pty) Start(_ string, _ []string, sz *WinSize, env []string) error {
 	s.sh = sh
 	s.lines = make(chan string, 8)
 	s.editor = &shell.LineEditor{
-		Echo: s.echo,
-		Redraw: func(content string, back int) {
-			line := "\r\x1b[2K" + s.prompt() + content
-			if back > 0 {
-				line += fmt.Sprintf("\x1b[%dD", back)
-			}
-			s.echo(line)
+		Echo:   s.echo,
+		Prompt: func() string { return s.shown },
+		Cols: func() int {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return s.cols
 		},
 		Submit:      func(line string) { s.lines <- line },
-		Interrupt:   func() { s.sh.CancelPending(); s.echo(s.prompt()) },
+		Interrupt:   func() { s.sh.CancelPending(); s.writePrompt() },
 		EOF:         func() { s.lines <- "exit" },
-		ClearScreen: func() { s.echo("\x1b[2J\x1b[H" + s.prompt() + s.editor.Line()) },
+		ClearScreen: func() { s.echo("\x1b[2J\x1b[H"); s.writePrompt(); s.editor.Redisplay() },
 	}
 	if err := sh.UseHistory(s.editor.History, s.editor.ClearHistory); err != nil {
 		return fmt.Errorf("websh history: %w", err)
 	}
 	s.started = true
+	s.echo("websh on a browser visor. Type help for commands.\r\n")
 	go s.run()
-	s.echo("websh on a browser visor. Type help for commands.\r\n" + s.prompt())
 	return nil
 }
 
@@ -106,11 +106,24 @@ func (s *Pty) prompt() string {
 	if s.sh.Pending() {
 		return "> "
 	}
+	if p, ok := s.sh.PS1(); ok {
+		return p
+	}
 	return s.sh.Dir() + "$ "
+}
+
+// writePrompt draws the prompt, which the line editor draws again as it edits.
+func (s *Pty) writePrompt() {
+	s.shown = s.prompt()
+	s.echo(shell.PromptText(s.shown))
 }
 
 // run executes submitted lines one at a time and ends the session on exit.
 func (s *Pty) run() {
+	if err := s.sh.SourceRC(context.Background()); err != nil {
+		s.echo(shell.RCFile + ": " + err.Error() + "\r\n")
+	}
+	s.writePrompt()
 	for line := range s.lines {
 		if !s.sh.Pending() {
 			s.editor.AddHistory(line)
@@ -131,7 +144,7 @@ func (s *Pty) run() {
 			_ = s.Stop() //nolint:errcheck
 			return
 		}
-		s.echo(s.prompt())
+		s.writePrompt()
 	}
 }
 

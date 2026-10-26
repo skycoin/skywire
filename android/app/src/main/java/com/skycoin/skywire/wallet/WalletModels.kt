@@ -1,6 +1,7 @@
 package com.skycoin.skywire.wallet
 
 import com.skycoin.wallet.AddressBook
+import com.skycoin.wallet.Derivation
 import com.skycoin.wallet.TxRecord
 import com.skycoin.wallet.WalletBalance
 import kotlinx.serialization.Serializable
@@ -34,7 +35,14 @@ data class CoinSpec(
      *  the wallet UI's symbol set. Built-ins carry bundled logos instead;
      *  null falls back to ticker letters. */
     val icon: String? = null,
+    /** The node addresses requests try, in order. Empty until the user
+     *  names their own; [nodeUrl] is always the first of them. */
+    val nodeUrls: List<String> = emptyList(),
+    /** The coin's id at coinpaprika, for a USD price; null when it has none there. */
+    val priceId: String? = null,
 ) {
+    /** The addresses a request walks before it gives up: the list, else the one. */
+    val tryNodes: List<String> get() = nodeUrls.ifEmpty { listOf(nodeUrl) }
     /**
      * Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH
      * family, whatever fits the app's 64-bit amounts: gwei (10⁻⁹) for the
@@ -85,6 +93,7 @@ data class CoinSpec(
             nodeUrl = "https://node.skycoin.com",
             explorerTxUrl = "https://explorer.skycoin.com/app/transaction/%s",
             builtIn = true,
+            priceId = "sky-skycoin",
         )
         val BTC = CoinSpec(
             id = "BTC",
@@ -94,6 +103,7 @@ data class CoinSpec(
             nodeUrl = "https://mempool.space",
             explorerTxUrl = "https://mempool.space/tx/%s",
             builtIn = true,
+            priceId = "btc-bitcoin",
         )
         val ETH = CoinSpec(
             id = "ETH",
@@ -104,6 +114,7 @@ data class CoinSpec(
             explorerTxUrl = "$ETH_INDEXER/tx/%s",
             builtIn = true,
             indexerUrl = ETH_INDEXER,
+            priceId = "eth-ethereum",
         )
         val USDT = CoinSpec(
             id = "USDT",
@@ -116,6 +127,7 @@ data class CoinSpec(
             contract = "0xdAC17F958D2ee523a2206206994597C13D831ec7",
             tokenDecimals = 6,
             indexerUrl = ETH_INDEXER,
+            priceId = "usdt-tether",
         )
 
         /** Keyless public endpoints; both are user-replaceable per token. */
@@ -155,24 +167,33 @@ data class WalletMeta(
      * repairs any that were truncated.
      */
     val addressScanAtMs: Long = 0,
+    /** How keys come from the phrase; wallets made before the choice existed are STANDARD. */
+    val derivation: Derivation = Derivation.STANDARD,
 )
 
 /**
- * This coin as it is actually reached, once the user's own addresses are applied.
+ * This coin as it is actually reached, once the user's own addresses are
+ * applied.
  *
- * Every coin's node can be moved. The Ethereum family also reads its history
- * from a separate indexer, which moves on its own, so a node alone never
- * leaves half of it behind unannounced. A blank entry means the shipped one.
+ * The user's nodes come first, in their order — earlier is higher priority —
+ * and the shipped address rides behind them as the fallback, so a coin is
+ * never left with nothing to ask. The Ethereum family also reads its history
+ * from a separate indexer, which moves on its own, so it keeps its single
+ * address.
  */
 fun CoinSpec.withNodeOverride(
-    overrides: Map<String, String>,
+    overrides: Map<String, List<String>>,
     indexerOverrides: Map<String, String> = emptyMap(),
 ): CoinSpec {
-    val url = overrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: nodeUrl
+    // The shipped address is the fallback and stays last; naming it in the
+    // list is just spelling that out.
+    val mine = overrides[id]?.filter { it.isNotBlank() && it != nodeUrl }.orEmpty()
     val indexer = indexerUrl?.let { shipped ->
         indexerOverrides[id]?.trim()?.takeIf { it.isNotEmpty() } ?: shipped
     }
-    return if (url == nodeUrl && indexer == indexerUrl) this else copy(nodeUrl = url, indexerUrl = indexer)
+    if (mine.isEmpty() && indexer == indexerUrl) return this
+    val ordered = (mine + nodeUrl).distinct()
+    return copy(nodeUrl = ordered.first(), nodeUrls = ordered, indexerUrl = indexer)
 }
 
 /** True while this wallet's address list has never been confirmed against the chain. */
@@ -207,6 +228,8 @@ data class CachedTx(
     val confirmed: Boolean,
     val confirmations: Long,
     val fee: ULong? = null,
+    /** This wallet's addresses the transaction used, see TxRecord.own. */
+    val own: List<String> = emptyList(),
 )
 
 /**
@@ -221,6 +244,8 @@ data class WalletSnapshot(
     val hours: ULong? = null,
     val spendableOutputs: Int = 0,
     val txs: List<CachedTx> = emptyList(),
+    /** Confirmed coins held by each single address — the addresses sheet. */
+    val perAddress: Map<String, ULong> = emptyMap(),
     val fetchedAtMs: Long = 0,
     /**
      * When [txs] was last actually fetched, which can lag [fetchedAtMs]: the
@@ -234,6 +259,19 @@ data class WalletSnapshot(
 
 /** True when the tx list is older than the balance beside it, or never arrived. */
 val WalletSnapshot.historyBehind: Boolean get() = historyFetchedAtMs < fetchedAtMs
+
+/**
+ * The wallet's addresses that have sent coins. A spend puts the address's
+ * public key on the chain, where a future quantum computer could use it to
+ * take what is still there or sent there later. Read from the history the
+ * wallet already holds; skycoin-web asks the node per address for the same.
+ */
+val WalletSnapshot.exposedAddresses: Set<String>
+    get() = txs.filter { !it.incoming }.flatMapTo(HashSet()) { it.own }
+
+/** Exposed addresses that still hold coins: the ones worth moving. */
+val WalletSnapshot.exposedWithCoins: Set<String>
+    get() = exposedAddresses.filterTo(HashSet()) { (perAddress[it] ?: 0uL) > 0uL }
 
 /**
  * Fold one refresh's results into the snapshot that gets cached.
@@ -258,6 +296,7 @@ fun mergeSnapshot(
     predicted = balance.predicted,
     hours = balance.hours,
     spendableOutputs = balance.spendableOutputs,
+    perAddress = balance.perAddress,
     txs = history?.map {
         CachedTx(
             txid = it.txid,
@@ -268,6 +307,7 @@ fun mergeSnapshot(
             confirmed = it.confirmed,
             confirmations = it.confirmations,
             fee = it.fee,
+            own = it.own,
         )
     } ?: previous?.txs.orEmpty(),
     fetchedAtMs = nowMs,

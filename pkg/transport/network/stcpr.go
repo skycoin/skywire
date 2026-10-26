@@ -73,6 +73,7 @@ func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
 		configureTCPLiveness(tcpConn)
+		configureTCPQueue(tcpConn)
 	}
 	return conn, nil
 }

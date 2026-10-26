@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -494,6 +495,10 @@ func (proxyDefaultAPI) SetConfigFields(_ map[string]json.RawMessage) ([]visorapi
 }
 
 func (proxyDefaultAPI) LocalTransportStats() (*visorapi.LocalTransportStatsResponse, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) VisorCharts(_ visorapi.VisorChartsArgs) (*visorapi.VisorCharts, error) {
 	return nil, ErrProxyNotSupported
 }
 
@@ -1038,6 +1043,9 @@ func (proxyDefaultAPI) VoiceSetRingback(_ visorapi.VoiceRingback) error {
 	return ErrProxyNotSupported
 }
 
+// VoiceSetBlocked implements API (not proxied).
+func (proxyDefaultAPI) VoiceSetBlocked(_ []cipher.PubKey) error { return ErrProxyNotSupported }
+
 // VoiceRingback implements API (not proxied).
 func (proxyDefaultAPI) VoiceRingback() (visorapi.VoiceRingback, error) {
 	return visorapi.VoiceRingback{}, ErrProxyNotSupported
@@ -1391,3 +1399,7 @@ func (proxyDefaultAPI) HostBridgeForward(_, _ string) (visorapi.HostBridgeForwar
 }
 
 func (proxyDefaultAPI) HostBridgeUnforward(string) error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) RewardAddressExposure(_ string) (rewardconfig.AddressExposure, error) {
+	return rewardconfig.AddressExposure{}, ErrProxyNotSupported
+}

@@ -142,8 +142,10 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	switch surface {
 	case proxystatus.SurfaceDmsg:
 		p.fillLayerBounded(&snap, "dmsg layer", p.fillDmsgLayer)
+		snap.Requests = p.v.requestLog.Recent("dmsg")
 	case proxystatus.SurfaceSkynet:
 		p.fillLayerBounded(&snap, "skynet layer", p.fillSkynetLayer)
+		snap.Requests = p.v.requestLog.Recent("skynet")
 	case proxystatus.SurfaceSkysocks:
 		// The skysocks tunnel's state is Legs/Streams/RangeSplit — no layer section.
 	}
@@ -244,9 +246,9 @@ func (p *visorStatusProvider) chainTargetState(addr string) string {
 			return "dmsg_web resolving proxy · " + runLabel(rt.IsRunning())
 		}
 	}
-	// skysocks-client binds SkysocksClientAddr (":1080"), so its port alone
+	// skysocks-client binds SkysocksClientAddr, so its port alone
 	// identifies it; the client is a managed app, so procM knows its liveness.
-	if _, p2, e := net.SplitHostPort("0.0.0.0" + skyenv.SkysocksClientAddr); e == nil && p2 == port {
+	if _, p2, e := net.SplitHostPort(skyenv.SkysocksClientAddr); e == nil && p2 == port {
 		running := false
 		if p.v.procM != nil {
 			proc, ok := p.v.procM.ProcByName(skyenv.SkysocksClientName)
@@ -384,9 +386,16 @@ func (p *visorStatusProvider) fillDmsgLayer(snap *proxystatus.Snapshot) {
 
 	// dmsg sessions are the dmsg layer's real transport state: without one, no
 	// .dmsg name can resolve. Read from the visor's dmsg client directly.
+	snap.Sessions = p.dmsgSessions()
+}
+
+// dmsgSessions lists the visor's dmsg client sessions, with how each reaches
+// its server.
+func (p *visorStatusProvider) dmsgSessions() []proxystatus.DmsgSession {
 	if p.v.dmsgC == nil {
-		return
+		return nil
 	}
+	var out []proxystatus.DmsgSession
 	for _, ses := range p.v.dmsgC.AllSessions() {
 		s := proxystatus.DmsgSession{
 			ServerPK: ses.RemotePK().String(),
@@ -399,9 +408,10 @@ func (p *visorStatusProvider) fillDmsgLayer(snap *proxystatus.Snapshot) {
 		if d := ses.LastPing(); d > 0 {
 			s.PingMS = float64(d) / float64(time.Millisecond)
 		}
-		snap.Sessions = append(snap.Sessions, s)
+		out = append(out, s)
 	}
-	sort.Slice(snap.Sessions, func(i, j int) bool { return snap.Sessions[i].ServerPK < snap.Sessions[j].ServerPK })
+	sort.Slice(out, func(i, j int) bool { return out[i].ServerPK < out[j].ServerPK })
+	return out
 }
 
 // fillSkynetLayer populates the skynet resolving proxy's sections: its layer

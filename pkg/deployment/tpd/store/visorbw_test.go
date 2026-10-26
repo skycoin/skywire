@@ -26,7 +26,7 @@ func TestComputeVisorBW(t *testing.T) {
 		}},
 	}
 
-	got := ComputeVisorBW(records, day)
+	got := ComputeVisorBW(records, day, nil)
 	require.Equal(t, VisorBWVersion, got.Version)
 	require.Equal(t, 3, got.Transports)
 	require.Equal(t, 1, got.SameNetworkExcluded)
@@ -36,6 +36,25 @@ func TestComputeVisorBW(t *testing.T) {
 		"b": {"stcpr": 7},
 		"e": {"dmsg": 4},
 		"d": {"dmsg": 2},
+	}, got.Visors)
+}
+
+// A transport neither edge marked, between two visors at one public IP, is
+// left out as same-network: a webrtc conn carries no address to mark by.
+func TestComputeVisorBWSamePublicIP(t *testing.T) {
+	const day = "2026-10-21"
+	eb := func(sent, recv uint64) *EdgeBandwidth { return &EdgeBandwidth{Sent: sent, Recv: recv} }
+	records := []TransportMetric{
+		{Type: "webrtc", Edges: []string{"a", "b"}, Daily: []DailyEdgeBandwidth{{Date: day, A: eb(500, 30), B: eb(30, 500)}}},
+		{Type: "webrtc", Edges: []string{"a", "c"}, Daily: []DailyEdgeBandwidth{{Date: day, A: eb(70, 10), B: eb(10, 70)}}},
+	}
+	ip := map[string]string{"a": "129.152.28.221", "b": "129.152.28.221", "c": "203.0.113.9"}
+	got := ComputeVisorBW(records, day, func(x, y string) bool { return ip[x] == ip[y] })
+	require.Equal(t, 2, got.Transports)
+	require.Equal(t, 1, got.SameNetworkExcluded)
+	require.Equal(t, map[string]map[string]uint64{
+		"a": {"webrtc": 70},
+		"c": {"webrtc": 10},
 	}, got.Visors)
 }
 

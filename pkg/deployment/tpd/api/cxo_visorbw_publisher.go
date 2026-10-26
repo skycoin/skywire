@@ -129,6 +129,11 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 			ops = append(ops, treestore.PutOp{Path: store.VisorBWDayPath(d)})
 		}
 	}
+	samePublicIP, ready := p.api.samePublicIP()
+	if len(missing) > 0 && !ready {
+		p.log.Debug("waiting for the address resolver's bindings feed before settling a day")
+		missing = nil
+	}
 	if len(missing) > 0 {
 		leaves, err := ls.LoadMetricsLeaves(ctx, missing)
 		if err != nil {
@@ -146,7 +151,7 @@ func (p *VisorBWCXOPublisher) publishOnce(ctx context.Context, now time.Time) {
 				p.log.WithError(err).WithField("date", d).Warn("settled metrics day does not decode")
 				continue
 			}
-			day := store.ComputeVisorBW(records, d)
+			day := store.ComputeVisorBW(records, d, samePublicIP)
 			if len(day.Visors) == 0 {
 				// The day's leaf missed its rows. Publishing it would hand the
 				// reward system an empty day, so wait for the leaf to be rebuilt.

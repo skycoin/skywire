@@ -52,6 +52,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		Title: "Skywire transport discovery",
 		About: strings.Split(api.dmsgAddr, ":")[0],
 		Links: []charts.Link{{Name: "Network graph", Href: "graph"}},
+		Extra: api.ChartsExtra(),
 		Stats: api.Stats,
 		Store: st,
 		Log:   log,
@@ -60,6 +61,7 @@ func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.Fie
 		},
 	}
 	c.graph = &netgraph.Page{Title: "Skywire transport graph", Back: "./", Source: api.graphLinks, Marks: api.roleColors,
+		Groups: api.ipGroups, GroupsAre: "one public IP",
 		Legend: []netgraph.Mark{{Name: roleName[roleRegistered], Color: roleColor[roleRegistered]}, {Name: roleName[roleLAN], Color: roleColor[roleLAN]}}}
 	api.chartState.Store(c)
 	go charts.Run(ctx, st, api.Stats.Wrap(api.collectCharts), log)
@@ -83,6 +85,15 @@ func (api *API) GraphPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.graph.ServeHTTP(w, r)
+}
+
+// ChartsExtra is the transport graph and its engine, served next to the charts page.
+func (api *API) ChartsExtra() []charts.Extra {
+	return []charts.Extra{
+		{Path: "/graph", Handler: http.HandlerFunc(api.GraphPage)},
+		{Path: "/graph/engine.wasm", Handler: http.HandlerFunc(netgraph.EngineWasm)},
+		{Path: "/graph/engine.js", Handler: http.HandlerFunc(netgraph.EngineLoader)},
+	}
 }
 
 // graphLinks is every transport in the cache, for the transport graph.
@@ -328,7 +339,11 @@ func (api *API) visorBandwidthTable(ctx context.Context, c *tpdCharts, now time.
 		if err != nil {
 			return charts.Table{}, false
 		}
-		day := store.ComputeVisorBW(records, date)
+		samePublicIP, ready := api.samePublicIP()
+		if !ready {
+			return charts.Table{}, false
+		}
+		day := store.ComputeVisorBW(records, date, samePublicIP)
 		if len(day.Visors) == 0 {
 			return charts.Table{}, false
 		}

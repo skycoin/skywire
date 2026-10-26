@@ -24,9 +24,9 @@ object EthCrypto {
     }
 
     /** m/44'/60'/0'/0 — the node every index-i external address hangs off. */
-    fun accountKey(mnemonic: String): Bip32.ExtKey =
+    fun accountKey(mnemonic: String, passphrase: String = ""): Bip32.ExtKey =
         Bip32.derive(
-            Bip32.master(Bip39.toSeed(mnemonic)),
+            Bip32.master(Bip39.toSeed(mnemonic, passphrase)),
             intArrayOf(44 or Bip32.HARDENED, 60 or Bip32.HARDENED, Bip32.HARDENED, 0),
         )
 

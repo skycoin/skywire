@@ -34,8 +34,8 @@ func (*fakePack) Flags() (_ Flags)       { return }
 func (*fakePack) AddFlags(Flags)         { panic("fake method called") }
 func (*fakePack) ClearFlags(Flags)       { panic("fake method called") }
 
-// get and cache value, and return true
-// if hard rc of value is zero
+// get and cache value, and return true unless something besides this fill
+// holds it. Pre counts this fill, as splitSchemaHash does, so that is rc <= 1.
 func (r *Refs) splitHash(
 	fp *fakePack, //       :
 	hash cipher.SHA256, // :
@@ -50,7 +50,7 @@ func (r *Refs) splitHash(
 		return
 	}
 
-	return (rc == 0) // laod if hard rc == 0
+	return rc <= 1
 }
 
 // Split used by the node package to fill the Dynamic.

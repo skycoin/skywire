@@ -110,3 +110,39 @@ func TestForgetAllPurgesTheReplayRing(t *testing.T) {
 		t.Errorf("/events ring holds %d events after the purge, want 2 (the other peer's DM and pair message)", n)
 	}
 }
+
+// TestForgetOneMessagePurgesItFromTheReplayRing: deleting one message, for me
+// or for everyone, must not have the next page load replay it. The phone
+// reloads the page on every return to the chat tab.
+func TestForgetOneMessagePurgesItFromTheReplayRing(t *testing.T) {
+	withChatLog(t)
+	restoreHistoryStore(t)
+	prev := hub
+	hub = newSSEHub()
+	t.Cleanup(func() { hub = prev })
+	historyStore = newTempStore(t, history.Limits{})
+
+	peer, _ := cipher.GenerateKeyPair()
+	other, _ := cipher.GenerateKeyPair()
+	hub.publishEvent(chatEvent{ID: "call", Channel: channelDM, Dir: "in", From: peer.Hex(), Text: "\U0001F4DE Missed call"})
+	hub.publishEvent(chatEvent{ID: "xfer", Channel: channelDM, Dir: "in", From: peer.Hex(), FileID: "xfer", FileName: "video-1.mp4"})
+	hub.publishEvent(chatEvent{ID: "keep", Channel: channelDM, Dir: "in", From: peer.Hex(), Text: "still here"})
+	hub.publishEvent(chatEvent{ID: "call", Channel: channelDM, Dir: "in", From: other.Hex(), Text: "same id, other peer"})
+
+	forgetPersisted(peer.Hex(), "call")
+	forgetPersisted(peer.Hex(), "xfer")
+
+	ch, unsubscribe := hub.subscribe()
+	defer unsubscribe()
+	replayed := strings.Join(drain(ch), "\n")
+	for _, gone := range []string{"Missed call", "video-1.mp4"} {
+		if strings.Contains(replayed, gone) {
+			t.Errorf("%q is still replayed after its delete:\n%s", gone, replayed)
+		}
+	}
+	for _, kept := range []string{"still here", "same id, other peer"} {
+		if !strings.Contains(replayed, kept) {
+			t.Errorf("%q was dropped from the replay, but it was not deleted:\n%s", kept, replayed)
+		}
+	}
+}

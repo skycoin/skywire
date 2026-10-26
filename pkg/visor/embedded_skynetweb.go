@@ -74,7 +74,11 @@ type EmbeddedSkynetWeb struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	parentCtx context.Context
+
+	requests *proxystatus.RequestLog
 }
+
+func (e *EmbeddedSkynetWeb) setRequestLog(l *proxystatus.RequestLog) { e.requests = l }
 
 func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), selfDialAs func(uint16, cipher.PubKey) (net.Conn, error), cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
@@ -219,6 +223,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		UpstreamRules: e.cfg.UpstreamRules,
 		Stats:         e.stats,
+		Requests:      e.requests,
 	}
 
 	// Self-loopback: serve requests for THIS visor's own PK in-process
@@ -307,6 +312,11 @@ type routerSkynetDialer struct {
 	routeTimeout time.Duration          // 0 = use DefaultRouteKeepAlive
 	nextPort     uint32                 // ephemeral port counter for route fallback
 	pool         *skyroute.Pool         // holds+reuses multihop routes per dest (nil = disabled)
+	// service, when set, is a service the dialed visor hosts under the
+	// service's own key: the handshake names it and checks the host's proof.
+	service cipher.PubKey
+	// noRelay makes dialDirectOrRelay try only a direct transport.
+	noRelay bool
 }
 
 // dialRouteForPool dials the destination's mux forwarding port over a route, for
@@ -327,7 +337,32 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	// Explicit source-route from the hostname (<hop>.<dest>.skynet): build the
 	// exact forward+reverse hops and dial them, bypassing the direct-transport
 	// fast path and the route-finder. Single-path only (no mux).
+	var mux *transport.VStreamMux
+	if d.skynetMuxPtr != nil {
+		mux = *d.skynetMuxPtr
+	}
+	// A single transport ID that joins this visor to remote pins the direct
+	// stream to that transport (<tpid>.<dest>.skynet), with no fallback.
+	if len(route) == 1 && route[0].IsTpID && d.tpM != nil {
+		if tp := d.tpM.Transport(route[0].TpID); tp != nil && tp.Remote() == remote {
+			if mux == nil {
+				return nil, errors.New("skynet: direct streams are not up")
+			}
+			stream, err := mux.DialByTransportID(remote, route[0].TpID)
+			if err != nil {
+				return nil, err
+			}
+			conn := &vstreamConn{VStream: stream}
+			if err := skynetweb.PerformHandshake(conn, port); err != nil {
+				conn.Close() //nolint:errcheck,gosec
+				return nil, err
+			}
+			proxystatus.NotePath(ctx, "pinned "+d.transportNote(stream.TransportID()))
+			return conn, nil
+		}
+	}
 	if len(route) > 0 {
+		proxystatus.NotePath(ctx, fmt.Sprintf("source route, %d hops", len(route)+1))
 		return d.dialSourceRoute(ctx, remote, port, route)
 	}
 
@@ -335,10 +370,6 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	// Uses the shared VStreamMux (same instance as the forwarding server).
 	// Dereference at dial time so we pick up a mux that finished
 	// initializing after this dialer was constructed.
-	var mux *transport.VStreamMux
-	if d.skynetMuxPtr != nil {
-		mux = *d.skynetMuxPtr
-	}
 	if mux != nil {
 		stream, err := mux.Dial(remote, "")
 		if err == nil {
@@ -355,6 +386,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 				conn.Close() //nolint:errcheck,gosec
 				return nil, err
 			}
+			proxystatus.NotePath(ctx, d.transportNote(stream.TransportID()))
 			return conn, nil
 		}
 		// No direct transport (dial failed) — try a 1-hop relay (a peer we
@@ -384,6 +416,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 				_ = stream.Close() //nolint:errcheck,gosec
 				return nil, hErr
 			}
+			proxystatus.NotePath(ctx, "held route")
 			return stream, nil
 		}
 		if !errors.Is(err, skyroute.ErrNoMux) {
@@ -408,6 +441,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		_ = conn.Close() //nolint:errcheck,gosec
 		return nil, err
 	}
+	proxystatus.NotePath(ctx, "route")
 	return conn, nil
 }
 
@@ -469,6 +503,16 @@ func (d *routerSkynetDialer) dialSourceRouteConn(ctx context.Context, dest ciphe
 	opts.ReverseHops = rev
 	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
 	return d.router.DialRoutes(ctx, dest, lPort, routing.Port(fwdPort), opts)
+}
+
+// transportNote names the transport a direct stream rides, for the request log.
+func (d *routerSkynetDialer) transportNote(id uuid.UUID) string {
+	if d.tpM != nil {
+		if tp := d.tpM.Transport(id); tp != nil {
+			return fmt.Sprintf("direct %s transport %s", tp.Type(), id)
+		}
+	}
+	return "direct transport " + id.String()
 }
 
 // sourceRouteKey derives a stable pool key for an explicit source route: the
@@ -614,6 +658,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 	}
 	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, cfg, log)
 	v.wireLocalResolverPublish(runtime)
+	v.wireResolverRequests(runtime)
 	runtime.statusProvider = v.proxyStatusProvider()
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime

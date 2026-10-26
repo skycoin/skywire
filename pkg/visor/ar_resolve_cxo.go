@@ -144,3 +144,23 @@ func (v *Visor) arAdvertised(pk cipher.PubKey) (map[types.Type]bool, bool) {
 	}
 	return out, true
 }
+
+// arBindingsAll returns every peer's bindings from the bindings feed, keyed by
+// hex public key. The map is shared: callers must not change it. ok is false
+// until the feed has synced.
+func (v *Visor) arBindingsAll() (map[string]*arfeed.PeerBindings, bool) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
+		return nil, false
+	}
+	idx := &v.arBindings
+	idx.acquire.Do(func() { mgr.AcquireFor(TabARResolve) })
+	last := mgr.LastSync(FeedARBindings)
+	if last.IsZero() {
+		return nil, false
+	}
+	idx.lookup(mgr, last, "")
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.index, idx.index != nil
+}

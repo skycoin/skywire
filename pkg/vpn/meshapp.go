@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skynetca"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
@@ -28,9 +29,12 @@ import (
 // dialed directly.
 func MeshDialer(appCl *app.Client) meshgw.MeshDial {
 	resolvers := &resolverPorts{appCl: appCl}
-	return func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16) (net.Conn, error) {
+	return func(ctx context.Context, scheme string, dest cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
 		if rp, ok := resolvers.portFor(scheme); ok {
-			return dialViaResolver(ctx, appCl, rp, scheme, dest, port)
+			return dialViaResolver(ctx, appCl, rp, scheme, dest, port, route)
+		}
+		if len(route) > 0 {
+			return nil, fmt.Errorf("mesh dial: a routed %s name needs the visor's resolving proxy, which is not running", scheme)
 		}
 		return appCl.Dial(appnet.Addr{
 			Net:    appnet.Type(scheme),

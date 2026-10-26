@@ -60,6 +60,14 @@ func TestWalletHandlerRouting(t *testing.T) {
 		}
 	})
 
+	t.Run("added coins need the skycoin-web app", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h(w, walletReq("coins/custom"))
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status=%d, want 404 without the app", w.Code)
+		}
+	})
+
 	t.Run("non-numeric coin index → 400", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h(w, walletReq("coin/x/api/v1/health"))

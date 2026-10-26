@@ -6,8 +6,9 @@ import com.skycoin.wallet.toHex
 import java.io.ByteArrayOutputStream
 
 /**
- * Segwit transaction limited to what this wallet creates: P2WPKH inputs,
- * arbitrary standard outputs, BIP 143 sighash, RBF signaled.
+ * Transaction limited to what this wallet creates: P2WPKH inputs signed with
+ * the BIP 143 sighash, or legacy P2PKH inputs signed with the original one,
+ * arbitrary standard outputs, RBF signaled.
  */
 class BtcTxn(
     val inputs: List<Input>,
@@ -24,8 +25,15 @@ class BtcTxn(
         val pubKeyHash: ByteArray,
         /** Default opts into replacement (BIP 125) while still allowing locktime. */
         val sequence: Long = 0xFFFFFFFDL,
+        /** A P2PKH input: signed in its scriptSig rather than a witness. */
+        val legacy: Boolean = false,
     ) {
         var witness: List<ByteArray> = emptyList()
+        var scriptSig: ByteArray = ByteArray(0)
+
+        /** The P2PKH script over [pubKeyHash]: a legacy input's prevout script, a segwit one's scriptCode. */
+        fun p2pkhScript(): ByteArray =
+            byteArrayOf(0x76, 0xa9.toByte(), 0x14) + pubKeyHash + byteArrayOf(0x88.toByte(), 0xac.toByte())
     }
 
     class Output(val valueSats: ULong, val scriptPubKey: ByteArray)
@@ -44,6 +52,11 @@ class BtcTxn(
         }
     }
 
+    private fun scriptSig(w: ByteArrayOutputStream, script: ByteArray) {
+        w.writeVarInt(script.size.toLong())
+        w.write(script)
+    }
+
     /** Serialization without witness data — what the txid commits to. */
     fun serializeStripped(): ByteArray {
         val w = ByteArrayOutputStream()
@@ -51,7 +64,7 @@ class BtcTxn(
         w.writeVarInt(inputs.size.toLong())
         for (i in inputs) {
             outpoint(w, i)
-            w.writeVarInt(0) // empty scriptSig — witness carries the signature
+            scriptSig(w, i.scriptSig) // empty on a segwit input: its witness carries the signature
             w.writeU32(i.sequence)
         }
         serializeOutputs(w)
@@ -68,7 +81,7 @@ class BtcTxn(
         w.writeVarInt(inputs.size.toLong())
         for (i in inputs) {
             outpoint(w, i)
-            w.writeVarInt(0)
+            scriptSig(w, i.scriptSig)
             w.writeU32(i.sequence)
         }
         serializeOutputs(w)
@@ -120,13 +133,30 @@ class BtcTxn(
         w.write(hashSequence)
         outpoint(w, input)
         // scriptCode of P2WPKH: the classic P2PKH script over the program.
-        w.writeVarInt(25)
-        w.write(byteArrayOf(0x76, 0xa9.toByte(), 0x14))
-        w.write(input.pubKeyHash)
-        w.write(byteArrayOf(0x88.toByte(), 0xac.toByte()))
+        scriptSig(w, input.p2pkhScript())
         w.writeU64(input.valueSats)
         w.writeU32(input.sequence)
         w.write(hashOutputs)
+        w.writeU32(locktime)
+        w.writeU32(SIGHASH_ALL)
+        return Hashes.doubleSha256(w.toByteArray())
+    }
+
+    /**
+     * The original signature hash for legacy input [index], SIGHASH_ALL: the
+     * transaction with that input's scriptSig replaced by its prevout script,
+     * every other scriptSig emptied, and the hash type appended.
+     */
+    fun legacySighash(index: Int): ByteArray {
+        val w = ByteArrayOutputStream()
+        w.writeU32(version.toLong())
+        w.writeVarInt(inputs.size.toLong())
+        for ((n, i) in inputs.withIndex()) {
+            outpoint(w, i)
+            scriptSig(w, if (n == index) i.p2pkhScript() else ByteArray(0))
+            w.writeU32(i.sequence)
+        }
+        serializeOutputs(w)
         w.writeU32(locktime)
         w.writeU32(SIGHASH_ALL)
         return Hashes.doubleSha256(w.toByteArray())
@@ -136,26 +166,34 @@ class BtcTxn(
     fun sign(keys: List<ByteArray>) {
         require(keys.size == inputs.size) { "one key per input" }
         for ((i, key) in keys.withIndex()) {
+            val input = inputs[i]
             val pub = Secp256k1.pubKeyFromSecKey(key)
-            check(Hashes.hash160(pub).contentEquals(inputs[i].pubKeyHash)) {
+            check(Hashes.hash160(pub).contentEquals(input.pubKeyHash)) {
                 "key does not own input $i"
             }
-            val der = Secp256k1.signDer(sighash(i), key)
-            inputs[i].witness = listOf(der + byteArrayOf(SIGHASH_ALL.toByte()), pub)
+            if (input.legacy) {
+                val sig = Secp256k1.signDer(legacySighash(i), key) + byteArrayOf(SIGHASH_ALL.toByte())
+                input.scriptSig = byteArrayOf(sig.size.toByte()) + sig + byteArrayOf(pub.size.toByte()) + pub
+            } else {
+                val der = Secp256k1.signDer(sighash(i), key)
+                input.witness = listOf(der + byteArrayOf(SIGHASH_ALL.toByte()), pub)
+            }
         }
     }
 
     companion object {
         const val SIGHASH_ALL = 1L
 
-        /** Pre-selection fee estimate: weight of a tx with n P2WPKH inputs and the given output scripts. */
-        fun estimateVsize(inputCount: Int, outputScripts: List<ByteArray>): Int {
+        /** Pre-selection fee estimate: weight of a tx with n P2WPKH (or legacy P2PKH) inputs and the given output scripts. */
+        fun estimateVsize(inputCount: Int, outputScripts: List<ByteArray>, legacy: Boolean = false): Int {
             // Non-witness: version(4) + in-count + out-count varints + locktime(4);
             // witness adds marker+flag (2 WU) once any input is segwit.
-            var weight = (4 + varIntSize(inputCount.toLong()) + varIntSize(outputScripts.size.toLong()) + 4) * 4 + 2
-            // Input: outpoint 36 + empty-script varint 1 + sequence 4 (×4), witness ≈ 108 WU
+            var weight = (4 + varIntSize(inputCount.toLong()) + varIntSize(outputScripts.size.toLong()) + 4) * 4 +
+                if (legacy) 0 else 2
+            // Segwit input: outpoint 36 + empty-script varint 1 + sequence 4 (×4), witness ≈ 108 WU
             // (count 1 + 72-byte DER+sighash with its varint + 33-byte pubkey with its varint).
-            weight += inputCount * ((36 + 1 + 4) * 4 + 108)
+            // Legacy input: the same 107 bytes sit in the scriptSig, at full weight: 148 bytes.
+            weight += inputCount * if (legacy) (36 + 1 + 107 + 4) * 4 else ((36 + 1 + 4) * 4 + 108)
             for (s in outputScripts) weight += (8 + varIntSize(s.size.toLong()) + s.size) * 4
             return (weight + 3) / 4
         }

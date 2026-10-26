@@ -43,6 +43,10 @@ export function walletBackendTarget(url: string, page: string = location.href): 
   if (/\/api\/v1\/coins$/.test(path)) {
     return { url: 'wallet/coins', headers: {} };
   }
+  // The coins added in the wallet, which only a running skycoin-web app keeps.
+  if (/\/api\/v1\/coins\/custom$/.test(path)) {
+    return { url: 'wallet/coins/custom' + parsed.search, headers: {} };
+  }
 
   const coin = /\/coin\/(\d+)\//.exec(path);
   let target: string;

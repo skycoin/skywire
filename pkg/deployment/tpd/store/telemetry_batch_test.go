@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +22,9 @@ func TestApplyTelemetryBatch(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	tp1, tp2 := uuid.New(), uuid.New()
+	seedPrev(t, s, tp1.String(), a)
+	seedPrev(t, s, tp1.String(), b)
+	seedPrev(t, s, tp2.String(), a)
 
 	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{
 		{ID: tp1, Reporter: a, Sent: 100, Recv: 50, ThroughputBps: 500, LatMin: 5, LatMax: 15, LatAvg: 10, Type: "stcpr"},
@@ -65,4 +70,127 @@ func TestApplyTelemetrySameNetwork(t *testing.T) {
 	n, err := s.client.HExists(ctx, s.bandwidthDailyKey(wan.String(), now), sameNetworkField).Result()
 	require.NoError(t, err)
 	require.False(t, n)
+}
+
+// dumpHashes returns every hash and set in the db, without updated_at.
+func dumpHashes(t *testing.T, s *redisStore) map[string]map[string]string {
+	t.Helper()
+	ctx := context.Background()
+	out := map[string]map[string]string{}
+	keys, err := s.client.Keys(ctx, "*").Result()
+	require.NoError(t, err)
+	for _, k := range keys {
+		switch s.client.Type(ctx, k).Val() {
+		case "hash":
+			h, err := s.client.HGetAll(ctx, k).Result()
+			require.NoError(t, err)
+			delete(h, "updated_at")
+			out[k] = h
+		case "set":
+			m, err := s.client.SMembers(ctx, k).Result()
+			require.NoError(t, err)
+			h := map[string]string{}
+			for _, v := range m {
+				h[v] = ""
+			}
+			out[k] = h
+		}
+	}
+	return out
+}
+
+// The batched scripts leave redis exactly as the single-row writes do, with
+// many rows from a few reporters folded into one call each.
+func TestApplyTelemetryBatchMatchesSingleRows(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	reporters := make([]cipher.PubKey, 3)
+	for i := range reporters {
+		reporters[i], _ = cipher.GenerateKeyPair()
+	}
+	ids := make([]uuid.UUID, 300)
+	for i := range ids {
+		ids[i] = uuid.New()
+	}
+	types := []string{"stcpr", "sudph", ""}
+	var rounds [][]TelemetryUpdate
+	for r := 0; r < 4; r++ {
+		var batch []TelemetryUpdate
+		for i, id := range ids {
+			u := TelemetryUpdate{ID: id, Reporter: reporters[i%3], Type: types[i%3],
+				Sent: uint64((r + 1) * (i + 1) * 1000), Recv: uint64((r + 1) * i * 10)}
+			if i%5 == 0 {
+				u.Sent = 0 // a reset counter
+			}
+			if i%4 == 0 {
+				u.LatMin, u.LatMax, u.LatAvg = 1, 9, float64(r+i%7)+0.25
+			}
+			batch = append(batch, u)
+		}
+		rounds = append(rounds, batch)
+	}
+
+	for _, b := range rounds {
+		require.NoError(t, s.ApplyTelemetry(ctx, b))
+	}
+	batched := dumpHashes(t, s)
+	require.NoError(t, s.client.FlushDB(ctx).Err())
+	for _, b := range rounds {
+		for _, u := range b {
+			require.NoError(t, s.UpdateBandwidth(ctx, u.ID.String(), u.Reporter, u.Sent, u.Recv, u.Type))
+			if latencyValid(u.LatMin, u.LatMax, u.LatAvg) {
+				require.NoError(t, s.UpdateLatency(ctx, u.ID.String(), u.LatMin, u.LatMax, u.LatAvg, u.Type))
+			}
+		}
+	}
+	single := dumpHashes(t, s)
+	require.Equal(t, len(single), len(batched))
+	for k, want := range single {
+		got := batched[k]
+		require.Len(t, got, len(want), k)
+		for f, v := range want {
+			if a, err := strconv.ParseFloat(v, 64); err == nil && strings.Contains(f, "lat_sum") {
+				b, err := strconv.ParseFloat(got[f], 64)
+				require.NoError(t, err, "%s %s", k, f)
+				require.InDelta(t, a, b, 1e-6, "%s %s", k, f)
+				continue
+			}
+			require.Equal(t, v, got[f], "%s %s", k, f)
+		}
+	}
+}
+
+// A row held across UTC midnight is counted on the day it arrived.
+func TestApplyTelemetryDatedByArrival(t *testing.T) {
+	s := newTestRedisStore(t)
+	ctx := context.Background()
+	a, _ := cipher.GenerateKeyPair()
+	id := uuid.New()
+	seedPrev(t, s, id.String(), a)
+	yesterday := time.Now().UTC().AddDate(0, 0, -1)
+	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{
+		{ID: id, Reporter: a, Sent: 100, Recv: 10, Type: "stcpr", At: yesterday, LatMin: 1, LatMax: 3, LatAvg: 2},
+	}))
+	day := yesterday.Format(MetricsDateFormat)
+	n, err := s.client.Exists(ctx, s.bandwidthDailyKey(id.String(), time.Now().UTC())).Result()
+	require.NoError(t, err)
+	require.Zero(t, n, "nothing on today's hash")
+	got, err := s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), yesterday), a.Hex()+":sent").Result()
+	require.NoError(t, err)
+	require.Equal(t, "100", got)
+	got, err = s.client.HGet(ctx, s.netDailyKey(day), "bandwidth").Result()
+	require.NoError(t, err)
+	require.Equal(t, "110", got)
+	got, err = s.client.HGet(ctx, s.visorBandwidthDailyKey(a.Hex(), yesterday), "sent").Result()
+	require.NoError(t, err)
+	require.Equal(t, "100", got)
+	got, err = s.client.HGet(ctx, s.netDailyKey(day), "lat_count").Result()
+	require.NoError(t, err)
+	require.Equal(t, "1", got)
+
+	// Today's next report adds only the delta, to today.
+	require.NoError(t, s.ApplyTelemetry(ctx, []TelemetryUpdate{{ID: id, Reporter: a, Sent: 150, Recv: 10, Type: "stcpr"}}))
+	got, err = s.client.HGet(ctx, s.bandwidthDailyKey(id.String(), time.Now().UTC()), a.Hex()+":sent").Result()
+	require.NoError(t, err)
+	require.Equal(t, "50", got)
 }

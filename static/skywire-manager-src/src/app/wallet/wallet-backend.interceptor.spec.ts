@@ -12,6 +12,7 @@ describe('walletBackendTarget', () => {
 
   it('sends the coin list to the hypervisor registry', () => {
     expect(walletBackendTarget('/api/v1/coins', page)).toEqual({ url: 'wallet/coins', headers: {} });
+    expect(walletBackendTarget('/api/v1/coins/custom?id=ab12', page)).toEqual({ url: 'wallet/coins/custom?id=ab12', headers: {} });
   });
 
   it('keeps a coin index and query, relative to the page', () => {

@@ -35,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/flightrec"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -225,6 +226,12 @@ type Visor struct {
 	// homeVisors caches the visor list home.skynet shows.
 	homeVisors homeVisorCache
 
+	// caddySites caches the site names a local Caddy reports.
+	caddySites siteCache
+
+	// visorCharts samples this visor's load and traffic for /status/visor.
+	visorCharts atomic.Pointer[visorCharts]
+
 	procM       appserver.ProcManager // proc manager
 	appL        *launcher.AppLauncher // app launcher
 	serviceDisc appdisc.Factory
@@ -252,6 +259,8 @@ type Visor struct {
 	// Seeded from config; extended at runtime when a connected
 	// hypervisor pushes its own hypervisors. See peer_whitelist.go.
 	peerWhitelist pty.Whitelist
+	// requestLog keeps the resolving proxies' recent requests for the status pages.
+	requestLog *proxystatus.RequestLog
 
 	// hvPair is the hypervisor pairing state (pairing_hv.go), made on first use.
 	hvPairOnce sync.Once
@@ -275,8 +284,6 @@ type Visor struct {
 	// bootstrap direct client uses the addresses last learned from
 	// dmsg-discovery, not the (potentially stale) addresses in skywire.json.
 	dmsgServersCache *DmsgServersCache
-	// serversFeedOnce holds the dmsg discovery feed once for the server cache.
-	serversFeedOnce sync.Once
 
 	// deploySvcMu serializes applying the deployment's services config: the
 	// conf service's CXO feed and the hourly dmsg-HTTP refresh can both
@@ -397,6 +404,12 @@ type Visor struct {
 	// refused is invisible from both ends. Guarded by cxoUserFeedsMu.
 	sdRegCXOPub *treestore.Publisher
 
+	// systemFeedServices are the services whose registrations ride the system
+	// feed (system_feed_registrations.go). Guarded by cxoUserFeedsMu.
+	systemFeedServices []string
+	// sysFeedAnnounceOK is when the system feed last reached TPD, in Unix ns.
+	sysFeedAnnounceOK atomic.Int64
+
 	// sdEntryMirror holds the visor's live service-discovery entry set and
 	// mirrors it onto the SD-registration CXO feed. Constructed in NewVisor
 	// (never nil) and handed to every servicedisc client the visor builds,
@@ -470,6 +483,14 @@ type Visor struct {
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux
+	// hostedKeys holds the keys of the own-key services running in this visor,
+	// which handleServerConn hands streams to. cipher.PubKey -> cipher.Sig,
+	// the service's signature naming this visor as its host.
+	hostedKeys sync.Map
+	// svcHosts caches the host visor of each deployment service it dials.
+	svcHosts serviceHosts
+	// feedRedials spaces the moves of feed conns off dmsg (cxoRedial).
+	feedRedials  feedRedials
 	appDirectMux *transport.VStreamMux // direct skywire-network app dials (route ID 0); diag only
 	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
 	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
@@ -888,6 +909,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, opts Options, logBcast 
 		isTransportabilityHealthy: newInternalHealthInfo(),
 		connectedHypervisors:      make(map[cipher.PubKey]bool),
 		peerWhitelist:             newPeerWhitelist(conf),
+		requestLog:                proxystatus.NewRequestLog(statusRequestsKept),
 		hypervisorCancels:         make(map[cipher.PubKey]context.CancelFunc),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),

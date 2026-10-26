@@ -36,6 +36,8 @@ func TestApplyCheckpointsVerifies(t *testing.T) {
 	require.NoError(t, s.RegisterTransportsBatch(ctx, cipher.PubKey{}, []*transport.SignedEntry{{Entry: e}}))
 	ea, eb := e.Edges[0], e.Edges[1]
 	const gib = 1 << 30
+	seedPrev(t, s, e.ID.String(), ea)
+	seedPrev(t, s, e.ID.String(), eb)
 	require.NoError(t, s.UpdateBandwidth(ctx, e.ID.String(), ea, 4*gib, 0, "stcpr"))
 	require.NoError(t, s.UpdateBandwidth(ctx, e.ID.String(), eb, 0, 4*gib, "stcpr"))
 

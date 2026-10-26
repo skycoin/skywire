@@ -105,6 +105,13 @@ object Bip39 {
 
     fun isWord(word: String): Boolean = word.lowercase() in wordIndex
 
+    /**
+     * The 24-word, on-list, checksum-less shape the older wallets generated:
+     * their seeds were arbitrary strings, so a phrase of list words restored
+     * then and must restore now. True only for exactly 24 list words.
+     */
+    fun legacyWords(mnemonic: String): Boolean = tokens(mnemonic)?.size == 24
+
     fun suggestions(prefix: String, limit: Int = 4): List<String> {
         val p = prefix.trim().lowercase()
         if (p.isEmpty()) return emptyList()

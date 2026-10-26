@@ -406,6 +406,8 @@ type DiagSnapshot struct {
 	// app-direct dials, visor RPC): open streams, relay legs, and frames that
 	// arrived for streams this side does not have.
 	VStream []DiagVStreamMux `json:"vstream,omitempty"`
+	// Autoconnect is the site limit as this visor applies it.
+	Autoconnect *DiagAutoconnect `json:"autoconnect,omitempty"`
 	// Dmsg is per-session ping health plus the relay nominee/backoff state.
 	Dmsg *DiagDmsg `json:"dmsg,omitempty"`
 	// Reach counts the reach cards this visor serves and fetches (reach_card.go).
@@ -427,6 +429,12 @@ type DiagSnapshot struct {
 	// survives any amount of open churn: look up the transport id here to get
 	// the reason it died and how old it was.
 	TransportLastClose map[uuid.UUID]transport.TransportEvent `json:"transport_last_close,omitempty"`
+	// DialStats counts outbound transport dials per type: attempts, successes,
+	// failures and the last error. DialFailures is the last
+	// transport.DialFailureRingSize failed dials, oldest first, which the event
+	// ring cannot show because those transports never opened.
+	DialStats    map[string]transport.DialStat `json:"dial_stats,omitempty"`
+	DialFailures []transport.DialFailure       `json:"dial_failures,omitempty"`
 	// MuxEvents is the last router.MuxEventRingSize route-group and mux-leg
 	// changes, oldest first, each with the reason the code gave and who
 	// initiated it (local/remote/operator/adaptive/policy). This is where to
@@ -493,6 +501,29 @@ type DiagDmsgOverSkynet struct {
 	Fallback  uint64 `json:"fallback"`
 	LastError string `json:"last_error,omitempty"`
 	LastPK    string `json:"last_pk,omitempty"`
+	// Failures are the most recent failed dials, newest last.
+	Failures []DiagSkynetDialFailure `json:"failures,omitempty"`
+}
+
+// DiagSkynetDialFailure is one dial that fell back to dmsg, with what each
+// relay it tried answered.
+type DiagSkynetDialFailure struct {
+	At         time.Time            `json:"at"`
+	PK         string               `json:"pk"`
+	Dst        string               `json:"dst,omitempty"`
+	Error      string               `json:"error"`
+	Direct     string               `json:"direct,omitempty"`
+	Candidates int                  `json:"candidates"`
+	Confirmed  int                  `json:"confirmed"`
+	Relays     []DiagSkynetRelayTry `json:"relays,omitempty"`
+}
+
+// DiagSkynetRelayTry is one relay's outcome in a failed dial.
+type DiagSkynetRelayTry struct {
+	Relay     string `json:"relay"`
+	Confirmed bool   `json:"confirmed"`
+	Stage     string `json:"stage"`
+	Error     string `json:"error"`
 }
 
 // DiagDmsgSession is one dmsg session's liveness.
@@ -546,4 +577,24 @@ type DiagReachCards struct {
 	Fetches uint64 `json:"fetches"`
 	Hits    uint64 `json:"hits"`
 	Misses  uint64 `json:"misses"`
+}
+
+// DiagAutoconnect is autoconnect's site limit as this visor sees the network:
+// the sites it groups visors into from the address-resolver feed, its own
+// site, and how many sudph peers the limit leaves to other members of their
+// site this cycle.
+type DiagAutoconnect struct {
+	SiteLinks int      `json:"site_links"`
+	SiteTypes []string `json:"site_types,omitempty"`
+	// Visors and Sites count the visors grouped into a site and the sites.
+	Visors int `json:"visors"`
+	Sites  int `json:"sites"`
+	// MultiSites counts the sites of more than one visor.
+	MultiSites int `json:"multi_sites"`
+	// Site is this visor's own site, empty when it is in none.
+	Site []cipher.PubKey `json:"site,omitempty"`
+	// SudphPeers is the peers the reach feed lists for sudph, and
+	// SudphAllowed how many of them the site limit lets this visor dial.
+	SudphPeers   int `json:"sudph_peers"`
+	SudphAllowed int `json:"sudph_allowed"`
 }

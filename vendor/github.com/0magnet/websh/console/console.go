@@ -59,6 +59,10 @@ type Options struct {
 	// In and Out are the terminal. Nil means os.Stdin and os.Stdout.
 	In, Out *os.File
 
+	// Run is a command line run first, shown at the first prompt as if typed;
+	// the shell reads the next one from the terminal, as after any other.
+	Run string
+
 	// Signals carries Ctrl+C (os.Interrupt) and Ctrl+\ (SIGQUIT) for a terminal
 	// that is not the process's own, as a window's tab is: its host sends them
 	// here. Nil listens for the process's signals.
@@ -125,13 +129,11 @@ func Run(opt Options) (int, error) {
 	sh.WakeStdin = c.endReads
 
 	c.ed = &shell.LineEditor{
-		Echo: c.write,
-		Redraw: func(content string, back int) {
-			line := "\r\x1b[2K" + c.prompt() + content
-			if back > 0 {
-				line += "\x1b[" + strconv.Itoa(back) + "D"
-			}
-			c.write(line)
+		Echo:   c.write,
+		Prompt: func() string { return c.shown },
+		Cols: func() int {
+			w, _ := sh.Size()
+			return w
 		},
 		Submit:    func(l string) { c.line, c.done = l, true },
 		Interrupt: func() { c.sh.CancelPending(); c.writePrompt() },
@@ -139,7 +141,7 @@ func Run(opt Options) (int, error) {
 		ClearScreen: func() {
 			c.write("\x1b[2J\x1b[H")
 			c.writePrompt()
-			c.write(c.ed.Line())
+			c.ed.Redisplay()
 		},
 		Complete: sh.Complete,
 	}
@@ -179,8 +181,19 @@ func Run(opt Options) (int, error) {
 	if opt.Greeting != "" {
 		c.write(strings.ReplaceAll(opt.Greeting, "\n", "\r\n"))
 	}
+	if err := c.runRC(); err != nil {
+		c.write(c.host + ": " + shell.RCFile + ": " + strings.ReplaceAll(err.Error(), "\n", "\r\n") + "\r\n")
+	}
+	first := opt.Run
 	for {
-		line, ok := c.readLine()
+		line, ok := first, true
+		if first != "" {
+			c.writePrompt()
+			c.write(first + "\n") // the terminal is not raw here, so it makes \r\n
+			first = ""
+		} else {
+			line, ok = c.readLine()
+		}
 		if !ok {
 			c.write("\r\n")
 			return 0, nil
@@ -207,6 +220,7 @@ type console struct {
 	host  string
 	sh    *shell.Shell
 	ed    *shell.LineEditor
+	shown string   // the prompt writePrompt drew last, which the editor draws again
 	in    *os.File // the terminal, non-blocking: see pollable
 	out   *os.File
 	fd    int
@@ -337,6 +351,9 @@ func (c *console) prompt() string {
 	if c.sh.Pending() {
 		return "\x1b[1;33m>\x1b[0m "
 	}
+	if p, ok := c.sh.PS1(); ok {
+		return p
+	}
 	dir := c.sh.Dir()
 	if home := os.Getenv("HOME"); home != "" && (dir == home || strings.HasPrefix(dir, home+"/")) {
 		dir = "~" + dir[len(home):]
@@ -348,7 +365,8 @@ func (c *console) prompt() string {
 // uses to find prompts and commands (OSC 133), as the browser session does.
 func (c *console) writePrompt() {
 	c.osc133("A")
-	c.write(c.prompt())
+	c.shown = c.prompt()
+	c.write(shell.PromptText(c.shown))
 	c.osc133("B")
 }
 
@@ -405,4 +423,23 @@ func Script(src io.Reader, name string, args []string, opt Options) (int, error)
 		return int(es), nil
 	}
 	return 1, err
+}
+
+// runRC sources ~/.webshrc as a line runs, so Ctrl+C ends it.
+func (c *console) runRC() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	c.mu.Lock()
+	c.cancel = cancel
+	c.mu.Unlock()
+	err := c.sh.SourceRC(ctx)
+	interrupted := ctx.Err() != nil
+	c.mu.Lock()
+	c.cancel = nil
+	c.mu.Unlock()
+	cancel()
+	c.in.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec // as in runLine
+	if interrupted {
+		return nil
+	}
+	return err
 }

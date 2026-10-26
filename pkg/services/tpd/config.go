@@ -34,6 +34,31 @@ type Config struct {
 	// ChartsAddr serves only the charts page over plain HTTP. Empty disables it.
 	ChartsAddr string `json:"charts_addr,omitempty"`
 
+	// TelemetryApplyEvery is how often one edge's report of one transport is
+	// written to redis. Empty means 15m, and it is capped at 30m.
+	TelemetryApplyEvery services.Duration `json:"telemetry_apply_every,omitempty"`
+
+	// RoutingPublishEvery is how often the routing feed is republished.
+	// Empty means 10m.
+	RoutingPublishEvery services.Duration `json:"routing_publish_every,omitempty"`
+
+	// RoutingLatencyWindow is how many routing publishes the published
+	// latency is the minimum of. Zero means 6.
+	RoutingLatencyWindow int `json:"routing_latency_window,omitempty"`
+
+	// RoutingHysteresis is the relative change a transport's latency or
+	// throughput must make before the routing feed republishes it. Zero
+	// means 0.25; a negative value republishes every change.
+	RoutingHysteresis float64 `json:"routing_hysteresis,omitempty"`
+
+	// RoutingSnapshotEvery is how many routing publishes go by between full
+	// snapshots; the publishes between send only what changed. Zero means 6.
+	RoutingSnapshotEvery int `json:"routing_snapshot_every,omitempty"`
+
+	// AddressResolverDmsg is the address resolver whose bindings feed shows
+	// which visors share a public IP. Empty means the production one.
+	AddressResolverDmsg string `json:"address_resolver_dmsg,omitempty"`
+
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`

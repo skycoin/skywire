@@ -240,5 +240,5 @@ func TestListenAndServeNet_RejectsConnWhenExtractorReturnsFalse(t *testing.T) {
 		t.Error("server conn was not closed; extractor-false should drop the conn")
 	}
 	_ = lis.Close() //nolint:errcheck,gosec
-	<-done
+	<-done          //nolint:errcheck
 }

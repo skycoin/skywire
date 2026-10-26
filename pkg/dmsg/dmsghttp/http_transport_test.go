@@ -276,7 +276,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 		defer cancel()
 		_ = srv.Shutdown(ctx) //nolint:errcheck
 		_ = lis.Close()       //nolint:errcheck
-		<-errCh
+		<-errCh               //nolint:errcheck
 	})
 
 	addr := lis.Addr().String()
