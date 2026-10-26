@@ -3,7 +3,7 @@ import XCTest
 
 /// The wallet's Skycoin flows against a local fake node, which holds a fixed set of outputs for
 /// the phrase below and checks each injected transaction with skycoin's own signature and fee
-/// rules (the bench's fakenode, see ios/README.md). Skipped unless the runner names it:
+/// rules (ios/scripts/fakenode, see ios/README.md). Skipped unless the runner names it:
 ///
 ///   TEST_RUNNER_SKYWIRE_FAKE_NODE=http://127.0.0.1:6420 … -only-testing:SkywireUITests/WalletBenchChecks
 ///
