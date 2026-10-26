@@ -239,6 +239,36 @@ final class WalletBenchChecks: XCTestCase {
         attachScreenshot(app, "bench-broadcast")
     }
 
+    /// A request made on Receive carries the amount, hours and message in the QR and the copy, and
+    /// pasted on Send it fills the recipient, the amount and the hours.
+    func testPaymentRequestRoundTrip() throws {
+        let app = try benchWallet()
+        app.buttons["wallet-receive"].tap()
+        let request = app.buttons["wallet-request"]
+        scroll(to: request, in: app)
+        request.tap()
+        for (field, text) in [("wallet-request-amount", "1.5"), ("wallet-request-hours", "20"), ("wallet-request-message", "lunch")] {
+            let input = app.textFields[field]
+            scroll(to: input, in: app)
+            input.tap()
+            input.typeText(text)
+        }
+        let copy = app.buttons["wallet-receive-copy"]
+        scroll(to: copy, in: app)
+        XCTAssertEqual(copy.label, "Copy request")
+        attachScreenshot(app, "bench-request")
+        copy.tap()
+        back(app)
+        app.buttons["wallet-send"].tap()
+        tapWhenUp("Paste", in: app)
+        XCTAssertEqual(app.textFields["wallet-send-to"].value as? String, addresses[0])
+        XCTAssertEqual(app.textFields["wallet-send-amount"].value as? String, "1.5")
+        let hours = app.textFields["wallet-send-hours"]
+        scroll(to: hours, in: app)
+        XCTAssertEqual(hours.value as? String, "20")
+        attachScreenshot(app, "bench-request-pasted")
+    }
+
     /// Opens an offline dialog from Advanced and pastes what the app copied last.
     private func offline(_ button: String, _ app: XCUIApplication) {
         let open = app.buttons[button]

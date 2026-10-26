@@ -6,6 +6,10 @@ import UIKit
 struct WalletReceiveView: View {
     @EnvironmentObject private var model: WalletModel
     @EnvironmentObject private var dialogs: SkyDialogs
+    @State private var requestOpen = false
+    @State private var amount = ""
+    @State private var hours = ""
+    @State private var message = ""
 
     private var address: String? {
         guard let wallet = model.active else { return nil }
@@ -18,12 +22,15 @@ struct WalletReceiveView: View {
         WalletScreen(title: Text("wallet_receive_title")) {
             ScrollView {
                 if let address, let wallet = model.active {
+                    let request = model.coin.paymentRequest(address: address, amountText: amount, hoursText: hours, message: message)
+                    // The QR, Copy and Share carry the request once one is filled in; the chip stays the address.
+                    let shared = request.uri ?? address
                     VStack(spacing: 0) {
                         Text(verbatim: L10n.format("wallet_receive_only", model.coin.ticker))
                             .skyText(.bodyMedium)
                             .foregroundStyle(Color.skyOnSurfaceVariant)
                             .multilineTextAlignment(.center)
-                        QRCodeImage(content: address)
+                        QRCodeImage(content: shared)
                             .frame(width: 220, height: 220)
                             .clipShape(RoundedRectangle(cornerRadius: SkyRadius.small))
                             .padding(16)
@@ -45,12 +52,17 @@ struct WalletReceiveView: View {
                         .accessibilityValue(Text(verbatim: address))
                         Text("wallet_receive_tap_copy").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
                         HStack(spacing: 12) {
-                            Button { copy(address) } label: { Text("wallet_copy").frame(maxWidth: .infinity) }
-                                .buttonStyle(FilledButtonStyle(height: 50))
-                            ShareLink(item: address) { Text("wallet_share").frame(maxWidth: .infinity) }
+                            Button { copy(shared, request: request.uri != nil) } label: {
+                                Text(request.uri != nil ? L10n.key("wallet_request_copy") : L10n.key("wallet_copy")).frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(FilledButtonStyle(height: 50))
+                            .accessibilityIdentifier("wallet-receive-copy")
+                            ShareLink(item: shared) { Text("wallet_share").frame(maxWidth: .infinity) }
                                 .buttonStyle(TonalButtonStyle(height: 50))
                         }
                         .padding(.top, 26)
+                        requestCard(request)
+                            .padding(.top, 12)
                         Button { dialogs.presentSheet { AddressSheet().environmentObject(model) } } label: {
                             HStack(spacing: 12) {
                                 Text("wallet_other_addresses").skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
@@ -76,9 +88,57 @@ struct WalletReceiveView: View {
         }
     }
 
-    private func copy(_ address: String) {
-        UIPasteboard.general.string = address
-        dialogs.snackbar(Text("wallet_address_copied"))
+    private func copy(_ text: String, request: Bool = false) {
+        UIPasteboard.general.string = text
+        dialogs.snackbar(Text(request ? L10n.key("wallet_request_copied") : L10n.key("wallet_address_copied")))
+    }
+
+    /// Request a specific amount: the hours on fiber coins, a message off the Ethereum family.
+    private func requestCard(_ request: PaymentRequest) -> some View {
+        let coin = model.coin
+        return VStack(alignment: .leading, spacing: 0) {
+            Button { requestOpen.toggle() } label: {
+                HStack {
+                    Text("wallet_request_title").skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    MaterialIcon(requestOpen ? MI.outlinedKeyboardArrowUp : MI.outlinedKeyboardArrowDown, size: 18)
+                        .foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 15)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle(layer: .skyOnSurface))
+            .accessibilityIdentifier("wallet-request")
+            if requestOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    SkyOutlinedTextField(label: LocalizedStringKey(L10n.format("wallet_request_amount", coin.ticker)),
+                                         text: Binding(get: { amount }, set: { amount = String($0.prefix(40)) }),
+                                         isError: request.badAmount, keyboard: .decimalPad, notch: .skySurfaceVariant,
+                                         identifier: "wallet-request-amount")
+                    if coin.kind == .skyFiber {
+                        SkyOutlinedTextField(label: L10n.key("wallet_request_hours"),
+                                             text: Binding(get: { hours }, set: { hours = String($0.prefix(18)) }),
+                                             isError: request.badHours, keyboard: .numberPad, notch: .skySurfaceVariant,
+                                             identifier: "wallet-request-hours")
+                    }
+                    if !coin.isEthFamily {
+                        SkyOutlinedTextField(label: L10n.key("wallet_request_message"),
+                                             text: Binding(get: { message }, set: { message = String($0.prefix(requestMessageMax)) }),
+                                             notch: .skySurfaceVariant, identifier: "wallet-request-message", prose: true)
+                    }
+                    Text(request.badAmount ? L10n.key("wallet_request_bad_amount")
+                         : request.badHours ? L10n.key("wallet_request_bad_hours") : L10n.key("wallet_request_note"))
+                        .skyText(.bodySmall)
+                        .foregroundStyle(request.badAmount || request.badHours ? Color.skyError : Color.skyOnSurfaceVariant)
+                        .padding(.top, 2)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+        }
+        .background(Color.skySurfaceVariant, in: .sky(SkyRadius.medium))
+        .accessibilityElement(children: .contain)
     }
 }
 
