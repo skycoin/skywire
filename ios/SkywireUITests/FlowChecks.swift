@@ -152,16 +152,5 @@ final class FlowChecks: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 30), .completed, "still locked after a match")
     }
 
-    /// Has faceid-matcher.sh (on the Mac) answer every Face ID prompt with a
-    /// match while `step` runs; a prompt raised after it returns waits. The
-    /// flag file stays for the whole step because a match sent while no
-    /// prompt is up is dropped: asking for one match per prompt lost it in
-    /// the gap between one sheet closing and the next opening.
-    private func answeringFaceID(_ step: () -> Void) {
-        FileManager.default.createFile(atPath: Self.faceIDFlag, contents: nil)
-        defer { try? FileManager.default.removeItem(atPath: Self.faceIDFlag) }
-        step()
-    }
-
     private nonisolated static let faceIDFlag = NSTemporaryDirectory() + "faceid-match"
 }

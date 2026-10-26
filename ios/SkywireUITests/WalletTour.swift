@@ -130,10 +130,6 @@ final class WalletTour: XCTestCase {
         coin.tap()
     }
 
-    private func back(_ app: XCUIApplication) {
-        goBack(app)
-    }
-
     private func snap(_ name: String) {
         // Let SwiftUI settle (a navigation push animates).
         usleep(700_000)

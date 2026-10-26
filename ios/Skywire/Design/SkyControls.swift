@@ -481,3 +481,22 @@ struct ProportionalRow: Layout {
         return ideal.map { total > 0 ? free * $0 / total : 0 }
     }
 }
+
+/// Material 3's checkbox, 18 points in a 24 point box: a filled square with a tick when picked.
+struct SkyCheckbox: View {
+    let checked: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2)
+                .strokeBorder(checked ? Color.skyPrimary : Color.skyOnSurfaceVariant, lineWidth: 2)
+                .background(RoundedRectangle(cornerRadius: 2).fill(checked ? Color.skyPrimary : Color.clear))
+                .frame(width: 18, height: 18)
+            if checked {
+                MaterialIcon(MI.filledCheck, size: 16).foregroundStyle(Color.skyOnPrimary)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityHidden(true)
+    }
+}

@@ -257,6 +257,8 @@ struct CachedTx: Codable, Equatable, Identifiable, Sendable {
     var confirmed: Bool
     var confirmations: Int64
     var fee: UInt64?
+    /// This wallet's addresses the transaction used, see TxRecord.own.
+    var own: [String] = []
 
     var id: String { txid }
 
@@ -269,11 +271,12 @@ struct CachedTx: Codable, Equatable, Identifiable, Sendable {
         confirmed = record.confirmed
         confirmations = record.confirmations
         fee = record.fee
+        own = record.own
     }
 
     init(
         txid: String, incoming: Bool, amount: UInt64, party: String?, timestamp: Int64,
-        confirmed: Bool, confirmations: Int64, fee: UInt64?
+        confirmed: Bool, confirmations: Int64, fee: UInt64?, own: [String] = []
     ) {
         self.txid = txid
         self.incoming = incoming
@@ -283,6 +286,25 @@ struct CachedTx: Codable, Equatable, Identifiable, Sendable {
         self.confirmed = confirmed
         self.confirmations = confirmations
         self.fee = fee
+        self.own = own
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case txid, incoming, amount, party, timestamp, confirmed, confirmations, fee, own
+    }
+
+    /// A cache written before a field existed still reads, with that field at its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        txid = try c.decode(String.self, forKey: .txid)
+        incoming = try c.decode(Bool.self, forKey: .incoming)
+        amount = try c.decode(UInt64.self, forKey: .amount)
+        party = try c.decodeIfPresent(String.self, forKey: .party)
+        timestamp = try c.decode(Int64.self, forKey: .timestamp)
+        confirmed = try c.decode(Bool.self, forKey: .confirmed)
+        confirmations = try c.decode(Int64.self, forKey: .confirmations)
+        fee = try c.decodeIfPresent(UInt64.self, forKey: .fee)
+        own = try c.decodeIfPresent([String].self, forKey: .own) ?? []
     }
 }
 
@@ -295,6 +317,8 @@ struct WalletSnapshot: Codable, Equatable, Sendable {
     var hours: UInt64?
     var spendableOutputs = 0
     var txs: [CachedTx] = []
+    /// Confirmed coins held by each single address: the addresses sheet's numbers.
+    var perAddress: [String: UInt64] = [:]
     var fetchedAtMs: Int64 = 0
     /// When `txs` was last actually fetched, which can lag `fetchedAtMs`: the
     /// balance and the history are fetched separately and the history is the
@@ -307,7 +331,28 @@ struct WalletSnapshot: Codable, Equatable, Sendable {
     var historyBehind: Bool { historyFetchedAtMs < fetchedAtMs }
 
     var balance: WalletBalance {
-        WalletBalance(confirmed: confirmed, predicted: predicted, hours: hours, spendableOutputs: spendableOutputs)
+        WalletBalance(confirmed: confirmed, predicted: predicted, hours: hours, spendableOutputs: spendableOutputs, perAddress: perAddress)
+    }
+}
+
+extension WalletSnapshot {
+    enum CodingKeys: String, CodingKey {
+        case confirmed, predicted, hours, spendableOutputs, txs, perAddress, fetchedAtMs, historyFetchedAtMs
+    }
+
+    /// A cache written before a field existed still reads, with that field at its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            confirmed: try c.decodeIfPresent(UInt64.self, forKey: .confirmed) ?? 0,
+            predicted: try c.decodeIfPresent(UInt64.self, forKey: .predicted) ?? 0,
+            hours: try c.decodeIfPresent(UInt64.self, forKey: .hours),
+            spendableOutputs: try c.decodeIfPresent(Int.self, forKey: .spendableOutputs) ?? 0,
+            txs: try c.decodeIfPresent([CachedTx].self, forKey: .txs) ?? [],
+            perAddress: try c.decodeIfPresent([String: UInt64].self, forKey: .perAddress) ?? [:],
+            fetchedAtMs: try c.decodeIfPresent(Int64.self, forKey: .fetchedAtMs) ?? 0,
+            historyFetchedAtMs: try c.decodeIfPresent(Int64.self, forKey: .historyFetchedAtMs) ?? 0
+        )
     }
 }
 
@@ -326,6 +371,7 @@ func mergeSnapshot(balance: WalletBalance, history: [TxRecord]?, previous: Walle
         hours: balance.hours,
         spendableOutputs: balance.spendableOutputs,
         txs: history.map { $0.map(CachedTx.init) } ?? previous?.txs ?? [],
+        perAddress: balance.perAddress,
         fetchedAtMs: nowMs,
         historyFetchedAtMs: history != nil ? nowMs : previous?.historyFetchedAtMs ?? 0
     )
