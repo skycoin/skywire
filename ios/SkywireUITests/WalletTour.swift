@@ -28,6 +28,8 @@ final class WalletTour: XCTestCase {
 
     func testWalletTourSpanish() throws { try tour(language: "es", locale: "es_ES") }
 
+    func testWalletTourFrench() throws { try tour(language: "fr", locale: "fr_FR") }
+
     /// Removes the tour's wallet (English labels): last by name.
     func testWalletTourZRemove() {
         let app = XCUIApplication()

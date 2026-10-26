@@ -476,6 +476,7 @@ private struct LanguageCard: View {
                 chip(L10n.key("settings_language_en"), .english)
                 chip(L10n.key("settings_language_zh_cn"), .chineseSimplified)
                 chip(L10n.key("settings_language_es"), .spanish)
+                chip(L10n.key("settings_language_fr"), .french)
             }
             .padding(.top, 4)
         }

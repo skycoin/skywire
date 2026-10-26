@@ -7,7 +7,7 @@ import XCTest
 /// the keys the Swift sources use. ios/scripts/seed-strings.py writes the
 /// catalogues; this is what keeps them honest.
 final class StringCatalogTests: XCTestCase {
-    static let languages = ["en", "zh-Hans", "es"]
+    static let languages = ["en", "zh-Hans", "es", "fr"]
 
     /// ios/, from this file's path. The Simulator reads the Mac's disk.
     static let iosDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -53,7 +53,7 @@ final class StringCatalogTests: XCTestCase {
         return try JSONDecoder().decode(Catalogue.self, from: Data(contentsOf: url))
     }
 
-    func testEveryKeyHasTheThreeLanguages() throws {
+    func testEveryKeyHasTheFourLanguages() throws {
         for name in ["Localizable", "InfoPlist"] {
             let catalogue = try Self.catalogue(name)
             XCTAssertEqual(catalogue.sourceLanguage, "en")

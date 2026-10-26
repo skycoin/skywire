@@ -16,6 +16,12 @@
             "value" : "Skywire usa la cámara para grabar mensajes de vídeo y escanear códigos QR en SkyChat y en la billetera."
           }
         },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire utilise l’appareil photo pour enregistrer des messages vidéo et scanner des codes QR dans SkyChat et le portefeuille."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -37,6 +43,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skywire usa Face ID para desbloquear la app cuando el bloqueo de la app está activado, y para confirmar los envíos de la billetera y antes de mostrar una frase de recuperación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire utilise Face ID pour déverrouiller l’app quand le verrouillage est activé, et pour confirmer les envois du portefeuille et l’affichage d’une phrase de récupération."
           }
         },
         "zh-Hans" : {
@@ -62,6 +74,12 @@
             "value" : "SkyChat usa el micrófono para las llamadas y para grabar mensajes de voz y de vídeo."
           }
         },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SkyChat utilise le micro pour les appels et pour enregistrer des messages vocaux et vidéo."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -83,6 +101,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire enregistre dans votre photothèque les images et les vidéos que vous choisissez."
           }
         },
         "zh-Hans" : {

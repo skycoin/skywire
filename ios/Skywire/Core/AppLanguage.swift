@@ -3,7 +3,7 @@ import Foundation
 /// The language the interface is drawn in (Android: core/AppLanguage.kt, the same stored names).
 /// Only the app follows it: logs and what the visor reports stay as written.
 enum AppLanguage: String, CaseIterable {
-    case system = "SYSTEM", english = "ENGLISH", chineseSimplified = "CHINESE_SIMPLIFIED", spanish = "SPANISH"
+    case system = "SYSTEM", english = "ENGLISH", chineseSimplified = "CHINESE_SIMPLIFIED", spanish = "SPANISH", french = "FRENCH"
 
     /// The localisation it names in the bundle; nil for the phone's choice.
     var tag: String? {
@@ -12,6 +12,7 @@ enum AppLanguage: String, CaseIterable {
         case .english: "en"
         case .chineseSimplified: "zh-Hans"
         case .spanish: "es"
+        case .french: "fr"
         }
     }
 

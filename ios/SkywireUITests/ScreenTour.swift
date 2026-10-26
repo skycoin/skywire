@@ -23,6 +23,8 @@ final class ScreenTour: XCTestCase {
 
     func testTourSpanish() throws { try tour(language: "es", locale: "es_ES") }
 
+    func testTourFrench() throws { try tour(language: "fr", locale: "fr_FR") }
+
     private func tour(language: String, locale: String) throws {
         let app = XCUIApplication()
         launch(app, language: language, locale: locale)

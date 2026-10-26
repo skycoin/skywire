@@ -2,8 +2,8 @@
 """Writes the iOS app's string catalogues from the Android ones.
 
 ios/Skywire/Localizable.xcstrings holds exactly the keys the app's Swift
-sources use. A key the Android app has takes its English, Simplified Chinese
-and Spanish from android/app/src/main/res/values{,-zh-rCN,-es}/strings.xml,
+sources use. A key the Android app has takes its English, Simplified Chinese,
+Spanish and French from android/app/src/main/res/values{,-zh-rCN,-es,-fr}/strings.xml,
 so the two apps say the same thing in the same words; a key only iOS has comes
 from ios/scripts/strings-ios.json, as do the Info.plist strings
 (InfoPlist.xcstrings). Android's placeholders become iOS's: %1$s -> %1$@,
@@ -31,7 +31,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 APP = os.path.join(ROOT, "ios", "Skywire")
 ANDROID_RES = os.path.join(ROOT, "android", "app", "src", "main", "res")
 SUPPLEMENT = os.path.join(ROOT, "ios", "scripts", "strings-ios.json")
-LANGUAGES = {"en": "values", "zh-Hans": "values-zh-rCN", "es": "values-es"}
+LANGUAGES = {"en": "values", "zh-Hans": "values-zh-rCN", "es": "values-es", "fr": "values-fr"}
 
 TRIGGER = re.compile(
     r"\b(?:Text|Label|Button|Toggle|Section|Picker|TextField|LocalizedStringKey"
