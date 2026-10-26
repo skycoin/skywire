@@ -474,6 +474,12 @@ final class WalletStore: ObservableObject {
         return settled
     }
 
+    /// The wallet's unspent outputs, for a coin picker or one address's outputs. Fiber chains only.
+    func utxos(walletId: String) async throws -> [UtxoRecord] {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
+        return try await core(for: spec).utxos(AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses))
+    }
+
     // MARK: Send
 
     func plan(walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool) async throws -> TxPlan {

@@ -233,7 +233,7 @@ private struct MailRow: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 if selecting {
-                    MailCheckbox(checked: selected)
+                    SkyCheckbox(checked: selected)
                 } else {
                     Circle().fill(unread ? Color.skyPrimary : Color.clear).frame(width: 10, height: 10)
                 }
@@ -280,25 +280,6 @@ private struct MailRow: View {
             .accessibilityIdentifier("mail-row")
             SkyDivider()
         }
-    }
-}
-
-/// Material 3's checkbox, 18 points in a 24 point box: a filled square with a tick when picked.
-private struct MailCheckbox: View {
-    let checked: Bool
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 2)
-                .strokeBorder(checked ? Color.skyPrimary : Color.skyOnSurfaceVariant, lineWidth: 2)
-                .background(RoundedRectangle(cornerRadius: 2).fill(checked ? Color.skyPrimary : Color.clear))
-                .frame(width: 18, height: 18)
-            if checked {
-                MaterialIcon(MI.filledCheck, size: 16).foregroundStyle(Color.skyOnPrimary)
-            }
-        }
-        .frame(width: 24, height: 24)
-        .accessibilityHidden(true)
     }
 }
 

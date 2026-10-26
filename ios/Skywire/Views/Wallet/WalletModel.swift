@@ -7,6 +7,8 @@ struct SendState {
     var to = ""
     var amountText = ""
     var sendMax = false
+    /// The unspent outputs as last loaded, for the picker and one address's outputs.
+    var utxos: [UtxoRecord] = []
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -55,6 +57,8 @@ final class WalletModel: ObservableObject {
     @Published private(set) var restoring = false
     /// Index into the active wallet's receive addresses shown on Receive.
     @Published var receiveIndex = 0
+    /// History shows only transactions this address of the wallet took part in; nil shows all.
+    @Published var historyAddress: String?
     @Published var send = SendState()
     @Published private(set) var draft = DraftState()
     /// The node address the coin would use with nothing set — what the Node
@@ -112,6 +116,7 @@ final class WalletModel: ObservableObject {
         } else {
             stale = false
             receiveIndex = 0
+            historyAddress = nil
         }
         ready = true
         if visible && (!sameWallet || refreshTask == nil) { startRefreshing() }
@@ -314,6 +319,16 @@ final class WalletModel: ObservableObject {
     // MARK: Send
 
     func resetSend() { send = SendState() }
+
+    /// Loads the unspent outputs, keeping the last list when the node does not answer. Fiber only.
+    func loadUtxos() {
+        guard let active, coin.kind == .skyFiber else { return }
+        Task { [self] in
+            if let list = try? await store.utxos(walletId: active.id), self.active?.id == active.id {
+                send.utxos = list
+            }
+        }
+    }
 
     /// The fee presets, on Bitcoin only (the other chains price themselves or
     /// burn hours).

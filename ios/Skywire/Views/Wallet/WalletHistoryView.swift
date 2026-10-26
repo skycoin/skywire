@@ -7,16 +7,19 @@ private enum TxFilter: Hashable { case all, sent, received, pending }
 /// Full history (Android: ui/wallet/WalletHistory.kt): filter chips, transactions grouped by day.
 struct WalletHistoryView: View {
     @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
     @State private var filter = TxFilter.all
 
     private var txs: [CachedTx] {
-        (model.snapshot?.txs ?? []).filter {
-            switch filter {
+        let address = model.historyAddress
+        return (model.snapshot?.txs ?? []).filter { tx in
+            let kind: Bool = switch filter {
             case .all: true
-            case .sent: !$0.incoming
-            case .received: $0.incoming
-            case .pending: !$0.confirmed
+            case .sent: !tx.incoming
+            case .received: tx.incoming
+            case .pending: !tx.confirmed
             }
+            return kind && (address.map { tx.own.contains($0) } ?? true)
         }
     }
 
@@ -44,6 +47,7 @@ struct WalletHistoryView: View {
                             chip(L10n.key("wallet_filter_sent"), .sent)
                             chip(L10n.key("wallet_filter_received"), .received)
                             chip(L10n.key("wallet_filter_pending"), .pending)
+                            addressChip
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 4)
@@ -90,6 +94,21 @@ struct WalletHistoryView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// The address the list is narrowed to, or All addresses; a tap picks another.
+    private var addressChip: some View {
+        let address = model.historyAddress
+        return Button { dialogs.presentSheet { HistoryAddressSheet().environmentObject(model) } } label: {
+            Text(verbatim: address.map { shortAddress($0) } ?? L10n.text("wallet_history_all_addresses")).skyText(.labelLarge)
+                .foregroundStyle(address != nil ? Color.skyPrimary : Color.skyOnSurfaceVariant)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 9)
+                .background(address != nil ? Color.skySecondaryContainer : Color.skySurfaceVariant, in: .sky(18))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 18))))
+        .accessibilityAddTraits(address != nil ? .isSelected : [])
+        .accessibilityIdentifier("wallet-history-address")
+    }
+
     /// "Nothing has moved in or out of this wallet" is a claim about the chain, ours to make only
     /// when the history arrived: it is the half of a refresh that can be too big to fetch.
     private var emptyState: some View {
@@ -120,6 +139,42 @@ struct WalletHistoryView: View {
         if unfetched { return L10n.format("wallet_history_unfetched_body", model.coin.ticker) }
         if filter == .all { return L10n.format("wallet_history_empty_all", model.coin.ticker) }
         return L10n.format("wallet_history_empty_filter", model.coin.ticker)
+    }
+}
+
+/// Picks which of the wallet's addresses the history shows.
+private struct HistoryAddressSheet: View {
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        if let wallet = model.active {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("wallet_history_address_pick").skyText(.titleMedium).padding(.horizontal, 20).padding(.vertical, 8)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(([nil] + (wallet.receiveAddresses + wallet.changeAddresses).map(Optional.some)).enumerated()), id: \.offset) { _, address in
+                            Button {
+                                model.historyAddress = address
+                                dialogs.dismissSheet()
+                            } label: {
+                                Text(verbatim: address.map { shortAddress($0) } ?? L10n.text("wallet_history_all_addresses"))
+                                    .skyText(.bodyMedium, bold: address == model.historyAddress)
+                                    .foregroundStyle(address == model.historyAddress ? Color.skyPrimary : Color.skyOnSurface)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 13)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressStyle(layer: .skyOnSurface))
+                        }
+                    }
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, 24)
+        }
     }
 }
 
