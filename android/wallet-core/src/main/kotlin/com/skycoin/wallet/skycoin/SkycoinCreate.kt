@@ -1,12 +1,14 @@
 package com.skycoin.wallet.skycoin
 
+import java.math.BigDecimal
 import java.math.BigInteger
+import java.math.RoundingMode
 
 /**
  * Unsigned-transaction construction — a faithful port of the reference
  * implementation's transaction package (Create / ChooseSpends /
- * DistributeCoinHoursProportional / RequiredFee), hours-auto with share
- * factor 1/2, the same strategy the desktop wallet uses.
+ * DistributeCoinHoursProportional / RequiredFee). Hours are automatic in
+ * share mode, 1/2 by default as the desktop wallet sends, or manual.
  *
  * Everything here is pure: unspents in, chosen transaction out. Network and
  * signing live elsewhere.
@@ -167,19 +169,23 @@ object SkycoinCreate {
         return out
     }
 
+    /** The share of post-burn hours sent onward when none is chosen, as the desktop wallet sends. */
+    val DEFAULT_SHARE: BigDecimal = BigDecimal("0.5")
+
     /**
-     * Create the unsigned transaction. Hours selection is auto/share; the
-     * share of post-burn hours sent onward is 1/2, retried at 1/1 when change
-     * hours would otherwise be burned with no change output to carry them.
+     * Create the unsigned transaction. Automatic hours send [shareFactor] of
+     * the post-burn hours onward, retried at 1 when change hours would
+     * otherwise be burned with no change output to carry them.
      */
     fun create(
         unspents: List<UxBalance>,
         to: List<Destination>,
         changeAddress: String,
         burnFactor: UInt,
-        shareFull: Boolean = false,
+        shareFactor: BigDecimal = DEFAULT_SHARE,
         callCount: Int = 0,
     ): Created {
+        require(shareFactor.signum() >= 0 && shareFactor <= BigDecimal.ONE) { "share factor outside 0..1" }
         require(to.isNotEmpty()) { "no destinations" }
         require(to.all { it.coins != 0uL }) { "zero-coin destination" }
         // Hours are all-automatic or all-manual in one call, never mixed.
@@ -210,7 +216,9 @@ object SkycoinCreate {
         val addrHours = if (isManual) {
             manualHours.map { it!! }
         } else {
-            val allocatedHours = if (shareFull) remaining else remaining / 2uL
+            // decimal.Mul(...).IntPart() in the reference: the product, truncated.
+            val allocatedHours = shareFactor.multiply(remaining.toBigInteger().toBigDecimal())
+                .setScale(0, RoundingMode.DOWN).toBigInteger().toString().toULong()
             distributeCoinHoursProportional(to.map { it.coins }, allocatedHours)
         }
         for ((i, d) in to.withIndex()) {
@@ -251,9 +259,10 @@ object SkycoinCreate {
         }
 
         // Still hours with nowhere to go: retry once sending the full share onward.
-        if (!isManual && changeCoins == 0uL && changeHours > 0uL && !shareFull) {
+        if (!isManual && changeCoins == 0uL && changeHours > 0uL) {
+            check(shareFactor.compareTo(BigDecimal.ONE) != 0) { "share factor is 1 but hours are left over" }
             if (callCount > 0) error("create already retried at full share")
-            return create(unspents, to, changeAddress, burnFactor, shareFull = true, callCount = 1)
+            return create(unspents, to, changeAddress, burnFactor, BigDecimal.ONE, callCount = 1)
         }
 
         // Hours no change output carries are burned, so they count in the fee:

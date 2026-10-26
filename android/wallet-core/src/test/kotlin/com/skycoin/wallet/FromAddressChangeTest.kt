@@ -20,7 +20,7 @@ import kotlin.test.assertEquals
  */
 class FromAddressChangeTest {
 
-    private val seed = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    private val seed = KeySource("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
 
     private fun fakeNode(outputs: String) = OkHttpClient.Builder().addInterceptor { chain ->
         val body = when (val path = chain.request().url.encodedPath) {

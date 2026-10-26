@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.wallet
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,11 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +52,11 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
+import com.skycoin.skywire.wallet.CoinSpec
+import com.skycoin.skywire.wallet.WalletMesh
+import com.skycoin.wallet.Amounts
+import com.skycoin.wallet.NodeInfo
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
@@ -74,6 +83,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 @Composable
 fun WalletNodeScreen(
     viewModel: WalletViewModel,
+    onDetails: () -> Unit,
     onBack: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -86,7 +96,10 @@ fun WalletNodeScreen(
     val hasIndexer = shippedIndexer != null
     var add by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    fun typed(value: String) = value.trim().removeSuffix("/")
+    var checking by remember { mutableStateOf(false) }
+    var candidate by remember { mutableStateOf<Pair<String, NodeInfo>?>(null) }
+    val scope = rememberCoroutineScope()
+    fun typed(value: String) = WalletMesh.normalize(value).removeSuffix("/")
 
     // Every mutation saves at once: the order on screen is the order the
     // wallet asks in, with nothing waiting on a save button.
@@ -102,9 +115,16 @@ fun WalletNodeScreen(
             url == shipped || url in state.nodeUrls ->
                 error = context.getString(R.string.wallet_node_duplicate)
             else -> {
+                // Asked first, as skycoin-web does: a node that does not answer, or
+                // is too old, never joins the list the wallet asks in.
                 error = null
-                add = ""
-                apply(state.nodeUrls + url)
+                checking = true
+                scope.launch {
+                    viewModel.checkNode(url)
+                        .onSuccess { candidate = url to it }
+                        .onFailure { error = it.message }
+                    checking = false
+                }
             }
         }
     }
@@ -148,6 +168,34 @@ fun WalletNodeScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 14.dp),
             )
+            if (coin.kind == CoinKind.SKY_FIBER) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(onClick = onDetails)
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.wallet_nodeinfo_title), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            stringResource(R.string.wallet_nodeinfo_open_sub),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        null,
+                        Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             state.nodeUrls.forEachIndexed { i, url ->
                 NodeRow(
@@ -182,10 +230,13 @@ fun WalletNodeScreen(
             }
             Button(
                 onClick = { addNode() },
-                enabled = typed(add).isNotEmpty(),
+                enabled = typed(add).isNotEmpty() && !checking,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(50.dp),
             ) {
-                Text(stringResource(R.string.wallet_node_add), fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(if (checking) R.string.wallet_node_checking else R.string.wallet_node_add),
+                    fontWeight = FontWeight.Bold,
+                )
             }
             TransportNote(typed(add))
 
@@ -208,13 +259,70 @@ fun WalletNodeScreen(
             }
         }
     }
+
+    candidate?.let { (url, info) ->
+        NodeCheckDialog(
+            coin = coin,
+            info = info,
+            onUse = {
+                candidate = null
+                add = ""
+                apply(state.nodeUrls + url)
+            },
+            onDismiss = { candidate = null },
+        )
+    }
+}
+
+/** What a node reports about itself, as skycoin-web shows it before switching. */
+@Composable
+private fun NodeCheckDialog(coin: CoinSpec, info: NodeInfo, onUse: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.wallet_node_check_title)) },
+        text = {
+            Column {
+                listOfNotNull(
+                    (info.coinName ?: coin.name).let { R.string.wallet_node_check_coin to it },
+                    info.version?.let { R.string.wallet_node_check_version to it },
+                    info.height?.let { R.string.wallet_node_check_height to Amounts.groupThousands(it.toString()) },
+                    info.burnFactor?.let { R.string.wallet_node_check_burn to "1/$it" },
+                    info.pubkey?.let { R.string.wallet_node_check_pubkey to shortAddress(it, 10, 8) },
+                ).forEach { (label, value) ->
+                    Row(Modifier.padding(vertical = 6.dp)) {
+                        Text(
+                            stringResource(label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    }
+                }
+                // A fiber node answers for its own chain; another coin's node would show that chain's balances.
+                val other = info.coinName?.takeIf { coin.kind == CoinKind.SKY_FIBER && !it.equals(coin.name, ignoreCase = true) }
+                if (other != null) {
+                    Text(
+                        stringResource(R.string.wallet_node_other_coin, other, coin.name),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onUse) { Text(stringResource(R.string.wallet_node_check_use), fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** One of the user's nodes: its priority, its address, and the reorder and
  *  remove controls. Position 1 is asked first. */
 @Composable
 private fun NodeRow(position: Int, url: String, onUp: () -> Unit, onDown: () -> Unit, onRemove: () -> Unit) {
-    val cleartext = url.startsWith("http://", ignoreCase = true)
+    val cleartext = cleartextNode(url)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -231,7 +339,7 @@ private fun NodeRow(position: Int, url: String, onUp: () -> Unit, onDown: () -> 
             fontWeight = FontWeight.Bold,
         )
         Text(
-            url,
+            shortMeshUrl(url),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -338,9 +446,25 @@ private fun UrlField(
 }
 
 /** Whether what is typed will be encrypted on the wire, said plainly. */
+/** A .dmsg node's 53-character key label shortened in the middle, so the row still shows whose node it is. */
+private fun shortMeshUrl(url: String): String {
+    val host = url.toHttpUrlOrNull()?.host ?: return url
+    if (!WalletMesh.isMesh(host)) return url
+    val label = host.removeSuffix(".dmsg")
+    return if (label.length <= 16) url else url.replace(label, label.take(8) + "…" + label.takeLast(6))
+}
+
+/** Plain http to a host on the internet. A .dmsg host is reached over dmsg, which encrypts it end to end. */
+private fun cleartextNode(url: String): Boolean {
+    val trimmed = url.trim()
+    return trimmed.startsWith("http://", ignoreCase = true) &&
+        trimmed.toHttpUrlOrNull()?.host?.let(WalletMesh::isMesh) != true
+}
+
 @Composable
 private fun TransportNote(url: String) {
-    val cleartext = url.trim().startsWith("http://", ignoreCase = true)
+    val cleartext = cleartextNode(url)
+    val mesh = url.toHttpUrlOrNull()?.host?.let(WalletMesh::isMesh) == true
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -362,7 +486,11 @@ private fun TransportNote(url: String) {
         )
         Text(
             stringResource(
-                if (cleartext && url.isNotBlank()) R.string.wallet_node_cleartext else R.string.wallet_node_encrypted,
+                when {
+                    mesh -> R.string.wallet_node_mesh
+                    cleartext && url.isNotBlank() -> R.string.wallet_node_cleartext
+                    else -> R.string.wallet_node_encrypted
+                },
             ),
             style = MaterialTheme.typography.bodySmall,
             color = if (cleartext && url.isNotBlank()) PENDING_AMBER else MaterialTheme.colorScheme.onSurfaceVariant,
