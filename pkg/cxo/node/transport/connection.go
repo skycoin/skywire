@@ -32,6 +32,9 @@ const maxFrameSize = 64 * 1024 * 1024
 // ErrInterrupted is returned by ReadFrame after Interrupt or Close.
 var ErrInterrupted = errors.New("cxo transport: read interrupted")
 
+// interruptDrainTimeout bounds how long Interrupt waits for queued frames.
+const interruptDrainTimeout = 10 * time.Second
+
 // Connection wraps a net.Conn with length-prefixed (4 bytes, big-endian)
 // message I/O. The owner reads frames with ReadFrame. Outbound frames go
 // through a queue that a writer goroutine drains only while it is non-empty,
@@ -97,16 +100,30 @@ func (c *Connection) Close() {
 	close(c.done)
 }
 
-// Interrupt makes a blocked or later ReadFrame return ErrInterrupted while
-// leaving queued writes to drain.
+// Interrupt makes a blocked or later ReadFrame return ErrInterrupted. Frames
+// already queued are written first, then the connection closes, since some
+// carriers (a VStream over skywire transports) ignore read deadlines.
 func (c *Connection) Interrupt() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed || c.interrupted {
+		c.mu.Unlock()
 		return
 	}
 	c.interrupted = true
 	c.conn.SetReadDeadline(time.Now()) //nolint:errcheck,gosec
+	c.mu.Unlock()
+	if !c.writing.Load() {
+		c.Close()
+		return
+	}
+	// A writer stuck on a dead stream must not keep the reader parked.
+	time.AfterFunc(interruptDrainTimeout, c.Close)
+}
+
+func (c *Connection) isInterrupted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.interrupted
 }
 
 func (c *Connection) setReadDeadline(t time.Time) error {
@@ -188,6 +205,9 @@ func (c *Connection) writeLoop() {
 			// A frame queued after the empty check but before the Store saw
 			// writing set and did not start a writer: take it over.
 			if len(c.out) == 0 || !c.writing.CompareAndSwap(false, true) {
+				if c.isInterrupted() {
+					c.Close()
+				}
 				return
 			}
 		}
