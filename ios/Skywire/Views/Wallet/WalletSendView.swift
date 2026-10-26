@@ -210,7 +210,13 @@ struct WalletSendView: View {
         dialogs.presentSheet {
             // The check runs over the sheet, which closes once it has passed: a refusal leaves
             // the plan on screen to sign or go back from.
-            ReviewSheet(onConfirm: {
+            ReviewSheet(onUnsigned: {
+                guard let hex = model.unsignedHex() else { return }
+                dialogs.dismissSheet()
+                dialogs.showCustom {
+                    RawTxDialog(title: Text("wallet_offline_unsigned_title"), message: Text("wallet_offline_unsigned_body"), hex: hex)
+                }
+            }, onConfirm: {
                 Task {
                     guard await WalletAuth.confirm(reason: L10n.text("wallet_bio_send_title")) else { return }
                     dialogs.dismissSheet()
@@ -271,6 +277,16 @@ struct WalletSendView: View {
         }
         Text(manualHours ? L10n.key("wallet_send_share_manual") : L10n.key("wallet_send_share_note"))
             .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+        // Offline signing, as skycoin-web: sign here what another device built, or send what it signed.
+        HStack(spacing: 4) {
+            Button { dialogs.showCustom { OfflineTxDialog(mode: .sign).environmentObject(model) } } label: { Text("wallet_offline_sign_title") }
+                .buttonStyle(.skyText)
+                .accessibilityIdentifier("wallet-offline-sign")
+            Button { dialogs.showCustom { OfflineTxDialog(mode: .broadcast).environmentObject(model) } } label: { Text("wallet_offline_broadcast_title") }
+                .buttonStyle(.skyText)
+                .accessibilityIdentifier("wallet-offline-broadcast")
+        }
+        .padding(.top, 14)
     }
 
     private var maxButton: some View {
@@ -781,6 +797,7 @@ private struct BtcFeeCard: View {
 private struct ReviewSheet: View {
     @EnvironmentObject private var model: WalletModel
     @EnvironmentObject private var dialogs: SkyDialogs
+    let onUnsigned: () -> Void
     let onConfirm: () -> Void
 
     var body: some View {
@@ -825,6 +842,13 @@ private struct ReviewSheet: View {
                     .accessibilityIdentifier("wallet-review-sign")
                 }
                 .padding(.top, 18)
+                // Fiber only: the unsigned transaction, to sign on a device that holds the keys.
+                if coin.kind == .skyFiber {
+                    Button(action: onUnsigned) { Text("wallet_offline_unsigned_button").frame(maxWidth: .infinity) }
+                        .buttonStyle(.skyText)
+                        .padding(.top, 6)
+                        .accessibilityIdentifier("wallet-review-unsigned")
+                }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 26)
