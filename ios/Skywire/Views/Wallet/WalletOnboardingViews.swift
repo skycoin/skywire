@@ -115,7 +115,8 @@ struct WalletRestoreView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text(verbatim: L10n.format("wallet_restore_progress", min(words.count + 1, target), target))
+                        // Until a 13th word settles it, the phrase may be either length.
+                        Text(verbatim: L10n.format("wallet_restore_progress", min(words.count + 1, target), target == 24 ? "24" : "12/24"))
                             .skyText(.bodyLarge).foregroundStyle(Color.skyOnSurfaceVariant)
                         Spacer()
                         Button { paste() } label: { Text("wallet_restore_paste") }
