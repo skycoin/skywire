@@ -29,6 +29,7 @@ final class ChatPage: NSObject, ObservableObject {
     private let downloads = ChatDownloads()
     /// The address loaded, without the theme query.
     private var loadedURL: URL?
+    private var loadedLang: String?
     private var dark = false
     private var password: String?
     /// The responsiveness ping in flight, and whether it has been reported late.
@@ -85,18 +86,21 @@ final class ChatPage: NSObject, ObservableObject {
         return view
     }
 
-    /// Shows the chat at `url`. Loads only when the address changed: the
-    /// theme rides in the URL so the page picks it before it paints, and a
-    /// theme change moves the open page over instead of reloading it.
-    func show(_ url: URL, password: String, dark: Bool) {
+    /// Shows the chat at `url`. Loads only when the address or the language
+    /// changed: the theme and the language ride in the URL so the page picks
+    /// them before it paints, and a theme change moves the open page over
+    /// instead of reloading it. The page translates itself only on load, as
+    /// Android's language change recreates the activity.
+    func show(_ url: URL, password: String, dark: Bool, lang: String?) {
         self.password = password
         guard let webView else { return }
-        if url != loadedURL {
+        if url != loadedURL || lang != loadedLang {
             loadedURL = url
+            loadedLang = lang
             self.dark = dark
             ready = false
             error = nil
-            webView.load(URLRequest(url: Self.themed(url, dark: dark)))
+            webView.load(URLRequest(url: Self.themed(url, dark: dark, lang: lang)))
         } else if dark != self.dark {
             self.dark = dark
             applyTheme()
@@ -114,6 +118,7 @@ final class ChatPage: NSObject, ObservableObject {
         webView.uiDelegate = nil
         self.webView = nil
         loadedURL = nil
+        loadedLang = nil
         ready = false
     }
 
@@ -219,11 +224,23 @@ final class ChatPage: NSObject, ObservableObject {
     private static let threadAttempts = 67
     private static let driveRetry: Duration = .milliseconds(150)
 
-    /// `?theme=dark|light`, which the page reads on its first line.
-    static func themed(_ url: URL, dark: Bool) -> URL {
+    /// `?theme=dark|light`, which the page reads on its first line, and
+    /// `&lang=` when the page should speak a language other than English.
+    static func themed(_ url: URL, dark: Bool, lang: String? = nil) -> URL {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "theme", value: dark ? "dark" : "light")]
+            + (lang.map { [URLQueryItem(name: "lang", value: $0)] } ?? [])
         return components?.url ?? url
+    }
+
+    /// The languages the page carries its own translations for (skychat's index.html).
+    static let pageLanguages: Set<String> = ["zh", "es", "fr"]
+
+    /// The page's language for the app's: the one the app draws in, the phone's when the setting
+    /// is System, and nothing for English or a language the page does not ship.
+    static func pageLang(_ language: AppLanguage) -> String? {
+        let code = Locale(identifier: language.resolvedTag).language.languageCode?.identifier
+        return code.flatMap { pageLanguages.contains($0) ? $0 : nil }
     }
 
     /// Sets the attribute the theme query sets, so the CSS reacts to one

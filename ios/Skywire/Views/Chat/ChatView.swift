@@ -51,7 +51,8 @@ struct ChatView: View {
     @ViewBuilder
     private var content: some View {
         if showsPage, let url = model.url, let password = model.password {
-            ChatWebView(page: page, url: url, password: password, dark: colorScheme == .dark)
+            ChatWebView(page: page, url: url, password: password, dark: colorScheme == .dark,
+                        lang: ChatPage.pageLang(app.settings.language))
         } else {
             ChatStatus(model: model, pageError: page.error) {
                 page.clearError()
@@ -69,6 +70,7 @@ private struct ChatWebView: UIViewRepresentable {
     let url: URL
     let password: String
     let dark: Bool
+    let lang: String?
 
     func makeCoordinator() -> ChatPage {
         page
@@ -79,7 +81,7 @@ private struct ChatWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        page.show(url, password: password, dark: dark)
+        page.show(url, password: password, dark: dark, lang: lang)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator page: ChatPage) {
