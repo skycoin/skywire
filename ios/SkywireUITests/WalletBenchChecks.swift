@@ -74,6 +74,47 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "10.000")).firstMatch.waitForExistence(timeout: 5))
     }
 
+    /// A send spends from one chosen address, or from outputs picked by hand with the hours set
+    /// exactly; the fake node checks each with skycoin's rules.
+    func testSendFromAnAddressAndPickedCoins() throws {
+        let app = try benchWallet()
+
+        // From the second address: its 4 SKY is all that is available, and only it pays.
+        openSend(to: addresses[2], amount: "1", app)
+        app.buttons["wallet-send-from"].tap()
+        app.buttons["wallet-from-2"].tap()
+        XCTAssertTrue(app.staticTexts["Available 4.000 SKY"].waitForExistence(timeout: 5), "Available does not follow the address")
+        attachScreenshot(app, "bench-send-from")
+        try signAndSend(app)
+        let fromSecond = try lastTransaction()
+        XCTAssertEqual(Set(fromSecond.inputs.map(\.owner)), [addresses[1]], "a send from address 2 spent another address's coins")
+        // Change goes back to the address the coins came from.
+        XCTAssertTrue(fromSecond.outputs.contains { $0.dst == addresses[1] }, "the change left address 2")
+
+        // One picked output, and the hours to send typed by hand.
+        try benchReset(app)
+        openSend(to: addresses[2], amount: "1", app)
+        app.buttons["wallet-send-coins"].tap()
+        let picked = app.buttons.matching(identifier: "wallet-utxo").matching(NSPredicate(format: "label BEGINSWITH %@", "2.500")).firstMatch
+        XCTAssertTrue(picked.waitForExistence(timeout: 10), "the 2.5 SKY output is not offered")
+        picked.tap()
+        app.buttons["wallet-utxo-done"].tap()
+        XCTAssertTrue(app.buttons["wallet-send-coins"].label.contains("1 of 4 outputs"), app.buttons["wallet-send-coins"].label)
+        let hours = app.textFields["wallet-send-hours"]
+        scroll(to: hours, in: app)
+        hours.tap()
+        hours.typeText("12.5")
+        app.buttons["wallet-send-review"].tap()
+        XCTAssertTrue(app.staticTexts["Not a number of hours."].waitForExistence(timeout: 5), "12.5 hours was taken")
+        hours.tap()
+        hours.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4) + "5")
+        attachScreenshot(app, "bench-send-coins")
+        try signAndSend(app)
+        let picks = try lastTransaction()
+        XCTAssertEqual(picks.inputs.map(\.coins), ["2.500000"], "the send did not spend exactly the picked output")
+        XCTAssertEqual(picks.outputs.first { $0.dst == addresses[2] }?.hours, 5, "the destination did not get 5 hours")
+    }
+
     // MARK: Bench
 
     /// The app on SKY with the bench phrase's wallet, its node pointed at the fake one, refreshed.
@@ -131,6 +172,64 @@ final class WalletBenchChecks: XCTestCase {
         openNode(app)
         replaceText("wallet-node-url", with: node, app)
         app.buttons["wallet-node-save"].tap()
+    }
+
+    /// The fake node's funding again, and the wallet refreshed onto it.
+    func benchReset(_ app: XCUIApplication) throws {
+        try bench("reset")
+        attachScreenshot(app, "bench-before-reset")
+        // Pull to refresh is not on the balance screen; a coin switch re-reads at once.
+        selectCoin("BTC", app)
+        selectCoin("SKY", app)
+        XCTAssertTrue(waitEnabled(app.buttons["wallet-send"], timeout: 60))
+    }
+
+    /// From the balance screen: Send, with the recipient and amount typed.
+    func openSend(to address: String, amount: String, _ app: XCUIApplication) {
+        let send = app.buttons["wallet-send"]
+        XCTAssertTrue(waitEnabled(send, timeout: 60))
+        send.tap()
+        let to = app.textFields["wallet-send-to"]
+        XCTAssertTrue(to.waitForExistence(timeout: 5))
+        to.tap()
+        to.typeText(address)
+        let field = app.textFields["wallet-send-amount"]
+        field.tap()
+        field.typeText(amount)
+    }
+
+    /// Review, Sign and send behind Face ID, and the result screen.
+    func signAndSend(_ app: XCUIApplication) throws {
+        let review = app.buttons["wallet-send-review"]
+        scroll(to: review, in: app)
+        let sign = app.buttons["wallet-review-sign"]
+        let error = app.staticTexts["wallet-send-error"]
+        // A tap while the page still glides from the scroll only stops it.
+        for _ in 0..<3 where !sign.exists && !error.exists {
+            usleep(700_000)
+            review.tap()
+            _ = sign.waitForExistence(timeout: 15)
+        }
+        XCTAssertTrue(sign.exists, "no review: \(error.exists ? error.label : "nothing said")")
+        attachScreenshot(app, "bench-review")
+        answeringFaceID {
+            sign.tap()
+            XCTAssertTrue(app.buttons["wallet-result-txid"].waitForExistence(timeout: 30), "the send did not reach the result screen")
+        }
+        tapWhenUp("wallet-result-done", in: app)
+    }
+
+    struct BenchTxn: Decodable {
+        struct Input: Decodable { let owner: String; let coins: String }
+        struct Output: Decodable { let dst: String; let coins: String; let hours: UInt64 }
+        let txid: String
+        let inputs: [Input]
+        let outputs: [Output]
+    }
+
+    /// The last transaction the fake node accepted.
+    func lastTransaction() throws -> BenchTxn {
+        try JSONDecoder().decode(BenchTxn.self, from: try bench("last"))
     }
 
     @discardableResult

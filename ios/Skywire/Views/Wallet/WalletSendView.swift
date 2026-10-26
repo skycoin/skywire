@@ -39,10 +39,28 @@ struct WalletSendView: View {
                     .background(Color.skySurfaceVariant, in: .sky(14))
                     .padding(.top, 9)
 
+                    // One account per wallet on the ETH family: there is no second address a send
+                    // could leave from.
+                    if !model.coin.isEthFamily {
+                        SendLabel(text: L10n.text("wallet_send_from")).padding(.top, 26)
+                        PickRow(title: model.send.fromAddress.map { shortAddress($0) } ?? L10n.text("wallet_send_from_wallet"),
+                                value: model.coin.amountText(model.sendAvailable), identifier: "wallet-send-from") {
+                            dialogs.presentSheet { FromSheet().environmentObject(model) }
+                        }
+                    }
+                    // Coin control, fiber only: which unspent outputs fund the send.
+                    if model.coin.kind == .skyFiber {
+                        SendLabel(text: L10n.text("wallet_send_coins")).padding(.top, 26)
+                        PickRow(title: coinsTitle, value: nil, identifier: "wallet-send-coins") {
+                            model.loadUtxos()
+                            dialogs.presentSheet { UtxoSheet().environmentObject(model) }
+                        }
+                    }
+
                     HStack {
                         SendLabel(text: L10n.text("wallet_send_amount"))
                         Spacer()
-                        Text(verbatim: L10n.format("wallet_send_available", model.coin.amountText(model.snapshot?.confirmed ?? 0), model.coin.ticker))
+                        Text(verbatim: L10n.format("wallet_send_available", model.coin.amountText(model.sendAvailable), model.coin.ticker))
                             .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
                     }
                     .padding(.top, 26)
@@ -80,6 +98,23 @@ struct WalletSendView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.skySurfaceVariant, in: .sky(14))
                     .padding(.top, 9)
+
+                    // Coin hours to the recipient: blank keeps the automatic split, a number sends
+                    // exactly that many.
+                    if model.coin.kind == .skyFiber {
+                        SendLabel(text: L10n.text("wallet_send_hours")).padding(.top, 26)
+                        BareField(placeholder: L10n.text("wallet_send_hours_hint"), text: Binding(
+                            // Kept as typed: stripping turned "12.5" into 125, and the plan names
+                            // anything that is not a whole number.
+                            get: { model.send.hoursText },
+                            set: { model.send.hoursText = String($0.prefix(18)); model.send.plan = nil; model.send.planError = nil }
+                        ), keyboard: .numberPad, identifier: "wallet-send-hours")
+                        .padding(.leading, 4)
+                        .padding(.trailing, 12)
+                        .padding(.vertical, 4)
+                        .background(Color.skySurfaceVariant, in: .sky(14))
+                        .padding(.top, 9)
+                    }
 
                     if let error = model.send.planError {
                         Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 12)
@@ -178,6 +213,13 @@ struct WalletSendView: View {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     }
 
+    private var coinsTitle: String {
+        let send = model.send
+        guard !send.inputs.isEmpty else { return L10n.text("wallet_send_coins_auto") }
+        let picked = send.utxos.filter { send.inputs.contains($0.uxid) }.reduce(UInt64(0)) { $0 &+ $1.coins }
+        return L10n.format("wallet_send_coins_picked", send.inputs.count, send.utxos.count, model.coin.amountText(picked))
+    }
+
     private var toHint: String {
         switch model.coin.kind {
         case .btc: L10n.text("wallet_send_to_hint_btc")
@@ -193,6 +235,143 @@ struct WalletSendView: View {
         case .erc20: L10n.text("wallet_max_note_erc20")
         case .skyFiber: L10n.format("wallet_max_note_fiber", model.coin.ticker)
         }
+    }
+}
+
+/// A row that opens a picker: its choice in bold, an optional figure, a chevron.
+private struct PickRow: View {
+    let title: String
+    let value: String?
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(verbatim: title).skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let value {
+                    Text(verbatim: value).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
+                MaterialIcon(MI.outlinedKeyboardArrowDown, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(Color.skySurfaceVariant, in: .sky(14))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 14))))
+        .padding(.top, 9)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Where the send spends from: the whole wallet, or one of its receive addresses.
+private struct FromSheet: View {
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        if let wallet = model.active {
+            let perAddress = model.snapshot?.perAddress ?? [:]
+            VStack(alignment: .leading, spacing: 0) {
+                Text("wallet_send_from").skyText(.titleMedium).padding(.horizontal, 20).padding(.bottom, 8)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        row(index: nil, title: L10n.text("wallet_send_from_wallet"), held: model.snapshot?.confirmed ?? 0, bold: false, identifier: "wallet-from-wallet")
+                        ForEach(Array(wallet.receiveAddresses.enumerated()), id: \.offset) { index, address in
+                            let held = perAddress[address] ?? 0
+                            row(index: index, title: shortAddress(address), held: held, bold: held > 0, identifier: "wallet-from-\(index + 1)") {
+                                model.sendFrom(address)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.bottom, 24)
+        }
+    }
+
+    private func row(index: Int?, title: String, held: UInt64, bold: Bool, identifier: String,
+                     pick: (() -> Void)? = nil) -> some View {
+        Button {
+            if let pick { pick() } else { model.sendFrom(nil) }
+            dialogs.dismissSheet()
+        } label: {
+            HStack(spacing: 12) {
+                if let index {
+                    Text(verbatim: "\(index + 1)").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 16, alignment: .leading)
+                }
+                Text(verbatim: title).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(verbatim: model.coin.amountText(held)).skyText(.bodyMedium, bold: bold)
+                    .foregroundStyle(bold ? Color.skyOnSurface : Color.skyOnSurfaceVariant)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(layer: .skyOnSurface))
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Coin control: which unspent outputs fund the send. A chosen from-address spends only its
+/// own outputs, so only those are offered.
+private struct UtxoSheet: View {
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+
+    var body: some View {
+        let send = model.send
+        let offered = send.utxos.filter { send.fromAddress == nil || $0.address == send.fromAddress }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_send_coins").skyText(.titleMedium).padding(.horizontal, 20)
+            if offered.isEmpty {
+                Text("wallet_send_coins_none").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.horizontal, 20).padding(.vertical, 10)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(offered, id: \.uxid) { output in
+                            Button { model.toggleInput(output.uxid) } label: {
+                                HStack(spacing: 6) {
+                                    SkyCheckbox(checked: send.inputs.contains(output.uxid))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(verbatim: model.coin.amountText(output.coins)).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface)
+                                        Text(verbatim: L10n.format("wallet_utxo_line", String(output.hours), shortAddress(output.address)))
+                                            .skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 11)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressStyle(layer: .skyOnSurface))
+                            .accessibilityAddTraits(send.inputs.contains(output.uxid) ? .isSelected : [])
+                            .accessibilityIdentifier("wallet-utxo")
+                        }
+                    }
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            }
+            HStack(spacing: 12) {
+                Button { model.clearInputs() } label: { Text("wallet_send_coins_auto").frame(maxWidth: .infinity) }
+                    .buttonStyle(TonalButtonStyle(height: 46))
+                    .accessibilityIdentifier("wallet-utxo-auto")
+                Button { dialogs.dismissSheet() } label: { Text("wallet_done").frame(maxWidth: .infinity) }
+                    .buttonStyle(FilledButtonStyle(height: 46))
+                    .accessibilityIdentifier("wallet-utxo-done")
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+        }
+        .padding(.bottom, 24)
     }
 }
 

@@ -7,8 +7,14 @@ struct SendState {
     var to = ""
     var amountText = ""
     var sendMax = false
+    /// The one address the send spends from; nil = the whole wallet.
+    var fromAddress: String?
+    /// Unspent outputs picked to fund the send; empty = automatic.
+    var inputs: Set<String> = []
     /// The unspent outputs as last loaded, for the picker and one address's outputs.
     var utxos: [UtxoRecord] = []
+    /// Hours for the recipient as typed; blank = the automatic split. Fiber only.
+    var hoursText = ""
     var feeRate = 12
     var presets: FeePresets?
     var planning = false
@@ -342,7 +348,45 @@ final class WalletModel: ObservableObject {
     /// The Max amount, fee-adjusted on Bitcoin and ETH, full balance elsewhere.
     func sendMaxAmount() -> UInt64 {
         guard let snapshot, let core = try? store.core(for: coin) else { return 0 }
-        return core.estimateMax(balance: snapshot.balance, feeRate: send.feeRate)
+        // Picked outputs cap the send at what they hold; a fiber fee burns hours, not coins.
+        if !send.inputs.isEmpty {
+            return send.utxos.filter { send.inputs.contains($0.uxid) }.reduce(0) { $0 &+ $1.coins }
+        }
+        // With a from-address chosen, Max is what that address holds. The output count is an
+        // estimate on Bitcoin: the plan recomputes the true fee from the real inputs either way.
+        let balance: WalletBalance
+        if let from = send.fromAddress {
+            let held = snapshot.perAddress[from] ?? 0
+            balance = WalletBalance(confirmed: held, predicted: held, hours: snapshot.hours, spendableOutputs: 1)
+        } else {
+            balance = snapshot.balance
+        }
+        return core.estimateMax(balance: balance, feeRate: send.feeRate)
+    }
+
+    /// What the send can spend: the chosen address's coins, or the wallet's.
+    var sendAvailable: UInt64 {
+        send.fromAddress.map { snapshot?.perAddress[$0] ?? 0 } ?? snapshot?.confirmed ?? 0
+    }
+
+    func toggleInput(_ uxid: String) {
+        if send.inputs.contains(uxid) { send.inputs.remove(uxid) } else { send.inputs.insert(uxid) }
+        send.plan = nil
+    }
+
+    func clearInputs() {
+        send.inputs = []
+        send.plan = nil
+    }
+
+    /// Spend from one address, or (nil) the whole wallet. The picked outputs belonged to the
+    /// old choice, so they go.
+    func sendFrom(_ address: String?) {
+        send.fromAddress = address
+        send.inputs = []
+        send.sendMax = false
+        send.planError = nil
+        send.plan = nil
     }
 
     /// Build the plan, then hand over to the review sheet.
@@ -359,6 +403,15 @@ final class WalletModel: ObservableObject {
             send.planError = L10n.text("wallet_send_invalid_amount")
             return
         }
+        let typedHours = request.hoursText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var hoursTo: UInt64?
+        if coin.kind == .skyFiber, !typedHours.isEmpty {
+            guard let hours = UInt64(typedHours) else {
+                send.planError = L10n.text("wallet_send_invalid_hours")
+                return
+            }
+            hoursTo = hours
+        }
         send.planning = true
         send.planError = nil
         action { [self] in
@@ -368,7 +421,10 @@ final class WalletModel: ObservableObject {
                     toAddress: request.to,
                     amount: amount,
                     feeRate: coin.kind == .btc ? request.feeRate : nil,
-                    sendMax: request.sendMax
+                    sendMax: request.sendMax,
+                    fromAddress: coin.isEthFamily ? nil : request.fromAddress,
+                    inputs: coin.kind == .skyFiber ? request.inputs : [],
+                    hoursTo: hoursTo
                 )
                 send.planning = false
                 send.plan = plan

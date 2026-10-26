@@ -482,16 +482,29 @@ final class WalletStore: ObservableObject {
 
     // MARK: Send
 
-    func plan(walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool) async throws -> TxPlan {
+    /// Build and price a send. `fromAddress` spends only that address's outputs, `inputs` only
+    /// the outputs picked, `hoursTo` sends exactly that many hours (fiber chains).
+    func plan(
+        walletId: String, toAddress: String, amount: UInt64, feeRate: Int?, sendMax: Bool,
+        fromAddress: String? = nil, inputs: Set<String> = [], hoursTo: UInt64? = nil
+    ) async throws -> TxPlan {
         guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
         guard let seed = try seeds.seed(walletId) else { throw WalletStoreError(L10n.text("wallet_seed_unavailable")) }
+        let from = fromAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
         return try await core(for: spec).buildTx(
             seed: KeySource(mnemonic: seed),
             book: AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses),
             toAddress: toAddress.trimmingCharacters(in: .whitespacesAndNewlines),
             amount: amount,
             feeRate: feeRate,
-            sendMax: sendMax
+            sendMax: sendMax,
+            fromAddress: from?.isEmpty == false ? from : nil,
+            inputs: inputs.isEmpty ? nil : inputs,
+            hoursTo: hoursTo,
+            more: [],
+            changeAddress: nil,
+            shareFactor: nil,
+            feeLevel: nil
         )
     }
 
