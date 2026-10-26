@@ -196,10 +196,13 @@ struct WalletMeta: Codable, Equatable, Identifiable, Sendable {
     /// again. 0 means the question is still open: refresh asks it again until
     /// it is answered, and the screen says so meanwhile.
     var addressScanAtMs: Int64 = 0
+    /// How keys come from the phrase; wallets made before the choice existed are standard.
+    var derivation = Derivation.standard
 
     init(
         id: String, coinId: String, name: String, createdAtMs: Int64,
-        receiveAddresses: [String], changeAddresses: [String] = [], addressScanAtMs: Int64 = 0
+        receiveAddresses: [String], changeAddresses: [String] = [], addressScanAtMs: Int64 = 0,
+        derivation: Derivation = .standard
     ) {
         self.id = id
         self.coinId = coinId
@@ -208,10 +211,11 @@ struct WalletMeta: Codable, Equatable, Identifiable, Sendable {
         self.receiveAddresses = receiveAddresses
         self.changeAddresses = changeAddresses
         self.addressScanAtMs = addressScanAtMs
+        self.derivation = derivation
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, coinId, name, createdAtMs, receiveAddresses, changeAddresses, addressScanAtMs
+        case id, coinId, name, createdAtMs, receiveAddresses, changeAddresses, addressScanAtMs, derivation
     }
 
     init(from decoder: Decoder) throws {
@@ -223,6 +227,7 @@ struct WalletMeta: Codable, Equatable, Identifiable, Sendable {
         receiveAddresses = try c.decode([String].self, forKey: .receiveAddresses)
         changeAddresses = try c.decodeIfPresent([String].self, forKey: .changeAddresses) ?? []
         addressScanAtMs = try c.decodeIfPresent(Int64.self, forKey: .addressScanAtMs) ?? 0
+        derivation = try c.decodeIfPresent(Derivation.self, forKey: .derivation) ?? .standard
     }
 
     /// True while this wallet's address list has never been confirmed

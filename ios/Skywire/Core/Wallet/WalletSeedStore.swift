@@ -76,10 +76,41 @@ final class WalletSeedStore: Sendable {
         }
     }
 
+    /// Deletes the phrase and the passphrase that goes with it.
     func deleteSeed(_ walletId: String) throws {
-        let status = SecItemDelete(query(walletId) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError(status: status, operation: "delete")
+        for query in [query(walletId), query(walletId, item: "passphrase")] {
+            let status = SecItemDelete(query as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw KeychainError(status: status, operation: "delete")
+            }
+        }
+    }
+
+    /// The BIP 39 passphrase, sealed like the phrase; an empty one is not stored.
+    func putPassphrase(_ walletId: String, _ passphrase: String) throws {
+        guard !passphrase.isEmpty else { return }
+        let data = Data(passphrase.utf8)
+        var item = query(walletId, item: "passphrase")
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        var status = SecItemAdd(item as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            status = SecItemUpdate(query(walletId, item: "passphrase") as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        }
+        guard status == errSecSuccess else { throw KeychainError(status: status, operation: "write") }
+    }
+
+    /// Empty when the wallet has none.
+    func passphrase(_ walletId: String) throws -> String {
+        var request = query(walletId, item: "passphrase")
+        request[kSecReturnData as String] = true
+        request[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(request as CFDictionary, &result)
+        switch status {
+        case errSecSuccess: return (result as? Data).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        case errSecItemNotFound: return ""
+        default: throw KeychainError(status: status, operation: "read")
         }
     }
 
@@ -98,11 +129,11 @@ final class WalletSeedStore: Sendable {
         }
     }
 
-    private func query(_ walletId: String) -> [String: Any] {
+    private func query(_ walletId: String, item: String = "seed") -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: "seed_\(walletId)",
+            kSecAttrAccount as String: "\(item)_\(walletId)",
             kSecUseDataProtectionKeychain as String: true,
         ]
         if let accessGroup {

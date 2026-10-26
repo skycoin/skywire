@@ -78,6 +78,8 @@ struct SkyOutlinedTextField: View {
     var supporting: Text? = nil
     /// Words rather than a key: the keyboard corrects and capitalises.
     var prose = false
+    /// A secret: drawn as dots, as Android's PasswordVisualTransformation.
+    var secure = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -149,7 +151,9 @@ struct SkyOutlinedTextField: View {
     // An empty prompt: the label and placeholder above are the field's own drawing.
     @ViewBuilder private var field: some View {
         let title = label.map { Text($0) } ?? placeholder.map { Text($0) } ?? Text(verbatim: "")
-        if let minLines {
+        if secure {
+            SecureField(text: $text, prompt: Text(verbatim: "")) { title }
+        } else if let minLines {
             TextField(text: $text, prompt: Text(verbatim: ""), axis: .vertical) { title }
                 .lineLimit(minLines...)
         } else {

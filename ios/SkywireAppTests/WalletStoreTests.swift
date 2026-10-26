@@ -279,4 +279,64 @@ final class WalletStoreTests: XCTestCase {
         let separator = Locale.current.decimalSeparator ?? "."
         XCTAssertEqual(WalletModel.amountInput("0\(separator)5"), "0.5")
     }
+
+    // MARK: Key sources (Android: WalletMetaDerivationTest, and #5772's wallet kinds)
+
+    /// The wallet type is stored with each wallet, and wallets stored before it existed stay classic.
+    func testWalletsStoredBeforeTheChoiceAreStandard() throws {
+        let old = #"{"id":"w-1","coinId":"SKY","name":"SKY","createdAtMs":1,"receiveAddresses":["a"]}"#
+        XCTAssertEqual(try JSONDecoder().decode(WalletMeta.self, from: Data(old.utf8)).derivation, .standard)
+        let meta = WalletMeta(id: "w-2", coinId: "SKY", name: "SKY 2", createdAtMs: 1, receiveAddresses: ["a"], derivation: .bip44)
+        XCTAssertEqual(try JSONDecoder().decode(WalletMeta.self, from: JSONEncoder().encode(meta)).derivation, .bip44)
+    }
+
+    /// A BIP 44 Skycoin wallet derives other addresses than the classic one from the same phrase,
+    /// keeps its type, and has extended public keys; the classic one has none.
+    func testABip44SkycoinWallet() async throws {
+        let classic = try await store.addWallet(.sky, name: "", mnemonic: Self.phrase, restored: false)
+        let bip44 = try await store.addWallet(.sky, name: "", mnemonic: Self.phrase, restored: false, derivation: .bip44)
+        XCTAssertNotEqual(bip44.id, classic.id, "the same phrase as another type is another wallet")
+        XCTAssertEqual(bip44.derivation, .bip44)
+        let expected = try SkyFiberWalletCore(nodeURL: CoinSpec.sky.nodeUrl, session: .shared)
+            .deriveAddresses(seed: KeySource(mnemonic: Self.phrase, derivation: .bip44), receiveCount: 1, changeCount: 0)
+        XCTAssertEqual(bip44.receiveAddresses, expected.receive)
+        XCTAssertNotEqual(bip44.receiveAddresses, classic.receiveAddresses)
+        XCTAssertTrue(try XCTUnwrap(try store.extendedPublicKeys(walletId: bip44.id)).account.hasPrefix("xpub"))
+        XCTAssertNil(try store.extendedPublicKeys(walletId: classic.id))
+    }
+
+    /// A passphrase changes the keys, is sealed beside the phrase, and goes with it; the classic
+    /// fiber wallet has no use for one and stores none.
+    func testAPassphraseIsSealedAndGoesWithThePhrase() async throws {
+        let plain = try await store.addWallet(.btc, name: "", mnemonic: Self.phrase, restored: false)
+        let guarded = try await store.addWallet(.btc, name: "", mnemonic: Self.phrase, restored: false, passphrase: "pw")
+        XCTAssertNotEqual(guarded.receiveAddresses, plain.receiveAddresses)
+        XCTAssertEqual(try store.revealPassphrase(guarded.id), "pw")
+        XCTAssertEqual(try store.revealPassphrase(plain.id), "")
+        try store.removeWallet(guarded.id)
+        XCTAssertEqual(try store.seeds.passphrase(guarded.id), "", "the passphrase outlived its wallet")
+
+        let classic = try await store.addWallet(.sky, name: "", mnemonic: Self.phrase, restored: false, passphrase: "pw")
+        XCTAssertEqual(try store.revealPassphrase(classic.id), "")
+    }
+
+    /// Legacy Bitcoin wallets use P2PKH addresses, which start with 1.
+    func testALegacyBitcoinWallet() async throws {
+        let legacy = try await store.addWallet(.btc, name: "", mnemonic: Self.phrase, restored: false, derivation: .bip44)
+        XCTAssertTrue(legacy.receiveAddresses[0].hasPrefix("1"), legacy.receiveAddresses[0])
+    }
+
+    /// A classic fiber wallet's non-standard seed is taken exactly as typed, case and spaces
+    /// included; as a phrase it is refused.
+    func testANonStandardSeedIsTakenAsTyped() async throws {
+        let seed = "My  Old Seed"
+        do {
+            _ = try await store.addWallet(.sky, name: "", mnemonic: seed, restored: false)
+            XCTFail("a non-standard seed restored as a phrase")
+        } catch {}
+        let meta = try await store.addWallet(.sky, name: "", mnemonic: seed, restored: false, exact: true)
+        let first = SkycoinCrypto.addressFromPubKey(try SkycoinCrypto.generateKeyPairs(seed: Array(seed.utf8), count: 1)[0].public)
+        XCTAssertEqual(meta.receiveAddresses, [first])
+        XCTAssertEqual(try store.revealSeed(meta.id), seed)
+    }
 }
