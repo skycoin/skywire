@@ -145,7 +145,7 @@ skywire cli config gen
       --skycoinwebwallet string              skycoin web wallet dir override
       --skycoinwebelectrum string            skycoin web electrum servers (comma separated), default, or none
       --skycoinwebuser string                skycoin web UID (empty inherits visor UID)
-      --rewardaddr string                    skycoin reward address or xpub key
+      --rewardaddr string                    reward account xpub (BIP44, account level)
   -k, --os string                            (linux / mac / win) paths (default "linux")
   -p, --pkg                                  use path for package: /opt/skywire
   -u, --user                                 use paths for user space: <home>

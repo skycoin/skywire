@@ -97,8 +97,9 @@ const longtext = `
 	  reward lookup     query the reward server for a PK's payout history
 	  reward rules      display the mainnet reward eligibility rules
 
-	Sets the skycoin reward address or xpub key for the visor.
-	Accepts either a skycoin address or a BIP44 account-level xpub key.
+	Sets the reward account xpub for the visor: a BIP44 account-level
+	xpub, so each reward goes to a fresh address. A single skycoin
+	address is no longer accepted; one set earlier still works.
 	The address is written to the root of the default 'local' directory
 	specified in the visor's config.
 
@@ -299,14 +300,12 @@ var rewardCmd = &cobra.Command{
 		//remove any newline from rewardAddress string
 		rewardAddress = strings.TrimSuffix(rewardAddress, "\n")
 		//validate the skycoin address or xpub key
-		canonical, isXpub, err := rewardconfig.ValidateRewardAddress(rewardAddress)
+		canonical, err := rewardconfig.ValidateRewardXpub(rewardAddress)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid address or xpub key specified: %v", err))
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if isXpub {
-			if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
-				cmdutil.Eprintf("\n%s\n\n", warning)
-			}
+		if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
+			cmdutil.Eprintf("\n%s\n\n", warning)
 		}
 
 		// Bulk path: apply this address to multiple visors via the

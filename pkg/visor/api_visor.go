@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -516,12 +517,15 @@ func (v *Visor) GoroutineDump() (string, error) {
 // reward.txt sits outside the generated json, so the address survives both a
 // restart and a config regen. REWARDSKYADDR in skywire.conf sets it at gen time.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
+	p, err := rewardconfig.ValidateRewardXpub(p)
+	if err != nil {
+		return "", err
+	}
 	// In-memory only, so the running visor reports the new address; not flushed.
 	v.conf.RewardAddress = p
 	// The durable write: reward.txt is what survey/reward reporting reads.
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
-	err := os.WriteFile(path, []byte(p), 0600)
-	if err != nil {
+	if err := os.WriteFile(path, []byte(p), 0600); err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
 	// Refresh the survey in the background. Setting the reward address must

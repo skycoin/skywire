@@ -2,6 +2,7 @@
 package rewardconfig
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -35,6 +36,26 @@ func ValidateRewardAddress(addr string) (canonical string, isXpub bool, err erro
 		return "", false, fmt.Errorf("invalid skycoin address: %w", err)
 	}
 	return cAddr.String(), false, nil
+}
+
+// ErrSingleAddress is returned when a plain address is given where only an
+// account xpub is accepted. A single address shows every reward it was paid
+// to anyone, and spending from it links them; an xpub pays a fresh address.
+var ErrSingleAddress = errors.New("a single skycoin address is no longer accepted as a reward address: " +
+	"set your wallet's account xpub instead, so each reward goes to a fresh address. " +
+	"In the Skycoin desktop wallet or skycoin-web, copy the wallet's Account xPub")
+
+// ValidateRewardXpub validates a reward address being set, which must be an
+// xpub. Addresses already set are still read with ValidateRewardAddress.
+func ValidateRewardXpub(addr string) (string, error) {
+	canonical, isXpub, err := ValidateRewardAddress(addr)
+	if err != nil {
+		return "", err
+	}
+	if !isXpub {
+		return "", ErrSingleAddress
+	}
+	return canonical, nil
 }
 
 // CheckXpubDepth checks if an xpub key is at the expected BIP44 account level (depth 3).
