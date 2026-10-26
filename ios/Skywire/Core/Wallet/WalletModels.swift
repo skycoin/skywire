@@ -32,6 +32,9 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
     /// User-added coins: the file name of the badge picked at creation
     /// (CoinIcons); nil falls back to ticker letters.
     var icon: String?
+    /// The node addresses requests try, in order; empty until the user names their own.
+    /// `nodeUrl` is always the first of them. Derived from the registry, never stored here.
+    var nodeUrls: [String] = []
 
     init(
         id: String, name: String, ticker: String, kind: CoinKind, nodeUrl: String,
@@ -70,6 +73,9 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         icon = try c.decodeIfPresent(String.self, forKey: .icon)
     }
 
+    /// The addresses a request walks before it gives up: the list, else the one.
+    var tryNodes: [String] { nodeUrls.isEmpty ? [nodeUrl] : nodeUrls }
+
     /// Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH
     /// family, whatever fits the app's 64-bit amounts: gwei (10⁻⁹) for the
     /// native coin because wei overflows 64 bits at ~18 ETH, and a token's own
@@ -103,19 +109,25 @@ struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    /// This coin as it is actually reached, once the user's own addresses are
-    /// applied. Every coin's node can be moved. The Ethereum family also reads
-    /// its history from a separate indexer, which moves on its own, so a node
-    /// alone never leaves half of it behind unannounced. A blank entry means
+    /// This coin as it is actually reached, once the user's own addresses are applied. The user's
+    /// nodes come first, in their order, and the shipped address rides behind them as the fallback,
+    /// so a coin is never left with nothing to ask. The Ethereum family also reads its history from
+    /// a separate indexer, which moves on its own and keeps a single address. A blank entry means
     /// the shipped one.
-    func withNodeOverride(_ overrides: [String: String], indexerOverrides: [String: String] = [:]) -> CoinSpec {
-        func override(_ map: [String: String]) -> String? {
-            guard let url = map[id]?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty else { return nil }
-            return url
+    func withNodeOverride(_ overrides: [String: [String]], indexerOverrides: [String: String] = [:]) -> CoinSpec {
+        // Naming the shipped address in the list is just spelling out the fallback.
+        let mine = (overrides[id] ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != nodeUrl }
+        let indexer = indexerUrl.map { shipped in
+            indexerOverrides[id].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? shipped
         }
+        if mine.isEmpty && indexer == indexerUrl { return self }
+        var ordered: [String] = []
+        for url in mine + [nodeUrl] where !ordered.contains(url) { ordered.append(url) }
         var copy = self
-        copy.nodeUrl = override(overrides) ?? nodeUrl
-        copy.indexerUrl = indexerUrl.map { override(indexerOverrides) ?? $0 }
+        copy.nodeUrl = ordered[0]
+        copy.nodeUrls = ordered
+        copy.indexerUrl = indexer
         return copy
     }
 

@@ -143,8 +143,8 @@ final class WalletChecks: XCTestCase {
         selectCoin("SKY", app)
     }
 
-    /// Every coin's node can be moved, and the Ethereum family's history indexer beside it,
-    /// saved and reset together (Android: WalletNode.kt). A fresh phrase on Bitcoin, then Ethereum.
+    /// Every coin's node can be moved, and the Ethereum family's history indexer beside it, saved
+    /// on its own (Android: WalletNode.kt). A fresh phrase on Bitcoin, then Ethereum.
     func testEveryCoinsNodeCanBeMoved() throws {
         let words = Bip39.newMnemonic().split(separator: " ").map(String.init)
         let phrase = words.joined(separator: " ")
@@ -158,12 +158,16 @@ final class WalletChecks: XCTestCase {
         app.buttons["wallet-restore-action"].tap()
         openShippedNode(app)
         XCTAssertFalse(app.textFields["wallet-indexer-url"].exists, "Bitcoin has no indexer")
+        XCTAssertTrue(app.descendants(matching: .any)["wallet-node-shipped"].label.contains("mempool.space"))
+        addNode("https://blockstream.info/api", app)
+        XCTAssertTrue(app.staticTexts["wallet-node-1"].waitForExistence(timeout: 30), "the node was not added")
         attachScreenshot(app, "wallet-7-btc-node")
-        replaceText("wallet-node-url", with: "https://blockstream.info/api", app)
-        app.buttons["wallet-node-save"].tap()
+        back(app)
         XCTAssertTrue(nodeRow(app).label.contains("blockstream.info/api"), nodeRow(app).label)
         openNode(app)
-        tapWhenUp("wallet-node-default", in: app)
+        app.buttons["wallet-node-remove-1"].tap()
+        XCTAssertTrue(waitGone(app.staticTexts["wallet-node-1"], timeout: 5))
+        back(app)
         XCTAssertTrue(nodeRow(app).label.contains("mempool.space"), nodeRow(app).label)
         removeWallet(Bip84.address(pubKey: try Bip84.key(Bip84.accountKey(mnemonic: phrase), change: 0, index: 0).pubKey()), app)
 
@@ -176,16 +180,20 @@ final class WalletChecks: XCTestCase {
         XCTAssertTrue(indexer.exists, "Ethereum reads history from an indexer")
         XCTAssertEqual(indexer.value as? String, "https://eth.blockscout.com")
         attachScreenshot(app, "wallet-8-eth-node")
+        scroll(to: indexer, in: app)
         replaceText("wallet-indexer-url", with: "https://scout.example", app)
-        app.buttons["wallet-node-save"].tap()
+        app.buttons["wallet-indexer-save"].tap()
+        back(app)
         // The row names the node; the indexer moved alone.
         XCTAssertTrue(nodeRow(app).label.contains("ethereum-rpc.publicnode.com"), nodeRow(app).label)
         openNode(app)
         XCTAssertEqual(indexer.value as? String, "https://scout.example")
-        tapWhenUp("wallet-node-default", in: app)
+        scroll(to: indexer, in: app)
+        replaceText("wallet-indexer-url", with: "https://eth.blockscout.com", app)
+        app.buttons["wallet-indexer-save"].tap()
+        back(app)
         openNode(app)
         XCTAssertEqual(indexer.value as? String, "https://eth.blockscout.com")
-        XCTAssertFalse(app.buttons["wallet-node-default"].exists, "the shipped addresses offer no way back to themselves")
         back(app)
         let eth = try EthCrypto.address(pubCompressed: EthCrypto.key(EthCrypto.accountKey(mnemonic: phrase), index: 0).pubKey())
         removeWallet(eth, app)

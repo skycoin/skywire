@@ -108,7 +108,7 @@ final class WalletTour: XCTestCase {
         let node = app.buttons["wallet-node-row"]
         scroll(to: node, in: app)
         node.tap()
-        XCTAssertTrue(app.textFields["wallet-node-url"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["wallet-node-add-url"].waitForExistence(timeout: 5))
         snap("\(language)-w9-node")
         back(app)
 
