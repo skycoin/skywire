@@ -313,10 +313,11 @@ struct SeedGrid: View {
 /// The amber banner: the numbers on screen are old, or incomplete.
 struct WalletBanner: View {
     let text: String
+    var icon = MI.outlinedSchedule
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            MaterialIcon(MI.outlinedSchedule, size: 16)
+            MaterialIcon(icon, size: 16)
             Text(verbatim: text).skyText(.bodySmall)
         }
         .foregroundStyle(Color.skyWarning)
