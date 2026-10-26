@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/soheilhy/cmux"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -287,7 +289,7 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	for {
 		conn, err := c.acceptConn()
 		if err != nil {
-			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed)) {
+			if c.isClosed() || listenerClosed(err) {
 				c.log.Debug("Cleanly stopped serving.")
 				return
 			}
@@ -303,6 +305,13 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 			c.serveConn(conn)
 		}()
 	}
+}
+
+// listenerClosed reports whether a failed Accept means the listener is gone
+// for good. A cmux sub-listener closes before the client does on shutdown.
+func listenerClosed(err error) bool {
+	return errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, cmux.ErrListenerClosed) || errors.Is(err, cmux.ErrServerClosed)
 }
 
 // maxConcurrentHandshakes caps the handshakes running off the accept loop at
