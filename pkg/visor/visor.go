@@ -504,6 +504,8 @@ type Visor struct {
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
+	// pressure is the visor's resource pressure, see pressure.go.
+	pressure pressureState
 
 	// Public autoconnect runtime control
 	autoconnect autoconnectState

@@ -454,6 +454,20 @@ type DiagRuntime struct {
 	SysMB      float64 `json:"sys_mb"`
 	NumGC      uint32  `json:"num_gc"`
 	GoVersion  string  `json:"go_version"`
+	// Pressure is the resource pressure that gates automatic transports.
+	Pressure *DiagPressure `json:"pressure,omitempty"`
+}
+
+// DiagPressure is the visor's resource pressure. While Busy it takes no new
+// automatic transports.
+type DiagPressure struct {
+	Busy bool `json:"busy"`
+	// MemAvailMB and MemTotalMB are the machine's, or its cgroup's, memory.
+	MemAvailMB float64 `json:"mem_available_mb,omitempty"`
+	MemTotalMB float64 `json:"mem_total_mb,omitempty"`
+	// GCCPUShare is the share of the visor's CPU spent in GC over the last minute.
+	GCCPUShare float64   `json:"gc_cpu_share"`
+	Since      time.Time `json:"since"`
 }
 
 // DiagPanics is the recovered-panic accounting. Count keeps rising after Last
