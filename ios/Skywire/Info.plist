@@ -64,6 +64,17 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<!-- A wallet node named <pk>.dmsg is reached over dmsg, which encrypts end to end (WalletMesh.swift). -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>dmsg</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>UIAppFonts</key>
 	<array>

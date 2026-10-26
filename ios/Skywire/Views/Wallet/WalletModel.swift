@@ -283,7 +283,9 @@ final class WalletModel: ObservableObject {
         } catch let refused as WalletStoreError {
             return .failure(refused)
         } catch {
-            return .failure(WalletStoreError(L10n.text("wallet_node_unreachable")))
+            // A .dmsg node is reached through the Skywire core, which may simply not be running.
+            return .failure(WalletStoreError(WalletMesh.isMeshURL(url) ? L10n.text("wallet_node_unreachable_mesh")
+                                                                     : L10n.text("wallet_node_unreachable")))
         }
     }
 

@@ -63,16 +63,20 @@ final class WalletStore: ObservableObject {
     let directory: URL
     let seeds: WalletSeedStore
     private let session: URLSession
+    /// Requests to .dmsg nodes go through the visor's resolver on this session; nil before iOS 17.
+    private let meshSession: URLSession?
     /// Wallet id → when a failed address scan may be tried again (ms).
     private var scanRetryAfter: [String: Int64] = [:]
 
     /// Long enough that a scan the link cannot carry is not retried in a loop.
     static let scanRetryBackoffMs: Int64 = 5 * 60 * 1000
 
-    init(directory: URL, seeds: WalletSeedStore, session: URLSession = WalletStore.makeSession()) {
+    init(directory: URL, seeds: WalletSeedStore, session: URLSession = WalletStore.makeSession(),
+         meshSession: URLSession? = WalletMesh.makeSession()) {
         self.directory = directory
         self.seeds = seeds
         self.session = session
+        self.meshSession = meshSession
         registry = Self.read(directory.appendingPathComponent("registry.json")) ?? WalletRegistry()
     }
 
@@ -141,9 +145,10 @@ final class WalletStore: ObservableObject {
         for w in registry.wallets where w.coinId == coinId { scanRetryAfter[w.id] = nil }
     }
 
-    /// `url` trimmed for storage; blank stays blank, which means the shipped one.
+    /// `url` trimmed for storage, a .dmsg key in hex as its DNS label; blank stays blank, which
+    /// means the shipped one.
     private static func checkedUrl(_ url: String) throws -> String {
-        var trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = WalletMesh.normalize(url)
         if trimmed.hasSuffix("/") { trimmed.removeLast() }
         guard trimmed.isEmpty || isHTTPURL(trimmed) else { throw WalletStoreError(L10n.text("wallet_add_coin_node_invalid")) }
         return trimmed
@@ -153,6 +158,7 @@ final class WalletStore: ObservableObject {
     /// behind it. A node the wallet must not use is refused with the reason; an unreachable one
     /// throws the transport's error.
     func checkNode(_ coin: CoinSpec, url: String) async throws -> NodeInfo {
+        if meshSession == nil && WalletMesh.isMeshURL(url) { throw WalletStoreError(L10n.text("wallet_node_mesh_ios16")) }
         var spec = coin
         spec.nodeUrl = url
         spec.nodeUrls = []
@@ -281,11 +287,11 @@ final class WalletStore: ObservableObject {
         let failover = spec.tryNodes.count > 1 ? NodeFailover(spec.tryNodes) : nil
         switch spec.kind {
         case .skyFiber:
-            return try SkyFiberWalletCore(nodeURL: spec.nodeUrl, session: session, failover: failover)
+            return try SkyFiberWalletCore(nodeURL: spec.nodeUrl, session: session, failover: failover, mesh: meshSession)
         case .btc:
-            return try BtcWalletCore(esploraURL: spec.nodeUrl, session: session, failover: failover)
+            return try BtcWalletCore(esploraURL: spec.nodeUrl, session: session, failover: failover, mesh: meshSession)
         case .eth:
-            return try EthWalletCore(rpcURL: spec.nodeUrl, indexerURL: spec.indexerUrl, session: session, failover: failover)
+            return try EthWalletCore(rpcURL: spec.nodeUrl, indexerURL: spec.indexerUrl, session: session, failover: failover, mesh: meshSession)
         case .erc20:
             guard let contract = spec.contract else { throw WalletStoreError("token \(spec.id) has no contract address") }
             return try EthWalletCore(
@@ -293,6 +299,7 @@ final class WalletStore: ObservableObject {
                 indexerURL: spec.indexerUrl,
                 session: session,
                 failover: failover,
+                mesh: meshSession,
                 token: EthWalletCore.Erc20Token(contract: contract, decimals: spec.tokenDecimals ?? CoinSpec.defaultTokenDecimals)
             )
         }

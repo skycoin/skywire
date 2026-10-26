@@ -150,6 +150,12 @@
       "zh-Hans": "选择",
       "es": "Seleccionar",
       "fr": "Sélectionner"
+    },
+    "wallet_node_mesh_ios16": {
+      "en": "Reaching a .dmsg node needs iOS 17 or later.",
+      "zh-Hans": "访问 .dmsg 节点需要 iOS 17 或更高版本。",
+      "es": "Para llegar a un nodo .dmsg hace falta iOS 17 o posterior.",
+      "fr": "Joindre un nœud .dmsg demande iOS 17 ou une version plus récente."
     }
   },
   "InfoPlist": {

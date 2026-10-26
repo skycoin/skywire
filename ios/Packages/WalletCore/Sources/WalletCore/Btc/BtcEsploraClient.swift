@@ -8,10 +8,10 @@ public struct BtcEsploraClient: Sendable {
     private let base: URL
     private let http: HttpClient
 
-    public init(baseURL: String, session: URLSession, failover: NodeFailover? = nil) throws {
+    public init(baseURL: String, session: URLSession, failover: NodeFailover? = nil, mesh: URLSession? = nil) throws {
         guard let url = parseBaseURL(baseURL) else { throw WalletCoreError("invalid esplora URL: \(baseURL)") }
         base = url
-        http = HttpClient(session: session, failover: failover)
+        http = HttpClient(session: session, failover: failover, mesh: mesh)
     }
 
     public struct TxoStats: Decodable, Sendable {

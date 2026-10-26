@@ -200,6 +200,45 @@ final class WalletChecks: XCTestCase {
         selectCoin("SKY", app)
     }
 
+    /// A node named by its key on the Skywire mesh answers through the core's .dmsg resolver: the
+    /// deployment's Skycoin node, written in hex as it is shared, checked and listed by its label.
+    func testADmsgNodeOverTheMesh() throws {
+        let app = connectedApp(arguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
+        openTab(.wallet, in: app)
+        selectCoin("SKY", app)
+        if !app.buttons["wallet-node-row"].waitForExistence(timeout: 5) {
+            startRestore(app)
+            typePhrase(Bip39.newMnemonic().split(separator: " ").map(String.init), app)
+            app.buttons["wallet-restore-action"].tap()
+        }
+        openShippedNode(app)
+        let hex = "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1"
+        let field = app.textFields["wallet-node-add-url"]
+        field.tap()
+        field.typeText("http://\(hex).dmsg:6420")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Reached over the Skywire mesh")).firstMatch.exists,
+                      "the transport note does not say the mesh")
+        // The resolver binds a while after the core says connected; a user would try again.
+        let accept = app.buttons["wallet-node-check-use"]
+        let error = app.staticTexts["wallet-node-error"]
+        for attempt in 1...4 where !accept.exists {
+            if attempt > 1 { sleep(15) }
+            app.buttons["wallet-node-add"].tap()
+            let deadline = Date().addingTimeInterval(90)
+            while !accept.exists && !error.exists && Date() < deadline { usleep(500_000) }
+        }
+        XCTAssertTrue(accept.exists, "the .dmsg node did not answer: \(error.exists ? error.label : "no answer")")
+        XCTAssertTrue(app.staticTexts["Skycoin"].exists, "the properties do not name the node's coin")
+        attachScreenshot(app, "wallet-dmsg-node-check")
+        accept.tap()
+        let row = app.staticTexts["wallet-node-1"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertEqual(row.label, "http://aong2hr4…r3n2mc.dmsg:6420")
+        attachScreenshot(app, "wallet-dmsg-node-list")
+        app.buttons["wallet-node-remove-1"].tap()
+        XCTAssertTrue(waitGone(row, timeout: 5))
+    }
+
     /// Ethereum offers three tips, as skycoin-web does; picking one is what the plan prices, and an
     /// empty account is refused at review rather than signed.
     func testEthereumFeeLevels() throws {

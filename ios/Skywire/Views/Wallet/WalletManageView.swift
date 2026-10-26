@@ -561,9 +561,9 @@ struct WalletNodeView: View {
         model.saveNodeUrls(next)
     }
 
-    /// As the store keeps it, so a trailing slash is not a change.
+    /// As the store keeps it, so a trailing slash or a key in hex is not a change.
     static func typed(_ value: String) -> String {
-        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = WalletMesh.normalize(value)
         if trimmed.hasSuffix("/") { trimmed.removeLast() }
         return trimmed
     }
@@ -616,9 +616,9 @@ private struct NodeCheckDialog: View {
     }
 }
 
-/// Plain http to a host on the internet.
+/// Plain http to a host on the internet. A .dmsg host is reached over dmsg, which encrypts it end to end.
 private func cleartextNode(_ url: String) -> Bool {
-    url.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://")
+    url.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("http://") && !WalletMesh.isMeshURL(url)
 }
 
 /// One of the user's nodes: its priority, its address, and the reorder and remove controls.
@@ -634,7 +634,7 @@ private struct NodeRow: View {
         let cleartext = cleartextNode(url)
         HStack(spacing: 0) {
             Text(verbatim: "\(position)").skyText(.labelLarge, bold: true).foregroundStyle(Color.skyPrimary)
-            Text(verbatim: url).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface).lineLimit(1).truncationMode(.middle)
+            Text(verbatim: WalletMesh.shortURL(url)).skyText(.bodyMedium, bold: true).foregroundStyle(Color.skyOnSurface).lineLimit(1).truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .accessibilityIdentifier("wallet-node-\(position)")
@@ -691,7 +691,11 @@ private struct NodeTransportNote: View {
         let cleartext = !url.isEmpty && cleartextNode(url)
         HStack(alignment: .top, spacing: 9) {
             MaterialIcon(cleartext ? MI.outlinedLockOpen : MI.outlinedLock, size: 16)
-            Text(cleartext ? L10n.key("wallet_node_cleartext") : L10n.key("wallet_node_encrypted")).skyText(.bodySmall)
+            if WalletMesh.isMeshURL(url) {
+                Text("wallet_node_mesh").skyText(.bodySmall)
+            } else {
+                Text(cleartext ? L10n.key("wallet_node_cleartext") : L10n.key("wallet_node_encrypted")).skyText(.bodySmall)
+            }
         }
         .foregroundStyle(cleartext ? Color.skyWarning : Color.skyOnSurfaceVariant)
         .padding(.horizontal, 14)
