@@ -164,6 +164,25 @@ final class WalletStore: ObservableObject {
         }
     }
 
+    // MARK: Node details (fiber)
+
+    private func fiber(_ coin: CoinSpec) throws -> SkyFiberWalletCore {
+        guard let core = try core(for: coin) as? SkyFiberWalletCore else { throw WalletStoreError("node details are for fiber coins") }
+        return core
+    }
+
+    func chainInfo(_ coin: CoinSpec) async throws -> ChainInfo { try await fiber(coin).chainInfo() }
+
+    func peers(_ coin: CoinSpec) async throws -> [PeerInfo] { try await fiber(coin).peers() }
+
+    /// The node's unconfirmed pool, each marked when it moves this wallet's coins.
+    func pending(walletId: String) async throws -> [PendingInfo] {
+        guard let meta = wallet(walletId), let spec = coin(meta.coinId) else { throw WalletStoreError("unknown wallet") }
+        return try await fiber(spec).pending(AddressBook(receive: meta.receiveAddresses, change: meta.changeAddresses))
+    }
+
+    func deletePending(_ coin: CoinSpec, txid: String) async throws { try await fiber(coin).deletePending(txid: txid) }
+
     /// What the coin's node, through its usual list, says about itself now.
     func nodeStatus(_ coin: CoinSpec) async throws -> NodeInfo {
         try await core(for: coin).nodeInfo()

@@ -453,6 +453,25 @@ struct WalletNodeView: View {
                         .padding(.top, 6)
                         .padding(.bottom, 10)
                     Text("wallet_node_list_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.bottom, 14)
+                    if coin.kind == .skyFiber {
+                        Button { model.path.append(.nodeInfo) } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("wallet_nodeinfo_title").skyText(.bodyLarge, bold: true).foregroundStyle(Color.skyOnSurface)
+                                    Text("wallet_nodeinfo_open_sub").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                MaterialIcon(MI.outlinedKeyboardArrowRight, size: 18).foregroundStyle(Color.skyOnSurfaceVariant)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 13)
+                            .background(Color.skySurfaceVariant, in: .sky(14))
+                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(PressStyle(layer: .skyOnSurface, shape: AnyShape(RoundedRectangle(cornerRadius: 14))))
+                        .padding(.bottom, 14)
+                        .accessibilityIdentifier("wallet-nodeinfo-open")
+                    }
                     // Every change saves at once: the order on screen is the order the wallet asks in.
                     ForEach(Array(nodes.enumerated()), id: \.element) { i, url in
                         NodeRow(position: i + 1, url: url, last: i == nodes.count - 1,

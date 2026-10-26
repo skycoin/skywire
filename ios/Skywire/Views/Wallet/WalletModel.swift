@@ -49,7 +49,7 @@ struct DraftState {
 
 /// The wallet tab's screens, pushed on its navigation stack.
 enum WalletRoute: Hashable {
-    case create, verify, restore, receive, send, result, history, wallets, addCoin, node
+    case create, verify, restore, receive, send, result, history, wallets, addCoin, node, nodeInfo
     case tx(String)
     case reveal(String)
 }
@@ -239,6 +239,19 @@ final class WalletModel: ObservableObject {
         node = nil
         nodeReachable = true
     }
+
+    // MARK: Node details (fiber)
+
+    func chainInfo() async throws -> ChainInfo { try await store.chainInfo(coin) }
+
+    func peers() async throws -> [PeerInfo] { try await store.peers(coin) }
+
+    func pending() async throws -> [PendingInfo] {
+        guard let active else { throw WalletStoreError("no wallet") }
+        return try await store.pending(walletId: active.id)
+    }
+
+    func deletePending(_ txid: String) async throws { try await store.deletePending(coin, txid: txid) }
 
     /// Checks a node before it joins the selected coin's list: what it reports, or why it will not do.
     func checkNode(_ url: String) async -> Result<NodeInfo, WalletStoreError> {

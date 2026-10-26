@@ -310,6 +310,33 @@ struct SeedGrid: View {
     }
 }
 
+/// Android's AlertDialog with text only: a question, Cancel and the action.
+struct TextConfirmDialog: View {
+    @EnvironmentObject private var dialogs: SkyDialogs
+    let message: LocalizedStringKey
+    let confirm: LocalizedStringKey
+    var destructive = false
+    let identifier: String
+    let onConfirm: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(message).skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
+            HStack(spacing: 8) {
+                Spacer()
+                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
+                Button {
+                    dialogs.dismiss()
+                    onConfirm()
+                } label: { Text(confirm).foregroundStyle(destructive ? Color.skyError : Color.skyPrimary) }
+                    .buttonStyle(.skyText)
+                    .accessibilityIdentifier(identifier)
+            }
+            .padding(.top, 24)
+        }
+    }
+}
+
 /// The amber banner: the numbers on screen are old, or incomplete.
 struct WalletBanner: View {
     let text: String

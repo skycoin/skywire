@@ -141,7 +141,10 @@ struct WalletSendView: View {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         // skycoin-web asks first when the node is still syncing: the balance may not be its last.
                         if model.node?.synced == false {
-                            dialogs.showCustom { SyncingConfirm { model.buildPlan { openReview() } } }
+                            dialogs.showCustom {
+                                TextConfirmDialog(message: L10n.key("wallet_send_syncing_confirm"), confirm: L10n.key("wallet_review"),
+                                                  identifier: "wallet-syncing-review") { model.buildPlan { openReview() } }
+                            }
                         } else {
                             model.buildPlan { openReview() }
                         }
@@ -1045,29 +1048,6 @@ private struct QRScannerSheet: UIViewControllerRepresentable {
                     return
                 }
             }
-        }
-    }
-}
-
-/// Android's text-only AlertDialog: the node is still syncing, review anyway or go back.
-private struct SyncingConfirm: View {
-    @EnvironmentObject private var dialogs: SkyDialogs
-    let onReview: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("wallet_send_syncing_confirm").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant)
-            HStack(spacing: 8) {
-                Spacer()
-                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
-                Button {
-                    dialogs.dismiss()
-                    onReview()
-                } label: { Text("wallet_review") }
-                    .buttonStyle(.skyText)
-                    .accessibilityIdentifier("wallet-syncing-review")
-            }
-            .padding(.top, 24)
         }
     }
 }

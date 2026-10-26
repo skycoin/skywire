@@ -45,6 +45,7 @@ struct WalletTab: View {
         case .reveal(let id): WalletRevealView(walletId: id)
         case .addCoin: WalletAddCoinView()
         case .node: WalletNodeView()
+        case .nodeInfo: WalletNodeInfoView()
         }
     }
 }
