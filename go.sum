@@ -99,8 +99,8 @@ github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54 h1:7BESgOFFEUIW
 github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54/go.mod h1:SgxWmIgu46cajN0KsBsKJXEVugmpNLZjNhz+KH44hXU=
 github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b h1:TvuDIGb7WMqMMkip/5U/OkthwVhRHWY9kLgFsCvfRTU=
 github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b/go.mod h1:M/nZ3W+0x5ti9fZDs6Cx+6eTZnwVdGMjeMuRDmOB5es=
-github.com/0magnet/kcp-go/v5 v5.6.82 h1:T8JXn5LrbbpxFaWY3MH9e8eHhB1XRw+jPY0B/wSRhZg=
-github.com/0magnet/kcp-go/v5 v5.6.82/go.mod h1:ZRiPXNV2uWPKlydr4WRbjVoYXlRukWn2oXgsHOWGtc4=
+github.com/0magnet/kcp-go/v5 v5.6.83 h1:ebX2v3dG9IGRoTil1hKfh6/7lJte9xzlieAiBx5O1kA=
+github.com/0magnet/kcp-go/v5 v5.6.83/go.mod h1:ZRiPXNV2uWPKlydr4WRbjVoYXlRukWn2oXgsHOWGtc4=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489 h1:e9oQciGjDuTPFtS0t9cX+C6pOcVVIJIsa5AjcTPsjtA=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489/go.mod h1:DbbClVrvQ558CvwGWU78xx0k03aEY/uS9qf5Wtw+n3o=
 github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63 h1:XxaDWKe26asi8R5Kkrp1Ikg+UsWKuDMBwFTKWUTzBdM=
