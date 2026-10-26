@@ -190,6 +190,10 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addSoloBool("FLIGHTRECORDER", "flight-recorder", autoconfigVals.FlightRecorder)
 	addSoloBool("MUXFEC", "mux-fec", autoconfigVals.MuxFEC)
 	addSoloBool("HVUIDISABLE", "hv-ui-disable", autoconfigVals.HvUIDisable)
+	addString("MEMORYLIMIT", "memory-limit", autoconfigVals.MemoryLimit)
+	addInt("AUTOCONNMAXTOTAL", "autoconn-max-total", autoconfigVals.AutoconnMaxTotal)
+	addInt("AUTOCONNSITELINKS", "autoconn-site-links", autoconfigVals.AutoconnSiteLinks)
+	addString("AUTOCONNMAXPERTYPE", "autoconn-max-per-type", autoconfigVals.AutoconnMaxPerType)
 
 	// VPN server
 	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)

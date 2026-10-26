@@ -249,6 +249,14 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "no-stats")
 	skyenvIntVar(genConfigCmd.Flags(), &statsRetention, "stats-retention", "${STATSRETENTION:-0}", "days of local telemetry to keep (30 when 0)")
 	gHiddenFlags = append(gHiddenFlags, "stats-retention")
+	skyenvStringVar(genConfigCmd.Flags(), &memoryLimit, "memory-limit", "${MEMORYLIMIT}", "Go memory limit of the visor, none, auto or a size like 256MiB (none when empty)")
+	gHiddenFlags = append(gHiddenFlags, "memory-limit")
+	skyenvIntVar(genConfigCmd.Flags(), &autoconnMaxTotal, "autoconn-max-total", "${AUTOCONNMAXTOTAL:--1}", "cap on transports autoconnect dials of all types, 0 for no cap (-1 leaves it as it was)")
+	gHiddenFlags = append(gHiddenFlags, "autoconn-max-total")
+	skyenvIntVar(genConfigCmd.Flags(), &autoconnSiteLinks, "autoconn-site-links", "${AUTOCONNSITELINKS:--1}", "transports kept between two sites, 0 for no limit (-1 leaves the default of 2)")
+	gHiddenFlags = append(gHiddenFlags, "autoconn-site-links")
+	skyenvStringVar(genConfigCmd.Flags(), &autoconnMaxPerType, "autoconn-max-per-type", "${AUTOCONNMAXPERTYPE}", "cap on transports autoconnect dials per type, like sudph=40,webrtc=10")
+	gHiddenFlags = append(gHiddenFlags, "autoconn-max-per-type")
 
 	// Hypervisor and security flags
 	skyenvBoolVarP(genConfigCmd.Flags(), &isHypervisor, "ishv", "i", "${ISHYPERVISOR:-false}", "local hypervisor configuration")
@@ -807,6 +815,9 @@ var genConfigCmd = &cobra.Command{
 		configureHypervisor(log)
 		keepPersistentTransports()
 		keepAutoconnect()
+		if err := applyAutoconnectVars(); err != nil {
+			log.Fatal(err)
+		}
 		keepTCPNotSentLowat()
 		configureWSPeers(log)
 
@@ -1133,7 +1144,7 @@ func mergeExistingApps(log *logging.Logger) {
 	}
 	// So is an explicit memory_limit. "auto" was only the old generated default,
 	// so a regen replaces it with the "none" default.
-	if l := oldConfCache.MemoryLimit; l != "" && l != "auto" {
+	if l := oldConfCache.MemoryLimit; l != "" && l != "auto" && memoryLimit == "" {
 		conf.MemoryLimit = oldConfCache.MemoryLimit
 	}
 	// So is where the status page of those services is served.
@@ -1550,6 +1561,12 @@ func configureLauncher(log *logging.Logger) {
 	}
 	// Written out so the setting is visible. "none" sets no Go memory limit.
 	conf.MemoryLimit = "none"
+	if memoryLimit != "" {
+		if err := checkMemoryLimit(memoryLimit); err != nil {
+			log.Fatal(err)
+		}
+		conf.MemoryLimit = memoryLimit
+	}
 	// Config bootstrap service
 	conf.ConfService = serviceConfURL
 	conf.ConfServiceDmsg = services.ConfDmsg
@@ -2902,30 +2919,34 @@ var (
 		// The resolvers' string knobs, for the same reason as the two bools
 		// above: an upstream or a bind address that cannot round-trip is a
 		// chain that comes back up pointing somewhere else, or nowhere.
-		"dmsgweb-upstream":   "DMSGWEBUPSTREAM",
-		"skynetweb-upstream": "SKYNETWEBUPSTREAM",
-		"dmsgweb-addr":       "DMSGWEBADDR",
-		"skynetweb-addr":     "SKYNETWEBADDR",
-		"dmsgweb-sk":         "DMSGWEBSK",
-		"resolver-ca":        "RESOLVERCA",
-		"wallet-custody":     "WALLETCUSTODY",
-		"wallet-dir":         "WALLETDIR",
-		"wallet-remote":      "WALLETREMOTE",
-		"disableapps":        "DISABLEAPPS",
-		"wisp-socks":         "WISPSOCKS",
-		"log-hook-level":     "LOGHOOKLEVEL",
-		"log-server-addr":    "LOGSERVERADDR",
-		"pty-ssh-listen":     "PTYSSHLISTEN",
-		"dmsgscp-root":       "DMSGSCPROOT",
+		"dmsgweb-upstream":      "DMSGWEBUPSTREAM",
+		"skynetweb-upstream":    "SKYNETWEBUPSTREAM",
+		"dmsgweb-addr":          "DMSGWEBADDR",
+		"skynetweb-addr":        "SKYNETWEBADDR",
+		"dmsgweb-sk":            "DMSGWEBSK",
+		"resolver-ca":           "RESOLVERCA",
+		"wallet-custody":        "WALLETCUSTODY",
+		"wallet-dir":            "WALLETDIR",
+		"wallet-remote":         "WALLETREMOTE",
+		"disableapps":           "DISABLEAPPS",
+		"wisp-socks":            "WISPSOCKS",
+		"log-hook-level":        "LOGHOOKLEVEL",
+		"log-server-addr":       "LOGSERVERADDR",
+		"pty-ssh-listen":        "PTYSSHLISTEN",
+		"dmsgscp-root":          "DMSGSCPROOT",
+		"memory-limit":          "MEMORYLIMIT",
+		"autoconn-max-per-type": "AUTOCONNMAXPERTYPE",
 	}
 	// Integer/port flags: bare KEY=N lines (e.g. #TRANSPORTPORT=0).
 	intFlagToEnv = map[string]string{
-		"transport-port":     "TRANSPORTPORT",
-		"stcpr":              "STCPRPORT",
-		"sudph":              "SUDPHPORT",
-		"min-hops":           "MINHOPS",
-		"ar-transport-limit": "ARTRANSPORTLIMIT",
-		"stats-retention":    "STATSRETENTION",
+		"transport-port":      "TRANSPORTPORT",
+		"stcpr":               "STCPRPORT",
+		"sudph":               "SUDPHPORT",
+		"min-hops":            "MINHOPS",
+		"ar-transport-limit":  "ARTRANSPORTLIMIT",
+		"stats-retention":     "STATSRETENTION",
+		"autoconn-max-total":  "AUTOCONNMAXTOTAL",
+		"autoconn-site-links": "AUTOCONNSITELINKS",
 	}
 	// Array-shaped flags: bash-array lines KEY=('a' 'b' 'c'), taken
 	// comma-separated on the CLI (`--hvpks PK1,PK2`) — split, trimmed, empties

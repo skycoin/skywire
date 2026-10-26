@@ -186,3 +186,33 @@ func TestSessionsCountIsWrittenAndMirrored(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(env), "MINDMSGSESS=5")
 }
+
+// The autoconnect limits and memory_limit are saved to their variables, and
+// an unset site_links comments its variable out instead of writing one.
+func TestAutoconnectLimitsAreMirrored(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("#MEMORYLIMIT=none\n#AUTOCONNMAXTOTAL=0\n#AUTOCONNSITELINKS=2\n#AUTOCONNMAXPERTYPE=''\n"), 0o600))
+	conf.Skyenv = envFile
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
+
+	three := 3
+	require.NoError(t, conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) {
+		a.MaxTotal = 80
+		a.SiteLinks = &three
+		a.MaxPerType = map[string]int{"webrtc": 10, "sudph": 40}
+	}))
+	conf.MemoryLimit = "256MiB"
+	require.NoError(t, conf.Flush())
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	for _, want := range []string{"MEMORYLIMIT='256MiB'", "AUTOCONNMAXTOTAL=80", "AUTOCONNSITELINKS=3", "AUTOCONNMAXPERTYPE='sudph=40,webrtc=10'"} {
+		require.Contains(t, string(env), want)
+	}
+
+	require.NoError(t, conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.SiteLinks = nil }))
+	env, err = os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.NotContains(t, string(env), "\nAUTOCONNSITELINKS=")
+}
