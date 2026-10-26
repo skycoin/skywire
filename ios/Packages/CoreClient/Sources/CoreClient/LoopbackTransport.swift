@@ -101,8 +101,8 @@ public final class LoopbackTransport: RequestTransport {
         return configuration
     }
 
-    /// Longer than any request's own timeout (svc-fetch's is the longest).
-    private static let exchangeLimit: TimeInterval = 120
+    /// Longer than any request's own timeout (a mail send's is the longest).
+    private static let exchangeLimit: TimeInterval = 330
     /// A stream ends when its reader ends it, not on a clock.
     private static let streamLimit: TimeInterval = 60 * 60 * 24 * 365
 }

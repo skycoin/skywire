@@ -5629,6 +5629,29 @@
         }
       }
     },
+    "mail_send_unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Still delivering: the visor has not answered yet. Check Sent in a few minutes before sending it again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sigue en camino: el nodo aún no ha respondido. Revisa Enviados en unos minutos antes de reenviar."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍在发送：节点还没有应答。请过几分钟查看已发送，再决定是否重发。"
+          }
+        }
+      }
+    },
     "mail_sending" : {
       "extractionState" : "manual",
       "localizations" : {
