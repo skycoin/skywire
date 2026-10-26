@@ -75,7 +75,7 @@ extension XCTestCase {
     func launch(_ app: XCUIApplication, language: String, locale: String) {
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locale]
         app.launch()
-        let home = ["en": "Home", "zh-Hans": "首页", "es": "Inicio"][language]
+        let home = ["en": "Home", "zh-Hans": "首页", "es": "Inicio", "fr": "Accueil"][language]
         let tab = app.buttons["tab-home"]
         XCTAssertTrue(tab.waitForExistence(timeout: 15))
         XCTAssertEqual(tab.label, home, "the app is not drawn in \(language)")

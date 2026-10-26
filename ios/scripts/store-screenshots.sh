@@ -3,7 +3,7 @@
 # tour in each language, on a device of a size App Store Connect takes, with
 # the status bar store screenshots use (9:41, full signal and battery).
 #
-#   ios/scripts/store-screenshots.sh "iPhone 18 Pro Max" [en zh-Hans es]
+#   ios/scripts/store-screenshots.sh "iPhone 18 Pro Max" [en zh-Hans es fr]
 #
 # Run from the repo root after make ios-core, with the app's ports free
 # (ios/README.md). The pictures go to ios/build/store-screenshots/<device>/
@@ -13,7 +13,7 @@ set -eu
 
 device=${1:?usage: ios/scripts/store-screenshots.sh <Simulator name> [languages]}
 shift
-languages=${*:-en zh-Hans es}
+languages=${*:-en zh-Hans es fr}
 out="ios/build/store-screenshots/$device"
 mkdir -p "$out"
 
@@ -27,7 +27,8 @@ for language in $languages; do
     en) test=testTourEnglish ;;
     zh-Hans) test=testTourSimplifiedChinese ;;
     es) test=testTourSpanish ;;
-    *) echo "no tour in $language (en, zh-Hans, es)" >&2; exit 1 ;;
+    fr) test=testTourFrench ;;
+    *) echo "no tour in $language (en, zh-Hans, es, fr)" >&2; exit 1 ;;
   esac
   result="$out/$language-$(date +%Y%m%d-%H%M%S).xcresult"
   xcodebuild -project ios/Skywire.xcodeproj -scheme SkywireTour \
