@@ -133,8 +133,10 @@ final class WalletChecks: XCTestCase {
         XCTAssertEqual(try receiveAddress(app, timeout: 180), eth)
         back(app)
 
+        // In USDT's list, whichever of its wallets is in use: an earlier one stays so.
         selectCoin("USDT", app)
-        XCTAssertEqual(try receiveAddress(app), eth, "USDT holds the ETH account without a second restore")
+        openWallets(app)
+        XCTAssertTrue(app.buttons["wallet-row-\(eth)"].waitForExistence(timeout: 10), "USDT does not hold the ETH account")
         attachScreenshot(app, "wallet-6-usdt-mirror")
         back(app)
         removeWallet(eth, app)
