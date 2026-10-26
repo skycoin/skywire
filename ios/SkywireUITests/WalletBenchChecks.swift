@@ -115,6 +115,49 @@ final class WalletBenchChecks: XCTestCase {
         XCTAssertEqual(picks.outputs.first { $0.dst == addresses[2] }?.hours, 5, "the destination did not get 5 hours")
     }
 
+    /// One fiber transaction pays several destinations, typed one by one or pasted as bulk text,
+    /// and the review lists each; the fake node checks the outputs it gets.
+    func testSendToSeveralDestinationsAndInBulk() throws {
+        let app = try benchWallet()
+        openSend(to: addresses[2], amount: "1", app)
+        app.buttons["wallet-send-add-destination"].tap()
+        let to2 = app.textFields["wallet-dest-to-2"]
+        XCTAssertTrue(to2.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["wallet-send-max"].exists, "Max stays with several destinations")
+        to2.tap()
+        to2.typeText(addresses[1])
+        let amount2 = app.textFields["wallet-dest-amount-2"]
+        amount2.tap()
+        amount2.typeText("0.5")
+        try signAndSend(app, screenshot: "bench-review-many")
+        let typed = try lastTransaction()
+        XCTAssertEqual(typed.outputs.first { $0.dst == addresses[2] }?.coins, "1.000000")
+        XCTAssertEqual(typed.outputs.filter { $0.dst == addresses[1] }.map(\.coins).contains("0.500000"), true, "destination 2 was not paid 0.5")
+
+        try benchReset(app)
+        let send = app.buttons["wallet-send"]
+        XCTAssertTrue(waitEnabled(send, timeout: 60))
+        send.tap()
+        app.buttons["wallet-send-bulk"].tap()
+        let bulk = app.textFields["wallet-bulk-text"]
+        XCTAssertTrue(bulk.waitForExistence(timeout: 5))
+        bulk.tap()
+        bulk.typeText("\(addresses[2]), 1, 4\n\(addresses[1]), 2")
+        app.buttons["wallet-bulk-apply"].tap()
+        let error = app.staticTexts["wallet-bulk-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(error.label.hasPrefix("Line 2"), error.label)
+        bulk.typeText(", 3")
+        app.buttons["wallet-bulk-apply"].tap()
+        XCTAssertTrue(waitGone(bulk, timeout: 5), "the corrected list was not taken")
+        XCTAssertEqual(app.textFields["wallet-send-to"].value as? String, addresses[2])
+        XCTAssertEqual(app.textFields["wallet-dest-to-2"].value as? String, addresses[1])
+        try signAndSend(app, screenshot: "bench-review-bulk")
+        let pasted = try lastTransaction()
+        XCTAssertEqual(pasted.outputs.first { $0.dst == addresses[2] }?.hours, 4)
+        XCTAssertEqual(pasted.outputs.first { $0.dst == addresses[1] && $0.coins == "2.000000" }?.hours, 3)
+    }
+
     // MARK: Bench
 
     /// The app on SKY with the bench phrase's wallet, its node pointed at the fake one, refreshed.
@@ -199,7 +242,7 @@ final class WalletBenchChecks: XCTestCase {
     }
 
     /// Review, Sign and send behind Face ID, and the result screen.
-    func signAndSend(_ app: XCUIApplication) throws {
+    func signAndSend(_ app: XCUIApplication, screenshot: String = "bench-review") throws {
         let review = app.buttons["wallet-send-review"]
         scroll(to: review, in: app)
         let sign = app.buttons["wallet-review-sign"]
@@ -211,7 +254,7 @@ final class WalletBenchChecks: XCTestCase {
             _ = sign.waitForExistence(timeout: 15)
         }
         XCTAssertTrue(sign.exists, "no review: \(error.exists ? error.label : "nothing said")")
-        attachScreenshot(app, "bench-review")
+        attachScreenshot(app, screenshot)
         answeringFaceID {
             sign.tap()
             XCTAssertTrue(app.buttons["wallet-result-txid"].waitForExistence(timeout: 30), "the send did not reach the result screen")

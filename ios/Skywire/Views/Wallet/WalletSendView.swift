@@ -70,21 +70,35 @@ struct WalletSendView: View {
                             set: { model.send.amountText = $0; model.send.sendMax = false; model.send.planError = nil }
                         ), style: .headlineSmall, keyboard: .decimalPad, identifier: "wallet-send-amount")
                         Text(verbatim: model.coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant)
-                        Button {
-                            let max = model.sendMaxAmount()
-                            model.send.amountText = Amounts.format(max, exponent: model.coin.exponent, minDecimals: model.coin.displayDecimals)
-                                .replacingOccurrences(of: ",", with: "")
-                            model.send.sendMax = true
-                            model.send.planError = nil
-                        } label: { Text("wallet_max") }
-                        .buttonStyle(.skyText)
-                        .accessibilityIdentifier("wallet-send-max")
+                        if model.send.extra.isEmpty { maxButton }
                     }
                     .padding(.leading, 4)
                     .padding(.trailing, 12)
                     .background(Color.skySurfaceVariant, in: .sky(14))
                     .padding(.top, 9)
-                    Text(verbatim: maxNote).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
+                    if model.send.extra.isEmpty {
+                        Text(verbatim: maxNote).skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
+                    }
+
+                    // More destinations in the same transaction, fiber only, as skycoin-web's
+                    // advanced form.
+                    if model.coin.kind == .skyFiber {
+                        ForEach(Array(model.send.extra.indices), id: \.self) { index in
+                            DestinationCard(index: index)
+                        }
+                        HStack(spacing: 8) {
+                            Button { model.addDestination() } label: { Text("wallet_send_add_destination") }
+                                .buttonStyle(.skyText)
+                                .accessibilityIdentifier("wallet-send-add-destination")
+                            Button { dialogs.showCustom { BulkSendDialog(initial: bulkText).environmentObject(model) } } label: {
+                                Text("wallet_send_bulk")
+                            }
+                            .buttonStyle(.skyText)
+                            .accessibilityIdentifier("wallet-send-bulk")
+                        }
+                        .padding(.top, 10)
+                    }
+
 
                     SendLabel(text: L10n.text("wallet_fee")).padding(.top, 26)
                     Group {
@@ -120,7 +134,11 @@ struct WalletSendView: View {
                         Text(verbatim: error).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 12)
                             .accessibilityIdentifier("wallet-send-error")
                     }
-                    Button { model.buildPlan { openReview() } } label: {
+                    Button {
+                        // The keyboard would squeeze the review sheet, which grows with each destination.
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        model.buildPlan { openReview() }
+                    } label: {
                         HStack(spacing: 10) {
                             if model.send.planning { MaterialSpinner(size: 16, stroke: 2, color: .skyOnSurface.opacity(0.38)) }
                             Text("wallet_review")
@@ -213,6 +231,27 @@ struct WalletSendView: View {
         DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     }
 
+    private var maxButton: some View {
+        Button {
+            let max = model.sendMaxAmount()
+            model.send.amountText = Amounts.format(max, exponent: model.coin.exponent, minDecimals: model.coin.displayDecimals)
+                .replacingOccurrences(of: ",", with: "")
+            model.send.sendMax = true
+            model.send.planError = nil
+        } label: { Text("wallet_max") }
+        .buttonStyle(.skyText)
+        .accessibilityIdentifier("wallet-send-max")
+    }
+
+    /// The destinations as bulk text, so the dialog opens on what is already typed.
+    private var bulkText: String {
+        let send = model.send
+        return ([DestDraft(address: send.to, amountText: send.amountText, hoursText: send.hoursText)] + send.extra)
+            .filter { !$0.address.trimmingCharacters(in: .whitespaces).isEmpty || !$0.amountText.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { [$0.address, $0.amountText, $0.hoursText].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: ", ") }
+            .joined(separator: "\n")
+    }
+
     private var coinsTitle: String {
         let send = model.send
         guard !send.inputs.isEmpty else { return L10n.text("wallet_send_coins_auto") }
@@ -234,6 +273,101 @@ struct WalletSendView: View {
         case .eth: L10n.text("wallet_max_note_eth")
         case .erc20: L10n.text("wallet_max_note_erc20")
         case .skyFiber: L10n.format("wallet_max_note_fiber", model.coin.ticker)
+        }
+    }
+}
+
+/// A destination after the first: address, amount and, optionally, its hours.
+private struct DestinationCard: View {
+    @EnvironmentObject private var model: WalletModel
+    let index: Int
+
+    var body: some View {
+        let coin = model.coin
+        VStack(spacing: 0) {
+            HStack {
+                SendLabel(text: L10n.format("wallet_send_destination", index + 2)).padding(.leading, 12)
+                Spacer()
+                Button { model.removeDestination(index) } label: {
+                    MaterialIcon(MI.outlinedClose, size: 18).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(Text("wallet_send_remove_destination"))
+                .accessibilityIdentifier("wallet-dest-remove-\(index + 2)")
+            }
+            BareField(placeholder: L10n.format("wallet_send_to_hint_fiber", coin.name), text: field(\.address),
+                      identifier: "wallet-dest-to-\(index + 2)")
+            SkyDivider(color: .skyContainerHighest)
+            HStack(spacing: 0) {
+                BareField(placeholder: "0", text: field(\.amountText), keyboard: .decimalPad, identifier: "wallet-dest-amount-\(index + 2)")
+                Text(verbatim: coin.ticker).skyText(.titleMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.trailing, 12)
+            }
+            SkyDivider(color: .skyContainerHighest)
+            BareField(placeholder: L10n.text("wallet_send_dest_hours_hint"), text: field(\.hoursText), keyboard: .numberPad,
+                      identifier: "wallet-dest-hours-\(index + 2)")
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 6)
+        .background(Color.skySurfaceVariant, in: .sky(14))
+        .padding(.top, 14)
+    }
+
+    private func field(_ key: WritableKeyPath<DestDraft, String>) -> Binding<String> {
+        Binding(
+            get: { model.send.extra.indices.contains(index) ? model.send.extra[index][keyPath: key] : "" },
+            set: { value in
+                model.updateDestination(index) { draft in
+                    draft[keyPath: key] = key == \DestDraft.address ? value.trimmingCharacters(in: .whitespaces) : String(value.prefix(key == \DestDraft.hoursText ? 18 : 40))
+                }
+            }
+        )
+    }
+}
+
+/// Every destination as text, one per line, skycoin-web's bulk send format.
+private struct BulkSendDialog: View {
+    @EnvironmentObject private var model: WalletModel
+    @EnvironmentObject private var dialogs: SkyDialogs
+    let initial: String
+    @State private var text = ""
+    @State private var problem: BulkParse?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("wallet_send_bulk").skyText(.headlineSmall).foregroundStyle(Color.skyOnSurface)
+            Text("wallet_send_bulk_body").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 16)
+            SkyOutlinedTextField(placeholder: L10n.key("wallet_send_bulk_hint"), text: Binding(get: { text }, set: { text = $0; problem = nil }),
+                                 isError: problem != nil, mono: true, notch: .skyContainerHigh, identifier: "wallet-bulk-text", minLines: 5)
+                .padding(.top, 12)
+            if let message = problemText {
+                Text(verbatim: message).skyText(.bodySmall).foregroundStyle(Color.skyError).padding(.top, 8)
+                    .accessibilityIdentifier("wallet-bulk-error")
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button { dialogs.dismiss() } label: { Text("cancel") }.buttonStyle(.skyText)
+                Button {
+                    let parsed = parseBulk(text)
+                    if case let .ok(destinations) = parsed {
+                        dialogs.dismiss()
+                        model.applyBulk(destinations)
+                    } else {
+                        problem = parsed
+                    }
+                } label: { Text("wallet_send_bulk_apply") }
+                .buttonStyle(.skyText)
+                .accessibilityIdentifier("wallet-bulk-apply")
+            }
+            .padding(.top, 24)
+        }
+        .onAppear { text = initial }
+    }
+
+    private var problemText: String? {
+        switch problem {
+        case .none, .ok?: nil
+        case .empty?: L10n.text("wallet_send_bulk_empty")
+        case let .badLine(line)?: L10n.format("wallet_send_bulk_line", line)
+        case let .mixedHours(line)?: L10n.format("wallet_send_bulk_mixed", line)
         }
     }
 }
@@ -542,7 +676,9 @@ private struct ReviewSheet: View {
                 Text("wallet_review_title").skyText(.titleMedium)
                 Text(verbatim: "\(coin.amountText(plan.amount)) \(coin.ticker)").skyText(.headlineMedium).padding(.top, 16)
                 // The network is the coin's own chain: Skycoin, this fiber coin's, Bitcoin or Ethereum.
-                Text(verbatim: L10n.format("wallet_review_dest", shortAddress(plan.toAddress), coin.name))
+                Text(verbatim: plan.recipients.count > 1
+                    ? L10n.format("wallet_review_dest_many", coin.name)
+                    : L10n.format("wallet_review_dest", shortAddress(plan.toAddress), coin.name))
                     .skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 8)
                 VStack(spacing: 0) {
                     ForEach(Array(rows(plan).enumerated()), id: \.offset) { index, row in
@@ -613,8 +749,12 @@ private struct ReviewSheet: View {
         case .skyFiber:
             let hoursNow = model.snapshot?.hours ?? 0
             let spent = plan.fee &+ (plan.hoursToRecipient ?? 0)
+            let each: [(String, String)] = plan.recipients.count > 1
+                ? plan.recipients.map { (shortAddress($0.address), "\(coin.amountText($0.amount)) \(coin.ticker) · \(hoursText($0.hours ?? 0))") }
+                : []
             return [
                 (L10n.text("wallet_review_amount"), "\(coin.amountText(plan.amount)) \(coin.ticker)"),
+            ] + each + [
                 (L10n.text("wallet_hours_burned"), hoursText(plan.fee)),
                 (L10n.format("wallet_review_balance_after", coin.ticker), coin.amountText(confirmed >= plan.amount ? confirmed - plan.amount : 0)),
                 (L10n.text("wallet_review_hours_after"), hoursText(hoursNow - min(hoursNow, spent))),
@@ -636,8 +776,10 @@ struct WalletResultView: View {
                     .background(Color.skySuccess.opacity(0.15), in: Circle())
                     .padding(.top, 60)
                 Text("wallet_result_title").skyText(.headlineSmall).multilineTextAlignment(.center).padding(.top, 22)
-                Text(verbatim: L10n.format("wallet_result_body", model.coin.amountText(model.send.sentAmount), model.coin.ticker,
-                                           shortAddress(model.send.sentTo, head: 6, tail: 4)))
+                Text(verbatim: model.send.sentCount > 1
+                    ? L10n.format("wallet_result_body_many", model.coin.amountText(model.send.sentAmount), model.coin.ticker)
+                    : L10n.format("wallet_result_body", model.coin.amountText(model.send.sentAmount), model.coin.ticker,
+                                  shortAddress(model.send.sentTo, head: 6, tail: 4)))
                     .skyText(.bodyLarge)
                     .foregroundStyle(Color.skyOnSurfaceVariant)
                     .multilineTextAlignment(.center)
