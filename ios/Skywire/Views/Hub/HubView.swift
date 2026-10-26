@@ -444,6 +444,7 @@ final class HubModel: ObservableObject {
         readBalance()
         guard app.connected else {
             states = [:]
+            unreadMail = 0
             return
         }
         minHops = try? await app.client.routerSettings().minHops
@@ -485,14 +486,12 @@ final class HubModel: ObservableObject {
             .map { Amounts.format($0.confirmed, exponent: CoinSpec.sky.exponent, minDecimals: 0) }
     }
 
-    /// The inbox's unread count while the mailbox runs; a failed read keeps the last one.
+    /// The inbox's unread count while the mailbox runs; a failed read keeps the last one. The
+    /// mailbox's own word for whether it runs, as the mail screen reads it: the apps list can
+    /// lag it, which left the badge at zero while mail flowed.
     private func countMail(_ app: AppModel) async {
-        guard states[MailProfile.app]?.running == true else {
-            unreadMail = 0
-            return
-        }
         if let status = try? await app.client.mailStatus() {
-            unreadMail = status.unread
+            unreadMail = status.running ? status.unread : 0
         }
     }
 
