@@ -21,6 +21,10 @@ func TestReapIdleProbesQuietConn(t *testing.T) {
 		return len(ln.Connections()) == 1
 	})
 	sc := ln.Connections()[0]
+	// receiveMsg seeds the clock when it starts, which would undo ours.
+	waitForCondition(t, "both receive loops started", func() bool {
+		return c.lastActivityNs.Load() != 0 && sc.lastActivityNs.Load() != 0
+	})
 
 	quiet := time.Now().Add(-idleProbeAfter - time.Second).UnixNano()
 	c.lastActivityNs.Store(quiet)
