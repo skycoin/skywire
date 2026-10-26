@@ -502,6 +502,15 @@ private struct MailComposeView: View {
                 } else {
                     Button { showCc = true } label: { Text("mail_add_cc") }.buttonStyle(.skyText)
                 }
+                // The suffix is the sender's choice of network, and they differ in more
+                // than name: dmsg needs no route but relays through a dmsg server;
+                // skynet is a direct route when one exists.
+                VStack(alignment: .leading, spacing: 4) {
+                    SkySegmentedRow(items: [false, true], selected: model.draft?.skynet ?? false,
+                                    label: { Text(verbatim: String(($0 ? SkymailAddress.skynet : SkymailAddress.dmsg).dropFirst())) }, onSelect: model.setViaSkynet)
+                        .accessibilityIdentifier("mail-network")
+                    Text("mail_via_hint").skyText(.bodySmall).foregroundStyle(Color.skyOnSurfaceVariant)
+                }
                 SkyOutlinedTextField(label: L10n.key("mail_subject"), text: binding(\.subject), identifier: "mail-subject", prose: true)
                 SkyOutlinedTextField(label: L10n.key("mail_body"), text: binding(\.body), identifier: "mail-body", minLines: 6, prose: true)
                 ForEach(Array((model.draft?.attachments ?? []).enumerated()), id: \.offset) { index, attachment in

@@ -77,8 +77,10 @@ public enum SkymailAddress {
     }
 
     /// What a typed recipient means: an address as given, or a bare public key
-    /// (hex or skychat://) turned into its dmsg address. Nil when it is neither.
-    public static func recipient(_ input: String) -> String? {
+    /// (hex or skychat://) turned into an address over `suffix`. Nil when it is
+    /// neither. An address keeps the suffix it was written with: that is the
+    /// sender's choice of network.
+    public static func recipient(_ input: String, suffix: String = dmsg) -> String? {
         var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.hasPrefix("skychat://") {
             text.removeFirst("skychat://".count)
@@ -89,8 +91,20 @@ public enum SkymailAddress {
         if text.contains("@") {
             return pk(ofAddress: text) == nil ? nil : text
         }
-        return of(text)
+        return of(text, suffix: suffix)
     }
+
+    /// `text` with every SkyMail address in it moved onto the `suffix` network.
+    public static func withNetwork(_ text: String, suffix: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let template = "$1" + NSRegularExpression.escapedTemplate(for: suffix)
+        return addressHost.stringByReplacingMatches(in: text, range: range, withTemplate: template)
+    }
+
+    private static let addressHost = try! NSRegularExpression(
+        pattern: #"(@(?:[a-z0-9-]+\.)*[a-z2-7]{53})(?:\.dmsg|\.skynet)\b"#,
+        options: [.caseInsensitive]
+    )
 
     /// A key typed or pasted as a key, a skychat link or an address, as lowercase hex.
     public static func pk(ofInput input: String) -> String? {

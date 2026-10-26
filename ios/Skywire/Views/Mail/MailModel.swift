@@ -16,6 +16,10 @@ struct MailDraft: Equatable {
     var body = ""
     var inReplyTo = ""
     var attachments: [DraftAttachment] = []
+    /// The network every address in the draft goes over.
+    var skynet = false
+
+    var suffix: String { skynet ? SkymailAddress.skynet : SkymailAddress.dmsg }
 }
 
 struct OpenMail: Equatable {
@@ -236,8 +240,25 @@ final class MailModel: ObservableObject {
             to: to,
             subject: subject,
             body: "\n\n" + L10n.format("mail_reply_header", message.date, message.from) + "\n" + quoted,
-            inReplyTo: message.messageID
+            inReplyTo: message.messageID,
+            skynet: Self.overSkynet(to)
         )
+    }
+
+    /// Whether a reply to `address` starts on skynet: on the network of the address it answers.
+    static func overSkynet(_ address: String) -> Bool {
+        var answered = address.trimmingTrailingWhitespace()
+        if answered.hasSuffix(">") { answered.removeLast() }
+        return answered.lowercased().hasSuffix(SkymailAddress.skynet)
+    }
+
+    /// The network is the message's: the addresses already written move with it.
+    func setViaSkynet(_ on: Bool) {
+        guard var current = draft else { return }
+        current.skynet = on
+        current.to = SkymailAddress.withNetwork(current.to, suffix: current.suffix)
+        current.cc = SkymailAddress.withNetwork(current.cc, suffix: current.suffix)
+        draft = current
     }
 
     func discardDraft() {
@@ -272,7 +293,7 @@ final class MailModel: ObservableObject {
 
     /// A contact's address appended to To.
     func addRecipient(_ pk: String) {
-        guard let address = SkymailAddress.of(pk), var current = draft else { return }
+        guard var current = draft, let address = SkymailAddress.of(pk, suffix: current.suffix) else { return }
         var to = current.to.trimmingCharacters(in: .whitespacesAndNewlines)
         while to.hasSuffix(",") { to.removeLast() }
         current.to = [to, address].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -283,8 +304,8 @@ final class MailModel: ObservableObject {
         // The button's disabled state lags this by a frame; a second tap in
         // that window would send the mail twice, and nothing dedupes it.
         guard let current = draft, let app, !sending else { return }
-        let to = Self.parseRecipients(current.to)
-        let cc = Self.parseRecipients(current.cc)
+        let to = Self.parseRecipients(current.to, suffix: current.suffix)
+        let cc = Self.parseRecipients(current.cc, suffix: current.suffix)
         let bad = (to + cc).filter { $0.address == nil }.map(\.typed)
         if !bad.isEmpty {
             notice = L10n.format("mail_bad_address", bad.joined(separator: ", "))
@@ -396,11 +417,11 @@ final class MailModel: ObservableObject {
     // MARK: Helpers
 
     /// Each typed recipient and the address it means, nil when it is not one.
-    static func parseRecipients(_ text: String) -> [(typed: String, address: String?)] {
+    static func parseRecipients(_ text: String, suffix: String = SkymailAddress.dmsg) -> [(typed: String, address: String?)] {
         text.components(separatedBy: CharacterSet(charactersIn: ",; \n"))
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-            .map { ($0, SkymailAddress.recipient($0)) }
+            .map { ($0, SkymailAddress.recipient($0, suffix: suffix)) }
     }
 
     private static func readAttachment(_ url: URL) -> DraftAttachment? {
