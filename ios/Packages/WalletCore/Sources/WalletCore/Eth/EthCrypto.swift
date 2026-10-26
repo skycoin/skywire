@@ -7,9 +7,9 @@ public enum EthCrypto {
     public static func keccak256(_ data: [UInt8]) -> [UInt8] { Keccak256.hash(data) }
 
     /// m/44'/60'/0'/0 — the node every index-i external address hangs off.
-    public static func accountKey(mnemonic: String) throws -> Bip32.ExtKey {
+    public static func accountKey(mnemonic: String, passphrase: String = "") throws -> Bip32.ExtKey {
         try Bip32.derive(
-            Bip32.master(seed: Bip39.toSeed(mnemonic)),
+            Bip32.master(seed: Bip39.toSeed(mnemonic, passphrase: passphrase)),
             path: [44 | Bip32.hardened, 60 | Bip32.hardened, Bip32.hardened, 0]
         )
     }

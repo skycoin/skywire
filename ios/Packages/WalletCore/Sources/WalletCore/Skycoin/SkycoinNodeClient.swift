@@ -60,13 +60,53 @@ public struct SkycoinNodeClient: Sendable {
         }
     }
 
+    public struct BuildInfo: Decodable, Sendable {
+        public var version = ""
+
+        enum CodingKeys: String, CodingKey { case version }
+
+        public init() {}
+
+        public init(from decoder: Decoder) throws {
+            version = try decoder.container(keyedBy: CodingKeys.self).value(.version, default: "")
+        }
+    }
+
+    /// The fiber.toml settings a node reports: how the coin names and shows
+    /// itself.
+    public struct FiberInfo: Decodable, Sendable {
+        public var name = ""
+        public var displayName = ""
+        public var ticker = ""
+        public var explorerURL = ""
+
+        enum CodingKeys: String, CodingKey {
+            case name, displayName = "display_name", ticker, explorerURL = "explorer_url"
+        }
+
+        public init() {}
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.value(.name, default: "")
+            displayName = try c.value(.displayName, default: "")
+            ticker = try c.value(.ticker, default: "")
+            explorerURL = try c.value(.explorerURL, default: "")
+        }
+    }
+
     public struct Health: Decodable, Sendable {
         public var blockchain = BlockchainInfo()
         public var userVerifyTxn = VerifyTxnParams()
         public var coin = ""
+        public var version = BuildInfo()
+        public var blockchainPubkey = ""
+        public var fiber = FiberInfo()
+        public var openConnections = -1
 
         enum CodingKeys: String, CodingKey {
-            case blockchain, userVerifyTxn = "user_verify_transaction", coin
+            case blockchain, userVerifyTxn = "user_verify_transaction", coin, version
+            case blockchainPubkey = "blockchain_pubkey", fiber, openConnections = "open_connections"
         }
 
         public init(from decoder: Decoder) throws {
@@ -74,6 +114,114 @@ public struct SkycoinNodeClient: Sendable {
             blockchain = try c.value(.blockchain, default: BlockchainInfo())
             userVerifyTxn = try c.value(.userVerifyTxn, default: VerifyTxnParams())
             coin = try c.value(.coin, default: "")
+            version = try c.value(.version, default: BuildInfo())
+            blockchainPubkey = try c.value(.blockchainPubkey, default: "")
+            fiber = try c.value(.fiber, default: FiberInfo())
+            openConnections = try c.value(.openConnections, default: -1)
+        }
+    }
+
+    public struct BlockHead: Decodable, Sendable {
+        public var seq: UInt64 = 0
+        public var timestamp: UInt64 = 0
+        public var blockHash = ""
+
+        enum CodingKeys: String, CodingKey { case seq, timestamp, blockHash = "block_hash" }
+
+        public init() {}
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            seq = try c.value(.seq, default: 0)
+            timestamp = try c.value(.timestamp, default: 0)
+            blockHash = try c.value(.blockHash, default: "")
+        }
+    }
+
+    public struct Metadata: Decodable, Sendable {
+        public var head = BlockHead()
+
+        enum CodingKeys: String, CodingKey { case head }
+
+        public init(from decoder: Decoder) throws {
+            head = try decoder.container(keyedBy: CodingKeys.self).value(.head, default: BlockHead())
+        }
+    }
+
+    public struct Supply: Decodable, Sendable {
+        public var currentSupply = ""
+        public var totalSupply = ""
+
+        enum CodingKeys: String, CodingKey { case currentSupply = "current_supply", totalSupply = "total_supply" }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            currentSupply = try c.lenientString(.currentSupply, default: "")
+            totalSupply = try c.lenientString(.totalSupply, default: "")
+        }
+    }
+
+    public struct Connection: Decodable, Sendable {
+        public var address = ""
+        public var height: UInt64 = 0
+        public var outgoing = false
+        public var trusted = false
+        public var userAgent = ""
+        public var lastSent: Int64 = 0
+        public var lastReceived: Int64 = 0
+
+        enum CodingKeys: String, CodingKey {
+            case address, height, outgoing, trusted = "is_trusted_peer", userAgent = "user_agent"
+            case lastSent = "last_sent", lastReceived = "last_received"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            address = try c.value(.address, default: "")
+            height = try c.value(.height, default: 0)
+            outgoing = try c.value(.outgoing, default: false)
+            trusted = try c.value(.trusted, default: false)
+            userAgent = try c.value(.userAgent, default: "")
+            lastSent = try c.value(.lastSent, default: 0)
+            lastReceived = try c.value(.lastReceived, default: 0)
+        }
+    }
+
+    public struct Connections: Decodable, Sendable {
+        public var connections: [Connection] = []
+
+        enum CodingKeys: String, CodingKey { case connections }
+
+        public init(from decoder: Decoder) throws {
+            connections = try decoder.container(keyedBy: CodingKeys.self).value(.connections, default: [])
+        }
+    }
+
+    public struct PendingEntry: Decodable, Sendable {
+        public let transaction: VerboseTxn
+        public var received = ""
+
+        enum CodingKeys: String, CodingKey { case transaction, received }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            transaction = try c.decode(VerboseTxn.self, forKey: .transaction)
+            received = try c.value(.received, default: "")
+        }
+    }
+
+    /// How far the node has synced: its own height and the highest its
+    /// peers report.
+    public struct Progress: Decodable, Sendable {
+        public var current: UInt64 = 0
+        public var highest: UInt64 = 0
+
+        enum CodingKeys: String, CodingKey { case current, highest }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            current = try c.value(.current, default: 0)
+            highest = try c.value(.highest, default: 0)
         }
     }
 
@@ -256,6 +404,39 @@ public struct SkycoinNodeClient: Sendable {
 
     public func transactions(_ addresses: [String]) async throws -> [TxnEntry] {
         try await get("api/v1/transactions", [("addrs", addresses.joined(separator: ",")), ("verbose", "1")])
+    }
+
+    public func progress() async throws -> Progress {
+        try await get("api/v1/blockchain/progress")
+    }
+
+    public func metadata() async throws -> Metadata {
+        try await get("api/v1/blockchain/metadata")
+    }
+
+    public func coinSupply() async throws -> Supply {
+        try await get("api/v1/coinSupply")
+    }
+
+    public func connections() async throws -> Connections {
+        try await get("api/v1/network/connections")
+    }
+
+    public func pendingTxs() async throws -> [PendingEntry] {
+        try await get("api/v1/pendingTxs", [("verbose", "1")])
+    }
+
+    /// Removes a transaction from the node's own unconfirmed pool. Peers
+    /// that hold it are unaffected.
+    public func deletePending(txid: String) async throws {
+        let csrf = await fetchCsrf()
+        let resp = try await http.delete(
+            endpoint(base, "api/v1/pendingTxs", [("txid", txid)]),
+            headers: csrf.map { ["X-CSRF-Token": $0] } ?? [:]
+        )
+        if !resp.isSuccessful {
+            throw WalletError.nodeRejected(Self.errorMessage(resp.body, code: resp.status))
+        }
     }
 
     /// Broadcast; returns the txid the node reports. Node-side rejections

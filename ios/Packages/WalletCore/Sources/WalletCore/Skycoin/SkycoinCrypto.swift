@@ -72,3 +72,21 @@ public enum SkycoinCrypto {
 
     public static func isValidAddress(_ address: String) -> Bool { decodeAddress(address) != nil }
 }
+
+/// Skycoin's BIP 44 wallets: m/44'/8000'/account'/chain/index, chain 0 for
+/// receiving and 1 for change, the phrase run through BIP 39 with its
+/// passphrase. The address of a key is the usual Skycoin one.
+public enum SkycoinBip44 {
+    private static let coinType: UInt32 = 8000
+
+    public static func accountKey(mnemonic: String, passphrase: String, account: UInt32 = 0) throws -> Bip32.ExtKey {
+        try Bip32.derive(
+            Bip32.master(seed: Bip39.toSeed(mnemonic, passphrase: passphrase)),
+            path: [44 | Bip32.hardened, coinType | Bip32.hardened, account | Bip32.hardened]
+        )
+    }
+
+    public static func key(_ account: Bip32.ExtKey, chain: UInt32, index: UInt32) throws -> Bip32.ExtKey {
+        try Bip32.ckdPriv(Bip32.ckdPriv(account, index: chain), index: index)
+    }
+}

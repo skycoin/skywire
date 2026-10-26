@@ -1,0 +1,18 @@
+{
+  "bip84": {
+    "accountPrivHex": "e14f274d16ca0d91031b98b162618061d03930fa381af6d4caf44b01819ab6d4",
+    "bip39SeedHex": "5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4",
+    "change": [
+      "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el",
+      "bc1qggnasd834t54yulsep6fta8lpjekv4zj6gv5rf",
+      "bc1qn8alfh45rlsj44pcdt0f2cadtztgnz4gq3h3uf"
+    ],
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    "receive": [
+      "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+      "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g",
+      "bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z"
+    ],
+    "receivePrivHex0": "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3"
+  }
+}

@@ -2,11 +2,14 @@ import Foundation
 
 /// WalletCore for Bitcoin mainnet: BIP 84 keys, P2WPKH spends, an esplora
 /// server for the chain view. Fee is sat/vB chosen by the user; transactions
-/// signal RBF.
+/// signal RBF. A BIP 44 key source makes it a legacy wallet: P2PKH
+/// addresses and the original sighash.
 public final class BtcWalletCore: WalletCore {
 
     /// Core's dust threshold for P2WPKH outputs.
     public static let dustSats: UInt64 = 294
+    /// Core's dust threshold for P2PKH outputs.
+    public static let dustSatsP2PKH: UInt64 = 546
     private static let scanGap = 5
     private static let scanCap = 40
 
@@ -30,35 +33,37 @@ public final class BtcWalletCore: WalletCore {
         let outputs: [BtcTxn.Output]
         /// Fresh change chain index used by this plan, or -1 when no change.
         let changeIndex: Int
+        /// Legacy P2PKH inputs, signed in their scriptSigs.
+        let legacy: Bool
     }
 
     public func newSeed() -> String { Bip39.newMnemonic(entropyBits: 128) }
 
     public func validateSeed(_ mnemonic: String) -> Bool { Bip39.validate(mnemonic) }
 
-    public func deriveAddresses(seed: String, receiveCount: Int, changeCount: Int) throws -> AddressBook {
-        let account = try Bip84.accountKey(mnemonic: seed)
+    public func deriveAddresses(seed: KeySource, receiveCount: Int, changeCount: Int) throws -> AddressBook {
+        let account = try BtcKeys.accountKey(seed)
         return AddressBook(
             receive: try (0..<receiveCount).map {
-                Bip84.address(pubKey: try Bip84.key(account, change: 0, index: UInt32($0)).pubKey())
+                BtcKeys.address(pubKey: try Bip84.key(account, change: 0, index: UInt32($0)).pubKey(), derivation: seed.derivation)
             },
             change: try (0..<changeCount).map {
-                Bip84.address(pubKey: try Bip84.key(account, change: 1, index: UInt32($0)).pubKey())
+                BtcKeys.address(pubKey: try Bip84.key(account, change: 1, index: UInt32($0)).pubKey(), derivation: seed.derivation)
             }
         )
     }
 
     public func validateAddress(_ address: String) -> Bool { BtcAddress.isValid(address) }
 
-    public func scanUsed(seed: String) async throws -> (receive: Int, change: Int) {
-        let account = try Bip84.accountKey(mnemonic: seed)
+    public func scanUsed(seed: KeySource) async throws -> (receive: Int, change: Int) {
+        let account = try BtcKeys.accountKey(seed)
         func scanChain(_ chain: UInt32, minimum: Int) async throws -> Int {
             var lastUsed = -1
             var i = 0
             var gap = 0
             while gap < Self.scanGap && i < Self.scanCap {
-                let addr = Bip84.address(pubKey: try Bip84.key(account, change: chain, index: UInt32(i)).pubKey())
-                let info = try await api.addressInfo(addr)
+                let pub = try Bip84.key(account, change: chain, index: UInt32(i)).pubKey()
+                let info = try await api.addressInfo(BtcKeys.address(pubKey: pub, derivation: seed.derivation))
                 if info.chain.txCount > 0 || info.mempool.txCount > 0 {
                     lastUsed = i
                     gap = 0
@@ -76,16 +81,20 @@ public final class BtcWalletCore: WalletCore {
         var confirmed: UInt64 = 0
         var all: UInt64 = 0
         var outputs = 0
+        var per = [String: UInt64]()
         for addr in book.all() {
+            var addrConfirmed: UInt64 = 0
             for u in try await api.utxos(addr) {
                 all &+= u.value
                 if u.status.confirmed {
                     confirmed &+= u.value
+                    addrConfirmed &+= u.value
                     outputs += 1
                 }
             }
+            per[addr] = addrConfirmed
         }
-        return WalletBalance(confirmed: confirmed, predicted: all, hours: nil, spendableOutputs: outputs)
+        return WalletBalance(confirmed: confirmed, predicted: all, hours: nil, spendableOutputs: outputs, perAddress: per)
     }
 
     public func history(_ book: AddressBook) async throws -> [TxRecord] {
@@ -111,6 +120,9 @@ public final class BtcWalletCore: WalletCore {
                 let party: String? = incoming
                     ? tx.vin.first { $0.prevout?.address != nil && !ours.contains($0.prevout!.address!) }?.prevout?.address
                     : tx.vout.first { $0.address != nil && !ours.contains($0.address!) }?.address
+                let own = distinct(incoming
+                    ? tx.vout.compactMap(\.address).filter { ours.contains($0) }
+                    : tx.vin.compactMap { $0.prevout?.address }.filter { ours.contains($0) })
                 let confirmations: Int64 = tx.status.confirmed && tip >= tx.status.blockHeight
                     ? tip - tx.status.blockHeight + 1
                     : 0
@@ -122,12 +134,17 @@ public final class BtcWalletCore: WalletCore {
                     timestamp: tx.status.confirmed ? tx.status.blockTime : Int64(Date().timeIntervalSince1970),
                     confirmed: tx.status.confirmed,
                     confirmations: confirmations,
-                    fee: tx.fee
+                    fee: tx.fee,
+                    own: own
                 )
                 order.append(tx.txid)
             }
         }
         return sortedForDisplay(order.map { seen[$0]! })
+    }
+
+    public func nodeInfo() async throws -> NodeInfo {
+        NodeInfo(coinName: "Bitcoin", ticker: "BTC", height: try await api.tipHeight())
     }
 
     public func feePresets() async throws -> FeePresets? {
@@ -144,17 +161,28 @@ public final class BtcWalletCore: WalletCore {
     }
 
     public func buildTx(
-        seed: String,
+        seed: KeySource,
         book: AddressBook,
         toAddress: String,
         amount: UInt64,
         feeRate: Int?,
-        sendMax: Bool
+        sendMax: Bool,
+        fromAddress: String? = nil,
+        inputs: Set<String>? = nil,
+        hoursTo: UInt64? = nil,
+        more: [Recipient] = [],
+        changeAddress: String? = nil,
+        shareFactor: Decimal? = nil,
+        feeLevel: FeeLevel? = nil
     ) async throws -> TxPlan {
+        if !more.isEmpty { throw WalletError.invalidAmount("this chain sends to one destination at a time") }
+        if changeAddress != nil { throw WalletError.invalidAddress }
         guard let destScript = BtcAddress.scriptPubKey(toAddress) else { throw WalletError.invalidAddress }
         let rate = UInt64(max(feeRate ?? 1, 1))
 
-        let account = try Bip84.accountKey(mnemonic: seed)
+        let legacy = seed.derivation == .bip44
+        let dust = legacy ? Self.dustSatsP2PKH : Self.dustSats
+        let account = try BtcKeys.accountKey(seed)
         // address → (chain, index, hash160)
         var programOf = [String: (UInt32, UInt32, [UInt8])]()
         for (i, a) in book.receive.enumerated() {
@@ -165,9 +193,11 @@ public final class BtcWalletCore: WalletCore {
         }
 
         // Confirmed outputs only — the design promise is that pending funds
-        // cannot be respent from this wallet.
+        // cannot be respent from this wallet. A chosen from-address spends
+        // only what it holds.
         var utxos = [(String, BtcEsploraClient.Utxo)]()
         for addr in book.all() {
+            if let fromAddress, addr != fromAddress { continue }
             for u in try await api.utxos(addr) where u.status.confirmed { utxos.append((addr, u)) }
         }
         if utxos.isEmpty { throw WalletError.insufficientBalance }
@@ -176,7 +206,7 @@ public final class BtcWalletCore: WalletCore {
             $0.element.1.value != $1.element.1.value ? $0.element.1.value > $1.element.1.value : $0.offset < $1.offset
         }.map(\.element)
 
-        let changeScriptLen = 22 // P2WPKH change
+        let changeScriptLen = legacy ? 25 : 22 // P2PKH or P2WPKH change
 
         func planInput(_ p: (String, BtcEsploraClient.Utxo)) throws -> PlanInput {
             guard let program = programOf[p.0] else {
@@ -189,9 +219,9 @@ public final class BtcWalletCore: WalletCore {
         if sendMax {
             var total: UInt64 = 0
             for u in utxos { total &+= u.1.value }
-            let vsize = BtcTxn.estimateVsize(inputCount: utxos.count, outputScripts: [destScript])
+            let vsize = BtcTxn.estimateVsize(inputCount: utxos.count, outputScripts: [destScript], legacy: legacy)
             let fee = rate &* UInt64(vsize)
-            if total <= fee &+ Self.dustSats { throw WalletError.insufficientBalance }
+            if total <= fee &+ dust { throw WalletError.insufficientBalance }
             let sendAmount = total - fee
             return TxPlan(
                 toAddress: toAddress,
@@ -205,13 +235,14 @@ public final class BtcWalletCore: WalletCore {
                 payload: .btc(Payload(
                     inputs: try utxos.map(planInput),
                     outputs: [BtcTxn.Output(valueSats: sendAmount, scriptPubKey: destScript)],
-                    changeIndex: -1
+                    changeIndex: -1,
+                    legacy: legacy
                 ))
             )
         }
 
         if amount == 0 { throw WalletError.invalidAmount("enter an amount to send") }
-        if amount < Self.dustSats { throw WalletError.invalidAmount("amount is below the dust limit") }
+        if amount < dust { throw WalletError.invalidAmount("amount is below the dust limit") }
 
         var selected = [(String, BtcEsploraClient.Utxo)]()
         var inSum: UInt64 = 0
@@ -220,7 +251,7 @@ public final class BtcWalletCore: WalletCore {
         for u in utxos {
             selected.append(u)
             inSum &+= u.1.value
-            feeWithChange = rate &* UInt64(BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: withChange))
+            feeWithChange = rate &* UInt64(BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: withChange, legacy: legacy))
             if inSum >= amount &+ feeWithChange { break }
         }
         if inSum < amount { throw WalletError.insufficientBalance }
@@ -230,22 +261,23 @@ public final class BtcWalletCore: WalletCore {
         var changeIndex = -1
         var outputs = [BtcTxn.Output(valueSats: amount, scriptPubKey: destScript)]
 
-        if change < Self.dustSats {
+        if change < dust {
             // No change output: whatever is left over joins the fee.
             fee = inSum - amount
-            let feeNoChange = rate &* UInt64(BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: [destScript]))
+            let feeNoChange = rate &* UInt64(BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: [destScript], legacy: legacy))
             if fee < feeNoChange { throw WalletError.insufficientBalance }
             change = 0
         } else {
             changeIndex = book.change.count
-            let changeAddr = Bip84.address(pubKey: try Bip84.key(account, change: 1, index: UInt32(changeIndex)).pubKey())
+            let changePub = try Bip84.key(account, change: 1, index: UInt32(changeIndex)).pubKey()
+            let changeAddr = BtcKeys.address(pubKey: changePub, derivation: seed.derivation)
             guard let changeScript = BtcAddress.scriptPubKey(changeAddr) else {
                 throw WalletCoreError("derived change address failed to decode")
             }
             outputs.append(BtcTxn.Output(valueSats: change, scriptPubKey: changeScript))
         }
 
-        let vsize = BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: outputs.map(\.scriptPubKey))
+        let vsize = BtcTxn.estimateVsize(inputCount: selected.count, outputScripts: outputs.map(\.scriptPubKey), legacy: legacy)
         return TxPlan(
             toAddress: toAddress,
             amount: amount,
@@ -255,16 +287,16 @@ public final class BtcWalletCore: WalletCore {
             hoursChange: nil,
             vsize: vsize,
             feeRate: Int(rate),
-            payload: .btc(Payload(inputs: try selected.map(planInput), outputs: outputs, changeIndex: changeIndex))
+            payload: .btc(Payload(inputs: try selected.map(planInput), outputs: outputs, changeIndex: changeIndex, legacy: legacy))
         )
     }
 
-    public func signTx(seed: String, plan: TxPlan) throws -> SignedTx {
+    public func signTx(seed: KeySource, plan: TxPlan) throws -> SignedTx {
         guard case .btc(let payload) = plan.payload else { throw WalletCoreError("not a Bitcoin plan") }
-        let account = try Bip84.accountKey(mnemonic: seed)
+        let account = try BtcKeys.accountKey(seed)
         var txn = try BtcTxn(
             inputs: payload.inputs.map {
-                BtcTxn.Input(txid: $0.txid, vout: $0.vout, valueSats: $0.value, pubKeyHash: $0.pubKeyHash)
+                BtcTxn.Input(txid: $0.txid, vout: $0.vout, valueSats: $0.value, pubKeyHash: $0.pubKeyHash, legacy: payload.legacy)
             },
             outputs: payload.outputs
         )

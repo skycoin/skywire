@@ -1,3 +1,5 @@
+import Foundation
+
 /// The Skycoin transaction and its exact wire encoding (skyencoder output,
 /// little-endian, u32 length prefixes on slices):
 ///
@@ -92,4 +94,84 @@ public struct SkycoinTxn: Sendable {
     public func txidHex() -> String { Hashes.sha256(serialize()).hex }
 
     public func serializeHex() -> String { serialize().hex }
+
+    /// The same transaction with every signature zeroed, as an unsigned
+    /// transaction is written.
+    public func unsignedHex() -> String {
+        var copy = SkycoinTxn()
+        copy.inputs = inputs
+        copy.outputs = outputs
+        copy.sigs = Array(repeating: [UInt8](repeating: 0, count: 65), count: inputs.count)
+        copy.updateHeader()
+        return copy.serializeHex()
+    }
+
+    /// True when every input carries a signature.
+    public func isSigned() -> Bool {
+        sigs.count == inputs.count && !sigs.contains { s in s.allSatisfy { $0 == 0 } }
+    }
+
+    /// Reads the wire encoding back. Refuses trailing bytes, a length field
+    /// that disagrees, and an inner hash that does not match the inputs and
+    /// outputs, so a mangled paste fails here and not at a node. Throws
+    /// WalletCoreError with Kotlin's messages.
+    public static func decode(_ hex: String) throws -> SkycoinTxn {
+        guard let bytes = [UInt8](hex: hex.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw WalletCoreError("not a hex transaction")
+        }
+        var r = ByteReader(bytes)
+        func count(_ size: Int) throws -> Int {
+            let n = Int(Int32(bitPattern: try r.u32()))
+            try require(n >= 0, "transaction ends early")
+            try r.need(n * size)
+            return n
+        }
+        var txn = SkycoinTxn()
+        try r.need(4 + 1)
+        txn.length = try r.u32()
+        txn.type = try r.u8()
+        txn.innerHash = try r.take(32)
+        for _ in 0..<(try count(65)) { txn.sigs.append(try r.take(65)) }
+        for _ in 0..<(try count(32)) { txn.inputs.append(try r.take(32)) }
+        for _ in 0..<(try count(1 + 20 + 8 + 8)) {
+            let version = try r.u8()
+            let key = try r.take(20)
+            txn.outputs.append(Output(addressKey: key, addressVersion: version, coins: try r.u64(), hours: try r.u64()))
+        }
+        try require(r.remaining == 0, "bytes after the transaction")
+        try require(Int(txn.length) == bytes.count, "length field does not match")
+        try require(txn.innerHash == txn.hashInner(), "inner hash does not match")
+        return txn
+    }
+}
+
+/// Little-endian reader for SkycoinTxn.decode; every read past the end is
+/// "transaction ends early".
+private struct ByteReader {
+    private let bytes: [UInt8]
+    private var pos = 0
+
+    init(_ bytes: [UInt8]) { self.bytes = bytes }
+
+    var remaining: Int { bytes.count - pos }
+
+    func need(_ n: Int) throws {
+        try require(n <= remaining, "transaction ends early")
+    }
+
+    mutating func take(_ n: Int) throws -> [UInt8] {
+        try need(n)
+        defer { pos += n }
+        return Array(bytes[pos..<(pos + n)])
+    }
+
+    mutating func u8() throws -> UInt8 { try take(1)[0] }
+
+    mutating func u32() throws -> UInt32 {
+        try take(4).reversed().reduce(0) { $0 << 8 | UInt32($1) }
+    }
+
+    mutating func u64() throws -> UInt64 {
+        try take(8).reversed().reduce(0) { $0 << 8 | UInt64($1) }
+    }
 }

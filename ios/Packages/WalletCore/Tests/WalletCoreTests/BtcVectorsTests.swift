@@ -58,7 +58,7 @@ final class Bip84FixtureTests: XCTestCase {
     }
 
     func testDerivationChainMatchesReference() throws {
-        let fx = try Fixture.decode(Fixtures.self, "skycoin-fixtures.json").bip84
+        let fx = try Fixture.decode(Fixtures.self, "btc-fixtures.json").bip84
         XCTAssertEqual(fx.bip39SeedHex, try Bip39.toSeed(fx.mnemonic).hex)
         let account = try Bip84.accountKey(mnemonic: fx.mnemonic)
         XCTAssertEqual(fx.accountPrivHex, account.key.hex)
