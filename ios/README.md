@@ -160,6 +160,18 @@ xcodebuild -project ios/Skywire.xcodeproj -scheme SkywireTour \
 xcrun xcresulttool export attachments --path ios/build/Tour.xcresult --output-path <dir>
 ```
 
+`WalletBenchChecks` sends real Skycoin transactions to a fake node, which
+checks each with skycoin's own signature and fee rules. Start it, have
+`faceid-matcher.sh` answer the Face ID prompts (Face ID enrolled on the
+Simulator), and name the node to the runner:
+
+```sh
+go run ./ios/scripts/fakenode &
+ios/scripts/faceid-matcher.sh &
+TEST_RUNNER_SKYWIRE_FAKE_NODE=http://127.0.0.1:6420 \
+  xcodebuild … -scheme SkywireTour test -only-testing:SkywireUITests/WalletBenchChecks
+```
+
 `MailChecks/testExchangeWithAPeer` needs a second visor on the Mac whose API
 answers on another port without a login (the desktop peer: `make build-mobile`,
 `hypervisor.http_addr` 127.0.0.1:18000, `enable_auth` false). Name it to the runner:
