@@ -520,7 +520,12 @@ func gzipRecords(metrics []store.TransportMetric) ([]byte, error) {
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	// The body is held until its day settles; do not hold the growth slack too.
+	out := buf.Bytes()
+	if cap(out)-len(out) > len(out)/8 {
+		out = bytes.Clone(out)
+	}
+	return out, nil
 }
 
 // Publisher returns the underlying feed publisher, for introspection.
