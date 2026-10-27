@@ -104,7 +104,7 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	}
 	// MinSessions 2 (not 1): once bootstrapped via the seed and registered in
 	// discovery, the client learns the live server list from discovery
-	// (seededDiscClient.AvailableServers → real) and holds a SECOND session, so a
+	// and holds a SECOND session, so a
 	// single seed going down doesn't sever the client (and orphan it from the
 	// discovery it would need to find another server). Capped at the known set.
 	conf.MinSessions = 2
