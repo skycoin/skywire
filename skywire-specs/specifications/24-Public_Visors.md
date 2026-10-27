@@ -1,244 +1,89 @@
 # Public Visors
 
-A *Public Visor* is a visor configured to serve as a bootstrap node for other visors on the Skywire network. Public visors advertise themselves in the *Service Discovery* and accept incoming STCPR (Skywire TCP Relay) transports from other visors.
+| Status   | Implemented                                                                   |
+|----------|-------------------------------------------------------------------------------|
+| Revision | 2026-10-27, skywire 38152beed                                                 |
+| Code     | `pkg/visor/init_transport.go`, `pkg/app/appdisc`, `pkg/visor/visorconfig`     |
+
+## Abstract
+
+A public visor advertises itself in Service Discovery as a visor that accepts
+incoming `stcpr` transports. Other visors find it there and connect to it. The
+visor validates that it is reachable, and it stops advertising itself while it
+serves too many distinct peers.
 
 ## Overview
 
-Public visors serve a critical role in network bootstrapping:
+Visors with `public_autoconnect` enabled read the `visor` entries of Service
+Discovery and open transports to them (see Public Autoconnect). A public visor
+creates and maintains its own `visor` entry. It does not depend on any other
+component to register it.
 
-- **Bootstrap nodes**: New visors connect to public visors to establish initial network presence
-- **Relay capability**: Provide transport endpoints for visors behind NAT or firewalls
-- **Network mesh expansion**: Facilitate SUDPH (Skywire UDP Hole Punch) connections between visors
+## Addressing
 
-Unlike regular visors, public visors must be externally reachable, either via:
-- A public IP address with no NAT
-- Port forwarding configured on the router (forwarding the STCPR port, default 7777)
+The advertised address is `<visor-pk>:<port>`, where the port is the local port
+of the visor's `stcpr` client. The entry is registered with Service Discovery
+as described in Service Discovery.
 
-## Configuration
+## Data Formats
 
-Public visor behavior is configured in the visor's JSON configuration:
+### Configuration
 
-```json
-{
-  "is_public": true,
-  "public_visor_config": {
-    "registration_timeout": "10m",
-    "max_transports": 1000
-  },
-  "stcpr_port": 7777
-}
-```
+`visorconfig.V1.IsPublic` and `visorconfig.PublicVisorConfig`.
 
-### Configuration Fields
+| JSON key                           | Type     | Default  | Meaning                                  |
+|------------------------------------|----------|----------|------------------------------------------|
+| `is_public`                        | bool     | false (`skyenv.IsPublic`) | enables public visor mode |
+| `public_visor.registration_timeout`| duration | 10 min (`skyenv.PublicVisorRegistrationTimeout`) | time allowed to receive an external `stcpr` connection; 0 disables the check |
+| `public_visor.max_transports`      | int      | 2048 (`visorconfig.PublicVisorMaxTransports`) | distinct peer count that pauses registration; 0 disables the limit |
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `is_public` | boolean | `false` | Enables public visor mode |
-| `registration_timeout` | duration | `10m` | Time to wait for external connection validation |
-| `max_transports` | integer | `1000` | Maximum transport count before deregistering |
-| `stcpr_port` | integer | `7777` | Port for incoming STCPR connections |
+### Service Discovery entry
 
-### Configuration Constants
+`servicedisc.Service` of type `visor` (`ServiceTypeVisor`) with `address` set to
+the key and port above, and the visor's geo data and version.
 
-Defined in `pkg/skyenv/skyenv.go`:
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `PublicVisorRegistrationTimeout` | 10 minutes | Default registration timeout |
-| `STCPAddr` | `:7777` | Default STCPR listen address |
-| `IsPublic` | `false` | Default public visor setting |
-
-Defined in `pkg/visor/visorconfig/values.go`:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `PublicVisorMaxTransports` | 1000 | Default max transports |
-
-## Registration Lifecycle
+## Behaviour
 
 ### Startup
 
-When a visor starts with `is_public: true`:
+`initPublicVisor` first removes any `visor` entry the visor left at its previous
+run. If `is_public` is false it ends there. Otherwise it reads the port of the
+`stcpr` client, creates an `appdisc.PublicVisorUpdater` with the configured
+timeout and limit, and starts it. The updater registers the entry in the
+background and repeats the registration every `skyenv.ServiceDiscUpdateInterval`,
+90 s. A failed registration is retried at the next interval.
 
-1. The `initPublicVisor()` function is called during visor initialization
-2. A `PublicVisorUpdater` is created with the configured timeout and max transports
-3. The visor registers with the *Service Discovery* as a public visor
-4. A monitoring loop begins to validate external reachability
+### Validation
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Public Visor Startup                        │
-├─────────────────────────────────────────────────────────────────┤
-│  1. initPublicVisor() called                                   │
-│  2. Create PublicVisorUpdater(timeout=10m, maxTp=1000)        │
-│  3. Register with Service Discovery                            │
-│  4. Start monitoring loop                                       │
-│  5. Wait for external STCPR connection...                      │
-└─────────────────────────────────────────────────────────────────┘
-```
+A visor is validated when its `stcpr` listener accepts a connection whose remote
+address is not private. A private address is loopback, link-local, IPv4
+`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` or `100.64.0.0/10`, or IPv6
+`fc00::/7` (`network.isPrivateIP`).
 
-### External Connection Validation
+If `registration_timeout` is above 0 and no such connection arrives within it,
+the updater deletes the entry and stops. It does not register again until the
+visor restarts. A visor validated before the timeout is not checked again.
 
-The visor must receive at least one STCPR connection from an external (non-private) IP address within the registration timeout to be considered "validated."
+### Distinct peer limit
 
-**Detection Logic** (in `pkg/transport/network/client.go`):
+Once a minute the updater counts the distinct remote visors across all the
+visor's transports. Several transports to one peer count once.
 
-```go
-// When accepting STCPR connection:
-if !isPrivateIP(remoteAddr.IP) {
-    // External connection detected - visor is validated
-    onExternalSTCPR()
-}
-```
+| State   | Condition                                   | Action                                  |
+|---------|---------------------------------------------|-----------------------------------------|
+| active  | count >= `max_transports`                   | delete the entry, pause the heartbeat   |
+| paused  | count < 90 percent of `max_transports`      | register at once, resume the heartbeat  |
 
-**Private IP Ranges** (excluded from validation):
+A paused visor keeps its transports and keeps accepting connections.
 
-| Range | Description |
-|-------|-------------|
-| `10.0.0.0/8` | RFC1918 Private |
-| `172.16.0.0/12` | RFC1918 Private |
-| `192.168.0.0/16` | RFC1918 Private |
-| `100.64.0.0/10` | RFC6598 CGNAT |
-| `127.0.0.0/8` | Loopback |
-| `fc00::/7` | IPv6 Unique Local |
-| Link-local addresses | IPv4/IPv6 link-local |
+## Security Considerations
 
-### Deregistration Conditions
+A public visor accepts transports from any visor. Transport encryption and
+authentication are those of the transport protocol. The entry lists the visor's
+address, so the address is visible to every Service Discovery client.
 
-A public visor will automatically deregister from *Service Discovery* under two conditions:
+## References
 
-**1. Validation Timeout**
-
-If no external STCPR connection is received within `registration_timeout`:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Timer starts at registration                                │
-│  ↓                                                           │
-│  Wait up to 10 minutes for external STCPR...                │
-│  ↓                                                           │
-│  No external connection received?                            │
-│  ↓                                                           │
-│  Log: "Public visor validation timeout: no external STCPR   │
-│        connection received. Deregistering from service      │
-│        discovery."                                           │
-│  ↓                                                           │
-│  Deregister (reason: "no_external_stcpr")                   │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**2. Maximum Transports Reached**
-
-If the transport count reaches `max_transports`:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Transport count checked every 1 minute                     │
-│  ↓                                                           │
-│  count >= max_transports (default 1000)?                    │
-│  ↓                                                           │
-│  Log: "Public visor reached max transports (X/1000).        │
-│        Deregistering from service discovery."               │
-│  ↓                                                           │
-│  Deregister (reason: "max_transports")                      │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### State Diagram
-
-```
-                    ┌─────────────┐
-                    │   Startup   │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ Registered  │◄────────────────┐
-                    │ (Unvalidated)│                │
-                    └──────┬──────┘                │
-                           │                        │
-            ┌──────────────┼──────────────┐        │
-            │              │              │        │
-            ▼              ▼              ▼        │
-    ┌───────────┐  ┌───────────┐  ┌───────────┐   │
-    │  Timeout  │  │ External  │  │ Max Tps   │   │
-    │ (10 min)  │  │  STCPR    │  │ Reached   │   │
-    └─────┬─────┘  └─────┬─────┘  └─────┬─────┘   │
-          │              │              │         │
-          │              ▼              │         │
-          │       ┌─────────────┐       │         │
-          │       │ Registered  │───────┘         │
-          │       │ (Validated) │                 │
-          │       └──────┬──────┘                 │
-          │              │                        │
-          │              │ Max Tps Reached        │
-          │              ▼                        │
-          │       ┌─────────────┐                 │
-          └──────►│Deregistered │                 │
-                  └─────────────┘                 │
-                                                  │
-                  (Restart required to           │
-                   re-register)                   │
-```
-
-## Service Discovery Registration
-
-Public visors register as service type `visor` with the *Service Discovery*:
-
-**Registration Request:**
-
-```
-POST /api/services
-Content-Type: application/json
-SW-Public: <visor-public-key>
-SW-Nonce: <nonce>
-SW-Sig: <signature>
-
-{
-    "address": "<pk>:<stcpr_port>",
-    "type": "visor",
-    "geo": { ... },
-    "version": "<visor-version>"
-}
-```
-
-**Heartbeat Updates:**
-
-The `PublicVisorUpdater` sends periodic heartbeat updates to maintain registration. The update interval is controlled by `ServiceDiscUpdateInterval` (default 90 seconds).
-
-## Network Requirements
-
-### Port Forwarding
-
-For visors behind NAT, the STCPR port must be forwarded:
-
-| Protocol | Internal Port | External Port | Description |
-|----------|--------------|---------------|-------------|
-| TCP | 7777 | 7777 | STCPR transport connections |
-
-### Firewall Rules
-
-The following inbound connections must be allowed:
-
-| Port | Protocol | Source | Description |
-|------|----------|--------|-------------|
-| 7777 | TCP | Any | STCPR connections from other visors |
-
-## Design Considerations
-
-### Validation Requirements
-
-- A public visor requires exactly ONE external STCPR connection to be validated
-- There is no minimum transport count requirement for continued registration
-- Connections from private IP ranges (RFC1918, RFC6598, loopback, link-local) do not count as external
-- If all connecting visors are on the same LAN, no external connections will be detected
-
-### Disabling Validation
-
-Setting `registration_timeout: 0` disables the external connection validation check entirely. The visor will remain registered regardless of whether it receives external connections.
-
-### Security Considerations
-
-- Public visors are advertised in *Service Discovery* and accessible to any visor
-- No authentication is required to establish transports (by design)
-- Transport-level encryption is handled by the transport protocol
+- Service Discovery
+- Public Autoconnect
+- Address Resolver Privacy

@@ -1,207 +1,244 @@
 # Route Finder
 
-The *Route Finder* (or *Route Finding Service*) is responsible for finding and suggesting routes between two Skywire Nodes (identified by public keys). It is expected that an *App Node* is to use this service to find possible routes before contacting the *Setup Node*.
+| Status   | Implemented                                                                       |
+|----------|-----------------------------------------------------------------------------------|
+| Revision | 2026-10-27, skywire 38152beed                                                     |
+| Code     | `pkg/deployment/rf`, `pkg/services/rf`, `pkg/rfclient`, `pkg/router`, `pkg/visor` |
 
-The *Route Finder* uses a Breadth-First Search (BFS) algorithm to find the shortest paths and returns up to 3 routes per source-destination pair, sorted by hop count (ascending).
+## Abstract
 
-## Graph Algorithm
+The Route Finder answers queries for routes between two visors. It holds the
+network transport graph built from the Transport Discovery transport set and
+returns the lowest latency paths that fit the requested hop limits. A visor can
+also calculate routes itself, without the Route Finder, from its own transports
+and a snapshot of the network graph.
 
-In order to explore routing we need to create a graph that represents the current skywire network, or at least the network formed by all the reachable nodes from the `source node`.
+## Overview
 
-For this purpose, we use a Depth-First Search (DFS) algorithm to build the network graph from a root node. The graph construction:
+The router asks for routes when it dials a remote visor (see Router and Route
+Setup). The route finder is one of several route sources. The others are the
+direct transport check, the RSN oracle for two hop routes, the neighbour
+transport lists for three hop routes, and local calculation described below.
 
-1. Starts from the source node
-2. Queries the Transport Discovery for all transports connected to each node
-3. Recursively explores connected nodes until all reachable nodes are discovered
-4. Only considers nodes reachable from the source node
+The Route Finder reads transports from the Transport Discovery store. It keeps
+no storage of its own. When it runs in the same process as Transport Discovery
+it builds its graph from that service's live transport set instead of reading
+Redis (`GraphCache.ShareFrom`).
 
-## Routing Algorithm
+## Addressing
 
-Given the network graph, the Route Finder uses BFS to find paths from source to destination:
+The Route Finder is served over dmsg HTTP at `dmsg://<route-finder-pk>:80`.
+The address is listed in the deployment configuration (`deployment.Services`).
 
-1. **Path Finding**: Finds all paths from source to destination visor
-2. **Hop Constraints**: Returns paths with hops in range [minHops, maxHops]
-3. **Cycle Prevention**: Ensures no duplicate vertices in a single path
-4. **Sorting**: Routes sorted by hop count (ascending - shortest first)
-5. **Limit**: Returns maximum 3 routes per edge pair
+## Data Formats
 
-## Code Structure
+### Request
 
-The code should be in the `skycoin/skywire` repository:
+`rfclient.FindRoutesRequest` has no JSON tags, so the keys are the Go field
+names. The decoder matches keys case-insensitively, but an underscore is not
+folded, so `min_hops` is not `MinHops`.
 
-- `/cmd/route-finder/route-finder.go` is the main executable for the *Route Finder*.
-- `/pkg/deployment/rf/api/` contains the RESTFUL API definitions.
-- `/pkg/deployment/rf/store/` contains graph building and route finding logic.
-- `/pkg/deployment/rf/client/` contains the client library that interacts with the *Route Finder* service's RESTFUL API.
+| JSON key | Type                      | Meaning                          |
+|----------|---------------------------|----------------------------------|
+| `Edges`  | array of `[src, dst]` keys | `routing.PathEdges`, one entry per query |
+| `Opts`   | object, OPTIONAL          | `rfclient.RouteOptions`          |
 
-## Database
+`rfclient.RouteOptions`:
 
-The *Route Finder* accesses the Transport Discovery database to build its network graph. It does not maintain its own persistent storage.
+| JSON key    | Type   | Meaning                                              |
+|-------------|--------|------------------------------------------------------|
+| `MinHops`   | uint16 | minimum hop count, 0 for no minimum                  |
+| `MaxHops`   | uint16 | maximum hop count, 0 for no maximum                  |
+| `NumRoutes` | uint16 | routes wanted per edge pair, 0 selects the default   |
 
-## Endpoint Definitions
+### Response
 
-All endpoint calls should include an `Accept: application/json` field in the request header, and the response header should include a `Content-Type: application/json` field.
+On success the body is a JSON object. Each key is the text form of a
+`routing.PathEdges`, `<src-pk>:<dst-pk>`. Each value is an array of routes,
+ordered best first. A route is an array of `routing.Hop`.
 
-### POST Find Routes
+| JSON key        | Type   | Meaning                                              |
+|-----------------|--------|------------------------------------------------------|
+| `TpID`          | UUID   | transport ID                                         |
+| `From`, `To`    | string | public keys of the hop ends                          |
+| `Latency`       | float  | measured latency in ms, omitted when unmeasured      |
+| `Type`          | string | transport type, omitted when empty                   |
+| `ThroughputBps` | float  | observed throughput, omitted when zero               |
 
-Finds routes between one or more source-destination pairs.
+Errors use `rfclient.HTTPResponse` with `{"error":{"message":..., "code":...}}`
+(`rfclient.HTTPError`).
 
-**Request:**
+## Interfaces
 
-```
-POST /routes
-Content-Type: application/json
-```
+### HTTP API
 
-> The request and response structs carry no `json` struct tags (except
-> `Latency`), so the wire keys are the Go field names verbatim. Two
-> consequences, and they differ by direction:
->
-> - **Responses** are emitted capitalised: `TpID`, `From`, `To`. A client
->   reading `tp_id` finds nothing.
-> - **Requests** are decoded case-insensitively, so `edges` and `opts` do
->   match. But `min_hops` and `max_hops` do NOT — case-folding does not
->   bridge an underscore. Those options are dropped silently and the
->   request still succeeds, so a hop-constrained query comes back
->   unconstrained with no error to indicate why.
->
-> Use the exact keys below in both directions.
+No endpoint requires authentication. A request body is limited to 1 MiB
+(`maxBodyBytes`). Responses larger than a small threshold are gzip compressed
+(`httputil.CompressMin`).
 
-```json
-{
-    "Edges": [
-        ["<source-public-key>", "<destination-public-key>"],
-        ["<source-public-key-2>", "<destination-public-key-2>"]
-    ],
-    "Opts": {
-        "MinHops": 0,
-        "MaxHops": 16,
-        "NumRoutes": 0
-    }
-}
-```
+| Method and path | Purpose                              |
+|-----------------|--------------------------------------|
+| `POST /routes`  | find routes for each pair in `Edges` |
+| `GET /health`   | `httputil.HealthCheckResponse` with service name `route-finder` |
+| `GET /`         | status page with charts              |
 
-**Request Fields:**
+`POST /routes` status codes:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `Edges` | array | Yes | Array of [source, destination] public key pairs |
-| `Opts` | object | No | Route filtering options |
-| `Opts.MinHops` | integer | No | Minimum number of hops (default: 0) |
-| `Opts.MaxHops` | integer | No | Maximum number of hops (default: 0, meaning no limit) |
-| `Opts.NumRoutes` | integer | No | Desired number of distinct routes per edge. Zero means the service default. A multiplexed dial MUST set this to its mux degree (plus headroom); otherwise the finder caps at 3 routes and a higher requested mux degree silently degrades. |
+| Code | Condition                                                          |
+|------|--------------------------------------------------------------------|
+| 200  | routes found for every pair                                        |
+| 400  | the body cannot be read or is not valid JSON                       |
+| 404  | the source has no transports, or no route exists for some pair     |
+| 500  | the per-source graph build failed with another error               |
 
-**Responses:**
+`rfclient` maps a 404 to `rfclient.ErrTransportNotFound`.
 
-- 200 OK (Success).
-    ```json
-    {
-        "<source-pk>:<destination-pk>": [
-            [
-                {
-                    "TpID": "<transport-id-uuid>",
-                    "From": "<source-visor-pk>",
-                    "To": "<next-hop-visor-pk>",
-                    "Latency": 12.5
-                },
-                {
-                    "TpID": "<transport-id-uuid>",
-                    "From": "<next-hop-visor-pk>",
-                    "To": "<destination-visor-pk>"
-                }
-            ]
-        ]
-    }
-    ```
+## Behaviour
 
-**Response Structure:**
+### Graph
 
-The response is a JSON object where:
-- **Key**: Path edges serialized as `"source-pk:destination-pk"`
-- **Value**: Array of routes, where each route is an array of Hop objects
+`GraphCache` holds one graph of the whole network, shared by all requests.
+`Rebuild` reads the transport set once, with latency and throughput overlaid
+when the store supports it, and links the entries into vertices.
 
-**Hop Object:**
+| Constant                    | Value | Meaning                                         |
+|-----------------------------|-------|-------------------------------------------------|
+| `DefaultCacheRefresh`       | 15 s  | age after which a request triggers a rebuild    |
+| `staleFactor`               | 4     | at this many refresh intervals a request waits for the rebuild |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `TpID` | string (UUID) | Transport ID connecting the two nodes |
-| `From` | string | Source visor public key (hex) |
-| `To` | string | Destination visor public key (hex) |
-| `Latency` | number | Measured transport latency for this hop, in milliseconds. Informational only — it is NOT used in route-rule setup. Omitted when the edge has no measurement, and by route-finders that predate the field. |
+A request that finds the graph older than the refresh interval is answered from
+it while one rebuild runs in the background. Before the first build completes,
+each request builds a graph from its source with depth limited to
+`MaxHops`, or 10 when `MaxHops` is 0 or above 10.
 
-**Error Responses:**
+The graph excludes transports labelled `transport.LabelSetup`, and transports
+of type `local` (`transport.Routable`). When several transports join the same
+two visors, the one with the lowest `tptypes.TypePreference` is kept. A `dmsg`
+transport may only be the last hop of a route.
 
-- 400 Bad Request (Malformed request, invalid public keys).
-    ```json
-    {
-        "error": {
-            "code": 400,
-            "message": "invalid public key format"
-        }
-    }
-    ```
-- 404 Not Found (No route exists between nodes).
-    ```json
-    {
-        "error": {
-            "code": 404,
-            "message": "no route to destination"
-        }
-    }
-    ```
-- 500 Internal Server Error (Server error).
-    ```json
-    {
-        "error": {
-            "code": 500,
-            "message": "internal server error"
-        }
-    }
-    ```
+### Route count
 
-### GET Health Check
+| Constant           | Value | Meaning                                  |
+|--------------------|-------|------------------------------------------|
+| `maxNumberOfRoutes`| 3     | routes per pair when `NumRoutes` is 0    |
+| `routesCeiling`    | 20    | upper bound on `NumRoutes`               |
 
-Returns service health information.
+### Ranking
 
-**Request:**
+`Graph.GetRouteWeighted` returns the routes with the lowest total latency. A
+route's latency is the sum of its hops' measured latency. A hop without a
+measurement counts `HopLatencyPenaltyMS`, 500 ms.
 
-```
-GET /health
-```
+A breadth-first search (`StreamRoutesWithCap`) emits paths in increasing hop
+count, avoids repeated visors in a path and stops expanding when the queue holds
+`DefaultMaxBFSQueue`, 200000, items. The search collects a candidate pool of
+`NumRoutes * 32` routes, bounded to the range 128 to 2048, and sorts the pool by
+latency. Results are memoised per graph. Failures are not cached.
 
-**Response:**
+### Landmark routing
 
-- 200 OK (Success).
-    ```json
-    {
-        "build_info": {
-            "version": "v1.0.0",
-            "commit": "abc123def456",
-            "date": "2024-02-25T10:30:00Z"
-        },
-        "started_at": "2024-02-25T10:00:00Z",
-        "dmsg_address": "02abc123:9000",
-        "dmsg_servers": ["02def456:8001", "02ghi789:8001"]
-    }
-    ```
+Landmark routing is on unless the `disable_landmark_routing` configuration
+field (`rf.Config.DisableLandmarkRouting`) is set. For each pair the finder
+first runs a bounded search to depth `landmarkDirectDepth`, 3, with a queue
+budget of `landmarkBFSBudget`, 40000. If that yields `NumRoutes` routes they are
+returned. Otherwise it composes routes from the source to a hub and from the hub
+to the destination and ranks them together with the bounded results. If both are
+empty the exhaustive search runs.
 
-**Response Fields:**
+| Constant                | Value | Meaning                                   |
+|-------------------------|-------|-------------------------------------------|
+| `defaultLandmarkHubs`   | 8     | highest degree visors used as hubs        |
+| `defaultLandmarkK`      | 5     | routes stored per visor and hub           |
+| `defaultLandmarkMaxLen` | 6     | hop limit of a stored sub-route           |
+| `landmarkMaxAge`        | 2 min | age until hub tables are rebuilt rather than inherited |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `build_info` | object | Build metadata (optional) |
-| `build_info.version` | string | Application version |
-| `build_info.commit` | string | Git commit hash |
-| `build_info.date` | string | Build date (RFC3339) |
-| `started_at` | string | Server start time (RFC3339) |
-| `dmsg_address` | string | DMSG address of this service (optional) |
-| `dmsg_servers` | array | List of DMSG server public keys (optional) |
+`dmsg` transports are excluded from the hub tables.
 
----
+## Local Route Calculation
 
-## Endpoint Summary
+A visor can compute routes without the Route Finder. `router.calculateLocalRoutes`
+returns a forward and a reverse path. It runs in this order.
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/routes` | POST | No | Find routes between node pairs |
-| `/health` | GET | No | Health check |
+1. It collects the visor's own open transports, skipping closed ones and those
+   labelled `transport.LabelSetup`, and orders them by type preference.
+2. When the minimum hop setting allows one hop, it returns the first transport
+   whose remote end is the destination. `dmsg` is skipped when the dial excludes
+   it, and so is any transport named by the dial's exclusions.
+3. A dial from a visor to itself looks for a two hop loop through a transport
+   partner.
+4. Otherwise it runs `localRouteBFS`. The search is seeded with the local
+   non-`dmsg` transports and expands over a network graph snapshot indexed by
+   visor. It visits levels in increasing hop count and returns at the first
+   level that reaches the destination between the minimum and `MaxHops`, 7 when
+   the router configuration leaves it 0. Among the hits of that level it returns
+   the path with the lowest `pathLatencyScore`. Expansion is ordered by public
+   key, so the same inputs give the same path. `dmsg` edges, intermediates named
+   in the dial's exclusions, and repeated visors in a path are skipped.
+   The reverse path is the forward path reversed.
+
+Steps 4 and the self loop need the network graph, which is held only when the
+router setting `dial.local_graph` (`routersettings.DialLocalGraph`) is on. Its
+default is off. With it off, `calculateLocalRoutes` returns `errLocalGraphOff`
+for a destination without a direct transport.
+
+### Network graph snapshot
+
+The snapshot is the discovery client's `GetAllTransports` result.
+On a visor the client is `cxoAwareTPD`. It assembles the list from the
+Transport Discovery routing CXO feed (`FeedTPDRouting`, dmsg port 75, see
+Transport Discovery) by `routingfeed.Reader`. Until that feed has synced it
+reports `ErrTPDAllTransportsNotReady`. The first use pins the feed
+subscription.
+
+`tpdSnapshotCache` holds one immutable snapshot with lookups by visor and by
+transport ID for latency, type and throughput. It is replaced when the feed's
+last sync time advances. A client without a sync time uses a TTL of
+`defaultTPDSnapshotTTL`, 5 minutes. A stale snapshot is served while one
+background refresh, bounded by 2 minutes, rebuilds it. Only a cold cache makes a
+caller wait.
+
+### Local graph source
+
+A visor may install a `LocalGraphSource` (`Visor.SetLocalGraphSource`), a
+function that returns extra transport entries and a version time. A hypervisor
+installs `Hypervisor.AttachedTransportEntries`, which builds entries from the
+transports in the cached summaries of its attached visors. A summary older than
+`attachedGraphStaleAfter`, twice the hypervisor poll interval, is dropped. Setup
+transports and entries with an empty end are dropped.
+
+`cxoAwareTPD.GetAllTransports` merges the source into the network list with
+`mergeTransportEntries`. An entry whose ID is already in the network list is
+not replaced. When the routing feed is not ready, the local entries alone are
+returned if there are any. The version reported to the snapshot cache is the
+later of the feed time and the source version.
+
+### Choosing between local calculation and the Route Finder
+
+`router.fetchBestRoutes` selects the source in this order.
+
+1. When force local routes is set, `calculateLocalRoutes` is the only source. A
+   failure is returned and the dial makes one fetch attempt. The setting is
+   changed with `Visor.SetForceLocalRoutes` and `Router.SetForceLocalRoutes`.
+2. A one hop route over an existing transport is used when the hop limits allow
+   one hop.
+3. For a minimum of at most 2 hops, the RSN oracle is tried. For at most 3
+   hops, the neighbours' transport lists are tried.
+4. When the destination is an edge in the local graph source
+   (`Visor.localGraphHasPeer`, set as `PreferLocalRouteTo`), local calculation
+   runs before the Route Finder.
+5. The Route Finder is queried for both directions. One query covers both when
+   the minimum hops are equal. Otherwise there is one query per direction.
+   `NumRoutes` is the mux degree plus headroom.
+6. If the Route Finder answers `rfclient.ErrTransportNotFound`, or its retries
+   are exhausted, local calculation runs as a fallback.
+
+## Security Considerations
+
+The Route Finder does not authenticate callers. It serves public topology data
+already published by Transport Discovery.
+
+## References
+
+- Transport Discovery
+- Router
+- Route Setup Process

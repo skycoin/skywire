@@ -1,96 +1,136 @@
 # HTTP Authorization Middleware
 
-Skywire is composed of multiple services and nodes. Some of these
-communicate via RESTful interfaces; some endpoints require
-authentication and authorization.
+| Status   | Implemented                                              |
+|----------|----------------------------------------------------------|
+| Revision | 2026-10-27, skywire 38152beed                            |
+| Code     | `pkg/httpauth`, `pkg/httpauthclient`                     |
 
-Nodes are identified by public keys, so the authentication scheme
-is based on public/private key cryptography. The curve used for
-node identity is `secp256k1`; public keys are represented in RESTful
-endpoints as lowercase hexadecimal strings.
+## Abstract
 
-## Authorization protocol
+The authorization middleware authenticates HTTP requests to deployment
+services by a secp256k1 public key. A request carries a signature over its body
+and a per-key security nonce that prevents replay. Requests that arrive over
+dmsg are identified by the dmsg peer key instead.
 
-To prevent replay attacks and unauthorized access, each remote
-entity (identified by its public key) is associated with a
-monotonically increasing *Security Nonce*. The remote entity SHALL
-sign the *Security Nonce* concatenated with the request body on
-every authenticated request.
+## Overview
 
-The next expected *Security Nonce* SHALL increment by one for each
-request that the server processes successfully (HTTP 2xx response).
-On any non-2xx response, the next expected nonce SHALL NOT change.
+Deployment services such as the address resolver, transport discovery and
+service discovery wrap their authenticated handlers in `httpauth.WithAuth`.
+Visors call them through `httpauthclient.Client`. Both ends keep a counter of
+the next expected nonce for the key.
 
-The initial next expected *Security Nonce* for a remote entity is
-zero. Servers MAY omit storage entries for remotes whose
-next-expected nonce is still zero.
+## Addressing
 
-## Request headers
+The server exposes the nonce recovery endpoint at `/security/nonces/{pk}`
+through `httpauth.NonceHandler`. The key is the last path segment.
 
-An authenticated request SHALL carry the following headers (`SW`
-denotes Skywire):
+## Data Formats
 
-| Header      | Value |
-|-------------|-------|
-| `SW-Public` | The remote's public key, hexadecimal-encoded. |
-| `SW-Nonce`  | The current Security Nonce for this request, decimal-encoded. |
-| `SW-Sig`    | The signature, hexadecimal-encoded, over `SHA256(body || nonce)`, where `body` is the verbatim request body and `nonce` is the nonce rendered as decimal ASCII and appended to it (NOT a fixed-width binary encoding, and NOT prefixed). |
+`httpauth.Nonce` and `httpauthclient.Nonce` are `uint64`, rendered as decimal.
 
-Concretely: for body `{"a":1}` and nonce `7`, the signed preimage is the
-eight-byte string `{"a":1}7`, and the signature is over its SHA256.
+Request headers, parsed by `httpauth.AuthFromHeaders`:
 
-The server SHALL reject a request with HTTP 401 if any of the
-following hold:
+| Header | Value |
+|---|---|
+| `SW-Public` | Public key, hexadecimal. Required. |
+| `SW-Nonce` | Nonce of this request, unsigned decimal. Required. |
+| `SW-Sig` | Signature, hexadecimal. Required when verification is on. |
 
-- The public key in `SW-Public` is not whitelisted (when a
-  whitelist is configured).
-- The nonce in `SW-Nonce` does not match the server's next-expected
-  nonce for the entity.
-- The signature in `SW-Sig` does not verify against the
-  reconstructed `SHA256(body || nonce)` digest using the
-  declared public key.
-- The request body length exceeds the server's configured maximum
-  (when set).
+The client also sets `SW-PublicIP` when it was given a public address, and the
+build version header (`buildinfo.VersionHeader`). The server does not use them
+for authentication.
 
-## Nonce-recovery endpoint
+The signed value is `SHA256(body || nonce)` where `nonce` is its decimal ASCII
+rendering appended to the verbatim body (`httpauth.PayloadWithNonce`,
+`httpauth.Sign`, `cipher.SignPayload`). For body `{"a":1}` and nonce `7` the
+payload is the string `{"a":1}7`.
 
-The server SHALL expose an endpoint that returns the
-next-expected Security Nonce for a given public key, so a remote
-that has lost sync can recover without an out-of-band channel.
-The endpoint response body SHALL be:
+Error responses are `httpauth.HTTPResponse`:
 
-```json
-{
-    "edge": "<public-key-hex>",
-    "next_nonce": <uint64>
-}
-```
+| JSON name | Type | Meaning |
+|---|---|---|
+| `error.message` | string | Reason. The status text when empty. |
+| `error.code` | integer | HTTP status code. |
 
-The nonce-recovery endpoint itself is not authenticated.
+`httpauth.NextNonceResponse`:
 
-## Storage contract
+| JSON name | Type | Meaning |
+|---|---|---|
+| `edge` | public key | The queried key. |
+| `next_nonce` | uint64 | The nonce the next request MUST carry. |
 
-The server-side storage layer SHALL provide:
+## Interfaces
 
-- An operation to retrieve the next-expected nonce for a given
-  public key. The result SHALL be zero when no entry exists.
-- An atomic operation to retrieve-and-increment the next-expected
-  nonce for a public key in a single step, returning the
-  post-increment value. The atomicity guarantee is required to
-  prevent two concurrent requests from racing past the same nonce.
-- An operation to enumerate the number of stored entries (for
-  operational visibility).
+### HTTP API
 
-## Client contract
+`GET /security/nonces/{pk}` is not authenticated.
 
-A client implementation SHALL:
+| Status | Condition |
+|---|---|
+| 200 | `NextNonceResponse`. The nonce is zero for an unknown key. |
+| 400 | The last path segment is not a public key, or it is the zero key. |
+| 500 | The nonce store failed. |
 
-- Track the next-expected Security Nonce locally per server it
-  talks to.
-- On every authenticated request, set the three `SW-*` headers as
-  described above using the locally tracked nonce.
-- On a successful (2xx) response, increment its local nonce by one.
-- On HTTP 401 with a `next_nonce` mismatch, re-sync by calling the
-  nonce-recovery endpoint and retrying once. A second 401 indicates
-  a real authorization failure (key not whitelisted, signature
-  invalid) and SHALL NOT be retried automatically.
+## Behaviour
+
+### Server
+
+The nonce store (`httpauth.NonceStore`) provides `Nonce`, `IncrementNonce` and
+`Count`. `IncrementNonce` is atomic and returns the new value. Implementations
+are an in-memory map and Redis (`INCR` on `nonces:<pk>`), selected by
+`httpauth.NewNonceStore`.
+
+For a request that does not arrive over dmsg, `WithAuth` runs these steps.
+
+1. `AuthFromHeaders` rejects a missing or malformed header with 401.
+2. The stored nonce is read. A store failure returns 500.
+3. A `SW-Nonce` that differs from the stored nonce returns 401 with the
+   message `SW-Nonce does not match`.
+4. The body is read in full and the signature is verified. A bad signature
+   returns 401. A body above the `httputil.LimitBody` cap returns 413.
+5. The wrapped handler runs with the key in the request context
+   (`httpauth.ContextAuthKey`, read with `httpauth.PKFromCtx`).
+6. When the handler wrote exactly status 200, the server calls
+   `IncrementNonce`. Any other status, including 201 and 204, leaves the nonce
+   unchanged.
+
+The middleware has no key whitelist. Handlers that need one check
+`PKFromCtx` themselves.
+
+`MakeLoadTestingMiddleware` skips the nonce and signature checks and still
+requires `SW-Public` and `SW-Nonce`.
+
+### Dmsg callers
+
+A request whose `RemoteAddr` parses as a public key arrived over dmsg HTTP.
+The dmsg handshake authenticated that key. `WithAuth` takes the identity from
+`RemoteAddr` (`dmsgRemotePK`), ignores any `SW-*` header, performs no nonce or
+signature check, never increments a nonce, and calls the handler.
+
+### Client
+
+`httpauthclient.Client` keeps one nonce counter per server address and key,
+shared by every client in the process that uses that pair, and serializes
+their requests.
+
+- `NewClient` fetches the initial nonce from `/security/nonces/{pk}`.
+- Each request carries the three `SW-*` headers computed from the local
+  counter.
+- When the response is a JSON error with code 401 and message
+  `SW-Nonce does not match`, the client fetches the nonce again, stores it and
+  retries the request once.
+- After the final response the client increments its counter when the status
+  is exactly 200.
+
+## Security Considerations
+
+The nonce is per key and per service. It orders requests and prevents replay of
+a signed body; it does not encrypt. A 2xx response other than 200 does not
+advance the nonce, so a signed request that received 201 can be replayed.
+Over dmsg the stream is authenticated and ordered by the dmsg session, so
+the application level nonce is not used.
+
+## References
+
+- [04 Transport Discovery](04-Transport_Discovery.md)
+- [20 Address Resolver](20-Address_Resolver.md)
