@@ -1,92 +1,69 @@
-# Address Resolver Privacy Controls
+# Address Resolver Privacy
+
+| Status   | Implemented                                                                         |
+|----------|-------------------------------------------------------------------------------------|
+| Revision | 2026-10-27, skywire f37a464a4 |
+| Code     | `pkg/visor/visorconfig`, `pkg/transport`, `pkg/visor/reach_card.go`, `pkg/visor/init_transport.go` |
+
+## Abstract
+
+A visor setting decides whether the visor makes its network address available
+through the Address Resolver. A visor that opts out can still dial other visors
+and use dmsg, but peers cannot look up its address.
 
 ## Overview
 
-Visors gain optional configuration to control their address resolver (AR) registration, allowing users to limit their network discoverability for privacy or resource management purposes.
+The Address Resolver stores a visor's address so that other visors can open
+direct transports to it (see Address Resolver). The setting `ar_transport_limit`
+in the `transport` section of the visor configuration is the switch.
 
-## Motivation
+## Data Formats
 
-The address resolver stores a visor's network address (IP + port) so other visors can establish transports to it. This is necessary for inbound connections but exposes the visor's location on the network. Some users may want to:
+`visorconfig.Transport.ARTransportLimit`, JSON key `ar_transport_limit`, an
+integer that defaults to 0. `transport.ManagerConfig.ARTransportLimit` carries
+the value to the transport manager. Only the sign is used.
 
-- Limit inbound connections after establishing enough transports
-- Operate as a "dark" visor reachable only through already-established transports and DMSG
-- Prevent their IP address from being stored in the address resolver entirely
+| Value | Meaning                                                    |
+|-------|------------------------------------------------------------|
+| >= 0  | the visor registers with the Address Resolver              |
+| < 0   | the visor does not register; peers cannot resolve it       |
 
-The RSN (Route Setup Node) also uses this mechanism: it does not register with AR because it initiates all its own transports outward and does not accept unsolicited inbound connections.
+A positive value is not a count. A visor does not deregister after a number of
+transports.
 
-## Configuration
+The configuration generator exposes the value as the flag `ar-transport-limit`.
+The route setup node (`pkg/services/sn`) sets the value to -1.
 
-New field in the visor config `transport` section:
+## Behaviour
 
-```json
-{
-  "transport": {
-    "ar_transport_limit": 0
-  }
-}
-```
+With a negative value `Visor.advertisesReach` is false, and the visor:
 
-### Behavior
+- calls `DisableBinding` on its Address Resolver client
+  (`addrresolver.BindDisabler`). `BindSTCPR`, `BindQUIC` and `BindWT` then
+  return without contacting the resolver, `BindSUDPH` returns
+  `addrresolver.ErrBindingDisabled`, and no unbind is sent on shutdown.
+- does not start the `sudph` client. Hole punching needs a binding on both
+  sides, so `sudph` is unavailable in either direction.
+- does not start the Address Resolver bind feed (dmsg port 71).
+- serves no reach card, and `GET /reach` answers 404 (see Address Resolver).
 
-| Value | Behavior |
-|-------|----------|
-| `0` (default) | Normal — register with AR and stay registered indefinitely |
-| `N > 0` | Register with AR initially. Deregister after `N` transports are established. Stop accepting new inbound transports. |
-| `N < 0` | Never register with AR. The visor is invisible to the address resolver. Only outbound transports and DMSG connections are possible. |
+`Resolve` keeps working. A visor that does not register can still dial peers
+over `stcpr`, `squicr`, `swtr` and dmsg, and use transports that are already
+established. Peers cannot open `stcpr`, `squicr` or `swtr` transports to it,
+because they have no address to dial.
 
-### What "deregistered" means
+A public visor (`public_autoconnect`) needs registration so that peers can reach
+it. The configuration permits the combination with a negative value.
 
-When a visor deregisters from AR (or never registers):
-- Its address is removed from (or never added to) the AR database
-- Other visors cannot resolve its network address via AR
-- No new STCPR or SUDPH inbound connections can be established
-- Existing transports remain functional and are maintained normally
-- The visor can still INITIATE outbound transports to other visors
-- The visor is still reachable via DMSG (DMSG sessions are independent of AR)
-- The visor is still reachable through already-established transports
+Registration is separate from load control for public visors, which is based on
+the number of distinct peer visors (see Public Visors).
 
-### Interaction with Public Visor Mode
+## Security Considerations
 
-A visor configured as a public visor (`public_autoconnect: true`) advertises itself in service discovery so other visors can autoconnect to it. This requires AR registration — otherwise no visor can establish a transport to it.
+A negative value withholds the visor's reach card. It does not hide the address
+from peers that already hold a transport to it.
 
-| `public_autoconnect` | `ar_transport_limit` | Behavior |
-|----------------------|---------------------|----------|
-| `false` | `0` | Normal visor, stays in AR |
-| `false` | `N > 0` | Deregister after N transports |
-| `false` | `N < 0` | Never register (dark mode) |
-| `true` | `0` | Public visor, stays in AR (normal) |
-| `true` | `N > 0` | Public visor, deregister after N transports. Log info message. Useful for bandwidth-limited public visors that want to serve a limited number of peers. |
-| `true` | `N < 0` | **Conflict.** Log warning, ignore `ar_transport_limit`. Public visors must be discoverable. |
+## References
 
-### Interaction with Autoconnect
-
-Autoconnect (the visor's own outbound transport creation to public visors) is unaffected by AR deregistration. A visor that has deregistered from AR can still:
-- Initiate STCPR connections to public visors (using their AR-registered addresses)
-- Initiate SUDPH connections via the address resolver's relay (the visor sends but doesn't need to be registered itself)
-- Maintain all existing transports
-
-### Transport Count
-
-The transport count for the `ar_transport_limit` threshold includes all active managed transports (STCPR + SUDPH), regardless of label or direction. The count is checked:
-- After each new transport is established (inbound or outbound)
-- Periodically (in case transports were closed and the count dropped below the threshold — the visor does NOT re-register; deregistration is permanent until visor restart)
-
-### Re-registration
-
-Once deregistered, the visor does NOT automatically re-register if transports are lost. Deregistration is a one-way action for the lifetime of the visor process. The rationale: if the user configured a limit, they want to control their visibility. Automatic re-registration would undermine that intent.
-
-To re-register, the visor must be restarted (or the config changed and reinitialize triggered).
-
-## Address Resolver Client Contract
-
-The AR client SHALL provide a deregister operation that:
-
-- Issues a DELETE to the AR's deregistration endpoint for the
-  visor's public key.
-- Clears the local registration state so subsequent transport
-  changes do not re-register the visor.
-- Stops the periodic re-registration heartbeat.
-
-After a successful deregistration, the AR SHALL no longer serve the
-visor's record to lookups; the visor MAY still maintain transports
-established prior to deregistration.
+- Address Resolver
+- Public Visors
