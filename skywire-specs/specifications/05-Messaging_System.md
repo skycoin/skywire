@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                              |
 |----------|--------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire f37a464a4 |
+| Revision | 2026-10-27, skywire c18b044dc |
 | Code     | `pkg/dmsg/dmsg`, `pkg/dmsg/disc`, `pkg/dmsg/discovery`, `pkg/dmsg/noise`, `pkg/dmsg/dmsgc/spec` |
 
 ## Abstract
@@ -114,7 +114,7 @@ validation error to 422, a body over the limit to 413 and anything else to 500.
 | `GET /dmsg-discovery/entries` | 200 array of client keys. |
 | `POST /dmsg-discovery/entries/batch` | Body is an array of at most 1000 key strings (`maxBatchEntriesKeys`). 200 object from key to `Entry`, omitting unknown keys. |
 | `GET /dmsg-discovery/visorEntries` | 200 visor client entries. |
-| `DELETE /dmsg-discovery/deregister` | Deregistration whitelist only. Headers `NM-PK` and `NM-Sign`, body an array of keys. 403 for an unlisted key or bad signature. |
+| `DELETE /dmsg-discovery/deregister` | Deregistration whitelist only, see [02](02-HTTP_Authorization_Middleware.md#deregistration-whitelist). Body an array of keys. 403 for an unlisted key or bad signature. |
 | `GET /dmsg-discovery/available_servers` | 200 array of up to 512 server entries. 404 when none. |
 | `GET /dmsg-discovery/all_servers` | 200 array of all server entries. 404 when none. |
 | `GET /dmsg-discovery/servers/clients` | 200 object from server key to client keys, cached for 15 seconds. |

@@ -26,7 +26,7 @@ func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.
 		api.internalError(w, r, err)
 		return
 	}
-	api.writeJSON(w, r, result)
+	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
 func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method string, req, result interface{}) error {
@@ -56,13 +56,6 @@ func (api *API) log(r *http.Request) logrus.FieldLogger {
 // Error is the object returned to the client when there's an error.
 type Error struct {
 	Error string `json:"error"`
-}
-
-func (api *API) writeJSON(w http.ResponseWriter, r *http.Request, data interface{}) {
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		api.log(r).WithError(err).Error("Failed to encode response")
-		api.internalError(w, r, err)
-	}
 }
 
 func (api *API) internalError(w http.ResponseWriter, r *http.Request, err error) {

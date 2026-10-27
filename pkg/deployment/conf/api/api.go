@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -184,13 +182,9 @@ func (a *API) refreshDmsgServers() {
 	a.log.WithField("count", len(entries)).Debug("dmsg_servers refreshed from dmsg-discovery")
 }
 
-func (a *API) logger(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
-}
-
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		ServiceName: "config-bootstrapper",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
@@ -200,7 +194,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
 	resp := a.Services()
-	a.writeJSON(w, r, http.StatusOK, &resp)
+	httputil.WriteJSON(w, r, http.StatusOK, &resp)
 }
 
 // Services returns a snapshot of the services config this API serves at
@@ -212,30 +206,12 @@ func (a *API) Services() deployment.Services {
 	return *a.services
 }
 
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) { //nolint
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to write json response")
-	}
-}
-
 func (a *API) dmsghttp(w http.ResponseWriter, r *http.Request) {
 	if time.Now().Add(-5 * time.Minute).After(a.dmsghttpConfTs) {
 		a.dmsghttpConf = a.dmsghttpConfGen()
 		a.dmsghttpConfTs = time.Now()
 	}
-	a.writeJSON(w, r, http.StatusOK, a.dmsghttpConf)
+	httputil.WriteJSON(w, r, http.StatusOK, a.dmsghttpConf)
 }
 
 func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {
