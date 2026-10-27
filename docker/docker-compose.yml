@@ -185,6 +185,11 @@ services:
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
     volumes:
+      # The e2e deployment, for the standalone CLI tools the suite runs here.
+      - type: bind
+        source: ../docker/integration/services-config.json
+        target: /opt/skywire/services-config.json
+        read_only: true
       - type: bind
         source: ../docker/integration/visorA.json
         target: /opt/skywire/skywire-visor.json
@@ -194,6 +199,7 @@ services:
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
+      - SKYDEPLOY=/opt/skywire/services-config.json
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
@@ -233,6 +239,11 @@ services:
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
     volumes:
+      # The e2e deployment, for the standalone CLI tools the suite runs here.
+      - type: bind
+        source: ../docker/integration/services-config.json
+        target: /opt/skywire/services-config.json
+        read_only: true
       - type: bind
         source: ../docker/integration/visorB.json
         target: /opt/skywire/skywire-visor.json
@@ -251,6 +262,7 @@ services:
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
+      - SKYDEPLOY=/opt/skywire/services-config.json
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
@@ -289,6 +301,11 @@ services:
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
     volumes:
+      # The e2e deployment, for the standalone CLI tools the suite runs here.
+      - type: bind
+        source: ../docker/integration/services-config.json
+        target: /opt/skywire/services-config.json
+        read_only: true
       - type: bind
         source: ../docker/integration/visorC.json
         target: /opt/skywire/skywire-visor.json
@@ -298,6 +315,7 @@ services:
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
+      - SKYDEPLOY=/opt/skywire/services-config.json
     entrypoint: /release/skywire visor -c /opt/skywire/skywire-visor.json -s -l debug -q http
     healthcheck:
       test: [
