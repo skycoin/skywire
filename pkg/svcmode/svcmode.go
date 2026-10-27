@@ -73,9 +73,9 @@ const (
 	// Useful for corporate / private network deployments that must
 	// not serve plaintext HTTP. Requires SK.
 	ModeDmsg Mode = "dmsg"
-	// ModeDual listens on both http and dmsghttp. This is the
-	// default when a DMSG secret key is available and matches the
-	// existing pre-svcmode behavior of all services.
+	// ModeDual listens on both http and dmsghttp. dmsg-discovery
+	// defaults to it, and test networks select it to reach services
+	// over plain HTTP.
 	ModeDual Mode = "dual"
 )
 
@@ -98,14 +98,15 @@ func ParseMode(s string) (Mode, error) {
 }
 
 // ResolveMode resolves the effective mode: the passed-in value (usually from
-// --mode or the service config), else ModeDual if SK is non-null, else
-// ModeHTTP. Returns an error only if an explicit value is unrecognized.
+// --mode or the service config), else ModeDmsg if SK is non-null, else
+// ModeHTTP. Deployment services are reached over dmsg and skynet, so a
+// service with a key binds no plain HTTP listener unless asked to. Returns an error only if an explicit value is unrecognized.
 func ResolveMode(flagValue string, skNonNull bool) (Mode, error) {
 	if flagValue != "" {
 		return ParseMode(flagValue)
 	}
 	if skNonNull {
-		return ModeDual, nil
+		return ModeDmsg, nil
 	}
 	return ModeHTTP, nil
 }

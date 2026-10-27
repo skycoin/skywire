@@ -106,7 +106,7 @@ skywire svc ar
       --keyfile string              file holding the secret key (generated if missing)
   -l, --loglvl string               log level [trace|debug|info|warn|error|fatal|panic] (default "info")
   -m, --metrics string              address to serve Prometheus metrics on
-      --mode string                 listeners: http|dmsg|dual (default dual with a key, else http)
+      --mode string                 listeners: http|dmsg|dual (default dmsg with a key, else http; dmsg-discovery dual)
   -r, --pprofaddr string            address http profiling serves on; alone it implies --pprofmode http (default localhost:6060)
   -q, --pprofmode string            [ cpu | mem | mutex | block | trace | http ]
       --public-udp-address string   externally-reachable host:port advertised in /health for SUDPH
