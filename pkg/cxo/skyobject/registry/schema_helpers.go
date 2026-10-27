@@ -49,12 +49,10 @@ func schemaArraySliceSize(el Schema, l, shift int, p []byte) (n int,
 }
 
 // getLength of length prefixed values
-// (like slice of string)
+// (like slice of string). DeserializeRaw would copy all of p to read 4 bytes.
 func getLength(p []byte) (l int, err error) {
-	var u uint32
-	_, err = encoder.DeserializeRaw(p, &u)
-	l = int(u)
-	return
+	u, _, err := encoder.DeserializeUint32(p)
+	return int(u), err
 }
 
 // fixedSize returns -1 if given kind represents a
