@@ -82,20 +82,11 @@ func (c *sudphClient) listen() (net.Listener, error) {
 		packetListener = c.sharedConn
 	} else {
 		var err error
-		var confPort string
-		if c.port != 0 {
-			confPort = fmt.Sprintf(":%d", c.port)
-		}
-		for {
-			packetListener, err = c.socks().ListenPacket("udp", confPort)
-			if err != nil {
-				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
-				c.port = nextListenPort(err, c.port)
-				confPort = fmt.Sprintf(":%d", c.port)
-				c.log.Warnf("Trying port %d", c.port)
-				continue
-			}
-			break
+		packetListener, err = listenWithFallback(c.genericClient, &c.port, func(addr string) (net.PacketConn, error) {
+			return c.socks().ListenPacket("udp", addr)
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
 	c.packetListener = packetListener

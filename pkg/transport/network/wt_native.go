@@ -100,14 +100,6 @@ func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.C
 	return nil, fmt.Errorf("wt: no dialable endpoint for %s", rPK)
 }
 
-const (
-	// wtReRegisterInterval keeps the WT AR entry alive (< the AR's 2-min TTL),
-	// mirroring stcpr/quic.
-	wtReRegisterInterval = 90 * time.Second
-	wtBindRetryDelay     = 5 * time.Second
-	wtBindMaxRetryDelay  = 60 * time.Second
-)
-
 // wtAcceptTimeout bounds how long a freshly-upgraded WebTransport session may
 // take to open its first (yamux-carrying) bidirectional stream.
 const wtAcceptTimeout = 30 * time.Second
@@ -245,34 +237,8 @@ func (c *wtClient) registerWT(ar addrresolver.APIClient, port string, cert *skyq
 		h, next := cert.Hash(), cert.NextHash()
 		return ar.BindWT(context.Background(), port, hex.EncodeToString(h[:]), hex.EncodeToString(next[:]))
 	}
-	delay := wtBindRetryDelay
-	for {
-		if err := bind(); err == nil {
-			c.log.Debugf("Successfully bound WT to AR (port %s)", port)
-			break
-		} else {
-			c.log.WithError(err).Warnf("Failed to bind WT, retrying in %v", delay)
-		}
-		if c.isClosed() {
-			return
-		}
-		time.Sleep(delay)
-		if delay *= 2; delay > wtBindMaxRetryDelay {
-			delay = wtBindMaxRetryDelay
-		}
-	}
-	ticker := time.NewTicker(wtReRegisterInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-c.done:
-			return
-		case <-ticker.C:
-		case <-rotated:
-		}
-		if err := bind(); err != nil {
-			c.log.WithError(err).Warn("Failed to re-register WT")
-		}
+	if c.bindUntilBound("WT", bind) {
+		c.reRegister("WT", bind, rotated)
 	}
 }
 
