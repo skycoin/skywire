@@ -164,6 +164,8 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 	}
 	lsAPI.SetVhosts(v.vhostSites(log))
 	lsAPI.SetWebsiteSites(nil)
+	fp80 := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort))
+	lsAPI.SetSitesHidden(fp80 != nil && fp80.HideSites)
 
 	// Rewards UI wins when configured — it's a global on/off switch.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {

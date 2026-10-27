@@ -219,10 +219,11 @@ func parsePKs(s string) ([]cipher.PubKey, error) {
 	return out, nil
 }
 
-// vhostsOn are the vhosts on the port 80 entry, or none for another port.
-func vhostsOn(cmd *cobra.Command, rpcClient visorapi.API, port int) []visorapi.Vhost {
+// kept80 is what the port 80 entry keeps across `serve add 80` and `serve rm
+// 80`, its vhosts and HideSites, or nothing for another port.
+func kept80(cmd *cobra.Command, rpcClient visorapi.API, port int) visorapi.ForwardedPort {
 	if port != 80 {
-		return nil
+		return visorapi.ForwardedPort{}
 	}
 	ports, err := rpcClient.ListForwardedPorts()
 	if err != nil {
@@ -230,10 +231,10 @@ func vhostsOn(cmd *cobra.Command, rpcClient visorapi.API, port int) []visorapi.V
 	}
 	for _, p := range ports {
 		if p.Port == 80 {
-			return p.Vhosts
+			return visorapi.ForwardedPort{Vhosts: p.Vhosts, HideSites: p.HideSites}
 		}
 	}
-	return nil
+	return visorapi.ForwardedPort{}
 }
 
 // vhostTarget is where a vhost's requests go, as the listing shows it.

@@ -137,6 +137,7 @@ type API struct {
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	websiteSites         func() []string         // optional: the site names websiteHandler serves by Host
+	sitesHidden          bool                    // list no sites, set via SetSitesHidden
 	// homePage renders the mesh directory for home.skynet and home.dmsg.
 	homePage func(suffix string, ownUser bool) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
@@ -609,6 +610,11 @@ func (api *API) SetWebsiteSites(sites func() []string) {
 	api.websiteSites = sites
 }
 
+// SetSitesHidden keeps every site off the landing page and the site list.
+func (api *API) SetSitesHidden(hidden bool) {
+	api.sitesHidden = hidden
+}
+
 // SetVisorStatusPage serves h at /status/visor to this visor, the survey
 // whitelist and the keys readers returns, and links it from their landing page.
 func (api *API) SetVisorStatusPage(h http.Handler, readers func() []cipher.PubKey) {
@@ -934,6 +940,9 @@ type SiteList struct {
 
 // sitesFor is each site name req's caller may open, sorted.
 func (api *API) sitesFor(req *http.Request) []string {
+	if api.sitesHidden {
+		return []string{}
+	}
 	seen := map[string]bool{}
 	if api.websiteSites != nil {
 		for _, s := range api.websiteSites() {
@@ -965,9 +974,10 @@ func (api *API) sitesFor(req *http.Request) []string {
 func (api *API) SetVhosts(vs []Vhost) {
 	m := make(map[string]*Vhost, len(vs))
 	for i := range vs {
-		for _, n := range vs[i].Names {
+		v := &vs[i]
+		for _, n := range v.Names {
 			if n != "" {
-				m[n] = &vs[i]
+				m[n] = v
 			}
 		}
 	}
