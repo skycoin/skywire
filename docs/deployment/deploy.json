@@ -139,10 +139,6 @@
         "pprof": ":6070",
         "godebug": "madvdontneed=1"
       },
-      "network_monitor": {
-        "addr": ":9080",
-        "pprof": ":6080"
-      },
       "conf_service": {
         "keyfile": "/etc/skywire/keys/conf.key",
         "config_file": "/etc/skywire/config-bootstrapper/config.json",

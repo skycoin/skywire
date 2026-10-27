@@ -21,7 +21,6 @@ skywire svc
 - [conf](conf/README.md) — print services-config.json file
 - [confbs](confbs/README.md) — Config Bootstrap Server for skywire
 - [ip](ip/README.md) — GeoIP service for skywire
-- [nm](nm/README.md) — Network monitor for skywire VPN and Visor.
 - [rf](rf/README.md) — Route Finder Server for skywire
 - [run](run/README.md) — Run multiple deployment services in one process
 - [sd](sd/README.md) — Service discovery server

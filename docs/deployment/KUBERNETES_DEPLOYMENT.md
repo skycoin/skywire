@@ -11,7 +11,7 @@ The reference production deployment runs on Docker Compose; there is no Kubernet
 
 ## When K8s is and isn't a good fit
 
-K8s fits the parts of the deployment that look like ordinary stateless web services — `dmsg-discovery`, `transport-discovery`, `address-resolver` (HTTP side), `service-discovery`, `route-finder`, `setup-node`, `config-bootstrapper`, `network-monitor`. These are clean Deployments behind ClusterIP Services with an Ingress for external traffic.
+K8s fits the parts of the deployment that look like ordinary stateless web services — `dmsg-discovery`, `transport-discovery`, `address-resolver` (HTTP side), `service-discovery`, `route-finder`, `setup-node`, `config-bootstrapper`. These are clean Deployments behind ClusterIP Services with an Ingress for external traffic.
 
 K8s gets awkward for two pieces:
 
@@ -37,7 +37,6 @@ A minimal cluster runs the following workloads:
 | `route-finder` | Deployment | 2+ | Ingress (TLS) → ClusterIP :9092 |
 | `config-bootstrapper` | Deployment | 1 | Ingress (TLS) → ClusterIP :9082 |
 | `setup-node` | Deployment | 1+ | none — dmsg-only |
-| `network-monitor` | Deployment | 1 | none — internal |
 | `dmsg-server-N` | StatefulSet (one per server) | 1 each | LoadBalancer or NodePort with stable external IP/port |
 | `geoip` | Deployment | 1 | optional Ingress |
 
@@ -62,7 +61,7 @@ stringData:
   redis-password: "<...>"
 ```
 
-Whitelisted PKs (network-monitor, survey, etc.) and per-service config files (config-bootstrapper's `config.json`, setup-node config, dmsg-server config minus the secret key) belong in ConfigMaps.
+Whitelisted PKs (deregistration, survey, etc.) and per-service config files (config-bootstrapper's `config.json`, setup-node config, dmsg-server config minus the secret key) belong in ConfigMaps.
 
 For dmsg-server, mount the public part of the config as a ConfigMap and the secret key as a Secret — assemble them into a single `config.json` at pod start with an init container, or pass the secret key via `--sk` on the command line if the binary supports it.
 

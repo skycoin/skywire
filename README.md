@@ -674,7 +674,6 @@ Visor native applications and other commands:
 * [cmd/svc/address-resolver/README.md](cmd/svc/address-resolver/README.md) — Address Resolver
 * [cmd/svc/config-bootstrapper/README.md](cmd/svc/config-bootstrapper/README.md) — Config Bootstrapper
 * [cmd/svc/geoip/README.md](cmd/svc/geoip/README.md) — GeoIP Service
-* [cmd/svc/network-monitor/README.md](cmd/svc/network-monitor/README.md) — Network Monitor
 * [cmd/svc/README.md](cmd/svc/README.md) — skywire svc
 * [cmd/svc/route-finder/README.md](cmd/svc/route-finder/README.md) — Route finder
 * [cmd/svc/sw-env/README.md](cmd/svc/sw-env/README.md) — sw-env. Skywire environment generator
@@ -748,7 +747,6 @@ Examples:
 * [skywire-specs/specifications/18-Router2 module.md](skywire-specs/specifications/18-Router2%20module.md) — `router2`
 * [skywire-specs/specifications/20-Address_Resolver.md](skywire-specs/specifications/20-Address_Resolver.md) — Address Resolver
 * [skywire-specs/specifications/21-Service_Discovery.md](skywire-specs/specifications/21-Service_Discovery.md) — Service Discovery
-* [skywire-specs/specifications/22-Network_Monitor.md](skywire-specs/specifications/22-Network_Monitor.md) — Network Monitor
 * [skywire-specs/specifications/23-Config_Bootstrapper.md](skywire-specs/specifications/23-Config_Bootstrapper.md) — Config Bootstrapper
 * [skywire-specs/specifications/24-Public_Visors.md](skywire-specs/specifications/24-Public_Visors.md) — Public Visors
 * [skywire-specs/specifications/25-Public_Autoconnect.md](skywire-specs/specifications/25-Public_Autoconnect.md) — Public Autoconnect
