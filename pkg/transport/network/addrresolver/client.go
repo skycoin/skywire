@@ -69,7 +69,15 @@ var (
 	ErrNotReady = errors.New("address resolver is not ready")
 	// ErrNoTransportsFound returned when no transports are found.
 	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
+	// ErrBindingDisabled is returned by BindSUDPH after DisableBinding.
+	ErrBindingDisabled = errors.New("address resolver registration is disabled")
 )
+
+// BindDisabler is implemented by clients that can stop registering this visor
+// while still resolving peers.
+type BindDisabler interface {
+	DisableBinding()
+}
 
 // Error is the object returned to the client when there's an error.
 type Error struct {
@@ -131,6 +139,8 @@ type VisorData struct {
 type httpClient struct {
 	// fastResolve, when set, answers lookups other than sudph before HTTP.
 	fastResolve atomic.Pointer[FastResolve]
+	// bindOff makes every bind a no-op, so peers cannot resolve this visor.
+	bindOff atomic.Bool
 	// notFound remembers recent "no entry" answers (see notFoundFor).
 	notFound notFoundCache
 	// udpRes tracks sudph lookups sent on the control connection.
@@ -611,6 +621,9 @@ func (c *httpClient) awaitPublicIP(timeout time.Duration) {
 // source IP + this port are reachable. (NAT-mapped UDP discovery / hole
 // punching is a follow-up; this path targets reachable nodes first.)
 func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindQUIC")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -680,6 +693,9 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 // server cert. The hash rides VisorData via the embedded LocalAddresses, so
 // /resolve/wt returns it alongside the endpoint.
 func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindWT")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -746,6 +762,9 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash st
 }
 
 func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindSTCPR")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -871,8 +890,17 @@ func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses
 	log.Debug("v6 BindSTCPR: ok — AR will populate RemoteAddrV6")
 }
 
+// DisableBinding stops this visor from registering with the address resolver.
+// Binds become no-ops and BindSUDPH fails, while Resolve keeps working.
+func (c *httpClient) DisableBinding() {
+	c.bindOff.Store(true)
+}
+
 // delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
 func (c *httpClient) delBindSTCPR(ctx context.Context) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.delBindSTCPR")
 	c.forgetBound("stcpr")
 	if !c.isReady() {

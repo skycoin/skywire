@@ -31,6 +31,9 @@ type SUDPHBinder interface {
 }
 
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {
+	if c.bindOff.Load() {
+		return nil, ErrBindingDisabled
+	}
 	log := c.log.WithField("func", "httpClient.BindSUDPH")
 	if !c.isReady() {
 		log.Debug("BindSUDPH: Address resolver is not ready yet, waiting...")
