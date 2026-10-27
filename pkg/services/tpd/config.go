@@ -12,8 +12,6 @@ import (
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/services"
 )
 
@@ -90,21 +88,4 @@ func ParseBlock(raw []byte) (*Config, error) {
 		return nil, fmt.Errorf("transport-discovery: parse block: %w", err)
 	}
 	return &c, nil
-}
-
-// dmsgDiscEntries returns the dmsg-server transit set svcmode.Start
-// expects ([]disc.Entry, value type) from the config's []*disc.Entry
-// when non-empty, otherwise falls back to the embedded
-// dmsg.Prod.DmsgServers keyring.
-func dmsgDiscEntries(configServers []*disc.Entry) []disc.Entry {
-	if len(configServers) == 0 {
-		return dmsg.Prod.DmsgServers
-	}
-	out := make([]disc.Entry, 0, len(configServers))
-	for _, e := range configServers {
-		if e != nil {
-			out = append(out, *e)
-		}
-	}
-	return out
 }

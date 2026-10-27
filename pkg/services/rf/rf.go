@@ -16,18 +16,15 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/rf/api"
 	rfstore "github.com/skycoin/skywire/pkg/deployment/rf/store"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
-	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -153,7 +150,7 @@ func (s *service) Embed(ctx context.Context, host services.Host) (http.Handler, 
 		sn = &api.SetupNodes{PKs: s.cfg.setupNodes(), Port: dmsg.DefaultDmsgHTTPPort,
 			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, host.DmsgClient)}}
 	}
-	rfAPI.StartCharts(ctx, chartStore(s.cfg, logger), sn, logger)
+	rfAPI.StartCharts(ctx, services.OpenChartsStore(s.cfg.StoreConfig(), "route-finder", logger), sn, logger)
 	go func() {
 		<-ctx.Done()
 		closeStore()
@@ -168,76 +165,29 @@ func (s *service) Run(ctx context.Context) error {
 	s.stats = charts.NewServiceStats("route finder")
 	defer cfg.StartPprof(logger)()
 
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
-	}
-
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-	}
+	id := cfg.Identity(logger)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	rfAPI, closeStore, err := s.build(runCtx, logger, dmsgAddr)
+	rfAPI, closeStore, err := s.build(runCtx, logger, id.DmsgAddr)
 	if err != nil {
 		return err
 	}
 	defer closeStore()
 
-	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
-	if err != nil {
-		return fmt.Errorf("route-finder: invalid mode: %w", err)
-	}
-
-	// dmsg-only discovery: the plain-HTTP cfg.Dmsg.Discovery field is
-	// ignored. Operators configure cfg.Dmsg.DiscoveryDmsg explicitly,
-	// or the embedded dmsg-PK URL (deployment.Prod.DmsgDiscoveryDmsg
-	// via dmsg.DiscAddr) is used. svcmode routes discovery RPC over
-	// dmsg-HTTP via the bootstrap dmsg client — no plain-HTTP egress.
-	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
-	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr()
-	}
-	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := cfg.SurveyKeys()
-
-	addr := cfg.Addr
-	if addr == "" {
-		addr = ":9092"
-	}
-
-	h, err := svcmode.Start(runCtx, svcmode.Config{
-		Stats:               s.stats,
-		Mode:                resolvedMode,
-		LogHookLevel:        cfg.LogHookLevel,
-		HTTPAddr:            addr,
-		Handler:             rfAPI,
-		PK:                  pk,
-		SK:                  sk,
-		DmsgPort:            dmsgPort,
-		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
-		DmsgServerType:      cfg.Dmsg.ServerType,
-		EmbeddedDmsgServers: embeddedServers,
-		SurveyWhitelist:     surveyWL,
-		Log:                 logger,
+	h, err := cfg.Listen(runCtx, id, services.Listener{
+		Name:        "route-finder",
+		DefaultAddr: ":9092",
+		Handler:     rfAPI,
+		Dmsg:        cfg.Dmsg,
+		Stats:       s.stats,
 		OnDmsgServersUpdated: func(svrs []string) {
 			rfAPI.DmsgServers = svrs
 		},
-	})
+	}, logger)
 	if err != nil {
-		return fmt.Errorf("route-finder: start listeners: %w", err)
+		return err
 	}
 	defer h.Close()
 
@@ -247,55 +197,15 @@ func (s *service) Run(ctx context.Context) error {
 			Client: &http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}}
 	}
 	rfAPI.Stats = s.stats
-	rfAPI.StartCharts(runCtx, chartStore(cfg, logger), sn, logger)
-	if cfg.ChartsAddr != "" {
-		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
-		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(rfAPI.ChartsPage)); err != nil {
-				logger.WithError(err).Error("charts listener failed")
-			}
-		}()
-	}
+	rfAPI.StartCharts(runCtx, services.OpenChartsStore(cfg.StoreConfig(), "route-finder", logger), sn, logger)
+	services.ServeCharts(runCtx, cfg.ChartsAddr, rfAPI.ChartsPage, logger)
 
-	select {
-	case <-runCtx.Done():
-		return nil
-	case err := <-h.Errors():
-		logger.WithError(err).Error("listener failed")
-		return err
-	}
-}
-
-func dmsgDiscEntries(configServers []*disc.Entry) []disc.Entry {
-	if len(configServers) == 0 {
-		return dmsg.Prod.DmsgServers
-	}
-	out := make([]disc.Entry, 0, len(configServers))
-	for _, e := range configServers {
-		if e != nil {
-			out = append(out, *e)
-		}
-	}
-	return out
+	return services.Wait(runCtx, h, logger)
 }
 
 // setupNodes are the deployment's route setup nodes.
 func (c *Config) setupNodes() []cipher.PubKey {
 	return deployment.Prod.RouteSetupNodes
-}
-
-// chartStore keeps the chart samples in the finder's redis.
-func chartStore(cfg *Config, log *logging.Logger) charts.Store {
-	sc := cfg.StoreConfig()
-	if sc.Type != storeconfig.Redis {
-		return charts.NewMemoryStore()
-	}
-	st, err := charts.NewRedisStore(sc.URL, sc.Password, "route-finder")
-	if err != nil {
-		log.WithError(err).Warn("charts: redis unavailable, keeping samples in memory")
-		return charts.NewMemoryStore()
-	}
-	return st
 }
 
 // ChartsPage is the charts page of the running service, for the host's status
