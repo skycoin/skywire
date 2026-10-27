@@ -556,8 +556,8 @@ func (m *MetricsCXOPublisher) loadSettled(ctx context.Context, dates []string) m
 // The network never has a day without traffic, so such a leaf was built from a
 // read that missed the day's rows.
 func emptyLeaf(parts [][]byte) bool {
-	records, err := decodeMetricsParts(parts)
-	return err != nil || len(records) == 0
+	n, err := store.CountMetricRecords(parts)
+	return err != nil || n == 0
 }
 
 // settle remembers the bodies of days still open and saves every day that
