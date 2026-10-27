@@ -14,6 +14,8 @@ final class SettingsModel: ObservableObject {
     @Published var notice: String?
     /// An identity change is running: the core restarts around it.
     @Published private(set) var identityBusy = false
+    /// The visor's reward address, as CoreClient.rewardAddress reads it; empty while the core is down.
+    @Published private(set) var rewardAddress = ""
 
     /// The route lengths offered (Android: MinHopsCard's presets).
     static let hopChoices = [1, 2, 3]
@@ -98,6 +100,54 @@ final class SettingsModel: ObservableObject {
                 if !app.handle(error) { notice = error.localizedDescription }
             }
         }
+    }
+
+    /// Reads the reward address. Called whenever Settings comes to the front, not only when the
+    /// core comes up: the wallet's xpub dialog can set it while this screen waits behind.
+    func loadRewardAddress(_ app: AppModel) async {
+        guard app.connected else {
+            rewardAddress = ""
+            return
+        }
+        do {
+            rewardAddress = try await app.client.rewardAddress()
+        } catch {
+            app.handle(error)
+        }
+    }
+
+    /// Sets the reward address to `raw`, an account xpub, or clears it when blank. It lives in
+    /// the visor, so the core has to be running; the visor checks the xpub itself, and its
+    /// refusal reaches the snackbar (Android: SettingsViewModel.setRewardAddress).
+    func setRewardAddress(_ raw: String, _ app: AppModel) {
+        let wanted = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard app.connected else {
+            notice = L10n.text("settings_reward_needs_core")
+            return
+        }
+        guard wanted.isEmpty || RewardXpub.looksValid(wanted) else {
+            notice = L10n.text("settings_reward_invalid")
+            return
+        }
+        Task {
+            do {
+                if wanted.isEmpty {
+                    try await app.client.deleteRewardAddress()
+                } else {
+                    try await app.client.setRewardAddress(wanted)
+                }
+                rewardAddress = wanted
+                notice = L10n.text(wanted.isEmpty ? "settings_reward_cleared" : "settings_reward_saved")
+            } catch {
+                if !app.handle(error) { notice = Self.visorReason(error) }
+            }
+        }
+    }
+
+    /// What the visor said, without the request that carried it.
+    static func visorReason(_ error: any Error) -> String {
+        if case let CoreClientError.http(_, _, _, message) = error { return message }
+        return error.localizedDescription
     }
 
     /// Grants remote management to `raw`, if it is a visor key. Applies at the

@@ -122,7 +122,7 @@ struct WalletManageView: View {
                                 identifier: "wallet-action-xpub") {
                         dialogs.dismissSheet()
                         if let keys = model.extendedPublicKeys(wallet.id) {
-                            dialogs.showCustom { XpubDialog(keys: keys) }
+                            dialogs.showCustom { XpubDialog(keys: keys).environmentObject(model) }
                         }
                     }
                 }
@@ -727,11 +727,16 @@ struct AddressesDocument: FileDocument {
     }
 }
 
-/// A BIP 44 wallet's account xpub and its receive and change chain xpubs; a tap copies one.
+/// A BIP 44 wallet's account xpub and its receive and change chain xpubs; a tap copies one. The
+/// account xpub can also become this phone's reward address.
 private struct XpubDialog: View {
     @EnvironmentObject private var dialogs: SkyDialogs
+    @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var model: WalletModel
     let keys: ExtendedPublicKeys
     @State private var copied: String?
+    @State private var reward: (text: String, saved: Bool)?
+    @State private var rewardBusy = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -760,6 +765,19 @@ private struct XpubDialog: View {
                         if copied == xpub {
                             Text("wallet_xpub_copied").skyText(.bodySmall).foregroundStyle(Color.skyPrimary).padding(.top, 4)
                         }
+                        if xpub == keys.account {
+                            Button { useForRewards(xpub) } label: { Text("wallet_xpub_use_reward") }
+                                .buttonStyle(.skyText)
+                                .disabled(rewardBusy)
+                                .padding(.top, 4)
+                                .accessibilityIdentifier("wallet-xpub-use-reward")
+                            // Said here, as "Copied" is: a snackbar would be drawn behind this dialog.
+                            if let reward {
+                                Text(verbatim: reward.text).skyText(.bodySmall)
+                                    .foregroundStyle(reward.saved ? Color.skyPrimary : Color.skyError)
+                                    .accessibilityIdentifier("wallet-xpub-reward-result")
+                            }
+                        }
                     }
                 }
             }
@@ -771,6 +789,14 @@ private struct XpubDialog: View {
                 Button { dialogs.dismiss() } label: { Text("wallet_done") }.buttonStyle(.skyText)
             }
             .padding(.top, 24)
+        }
+    }
+
+    private func useForRewards(_ xpub: String) {
+        rewardBusy = true
+        Task {
+            reward = await model.useForRewards(xpub, app)
+            rewardBusy = false
         }
     }
 }
