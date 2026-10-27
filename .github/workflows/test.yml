@@ -306,6 +306,27 @@ jobs:
           $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
           go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
 
+  # The js/wasm visor, the one a browser tab runs, under Node against the
+  # native e2e deployment: it registers over a dmsg WebSocket session and a
+  # native visor holds a dmsg transport to it. See internal/nativee2e.
+  e2e-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Run the wasm visor e2e
+        run: go test -mod=vendor -tags client_e2e -v -timeout=25m -run 'TestVisorConnectivity|TestWasmVisor' ./internal/nativee2e/
+
   # Compile-only lane for the browser/wasm binaries. Every wasm main package is
   # guarded by //go:build js && wasm, so the default-GOARCH unit lanes never even
   # build them — a break in the js/wasm code (e.g. an import that isn't
