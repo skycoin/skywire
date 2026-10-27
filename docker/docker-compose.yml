@@ -39,7 +39,7 @@ services:
         ipv4_address: 175.0.0.250
       intra:
         ipv4_address: 174.0.0.250
-    container_name: "redis"
+    container_name: "skywire-e2e-redis"
     hostname: redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -171,7 +171,7 @@ services:
       intra:
         ipv4_address: 174.0.0.11
     ports:
-      - "127.0.0.1:8001:8001"   # skychat UI
+      - "127.0.0.1:${E2E_SKYCHAT_A_PORT:-8001}:8001"   # skychat UI
     extra_hosts:
       - "visor-b:173.0.0.12"
       - "visor-c:173.0.0.13"
@@ -218,8 +218,8 @@ services:
       intra:
         ipv4_address: 174.0.0.12
     ports:
-      - "127.0.0.1:8002:8001"   # skychat UI (container port is 8001 on every visor)
-      - "127.0.0.1:8000:8000"   # hypervisor UI — visor-b is the hypervisor for a and c
+      - "127.0.0.1:${E2E_SKYCHAT_B_PORT:-8002}:8001"   # skychat UI (container port is 8001 on every visor)
+      - "127.0.0.1:${E2E_HYPERVISOR_PORT:-8000}:8000"   # hypervisor UI — visor-b is the hypervisor for a and c
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-c:173.0.0.13"
@@ -275,7 +275,7 @@ services:
       intra:
         ipv4_address: 174.0.0.13
     ports:
-      - "127.0.0.1:8003:8001"   # skychat UI
+      - "127.0.0.1:${E2E_SKYCHAT_C_PORT:-8003}:8001"   # skychat UI
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-b:173.0.0.12"

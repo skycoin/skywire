@@ -53,7 +53,9 @@ func TestGraphCacheRebuildsOnDemand(t *testing.T) {
 	n1, n2, _, _, n5 := generateNodesPK(t)
 	m := newMockStore()
 	m.SaveEntry(n1, n2, true)
-	refresh := 50 * time.Millisecond
+	// Wide enough that a runner oversleeping 2*refresh stays short of the
+	// staleFactor*refresh synchronous rebuild.
+	refresh := 250 * time.Millisecond
 	c := NewGraphCache(m, refresh, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
