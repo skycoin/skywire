@@ -41,8 +41,7 @@ func TestConnectionWrite(t *testing.T) {
 	defer c.Close()
 	defer b.Close() //nolint:errcheck
 
-	c.GetChanOut() <- Frame{Body: []byte("hello")}
-	c.Kick()
+	c.QueueFrame(Frame{Body: []byte("hello")})
 
 	done := make(chan []byte, 1)
 	go func() {
@@ -108,10 +107,9 @@ func TestConnectionWriterExitsWhenIdle(t *testing.T) {
 
 	require.False(t, c.writing.Load(), "a new connection starts no writer")
 	for i := 0; i < 100; i++ {
-		c.GetChanOut() <- Frame{Body: []byte("x")}
-		c.Kick()
+		c.QueueFrame(Frame{Body: []byte("x")})
 	}
-	require.Eventually(t, func() bool { return !c.writing.Load() && len(c.out) == 0 },
+	require.Eventually(t, func() bool { return !c.writing.Load() && c.queued() == 0 },
 		2*time.Second, time.Millisecond, "the writer must drain the queue and exit")
 }
 
@@ -141,8 +139,7 @@ func TestConnectionInterruptKeepsWrites(t *testing.T) {
 	defer b.Close() //nolint:errcheck
 
 	errc := readBlocked(c)
-	c.GetChanOut() <- Frame{Body: []byte("queued")}
-	c.Kick()
+	c.QueueFrame(Frame{Body: []byte("queued")})
 	c.Interrupt()
 
 	header := make([]byte, 4)

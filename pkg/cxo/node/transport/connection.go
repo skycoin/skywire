@@ -35,6 +35,15 @@ var ErrInterrupted = errors.New("cxo transport: read interrupted")
 // interruptDrainTimeout bounds how long Interrupt waits for queued frames.
 const interruptDrainTimeout = 10 * time.Second
 
+// sendQueueLen is how many frames a connection queues before a send waits.
+const sendQueueLen = 256
+
+// ErrSendTimeout is returned by SendFrame when the queue stays full.
+var ErrSendTimeout = errors.New("cxo transport: send queue full")
+
+// ErrSendStopped is returned by SendFrame when its stop channel closes.
+var ErrSendStopped = errors.New("cxo transport: send stopped")
+
 // Connection wraps a net.Conn with length-prefixed (4 bytes, big-endian)
 // message I/O. The owner reads frames with ReadFrame. Outbound frames go
 // through a queue that a writer goroutine drains only while it is non-empty,
@@ -47,9 +56,15 @@ type Connection struct {
 	closed      bool
 	interrupted bool
 
-	rmu     sync.Mutex // one ReadFrame at a time keeps frames whole
-	out     chan Frame
+	rmu sync.Mutex // one ReadFrame at a time keeps frames whole
+
+	// The send queue grows on demand and is dropped once drained, so an
+	// idle connection holds no frame buffer. qmu guards q, qhead and writing.
+	qmu     sync.Mutex
+	q       []Frame
+	qhead   int
 	writing atomic.Bool
+	space   chan struct{} // the writer took a frame
 	done    chan struct{}
 }
 
@@ -57,7 +72,7 @@ func newConnection(conn net.Conn, isTCP bool) *Connection {
 	return &Connection{
 		conn:  conn,
 		isTCP: isTCP,
-		out:   make(chan Frame, 256),
+		space: make(chan struct{}, 1),
 		done:  make(chan struct{}),
 	}
 }
@@ -98,6 +113,10 @@ func (c *Connection) Close() {
 	c.mu.Unlock()
 	c.conn.Close() //nolint:errcheck,gosec
 	close(c.done)
+	c.qmu.Lock()
+	clear(c.q)
+	c.q, c.qhead = nil, 0
+	c.qmu.Unlock()
 }
 
 // Interrupt makes a blocked or later ReadFrame return ErrInterrupted. Frames
@@ -177,39 +196,94 @@ func (c *Connection) readFrame(timeout time.Duration) ([]byte, error) {
 	return payload, nil
 }
 
-// GetChanOut returns the send queue. Call Kick after each successful send.
-func (c *Connection) GetChanOut() chan<- Frame {
-	return c.out
-}
-
-// Kick starts the writer unless one is running.
-func (c *Connection) Kick() {
-	if c.writing.CompareAndSwap(false, true) {
+// QueueFrame queues f unless sendQueueLen frames are already waiting, and
+// starts the writer unless one is running. It never blocks.
+func (c *Connection) QueueFrame(f Frame) bool {
+	c.qmu.Lock()
+	if len(c.q)-c.qhead >= sendQueueLen {
+		c.qmu.Unlock()
+		return false
+	}
+	if c.qhead > 0 && len(c.q) == cap(c.q) {
+		n := copy(c.q, c.q[c.qhead:])
+		clear(c.q[n:])
+		c.q, c.qhead = c.q[:n], 0
+	}
+	c.q = append(c.q, f)
+	start := !c.writing.Load()
+	if start {
+		c.writing.Store(true)
+	}
+	c.qmu.Unlock()
+	if start {
 		go c.writeLoop()
 	}
+	return true
+}
+
+// SendFrame queues f, waiting up to timeout while the queue is full. It
+// returns ErrSendTimeout when the wait runs out and ErrSendStopped when stop
+// closes first.
+func (c *Connection) SendFrame(f Frame, stop <-chan struct{}, timeout time.Duration) error {
+	if c.QueueFrame(f) {
+		return nil
+	}
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.space:
+			if c.QueueFrame(f) {
+				c.signalSpace() // another sender may be waiting too
+				return nil
+			}
+		case <-stop:
+			return ErrSendStopped
+		case <-t.C:
+			return ErrSendTimeout
+		}
+	}
+}
+
+func (c *Connection) signalSpace() {
+	select {
+	case c.space <- struct{}{}:
+	default:
+	}
+}
+
+func (c *Connection) queued() int {
+	c.qmu.Lock()
+	defer c.qmu.Unlock()
+	return len(c.q) - c.qhead
 }
 
 func (c *Connection) writeLoop() {
 	for {
 		select {
-		case f := <-c.out:
-			if err := c.writeFrame(f); err != nil {
-				// writing stays set, so no new writer starts on a dead conn.
-				c.Close()
-				return
-			}
 		case <-c.done:
 			return
 		default:
+		}
+		c.qmu.Lock()
+		if c.qhead == len(c.q) {
+			c.q, c.qhead = nil, 0
 			c.writing.Store(false)
-			// A frame queued after the empty check but before the Store saw
-			// writing set and did not start a writer: take it over.
-			if len(c.out) == 0 || !c.writing.CompareAndSwap(false, true) {
-				if c.isInterrupted() {
-					c.Close()
-				}
-				return
+			c.qmu.Unlock()
+			if c.isInterrupted() {
+				c.Close()
 			}
+			return
+		}
+		f := c.q[c.qhead]
+		c.q[c.qhead] = Frame{}
+		c.qhead++
+		c.qmu.Unlock()
+		c.signalSpace()
+		if err := c.writeFrame(f); err != nil {
+			// writing stays set, so no new writer starts on a dead conn.
+			c.Close()
+			return
 		}
 	}
 }
