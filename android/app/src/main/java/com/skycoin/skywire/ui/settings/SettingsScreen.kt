@@ -63,7 +63,9 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
+import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DnsServer
+import com.skycoin.skywire.core.RewardXpub
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.InfoRow
@@ -195,6 +197,7 @@ fun SettingsScreen(
                 )
             }
             item { DnsCard(state, viewModel::setDnsServer) }
+            item { RewardCard(state, viewModel::setRewardAddress) }
             item {
                 RemoteManagementCard(
                     state = state,
@@ -595,6 +598,59 @@ private fun DnsCard(state: SettingsUiState, onSave: (String) -> Unit) {
             if (state.dnsServer.isNotEmpty()) {
                 TextButton(onClick = { onSave("") }) {
                     Text(stringResource(R.string.settings_dns_default))
+                }
+            }
+        }
+    }
+}
+
+/** The reward address, an account xpub, kept by the visor — see [RewardXpub]. */
+@Composable
+private fun RewardCard(state: SettingsUiState, onSave: (String) -> Unit) {
+    var xpub by remember(state.rewardAddress) { mutableStateOf(state.rewardAddress) }
+    val typed = xpub.trim()
+    val valid = typed.isEmpty() || RewardXpub.looksValid(typed)
+    val running = state.coreState is CoreState.Running
+    SectionCard {
+        Text(stringResource(R.string.settings_reward), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(if (running) R.string.settings_reward_hint else R.string.settings_reward_needs_core),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (state.rewardAddress.isNotEmpty() && !RewardXpub.looksValid(state.rewardAddress)) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.settings_reward_legacy),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = xpub,
+            onValueChange = { xpub = it },
+            placeholder = { Text(stringResource(R.string.settings_reward_placeholder)) },
+            singleLine = true,
+            enabled = running,
+            isError = !valid,
+            supportingText = if (valid) null else {
+                { Text(stringResource(R.string.settings_reward_invalid)) }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FilledTonalButton(
+                onClick = { onSave(typed) },
+                enabled = running && valid && typed.isNotEmpty() && typed != state.rewardAddress,
+            ) {
+                Text(stringResource(R.string.settings_reward_save))
+            }
+            if (running && state.rewardAddress.isNotEmpty()) {
+                TextButton(onClick = { onSave("") }) {
+                    Text(stringResource(R.string.settings_reward_clear))
                 }
             }
         }

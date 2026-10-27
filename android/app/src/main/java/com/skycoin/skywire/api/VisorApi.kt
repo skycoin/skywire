@@ -635,6 +635,24 @@ class VisorApi(context: Context) {
         return if (id == null) base else "$base/${URLEncoder.encode(id, "UTF-8")}"
     }
 
+    /** The reward address: an account xpub, a single address set before xpubs were required, or "" for none. */
+    suspend fun rewardAddress(): String = authedGet("/api/visors/${localPk()}/reward")
+
+    /** Sets the reward address. The visor takes only an account xpub, and says why it refused anything else. */
+    suspend fun setRewardAddress(xpub: String): Unit = withContext(Dispatchers.IO) {
+        val body = buildJsonObject { put("reward_address", JsonPrimitive(xpub)) }.toString()
+        putWithRelogin("/api/visors/${localPk()}/reward", body).use { resp ->
+            if (!resp.isSuccessful) throw IOException(errorBody(resp))
+        }
+    }
+
+    /** Clears the reward address, which opts this visor out of rewards. */
+    suspend fun deleteRewardAddress(): Unit = withContext(Dispatchers.IO) {
+        deleteWithRelogin("/api/visors/${localPk()}/reward").use { resp ->
+            if (!resp.isSuccessful) throw IOException(errorBody(resp))
+        }
+    }
+
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {
         get("/api/csrf").use { decode<CsrfToken>(it).token }

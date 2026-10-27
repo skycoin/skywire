@@ -5,7 +5,10 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
+import com.skycoin.skywire.core.CoreServiceState
+import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.WalletMeta
@@ -730,6 +733,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun revealPassphrase(walletId: String): String = repo.revealPassphrase(walletId)
 
     suspend fun extendedPublicKeys(walletId: String): ExtendedPublicKeys? = repo.extendedPublicKeys(walletId)
+
+    /** Sets [xpub] as this phone's reward address and returns what to tell the user. */
+    suspend fun useForRewards(xpub: String): String {
+        val app = getApplication<Application>()
+        return runCatching {
+            check(CoreServiceState.state.value is CoreState.Running) { app.getString(R.string.settings_reward_needs_core) }
+            VisorApi.get(app).setRewardAddress(xpub)
+            app.getString(R.string.settings_reward_saved)
+        }.getOrElse { it.message ?: it::class.java.simpleName }
+    }
 
     override fun onCleared() {
         refreshJob?.cancel()

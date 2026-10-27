@@ -620,6 +620,16 @@
     <string name="settings_dns_save">Utiliser ce serveur</string>
     <string name="settings_dns_default">Revenir aux valeurs par défaut</string>
     <string name="settings_dns_saved">Serveur DNS : %1$s.</string>
+    <string name="settings_reward">Récompenses</string>
+    <string name="settings_reward_hint">Collez le xpub de compte de votre portefeuille (BIP 44, niveau compte) pour gagner des récompenses Skywire. Chaque récompense va à une nouvelle adresse dérivée de celui-ci. Les clés publiques étendues d\'un portefeuille, dans Portefeuille, peuvent le définir directement.</string>
+    <string name="settings_reward_placeholder">xpub…</string>
+    <string name="settings_reward_invalid">Saisissez un xpub de compte. Il commence par xpub ; une adresse seule n\'est pas acceptée.</string>
+    <string name="settings_reward_save">Enregistrer</string>
+    <string name="settings_reward_clear">Retirer</string>
+    <string name="settings_reward_saved">xpub de récompense enregistré.</string>
+    <string name="settings_reward_cleared">Adresse de récompense retirée. Ce téléphone ne gagne plus de récompenses.</string>
+    <string name="settings_reward_needs_core">Connectez-vous d\'abord : le cœur conserve l\'adresse de récompense.</string>
+    <string name="settings_reward_legacy">Une adresse seule est définie. Elle fonctionne encore, mais une nouvelle doit être un xpub de compte.</string>
     <string name="settings_dns_placeholder">Par défaut</string>
     <string name="settings_dns_cleared">Utilisation des serveurs DNS par défaut.</string>
 
@@ -990,6 +1000,7 @@
     <string name="wallet_xpub_receive">Chaîne de réception</string>
     <string name="wallet_xpub_change">Chaîne de monnaie</string>
     <string name="wallet_xpub_copied">Copiée</string>
+    <string name="wallet_xpub_use_reward">Utiliser pour les récompenses Skywire</string>
     <string name="wallet_remove_action">Retirer de cet appareil</string>
     <string name="wallet_remove_action_sub">Supprime les clés ici. Sans la phrase, les pièces sont perdues pour de bon.</string>
     <string name="wallet_remove_title">Retirer %1$s de cet appareil ?</string>
