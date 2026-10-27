@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                              |
 |----------|----------------------------------------------------------|
-| Revision | 2026-10-27, skywire f37a464a4 |
+| Revision | 2026-10-27, skywire 9783dd73a |
 | Code     | `pkg/httpauth`, `pkg/httpauthclient`                     |
 
 ## Abstract
@@ -90,9 +90,8 @@ For a request that does not arrive over dmsg, `WithAuth` runs these steps.
    returns 401. A body above the `httputil.LimitBody` cap returns 413.
 5. The wrapped handler runs with the key in the request context
    (`httpauth.ContextAuthKey`, read with `httpauth.PKFromCtx`).
-6. When the handler wrote exactly status 200, the server calls
-   `IncrementNonce`. Any other status, including 201 and 204, leaves the nonce
-   unchanged.
+6. When the handler wrote a 2xx status, the server calls `IncrementNonce`.
+   Any other status leaves the nonce unchanged.
 
 The middleware has no key whitelist. Handlers that need one check
 `PKFromCtx` themselves.
@@ -120,13 +119,12 @@ their requests.
   `SW-Nonce does not match`, the client fetches the nonce again, stores it and
   retries the request once.
 - After the final response the client increments its counter when the status
-  is exactly 200.
+  is 2xx.
 
 ## Security Considerations
 
 The nonce is per key and per service. It orders requests and prevents replay of
-a signed body; it does not encrypt. A 2xx response other than 200 does not
-advance the nonce, so a signed request that received 201 can be replayed.
+a signed body; it does not encrypt.
 Over dmsg the stream is authenticated and ordered by the dmsg session, so
 the application level nonce is not used.
 
