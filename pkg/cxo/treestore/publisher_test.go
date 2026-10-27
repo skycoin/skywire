@@ -405,15 +405,14 @@ func TestPublisherMutexNotHeldDuringPublish(t *testing.T) {
 	}
 
 	// Run a flood of Puts in parallel; record the longest single-Put
-	// latency observed. With the in-memory CXDS used by nopNode the
-	// publish path itself is fast, so we set a generous bound (250ms)
-	// — the failure shape we care about is multi-second hangs that
-	// the old code exhibits under contention; 250ms is comfortably
-	// above scheduler jitter without admitting the pathology.
+	// latency observed. The failure this guards against is the multi-second
+	// hang the old code showed under contention, so the bound is 1s: well
+	// below that hang and above a slow CI runner under -race (a 254ms Put
+	// failed the old 250ms bound on windows).
 	const (
 		workers = 8
 		runFor  = 200 * time.Millisecond
-		maxOK   = 250 * time.Millisecond
+		maxOK   = time.Second
 	)
 
 	// `time.After` only fires once, so all workers share a single
