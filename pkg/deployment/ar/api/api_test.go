@@ -109,15 +109,6 @@ func TestMirrorsAndBackfill_NoMirror(t *testing.T) {
 	a.updateMetrics() // exercise the metrics path
 }
 
-func TestWriteJSON_MarshalError(t *testing.T) {
-	a := newTestAPI(t)
-	rec := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/x", nil)
-	// channels can't be JSON-marshaled -> 500.
-	a.writeJSON(rec, r, http.StatusOK, make(chan int))
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-}
-
 // ---- health / transports (no auth) ----------------------------------------
 
 func TestHealth(t *testing.T) {

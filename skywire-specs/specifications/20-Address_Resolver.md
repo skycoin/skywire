@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                                                              |
 |----------|----------------------------------------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire f37a464a4 |
+| Revision | 2026-10-27, skywire c18b044dc |
 | Code     | `pkg/deployment/ar`, `pkg/services/ar`, `pkg/transport/network/addrresolver`, `pkg/visor/reach_card.go` |
 
 ## Abstract
@@ -136,10 +136,8 @@ bind or delete its own record.
 `DELETE /deregister/{network}` removes the bindings of the keys in the body, a
 JSON array of public key strings, for `{network}` of `stcpr` or `sudph`. It is
 the bulk endpoint for removing other visors' entries.
-The request carries `NM-PK` and `NM-Sign`. `NM-PK` must be in the AR whitelist
-(`api.WhitelistPKs`, initialised from `nmpk.GetWhitelistPKs` and the service
-`whitelist_keys` setting). `NM-Sign` must be a valid signature by `NM-PK` over the
-text of `NM-PK`. Responses are 200 with body `null`, 400 for an unparsable key,
+The caller is authorized by the deregistration whitelist (see
+[02](02-HTTP_Authorization_Middleware.md#deregistration-whitelist)). Responses are 200 with body `null`, 400 for an unparsable key,
 signature, network or body, 403 for a key outside the whitelist or a bad
 signature, and 500 when a delete fails.
 

@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                        |
 |----------|--------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire f37a464a4 |
+| Revision | 2026-10-27, skywire c18b044dc |
 | Code     | `pkg/deployment/tpd`, `pkg/services/tpd`, `pkg/transport`, `pkg/visor` |
 
 ## Abstract
@@ -109,7 +109,7 @@ not owned by the caller, or fail to delete.
 | `GET /all-transports/stats?selfTransports=hide` | 200 `TransportSummary`. 404 when there are no transports. `hide` excludes self transports. |
 | `GET /all-transports/per-key-stats?selfTransports=hide` | 200 object mapping a public key to its counts by type and `total`. 404 when empty. |
 | `GET /transports/stats/{edge}` | 200 `{"total": n, "by_type": {...}}`. 400. 404 when the visor has none. |
-| `DELETE /transports/deregister` | Deregistration whitelist only. Headers `NM-PK` and `NM-Sign`. Body is an array of transport IDs. 403 when the key is not in `api.WhitelistPKs` or the signature over the key's hex does not verify. 400 for a bad key, signature or body. 200 when finished. |
+| `DELETE /transports/deregister` | Deregistration whitelist only, see [02](02-HTTP_Authorization_Middleware.md#deregistration-whitelist). Body is an array of transport IDs. 403 for an unlisted key or a bad signature. 400 for a bad key, signature or body. 200 when finished. |
 | `GET /bandwidth/transport/{id}?period=daily&limit=7` | 200 bandwidth history. 400, 404. |
 | `GET /bandwidth/visor/{pk}?period=daily&limit=7` | 200 bandwidth history for the visor's transports. 400. |
 | `GET /metric` | 200 network aggregate. |

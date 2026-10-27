@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                              |
 |----------|--------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire f37a464a4 |
+| Revision | 2026-10-27, skywire c18b044dc |
 | Code     | `pkg/deployment/sd`, `pkg/services/sd`, `pkg/servicedisc`                |
 
 ## Abstract
@@ -120,9 +120,8 @@ The response status follows the order of checks.
 store error.
 
 `DELETE /api/services/deregister/{type}` accepts only keys in the deregistration whitelist. It
-does not use the nonce middleware. The caller sends `NM-PK` and `NM-Sign`.
-`NM-PK` must be in `api.WhitelistPKs` (`nmpk.GetWhitelistPKs`). `NM-Sign` must
-be a signature by `NM-PK` over the text of `NM-PK`. The body is a JSON array of
+does not use the nonce middleware (see
+[02](02-HTTP_Authorization_Middleware.md#deregistration-whitelist)). The body is a JSON array of
 public key strings, and each key is removed from the entries of `{type}` with
 port 0. Responses are 200 with `true`, 400 for an unparsable key, signature or
 body, 403 for a key outside the whitelist or a bad signature, and 500 on a

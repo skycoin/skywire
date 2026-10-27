@@ -194,3 +194,11 @@ func TestLogEntrySetFieldNoMiddleware(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	assert.NotPanics(t, func() { LogEntrySetField(r, "k", "v") })
 }
+
+func TestWriteJSON_UnencodableValueAnswers500(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	require.NotPanics(t, func() { WriteJSON(w, r, http.StatusOK, make(chan int)) })
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, w.Body.String())
+}
