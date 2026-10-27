@@ -94,7 +94,8 @@ struct PassphraseFields: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(verbatim: L10n.text("wallet_passphrase_title").uppercased()).skyText(.labelSmall).foregroundStyle(Color.skyOnSurfaceVariant)
                 SkyOutlinedTextField(placeholder: L10n.key("wallet_passphrase_hint"),
-                                     text: Binding(get: { model.draft.passphrase }, set: model.setDraftPassphrase),
+                                     // A closure, not the method: Swift 6.3's IRGen crashes on the method's isolated(any) thunk.
+                                     text: Binding(get: { model.draft.passphrase }, set: { model.setDraftPassphrase($0) }),
                                      identifier: "wallet-passphrase", radius: SkyRadius.small, secure: true)
                 if confirm && !draft.passphrase.isEmpty {
                     SkyOutlinedTextField(placeholder: L10n.key("wallet_passphrase_confirm"), text: $again, isError: mismatch,
