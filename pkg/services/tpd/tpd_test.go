@@ -1,5 +1,5 @@
 // Package tpd tpd_test.go: unit tests for config loading (ParseBlock /
-// LoadFile), the service factory + New, the pure dmsgDiscEntries helper,
+// LoadFile), the service factory + New,
 // the aggregatorSink delegation wrappers, and the early-return / error
 // paths of Run (invalid mode, listener start failure, and the canceled-ctx
 // Testing path) that don't require a live redis or dmsg network.
@@ -23,8 +23,6 @@ import (
 	tpapi "github.com/skycoin/skywire/pkg/deployment/tpd/api"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -116,22 +114,6 @@ func TestFactoryAndNew(t *testing.T) {
 	require.Error(t, err)
 
 	require.NotNil(t, New(&Config{}, testLog()))
-}
-
-// ---- pure helper: dmsgDiscEntries -----------------------------------------
-
-func TestDmsgDiscEntries(t *testing.T) {
-	// Empty/nil config falls back to the embedded prod keyring.
-	out := dmsgDiscEntries(nil)
-	require.Equal(t, dmsg.Prod.DmsgServers, out)
-
-	// Non-empty config is copied through (value type), with nil entries
-	// skipped.
-	srvPK, _ := cipher.GenerateKeyPair()
-	e := &disc.Entry{Static: srvPK, Server: &disc.Server{Address: "127.0.0.1:8080", ServerType: "public"}}
-	got := dmsgDiscEntries([]*disc.Entry{e, nil})
-	require.Len(t, got, 1)
-	require.Equal(t, srvPK, got[0].Static)
 }
 
 // ---- aggregatorSink delegation --------------------------------------------
