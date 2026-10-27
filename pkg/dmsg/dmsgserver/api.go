@@ -3,7 +3,6 @@ package dmsgserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/pires/go-proxyproto"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -196,30 +194,10 @@ func (a *ServerAPI) Close() error {
 // Health serves health page
 func (a *ServerAPI) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
 		BuildInfo: info,
 		StartedAt: a.startedAt,
 	})
-}
-
-// writeJSON writes a json object on a http.ResponseWriter with the given code.
-func (a *ServerAPI) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.log(r).Warnf("Failed to encode json response: %s", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.log(r).Warnf("Failed to write response: %s", err)
-	}
-}
-
-func (a *ServerAPI) log(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
 }
 
 // UpdateInternalState is background function which updates numbers of clients.

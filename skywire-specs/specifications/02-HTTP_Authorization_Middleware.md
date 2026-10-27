@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                              |
 |----------|----------------------------------------------------------|
-| Revision | 2026-10-27, skywire 9783dd73a |
+| Revision | 2026-10-27, skywire c18b044dc |
 | Code     | `pkg/httpauth`, `pkg/httpauthclient`                     |
 
 ## Abstract
@@ -121,12 +121,33 @@ their requests.
 - After the final response the client increments its counter when the status
   is 2xx.
 
+### Deregistration whitelist
+
+The bulk deregistration endpoints of transport discovery, dmsg discovery, the
+address resolver and service discovery do not use the nonce middleware. They
+authorize the caller with `httpauth.Whitelist.Authorize` against the keys in
+the service's `whitelist_keys` setting.
+
+- A dmsg caller is identified by its dmsg remote key. It is authorized when
+  that key is on the whitelist. The `NM-PK` and `NM-Sign` headers are ignored.
+- A plain HTTP caller sends its key in hex in `NM-PK` and, in `NM-Sign`, a
+  signature by that key over the hex of the key.
+
+A key that is not listed, or a signature that does not verify, answers 403
+(`ErrNotWhitelisted`). A header that does not parse answers 400
+(`ErrBadWhitelistAuth`). The key lists that three of these endpoints take in
+the body are read with `httpauth.ReadKeyList`, a JSON array of keys in hex.
+
 ## Security Considerations
 
 The nonce is per key and per service. It orders requests and prevents replay of
 a signed body; it does not encrypt.
 Over dmsg the stream is authenticated and ordered by the dmsg session, so
 the application level nonce is not used.
+
+The plain HTTP whitelist signature covers only the caller's key, so a
+captured header pair authorizes its holder until the key leaves the whitelist.
+Over dmsg the headers are not trusted.
 
 ## References
 

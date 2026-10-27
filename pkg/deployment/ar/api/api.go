@@ -22,7 +22,6 @@ import (
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/ar/store"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
-	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -41,14 +40,8 @@ var ErrNotConnected = errors.New("peer is not connected")
 // ErrMissingNetworkType is returned when there is no type in request.
 var ErrMissingNetworkType = errors.New("missing network type in request")
 
-// ErrUnauthorizedNetworkMonitor occurs in case of invalid network monitor key
-var ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
-
-// ErrBadInput occurs in case of bad input
-var ErrBadInput = errors.New("error bad input")
-
-// WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = nmpk.GetWhitelistPKs()
+// WhitelistPKs holds the keys allowed to call the bulk deregistration endpoint.
+var WhitelistPKs = httpauth.NewWhitelist()
 
 // API represents the api of the address-resolver service.
 type API struct {
@@ -470,7 +463,7 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 		} else {
 			err := fmt.Sprintf("Cannot bind %v to %v (%s). Invalid IP address in request: %v", pk, remoteAddr, tpType, localAddresses)
 			a.logger(r).Errorf("%s", err)
-			a.writeJSON(w, r, http.StatusBadRequest, &Error{
+			httputil.WriteJSON(w, r, http.StatusBadRequest, &Error{
 				Error: err,
 			})
 			return
@@ -483,7 +476,7 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 		err := fmt.Sprintf("Cannot bind %v to %v (%s). Remote address not present in request: %v", pk, remoteAddr, tpType, localAddresses)
 		a.logger(r).Errorf("%s", err)
 
-		a.writeJSON(w, r, http.StatusBadRequest, &Error{
+		httputil.WriteJSON(w, r, http.StatusBadRequest, &Error{
 			Error: err,
 		})
 		return
@@ -608,7 +601,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger(r).Errorf("Failed to resolve PK:%v (%v): %v", receiverPK, tpType, err)
 		w.Header().Set("Retry-After", "2")
-		a.writeJSON(w, r, http.StatusServiceUnavailable, &Error{Error: "address store unavailable"})
+		httputil.WriteJSON(w, r, http.StatusServiceUnavailable, &Error{Error: "address store unavailable"})
 		return
 	}
 
@@ -621,7 +614,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	a.countResolve(tpType, resolveFound)
 	// Sender gets the receiver's data and dails to it.
-	a.writeJSON(w, r, http.StatusOK, receiverVisorData)
+	httputil.WriteJSON(w, r, http.StatusOK, receiverVisorData)
 	a.logger(r).Debugf("Resolved %v to %v (%v)", receiverPK, receiverVisorData, tpType)
 
 	if types.Type(tpType) == types.SUDPH {
@@ -664,7 +657,7 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		ServiceName: "address-resolver",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
@@ -682,37 +675,16 @@ func (a *API) transports(w http.ResponseWriter, r *http.Request) {
 		Stcpr: a.getTransports(r, types.STCPR),
 	}
 
-	a.writeJSON(w, r, http.StatusOK, info)
+	httputil.WriteJSON(w, r, http.StatusOK, info)
 }
 
 func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	a.log.Info("Deregistration process started.")
 
-	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	nmPk := cipher.PubKey{}
-	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	nmSign := cipher.Sig{}
-	if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Veryfing request").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
+	if _, status, err := WhitelistPKs.Authorize(r); err != nil {
+		a.log.WithError(err).Error("Deregistration process interrupt.")
+		w.WriteHeader(status)
 		return
 	}
 
@@ -728,28 +700,11 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pks := []cipher.PubKey{}
-	body, err := io.ReadAll(r.Body)
+	pks, err := httpauth.ReadKeyList(r)
 	if err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading keys").Error("Deregistration process interrupt.")
+		a.log.WithError(err).Error("Deregistration process interrupt.")
 		w.WriteHeader(http.StatusBadRequest)
 		return
-	}
-	var keys []string
-	if err := json.Unmarshal(body, &keys); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Slicing keys").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	for _, key := range keys {
-		pk := cipher.PubKey{}
-		if err := pk.UnmarshalText([]byte(key)); err != nil {
-			a.log.WithError(ErrBadInput).WithField("Step", "Checking keys").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		pks = append(pks, pk)
 	}
 
 	for _, pk := range pks {
@@ -771,8 +726,8 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Network Type": netType}).Info("Deregistration process completed.")
-	a.writeJSON(w, r, http.StatusOK, nil)
+	a.log.WithFields(logrus.Fields{"Number of Keys": len(pks), "Keys": pks, "Network Type": netType}).Info("Deregistration process completed.")
+	httputil.WriteJSON(w, r, http.StatusOK, nil)
 }
 
 func (a *API) getTransports(r *http.Request, netType types.Type) []string {
@@ -838,24 +793,6 @@ func (a *API) deleteUDPConn(pk cipher.PubKey) {
 
 	delete(a.udpConns, pk)
 	a.reach.setLive(pk, false)
-}
-
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to write json response")
-	}
 }
 
 // sudphHandshakeTimeout is the per-connection deadline for completing the

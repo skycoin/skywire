@@ -19,30 +19,36 @@ import (
 var log = logging.MustGetLogger("httputil")
 
 // WriteJSON writes a json object on a http.ResponseWriter with the given code.
-// I/O errors (client disconnect, timeout) are logged but don't cause panics.
-// Marshaling errors panic as they indicate a programming error.
+// A value that cannot be encoded answers 500. Write errors are only logged.
 func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	enc := json.NewEncoder(w)
 	pretty, err := BoolFromQuery(r, "pretty", false)
 	if err != nil {
 		log.WithError(err).Warn("Failed to get bool from query")
 	}
-	if pretty {
-		enc.SetIndent("", "  ")
-	}
 	if err, ok := v.(error); ok {
 		v = map[string]interface{}{"error": err.Error()}
 	}
-	if err := enc.Encode(v); err != nil {
-		// Check if it's an I/O error (client disconnect, timeout, etc.)
+	// Marshal before writing the header, so a value that cannot be encoded
+	// answers 500 instead of a status with an empty or truncated body.
+	var body []byte
+	if pretty {
+		body, err = json.MarshalIndent(v, "", "  ")
+	} else {
+		body, err = json.Marshal(v)
+	}
+	if err != nil {
+		log.WithError(err).Error("Failed to encode JSON response")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	if _, err := w.Write(append(body, '\n')); err != nil {
 		if isIOError(err) {
 			log.WithError(err).Debug("Failed to write JSON response (client likely disconnected)")
 			return
 		}
-		// Marshaling errors indicate programming bugs, so panic
-		panic(err)
+		log.WithError(err).Warn("Failed to write JSON response")
 	}
 }
 
@@ -100,6 +106,9 @@ func ReadJSON(r *http.Request, v interface{}) error {
 
 // BoolFromQuery obtains a boolean from a query entry.
 func BoolFromQuery(r *http.Request, key string, defaultVal bool) (bool, error) {
+	if r == nil || r.URL == nil {
+		return defaultVal, nil
+	}
 	switch q := r.URL.Query().Get(key); q {
 	case "true", "on", "1":
 		return true, nil
