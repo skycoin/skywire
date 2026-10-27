@@ -73,3 +73,15 @@ func BenchmarkGzipPartsSplitDay(b *testing.B) {
 		})
 	}
 }
+
+// TestGzipRecordsKeepsNoSpareCapacity: a body is held for the rest of its day,
+// so the buffer's growth slack must not be held with it.
+func TestGzipRecordsKeepsNoSpareCapacity(t *testing.T) {
+	gz, err := gzipRecords(metricsFixture(4000, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spare := cap(gz) - len(gz); spare > len(gz)/8 {
+		t.Errorf("body of %d bytes keeps %d spare", len(gz), spare)
+	}
+}
