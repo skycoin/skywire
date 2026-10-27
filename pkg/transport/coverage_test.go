@@ -895,10 +895,8 @@ func TestVStreamIDsScopedPerTransport(t *testing.T) {
 	n, err := sB.Read(buf)
 	require.NoError(t, err)
 	require.Equal(t, "b", string(buf[:n]))
-	select {
-	case <-sA.readBuf:
+	if sA.rq.len() != 0 {
 		t.Fatal("frame for B's stream landed on A's stream with the same id")
-	default:
 	}
 	require.Equal(t, int64(0), mux.Stats().FramesUnknownStream)
 

@@ -196,12 +196,13 @@ type streamKey struct {
 const (
 	// vstreamReadBuf is the per-stream inbound frame queue.
 	vstreamReadBuf = 1024
-	// vstreamStallTimeout is how long HandlePacket (the transport read loop)
-	// waits for a full queue to drain before it gives the stream up.
-	vstreamStallTimeout = 30 * time.Second
 	// vstreamAcceptTimeout bounds the wait for Accept on an inbound SYN.
 	vstreamAcceptTimeout = 5 * time.Second
 )
+
+// vstreamStallTimeout is how long HandlePacket (the transport read loop)
+// waits for a full queue to drain before it gives the stream up.
+var vstreamStallTimeout = 30 * time.Second
 
 // nextIDFor allocates a wire stream id for a stream this side opens to
 // remotePK. Both ends of a transport allocate ids, and the map is keyed per
@@ -228,22 +229,30 @@ func (m *VStreamMux) nextIDFor(remotePK cipher.PubKey) uint64 {
 func (m *VStreamMux) deliver(stream *VStream, buf []byte) {
 	stream.recvBytes.Add(int64(len(buf)))
 	select {
-	case stream.readBuf <- buf:
-		return
 	case <-stream.closed:
 		return
 	default:
 	}
+	if stream.rq.push(buf) {
+		return
+	}
 	t := time.NewTimer(vstreamStallTimeout)
 	defer t.Stop()
-	select {
-	case stream.readBuf <- buf:
-	case <-stream.closed:
-	case <-t.C:
-		m.stalledStreams.Add(1)
-		m.log.WithField("stream", stream.id).WithField("remote", stream.remotePK.String()).
-			Warn("vstream: reader stalled; closing stream")
-		stream.Close() //nolint:errcheck,gosec
+	for {
+		select {
+		case <-stream.rq.space:
+			if stream.rq.push(buf) {
+				return
+			}
+		case <-stream.closed:
+			return
+		case <-t.C:
+			m.stalledStreams.Add(1)
+			m.log.WithField("stream", stream.id).WithField("remote", stream.remotePK.String()).
+				Warn("vstream: reader stalled; closing stream")
+			stream.Close() //nolint:errcheck,gosec
+			return
+		}
 	}
 }
 
@@ -402,7 +411,7 @@ func (m *VStreamMux) DialOnTransportAs(tp *ManagedTransport, appName string) (*V
 		tpID:     tp.Entry.ID,
 		appName:  appName,
 		openedAt: time.Now(),
-		readBuf:  make(chan []byte, vstreamReadBuf),
+		rq:       newFrameQueue(),
 		closed:   make(chan struct{}),
 		mux:      m,
 	}
@@ -460,7 +469,7 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 			id:       streamID,
 			remotePK: remotePK,
 			tpID:     mt.Entry.ID,
-			readBuf:  make(chan []byte, vstreamReadBuf),
+			rq:       newFrameQueue(),
 			closed:   make(chan struct{}),
 			mux:      m,
 		}
@@ -546,7 +555,7 @@ type VStream struct {
 	recvBytes atomic.Int64
 	remotePK  cipher.PubKey
 	tpID      uuid.UUID
-	readBuf   chan []byte
+	rq        frameQueue
 	readLeft  []byte // leftover from partial read
 	closed    chan struct{}
 	once      sync.Once
@@ -573,28 +582,23 @@ func (s *VStream) readRaw(p []byte) (int, error) {
 		return n, nil
 	}
 
-	select {
-	case data, ok := <-s.readBuf:
-		if !ok {
-			return 0, io.EOF
+	for {
+		if data, ok := s.rq.pop(); ok {
+			return s.take(p, data), nil
 		}
-		return s.take(p, data), nil
-	case <-s.closed:
-		// A peer's FIN closes the stream the moment it arrives, but every
-		// frame the peer wrote before it has already been queued — frames
-		// are delivered in order, and deliver blocks until each is. Hand
-		// those over before the EOF. select picks at random between ready
-		// cases, so a peer that wrote and then closed used to lose its last
-		// frames about half the time: a request answered and hung up on
-		// read as a bare EOF.
 		select {
-		case data, ok := <-s.readBuf:
-			if ok {
+		case <-s.rq.ready:
+		case <-s.closed:
+			// A peer's FIN closes the stream the moment it arrives, but every
+			// frame the peer wrote before it has already been queued — frames
+			// are delivered in order, and deliver blocks until each is. Hand
+			// those over before the EOF, or a request answered and hung up on
+			// reads as a bare EOF.
+			if data, ok := s.rq.pop(); ok {
 				return s.take(p, data), nil
 			}
-		default:
+			return 0, io.EOF
 		}
-		return 0, io.EOF
 	}
 }
 
@@ -748,11 +752,11 @@ func (m *VStreamMux) Stats() VStreamMuxStats {
 	n := len(m.streams)
 	maxLen, nearFull := 0, 0
 	for _, s := range m.streams {
-		l := len(s.readBuf)
+		l := s.rq.len()
 		if l > maxLen {
 			maxLen = l
 		}
-		if l*readBufNearFullDen >= cap(s.readBuf)*readBufNearFullNum {
+		if l*readBufNearFullDen >= vstreamReadBuf*readBufNearFullNum {
 			nearFull++
 		}
 	}
@@ -824,8 +828,8 @@ func (m *VStreamMux) StreamInfo(appName string) []VStreamInfo {
 			SentBytes:  nonNegativeCount(s.sentBytes.Load()),
 			RecvBytes:  nonNegativeCount(s.recvBytes.Load()),
 			UptimeMS:   uptime,
-			ReadBufLen: len(s.readBuf),
-			ReadBufCap: cap(s.readBuf),
+			ReadBufLen: s.rq.len(),
+			ReadBufCap: vstreamReadBuf,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
