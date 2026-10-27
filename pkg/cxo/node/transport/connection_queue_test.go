@@ -36,14 +36,17 @@ func TestConnectionQueueBackPressure(t *testing.T) {
 	defer c.Close()
 	defer b.Close() //nolint:errcheck
 
-	n := 0
+	// Wait for the writer to take the first frame and block in Write, so
+	// the queue below fills with nothing left to drain it.
+	require.True(t, c.QueueFrame(Frame{Body: []byte("0")}))
+	require.Eventually(t, func() bool { return c.queued() == 0 }, 2*time.Second, time.Millisecond)
+	n := 1
 	for c.QueueFrame(Frame{Body: []byte(fmt.Sprint(n))}) {
 		n++
 		require.Less(t, n, 10*sendQueueLen, "the queue must be bounded")
 	}
-	// The writer holds one frame, blocked in Write, as it did with a channel.
-	require.GreaterOrEqual(t, n, sendQueueLen)
-	require.LessOrEqual(t, n, sendQueueLen+1)
+	// The writer holds one frame and the queue the rest, as with a channel.
+	require.Equal(t, sendQueueLen+1, n)
 
 	start := time.Now()
 	err := c.SendFrame(Frame{Body: []byte("late")}, nil, 100*time.Millisecond)
