@@ -4,6 +4,7 @@
       "type": "transport-discovery",
       "name": "tpd",
       "addr": ":9094",
+      "mode": "dual",
       "pprof_addr": ":6094",
       "entry_timeout": "2m",
       "secret_key": "85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8",
@@ -30,6 +31,7 @@
       "type": "route-finder",
       "name": "rf",
       "addr": ":9092",
+      "mode": "dual",
       "pprof_addr": ":6092",
       "secret_key": "640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca",
       "dmsg": {
@@ -84,6 +86,7 @@
       "type": "address-resolver",
       "name": "ar",
       "addr": ":9093",
+      "mode": "dual",
       "udp_addr": ":9093",
       "public_udp_addr": "127.0.0.1:9093",
       "pprof_addr": ":6093",

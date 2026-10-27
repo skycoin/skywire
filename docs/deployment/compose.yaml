@@ -1,18 +1,17 @@
+# Deployment services listen on dmsg only (mode dmsg is the default with a
+# secret key), so only dmsg-discovery publishes a plain HTTP port.
 services:
   address-resolver:
     container_name: address-resolver
     image: "skycoin/skywire:test"
     restart: always
     ports:
-      - ${AR_PORT}:${AR_PORT}
 #      - 30178:${AR_PORT}/udp
       - 30178:30178/udp
       - 127.0.0.1:${AR_PPROF}:${AR_PPROF}
     command:
       - svc
       - ar
-      - --addr
-      - :${AR_PORT}
       - --sk
       - ${AR_SECKEY}
       - --dmsg-disc
@@ -37,7 +36,6 @@ services:
     image: "skycoin/skywire:test"
     restart: always
     ports:
-      - ${CONF_PORT}:${CONF_PORT}
       - 127.0.0.1:${CONF_PPROF}:${CONF_PPROF}
     command:
       - svc
@@ -82,9 +80,7 @@ services:
   # `redis_addr: "redis:6379"` set in their config.json. With those, the
   # process also runs a DHT full node on dmsg port 100 and rehydrates its
   # store from Redis on every restart. REDIS_PASSWORD must be in the
-  # environment so the DHT backend can authenticate; TPD_URL / SD_URL let
-  # the DHT-to-discovery pusher mirror visor-published DHT entries back
-  # to the HTTP services. See DOCKER_DEPLOYMENT.md "DMSG Server DHT" for
+  # environment so the DHT backend can authenticate. See DOCKER_DEPLOYMENT.md "DMSG Server DHT" for
   # rationale and the trade-offs of disabling DHT.
   dmsg-server-1:
     container_name: dmsg-server-1
@@ -101,8 +97,6 @@ services:
       - :${DMSGSERVER_1_PPROF}
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
-      - SD_URL=http://${SD_HOST}:${SD_PORT}
     depends_on:
       - redis
       - dmsg-discovery
@@ -126,8 +120,6 @@ services:
       - :${DMSGSERVER_6_PPROF}
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
-      - SD_URL=http://${SD_HOST}:${SD_PORT}
     depends_on:
       - redis
       - dmsg-discovery
@@ -151,8 +143,6 @@ services:
       - :${DMSGSERVER_7_PPROF}
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
-      - SD_URL=http://${SD_HOST}:${SD_PORT}
     depends_on:
       - redis
       - dmsg-discovery
@@ -166,13 +156,10 @@ services:
     image: "skycoin/skywire:test"
     restart: always
     ports:
-      - ${RF_PORT}:${RF_PORT}
       - 127.0.0.1:${RF_PPROF}:${RF_PPROF}
     command:
       - svc
       - rf
-      - -a
-      - :${RF_PORT}
       - --pprof
       - :${RF_PPROF}
       - -l
@@ -195,13 +182,10 @@ services:
     image: "skycoin/skywire:test"
     restart: always
     ports:
-      - ${SD_PORT}:${SD_PORT}
       - 127.0.0.1:${SD_PPROF}:${SD_PPROF}
     command:
       - svc
       - sd
-      - --addr
-      - :${SD_PORT}
       - --pprof
       - :${SD_PPROF}
       - --sk
@@ -256,13 +240,10 @@ services:
     image: "skycoin/skywire:test"
     restart: always
     ports:
-      - ${TPDISC_PORT}:${TPDISC_PORT}
       - 127.0.0.1:${TPDISC_PPROF}:${TPDISC_PPROF}
     command:
       - svc
       - tpd
-      - --addr
-      - :${TPDISC_PORT}
       - --pprof
       - :${TPDISC_PPROF}
       - --redis
