@@ -148,7 +148,13 @@ func (s *service) Run(ctx context.Context) error {
 
 	a.OfficialServers = officialServersMap(officialServerPKs(cfg.OfficialServers))
 
-	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
+	// dmsg servers register here over plain HTTP before dmsg exists, so this
+	// service keeps its HTTP listener by default.
+	mode := cfg.Mode
+	if mode == "" && !sk.Null() {
+		mode = string(svcmode.ModeDual)
+	}
+	resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
 	if err != nil {
 		return fmt.Errorf("dmsg-discovery: invalid mode %q: %w", cfg.Mode, err)
 	}
