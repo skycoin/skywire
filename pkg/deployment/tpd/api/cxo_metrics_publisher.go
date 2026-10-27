@@ -258,7 +258,7 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 
 	bodies := make(map[string][][]byte, len(fresh))
 	for _, date := range fresh {
-		parts, gerr := gzipParts(byDate[date], maxPublishBody)
+		parts, gerr := gzipPartsFrom(byDate[date], maxPublishBody, m.parts[date])
 		if gerr != nil {
 			m.log.WithError(gerr).WithField("date", date).Warn("metrics marshal failed")
 			m.recordError(gerr)
@@ -367,14 +367,14 @@ func sortOpsByPath(ops []treestore.PutOp) {
 // at most max bytes. One part is the normal case; a day only splits when even
 // compressed it will not fit in a single CXO object.
 func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
-	gz, err := gzipRecords(metrics)
-	if err != nil {
-		return nil, err
-	}
-	if len(gz) <= max {
-		return [][]byte{gz}, nil
-	}
+	return gzipPartsFrom(metrics, max, 0)
+}
 
+// gzipPartsFrom is gzipParts for a day last published in prev parts. A day
+// that split before is split the same way first, rather than compressed whole
+// every tick only to learn again that it does not fit. Only a day that now
+// needs fewer parts is compressed again from the whole.
+func gzipPartsFrom(metrics []store.TransportMetric, max, prev int) ([][]byte, error) {
 	// Size the split from the COMPRESSED total against a target derived from
 	// max, since gzipped bytes are what CXO stores and what the cap applies
 	// to. Dividing the raw size by a fixed byte budget instead over-splits by
@@ -386,8 +386,32 @@ func gzipParts(metrics []store.TransportMetric, max int) ([][]byte, error) {
 	if target < 1 {
 		target = 1 // a pathologically small cap must not divide by zero
 	}
+	if prev > 1 && len(metrics) > 1 {
+		out, err := gzipSplit(metrics, prev, max)
+		if err != nil {
+			return nil, err
+		}
+		total := 0
+		for _, p := range out {
+			total += len(p)
+		}
+		if total/target+1 >= prev {
+			return out, nil
+		}
+	}
+
+	gz, err := gzipRecords(metrics)
+	if err != nil {
+		return nil, err
+	}
+	if len(gz) <= max {
+		return [][]byte{gz}, nil
+	}
+	return gzipSplit(metrics, len(gz)/target+1, max)
+}
+
+func gzipSplit(metrics []store.TransportMetric, n, max int) ([][]byte, error) {
 	var out [][]byte
-	n := len(gz)/target + 1
 	for _, part := range splitEvenly(metrics, n) {
 		if err := appendGzipped(&out, part, max); err != nil {
 			return nil, err
