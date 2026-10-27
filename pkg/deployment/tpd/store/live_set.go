@@ -158,18 +158,49 @@ func (l *liveSet) byEdge(pk cipher.PubKey, withQoS bool, now time.Time) (out []*
 	if !l.on {
 		return nil, false
 	}
+	ids := l.edge[pk]
+	if len(ids) == 0 {
+		return nil, true
+	}
+	// One backing array for the copies instead of one allocation each.
+	slab := make([]transport.Entry, 0, len(ids))
+	out = make([]*transport.Entry, 0, len(ids))
+	for id := range ids {
+		t, ok := l.tps[id]
+		if !ok || now.After(t.expires) {
+			continue
+		}
+		slab = append(slab, t.entry)
+		e := &slab[len(slab)-1]
+		if withQoS {
+			l.overlayQoS(e, now)
+		}
+		out = append(out, e)
+	}
+	return out, true
+}
+
+// byEdgeExcept is byEdge without QoS, copying only the transports not in
+// keep; n counts all the unexpired ones. ok is false when the set is off.
+func (l *liveSet) byEdgeExcept(pk cipher.PubKey, keep map[uuid.UUID]struct{}, now time.Time) (out []*transport.Entry, n int, ok bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if !l.on {
+		return nil, 0, false
+	}
 	for id := range l.edge[pk] {
 		t, ok := l.tps[id]
 		if !ok || now.After(t.expires) {
 			continue
 		}
-		e := t.entry
-		if withQoS {
-			l.overlayQoS(&e, now)
+		n++
+		if _, kept := keep[id]; kept {
+			continue
 		}
+		e := t.entry
 		out = append(out, &e)
 	}
-	return out, true
+	return out, n, true
 }
 
 func (l *liveSet) overlayQoS(e *transport.Entry, now time.Time) {
@@ -346,4 +377,29 @@ func ShareStore(ctx context.Context, url string, s Store) {
 		<-ctx.Done()
 		liveStores.CompareAndDelete(url, s)
 	}()
+}
+
+// GetTransportsByEdgeExcept returns pk's transports that are not in keep,
+// without latency, as GetTransportsByEdgeNoLatency would list them. It
+// reports ErrTransportNotFound when pk has no transports at all. The CXO
+// reconcile asks this for every snapshot, and copying the whole list to
+// find the few absent ones was most of its allocation.
+func (s *redisStore) GetTransportsByEdgeExcept(ctx context.Context, pk cipher.PubKey, keep map[uuid.UUID]struct{}) ([]*transport.Entry, error) {
+	if out, n, ok := s.live.byEdgeExcept(pk, keep, time.Now()); ok {
+		if n == 0 {
+			return nil, ErrTransportNotFound
+		}
+		return out, nil
+	}
+	all, err := s.GetTransportsByEdgeNoLatency(ctx, pk)
+	if err != nil {
+		return nil, err
+	}
+	var out []*transport.Entry
+	for _, e := range all {
+		if _, kept := keep[e.ID]; !kept {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
