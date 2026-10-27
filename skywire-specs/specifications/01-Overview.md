@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                   |
 |----------|---------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                 |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/skyenv`, `deployment`, `pkg/visor`, `pkg/router`, `pkg/transport` |
 
 ## Abstract
@@ -87,7 +87,6 @@ configuration bootstrapper ([23](23-Config_Bootstrapper.md)).
 | Route setup nodes | `route_setup_nodes` (public keys) | [13](13-Setup_Node.md) |
 | Transport setup nodes | `transport_setup` (public keys) | [30](30-Transport_Setup_Node.md) |
 | STUN servers | `stun_servers` (UDP `host:port`, not dmsg) | `pkg/deployment/stun` |
-| Network monitor | none | [22](22-Network_Monitor.md) |
 | Transport graph | an HTML page served by transport discovery | [04](04-Transport_Discovery.md) |
 
 `deployment/services-config-clearnet.json` is a separate document and is not

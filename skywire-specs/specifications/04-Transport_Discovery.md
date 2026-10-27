@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                        |
 |----------|--------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                      |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/deployment/tpd`, `pkg/services/tpd`, `pkg/transport`, `pkg/visor` |
 
 ## Abstract
@@ -109,7 +109,7 @@ not owned by the caller, or fail to delete.
 | `GET /all-transports/stats?selfTransports=hide` | 200 `TransportSummary`. 404 when there are no transports. `hide` excludes self transports. |
 | `GET /all-transports/per-key-stats?selfTransports=hide` | 200 object mapping a public key to its counts by type and `total`. 404 when empty. |
 | `GET /transports/stats/{edge}` | 200 `{"total": n, "by_type": {...}}`. 400. 404 when the visor has none. |
-| `DELETE /transports/deregister` | Network monitor only. Headers `NM-PK` and `NM-Sign`. Body is an array of transport IDs. 403 when the key is not in `api.WhitelistPKs` or the signature over the key's hex does not verify. 400 for a bad key, signature or body. 200 when finished. |
+| `DELETE /transports/deregister` | Deregistration whitelist only. Headers `NM-PK` and `NM-Sign`. Body is an array of transport IDs. 403 when the key is not in `api.WhitelistPKs` or the signature over the key's hex does not verify. 400 for a bad key, signature or body. 200 when finished. |
 | `GET /bandwidth/transport/{id}?period=daily&limit=7` | 200 bandwidth history. 400, 404. |
 | `GET /bandwidth/visor/{pk}?period=daily&limit=7` | 200 bandwidth history for the visor's transports. 400. |
 | `GET /metric` | 200 network aggregate. |
@@ -194,7 +194,7 @@ A transport is removed in four ways.
 - The registering visor calls `DELETE /transports/id:{uuid}` or
   `POST /transports/delete-batch`, or an older visor publishes a
   `transports/<uuid>/tombstone` leaf.
-- The network monitor calls `DELETE /transports/deregister`.
+- A key in the deregistration whitelist calls `DELETE /transports/deregister`.
 - The entry expires.
 
 ### Entry timeout
@@ -261,7 +261,7 @@ the CXO root signature, and TPD accepts only entries that name the reporter as
 an edge. Entries are not signed by both edges, so a visor can register a
 transport to a peer that does not hold it; the entry expires unless refreshed.
 The public routes carry no authentication and are rate limited per caller. The
-deregistration route is limited to the network monitor keys. The transport query
+deregistration route is limited to the deregistration whitelist. The transport query
 is authorised by a route setup node signature bound to one target and one
 requester. Visor feeds are limited to the peer whitelist and the TPD.
 

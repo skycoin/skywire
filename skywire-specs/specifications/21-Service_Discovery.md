@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                              |
 |----------|--------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                            |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/deployment/sd`, `pkg/services/sd`, `pkg/servicedisc`                |
 
 ## Abstract
@@ -16,7 +16,6 @@ type. SD also tracks visor uptime.
 
 Visors register and refresh their own entries. Clients such as the VPN client,
 the proxy client and autoconnect list entries by type and choose among them.
-The Network Monitor removes entries of visors that are no longer online.
 Entries are also available as a CXO feed, which visors prefer to polling the
 HTTP API (see Public Autoconnect).
 
@@ -77,9 +76,10 @@ response element of the read routes.
 ### HTTP API
 
 The request body limit is 1 MiB and each request has a 30 s timeout
-(`httpTimeout`). CORS allows any origin. Routes marked auth use
+(`httpTimeout`). CORS allows any origin. Routes marked yes use
 `httpauth.MakeMiddleware` when SD has a nonce store (see HTTP Authorization
-Middleware).
+Middleware). The route marked list accepts only keys in the deregistration
+whitelist.
 
 | Method and path                         | Auth | Purpose                              |
 |-----------------------------------------|------|--------------------------------------|
@@ -87,7 +87,7 @@ Middleware).
 | `GET /api/services/{addr}`              | no   | get one entry                        |
 | `POST /api/services`                    | yes  | register or refresh an entry         |
 | `DELETE /api/services/{addr}`           | yes  | remove an entry                      |
-| `DELETE /api/services/deregister/{type}`| NM   | remove entries of the listed keys    |
+| `DELETE /api/services/deregister/{type}`| list | remove entries of the listed keys    |
 | `GET /uptimes`, `POST /uptimes`         | no   | visor uptimes                        |
 | `GET /health`                           | no   | `httputil.HealthCheckResponse`, service name `service-discovery` |
 | `GET /`                                 | no   | status page                          |
@@ -119,7 +119,7 @@ The response status follows the order of checks.
 `type` is missing or `addr` does not parse, 403 on a key mismatch, and 500 on a
 store error.
 
-`DELETE /api/services/deregister/{type}` is called by the Network Monitor. It
+`DELETE /api/services/deregister/{type}` accepts only keys in the deregistration whitelist. It
 does not use the nonce middleware. The caller sends `NM-PK` and `NM-Sign`.
 `NM-PK` must be in `api.WhitelistPKs` (`nmpk.GetWhitelistPKs`). `NM-Sign` must
 be a signature by `NM-PK` over the text of `NM-PK`. The body is a JSON array of
@@ -182,6 +182,5 @@ only when the observed source address is in its `local_ips`. Entries expose
 ## References
 
 - HTTP Authorization Middleware
-- Network Monitor
 - Public Visors
 - Public Autoconnect

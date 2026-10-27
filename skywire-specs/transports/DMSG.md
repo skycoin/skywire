@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                    |
 |----------|------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                  |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/transport/network/dmsg.go`, `pkg/dmsg`    |
 
 ## Abstract

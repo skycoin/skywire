@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                                         |
 |----------|-------------------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                                       |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/visor/visorconfig`, `pkg/transport`, `pkg/visor/reach_card.go`, `pkg/visor/init_transport.go` |
 
 ## Abstract
@@ -36,15 +36,21 @@ The route setup node (`pkg/services/sn`) sets the value to -1.
 
 ## Behaviour
 
-`Manager.ShouldRegisterAR` returns true when the value is 0 or greater.
+With a negative value `Visor.advertisesReach` is false, and the visor:
 
-A visor with a negative value also serves no reach card. `Visor.advertisesReach`
-is false, and `GET /reach` answers 404 (see Address Resolver).
+- calls `DisableBinding` on its Address Resolver client
+  (`addrresolver.BindDisabler`). `BindSTCPR`, `BindQUIC` and `BindWT` then
+  return without contacting the resolver, `BindSUDPH` returns
+  `addrresolver.ErrBindingDisabled`, and no unbind is sent on shutdown.
+- does not start the `sudph` client. Hole punching needs a binding on both
+  sides, so `sudph` is unavailable in either direction.
+- does not start the Address Resolver bind feed (dmsg port 71).
+- serves no reach card, and `GET /reach` answers 404 (see Address Resolver).
 
-A visor that does not register can still create outbound transports, use dmsg
-and use transports that are already established. Peers cannot open `stcpr`,
-`sudph`, `squicr` or `swtr` transports to it, because they have no address to
-dial.
+`Resolve` keeps working. A visor that does not register can still dial peers
+over `stcpr`, `squicr`, `swtr` and dmsg, and use transports that are already
+established. Peers cannot open `stcpr`, `squicr` or `swtr` transports to it,
+because they have no address to dial.
 
 A public visor (`public_autoconnect`) needs registration so that peers can reach
 it. The configuration permits the combination with a negative value.

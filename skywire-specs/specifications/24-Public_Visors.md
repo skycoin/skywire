@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                                   |
 |----------|-------------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                                 |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/visor/init_transport.go`, `pkg/app/appdisc`, `pkg/visor/visorconfig`     |
 
 ## Abstract

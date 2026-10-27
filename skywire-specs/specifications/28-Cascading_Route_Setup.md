@@ -2,7 +2,7 @@
 
 | Status   | Implemented, off by default                                            |
 |----------|------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                          |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/routing/cascade.go`, `pkg/router/cascade_*.go`, `pkg/router/setup_rpc_gateway.go`, `pkg/router/wrappers.go` |
 
 ## Abstract

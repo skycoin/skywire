@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                                  |
 |----------|------------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                                |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/deployment/stun`, `pkg/services/stun`, `pkg/transport/network/stun_client.go`, `pkg/visor/init_transport.go` |
 
 ## Abstract

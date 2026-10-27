@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                                                              |
 |----------|----------------------------------------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                                                            |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/deployment/ar`, `pkg/services/ar`, `pkg/transport/network/addrresolver`, `pkg/visor/reach_card.go` |
 
 ## Abstract
@@ -86,8 +86,9 @@ The `sudph` control connection carries these messages.
 
 ### HTTP API
 
-Routes marked auth use `httpauth.MakeMiddleware` (see HTTP Authorization
-Middleware). The request body limit is 1 MiB (`maxBodyBytes`).
+Routes marked yes use `httpauth.MakeMiddleware` (see HTTP Authorization
+Middleware). The route marked list accepts only keys in the deregistration
+whitelist. The request body limit is 1 MiB (`maxBodyBytes`).
 
 | Method and path               | Auth | Purpose                                         |
 |-------------------------------|------|-------------------------------------------------|
@@ -100,7 +101,7 @@ Middleware). The request body limit is 1 MiB (`maxBodyBytes`).
 | `GET /sudph-sessions`         | no   | KCP session counters, `?closed=N` lists N closed addresses |
 | `GET /transports`             | no   | `ArData`, gzip above the compression threshold  |
 | `GET /`                       | no   | status page                                     |
-| `DELETE /deregister/{network}`| NM   | remove bindings, see below                      |
+| `DELETE /deregister/{network}`| list | remove bindings, see below                      |
 | `GET /security/nonces/{pk}`   | no   | next nonce for `pk` (`httpauth.NonceHandler`)   |
 
 The caller of an authenticated route is the authenticated key. A visor can only
@@ -134,7 +135,7 @@ bind or delete its own record.
 
 `DELETE /deregister/{network}` removes the bindings of the keys in the body, a
 JSON array of public key strings, for `{network}` of `stcpr` or `sudph`. It is
-the bulk endpoint the Network Monitor uses to remove other visors' entries.
+the bulk endpoint for removing other visors' entries.
 The request carries `NM-PK` and `NM-Sign`. `NM-PK` must be in the AR whitelist
 (`api.WhitelistPKs`, initialised from `nmpk.GetWhitelistPKs` and the service
 `whitelist_keys` setting). `NM-Sign` must be a valid signature by `NM-PK` over the
@@ -221,8 +222,8 @@ A binding is removed in one of four ways.
 - A visor removes its `sudph` binding by sending `delBind` on the control
   connection when it shuts down (`addrresolver.UDPDelBindMessage`).
 - The binding expires when its TTL runs out.
-- The Network Monitor removes entries of other visors with
-  `DELETE /deregister/{network}`. Only a whitelisted monitor key is accepted.
+- A key in the deregistration whitelist removes entries of other visors with
+  `DELETE /deregister/{network}`.
 
 ### Reach cards
 

@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                       |
 |----------|-------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                     |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/router/setupnode.go`, `pkg/router/setup_rpc_gateway.go`, `pkg/router/rpc_gateway.go`, `pkg/router/setupmetrics`, `pkg/visor/embedded_route_setup.go`, `cmd/svc/setup-node` |
 
 ## Abstract

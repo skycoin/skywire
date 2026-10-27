@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                              |
 |----------|--------------------------------------------------------------------------|
-| Revision | 2026-10-27, skywire 38152beed                                            |
+| Revision | 2026-10-27, skywire f37a464a4 |
 | Code     | `pkg/cxo/treestore`, `pkg/cxo/cxosub`, `pkg/cxo/cxoaggregate`, `pkg/cxo/cxoutils`, `pkg/cxo/sysfeed`, `pkg/skyenv` |
 
 ## Abstract
