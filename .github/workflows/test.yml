@@ -326,6 +326,13 @@ jobs:
       - name: Compile-check js/wasm binaries
         run: make build-wasm
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Run the js/wasm tests under Node
+        run: make test-wasm
+
       - name: Check the committed netview module is current
         run: make check-netview-wasm
 
