@@ -2,9 +2,11 @@
 package transport
 
 import (
+	"errors"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -34,4 +36,22 @@ func (tm *Manager) LastInbound() map[types.Type]time.Time {
 		out[t] = at
 	}
 	return out
+}
+
+// InboundGate reports whether a new inbound transport from remote, dialed
+// with label, is taken.
+type InboundGate func(remote cipher.PubKey, label Label) bool
+
+// ErrInboundRefused is returned when an inbound gate turns a transport away.
+var ErrInboundRefused = errors.New("inbound transport refused")
+
+// SetInboundGate sets the check a new inbound transport must pass during the
+// settlement handshake. Reconnects of an existing transport are not checked.
+// A nil gate takes everything.
+func (tm *Manager) SetInboundGate(gate InboundGate) {
+	if gate == nil {
+		tm.inboundGate.Store(nil)
+		return
+	}
+	tm.inboundGate.Store(&gate)
 }

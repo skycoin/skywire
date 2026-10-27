@@ -204,6 +204,12 @@ type Values struct {
 	MuxFEC          bool // MUXFEC
 	HvUIDisable     bool // HVUIDISABLE
 
+	// --- Memory and autoconnect limits ---
+	MemoryLimit        string // MEMORYLIMIT
+	AutoconnMaxTotal   int    // AUTOCONNMAXTOTAL
+	AutoconnSiteLinks  int    // AUTOCONNSITELINKS
+	AutoconnMaxPerType string // AUTOCONNMAXPERTYPE
+
 	// --- VPN server feature ---
 	VpnServer           bool
 	NoVpnServer         bool
@@ -350,7 +356,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.Version, "version", "", "custom version override for testing — writes VERSION in skywire.conf")
 
 	// --- Visor public/private + autoconnect ---
-	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "skycoin reward address or xpub key — writes REWARDSKYADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "reward account xpub (BIP44, account level) — writes REWARDSKYADDR in skywire.conf")
 	cmd.Flags().BoolVar(&v.Public, "public", false, "publicize visor in service discovery — writes VISORISPUBLIC=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoPublic, "no-public", false, "unpublish visor from service discovery — writes VISORISPUBLIC=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PublicIP, "publicip", false, "display visor IP in service discovery — writes DISPLAYNODEIP=true in skywire.conf")
@@ -397,6 +403,12 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.FlightRecorder, "flight-recorder", false, "keep a rolling execution trace — writes FLIGHTRECORDER=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.MuxFEC, "mux-fec", false, "forward error correction on mux routes — writes MUXFEC=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.HvUIDisable, "hv-ui-disable", false, "run the hypervisor without its web UI — writes HVUIDISABLE=true in skywire.conf")
+
+	// --- Memory and autoconnect limits ---
+	cmd.Flags().StringVar(&v.MemoryLimit, "memory-limit", "", "Go memory limit of the visor, none, auto or a size like 256MiB — writes MEMORYLIMIT in skywire.conf")
+	cmd.Flags().IntVar(&v.AutoconnMaxTotal, "autoconn-max-total", 0, "cap on transports autoconnect dials of all types, 0 for no cap — writes AUTOCONNMAXTOTAL in skywire.conf")
+	cmd.Flags().IntVar(&v.AutoconnSiteLinks, "autoconn-site-links", 2, "transports autoconnect keeps between two sites, 0 for no limit — writes AUTOCONNSITELINKS in skywire.conf")
+	cmd.Flags().StringVar(&v.AutoconnMaxPerType, "autoconn-max-per-type", "", "cap on transports autoconnect dials per type, like sudph=40,webrtc=10 — writes AUTOCONNMAXPERTYPE in skywire.conf")
 
 	// --- VPN server ---
 	cmd.Flags().BoolVar(&v.VpnServer, "vpnserver", false, "autostart vpn-server — writes VPNSERVER=true in skywire.conf")
@@ -513,7 +525,7 @@ var envMap = map[string]EnvMapping{
 	"ws-peer": {Key: "WSPEERS", Format: EnvFormatBashArray},
 	"ishv":    {Key: "ISHYPERVISOR", Format: EnvFormatBool},
 	"no-ishv": {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
-	"hvdeskaddr": {Key: "HVDESKADDR", Format: EnvFormatString, Default: ":8010",
+	"hvdeskaddr": {Key: "HVDESKADDR", Format: EnvFormatString, Default: "127.0.0.1:8010",
 		Note: "Only affects a visor that serves the hypervisor web UI — ISHYPERVISOR=true, or enabled later with `skywire cli visor hv enable`."},
 	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
 	"no-pk-endpoint": {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
@@ -592,6 +604,12 @@ var envMap = map[string]EnvMapping{
 	"flight-recorder":  {Key: "FLIGHTRECORDER", Format: EnvFormatBool},
 	"mux-fec":          {Key: "MUXFEC", Format: EnvFormatBool},
 	"hv-ui-disable":    {Key: "HVUIDISABLE", Format: EnvFormatBool},
+
+	// Memory and autoconnect limits
+	"memory-limit":          {Key: "MEMORYLIMIT", Format: EnvFormatString, Default: "none"},
+	"autoconn-max-total":    {Key: "AUTOCONNMAXTOTAL", Format: EnvFormatInt, Default: "0"},
+	"autoconn-site-links":   {Key: "AUTOCONNSITELINKS", Format: EnvFormatInt, Default: "2"},
+	"autoconn-max-per-type": {Key: "AUTOCONNMAXPERTYPE", Format: EnvFormatString},
 
 	// VPN server
 	"vpnserver":                   {Key: "VPNSERVER", Format: EnvFormatBool},

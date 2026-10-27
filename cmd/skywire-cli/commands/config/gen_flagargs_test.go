@@ -96,6 +96,10 @@ func TestFlagArgsForSkyenvVisorSettings(t *testing.T) {
 		{"DMSGSCPROOT", "/srv/scp", []string{"--dmsgscp-root", "/srv/scp"}},
 		{"NOSTATS", "true", []string{"--no-stats=true"}},
 		{"STATSRETENTION", "60", []string{"--stats-retention", "60"}},
+		{"MEMORYLIMIT", "256MiB", []string{"--memory-limit", "256MiB"}},
+		{"AUTOCONNMAXTOTAL", "100", []string{"--autoconn-max-total", "100"}},
+		{"AUTOCONNSITELINKS", "0", []string{"--autoconn-site-links", "0"}},
+		{"AUTOCONNMAXPERTYPE", "sudph=40,webrtc=10", []string{"--autoconn-max-per-type", "sudph=40,webrtc=10"}},
 	} {
 		got, ok := FlagArgsForSkyenv(tc.key, tc.value)
 		if !ok || !reflect.DeepEqual(got, tc.want) {

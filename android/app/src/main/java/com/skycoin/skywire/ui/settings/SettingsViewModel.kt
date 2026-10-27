@@ -20,6 +20,7 @@ import com.skycoin.skywire.core.ConfigVault
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DnsServer
+import com.skycoin.skywire.core.RewardXpub
 import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.RemoteManagement
 import com.skycoin.skywire.core.SecretStore
@@ -84,6 +85,8 @@ data class SettingsUiState(
     val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
     /** The resolver for ordinary names, blank for [DnsServer.DEFAULT]. */
     val dnsServer: String = "",
+    /** The visor's reward address, as [VisorApi.rewardAddress] reads it; empty while the core is down. */
+    val rewardAddress: String = "",
     /** The remote-management grant — empty means nothing granted. */
     val remoteManagementPk: String = "",
     /** False when the phone has no screen lock and no enrolled biometric. */
@@ -151,7 +154,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 // than once: an identity operation ends in one of these, and
                 // this is what makes the new key appear without a refresh.
                 loadIdentity()
-                if (core is CoreState.Running) loadCoreVersion()
+                if (core is CoreState.Running) {
+                    loadCoreVersion()
+                    loadRewardAddress()
+                }
             }
         }
         viewModelScope.launch {
@@ -589,6 +595,21 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Set the reward address to [raw], an account xpub, or clear it when blank.
+     * It lives in the visor, so the core has to be running; the visor checks
+     * the xpub itself and its refusal reaches the snackbar.
+     */
+    fun setRewardAddress(raw: String) = action {
+        val app = getApplication<Application>()
+        val wanted = raw.trim()
+        require(CoreServiceState.state.value is CoreState.Running) { app.getString(R.string.settings_reward_needs_core) }
+        require(wanted.isEmpty() || RewardXpub.looksValid(wanted)) { app.getString(R.string.settings_reward_invalid) }
+        if (wanted.isEmpty()) api.deleteRewardAddress() else api.setRewardAddress(wanted)
+        mutable.update { it.copy(rewardAddress = wanted) }
+        report(app.getString(if (wanted.isEmpty()) R.string.settings_reward_cleared else R.string.settings_reward_saved))
+    }
+
+    /**
      * Grant remote management to the visor whose public key is [raw], or
      * refuse it on shape grounds with the reason on the snackbar. Stored
      * first and applied by the config rewrite on the next core start, like
@@ -724,6 +745,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         } finally {
             mutable.update { it.copy(busy = false) }
         }
+    }
+
+    private suspend fun loadRewardAddress() {
+        while (!api.ping()) delay(PING_INTERVAL_MS)
+        val address = runCatching { api.rewardAddress() }.getOrDefault("")
+        mutable.update { it.copy(rewardAddress = address) }
     }
 
     private companion object {

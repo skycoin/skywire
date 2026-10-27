@@ -61,10 +61,11 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error getting default network interface: %w", err)
 		}
-		if ifcs, hasMultiple := s.hasMultipleNetworkInterfaces(defaultNetworkIfcs); hasMultiple {
-			return nil, fmt.Errorf("multiple default network interfaces detected, set one via --netifc: %v", ifcs)
+		ifcs := strings.Split(defaultNetworkIfcs, "\n")
+		defaultNetworkIfc = ifcs[0]
+		if len(ifcs) > 1 {
+			fmt.Printf("Several default routes %v, using %s (lowest metric); set another via --netifc\n", ifcs, defaultNetworkIfc)
 		}
-		defaultNetworkIfc = defaultNetworkIfcs
 	}
 
 	fmt.Printf("Got default network interface: %s\n", defaultNetworkIfc)
@@ -421,14 +422,6 @@ func (s *Server) sendServerErrHello(conn net.Conn, status HandshakeStatus) {
 	if err := WriteJSON(conn, &sHello); err != nil {
 		print(fmt.Sprintf("Error sending server hello: %v\n", err))
 	}
-}
-
-func (s *Server) hasMultipleNetworkInterfaces(defaultNetworkInterface string) ([]string, bool) {
-	networkInterfaces := strings.Split(defaultNetworkInterface, "\n")
-	if len(networkInterfaces) > 1 {
-		return networkInterfaces, true
-	}
-	return []string{}, false
 }
 
 // getRemotePK extracts the remote public key from the connection

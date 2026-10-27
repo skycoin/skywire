@@ -130,20 +130,21 @@ const envfileTemplate = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
-#--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
-#	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
-#	Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a
-#	specific LAN IP, e.g. '192.168.0.2:8000'.
-#HVHTTPADDR=':8000'
+#--	Hypervisor web-UI listen address (host:port). Default '127.0.0.1:8000',
+#	reachable only from this machine. Set ':8000' to serve it on every
+#	interface (http://<this-host-ip>:8000 from the LAN, as a Skyminer
+#	router forward needs), or pin one LAN IP, e.g. '192.168.0.2:8000'.
+#HVHTTPADDR='127.0.0.1:8000'
 
 #--	Desk listen address (host:port): the wasm-visor hypervisor UI, served
 #	beside the dashboard with the same API and the same login. Default
-#	':8010'; the dashboard stays at HVHTTPADDR.
-#HVDESKADDR=':8010'
+#	'127.0.0.1:8010'; set ':8010' to serve it on the LAN.
+#HVDESKADDR='127.0.0.1:8010'
 
 #--	Expose an unauthenticated GET /api/pk on the hypervisor (returns this
 #	visor's public key). Off by default; skybian / Arch-ARM image builds
-#	set it so a freshly-imaged board can be discovered on the LAN.
+#	set it so a freshly-imaged board can be discovered on the LAN, which
+#	also needs HVHTTPADDR on a LAN address such as ':8000'.
 #ENABLEPKENDPOINT=true
 
 ### Browse origin #########################################################
@@ -246,7 +247,8 @@ const envfileTemplate = `#
 
 ### Rewards #############################################################
 
-#--	Skycoin reward address or xpub key
+#--	Reward account xpub (BIP44, account level). A single address set
+#	earlier still works, but a new one must be an xpub.
 #REWARDSKYADDR=''
 
 ### Apps ################################################################
@@ -607,5 +609,17 @@ const envfileTemplate = `#
 
 #--	Do not keep or publish local telemetry
 #NOSTATS=true
+
+#--	Go memory limit of the visor: none (default), auto or a size like 256MiB
+#MEMORYLIMIT=none
+
+#--	Cap on transports public autoconnect dials, all types together (0 = no cap)
+#AUTOCONNMAXTOTAL=0
+
+#--	Transports autoconnect keeps between two sites (default 2, 0 = no limit)
+#AUTOCONNSITELINKS=2
+
+#--	Cap on transports autoconnect dials per type
+#AUTOCONNMAXPERTYPE='sudph=40,webrtc=10'
 
 `

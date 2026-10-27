@@ -260,7 +260,11 @@ fun WalletManageScreen(
     }
 
     xpubs?.let { keys ->
-        XpubDialog(keys, onDismiss = { xpubs = null })
+        XpubDialog(
+            keys,
+            onDismiss = { xpubs = null },
+            onUseForRewards = { xpub -> scope.launch { snackbar.showSnackbar(viewModel.useForRewards(xpub)) } },
+        )
     }
 
     renameTarget?.let { wallet ->
@@ -388,7 +392,7 @@ private fun WalletActionSheet(
 
 /** A BIP 44 wallet's xpubs, as skycoin-web shows them: the account and its two chains. */
 @Composable
-private fun XpubDialog(keys: ExtendedPublicKeys, onDismiss: () -> Unit) {
+private fun XpubDialog(keys: ExtendedPublicKeys, onDismiss: () -> Unit, onUseForRewards: (String) -> Unit) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf<String?>(null) }
     AlertDialog(
@@ -434,6 +438,11 @@ private fun XpubDialog(keys: ExtendedPublicKeys, onDismiss: () -> Unit) {
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+                    if (xpub == keys.account) {
+                        TextButton(onClick = { onUseForRewards(xpub) }) {
+                            Text(stringResource(R.string.wallet_xpub_use_reward))
+                        }
                     }
                 }
             }

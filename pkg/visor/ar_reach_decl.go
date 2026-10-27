@@ -76,6 +76,10 @@ func (v *Visor) reachDecl() arfeed.ReachDecl {
 	if tm == nil {
 		return d
 	}
+	if v.pressure.busy.Load() {
+		d.Accepts = []string{arfeed.AcceptsNone}
+		return d
+	}
 	for _, t := range tm.Networks() {
 		if name, ok := reachTypes[tptypes.NormalizeType(t)]; ok {
 			d.Accepts = append(d.Accepts, name)

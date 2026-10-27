@@ -68,7 +68,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+      address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(112), Validators.pattern(/^\s*xpub/)])],
     });
 
     // change-detection: no view state — focuses an input

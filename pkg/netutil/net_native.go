@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/wlynxg/anet"
 )
@@ -95,6 +96,7 @@ func DefaultNetworkInterfaceIPs() ([]net.IP, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default network interface: %w", err)
 	}
+	networkIfc, _, _ = strings.Cut(networkIfc, "\n") // lowest metric first
 	localIPs, err := NetworkInterfaceIPs(networkIfc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get IPs of %s: %w", networkIfc, err)

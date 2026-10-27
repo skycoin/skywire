@@ -37,6 +37,7 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 	if live[0].Value.Kind() == metrics.KindUint64 {
 		d.Runtime.HeapLiveMB = float64(live[0].Value.Uint64()) / (1 << 20)
 	}
+	d.Runtime.Pressure = v.pressure.diag()
 
 	if n, last := logging.PanicStats(); n > 0 {
 		d.Panics = &visorapi.DiagPanics{Count: n, Last: last}

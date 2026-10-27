@@ -150,6 +150,10 @@ var (
 	dmsgscpRoot                string
 	noStats                    bool
 	statsRetention             int
+	memoryLimit                string
+	autoconnMaxTotal           int
+	autoconnSiteLinks          int
+	autoconnMaxPerType         string
 	enableFlightRecorder       bool
 	enableMuxFEC               bool
 	hvUIDisable                bool

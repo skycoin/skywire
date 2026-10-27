@@ -83,7 +83,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.form = formBuilder.group({
-      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112), Validators.pattern(/^\s*xpub/)])],
       nodes: formBuilder.array([]),
     });
 

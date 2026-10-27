@@ -103,6 +103,10 @@ func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport net
 // `label` is the transport label to include in the entry (propagated to the remote end).
 // The handshake logic only REGISTERS the transport, and does not update the status of the transport.
 func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS {
+	if !init {
+		return makeSettlementRespHS(nil)
+	}
+
 	// initiating logic.
 	initHS := func(_ context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
 		entry := makeEntryFromTransport(transport, label)
@@ -135,11 +139,16 @@ func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS 
 		}
 	}
 
-	// responding logic.
+	return initHS
+}
+
+// makeSettlementRespHS is the responding side of the settlement handshake. A
+// non-nil gate can refuse the transport once the dialer's label is known.
+func makeSettlementRespHS(gate InboundGate) SettlementHS {
 	// NOTE: Registration with TPD is NOT done here. The transport manager's
 	// periodic re-registration loop handles batch registration of all transports,
 	// which avoids per-transport HTTP calls that hit TPD rate limits on public visors.
-	respHS := func(ctx context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
+	return func(ctx context.Context, _ DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
 		// Use LabelUser for local comparison entry; compareEntries does not check label,
 		// so this is backward-compatible with older visors that always send LabelUser.
 		entry := makeEntryFromTransport(transport, LabelUser)
@@ -149,6 +158,11 @@ func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS 
 		if err != nil {
 			writeHsResponse(transport, responseInvalidEntry) //nolint:errcheck, gosec
 			return "", err
+		}
+
+		if gate != nil && !gate(transport.RemotePK(), recvSE.Entry.Label) {
+			writeHsResponse(transport, responseFailure) //nolint:errcheck, gosec
+			return "", ErrInboundRefused
 		}
 
 		if err := recvSE.Sign(transport.LocalPK(), sk); err != nil {
@@ -162,11 +176,6 @@ func MakeSettlementHS(init bool, log *logging.Logger, label Label) SettlementHS 
 
 		return receivedLabel, writeHsResponse(transport, responseOK)
 	}
-
-	if init {
-		return initHS
-	}
-	return respHS
 }
 
 func writeHsResponse(w io.Writer, response hsResponse) error {

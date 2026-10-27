@@ -1,5 +1,7 @@
 # Skywire Android
 
+Using the app: see the [user guide](../docs/android/user-guide.md). This file is about building it.
+
 The native Android app for Skywire: a Kotlin / Jetpack Compose (Material 3)
 shell around the **Skywire mobile core** — a single Go binary
 (`libskywire-mobile.so`) bundling the visor, config generation, and the four

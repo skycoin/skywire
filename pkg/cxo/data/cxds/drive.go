@@ -116,6 +116,10 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 	b, err = bolt.Open(fileName, 0644, &bolt.Options{
 		Timeout: time.Millisecond * 500,
 		NoSync:  opts.NoSync,
+		// Keep the freelist out of each commit. Writing and merging it there
+		// was most of the garbage on a small board with a fragmented file.
+		NoFreelistSync: true,
+		FreelistType:   bolt.FreelistMapType,
 	})
 
 	if err != nil {

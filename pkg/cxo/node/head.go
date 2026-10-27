@@ -14,6 +14,11 @@ import (
 )
 
 // a head
+//
+// Every API call (receivedRoot, delConn, evict, close) comes from the single
+// nodeFeeds event loop. An idle head has no goroutine: the loop updates its
+// state under mu. handle runs only while a Root is filling, and exits under a
+// TryLock of mu so it never leaves while the loop is handing it a message.
 type nodeHead struct {
 	n *nodeFeed // back reference
 
@@ -21,10 +26,9 @@ type nodeHead struct {
 	rrq   chan connRoot // received roots
 	errq  chan error    // close with error (max heads limit)
 
-	// api info
-
-	inforq chan struct{}  // info request
-	inforn chan *headInfo // info response
+	mu      sync.Mutex
+	running bool      // handle goroutine is running
+	f       *fillHead // owned by handle while running, else by holders of mu
 
 	// closing
 	await  sync.WaitGroup // wait goroutines
@@ -44,20 +48,33 @@ func newNodeHead(nf *nodeFeed) (n *nodeHead) {
 	n.errq = make(chan error)
 	n.closeq = make(chan struct{})
 
-	n.await.Add(1)
-	go n.handle()
+	n.f = &fillHead{
+		nodeHead: n,
+		cs:       make(knownRoots),
+		favg:     n.node().fillavg, // reference
+
+		ff: make(chan error), // filling error or nil (success)
+
+		successq: make(chan doneRequest),   // release connection
+		failureq: make(chan failedRequest), // failed requests
+	}
 
 	return
 }
 
-// (api)
-func (n *nodeHead) closeByError(err error) { //nolint:unused
-
-	select {
-	case n.errq <- err:
-	case <-n.closeq:
+// startIfFilling starts handle when the head, updated under mu, began a fill.
+func (n *nodeHead) startIfFilling() {
+	if n.running || n.f.f == nil {
+		return
 	}
-
+	select {
+	case <-n.closeq:
+		return
+	default:
+	}
+	n.running = true
+	n.await.Add(1)
+	go n.handle()
 }
 
 // (api)
@@ -71,6 +88,12 @@ func (n *nodeHead) closeByError(err error) { //nolint:unused
 // 1.2 GB heap, the process spent 80% of its CPU in GC). Drain brorq while we
 // wait, as receivedRoot does.
 func (n *nodeHead) delConn(c *Conn) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if !n.running {
+		n.f.handleDelConn(c)
+		return
+	}
 	fs := n.n.fs
 	for {
 		select {
@@ -86,6 +109,15 @@ func (n *nodeHead) delConn(c *Conn) {
 
 // (api)
 func (n *nodeHead) receivedRoot(cr connRoot) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if !n.running {
+		n.f.onLoop = true
+		n.f.handleReceivedRoot(cr)
+		n.f.onLoop = false
+		n.startIfFilling()
+		return
+	}
 
 	// Breaks the feeds↔head cyclic deadlock. This runs on the single nodeFeeds
 	// event-loop goroutine (handleReceivedRoot → nodeFeed.receivedRoot → here),
@@ -111,6 +143,30 @@ func (n *nodeHead) receivedRoot(cr connRoot) {
 		}
 	}
 
+}
+
+// (api) evict hands a running head ErrMaxHeadsLimit, draining brorq while it
+// waits (see receivedRoot), and then closes the head.
+func (n *nodeHead) evict() {
+	n.mu.Lock()
+	if n.running {
+		fs := n.n.fs
+	evict:
+		for {
+			select {
+			case n.errq <- ErrMaxHeadsLimit:
+				break evict
+			case <-n.closeq:
+				break evict
+			case bcr := <-fs.brorq:
+				fs.handleBroadcastRoot(bcr)
+			case <-fs.closeq:
+				break evict
+			}
+		}
+	}
+	n.mu.Unlock()
+	n.close()
 }
 
 // (api)
@@ -168,7 +224,9 @@ type fillHead struct {
 	rqo *list.List // request objects (cipher.SHA256)
 	fc  *list.List // connections to fill from (*Conn)
 
-	requesting int // number of running requests
+	requesting int  // number of running requests
+	inflight   int  // request goroutines not yet heard from, across fills
+	onLoop     bool // running inline on the nodeFeeds loop, which drains brorq
 
 	// fill identifies the current filler. A reply to an earlier one must not
 	// touch requesting or fc, which closeFiller already reset.
@@ -184,19 +242,8 @@ func (n *nodeHead) handle() {
 		rrq    = n.rrq    //
 		closeq = n.closeq //
 		errq   = n.errq   //
-		inforq = n.inforq //
 
-		f = fillHead{
-			nodeHead: n,
-			rq:       make(chan cipher.SHA256, 10),
-			cs:       make(knownRoots),
-			favg:     n.node().fillavg, // reference
-
-			ff: make(chan error), // filling error or nil (success)
-
-			successq: make(chan doneRequest),   // release connection
-			failureq: make(chan failedRequest), // failed requests
-		}
+		f = n.f
 
 		key cipher.SHA256
 		c   *Conn
@@ -244,11 +291,6 @@ func (n *nodeHead) handle() {
 				f.f.Fail(ErrTimeout)
 			}
 
-		// api info
-
-		case <-inforq:
-			n.handleInfo(&f)
-
 		case err = <-errq:
 
 			f.p = connRoot{} // remove pending Root
@@ -264,6 +306,14 @@ func (n *nodeHead) handle() {
 			f.terminate()
 			return
 
+		}
+
+		// Idle: no filler and no request goroutine left to report back. The
+		// feeds loop holds mu while it hands us a message, so keep serving then.
+		if f.f == nil && f.inflight == 0 && n.mu.TryLock() {
+			n.running = false
+			n.mu.Unlock()
+			return
 		}
 	}
 
@@ -284,6 +334,7 @@ func (f *fillHead) handleRequest(key cipher.SHA256) {
 }
 
 func (f *fillHead) handleSuccess(dr doneRequest) {
+	f.inflight--
 	f.node().Debugln(FillPin, "[fill] handleSuccess", dr.c.String())
 
 	if dr.fill != f.fill || f.fc == nil {
@@ -316,6 +367,7 @@ func (f *fillHead) rearmStall() {
 }
 
 func (f *fillHead) handleRequestFailure(fr failedRequest) {
+	f.inflight--
 	f.node().Debugln(FillPin, "[fill] handleRequestFailure", fr.c.String(),
 		fr.key.Hex()[:7])
 
@@ -454,7 +506,11 @@ func (f *fillHead) createFiller(cr connRoot) {
 		cr.r.Short())
 
 	// broadcast the Root we are going to fill
-	f.nodeHead.n.fs.broadcastRoot(cr)
+	if f.onLoop {
+		f.nodeHead.n.fs.handleBroadcastRoot(cr)
+	} else {
+		f.nodeHead.n.fs.broadcastRoot(cr)
+	}
 
 	f.tp = time.Now() // time point
 
@@ -521,6 +577,7 @@ func (f *fillHead) closeFiller() {
 	}
 
 	f.f.Close() //nolint:errcheck,gosec
+	f.f = nil
 
 	f.rqo, f.fc, f.rq = nil, nil, nil
 	f.tc, f.hardTc = nil, nil
@@ -602,6 +659,7 @@ func (f *fillHead) tryRequest() (fatal bool) {
 	// do the request
 
 	f.requesting++
+	f.inflight++
 
 	f.await.Add(1) // nodeHead.await
 	go f.request(c, f.fill, f.r.r.Seq, key)
@@ -783,72 +841,4 @@ func (k knownRoots) buildConnsList(seq uint64) (l *list.List) {
 	}
 
 	return
-}
-
-type headInfo struct {
-	nonce uint64 //nolint:unused // nonce of the head
-
-	fillingRoot    bool   // has filling Root
-	fillingRootSeq uint64 // its seq
-
-	pendingRoot    bool   // has pending Root
-	pendingRootSeq uint64 // its seq
-
-	// Tracking which connections contribute to filling could improve prioritization.
-
-	// known Root objects of peers
-	known map[*Conn][]uint64
-}
-
-// (api) request, can return nil
-func (n *nodeHead) info() (hi *headInfo) { //nolint:unused
-
-	select {
-	case n.inforq <- struct{}{}:
-	case <-n.closeq:
-		return
-	}
-
-	select {
-	case hi = <-n.inforn:
-	case <-n.closeq:
-	}
-
-	return
-
-}
-
-func (n *nodeHead) handleInfo(f *fillHead) {
-
-	var ni = new(headInfo)
-
-	ni.fillingRoot = (f.r.r != nil)
-
-	if ni.fillingRoot == true { //nolint:staticcheck
-		ni.fillingRootSeq = f.r.r.Seq
-	}
-
-	ni.pendingRoot = (f.p.r != nil)
-
-	if ni.pendingRoot == true { //nolint:staticcheck
-		ni.pendingRootSeq = f.r.r.Seq
-	}
-
-	// make copy
-
-	ni.known = make(map[*Conn][]uint64)
-
-	for c, known := range f.cs {
-		var kc = make([]uint64, len(known))
-		copy(kc, known)
-		ni.known[c] = kc
-	}
-
-	// the nonce field should be set by caller (by requester)
-
-	select {
-	case n.inforn <- ni:
-	case <-n.closeq:
-	}
-
 }

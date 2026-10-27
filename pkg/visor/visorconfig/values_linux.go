@@ -7,8 +7,6 @@ package visorconfig
 import (
 	"os"
 	"os/user"
-	"runtime"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,37 +46,6 @@ type Survey struct {
 	SkywireVersion string           `json:"skywire_version,omitempty"`
 	ServicesURLs   Services         `json:"services,omitempty"`
 	DmsgServers    []string         `json:"dmsg_servers,omitempty"`
-}
-
-// SystemSurvey returns system survey
-func SystemSurvey() (Survey, error) {
-	var si sysinfo.SysInfo
-	si.GetSysInfo()
-	disks, err := ghw.Block(ghw.WithDisableWarnings())
-	if err != nil {
-		return Survey{}, err
-	}
-	product, err := ghw.Product(ghw.WithDisableWarnings())
-	if err != nil {
-		return Survey{}, err
-	}
-	memory, err := ghw.Memory(ghw.WithDisableWarnings())
-	if err != nil && !strings.Contains(err.Error(), "Could not determine total usable bytes of memory") {
-		return Survey{}, err
-	}
-
-	s := Survey{
-		Timestamp:      time.Now(),
-		GOOS:           runtime.GOOS,
-		GOARCH:         runtime.GOARCH,
-		SYSINFO:        si,
-		UUID:           uuid.New(),
-		Disks:          disks,
-		Product:        product,
-		Memory:         memory,
-		SkywireVersion: Version(),
-	}
-	return s, nil
 }
 
 // IsRoot checks for root permissions.

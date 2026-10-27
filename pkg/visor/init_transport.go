@@ -734,6 +734,8 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.tpM = tpM
 	tpM.SetHostedEntries(v.hostedEntries)
 	v.initLock.Unlock()
+	tpM.SetInboundGate(v.inboundGate)
+	go runPressureLoop(ctx, v, log)
 
 	// AR self-refresh: polls AR for our own STCPR / SUDPH bind state and
 	// caches it so ARSelfInfo answers the CLI from memory.

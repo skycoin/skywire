@@ -21,9 +21,10 @@ func TestHeadDelConnDrainsBroadcastWhileWaiting(t *testing.T) {
 		fs:     map[cipher.PubKey]*nodeFeed{},
 	}
 	nh := &nodeHead{
-		n:      &nodeFeed{fs: fs},
-		delcq:  make(chan *Conn),
-		closeq: make(chan struct{}),
+		n:       &nodeFeed{fs: fs},
+		delcq:   make(chan *Conn),
+		closeq:  make(chan struct{}),
+		running: true,
 	}
 
 	// The head loop: broadcast a Root for a live conn (parks on brorq, which

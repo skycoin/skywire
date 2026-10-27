@@ -81,6 +81,9 @@ func EditFor(flag, value string) (skyenvfile.Edit, error) {
 		e.Value = skyenvfile.FormatBool(b)
 		e.Raw = e.Value
 	case EnvFormatInt:
+		if strings.TrimSpace(value) == "" {
+			return skyenvfile.Edit{Key: m.Key, Unset: true}, nil
+		}
 		i, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
 			return skyenvfile.Edit{}, fmt.Errorf("--%s: %q is not an integer", flag, value)

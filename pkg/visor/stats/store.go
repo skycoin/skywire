@@ -63,6 +63,10 @@ func OpenStore(path string) (*Store, error) {
 	db, err := bbolt.Open(path, 0600, &bbolt.Options{
 		NoSync:  false,
 		Timeout: 5 * time.Second,
+		// Keep the freelist out of each commit. Writing and merging it there
+		// was most of the garbage on a small board with a fragmented file.
+		NoFreelistSync: true,
+		FreelistType:   bbolt.FreelistMapType,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("stats: open %s: %w", path, err)

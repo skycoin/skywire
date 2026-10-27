@@ -190,6 +190,10 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addSoloBool("FLIGHTRECORDER", "flight-recorder", autoconfigVals.FlightRecorder)
 	addSoloBool("MUXFEC", "mux-fec", autoconfigVals.MuxFEC)
 	addSoloBool("HVUIDISABLE", "hv-ui-disable", autoconfigVals.HvUIDisable)
+	addString("MEMORYLIMIT", "memory-limit", autoconfigVals.MemoryLimit)
+	addInt("AUTOCONNMAXTOTAL", "autoconn-max-total", autoconfigVals.AutoconnMaxTotal)
+	addInt("AUTOCONNSITELINKS", "autoconn-site-links", autoconfigVals.AutoconnSiteLinks)
+	addString("AUTOCONNMAXPERTYPE", "autoconn-max-per-type", autoconfigVals.AutoconnMaxPerType)
 
 	// VPN server
 	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)
@@ -514,6 +518,9 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 			hvPort = hvPort[i+1:]
 		}
 		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:%s%s", colorRed, hvPort, colorReset))
+		if host, _, err := net.SplitHostPort(hvAddr); err == nil && isLoopbackHost(host) {
+			msg2("The hypervisor UI only serves this machine. To reach it from the LAN,\nset HVHTTPADDR=':8000' in skywire.conf and run autoconfig again.")
+		}
 		if conf.Hypervisor != nil && conf.Hypervisor.EffectiveDeskAddr() != "" {
 			deskPort := conf.Hypervisor.EffectiveDeskAddr()
 			if i := strings.LastIndex(deskPort, ":"); i >= 0 {
@@ -859,4 +866,13 @@ func msg2(msg string) {
 
 func msg3(msg string) {
 	cmdutil.Printf("%s -->%s%s %s%s\n", colorBlue, colorReset, colorBold, msg, colorReset)
+}
+
+// isLoopbackHost reports whether a listen host serves this machine only.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
