@@ -486,9 +486,23 @@ func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, string, bool) {
 	}
 	typ := ""
 	if len(parts) == 3 {
-		typ = parts[2]
+		typ = internType(parts[2])
 	}
 	return edges, typ, true
+}
+
+// internType returns the canonical string for a known transport type, or a copy
+// of an unknown one. A substring of the bw:edges value would keep the whole
+// value alive in the bandwidth index, one per transport.
+var knownTypes = tptypes.Known()
+
+func internType(s string) string {
+	for _, t := range knownTypes {
+		if string(t) == s {
+			return string(t)
+		}
+	}
+	return strings.Clone(s)
 }
 
 // GetTransportMetricsByIDs returns metrics for specific transports.
