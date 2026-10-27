@@ -263,7 +263,7 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		return json.Marshal(entries)
+		return marshalEntries(entries)
 	})
 	if err != nil {
 		if err != store.ErrTransportNotFound {
