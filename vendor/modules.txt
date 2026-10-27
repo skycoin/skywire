@@ -148,7 +148,7 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b
 ## explicit; go 1.26.0
 github.com/0magnet/img2txt-go/shape
-# github.com/0magnet/kcp-go/v5 v5.6.82
+# github.com/0magnet/kcp-go/v5 v5.6.83
 ## explicit; go 1.24.0
 github.com/0magnet/kcp-go/v5
 # github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489

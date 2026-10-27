@@ -71,8 +71,12 @@ skywire cli config gen
       --dmsgscp-root string                  directory dmsgscp serves (local/scp-root when empty)
       --no-stats                             do not keep or publish local telemetry
       --stats-retention int                  days of local telemetry to keep (30 when 0)
+      --memory-limit string                  Go memory limit of the visor, none, auto or a size like 256MiB (none when empty)
+      --autoconn-max-total int               cap on transports autoconnect dials of all types, 0 for no cap (-1 leaves it as it was) (default -1)
+      --autoconn-site-links int              transports kept between two sites, 0 for no limit (-1 leaves the default of 2) (default -1)
+      --autoconn-max-per-type string         cap on transports autoconnect dials per type, like sudph=40,webrtc=10
   -i, --ishv                                 local hypervisor configuration
-      --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default :8010)
+      --hvdeskaddr string                    hypervisor desk address: where the wasm-visor hypervisor UI is served, beside the dashboard on hvaddr (default 127.0.0.1:8010)
   -j, --hvpks string                         list of public keys to add as hypervisor
       --ws-peer string                       peers to hold a WebSocket transport to, <pk>@<ws(s)://host[:port]/path>, comma-separated — pins each in transport.ws_table and makes it a persistent transport (no address-resolver lookup; the address is the one given)
   -c, --noauth                               disable authentication for hypervisor UI
@@ -118,7 +122,7 @@ skywire cli config gen
       --dmsgweb-addr string                  host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --skynetweb-addr string                host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)
       --resolver-ca string                   directory with ca.crt and ca.key from "skywire cli resolver ca gen": both resolvers terminate HTTPS for .dmsg and .skynet with it (browsers must trust ca.crt)
-      --skydns                               autostart skydns: .dmsg and .skynet names for every program on this host (needs CAP_NET_ADMIN, and root without systemd-resolved)
+      --skydns                               autostart skydns: .dmsg and .skynet names for every program on this host (on by default where systemd-resolved runs and the config is made as root; elsewhere it needs CAP_NET_ADMIN and edits /etc/resolv.conf)
       --resolvers string                     additional resolving proxies; CSV of <kind>:<port>[;name=|addr=|suffix=|sk=|upstream=|chain=|alias=]
       --no-browse-origin                     do not serve the loopback real-origin browse proxy / HTTPS proxy-status pages (status-<surface>.<suffix>)
       --browse-suffix string                 browse-origin domain suffix (leading dot) for the loopback browse proxy + HTTPS proxy-status pages. Empty = deployment default (".theskywirenetwork.net")
@@ -141,7 +145,7 @@ skywire cli config gen
       --skycoinwebwallet string              skycoin web wallet dir override
       --skycoinwebelectrum string            skycoin web electrum servers (comma separated), default, or none
       --skycoinwebuser string                skycoin web UID (empty inherits visor UID)
-      --rewardaddr string                    skycoin reward address or xpub key
+      --rewardaddr string                    reward account xpub (BIP44, account level)
   -k, --os string                            (linux / mac / win) paths (default "linux")
   -p, --pkg                                  use path for package: /opt/skywire
   -u, --user                                 use paths for user space: <home>

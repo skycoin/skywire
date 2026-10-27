@@ -124,7 +124,7 @@ func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
 			return
 		}
 
-		canonical, _, err := rewardconfig.ValidateRewardAddress(reqBody.RewardAddress)
+		canonical, err := rewardconfig.ValidateRewardXpub(reqBody.RewardAddress)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return

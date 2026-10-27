@@ -581,6 +581,16 @@
     <string name="settings_dns_save">Use this server</string>
     <string name="settings_dns_default">Use the defaults</string>
     <string name="settings_dns_saved">DNS server: %1$s.</string>
+    <string name="settings_reward">Rewards</string>
+    <string name="settings_reward_hint">Paste your wallet\'s account xpub (BIP 44, account level) to earn Skywire rewards. Each reward goes to a fresh address derived from it. A wallet\'s extended public keys in Wallet can set it directly.</string>
+    <string name="settings_reward_placeholder">xpub…</string>
+    <string name="settings_reward_invalid">Enter an account xpub. It starts with xpub; a single address is not accepted.</string>
+    <string name="settings_reward_save">Save</string>
+    <string name="settings_reward_clear">Remove</string>
+    <string name="settings_reward_saved">Reward xpub saved.</string>
+    <string name="settings_reward_cleared">Reward address removed. This phone no longer earns rewards.</string>
+    <string name="settings_reward_needs_core">Connect first: the core keeps the reward address.</string>
+    <string name="settings_reward_legacy">A single address is set. It still works, but a new one must be an account xpub.</string>
     <string name="settings_dns_placeholder">Default</string>
     <string name="settings_dns_cleared">Using the default DNS servers.</string>
 
@@ -949,6 +959,7 @@
     <string name="wallet_xpub_receive">Receive chain</string>
     <string name="wallet_xpub_change">Change chain</string>
     <string name="wallet_xpub_copied">Copied</string>
+    <string name="wallet_xpub_use_reward">Use for Skywire rewards</string>
     <string name="wallet_remove_action">Remove from this device</string>
     <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
     <string name="wallet_remove_title">Remove %1$s from this device?</string>

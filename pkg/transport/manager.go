@@ -99,6 +99,9 @@ type Manager struct {
 	// lastInbound is when this visor last accepted an inbound transport of
 	// each type — its evidence that others can reach it by that type.
 	lastInbound inboundTimes
+	// inboundGate decides whether a new inbound transport is taken; see
+	// SetInboundGate.
+	inboundGate atomic.Pointer[InboundGate]
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
@@ -1248,7 +1251,19 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 	// freeze the transport map for every other peer of this visor. Seen live on
 	// prod01 (2026-09-28): three such dialers back to back held the lock 59s,
 	// and every transport on the relay stopped reading for that long.
-	if err := mTp.Accept(ctx, transport); err != nil {
+	var gate InboundGate
+	if g := tm.inboundGate.Load(); isNew && g != nil {
+		gate = *g
+	}
+	if err := mTp.accept(ctx, transport, gate); err != nil {
+		if errors.Is(err, ErrInboundRefused) {
+			tm.Logger.Debugf("refused inbound tp: type(%s) remote(%s)", lis.Network(), transport.RemotePK())
+			if closeErr := transport.Close(); closeErr != nil {
+				tm.Logger.WithError(closeErr).Debug("Failed to close refused transport")
+			}
+			mTp.closeWith("inbound refused")
+			return nil
+		}
 		// Close the transport to prevent CLOSE_WAIT connection leak
 		if closeErr := transport.Close(); closeErr != nil {
 			tm.Logger.WithError(closeErr).Warn("Failed to close transport after Accept error")

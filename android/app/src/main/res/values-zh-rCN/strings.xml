@@ -560,6 +560,16 @@
     <string name="settings_dns_save">使用此服务器</string>
     <string name="settings_dns_default">恢复默认</string>
     <string name="settings_dns_saved">DNS 服务器：%1$s。</string>
+    <string name="settings_reward">奖励</string>
+    <string name="settings_reward_hint">粘贴钱包的账户 xpub（BIP 44 账户层级）即可获得 Skywire 奖励。每笔奖励都会发送到由它派生的新地址。也可以在钱包中打开钱包的扩展公钥直接设置。</string>
+    <string name="settings_reward_placeholder">xpub…</string>
+    <string name="settings_reward_invalid">请输入账户 xpub。它以 xpub 开头；不接受单个地址。</string>
+    <string name="settings_reward_save">保存</string>
+    <string name="settings_reward_clear">移除</string>
+    <string name="settings_reward_saved">奖励 xpub 已保存。</string>
+    <string name="settings_reward_cleared">奖励地址已移除。此手机不再获得奖励。</string>
+    <string name="settings_reward_needs_core">请先连接：奖励地址由核心保存。</string>
+    <string name="settings_reward_legacy">当前设置的是单个地址。它仍然有效，但新设置必须是账户 xpub。</string>
     <string name="settings_dns_placeholder">默认</string>
     <string name="settings_dns_cleared">已恢复默认 DNS 服务器。</string>
 
@@ -908,6 +918,7 @@
     <string name="wallet_xpub_receive">收款链</string>
     <string name="wallet_xpub_change">找零链</string>
     <string name="wallet_xpub_copied">已复制</string>
+    <string name="wallet_xpub_use_reward">用于 Skywire 奖励</string>
     <string name="wallet_remove_action">从本机移除</string>
     <string name="wallet_remove_action_sub">删除本机保存的密钥。没有助记词，币将永远无法找回。</string>
     <string name="wallet_remove_title">从本机移除 %1$s？</string>

@@ -29,6 +29,7 @@ var allFlags = []string{
 	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
 	// Route calculation
 	"calculate-routes", "flight-recorder", "mux-fec", "hv-ui-disable",
+	"memory-limit", "autoconn-max-total", "autoconn-site-links", "autoconn-max-per-type",
 	// VPN server
 	"vpnserver", "no-vpnserver", "vpnrouter", "vpnrouter-lan-ifc", "vpnrouter-subnet",
 	"vpnrouter-wifi", "vpnrouter-ssid", "vpnrouter-passphrase", "vpnrouter-band",

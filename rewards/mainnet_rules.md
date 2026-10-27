@@ -78,7 +78,7 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime. *(Temporary exception: for the month of June 2026 only, the per-IP cap is raised to 12 shares — see [Per IP Limit](#Per-IP-Limit) for the rationale; the cap auto-reverts to 8 on 2026-07-01.)*
 
-* [6)](#Skycoin-Address) **A valid [skycoin address](#Skycoin-Address)** must be set for the visor
+* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor (a single address set earlier is still accepted)
 
 * [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
 
@@ -336,63 +336,25 @@ The exponent can be adjusted via the `--sat-exp` flag (default 0.5):
 
 ### Skycoin Address
 
-The skycoin address to be rewarded can be set from the cli:
+Rewards are paid to an account xpub, not a single address. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent. A single skycoin address can no longer be set; one set earlier still works for now.
+
+Use the **account** xpub of a BIP44 wallet (depth 3). In the Skycoin desktop wallet or skycoin-web it is shown for the wallet as "Account xPub", next to the two chain xpubs. A chain xpub (depth 4) is accepted with a warning but cannot be used for login verification.
+
+Set it from the cli:
 
 ```
-skywire cli reward <skycoin-address>
+skywire cli reward <account-xpub>
 ```
 
-![image](https://user-images.githubusercontent.com/36607567/213941582-f57213b8-2acd-4c9a-a2c0-9089a8c2604e.png)
+or in the hypervisor UI.
 
-
-```
-$ skywire cli reward --help
-
-	reward address setting
-
-	Sets the skycoin reward address for the visor.
-	The config is written to the root of the default local directory
-
-	this config is served via dmsghttp along with transport logs
-	and the system hardware survey for automating reward distribution
-
-Flags:
-      --all   show all flags
+It is __highly recommended__ to set it in the file '/etc/skywire.conf', so a config regeneration keeps it:
 
 ```
-
-```
-$ skywire cli reward 2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
-Reward address:
-  2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+echo "REWARDSKYADDR=('<account-xpub>')" | sudo tee -a /etc/skywire.conf
 ```
 
-```
-$ skywire cli reward --help
-
-    skycoin reward address set to:
-    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
-
-Flags:
-      --all   show all flags
-```
-
-or via the hypervisor UI.
-
-![image](https://user-images.githubusercontent.com/36607567/213941478-34c81493-9c3c-40c2-ac22-e33e3683a16f.png)
-
-the example above shows the genesis address for the skycoin blockchain. **Please do not use the genesis address.**
-
-It is __highly recommended__ to set the reward address in the file '/etc/skywire.conf' by adding this line to the file:
-
-```
-echo "REWARDSKYADDR=('2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6')" | sudo tee -a /etc/skywire.conf
-```
-
-**PLEASE DO NOT USE THE GENESIS ADDRESS!**
-
-
-Add your skycoin address there and run:
+then run:
 ```
 skywire-autoconfig
 ```

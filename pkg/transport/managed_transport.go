@@ -1042,6 +1042,11 @@ func (mt *ManagedTransport) closeWithoutDeregister() {
 
 // Accept accepts a new underlying transport.
 func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transport) error {
+	return mt.accept(ctx, transport, nil)
+}
+
+// accept is Accept with an inbound gate for the settlement handshake.
+func (mt *ManagedTransport) accept(ctx context.Context, transport network.Transport, gate InboundGate) error {
 	mt.transportMx.Lock()
 	defer mt.transportMx.Unlock()
 
@@ -1065,7 +1070,7 @@ func (mt *ManagedTransport) Accept(ctx context.Context, transport network.Transp
 	// Self-connections don't register to TPD and would deadlock during settlement
 	if _, isNoop := mt.dc.(*noopDiscoveryClient); !isNoop {
 		mt.log.Debug("Performing settlement handshake...")
-		receivedLabel, err := MakeSettlementHS(false, mt.log, mt.Entry.Label).Do(ctx, mt.dc, transport, mt.client.SK())
+		receivedLabel, err := makeSettlementRespHS(gate).Do(ctx, mt.dc, transport, mt.client.SK())
 		if err != nil {
 			return fmt.Errorf("settlement handshake failed: %w", err)
 		}
