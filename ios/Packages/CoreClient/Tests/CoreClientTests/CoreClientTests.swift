@@ -392,6 +392,13 @@ final class CoreClientTests: XCTestCase {
         visor.serveVariant("mail-status-off")
         _ = try await client.mailStatus()
         try await client.mailDelete(MailFolder.inbox, id: inbox[0].id)
+        visor.serveVariant("reward-put-single")
+        try? await client.setRewardAddress("2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
+        try await client.setRewardAddress(RewardClientTests.xpub)
+        _ = try await client.rewardAddress()
+        try await client.deleteRewardAddress()
+        visor.serveVariant("reward-none")
+        _ = try await client.rewardAddress()
         try await client.restartVisor(pk: pk)
 
         // The recordings only the rules produce: a second login on a live

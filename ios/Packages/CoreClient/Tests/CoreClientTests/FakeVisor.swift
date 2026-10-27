@@ -82,7 +82,7 @@ final class FakeVisor: Sendable {
 
     /// Recordings of a request line another recording answers too (the same
     /// route in another state), served only when a test asks (`serveVariant`).
-    private static let variantFixtures: Set<String> = ["mail-status-off", "mail-send-refused"]
+    private static let variantFixtures: Set<String> = ["mail-status-off", "mail-send-refused", "reward-none", "reward-put-single"]
 
     private static let byRequestLine: [String: String] = {
         var table: [String: String] = [:]

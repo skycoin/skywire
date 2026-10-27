@@ -160,6 +160,14 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 rec mail-delete DELETE "/api/visors/$PK/mail/INBOX/$ID" "" csrf
+# Rewards. A single address is refused, an account xpub is taken, and once it
+# is deleted the running visor reports no address.
+XPUB=xpub6DMLxE9HpaMf7wCMK2ikiAshrkvHBWfdyFFhdajSpi1h2PvCN51rLzxfsqV9EPnrmqpRmnutibiKJX39acErEGmU5syK9ir6wmMAnc2XQWL
+rec reward-put-single PUT "/api/visors/$PK/reward" '{"reward_address":"2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"}' csrf
+rec reward-put PUT "/api/visors/$PK/reward" "{\"reward_address\":\"$XPUB\"}" csrf
+rec reward GET "/api/visors/$PK/reward"
+rec reward-delete DELETE "/api/visors/$PK/reward" "" csrf
+rec reward-none GET "/api/visors/$PK/reward"
 rec restart POST "/api/visors/$PK/restart" '{}' csrf
 rm -f "$RAW/.h" "$RAW/.b"
 
