@@ -58,14 +58,6 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// Check AR transport limit — if negative, never register with AR.
-	if v.conf.Transport != nil && v.conf.Transport.ARTransportLimit < 0 {
-		log.Info("AR registration disabled (ar_transport_limit < 0)")
-		if v.conf.Transport.PublicAutoconnect {
-			log.Warn("ar_transport_limit < 0 conflicts with public_autoconnect — public visors must be discoverable")
-		}
-	}
-
 	// AR is dmsg://-routed, so the v6-forced clearnet client (#1525 Phase 2b,
 	// only meaningful for a plain-HTTP AR over raw TCP) is gone — pass nil.
 
@@ -82,6 +74,17 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
+	}
+	// A negative ar_transport_limit keeps this visor out of the resolver. It
+	// still resolves peers, so it can dial them.
+	if !v.advertisesReach() {
+		if d, ok := arClient.(addrresolver.BindDisabler); ok {
+			d.DisableBinding()
+		}
+		log.Info("AR registration disabled (ar_transport_limit < 0)")
+		if v.conf.Transport.PublicAutoconnect {
+			log.Warn("ar_transport_limit < 0 conflicts with public_autoconnect — public visors must be discoverable")
+		}
 	}
 	// Resolve stcpr, squicr and swtr peers from the resident bindings feed
 	// (ar_resolve_cxo.go); GET /resolve answers what it cannot.
@@ -385,6 +388,9 @@ func (v *Visor) retryStunOnTransientFail(log *logging.Logger) {
 			return
 		}
 
+		if !v.advertisesReach() {
+			return
+		}
 		// Lazy-start SUDPH now that STUN has classified a usable NAT.
 		// Mirrors the default branch of initSudphClient. tpM.InitClient is
 		// safe to call post-init: it locks, registers the client, runs it.
@@ -398,6 +404,12 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if runtime.GOOS == "js" {
 		// No UDP in a browser either; see initStcprClient.
 		log.Debug("sudph transport is not available in a browser; not started")
+		return nil
+	}
+	// SUDPH needs a resolver binding to dial or be dialed, so a visor that keeps
+	// out of the resolver has none.
+	if !v.advertisesReach() {
+		log.Debug("sudph transport is not started: ar_transport_limit < 0")
 		return nil
 	}
 	// Previously this short-circuited when AR was reached via dmsg
