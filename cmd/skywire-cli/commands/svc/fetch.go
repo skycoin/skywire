@@ -65,7 +65,7 @@ func baseURLFor(service string) string {
 // --no-cxo/--no-rpc/--no-dmsg/--sk/--config fetch-chain controls).
 func registerDeploymentFlags() {
 	pf := RootCmd.PersistentFlags()
-	pf.StringVar(&svcTPDURL, "tpdurl", "", "override the transport-discovery base URL (used by tpd / nm)")
+	pf.StringVar(&svcTPDURL, "tpdurl", "", "override the transport-discovery base URL (used by tpd)")
 	pf.StringVar(&svcDmsgdURL, "dmsgdurl", "", "override the dmsg-discovery base URL (used by dmsgd)")
 	pf.StringVar(&svcARURL, "arurl", "", "override the address-resolver base URL (used by ar)")
 	// Fetch-chain controls (--no-cxo/--no-rpc/--no-dmsg/--sk/--config) so
@@ -86,13 +86,10 @@ func init() {
 	arCmd.PersistentFlags().BoolVar(&directQuery, "direct", false, "query directly instead of via visor RPC")
 	arCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 
-	nmCmd.PersistentFlags().BoolVar(&directQuery, "direct", false, "query directly instead of via visor RPC")
-	nmCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
-
 	dmsgdCmd.PersistentFlags().BoolVar(&directQuery, "direct", false, "query directly instead of via visor RPC")
 	dmsgdCmd.PersistentFlags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 
-	RootCmd.AddCommand(tpdCmd, dmsgdCmd, arCmd, nmCmd)
+	RootCmd.AddCommand(tpdCmd, dmsgdCmd, arCmd)
 }
 
 // fetchViaVisorOrDirect fetches data from a service, preferring visor RPC.
@@ -476,32 +473,5 @@ sessions show as "(down: <duration>)"; sessions shorter than
 		}
 		human := serviceuptime.FormatHistory(sessions, svcUptimeGapThreshold, svcUptimeRestartLoopMax)
 		internal.PrintOutput(cmd.Flags(), sessions, human)
-	},
-}
-
-// --- NM subcommand ---
-
-// nmCmd is a stand-in: the network-monitor has no URL in the embedded
-// deployment.Services set (only keyring PKs exist for it), so there is no
-// dedicated endpoint to query. Until one is wired in, this probes the
-// transport-discovery /health as the closest liveness signal and says so.
-// FOLLOW-UP: give the network monitor a real deployment URL + endpoint, or
-// drop this subcommand.
-var nmCmd = &cobra.Command{
-	Use:   "nm",
-	Short: "Network Monitor status (currently probes TPD /health — no NM endpoint deployed)",
-	Long: `Query network-monitor liveness.
-
-NOTE: the network monitor has no URL in the embedded deployment set (only
-keyring public keys), so there is no dedicated endpoint to hit yet. This
-command probes the transport-discovery /health as the closest available
-liveness signal — treat the result as "is the discovery tier up", not as a
-network-monitor-specific status.`,
-	Run: func(cmd *cobra.Command, _ []string) {
-		data, err := fetchViaVisorOrDirect(cmd, "tpd", "/health")
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
-		}
-		emitPretty(cmd, data)
 	},
 }

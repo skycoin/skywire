@@ -161,39 +161,6 @@ services:
     ports:
       - "30087:8080"
       - 127.0.0.1:${DMSGSERVER_7_PPROF}:${DMSGSERVER_7_PPROF}
-  network-monitor:
-    container_name: network-monitor
-    image: "skycoin/skywire:test"
-    restart: always
-    command:
-      - svc
-      - nm
-      - --addr
-      - :${NETWORK_MONITOR_ADDR}
-      - --pprof
-      - :${NETWORK_MONITOR_PPROF}
-      - --pk
-      - ${NETWORK_MONITOR_PUBKEY}
-      - --sk
-      - ${NETWORK_MONITOR_SECKEY}
-      - --ar-url
-      - http://${AR_HOST}:${AR_PORT}
-      - --dmsgd-url
-      - http://${DMSGDISC_HOST}:${DMSGDISC_PORT}
-      - --sd-url
-      - http://${SD_HOST}:${SD_PORT}
-      - --tpd-url
-      - http://${TPDISC_HOST}:${TPDISC_PORT}
-      - --cleaning-delay
-      - "180"
-    depends_on:
-      - route-finder
-      - setup-node
-      - service-discovery
-      - address-resolver
-    ports:
-      - ${NETWORK_MONITOR_ADDR}:${NETWORK_MONITOR_ADDR}
-      - 127.0.0.1:${NETWORK_MONITOR_PPROF}:${NETWORK_MONITOR_PPROF}
   route-finder:
     container_name: route-finder
     image: "skycoin/skywire:test"
