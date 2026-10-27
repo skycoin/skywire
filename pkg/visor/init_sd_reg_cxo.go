@@ -44,7 +44,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/sysfeed"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -69,11 +68,6 @@ const sdRegBatchVersion = 1
 // latency while batching the startup burst (visor + vpn + skysocks entries
 // all registering at once) into a single publish.
 const sdRegBatchWindow = 5 * time.Second
-
-// sdRegAnnounceInterval is how often the visor pokes its CXO feed conn to
-// the SD. Short enough that a recovered visor/SD re-links well inside the
-// entry TTL.
-const sdRegAnnounceInterval = 30 * time.Second
 
 // sdEntryMirror holds the visor's live service-discovery entry set and
 // mirrors it onto the SD-registration CXO feed. It implements
@@ -292,7 +286,7 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// our feed (PK = our PK). ConnectPK is idempotent, so the same loop
 	// handles initial announce + reconnect.
 	lastAnnounceOK := new(atomic.Int64)
-	go runSDRegAnnounceLoop(v.ctx, pub, sdPK, lastAnnounceOK, log)
+	go announceFeed(v.ctx, pub, sdPK, lastAnnounceOK, "SD-reg-CXO", log)
 
 	// While the SD is subscribed and answering, its ingest of the heartbeat
 	// Roots keeps the entries alive, so unchanged heartbeats skip HTTP.
@@ -308,30 +302,4 @@ func initSDRegCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 		WithField("port", skyenv.DmsgVisorSDRegCXOPort).
 		Info("SD-reg-CXO: publisher running (service entries mirrored to service-discovery)")
 	return nil
-}
-
-// runSDRegAnnounceLoop dials the SD on a ticker (ConnectPK is idempotent —
-// a live conn is a no-op, a dropped one redials) and stamps lastOK with the
-// wall-clock time of each success.
-func runSDRegAnnounceLoop(ctx context.Context, pub *treestore.Publisher, sdPK cipher.PubKey, lastOK *atomic.Int64, log *logging.Logger) {
-	t := time.NewTicker(sdRegAnnounceInterval)
-	defer t.Stop()
-	announce := func() {
-		dctx, cancel := context.WithTimeout(ctx, sdRegAnnounceInterval/2)
-		defer cancel()
-		if err := pub.AnnounceTo(dctx, sdPK); err != nil {
-			log.WithError(err).WithField("sd_pk", sdPK).Trace("SD-reg-CXO: announce to service-discovery failed")
-			return
-		}
-		lastOK.Store(time.Now().UnixNano())
-	}
-	announce()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			announce()
-		}
-	}
 }
