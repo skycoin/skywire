@@ -13,6 +13,7 @@ struct SettingsView: View {
     @EnvironmentObject private var dialogs: SkyDialogs
     @StateObject private var model = SettingsModel()
     @State private var export: ConfigFile?
+    @Environment(\.layerVisible) private var onScreen
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,14 +26,15 @@ struct SettingsView: View {
                     ConfigCard(model: model) { askExport() }.scrollPlaceItem(1)
                     AutoconnectCard().scrollPlaceItem(2)
                     DnsCard(model: model).scrollPlaceItem(3)
-                    RemoteCard(model: model).scrollPlaceItem(4)
-                    AppLockCard().scrollPlaceItem(5)
-                    WalletPricesCard().scrollPlaceItem(6)
-                    ThemeCard().scrollPlaceItem(7)
-                    LanguageCard().scrollPlaceItem(8)
-                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(9)
-                    UpdatesCard().scrollPlaceItem(10)
-                    AboutCard(model: model).scrollPlaceItem(11)
+                    RewardCard(model: model).scrollPlaceItem(4)
+                    RemoteCard(model: model).scrollPlaceItem(5)
+                    AppLockCard().scrollPlaceItem(6)
+                    WalletPricesCard().scrollPlaceItem(7)
+                    ThemeCard().scrollPlaceItem(8)
+                    LanguageCard().scrollPlaceItem(9)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(10)
+                    UpdatesCard().scrollPlaceItem(11)
+                    AboutCard(model: model).scrollPlaceItem(12)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -41,6 +43,10 @@ struct SettingsView: View {
         }
         .background(Color.skyBackground)
         .task(id: app.connected) { await model.load(app) }
+        // Again each time Settings comes to the front: the wallet's xpub dialog sets it from its own tab.
+        .task(id: app.connected && onScreen) {
+            if onScreen { await model.loadRewardAddress(app) }
+        }
         .onChange(of: model.notice) { notice in
             guard let notice else { return }
             dialogs.snackbar(Text(verbatim: notice))
@@ -352,6 +358,48 @@ private struct DnsCard: View {
         // Seeded from what is stored, and again whenever that changes, as Android's remember(key).
         .onAppear { address = settings.dnsServer }
         .onChange(of: settings.dnsServer) { address = $0 }
+    }
+}
+
+/// The reward address, an account xpub, kept by the visor (Android: RewardCard, see RewardXpub).
+private struct RewardCard: View {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject var model: SettingsModel
+    @State private var xpub = ""
+
+    var body: some View {
+        let typed = xpub.trimmingCharacters(in: .whitespacesAndNewlines)
+        let valid = typed.isEmpty || RewardXpub.looksValid(typed)
+        let running = app.connected
+        SectionCard {
+            CardHeader(title: L10n.key("settings_reward"),
+                       hint: L10n.key(running ? "settings_reward_hint" : "settings_reward_needs_core"))
+            if !model.rewardAddress.isEmpty && !RewardXpub.looksValid(model.rewardAddress) {
+                Text("settings_reward_legacy").skyText(.bodySmall).foregroundStyle(Color.skyError)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
+            SkyOutlinedTextField(placeholder: L10n.key("settings_reward_placeholder"), text: $xpub, isError: !valid,
+                                 identifier: "settings-reward",
+                                 supporting: valid ? nil : Text("settings_reward_invalid"))
+                .disabled(!running)
+                .padding(.top, 12)
+            HStack(spacing: 12) {
+                Button { model.setRewardAddress(typed, app) } label: { Text("settings_reward_save") }
+                    .buttonStyle(.tonal)
+                    .disabled(!running || !valid || typed.isEmpty || typed == model.rewardAddress)
+                    .accessibilityIdentifier("settings-reward-save")
+                if running && !model.rewardAddress.isEmpty {
+                    Button { model.setRewardAddress("", app) } label: { Text("settings_reward_clear") }
+                        .buttonStyle(.skyText)
+                        .accessibilityIdentifier("settings-reward-clear")
+                }
+            }
+            .padding(.top, 12)
+        }
+        // Seeded from what the visor reports, and again whenever that changes, as Android's remember(key).
+        .onAppear { xpub = model.rewardAddress }
+        .onChange(of: model.rewardAddress) { xpub = $0 }
     }
 }
 

@@ -1,4 +1,5 @@
 import Combine
+import CoreClient
 import Foundation
 import WalletCore
 
@@ -676,5 +677,18 @@ final class WalletModel: ObservableObject {
 
     func extendedPublicKeys(_ walletId: String) -> ExtendedPublicKeys? {
         try? store.extendedPublicKeys(walletId: walletId)
+    }
+
+    /// Sets `xpub` as this phone's reward address and says how it went (Android:
+    /// WalletViewModel.useForRewards).
+    func useForRewards(_ xpub: String, _ app: AppModel) async -> (text: String, saved: Bool) {
+        guard app.connected else { return (L10n.text("settings_reward_needs_core"), false) }
+        do {
+            try await app.client.setRewardAddress(xpub)
+            return (L10n.text("settings_reward_saved"), true)
+        } catch {
+            app.handle(error)
+            return (SettingsModel.visorReason(error), false)
+        }
     }
 }
