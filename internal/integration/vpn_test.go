@@ -22,6 +22,9 @@ const (
 	vpnServerTunIPCommand = `ip addr show tun0`
 	targetHostScheme      = "https://"
 	targetHost            = "google.com"
+	// probeIP is traced to see the VPN server as the first hop. A literal address
+	// needs no DNS, and with one hop the probe needs no internet egress either.
+	probeIP = "1.1.1.1"
 )
 
 // TestVPN is a phased test that shares a single environment setup across
@@ -106,7 +109,7 @@ func TestVPN(t *testing.T) {
 		})
 
 		t.Run("traffic_through_vpn", func(t *testing.T) {
-			testTrafficGoesThroughVPN(t, env, targetHost)
+			testTrafficGoesThroughVPN(t, env, probeIP)
 		})
 	})
 
@@ -123,7 +126,7 @@ func TestVPN(t *testing.T) {
 		})
 
 		t.Run("traffic_through_vpn", func(t *testing.T) {
-			testTrafficGoesThroughVPN(t, env, targetHost)
+			testTrafficGoesThroughVPN(t, env, probeIP)
 		})
 	})
 
@@ -140,7 +143,7 @@ func TestVPN(t *testing.T) {
 		})
 
 		t.Run("traffic_through_vpn", func(t *testing.T) {
-			testTrafficGoesThroughVPN(t, env, targetHost)
+			testTrafficGoesThroughVPN(t, env, probeIP)
 		})
 	})
 
@@ -191,7 +194,7 @@ func TestVPN(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Verify traffic no longer goes through VPN server
-		firstHop, err := getFirstTracerouteHop(targetHost, env)
+		firstHop, err := getFirstTracerouteHop(probeIP, env)
 		if err != nil {
 			// Failing to trace a route at all is the outcome under test: with
 			// the killswitch set and the server restarted, traffic must not
@@ -260,7 +263,7 @@ func TestVPN(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Verify traffic no longer goes through VPN
-		firstHop, err := getFirstTracerouteHop(targetHost, env)
+		firstHop, err := getFirstTracerouteHop(probeIP, env)
 		if err != nil {
 			// As in phase 5: with every transport removed, not tracing a route
 			// is the expected outcome, whatever form the failure takes.
@@ -288,22 +291,20 @@ func testHostIsReachable(t *testing.T, env *TestEnv, targetURL string, wantRespC
 func testTrafficGoesThroughVPN(t *testing.T, env *TestEnv, targetHost string) {
 	serverTUNIP, err := getServerTUNIP(env)
 	if err != nil {
-		t.Skipf("Skipping VPN traffic test: TUN IP not available: %v", err)
+		t.Fatalf("VPN server TUN IP not available: %v", err)
 	}
 	require.NotEqual(t, "", serverTUNIP)
 
-	firstHop, err := getFirstTracerouteHop(targetHost, env)
-	if err != nil {
-		// traceroute to an external host needs DNS + internet egress that the
-		// isolated e2e docker network lacks; without it "traceroute google.com"
-		// produces no hop at all ("no ip found") and the first hop (the VPN TUN
-		// gateway) can't be observed. This is the SAME environment limitation
-		// that makes testHostIsReachable skip — so skip here too rather than
-		// hard-fail. When egress IS available the assertion below still runs and
-		// proves traffic enters the tunnel (first hop == VPN server TUN IP).
-		t.Skipf("Skipping VPN traffic test: cannot traceroute %s (no internet egress/DNS in this environment): %v", targetHost, err)
+	// A transport just added can briefly move the tunnel, so give the first
+	// hop a few tries before failing.
+	var firstHop net.IP
+	for deadline := time.Now().Add(15 * time.Second); ; {
+		if firstHop, err = getFirstTracerouteHop(targetHost, env); err == nil || !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(time.Second)
 	}
-
+	require.NoError(t, err, "no first hop tracing %s through the VPN", targetHost)
 	require.Equal(t, serverTUNIP, firstHop.String())
 }
 
@@ -335,7 +336,7 @@ func getHTTPRespStatusCodeViaCURLInContainer(env *TestEnv, containerName string,
 }
 
 func getFirstTracerouteHop(targetHost string, env *TestEnv) (net.IP, error) {
-	const tracerouteFmt = "timeout 9 traceroute -n %s"
+	const tracerouteFmt = "timeout 9 traceroute -n -m 1 -w 2 -q 1 %s"
 	fullCmd := fmt.Sprintf(tracerouteFmt, targetHost)
 
 	var stdout string
