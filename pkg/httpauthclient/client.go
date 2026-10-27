@@ -185,7 +185,8 @@ func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, err
 		}
 	}
 
-	if resp.StatusCode == http.StatusOK {
+	// The server advances the nonce on any 2xx (httpauth.WithAuth).
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		c.IncrementNonce()
 	}
 

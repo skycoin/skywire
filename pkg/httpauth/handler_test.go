@@ -346,3 +346,33 @@ func TestServer_Wrap_DmsgIdentity(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
 	})
 }
+
+// A 201 must consume the nonce like a 200, or the same signed request could
+// be replayed.
+func TestServer_Wrap_NonceAdvancesOn2xx(t *testing.T) {
+	for _, tc := range []struct {
+		status int
+		want   Nonce
+	}{
+		{http.StatusOK, 1},
+		{http.StatusCreated, 1},
+		{http.StatusBadRequest, 0},
+	} {
+		mock, err := NewNonceStore(context.TODO(), storeconfig.Config{Type: storeconfig.Memory}, "")
+		require.NoError(t, err)
+		m := httputil.NewRouter()
+		m.Use(MakeMiddleware(mock))
+		m.Post("/foo", func(w http.ResponseWriter, r *http.Request) {
+			httputil.WriteJSON(w, r, tc.status, "")
+		})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/foo", bytes.NewReader([]byte("hi")))
+		r.Header = validHeaders(t, []byte("hi"))
+		m.ServeHTTP(w, r)
+		require.Equal(t, tc.status, w.Code, w.Body.String())
+
+		nonce, err := mock.Nonce(context.TODO(), testPubKey)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, nonce, "status %d", tc.status)
+	}
+}

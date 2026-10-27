@@ -131,3 +131,25 @@ func newTestServer(t *testing.T, pk cipher.PubKey, headerCh chan<- http.Header) 
 		}
 	}))
 }
+
+func TestClient_NonceAdvancesOn201(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == fmt.Sprintf("/security/nonces/%s", pk) {
+			require.NoError(t, json.NewEncoder(w).Encode(&NextNonceResponse{pk, 1})) //nolint: gosec
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer ts.Close()
+
+	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/foo", bytes.NewBufferString(payload))
+	require.NoError(t, err)
+	res, err := c.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	assert.Equal(t, http.StatusCreated, res.StatusCode)
+	assert.Equal(t, uint64(2), uint64(c.getCurrentNonce()))
+}
