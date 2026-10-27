@@ -45,6 +45,9 @@ const arBindBatchWindow = 5 * time.Second
 const arBindAnnounceInterval = 30 * time.Second
 
 func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
+	if !v.advertisesReach() {
+		return nil
+	}
 	if v.dmsgC == nil {
 		log.Warn("AR-bind-CXO: dmsg client absent; publisher not started")
 		return nil
