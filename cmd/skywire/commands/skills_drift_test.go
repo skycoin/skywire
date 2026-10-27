@@ -167,8 +167,8 @@ var skillLongFlag = regexp.MustCompile(`(?:^|[\s(\x60])--([a-z][a-z0-9-]+)`)
 // written in a span or code block, even without its command, must exist on
 // at least one command, unless it belongs to a tool the skills mention.
 func TestSkillFlagsExistSomewhere(t *testing.T) {
-	files, _ := filepath.Glob("../../../.claude/skills/*/SKILL.md")
-	if len(files) == 0 {
+	files, err := filepath.Glob("../../../.claude/skills/*/SKILL.md")
+	if err != nil || len(files) == 0 {
 		t.Skip("no skills found")
 	}
 	flags.InstallHelpTree(RootCmd)
