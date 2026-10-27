@@ -1350,6 +1350,11 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 		consecutiveFailures++
 		t.Reset(entryFailureBackoff(consecutiveFailures))
 	}
+	// The first-session publish runs before this loop starts. If nothing has
+	// been published, it failed or timed out, so start on the backoff ladder.
+	if c.lastUpdate.Load() == 0 {
+		rearm(false)
+	}
 
 	for {
 		select {
