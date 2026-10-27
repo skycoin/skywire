@@ -163,6 +163,7 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 		return // logserver not yet constructed
 	}
 	lsAPI.SetVhosts(v.vhostSites(log))
+	lsAPI.SetWebsiteSites(nil)
 
 	// Rewards UI wins when configured — it's a global on/off switch.
 	if rw := v.conf.Rewards; rw != nil && rw.Enable {
@@ -200,6 +201,8 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 				WithField("preserve_host", fp.PreserveHost).
 				Info("Reverse-proxying custom website (port 80)")
 			lsAPI.SetWebsiteHandler(buildReverseProxy(log, target, fp.PreserveHost))
+			// The website takes every name no vhost has, as a "*" vhost would.
+			lsAPI.SetWebsiteSites(v.localSiteList(fp.PreserveHost, target.Hostname(), log))
 			return
 		}
 	}

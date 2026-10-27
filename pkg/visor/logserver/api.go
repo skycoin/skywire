@@ -136,6 +136,7 @@ type API struct {
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
+	websiteSites         func() []string         // optional: the site names websiteHandler serves by Host
 	// homePage renders the mesh directory for home.skynet and home.dmsg.
 	homePage func(suffix string, ownUser bool) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
@@ -602,6 +603,12 @@ func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
 }
 
+// SetWebsiteSites lists the sites the website handler serves by Host, for a
+// port 80 forward that hands every name to a server such as Caddy. Nil lists none.
+func (api *API) SetWebsiteSites(sites func() []string) {
+	api.websiteSites = sites
+}
+
 // SetVisorStatusPage serves h at /status/visor to this visor, the survey
 // whitelist and the keys readers returns, and links it from their landing page.
 func (api *API) SetVisorStatusPage(h http.Handler, readers func() []cipher.PubKey) {
@@ -928,6 +935,11 @@ type SiteList struct {
 // sitesFor is each site name req's caller may open, sorted.
 func (api *API) sitesFor(req *http.Request) []string {
 	seen := map[string]bool{}
+	if api.websiteSites != nil {
+		for _, s := range api.websiteSites() {
+			seen[s] = true
+		}
+	}
 	for _, v := range api.vhostList() {
 		if !callerAllowed(req, v.Whitelist) {
 			continue
