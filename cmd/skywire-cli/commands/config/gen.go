@@ -482,7 +482,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
 	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
-	gHiddenFlags = append(gHiddenFlags, "muxroutes")
 	skyenvStringVar(genConfigCmd.Flags(), &cliAddr, "cliaddr", "${CLIADDR}", "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
