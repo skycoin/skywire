@@ -555,14 +555,18 @@ func (v *Visor) GetRewardAddress() (string, error) {
 	return strings.TrimSpace(string(rConfig)), nil
 }
 
-// DeleteRewardAddress implements API.
+// DeleteRewardAddress implements API. It clears the address and survey in
+// memory too, since GetRewardAddress and the survey read those before reward.txt.
 func (v *Visor) DeleteRewardAddress() error {
-
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	err := os.Remove(path)
 	if err != nil {
 		return fmt.Errorf("error deleting file. err=%v", err)
 	}
+	v.conf.RewardAddress = ""
+	v.survey.mu.Lock()
+	v.survey.data = visorconfig.Survey{}
+	v.survey.mu.Unlock()
 	return nil
 }
 
