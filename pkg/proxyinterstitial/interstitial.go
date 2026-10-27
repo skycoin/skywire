@@ -593,7 +593,8 @@ func IsTransient(err error) bool {
 	}
 	s := strings.ToLower(err.Error())
 	for _, p := range []string{
-		"202", "delegated", "no route", "route not", "no suitable transport",
+		// Not a bare "202": a message that quotes a key or ID would match it.
+		"dmsg error 202", "delegated", "no route", "route not", "no suitable transport",
 		"session", "timeout", "deadline", "temporarily", "connection refused",
 		"cannot connect", "not ready", "unreachable", "i/o timeout",
 	} {
