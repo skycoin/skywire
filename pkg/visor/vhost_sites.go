@@ -105,15 +105,25 @@ func isSiteName(h string) bool {
 // vhostSiteList is the sites a vhost links to: those it lists, and for a
 // catch-all that hands the Host to a local server, the sites Caddy reports.
 func (v *Visor) vhostSiteList(vh visorapi.Vhost, target string, log *logging.Logger) func() []string {
-	if vh.Name != "*" || !vh.PreserveHost || !isLoopback(target) {
+	caddy := v.localSiteList(vh.Name == "*" && vh.PreserveHost, target, log)
+	if caddy == nil {
 		if len(vh.Sites) == 0 {
 			return nil
 		}
 		return func() []string { return vh.Sites }
 	}
 	return func() []string {
-		return append(append([]string(nil), vh.Sites...), v.caddySites.get(log)...)
+		return append(append([]string(nil), vh.Sites...), caddy()...)
 	}
+}
+
+// localSiteList is the sites Caddy reports, for a forward that hands every
+// name with its Host to a server on this machine. Otherwise nil.
+func (v *Visor) localSiteList(takesEveryName bool, target string, log *logging.Logger) func() []string {
+	if !takesEveryName || !isLoopback(target) {
+		return nil
+	}
+	return func() []string { return v.caddySites.get(log) }
 }
 
 func isLoopback(host string) bool {

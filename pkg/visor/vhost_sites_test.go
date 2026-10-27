@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // The shape is what Caddy 2.11's admin API returns for a Caddyfile config.
@@ -34,4 +36,16 @@ func TestCaddySites(t *testing.T) {
 	sites, err := caddySites(context.Background(), srv.URL)
 	require.NoError(t, err)
 	require.Equal(t, []string{"explorer.skycoin.com", "skycoin.com", "www.skycoin.com"}, sites)
+}
+
+// A port 80 forward lists Caddy's sites only when it hands the Host on to a
+// server on this machine, as a "*" vhost does.
+func TestLocalSiteList(t *testing.T) {
+	v := &Visor{}
+	v.caddySites.list, v.caddySites.at = []string{"magnetosphere.net"}, time.Now()
+	log := logging.MustGetLogger("test")
+
+	require.Equal(t, []string{"magnetosphere.net"}, v.localSiteList(true, "127.0.0.1", log)())
+	require.Nil(t, v.localSiteList(false, "127.0.0.1", log), "Host not preserved")
+	require.Nil(t, v.localSiteList(true, "10.0.0.5", log), "not this machine")
 }

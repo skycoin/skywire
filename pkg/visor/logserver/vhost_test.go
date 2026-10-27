@@ -226,3 +226,23 @@ func TestWebsiteWhitelist(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, get(path, stranger), path)
 	}
 }
+
+// TestWebsiteSites lists the sites a port 80 website serves by Host, as on a
+// visor that forwards port 80 to Caddy with no vhosts at all.
+func TestWebsiteSites(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	api.SetWebsiteHandler(site("caddy"))
+	api.SetWebsiteSites(func() []string { return []string{"magnetosphere.net", "cutemagnets.net"} })
+
+	req := httptest.NewRequest(http.MethodGet, "http://x/.skywire/sites", nil)
+	req.Host = visorPK.DNSLabel() + ".skynet"
+	req.RemoteAddr = visorPK.String() + ":80"
+	rec := httptest.NewRecorder()
+	api.Handler.ServeHTTP(rec, req)
+
+	var list SiteList
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	require.Equal(t, []string{"cutemagnets.net", "magnetosphere.net"}, list.Sites)
+}
