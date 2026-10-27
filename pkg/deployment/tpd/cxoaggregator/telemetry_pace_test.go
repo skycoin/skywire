@@ -1,6 +1,9 @@
 package cxoaggregator
 
 import (
+	"fmt"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -24,7 +27,7 @@ func TestTelemetryPacerHoldsWithinWindow(t *testing.T) {
 	out := p.offer(k, telSnap{sent: 10, throughput: 5, latMin: 1, latMax: 3, latAvg: 2}, t0)
 	require.Len(t, out, 1, "first report applies")
 	require.EqualValues(t, 10, out[0].sent)
-	require.Equal(t, t0, out[0].at)
+	require.Equal(t, t0.UnixNano(), out[0].at)
 
 	require.Empty(t, p.offer(k, telSnap{sent: 20, throughput: 50}, t0.Add(45*time.Second)))
 	require.Empty(t, p.offer(k, telSnap{sent: 30, throughput: 7}, t0.Add(90*time.Second)))
@@ -60,9 +63,9 @@ func TestTelemetryPacerMidnight(t *testing.T) {
 	out := p.offer(k, telSnap{sent: 3}, next)
 	require.Len(t, out, 2)
 	require.EqualValues(t, 2, out[0].sent)
-	require.Equal(t, late, out[0].at, "the held row keeps its own day")
+	require.Equal(t, late.UnixNano(), out[0].at, "the held row keeps its own day")
 	require.EqualValues(t, 3, out[1].sent)
-	require.Equal(t, next, out[1].at)
+	require.Equal(t, next.UnixNano(), out[1].at)
 
 	// With no report after midnight the flush still dates the held row to
 	// the old day, within one flush tick.
@@ -71,7 +74,7 @@ func TestTelemetryPacerMidnight(t *testing.T) {
 	require.Empty(t, p.offer(k2, telSnap{sent: 2}, late))
 	held := p.due(late.Add(telemetryFlushEvery + time.Second))
 	require.Len(t, held, 1)
-	require.Equal(t, late, held[0].s.at)
+	require.Equal(t, late.UnixNano(), held[0].s.at)
 	require.EqualValues(t, 2, held[0].s.sent)
 }
 
@@ -81,7 +84,7 @@ func TestTelemetryPacerSkipsUnchanged(t *testing.T) {
 	var p telemetryPacer
 	k := newTelKey(t)
 	t0 := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
-	row := telSnap{sent: 7, recv: 9, throughput: 100, latMin: 1, latMax: 2, latAvg: 1.5, tpType: "stcpr"}
+	row := telSnap{sent: 7, recv: 9, throughput: 100, latMin: 1, latMax: 2, latAvg: 1.5, tp: tpCodeOf("stcpr")}
 	require.Len(t, p.offer(k, row, t0), 1)
 
 	at := t0
@@ -170,4 +173,25 @@ func TestTelemetryPacerRetriesFailedWrites(t *testing.T) {
 
 	p.retry(held)
 	require.Len(t, p.offer(k, telSnap{sent: 10}, t0.Add(2*telemetryFlushEvery)), 1, "not skipped as unchanged")
+}
+
+// A transport type round-trips through its code, and the table stops
+// growing once full.
+func TestTpCodeTable(t *testing.T) {
+	tpCodes.Lock()
+	names, idx := slices.Clone(tpCodes.names), maps.Clone(tpCodes.idx)
+	tpCodes.Unlock()
+	defer func() {
+		tpCodes.Lock()
+		tpCodes.names, tpCodes.idx = names, idx
+		tpCodes.Unlock()
+	}()
+	for _, s := range []string{"", "stcpr", "dmsg", "stcpr", "legacy-type"} {
+		require.Equal(t, s, tpCodeOf(s).String())
+	}
+	for i := 0; i < 300; i++ {
+		tpCodeOf(fmt.Sprintf("junk-%d", i))
+	}
+	require.Equal(t, "", tpCodeOf("one-too-many").String())
+	require.Equal(t, "stcpr", tpCodeOf("stcpr").String())
 }
