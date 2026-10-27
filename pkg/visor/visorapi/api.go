@@ -1349,6 +1349,9 @@ type ForwardedPort struct {
 	// Vhosts are sites on port 80 chosen by the request's Host, each a local
 	// service reverse-proxied without Caddy. Set on the port 80 entry.
 	Vhosts []Vhost `json:"vhosts,omitempty"`
+	// HideSites keeps the sites served on port 80 off the landing page and
+	// GET /.skywire/sites. They are still served. Set on the port 80 entry.
+	HideSites bool `json:"hide_sites,omitempty"`
 }
 
 // Vhost is a site the visor serves on port 80 for one or more Host names, as
