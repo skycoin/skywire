@@ -1148,7 +1148,7 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		}
 		k := telKey{id: e.ID, reporter: reporter}
 		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
-			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type), at: now}
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tp: tpCodeOf(tpType), sameNet: telemetrywire.SameNetwork(e.Type), at: now.UnixNano()}
 		for _, s := range a.pace.offer(k, snap, now) {
 			due = append(due, heldSnap{k: k, s: s})
 		}
@@ -1170,7 +1170,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	a.heartbeat(ctx, id, tpType, at)
 	k := telKey{id: id, reporter: reporter}
 	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
-		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
+		latMin: latMin, latMax: latMax, latAvg: latAvg, tp: tpCodeOf(tpType)}
 	for _, s := range a.pace.offer(k, s, time.Now()) {
 		a.applySnap(ctx, k, s)
 	}
@@ -1179,7 +1179,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 // applySnap writes one telemetry snapshot to the store.
 func (a *Aggregator) applySnap(ctx context.Context, k telKey, s telSnap) {
 	id, reporter := k.id, k.reporter
-	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType
+	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType()
 	latMin, latMax, latAvg := s.latMin, s.latMax, s.latAvg
 	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv, tpType); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
