@@ -46,6 +46,9 @@ type API struct {
 // refreshed from dmsg-discovery. 5m matches the dmsghttp endpoint cache.
 const dmsgServersRefreshInterval = 5 * time.Minute
 
+// maxBodyBytes caps a request body. No route reads one.
+const maxBodyBytes = 64 << 10
+
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
 	ServiceName string          `json:"service_name,omitempty"`
@@ -107,8 +110,11 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(httputil.Recoverer)
-	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	// Every route is a GET, so no handler reads a body. The cap only bounds what
+	// a misbehaving client can make the server drain.
+	r.Use(httputil.LimitBody(maxBodyBytes))
+	// gzip JSON responses on the wire. This router is also served over dmsg,
+	// where every byte is relayed.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
 	// smaller than the flate state that would compress them (httputil.CompressMin).
 	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))

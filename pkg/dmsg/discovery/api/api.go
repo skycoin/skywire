@@ -169,7 +169,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	// dmsg, where every byte is relayed.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
 	// smaller than the flate state that would compress them (httputil.CompressMin).
 	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
