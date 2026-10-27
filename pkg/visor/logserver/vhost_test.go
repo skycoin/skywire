@@ -246,3 +246,29 @@ func TestWebsiteSites(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
 	require.Equal(t, []string{"cutemagnets.net", "magnetosphere.net"}, list.Sites)
 }
+
+// TestSitesHidden keeps every site off the list, while they are still served.
+func TestSitesHidden(t *testing.T) {
+	visorPK, _ := cipher.GenerateKeyPair()
+	api := New(logging.MustGetLogger("test"), t.TempDir(), "", nil, &visorconfig.Survey{}, false)
+	api.SetIdentity(visorPK.Hex(), "")
+	api.SetVhosts([]Vhost{{Name: "status", Names: []string{"status"}, Handler: site("status")}})
+	api.SetWebsiteHandler(site("caddy"))
+	api.SetWebsiteSites(func() []string { return []string{"magnetosphere.net"} })
+	api.SetSitesHidden(true)
+	label := visorPK.DNSLabel()
+	get := func(host, path string) string {
+		req := httptest.NewRequest(http.MethodGet, "http://x"+path, nil)
+		req.Host = host
+		req.RemoteAddr = visorPK.String() + ":80"
+		rec := httptest.NewRecorder()
+		api.Handler.ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+
+	var list SiteList
+	require.NoError(t, json.Unmarshal([]byte(get(label+".skynet", "/.skywire/sites")), &list))
+	require.Empty(t, list.Sites)
+	require.NotContains(t, get(label+".skynet", "/.skywire/"), "status."+label)
+	require.Equal(t, "status /", get("status."+label+".skynet", "/"), "a hidden site is still served")
+}
