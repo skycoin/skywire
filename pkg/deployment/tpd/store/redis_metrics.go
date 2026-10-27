@@ -661,6 +661,17 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 	}
 
+	// A visor is an edge of many transports; encode each key once and share it.
+	hexes := make(map[cipher.PubKey]string)
+	hexOf := func(pk cipher.PubKey) string {
+		h, ok := hexes[pk]
+		if !ok {
+			h = pk.Hex()
+			hexes[pk] = h
+		}
+		return h
+	}
+
 	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
 	bwByEntry := make(map[int][]DailyEdgeBandwidth)
 	// Edge hexes and the four field keys depend only on the entry, and bwKeys
@@ -676,8 +687,8 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 
 		if bk.idx != lastIdx {
 			f := filtered[bk.idx]
-			edgeAHex := f.entry.Edges[0].Hex()
-			edgeBHex := f.entry.Edges[1].Hex()
+			edgeAHex := hexOf(f.entry.Edges[0])
+			edgeBHex := hexOf(f.entry.Edges[1])
 			kASent, kARecv = edgeAHex+":sent", edgeAHex+":recv"
 			kBSent, kBRecv = edgeBHex+":sent", edgeBHex+":recv"
 			lastIdx = bk.idx
@@ -760,7 +771,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 
 		if query.Edges {
-			metric.Edges = []string{f.entry.Edges[0].Hex(), f.entry.Edges[1].Hex()}
+			metric.Edges = []string{hexOf(f.entry.Edges[0]), hexOf(f.entry.Edges[1])}
 		}
 
 		// Process latency result from the durable lat:<id> key.
