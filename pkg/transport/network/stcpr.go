@@ -116,7 +116,7 @@ func (c *stcprClient) serve() {
 	localAddr := lis.Addr().String()
 	_, port, err := net.SplitHostPort(localAddr)
 	if err != nil {
-		c.log.Errorf("Failed to extract port from addr %v: %v", err)
+		c.log.Errorf("Failed to extract port from addr %v: %v", localAddr, err)
 		return
 	}
 	c.log.Debug("Binding")

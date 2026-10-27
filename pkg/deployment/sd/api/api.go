@@ -247,8 +247,10 @@ const maxBodyBytes = 1 << 20
 // handler is safe to share across request goroutines.
 func (a *API) newRouter() *httputil.Router {
 	r := httputil.NewRouter()
+	r.Use(httputil.RequestID)
 	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(a.log))
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
@@ -259,6 +261,7 @@ func (a *API) newRouter() *httputil.Router {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
 	}
+	r.Use(httputil.SetLoggerMiddleware(a.log))
 	r.Use(httputil.Timeout(httpTimeout))
 
 	r.Use(httputil.CORS(httputil.CORSOptions{

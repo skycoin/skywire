@@ -281,8 +281,6 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
-	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
 	// No blanket response compression: the per-visor resolve and bind answers
 	// are under 100 bytes, and chi's Compress kept ~130 pooled flate writers
 	// (~110 MB) live under a 256 MiB GOMEMLIMIT — the AR spent two thirds of
@@ -628,9 +626,11 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 
 	if types.Type(tpType) == types.SUDPH {
 
+		// The sender already has its 200, so a sender without a record only
+		// skips the dial-assist.
 		senderVisorData, err := a.store.Resolve(ctx, types.Type(tpType), senderPK)
-		if errors.Is(err, store.ErrNoEntry) {
-			w.WriteHeader(http.StatusNotFound)
+		if err != nil {
+			a.logger(r).Debugf("No dial-assist for %v: sender %v has no %v record: %v", receiverPK, senderPK, tpType, err)
 			return
 		}
 
