@@ -462,6 +462,29 @@ public actor CoreClient {
         return id.map { "\(base)/\(Self.queryEncode($0))" } ?? base
     }
 
+    // MARK: Rewards
+
+    /// The reward address: an account xpub, a single address set before xpubs
+    /// were required, or "" for none.
+    public func rewardAddress() async throws -> String {
+        try await get("/api/visors/\(try await localPK())/reward")
+    }
+
+    /// Sets the reward address. The visor takes only an account xpub, and says
+    /// why it refused anything else.
+    public func setRewardAddress(_ xpub: String) async throws {
+        let path = "/api/visors/\(try await localPK())/reward"
+        let response = try await authed(.put, path, body: try JSONSerialization.data(withJSONObject: ["reward_address": xpub]))
+        try Self.check(response, "PUT", path)
+    }
+
+    /// Clears the reward address, which opts this visor out of rewards.
+    public func deleteRewardAddress() async throws {
+        let path = "/api/visors/\(try await localPK())/reward"
+        let response = try await authed(.delete, path)
+        try Self.check(response, "DELETE", path)
+    }
+
     // MARK: Voice calls
 
     /// Calls ringing right now, awaiting an answer, as the visor lists them
