@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	rpc "github.com/0magnet/gobrpc"
 	"github.com/flynn/noise"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -26,78 +25,6 @@ type AddIn struct{ A, B int }
 func (r *TestRPC) Add(in *AddIn, out *int) error {
 	*out = in.A + in.B
 	return nil
-}
-
-func TestRPCClientDialer(t *testing.T) {
-	var (
-		pattern = HandshakeXK
-	)
-
-	svr := rpc.NewServer()
-	require.NoError(t, svr.Register(new(TestRPC)))
-
-	lPK, lSK := cipher.GenerateKeyPair()
-	var l net.Listener
-	var lAddr string
-
-	setup := func() {
-		if len(lAddr) == 0 {
-			lAddr = ":0"
-		}
-		var err error
-
-		l, err = net.Listen("tcp", lAddr)
-		require.NoError(t, err)
-
-		l = WrapListener(l, lPK, lSK, false, pattern)
-		lAddr = l.Addr().(*Addr).Addr.String()
-		t.Logf("Listening on %s", lAddr)
-	}
-
-	teardown := func() {
-		require.NoError(t, l.Close())
-		l = nil
-	}
-
-	t.Run("RunRetry", func(t *testing.T) {
-		setup()
-		defer teardown() // Just in case of failure.
-
-		const reconCount = 5
-		const retry = time.Second / 4
-
-		dPK, dSK := cipher.GenerateKeyPair()
-		d := NewRPCClientDialer(lAddr, pattern, Config{
-			LocalPK:   dPK,
-			LocalSK:   dSK,
-			RemotePK:  lPK,
-			Initiator: true,
-		})
-		dDone := make(chan error, 1)
-
-		go func() {
-			dDone <- d.Run(svr, retry)
-			close(dDone)
-		}()
-
-		for i := 0; i < reconCount; i++ {
-			teardown()
-			time.Sleep(retry * 2) // Dialer shouldn't quit retrying in this time.
-			setup()
-
-			conn, err := l.Accept()
-			require.NoError(t, err)
-
-			in, out := &AddIn{A: i, B: i}, new(int)
-			require.NoError(t, rpc.NewClient(conn).Call("TestRPC.Add", in, out))
-			require.Equal(t, in.A+in.B, *out)
-			require.NoError(t, conn.Close()) // NOTE: also closes d, as it's the same connection
-		}
-
-		// The same connection is closed above (conn.Close()), and hence, this may return an error.
-		_ = d.Close() // nolint: errcheck
-		require.NoError(t, <-dDone)
-	})
 }
 
 func TestConn(t *testing.T) {

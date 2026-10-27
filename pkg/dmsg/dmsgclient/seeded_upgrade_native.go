@@ -11,14 +11,10 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// upgradeDiscovery (native) backs the registering-fallback discovery with an
-// HTTP-over-dmsg client (net/http + dmsghttp transport over the client's own
-// sessions). See seeded.go for the rationale; the TinyGo build supplies a
-// net/http-free equivalent (and the seededDiscClient registration fix) in
-// seeded_upgrade_tinygo.go. seedServers is unused here — the native path keeps
-// the proven RegisteringFallbackDiscClient to avoid changing native standalone
-// tools; it can adopt the seededDiscClient later.
-func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, dClient disc.APIClient, seedServers []*disc.Entry, discDmsgAddr string) error { //nolint:unparam // matches the TinyGo version, which can fail
+// upgradeDiscovery backs the registering-fallback discovery with an
+// HTTP-over-dmsg client (net/http and a dmsghttp transport over the client's own
+// sessions). See seeded.go for the rationale. seedServers is unused.
+func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, dClient disc.APIClient, seedServers []*disc.Entry, discDmsgAddr string) error { //nolint:unparam
 	_ = seedServers
 	dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 	httpDisc := disc.NewHTTP(discDmsgAddr, dmsgHTTP, log)
