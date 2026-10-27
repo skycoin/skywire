@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -211,4 +212,27 @@ func waitForListen(t *testing.T, addr string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("listener at %s never came up", addr)
+}
+
+func testLog() logrus.FieldLogger {
+	l := logrus.New()
+	l.SetOutput(io.Discard)
+	return l
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := l.Addr().(*net.TCPAddr).Port
+	require.NoError(t, l.Close())
+	return port
+}
+
+func readN(t *testing.T, r io.Reader, n int) []byte {
+	t.Helper()
+	buf := make([]byte, n)
+	_, err := io.ReadFull(r, buf)
+	require.NoError(t, err)
+	return buf
 }

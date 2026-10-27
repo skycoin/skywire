@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -111,17 +110,6 @@ func BoolFromQuery(r *http.Request, key string, defaultVal bool) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid '%s' query value of '%s'", key, q)
 	}
-}
-
-// SplitRPCAddr returns host and port and whatever error results from parsing the rpc address interface
-func SplitRPCAddr(rpcAddr string) (host string, port uint16, err error) {
-	addrToken := strings.Split(rpcAddr, ":")
-	uint64port, err := strconv.ParseUint(addrToken[1], 10, 16)
-	if err != nil {
-		return
-	}
-
-	return addrToken[0], uint16(uint64port), nil
 }
 
 type ctxKeyLogger int
