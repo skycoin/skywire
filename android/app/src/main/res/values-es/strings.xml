@@ -622,6 +622,16 @@
     <string name="settings_dns_save">Usar este servidor</string>
     <string name="settings_dns_default">Usar los predeterminados</string>
     <string name="settings_dns_saved">Servidor DNS: %1$s.</string>
+    <string name="settings_reward">Recompensas</string>
+    <string name="settings_reward_hint">Pega el xpub de cuenta de tu billetera (BIP 44, nivel de cuenta) para ganar recompensas de Skywire. Cada recompensa va a una dirección nueva derivada de él. Las claves públicas extendidas de una billetera en Billetera pueden configurarlo directamente.</string>
+    <string name="settings_reward_placeholder">xpub…</string>
+    <string name="settings_reward_invalid">Escribe un xpub de cuenta. Empieza por xpub; no se acepta una dirección suelta.</string>
+    <string name="settings_reward_save">Guardar</string>
+    <string name="settings_reward_clear">Quitar</string>
+    <string name="settings_reward_saved">xpub de recompensas guardado.</string>
+    <string name="settings_reward_cleared">Dirección de recompensas eliminada. Este teléfono ya no gana recompensas.</string>
+    <string name="settings_reward_needs_core">Conecta primero: el núcleo guarda la dirección de recompensas.</string>
+    <string name="settings_reward_legacy">Hay una dirección suelta configurada. Sigue funcionando, pero una nueva debe ser un xpub de cuenta.</string>
     <string name="settings_dns_placeholder">Predeterminado</string>
     <string name="settings_dns_cleared">Se usan los servidores DNS predeterminados.</string>
 
@@ -992,6 +1002,7 @@
     <string name="wallet_xpub_receive">Cadena de recepción</string>
     <string name="wallet_xpub_change">Cadena de cambio</string>
     <string name="wallet_xpub_copied">Copiada</string>
+    <string name="wallet_xpub_use_reward">Usar para recompensas de Skywire</string>
     <string name="wallet_remove_action">Quitar de este dispositivo</string>
     <string name="wallet_remove_action_sub">Borra las claves de aquí. Sin la frase, las monedas se pierden para siempre.</string>
     <string name="wallet_remove_title">¿Quitar %1$s de este dispositivo?</string>
