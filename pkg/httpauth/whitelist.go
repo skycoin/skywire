@@ -13,8 +13,9 @@ import (
 var (
 	// ErrNotWhitelisted means the caller's key is not in the Whitelist.
 	ErrNotWhitelisted = errors.New("caller is not whitelisted")
-	// ErrBadWhitelistAuth means the NM-PK or NM-Sign header does not parse.
-	ErrBadWhitelistAuth = errors.New("malformed whitelist authentication headers")
+	// ErrNotDmsg means the request did not arrive over dmsg or skynet, so it has
+	// no authenticated caller.
+	ErrNotDmsg = errors.New("whitelisted endpoints are served over dmsg only")
 )
 
 // Whitelist holds the keys, in hex, allowed to call the bulk deregistration
@@ -34,30 +35,16 @@ func (wl Whitelist) Get(pk string) bool {
 }
 
 // Authorize returns the key of a caller allowed by the Whitelist, or the HTTP
-// status to answer with. Over dmsg the caller is the noise-authenticated
-// remote key and the headers are ignored. Over plain HTTP the caller sends its
-// key in NM-PK and a signature of that key's hex in NM-Sign.
+// status to answer with. The caller is the authenticated remote key of a dmsg
+// stream, which includes a stream a host visor hands over from skynet. A plain
+// HTTP request has no such key and is refused.
 func (wl Whitelist) Authorize(r *http.Request) (cipher.PubKey, int, error) {
-	if pk, ok := dmsgRemotePK(r); ok {
-		if !wl.Get(pk.Hex()) {
-			return cipher.PubKey{}, http.StatusForbidden, ErrNotWhitelisted
-		}
-		return pk, 0, nil
+	pk, ok := dmsgRemotePK(r)
+	if !ok {
+		return cipher.PubKey{}, http.StatusForbidden, ErrNotDmsg
 	}
-	pkHex := r.Header.Get("NM-PK")
-	if !wl.Get(pkHex) {
+	if !wl.Get(pk.Hex()) {
 		return cipher.PubKey{}, http.StatusForbidden, ErrNotWhitelisted
-	}
-	var pk cipher.PubKey
-	if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
-		return cipher.PubKey{}, http.StatusBadRequest, fmt.Errorf("%w: NM-PK: %v", ErrBadWhitelistAuth, err)
-	}
-	var sig cipher.Sig
-	if err := sig.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-		return cipher.PubKey{}, http.StatusBadRequest, fmt.Errorf("%w: NM-Sign: %v", ErrBadWhitelistAuth, err)
-	}
-	if err := cipher.VerifyPubKeySignedPayload(pk, sig, []byte(pk.Hex())); err != nil {
-		return cipher.PubKey{}, http.StatusForbidden, fmt.Errorf("%w: %v", ErrNotWhitelisted, err)
 	}
 	return pk, 0, nil
 }

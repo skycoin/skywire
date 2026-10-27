@@ -128,18 +128,15 @@ func TestAPI_PostUptimes(t *testing.T) {
 func TestAPI_DeregisterEntry_Unauthorized(t *testing.T) {
 	api := newTestAPI(t, &store.MockStore{})
 
-	// No NM-PK header → not in the whitelist → 403, before any store access.
+	// A plain HTTP caller has no dmsg key → 403, before any store access.
 	rr := serve(api, httptest.NewRequest(http.MethodDelete, "/api/services/deregister/vpn", nil))
 	require.Equal(t, http.StatusForbidden, rr.Code)
 }
 
 func TestAPI_DeregisterEntry_Success(t *testing.T) {
-	nmPK, nmSK := cipher.GenerateKeyPair()
+	nmPK, _ := cipher.GenerateKeyPair()
 	WhitelistPKs.Set(nmPK.Hex())
 	t.Cleanup(func() { delete(WhitelistPKs, nmPK.Hex()) })
-
-	sig, err := cipher.SignPayload([]byte(nmPK.Hex()), nmSK)
-	require.NoError(t, err)
 
 	deadPK, _ := cipher.GenerateKeyPair()
 	db := &store.MockStore{}
@@ -148,8 +145,7 @@ func TestAPI_DeregisterEntry_Success(t *testing.T) {
 
 	body, _ := json.Marshal([]string{deadPK.Hex()}) //nolint
 	req := httptest.NewRequest(http.MethodDelete, "/api/services/deregister/vpn", bytes.NewReader(body))
-	req.Header.Set("NM-PK", nmPK.Hex())
-	req.Header.Set("NM-Sign", sig.Hex())
+	req.RemoteAddr = nmPK.Hex() + ":80"
 
 	rr := serve(api, req)
 	require.Equal(t, http.StatusOK, rr.Code)
