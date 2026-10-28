@@ -75,7 +75,7 @@ func NewReadWriter(rw io.ReadWriter, ns *Noise) *ReadWriter {
 	return &ReadWriter{
 		origin:   rw,
 		ns:       ns,
-		rawInput: bufio.NewReaderSize(rw, maxFrameSize*2), // can fit 2 frames.
+		rawInput: bufio.NewReaderSize(rw, maxFrameSize), // one whole frame
 	}
 }
 
