@@ -276,6 +276,7 @@
       "terminal": "Terminal",
       "wallet": "Wallet",
       "mail": "Mail",
+      "contacts": "Contacts",
       "host-bridge": "Host bridge",
       "logs": "Logs",
       "settings": "Settings"
@@ -578,6 +579,34 @@
         "api-sets": "--enable-gui-api-sets"
       }
     }
+  },
+  "contacts": {
+    "title": "Contacts",
+    "help": "The visor's address book. Skychat shows these names for anyone you have not given a chat nickname, and the CLI accepts them wherever it takes a key.",
+    "filter": "Search names, keys, mail or groups",
+    "add": "New contact",
+    "import": "Import .vcf",
+    "export": "Export .vcf",
+    "empty": "No contacts yet.",
+    "no-match": "No contact matches the search.",
+    "name": "Name",
+    "keys": "Public keys",
+    "mail": "Mail addresses",
+    "payments": "Payment addresses",
+    "payments-help": "one per line, as coin:address",
+    "groups": "Groups",
+    "groups-help": "comma separated",
+    "notes": "Notes",
+    "one-per-line": "one per line",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "copy": "Click to copy",
+    "copied": "Copied.",
+    "saved": "Contact saved.",
+    "deleted": "Contact deleted.",
+    "imported": "Imported {{ n }} contact(s).",
+    "bad-payment": "Write each payment address as coin:address."
   },
   "mail": {
     "title": "Mail",
