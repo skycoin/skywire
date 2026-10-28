@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/contacts"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -78,4 +79,17 @@ func (v *Visor) ContactsExport() ([]byte, error) {
 	var buf bytes.Buffer
 	err = s.Export(&buf)
 	return buf.Bytes(), err
+}
+
+// appContactNames is the book as key hex to name for the app named appName,
+// or nil when that app may not read it or the book cannot be read.
+func (v *Visor) appContactNames(appName string) map[string]string {
+	if appName != skyenv.SkychatName {
+		return nil
+	}
+	list, err := v.ContactsList()
+	if err != nil {
+		return nil
+	}
+	return contacts.Names(list)
 }

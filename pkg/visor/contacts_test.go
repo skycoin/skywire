@@ -12,6 +12,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -55,4 +56,16 @@ func TestContactsOverRPC(t *testing.T) {
 
 	_, err = api.ContactsPut(contacts.Contact{})
 	require.Error(t, err, "a contact needs a name")
+}
+
+// TestAppContactNamesOnlySkychat checks that only skychat reads the book.
+func TestAppContactNamesOnlySkychat(t *testing.T) {
+	v := &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{}}}
+	v.conf.LocalPath = filepath.Join(t.TempDir(), "local")
+	pk, _ := cipher.GenerateKeyPair()
+	_, err := v.ContactsPut(contacts.Contact{Name: "Alice", Keys: []cipher.PubKey{pk}})
+	require.NoError(t, err)
+
+	require.Equal(t, map[string]string{pk.Hex(): "Alice"}, v.appContactNames(skyenv.SkychatName))
+	require.Nil(t, v.appContactNames(skyenv.SkysocksClientName))
 }
