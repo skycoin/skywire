@@ -123,10 +123,22 @@ func (g *Graph) routesFromHub(hub cipher.PubKey, k, maxLen, queueCap int) map[ci
 	if !ok {
 		return out
 	}
-	queue := []*bfsItem{{current: hubV, hops: 0}}
-	for len(queue) > 0 {
-		item := queue[0]
-		queue = queue[1:]
+	// The queue holds at most queueCap waiting items, and popped ones are dropped
+	// by moving the rest to the front, so it is allocated once rather than grown.
+	size := 1024
+	if queueCap > 0 {
+		size = 2 * queueCap
+	}
+	queue := make([]*bfsItem, 1, size)
+	queue[0] = &bfsItem{current: hubV, hops: 0}
+	for head := 0; head < len(queue); {
+		item := queue[head]
+		head++
+		if head >= 1024 && head >= len(queue)/2 {
+			n := copy(queue, queue[head:])
+			clear(queue[n:])
+			queue, head = queue[:n], 0
+		}
 
 		if item.hops >= 1 && item.hops <= maxLen {
 			pk := item.current.edge
@@ -146,7 +158,7 @@ func (g *Graph) routesFromHub(hub cipher.PubKey, k, maxLen, queueCap int) map[ci
 			if conn, ok := item.current.connections[neighbor.edge]; ok && conn.Type == tptypes.DMSG {
 				continue
 			}
-			if queueCap > 0 && len(queue) >= queueCap {
+			if queueCap > 0 && len(queue)-head >= queueCap {
 				break
 			}
 			queue = append(queue, &bfsItem{current: neighbor, parent: item, hops: item.hops + 1})
