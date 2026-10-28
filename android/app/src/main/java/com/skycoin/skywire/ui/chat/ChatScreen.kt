@@ -41,6 +41,7 @@ import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.navigation.HoldTabSwipe
+import com.skycoin.skywire.ui.navigation.TabSubPage
 
 /** Snackbars any chat page can raise. */
 val LocalChatSnackbar = staticCompositionLocalOf<SnackbarHostState> { error("no chat snackbar") }
@@ -111,6 +112,7 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     BackHandler(enabled = pages.size > 1) { viewModel.pop() }
     // Inside a conversation, horizontal drags belong to the chat (slide to cancel, seek bars).
     HoldTabSwipe(pages.size > 1)
+    TabSubPage(pages.size > 1)
 
     CompositionLocalProvider(LocalChatSnackbar provides snackbar) {
         if (!conn.ready) {
