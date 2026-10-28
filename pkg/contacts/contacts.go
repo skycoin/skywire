@@ -153,3 +153,38 @@ func (c Contact) normalized() (Contact, error) {
 	sort.Strings(c.Groups)
 	return c, nil
 }
+
+// Names maps each key in list to its contact's name, as key hex. When a key is
+// on more than one contact the first in list wins, so pass List's name order.
+func Names(list []Contact) map[string]string {
+	out := make(map[string]string)
+	for _, c := range list {
+		for _, k := range c.Keys {
+			if _, ok := out[k.Hex()]; !ok {
+				out[k.Hex()] = c.Name
+			}
+		}
+	}
+	return out
+}
+
+// KeyByName finds the one key of the contact named name, matched without case.
+// No match, several matching contacts, or a contact with no key or several
+// keys is an error, since a message must not go to a guessed key.
+func KeyByName(list []Contact, name string) (cipher.PubKey, error) {
+	var found []Contact
+	for _, c := range list {
+		if strings.EqualFold(c.Name, name) {
+			found = append(found, c)
+		}
+	}
+	switch {
+	case len(found) == 0:
+		return cipher.PubKey{}, fmt.Errorf("no contact named %q", name)
+	case len(found) > 1:
+		return cipher.PubKey{}, fmt.Errorf("%d contacts are named %q", len(found), name)
+	case len(found[0].Keys) != 1:
+		return cipher.PubKey{}, fmt.Errorf("contact %q has %d keys, give the key instead", name, len(found[0].Keys))
+	}
+	return found[0].Keys[0], nil
+}

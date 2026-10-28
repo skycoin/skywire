@@ -54,6 +54,16 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 			return rpcReply, rpcRcvr.CloseListener(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".ContactNames", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(map[string]string)
+			return rpcReply, rpcRcvr.ContactNames(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".Dial", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(appnet.Addr)
 		if err := rpcDec.Decode(rpcArg); err != nil {
