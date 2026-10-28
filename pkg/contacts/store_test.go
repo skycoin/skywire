@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -97,6 +98,9 @@ func TestImportForeignCard(t *testing.T) {
 }
 
 func TestBookIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix permission bits; Stat reports 0777 or 0666")
+	}
 	dir := filepath.Join(t.TempDir(), "contacts")
 	s, err := OpenStore(dir)
 	require.NoError(t, err)
