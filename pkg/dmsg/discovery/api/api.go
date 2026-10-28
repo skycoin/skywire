@@ -98,6 +98,12 @@ type API struct {
 	allClientsErr    error
 	allClientsSingle singleflight // dedupes concurrent refreshes
 
+	// byServerCache is the grouped form of allClientsCache, built once per
+	// refresh instead of hex-encoding every key on each request.
+	byServerMu    sync.Mutex
+	byServerFor   []*disc.Entry
+	byServerCache map[string][]string
+
 	// cxoPublisher mirrors set/del entry events into a CXO TreeStore
 	// feed under clients-by-server/<server>/<client>/{entry,tombstone}.
 	// Started automatically whenever DMSG-D runs with a configured
@@ -800,23 +806,7 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 			return
 		}
 
-		result := make(map[string][]string)
-		for _, entry := range entries {
-			if entry.Client == nil {
-				continue
-			}
-			clientPK := entry.Static.Hex()
-			for _, serverPK := range entry.Client.DelegatedServers {
-				// Hex once per (entry, server) pair — previously
-				// called twice per inner iter (map key + value
-				// lookup), doubling the hex-encode load on every
-				// invocation of this endpoint.
-				sHex := serverPK.Hex()
-				result[sHex] = append(result[sHex], clientPK)
-			}
-		}
-
-		httputil.WriteJSON(w, r, http.StatusOK, result)
+		httputil.WriteJSON(w, r, http.StatusOK, a.clientsGroupedByServer(entries))
 	}
 }
 
@@ -993,4 +983,28 @@ func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger
 
 	a.metrics.SetClientsCount(clientsCount)
 	a.metrics.SetServersCount(serversCount)
+}
+
+// clientsGroupedByServer groups client PKs by delegated server. The result
+// is reused while entries is the same cached slice and must not be mutated.
+func (a *API) clientsGroupedByServer(entries []*disc.Entry) map[string][]string {
+	a.byServerMu.Lock()
+	defer a.byServerMu.Unlock()
+	if a.byServerCache != nil && len(a.byServerFor) == len(entries) &&
+		(len(entries) == 0 || &a.byServerFor[0] == &entries[0]) {
+		return a.byServerCache
+	}
+	result := make(map[string][]string)
+	for _, entry := range entries {
+		if entry.Client == nil {
+			continue
+		}
+		clientPK := entry.Static.Hex()
+		for _, serverPK := range entry.Client.DelegatedServers {
+			sHex := serverPK.Hex()
+			result[sHex] = append(result[sHex], clientPK)
+		}
+	}
+	a.byServerFor, a.byServerCache = entries, result
+	return result
 }
