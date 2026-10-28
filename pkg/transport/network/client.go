@@ -156,6 +156,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	generic := &genericClient{}
 	generic.listenStarted = make(chan struct{})
 	generic.done = make(chan struct{})
+	generic.rebind = make(chan struct{}, 1)
 	generic.listeners = make(map[uint16]*listener)
 	generic.log = log
 	generic.mLog = f.MLogger
@@ -243,6 +244,8 @@ type genericClient struct {
 	done            chan struct{}
 	closeOnce       sync.Once
 	onExternalSTCPR func() // called when external STCPR connection received
+	// rebind asks the address resolver loop to re-register now (Rebind).
+	rebind chan struct{}
 }
 
 // initTransport will initialize skywire transport over opened raw connection to

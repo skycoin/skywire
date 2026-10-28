@@ -2048,3 +2048,15 @@ func (tm *Manager) SetHostedEntries(f func() []*Entry) { tm.hostedEntries.Store(
 
 // RepublishTPDList publishes the transport list now, as after a change.
 func (tm *Manager) RepublishTPDList() { tm.publishTPDList(tm.currentBareEntries()) }
+
+// Rebind makes every network client that registers with the address
+// resolver re-register now, as after the visor moved to another network.
+func (tm *Manager) Rebind() {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	for _, c := range tm.netClients {
+		if r, ok := c.(network.Rebinder); ok {
+			r.Rebind()
+		}
+	}
+}
