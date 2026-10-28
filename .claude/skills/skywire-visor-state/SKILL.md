@@ -42,7 +42,7 @@ To compare a field across a fleet, loop over the keys from `skywire cli visor hv
 ```
 skywire cli visor state --select runtime --jq '.runtime | {compiler, heap_live_bytes, heap_goal_bytes, live_limit_ratio, rss_bytes, last_1m, last_5m}'
 ```
-`last_1m` and `last_5m` hold `pause_share` (stop the world CPU time over total CPU time), `gc_share`, `collections_per_min` and `covered_s`. `last_5m.pauses` and `pauses_total` give the p50, p99 and max pause, rounded up to the histogram bucket. A sampler takes one reading every 5 s into a ring (`SKYWIRE_GCTRACE_SAMPLES`, default 360).
+`last_1m` and `last_5m` hold `pause_share` (stop the world CPU time over total CPU time), `gc_share`, `collections_per_min` and `covered_s`. `last_5m.pauses` and `pauses_total` give the p50, p99 and max pause, rounded up to the histogram bucket. A sampler takes one reading every 5 s into a ring (visor config `gc_trace_samples`, default 360).
 
 The same ring is served as `/debug/gctrace` on the localhost pprof listener and on the survey whitelisted dmsg :80 surface. It is plain text, one line per sample with the deltas since the last one, or JSON with `?json=1`.
 ```

@@ -172,3 +172,11 @@ func BenchmarkSample(b *testing.B) {
 		s.Sample()
 	}
 }
+
+func TestConfigureSetsRingLength(t *testing.T) {
+	Configure(12)
+	t.Cleanup(func() { Configure(0) })
+	if got := int(cfgSamples.Load()); got != 12 {
+		t.Fatalf("configured samples = %d", got)
+	}
+}

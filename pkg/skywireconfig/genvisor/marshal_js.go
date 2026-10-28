@@ -354,6 +354,10 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("log_hook_level")
 		writeQuoted(w, v.LogHookLevel)
 	}
+	if v.GCTraceSamples != 0 {
+		o.field("gc_trace_samples")
+		writeInt(w, int64(v.GCTraceSamples))
+	}
 	o.field("local_path")
 	writeQuoted(w, v.LocalPath)
 	if v.Skyenv != "" {

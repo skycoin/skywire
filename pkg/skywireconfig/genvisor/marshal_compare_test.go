@@ -27,6 +27,7 @@ func TestMustMarshalJSONNative_MatchesStdlib(t *testing.T) {
 	}{
 		{"defaults", Options{}, nil},
 		{"hypervisor", Options{IsHypervisor: true}, nil},
+		{"gc-trace-samples", Options{}, func(v *visorconfig.V1) { v.GCTraceSamples = 720 }},
 		{"reward+public", Options{
 			RewardAddress: "2jnZqqJsCMB1v4VUKk6f1PDN9EuLZQxqoqp",
 			IsPublic:      true,
