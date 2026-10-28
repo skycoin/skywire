@@ -120,6 +120,10 @@ type ServicesCXOPublisher struct {
 	lastError error
 }
 
+// servicesKeepRoots keeps about a minute of Roots at the default 1 s batch, so a
+// visor whose fill outlasts several publishes can still fetch the objects it needs.
+const servicesKeepRoots = 60
+
 // StartServicesCXOPublisher constructs a publisher backed by the
 // given DMSG client and SD secret key. The publisher's allowlist is
 // open — the underlying SD HTTP routes are public reads, so the CXO
@@ -133,6 +137,7 @@ func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.
 		Logger:     log,
 		InMemoryDB: true, // services are always recomputed from redis on next mutation/sweep
 		DmsgPort:   skyenv.DmsgSDServicesCXOPort,
+		KeepRoots:  servicesKeepRoots,
 	})
 	if err != nil {
 		return nil, err

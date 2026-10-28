@@ -532,6 +532,7 @@ func (a *API) StartReachCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey) (*Rea
 		InMemoryDB:  true, // rebuilt from bindings and visor feeds after a restart
 		DmsgPort:    skyenv.DmsgARReachCXOPort,
 		BatchWindow: reachBatchWindow,
+		KeepRoots:   arKeepRoots,
 	})
 	if err != nil {
 		return nil, err
