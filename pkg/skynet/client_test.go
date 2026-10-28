@@ -175,11 +175,12 @@ func TestClientHandleLocalConn_DialRemoteFails(t *testing.T) {
 	})
 
 	cli, srv := net.Pipe()
+	// Set before starting: a pipe refuses deadlines once srv is closed.
+	require.NoError(t, cli.SetReadDeadline(time.Now().Add(2*time.Second)))
 	done := make(chan struct{})
 	go func() { c.handleLocalConn(srv); close(done) }()
 
 	// handleLocalConn must close the local conn when the remote dial fails.
-	require.NoError(t, cli.SetReadDeadline(time.Now().Add(2*time.Second)))
 	_, err := cli.Read(make([]byte, 1))
 	require.Error(t, err) // EOF: server end closed
 	select {
