@@ -129,4 +129,18 @@ class ChatProtocolTest {
         assertEquals(parseTime("2026-10-28T17:41:07.123+08:00"), ms)
         assertNull(parseTime(""))
     }
+
+    /** group-delete names an author: another member's message with the same feed id stays. */
+    @Test
+    fun groupTombstoneRemovesOnlyItsAuthorsMessage() {
+        val me = "03aa"
+        val list = listOf(
+            ChatMessage(key = "a", from = "02bb", tsNano = "100"),
+            ChatMessage(key = "b", from = "02cc", tsNano = "100"),
+            ChatMessage(key = "c", from = ChatMessage.ME, tsNano = "200"),
+        )
+        assertEquals(listOf("b", "c"), SseDispatch.withoutDeleted(list, "100", "02bb", me).map { it.key })
+        assertEquals(listOf("a", "b"), SseDispatch.withoutDeleted(list, "200", me, me).map { it.key })
+        assertTrue(SseDispatch.withoutDeleted(list, "300", "02bb", me) === list)
+    }
 }
