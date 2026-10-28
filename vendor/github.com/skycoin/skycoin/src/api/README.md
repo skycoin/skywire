@@ -848,7 +848,7 @@ Method: POST
 Args:
     seed: wallet seed [required]
     seed-passphrase: wallet seed passphrase [optional, bip44 type wallet only]
-    type: wallet type [required, one of "deterministic", "bip44" or "xpub"]
+    type: wallet type [required, one of "deterministic", "bip44", "xpub" or "pq"]
     bip44-coin: BIP44 coin type [optional, defaults to 8000 (skycoin's coin type), only valid if type is "bip44"]
     xpub: xpub key [required for xpub wallets]
     label: wallet label [required]
@@ -1210,10 +1210,13 @@ The request body includes:
 * A configuration for how destination hours are distributed, either manual or automatic
 * Additional options
 
-`change_address` is optional. If not provided and the wallet is a `deterministic` type
-wallet, then the change address will default to an address from one of the
-unspent outputs being spent as a transaction input.  If the wallet is a `bip44` type
-wallet, then a new, unused change address will be created.
+`change_address` is optional. If not provided, the change goes to a new address
+so that it does not return to an address whose public key the spend reveals.
+A `bip44` wallet uses an unused address on its change chain. A `deterministic`
+or `xpub` wallet generates its next address, and an encrypted `deterministic`
+wallet needs its password for that, so an unsigned request from one must name
+a `change_address`. A `collection` wallet cannot generate addresses, so its
+change goes to an address from one of the unspent outputs being spent.
 
 Example request body with manual hours selection type, unencrypted wallet and all wallet addresses may spend:
 
