@@ -490,7 +490,7 @@ func (p *Publisher) hydrateFromContainer() error {
 	}
 	hydrated := newMemNode()
 	var dropped []string
-	if err := hydrateMemNode(up, &rootNode, hydrated, &dropped, ""); err != nil {
+	if err := hydrateMemNode(up, &rootNode, hydrated, &dropped, "", p.dropLeaves); err != nil {
 		return fmt.Errorf("walk: %w", err)
 	}
 	// A dangling sub-object reference (the filling-trap's persisted form:
@@ -520,7 +520,10 @@ func (p *Publisher) hydrateFromContainer() error {
 // could not be resolved from CXDS (the filling-trap's persisted form). Such a
 // ref is SKIPPED rather than aborting the whole hydrate, so the intact subtrees
 // survive a restart; path threads the ancestor names for a locatable label.
-func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]string, path string) error {
+// With drop set a sub-tree that came back whole is not copied into memory: its
+// leaves stay in the store the way a published sub-tree does (see evict.go), and
+// it counts as already published so the next publish reuses its hash.
+func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]string, path string, drop bool) error {
 	n, err := node.Children.Len(up)
 	if err != nil {
 		return err
@@ -531,7 +534,11 @@ func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]
 			return err
 		}
 		if len(entry.Leaf) > 0 {
-			dest.leaves[entry.Name] = append([]byte(nil), entry.Leaf...)
+			if drop && path != "" {
+				dest.leaves[entry.Name] = nil
+			} else {
+				dest.leaves[entry.Name] = append([]byte(nil), entry.Leaf...)
+			}
 			continue
 		}
 		if entry.Sub.Hash == (skycipher.SHA256{}) {
@@ -553,8 +560,17 @@ func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]
 			return err
 		}
 		child := newMemNode()
-		if err := hydrateMemNode(up, &sub, child, dropped, childPath); err != nil {
+		before := len(*dropped)
+		if err := hydrateMemNode(up, &sub, child, dropped, childPath, drop); err != nil {
 			return err
+		}
+		if drop {
+			if len(child.leaves) > 0 {
+				child.evictedFrom = entry.Sub.Hash
+			}
+			if len(*dropped) == before {
+				child.pubHash, child.cached = entry.Sub.Hash, true
+			}
 		}
 		dest.subs[entry.Name] = child
 	}
