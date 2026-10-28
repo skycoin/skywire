@@ -1715,5 +1715,6 @@
     <string name="chat_notif_new_message">Nuevo mensaje</string>
     <string name="chat_kind_public_short">Público</string>
     <string name="chat_kind_private_short">Privado</string>
+    <string name="chat_error_no_reply">SkyChat no respondió a tiempo. Inténtalo de nuevo.</string>
     <!-- skychat-native:end -->
 </resources>

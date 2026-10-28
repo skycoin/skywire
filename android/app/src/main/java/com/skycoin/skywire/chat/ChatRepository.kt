@@ -131,6 +131,8 @@ class ChatRepository private constructor(internal val app: Context) {
 
     fun errorText(e: Throwable): String = when (e) {
         is SkychatHttpException -> e.message ?: "HTTP ${e.code}"
+        // A dropped connection or a timeout, not an answer: say so plainly.
+        is IOException -> app.getString(R.string.chat_error_no_reply)
         else -> e.message ?: e.javaClass.simpleName
     }
 
