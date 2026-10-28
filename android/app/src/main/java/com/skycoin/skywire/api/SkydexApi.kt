@@ -6,9 +6,12 @@ import com.skycoin.skywire.core.SecretStore
 import com.skycoin.skywire.core.SkydexProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,16 +33,12 @@ data class MarketStatus(
  * Client for skydex-client's *own* control API (`127.0.0.1:8051` by default) —
  * separate from [VisorApi], which talks to the visor on `:8000`.
  *
- * This is the seam that lets the market public key be entered natively while
- * the trading UI stays the page the desktop already serves. The engine never
- * dials a market on its own: `--market-pk` only pre-fills the page's connect
- * form, and something has to POST `/api/connect` for a connection to exist.
- * Doing that here is what makes "type a key, get the market" one step on the
- * phone instead of two — and the page, which polls `/api/status` on load, comes
- * up already on the market rather than on a second connect form.
- *
- * The reverse direction matters just as much: [status] is the truth the screen
- * mirrors rather than whatever the native header last did.
+ * Everything the SkyDEX screens do goes through here: the connection itself,
+ * and every trading call, which skydex-client passes to the market over dmsg.
+ * The engine never dials a market on its own: `--market-pk` only pre-fills a
+ * connect form, and something has to POST `/api/connect` for a connection to
+ * exist. [status] is the truth the screen mirrors rather than whatever it last
+ * did.
  *
  * Every request carries the basic-auth credential of the phone's gate (see
  * [SkydexProfile]) — on this device that surface is not open, including to us.
@@ -69,6 +68,15 @@ class SkydexApi private constructor(context: Context) {
         .callTimeout(95, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * For the calls skydex-client passes through to the market: each one is a
+     * round trip over dmsg, which takes seconds on a relayed route.
+     */
+    private val marketClient = client.newBuilder()
+        .readTimeout(45, TimeUnit.SECONDS)
+        .callTimeout(50, TimeUnit.SECONDS)
+        .build()
+
     /** The device-local password the gate is configured with. */
     suspend fun password(): String = secrets.skydexPassword()
 
@@ -76,7 +84,7 @@ class SkydexApi private constructor(context: Context) {
     suspend fun authorization(): String =
         okhttp3.Credentials.basic(SkydexProfile.USER, password())
 
-    /** True once the trading UI answers — the gate for showing the WebView. */
+    /** True once skydex-client answers on its control port. */
     suspend fun probe(baseUrl: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             client.newCall(request(baseUrl)).execute().use { it.isSuccessful }
@@ -122,6 +130,65 @@ class SkydexApi private constructor(context: Context) {
             client.newCall(request(baseUrl + "api/disconnect", body)).execute().close()
         }
     }
+
+    // --- the market, through skydex-client ---
+
+    suspend fun currencies(baseUrl: String): DexCurrencies =
+        market(baseUrl + "api/currencies", null, DexCurrencies.serializer())
+
+    suspend fun products(baseUrl: String): List<DexProduct> =
+        market(baseUrl + "api/products", null, DexProducts.serializer()).products.orEmpty()
+
+    suspend fun orders(baseUrl: String): List<DexOrder> =
+        market(baseUrl + "api/orders", null, DexOrders.serializer()).orders.orEmpty()
+
+    suspend fun listings(baseUrl: String): List<DexListing> =
+        market(baseUrl + "api/listings/mine", null, DexListings.serializer()).listings.orEmpty()
+
+    suspend fun orderStatus(baseUrl: String, orderId: String): DexOrderStatus =
+        market(baseUrl + "api/order-status", idBody("order_id", orderId), DexOrderStatus.serializer())
+
+    suspend fun register(baseUrl: String, walletSky: String, wallets: Map<String, String>) {
+        val body = json.encodeToString(DexRegisterRequest.serializer(), DexRegisterRequest(walletSky, wallets))
+        market(baseUrl + "api/register", body, DexMessage.serializer())
+    }
+
+    suspend fun createListing(baseUrl: String, sellCoin: String, amount: Double, price: Double, paymentCurrency: String): DexCreatedListing {
+        val body = json.encodeToString(DexListingRequest.serializer(), DexListingRequest(sellCoin, amount, price, paymentCurrency))
+        return market(baseUrl + "api/listings", body, DexCreatedListing.serializer())
+    }
+
+    suspend fun cancelListing(baseUrl: String, listingId: String): DexMessage =
+        market(baseUrl + "api/listings/cancel", idBody("listing_id", listingId), DexMessage.serializer())
+
+    suspend fun cancelOrder(baseUrl: String, orderId: String): DexMessage =
+        market(baseUrl + "api/orders/cancel", idBody("order_id", orderId), DexMessage.serializer())
+
+    suspend fun buy(baseUrl: String, productId: String): DexPurchase =
+        market(baseUrl + "api/buy", idBody("product_id", productId), DexPurchase.serializer())
+
+    /** A GET, or a POST with [body]; a refusal comes back as [SkydexException] in the market's words. */
+    private suspend fun <T> market(url: String, body: String?, deserializer: DeserializationStrategy<T>): T =
+        withContext(Dispatchers.IO) {
+            marketClient.newCall(request(url, body?.toRequestBody(JSON_MEDIA))).execute().use { resp ->
+                val text = resp.body.string()
+                if (!resp.isSuccessful) {
+                    val refusal = runCatching { json.decodeFromString(DexRefusal.serializer(), text) }.getOrNull()
+                    throw SkydexException(
+                        refusal?.error?.takeIf { it.isNotEmpty() } ?: app.getString(R.string.dex_error_connect, resp.code),
+                        refusal?.code.orEmpty(),
+                        resp.code,
+                    )
+                }
+                json.decodeFromString(deserializer, text.ifBlank { EMPTY_BODY })
+            }
+        }
+
+    private fun idBody(key: String, id: String): String =
+        json.encodeToString(JsonObject.serializer(), JsonObject(mapOf(key to JsonPrimitive(id))))
+
+    @Serializable
+    private data class DexRefusal(val error: String = "", val code: String = "")
 
     // --- plumbing ---
 
