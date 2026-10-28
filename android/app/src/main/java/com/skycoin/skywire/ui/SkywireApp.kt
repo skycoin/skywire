@@ -73,8 +73,10 @@ import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.navigation.TAB_ORDER
+import com.skycoin.skywire.ui.navigation.tabOnSubPage
 import com.skycoin.skywire.ui.navigation.tabSwipe
 import com.skycoin.skywire.ui.navigation.tabSwipeHeld
+import com.skycoin.skywire.ui.components.isShortScreen
 import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
@@ -171,13 +173,19 @@ fun SkywireApp() {
         return
     }
 
+    // A phone in landscape has about 400 dp of height, and the bar takes a fifth
+    // of it. Screens pushed over a tab (SkyDEX, SkySOCKS, a wallet step) leave by
+    // Back, so there the bar gives its room to the content.
+    val shortScreen = isShortScreen()
     Scaffold(
         bottomBar = {
-            SkyNavBar(
-                currentRoute = currentRoute,
-                onSelect = { navController.navigateToTab(it) },
-                onOpenHub = { navController.navigateToHub() },
-            )
+            if (!shortScreen || (currentRoute in TAB_ORDER && !tabOnSubPage.value)) {
+                SkyNavBar(
+                    currentRoute = currentRoute,
+                    onSelect = { navController.navigateToTab(it) },
+                    onOpenHub = { navController.navigateToHub() },
+                )
+            }
         },
     ) { innerPadding ->
         NavHost(
