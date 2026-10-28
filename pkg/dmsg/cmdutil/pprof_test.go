@@ -139,3 +139,21 @@ func TestInitPProf_HTTPMode_CacheEndpoint(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 }
+
+// TestInitPProf_HTTPMode_GCTraceEndpoint verifies the GC trace is served on the
+// local pprof listener.
+func TestInitPProf_HTTPMode_GCTraceEndpoint(t *testing.T) {
+	log := logging.MustGetLogger("test")
+	addr := getFreePort(t)
+
+	stop := InitPProf(log, "http", addr)
+	defer stop()
+
+	time.Sleep(200 * time.Millisecond)
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/debug/gctrace", addr)) //nolint:gosec
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "text/plain")
+}

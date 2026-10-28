@@ -8,6 +8,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/router"
@@ -104,6 +105,11 @@ type StateSnapshot struct {
 	// see DiagSnapshot. Cheap; part of the default snapshot.
 	Diag *DiagSnapshot `json:"diag,omitempty"`
 
+	// Runtime is the garbage collector and memory view read from runtime/metrics,
+	// with pause share and collection rate over the last 1 and 5 minutes. It
+	// reads the same on Go and TinyGo. Cheap; part of the default snapshot.
+	Runtime *gcmon.State `json:"runtime,omitempty"`
+
 	// Roles is what this visor is FOR the network: the in-process dmsg
 	// server (if any, and on which key/address), both directions of the dmsg
 	// relay, and whether it refuses transit. See RolesSnapshot. Cheap; part
@@ -136,13 +142,14 @@ const (
 	SelectProxy      = "proxy"      // visor-side proxystatus snapshot (skysocks); opt-in only
 	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
 	SelectRoles      = "roles"      // in-process dmsg server, dmsg relay (both directions), transit refusal
+	SelectRuntime    = "runtime"    // GC and memory metrics from runtime/metrics, with 1m and 5m windows
 )
 
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
 	SelectSummary, SelectHealth, SelectRouting, SelectMux, SelectPool,
 	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectServices, SelectProxy, SelectDiag,
-	SelectRoles,
+	SelectRoles, SelectRuntime,
 }
 
 // stateSelectAliases maps a snapshot JSON field name onto the --select key

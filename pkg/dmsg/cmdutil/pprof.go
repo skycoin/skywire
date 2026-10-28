@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -187,6 +188,7 @@ func startPProfHTTP(log *logging.Logger, addr string, traceOnly bool) {
 			log.Infof("Serving trace endpoint on http://%s/debug/pprof/trace (dedicated thread)", addr)
 		} else {
 			mux.HandleFunc("/debug/cache", cacheStatsHandler)
+			mux.Handle("/debug/gctrace", gcmon.DefaultHandler())
 			log.Infof("Serving pprof on http://%s (dedicated thread); cipher+DH cache stats at /debug/cache", addr)
 		}
 

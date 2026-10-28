@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -333,6 +334,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	authRoute("GET /debug/pprof/trace", pprof.Trace)
 	// The last seconds of execution trace, when the flight recorder runs.
 	authRoute("GET /debug/pprof/flightrecorder", flightrec.Handler().ServeHTTP)
+	// One line per 5 s sample of the garbage collector, ?json=1 for JSON.
+	authRoute("GET /debug/gctrace", gcmon.DefaultHandler().ServeHTTP)
 	// A full heap dump written to LocalPath/log, for finding what retains an object.
 	authRoute("POST /debug/heapdump", heapDumpHandler(localPath))
 

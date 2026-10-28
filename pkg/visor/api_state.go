@@ -4,6 +4,7 @@ package visor
 import (
 	"time"
 
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/wasmhv/execwasm"
@@ -198,6 +199,10 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 
 	if want.Has(visorapi.SelectRoles) {
 		snap.Roles = v.RolesSnapshot()
+	}
+
+	if want.Has(visorapi.SelectRuntime) {
+		snap.Runtime = gcmon.Default().State()
 	}
 
 	// proxy is opt-in (never in the default snapshot): the visor-side
