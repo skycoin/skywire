@@ -90,7 +90,8 @@ type V1 struct {
 	KeyRing *KeyRing `json:"keyring,omitempty"`
 
 	LogLevel             string                       `json:"log_level"`
-	LogHookLevel         string                       `json:"log_hook_level,omitempty"` // most verbose level kept for /debug/log, info when empty
+	LogHookLevel         string                       `json:"log_hook_level,omitempty"`   // most verbose level kept for /debug/log, info when empty
+	GCTraceSamples       int                          `json:"gc_trace_samples,omitempty"` // samples kept for /debug/gctrace at 5 s each, 360 when zero
 	LocalPath            string                       `json:"local_path"`
 	Skyenv               string                       `json:"skyenv,omitempty"` // the skywire.conf config gen read; live changes are written back there
 	StunServers          []string                     `json:"stun_servers"`

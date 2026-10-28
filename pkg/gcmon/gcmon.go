@@ -8,11 +8,10 @@ package gcmon
 
 import (
 	"math"
-	"os"
 	"runtime"
 	"runtime/metrics"
-	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,9 +20,6 @@ const Interval = 5 * time.Second
 
 // DefaultSamples is the default ring length, about 30 minutes at Interval.
 const DefaultSamples = 360
-
-// SamplesEnv overrides the ring length.
-const SamplesEnv = "SKYWIRE_GCTRACE_SAMPLES"
 
 // histEvery is how often the pause histogram is kept for windowed percentiles.
 const histEvery = time.Minute
@@ -231,17 +227,22 @@ func (s *Sampler) samplesLocked() []Sample {
 }
 
 var (
-	defOnce sync.Once
-	def     *Sampler
+	defOnce    sync.Once
+	def        *Sampler
+	cfgSamples atomic.Int64
 )
 
+// Configure sets the ring length of the default sampler from the visor config.
+// Zero keeps DefaultSamples. It has no effect once the sampler has started.
+func Configure(samples int) { cfgSamples.Store(int64(samples)) }
+
 // Default returns the process wide sampler, starting it on first use. Its ring
-// length comes from SamplesEnv.
+// length comes from Configure.
 func Default() *Sampler {
 	defOnce.Do(func() {
 		n := DefaultSamples
-		if v, err := strconv.Atoi(os.Getenv(SamplesEnv)); err == nil && v > 1 {
-			n = v
+		if c := int(cfgSamples.Load()); c > 1 {
+			n = c
 		}
 		def = New(n)
 		def.Start()

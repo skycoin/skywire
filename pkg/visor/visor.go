@@ -729,6 +729,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	logBroadcaster := logging.NewBroadcaster()
 	mLog.AddHook(logBroadcaster)
 
+	gcmon.Configure(conf.GCTraceSamples)
 	gcmon.Default()
 	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
 	defer stopPProf()
