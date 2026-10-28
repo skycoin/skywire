@@ -74,6 +74,8 @@ import com.skycoin.skywire.chat.GroupInfo
 import com.skycoin.skywire.chat.SAVED_KEY
 import com.skycoin.skywire.chat.ThreadSummary
 import com.skycoin.skywire.chat.abbrevPk
+import com.skycoin.skywire.chat.isVideoMessage
+import com.skycoin.skywire.chat.isVoiceMessage
 import com.skycoin.skywire.chat.acceptInvite
 import com.skycoin.skywire.chat.callLog
 import com.skycoin.skywire.chat.declineInvite
@@ -541,7 +543,14 @@ fun groupSubtitle(g: GroupInfo, me: String): String {
 /** `↑ `/`↓ ` and the shown text, the way list rows preview (index.html updatePreview). */
 @Composable
 fun previewText(m: ChatMessage, own: Boolean, group: Boolean = false, sender: String = ""): String {
-    val text = shownText(m.text.ifEmpty { m.file?.name.orEmpty() })
+    val f = m.file
+    val text = when {
+        f == null -> shownText(m.text)
+        f.isVoiceMessage() -> "\uD83C\uDFA4 " + stringResource(R.string.chat_voice_message)
+        f.isVideoMessage() -> "\uD83D\uDCF9 " + stringResource(R.string.chat_video_message)
+        f.name.isNotEmpty() && f.name != "file" -> "\uD83D\uDCCE " + f.name
+        else -> shownText(m.text)
+    }
     return when {
         !own -> text
         m.mine -> "↑ $text"
