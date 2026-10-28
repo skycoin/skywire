@@ -173,6 +173,10 @@ func skymailEffective(conf *visorconfig.V1) (bool, skymail.Limits, error) {
 // as pty and the resolving proxies do, so it works the same in a browser tab.
 const skymailApp = "skymail"
 
+// errHostMTA is why the mailbox stays down when `serve add 25` hands skynet
+// port 25 to the host's mail server, which then receives the mail instead.
+var errHostMTA = errors.New("port 25 is served by the host's mail server (`serve add 25`)")
+
 func initSkymail(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.mail.mu.Lock()
 	v.mail.ctx, v.mail.log = ctx, log
@@ -202,6 +206,11 @@ func (v *Visor) skymailAppFunc() appcommon.AppFunc {
 			}
 		}
 		if err := v.startSkymail(); err != nil {
+			// The host's own mail server owning port 25 is a setup, not a fault.
+			if errors.Is(err, errHostMTA) {
+				appCl.SetStatusOrLog(appserver.AppDetailedStatus(err.Error()))
+				return nil
+			}
 			appCl.SetErrorOrLog(err)
 			return err
 		}
@@ -238,7 +247,7 @@ func (v *Visor) startSkymail() error {
 		return fail(errors.New("no dmsg client"))
 	}
 	if v.forwardedPorts != nil && v.forwardedPorts.Get(skymailPort) != nil {
-		return fail(errors.New("port 25 is forwarded (`serve add 25`) to the host's MTA"))
+		return fail(errHostMTA)
 	}
 
 	v.initLock.Lock()

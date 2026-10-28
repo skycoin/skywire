@@ -37,6 +37,7 @@ var autoconfigFlagFor = map[string]func(nv reflect.Value) (flag, value string){
 	"dmsg_web.proxy_addr":                stringFlag("dmsgweb-addr"),
 	"dmsg_web.upstream_socks":            stringFlag("dmsgweb-upstream"),
 	"skynet_web.enable":                  boolFlag("skynetweb"),
+	"skymail_bridge.enable":              boolFlag("skymail-bridge"),
 	"skynet_web.proxy_addr":              stringFlag("skynetweb-addr"),
 	"skynet_web.upstream_socks":          stringFlag("skynetweb-upstream"),
 	"memory_limit":                       stringFlag("memory-limit"),
