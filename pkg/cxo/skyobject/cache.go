@@ -115,6 +115,8 @@ type Cache struct {
 	is map[cipher.SHA256]*item
 	rs map[registry.RegistryRef]*itemRegistry
 
+	rankBuf []rankItem // scratch for cleanDown, under mx
+
 	stat *cxdsStat
 
 	closeo sync.Once //nolint:unused
@@ -495,6 +497,11 @@ func (c *Cache) delete(key cipher.SHA256, it *item) (err error) {
 	return err
 }
 
+type rankItem struct {
+	key cipher.SHA256
+	it  *item
+}
+
 // clean the Cache down to lower boundary
 func (c *Cache) cleanDown(vol int) (err error) {
 
@@ -502,15 +509,18 @@ func (c *Cache) cleanDown(vol int) (err error) {
 	var tp = time.Now()
 	defer func() { c.stat.addCacheCleaning(time.Now().Sub(tp)) }() //nolint:staticcheck
 
-	type rankItem struct {
-		key cipher.SHA256
-		it  *item
-	}
-
 	// Value slice (not []*rankItem) so we don't allocate a tiny heap
-	// object per cache entry; this turns one make+N small allocs into
-	// a single backing array per cleanDown call.
-	var rank = make([]rankItem, 0, len(c.is))
+	// object per cache entry. The backing array is kept on the Cache and
+	// reused, since cleanDown runs under the Cache lock on every eviction.
+	var rank = c.rankBuf[:0]
+	if cap(rank) < len(c.is) {
+		rank = make([]rankItem, 0, len(c.is)+len(c.is)/4)
+	}
+	buf := rank
+	defer func() {
+		clear(buf[:cap(buf)])
+		c.rankBuf = buf[:0]
+	}()
 
 	for key, it := range c.is {
 
