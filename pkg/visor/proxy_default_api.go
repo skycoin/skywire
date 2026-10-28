@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -1402,4 +1403,24 @@ func (proxyDefaultAPI) HostBridgeUnforward(string) error { return ErrProxyNotSup
 
 func (proxyDefaultAPI) RewardAddressExposure(_ string) (rewardconfig.AddressExposure, error) {
 	return rewardconfig.AddressExposure{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ContactsList() ([]contacts.Contact, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ContactsPut(_ contacts.Contact) (*contacts.Contact, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ContactsDelete(_ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ContactsImport(_ []byte) (int, error) {
+	return 0, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ContactsExport() ([]byte, error) {
+	return nil, ErrProxyNotSupported
 }

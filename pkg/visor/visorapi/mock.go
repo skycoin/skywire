@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -1945,3 +1946,18 @@ func (mc *mockRPCClient) HostBridgeUnforward(string) error { return nil }
 func (mc *mockRPCClient) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
 	return rewardconfig.AddressExposure{Address: addr, Balance: "0"}, nil
 }
+
+// ContactsList implements API.
+func (mc *mockRPCClient) ContactsList() ([]contacts.Contact, error) { return nil, nil }
+
+// ContactsPut implements API.
+func (mc *mockRPCClient) ContactsPut(c contacts.Contact) (*contacts.Contact, error) { return &c, nil }
+
+// ContactsDelete implements API.
+func (mc *mockRPCClient) ContactsDelete(string) error { return nil }
+
+// ContactsImport implements API.
+func (mc *mockRPCClient) ContactsImport([]byte) (int, error) { return 0, nil }
+
+// ContactsExport implements API.
+func (mc *mockRPCClient) ContactsExport() ([]byte, error) { return nil, nil }

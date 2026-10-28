@@ -47,6 +47,7 @@ type API interface {
 	Routing
 	Transports
 	Mail
+	Contacts
 }
 
 // Node is the visor itself: status, lifecycle, configuration, rewards and
