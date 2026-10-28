@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -61,6 +64,8 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.dex.DexLocal
 import com.skycoin.skywire.ui.components.HelpTopic
+import com.skycoin.skywire.ui.components.isShortScreen
+import com.skycoin.skywire.ui.components.rememberCollapsingHeader
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.theme.SkyAccents
 
@@ -108,14 +113,19 @@ fun DexScreen(
     }
     BackHandler(enabled = state.connected) { goBack() }
 
+    // On a short screen (a phone in landscape) the title bar and the market row
+    // give way as the list scrolls; the tabs stay.
+    val compact = state.connected && isShortScreen()
+    val topBar: @Composable () -> Unit = {
+        SkyTopBar(
+            title = stringResource(R.string.app_skydex),
+            onBack = goBack,
+            help = HelpTopic(R.string.help_dex_title, R.string.help_dex_body),
+        )
+    }
+
     Scaffold(
-        topBar = {
-            SkyTopBar(
-                title = stringResource(R.string.app_skydex),
-                onBack = goBack,
-                help = HelpTopic(R.string.help_dex_title, R.string.help_dex_body),
-            )
-        },
+        topBar = { if (!compact) topBar() },
         snackbarHost = { SnackbarHost(snackbar) },
         // The system bars belong to the app scaffold this route sits in and
         // are consumed there — claiming them again would offset the screen.
@@ -130,22 +140,28 @@ fun DexScreen(
                 .imePadding(),
         ) {
             if (state.connected) {
-                ConnectedHeader(state, onDisconnect = viewModel::disconnect)
+                val collapse = rememberCollapsingHeader(enabled = compact)
+                Column(collapse.modifier) {
+                    if (compact) topBar()
+                    ConnectedHeader(state, onDisconnect = viewModel::disconnect)
+                }
                 TabStrip(state.tab, viewModel::selectTab)
-                Banners(state, local, viewModel)
-                Box(Modifier.weight(1f)) {
+                val lead = banners(state, local, viewModel)
+                Box(Modifier.weight(1f).nestedScroll(collapse.connection)) {
                     when (state.tab) {
-                        DexTab.MARKET -> MarketTab(state, local, viewModel)
-                        DexTab.ORDERS -> OrdersTab(state, viewModel)
-                        DexTab.LISTINGS -> ListingsTab(state, viewModel)
-                        DexTab.HISTORY -> HistoryTab(local, viewModel)
-                        DexTab.SETTINGS -> SettingsTab(state, local, viewModel)
+                        DexTab.MARKET -> MarketTab(state, local, viewModel, lead)
+                        DexTab.ORDERS -> OrdersTab(state, viewModel, lead)
+                        DexTab.LISTINGS -> ListingsTab(state, viewModel, lead)
+                        DexTab.HISTORY -> HistoryTab(local, viewModel, lead)
+                        DexTab.SETTINGS -> SettingsTab(state, local, viewModel, lead)
                     }
                 }
             } else {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    ConnectPanel(state, viewModel)
-                    RecentMarkets(state, viewModel)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    Column(Modifier.widthIn(max = 640.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
+                        ConnectPanel(state, viewModel)
+                        RecentMarkets(state, viewModel)
+                    }
                 }
             }
         }
@@ -173,23 +189,22 @@ private fun tabLabel(tab: DexTab): Int = when (tab) {
     DexTab.SETTINGS -> R.string.dex_tab_settings
 }
 
-/** Onboarding, and a market that has nothing to sell yet (App.jsx). */
-@Composable
-private fun Banners(state: DexUiState, local: DexLocal, vm: DexViewModel) {
+/** Onboarding, and a market that has nothing to sell yet (App.jsx), as the first items of the tab's list. */
+private fun banners(state: DexUiState, local: DexLocal, vm: DexViewModel): LazyListScope.() -> Unit {
     val register = !local.registered && state.tab != DexTab.SETTINGS
     val notReady = state.ready == false && (state.tab == DexTab.MARKET || state.tab == DexTab.LISTINGS)
-    if (!register && !notReady) return
-    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+    return {
         if (register) {
-            DexBanner(
-                stringResource(R.string.dex_banner_register_title) + " " + stringResource(R.string.dex_banner_register_body),
-                warn = false,
-                action = stringResource(R.string.dex_open_settings),
-            ) { vm.selectTab(DexTab.SETTINGS) }
+            item(key = "banner-register") {
+                DexBanner(
+                    stringResource(R.string.dex_banner_register_title) + " " + stringResource(R.string.dex_banner_register_body),
+                    warn = false,
+                    action = stringResource(R.string.dex_open_settings),
+                ) { vm.selectTab(DexTab.SETTINGS) }
+            }
         }
         if (notReady) {
-            if (register) Spacer(Modifier.height(8.dp))
-            DexBanner(stringResource(R.string.dex_banner_not_ready), warn = true)
+            item(key = "banner-ready") { DexBanner(stringResource(R.string.dex_banner_not_ready), warn = true) }
         }
     }
 }
