@@ -372,6 +372,10 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		o.field("log_hook_level")
 		writeQuotedNative(w, v.LogHookLevel)
 	}
+	if v.GCTraceSamples != 0 {
+		o.field("gc_trace_samples")
+		writeIntNative(w, int64(v.GCTraceSamples))
+	}
 	o.field("local_path")
 	writeQuotedNative(w, v.LocalPath)
 	if v.Skyenv != "" {
