@@ -63,6 +63,7 @@ import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.VoiceCalls
 import com.skycoin.skywire.ui.call.CallScreen
 import com.skycoin.skywire.ui.chat.ChatScreen
+import com.skycoin.skywire.chat.ChatRepository
 import com.skycoin.skywire.ui.dex.DexScreen
 import com.skycoin.skywire.ui.mail.MailScreen
 import com.skycoin.skywire.ui.fleet.FleetScreen
@@ -122,6 +123,11 @@ fun SkywireApp() {
     // is up and has shown it, which can be a while after the tab is on screen
     // (the core may still be connecting).
     val chatLink by DeepLinks.pendingChatLink.collectAsState()
+    // Follow a skychat that is already running (started earlier, or by the
+    // core) so unread counts and receipts are live before the tab is opened.
+    // Opening the tab is still what starts the app.
+    val appContext = LocalContext.current.applicationContext
+    LaunchedEffect(Unit) { ChatRepository.get(appContext).start(startApp = false) }
     LaunchedEffect(chatLink) {
         if (chatLink != null && currentRoute != Routes.CHAT) {
             navController.navigateToTab(Routes.CHAT)
@@ -158,9 +164,8 @@ fun SkywireApp() {
     }
 
     // A call owns the whole screen, in either direction and on every tab —
-    // the Chat tab included. The embedded page draws its own banner and panel
-    // underneath, but a call is not a thing to notice inside a list: it is
-    // what the phone is doing.
+    // the Chat tab included: a call is not a thing to notice inside a list,
+    // it is what the phone is doing.
     if (inCall.busy) {
         CallScreen()
         return
@@ -179,7 +184,7 @@ fun SkywireApp() {
             navController = navController,
             startDestination = Routes.HOME,
             // consumeWindowInsets so a destination can still ask for the
-            // insets it needs — the Chat WebView's imePadding would otherwise
+            // insets it needs — the chat composer's imePadding would otherwise
             // count the navigation bar twice, once here and once in the
             // keyboard inset it is measured from.
             modifier = Modifier
