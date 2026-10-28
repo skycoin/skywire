@@ -374,6 +374,12 @@ export class SingleNodeDataService {
 
     nodeData.updateSubscription = this.live.subscribe(`/api/visors/${nodeData.pk}/summary`, this.dataRefreshDelay).subscribe({
       next: ev => {
+        // The hypervisor caps subscriptions per socket; past it, poll.
+        if (ev.status === 429) {
+          this.startDataSubscription(0, nodeData);
+
+          return;
+        }
         if (ev.status >= 200 && ev.status < 300) {
           let node: Node;
           try {

@@ -33,6 +33,17 @@ describe('visor overview alerts', () => {
     ] as any;
     const alerts = overviewAlerts(n);
     expect(alerts.map(a => a.params?.['app'])).toEqual(['vpn-client', 'skychat']);
+    expect(alerts[1].text).toBe('node.overview.alert-app-stopped');
+  });
+
+  it('says why a stopped autostart app is not running when it reports a reason', () => {
+    const n = base();
+    const why = 'port 25 is served by the host\'s mail server (`serve add 25`)';
+    n.apps = [{ name: 'skymail', status: 0, autostart: true, detailedStatus: why }] as any;
+    const alerts = overviewAlerts(n);
+    expect(alerts.length).toBe(1);
+    expect(alerts[0].text).toBe('node.overview.alert-app-stopped-why');
+    expect(alerts[0].params).toEqual({ app: 'skymail', why: why });
   });
 
   it('flags a missing reward address, no transports and no dmsg', () => {
