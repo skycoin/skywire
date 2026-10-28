@@ -63,7 +63,11 @@ export function overviewAlerts(node: Node): OverviewAlert[] {
     if (app.status === appFailed) {
       alerts.push({ level: 'warn', text: 'node.overview.alert-app-failed', params: { app: app.name } });
     } else if (app.autostart && app.status !== appRunning && app.status !== appConnecting) {
-      alerts.push({ level: 'warn', text: 'node.overview.alert-app-stopped', params: { app: app.name } });
+      // The app's own reason, such as a port held by the host, says why it stopped.
+      const why = (app.detailedStatus || '').trim();
+      alerts.push(why ?
+        { level: 'warn', text: 'node.overview.alert-app-stopped-why', params: { app: app.name, why: why } } :
+        { level: 'warn', text: 'node.overview.alert-app-stopped', params: { app: app.name } });
     }
   });
   if (node.transports && node.transports.length === 0) {
