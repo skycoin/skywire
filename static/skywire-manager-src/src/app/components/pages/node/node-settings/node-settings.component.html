@@ -31,7 +31,10 @@
         <mat-checkbox [(ngModel)]="setOnly" color="primary">Set in the file only</mat-checkbox>
         <span class="count">{{ visibleCount }} of {{ rows.length }}</span>
         <span class="spacer"></span>
-        <button mat-raised-button color="primary" (click)="review()">Review changes</button>
+        @if (invalidCount > 0) {
+          <span class="invalid-count">{{ invalidCount }} to fix</span>
+        }
+        <button mat-raised-button color="primary" [disabled]="invalidCount > 0" (click)="review()">Review changes</button>
       </div>
 
       @for (r of rows; track r.key) {
@@ -53,7 +56,10 @@
                 </select>
               } @else {
                 <input [type]="r.secret ? 'password' : 'text'" [(ngModel)]="form[r.key]"
-                  [placeholder]="placeholder(r)" spellcheck="false" autocomplete="off">
+                  [class.invalid]="errorFor(r)" [placeholder]="placeholder(r)" spellcheck="false" autocomplete="off">
+                @if (errorFor(r); as err) {
+                  <div class="field-error">{{ err }}</div>
+                }
               }
             </div>
           </div>
