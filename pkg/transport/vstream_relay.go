@@ -107,7 +107,7 @@ func (m *VStreamMux) handleRelaySyn(mt *ManagedTransport, wireID uint64, senderP
 			id:       wireID,
 			remotePK: senderPK,
 			tpID:     mt.Entry.ID,
-			readBuf:  make(chan []byte, vstreamReadBuf),
+			rq:       newFrameQueue(),
 			closed:   make(chan struct{}),
 			mux:      m,
 		}
@@ -189,7 +189,7 @@ func (m *VStreamMux) DialThroughRelay(relayPK, dstPK cipher.PubKey, appName stri
 		id:       id,
 		remotePK: dstPK,
 		tpID:     relayTp.Entry.ID,
-		readBuf:  make(chan []byte, vstreamReadBuf),
+		rq:       newFrameQueue(),
 		closed:   make(chan struct{}),
 		mux:      m,
 	}
