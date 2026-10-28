@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -61,6 +63,24 @@ import com.skycoin.skywire.dex.SKY
 
 private val TAB_PADDING = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp)
 
+/** Landscape and tablets keep a phone's reading width rather than cards stretched edge to edge. */
+private val MAX_CONTENT_WIDTH = 640.dp
+
+/** A tab's list. [lead] goes first, so banners scroll away with the content instead of holding the top. */
+@Composable
+private fun DexList(lead: LazyListScope.() -> Unit, content: LazyListScope.() -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            modifier = Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxSize(),
+            contentPadding = TAB_PADDING,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            lead()
+            content()
+        }
+    }
+}
+
 private fun LazyListScope.errorLine(state: DexUiState) {
     state.actionError?.let { item(key = "action-error") { DexError(it) } }
     state.tradeError?.takeIf { it != state.actionError }?.let { item(key = "error") { DexError(it) } }
@@ -82,10 +102,10 @@ private fun SectionTitle(text: String) {
 // --- Market ---
 
 @Composable
-fun MarketTab(state: DexUiState, local: DexLocal, vm: DexViewModel) {
+fun MarketTab(state: DexUiState, local: DexLocal, vm: DexViewModel, lead: LazyListScope.() -> Unit = {}) {
     var formOpen by rememberSaveable { mutableStateOf(false) }
     val canSell = state.sellCoins.isNotEmpty()
-    LazyColumn(contentPadding = TAB_PADDING, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    DexList(lead) {
         item(key = "head") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SectionTitle(stringResource(R.string.dex_available_products))
@@ -271,9 +291,9 @@ private fun TradeLeg(label: String, value: String, onValue: (String) -> Unit, co
 // --- My Orders ---
 
 @Composable
-fun OrdersTab(state: DexUiState, vm: DexViewModel) {
+fun OrdersTab(state: DexUiState, vm: DexViewModel, lead: LazyListScope.() -> Unit = {}) {
     var confirm by remember { mutableStateOf<DexOrder?>(null) }
-    LazyColumn(contentPadding = TAB_PADDING, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    DexList(lead) {
         errorLine(state)
         val orders = state.orders
         when {
@@ -319,7 +339,7 @@ private fun OrderCard(order: DexOrder, state: DexUiState, vm: DexViewModel, onCa
         if (order.type == "buy") {
             Spacer(Modifier.height(10.dp))
             when {
-                status == "completed" -> Text(stringResource(R.string.dex_delivered), style = MaterialTheme.typography.bodySmall, color = com.skycoin.skywire.ui.theme.SkyAccents.success)
+                status == "completed" -> Text(stringResource(R.string.dex_delivered), style = MaterialTheme.typography.bodySmall, color = dexGood())
                 status == "pending_payment" -> DexHint(stringResource(R.string.dex_awaiting_payment))
                 live != null && status in IN_FLIGHT_STATUSES -> ConfirmationsBar(live.confirmations, live.requiredConfirmations)
             }
@@ -341,9 +361,9 @@ private fun OrderCard(order: DexOrder, state: DexUiState, vm: DexViewModel, onCa
 // --- My Listings ---
 
 @Composable
-fun ListingsTab(state: DexUiState, vm: DexViewModel) {
+fun ListingsTab(state: DexUiState, vm: DexViewModel, lead: LazyListScope.() -> Unit = {}) {
     var confirm by remember { mutableStateOf<DexListing?>(null) }
-    LazyColumn(contentPadding = TAB_PADDING, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    DexList(lead) {
         errorLine(state)
         val listings = state.listings
         when {
@@ -413,9 +433,9 @@ private fun ListingCard(l: DexListing, state: DexUiState, vm: DexViewModel, onCa
 // --- History ---
 
 @Composable
-fun HistoryTab(local: DexLocal, vm: DexViewModel) {
+fun HistoryTab(local: DexLocal, vm: DexViewModel, lead: LazyListScope.() -> Unit = {}) {
     val rows = remember(local.history) { local.history.sortedByDescending { parseInstant(it.createdAt)?.toEpochMilli() ?: it.savedAt } }
-    LazyColumn(contentPadding = TAB_PADDING, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    DexList(lead) {
         if (rows.isEmpty()) {
             item(key = "history-empty") { DexHint(stringResource(R.string.dex_no_history)) }
         } else {
@@ -448,7 +468,7 @@ private fun HistoryCard(o: DexOrder, onRemove: () -> Unit) {
 // --- Settings ---
 
 @Composable
-fun SettingsTab(state: DexUiState, local: DexLocal, vm: DexViewModel) {
+fun SettingsTab(state: DexUiState, local: DexLocal, vm: DexViewModel, lead: LazyListScope.() -> Unit = {}) {
     val context = LocalContext.current
     var sky by rememberSaveable { mutableStateOf(local.wallets[SKY].orEmpty()) }
     val payouts = remember { mutableStateMapOf<String, String>() }
@@ -456,7 +476,7 @@ fun SettingsTab(state: DexUiState, local: DexLocal, vm: DexViewModel) {
         state.currencies.forEach { c -> if (c !in payouts) payouts[c] = local.wallets[c].orEmpty() }
     }
     var confirmClear by remember { mutableStateOf(false) }
-    LazyColumn(contentPadding = TAB_PADDING, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    DexList(lead) {
         item(key = "wallets") {
             DexCard {
                 SectionTitle(stringResource(R.string.dex_wallets_title))
@@ -493,7 +513,7 @@ fun SettingsTab(state: DexUiState, local: DexLocal, vm: DexViewModel) {
                     Text(
                         m.text,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (m.ok) com.skycoin.skywire.ui.theme.SkyAccents.success else MaterialTheme.colorScheme.error,
+                        color = if (m.ok) dexGood() else MaterialTheme.colorScheme.error,
                     )
                 }
                 Spacer(Modifier.height(12.dp))

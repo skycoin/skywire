@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,13 +42,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.isShortScreen
+import com.skycoin.skywire.ui.theme.LocalDarkTheme
 import com.skycoin.skywire.ui.theme.SkyAccents
 import com.skycoin.skywire.ui.wallet.QrImage
 import java.time.Instant
@@ -61,8 +66,8 @@ private enum class Tone { GOOD, BUSY, BAD, QUIET, INFO }
 @Composable
 private fun Badge(text: String, tone: Tone) {
     val (bg, fg) = when (tone) {
-        Tone.GOOD -> SkyAccents.success.copy(alpha = 0.18f) to SkyAccents.success
-        Tone.BUSY -> SkyAccents.warning.copy(alpha = 0.18f) to SkyAccents.warning
+        Tone.GOOD -> dexGood().let { it.copy(alpha = 0.16f) to it }
+        Tone.BUSY -> dexBusy().let { it.copy(alpha = 0.16f) to it }
         Tone.BAD -> MaterialTheme.colorScheme.error.copy(alpha = 0.16f) to MaterialTheme.colorScheme.error
         Tone.INFO -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) to MaterialTheme.colorScheme.primary
         Tone.QUIET -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
@@ -75,6 +80,17 @@ private fun Badge(text: String, tone: Tone) {
         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
+
+/** Green as text: the accent holds on navy, but falls under 3:1 on white, so light mode takes a darker shade. */
+@Composable
+fun dexGood(): Color = if (LocalDarkTheme.current) SkyAccents.success else GOOD_ON_LIGHT
+
+/** Amber as text, for the same reason. */
+@Composable
+fun dexBusy(): Color = if (LocalDarkTheme.current) SkyAccents.warning else BUSY_ON_LIGHT
+
+private val GOOD_ON_LIGHT = Color(0xFF15803D)
+private val BUSY_ON_LIGHT = Color(0xFFB45309)
 
 /** An order or history status (Orders.jsx statusMap). Unknown states show as the market wrote them. */
 @Composable
@@ -233,40 +249,70 @@ fun PaymentQrDialog(address: String, amount: Double, coin: String, title: String
     var withAmount by remember { mutableStateOf(true) }
     val value = if (uri != null && withAmount) uri else address
     val copied = stringResource(R.string.copied_to_clipboard)
+    val screenHeight = LocalConfiguration.current.screenHeightDp
+    val compact = isShortScreen()
     AlertDialog(
         onDismissRequest = onDismiss,
+        // Side by side needs more than the platform's portrait dialog width.
+        properties = DialogProperties(usePlatformDefaultWidth = !compact),
+        modifier = if (compact) Modifier.widthIn(max = 600.dp).fillMaxWidth() else Modifier,
         title = { Text(title) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (amount > 0 && coin.isNotEmpty()) {
-                    Text(stringResource(R.string.dex_send_exactly, dexNumber(amount), coin), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(10.dp))
-                }
-                QrImage(value, sizeDp = 220)
-                if (uri != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.dex_qr_include_amount, coin), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        Switch(checked = withAmount, onCheckedChange = { withAmount = it })
+            if (compact) {
+                // In landscape a 220 dp code above the text is cut off, and a cut-off
+                // code does not scan: it goes beside the text, sized to the height.
+                Row(verticalAlignment = Alignment.Top) {
+                    QrImage(value, sizeDp = (screenHeight - 200).coerceIn(140, 220))
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SendExactly(amount, coin)
+                        QrDetails(address, coin, uri, withAmount, hint, onCopied) { withAmount = it }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text(address, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
-                Spacer(Modifier.height(8.dp))
-                val base = if (uri != null && withAmount) stringResource(R.string.dex_qr_hint_link, coin) else stringResource(R.string.dex_qr_hint_plain)
-                Text(
-                    if (hint != null) "$base $hint" else base,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (uri != null && withAmount) {
-                    TextButton(onClick = { copyText(context, uri); onCopied(copied) }) { Text(stringResource(R.string.dex_copy_link)) }
+            } else {
+                Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                    SendExactly(amount, coin)
+                    QrImage(value, sizeDp = 220)
+                    QrDetails(address, coin, uri, withAmount, hint, onCopied) { withAmount = it }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.dex_close)) } },
         dismissButton = { TextButton(onClick = { copyText(context, address); onCopied(copied) }) { Text(stringResource(R.string.dex_copy_address)) } },
     )
+}
+
+@Composable
+private fun SendExactly(amount: Double, coin: String) {
+    if (amount <= 0 || coin.isEmpty()) return
+    Text(stringResource(R.string.dex_send_exactly, dexNumber(amount), coin), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(10.dp))
+}
+
+/** The link switch, the address in full, and how to use the code. */
+@Composable
+private fun QrDetails(address: String, coin: String, uri: String?, withAmount: Boolean, hint: String?, onCopied: (String) -> Unit, onWithAmount: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    val copied = stringResource(R.string.copied_to_clipboard)
+    if (uri != null) {
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.dex_qr_include_amount, coin), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            Switch(checked = withAmount, onCheckedChange = onWithAmount)
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(address, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+    Spacer(Modifier.height(8.dp))
+    val base = if (uri != null && withAmount) stringResource(R.string.dex_qr_hint_link, coin) else stringResource(R.string.dex_qr_hint_plain)
+    Text(
+        if (hint != null) "$base $hint" else base,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (uri != null && withAmount) {
+        TextButton(onClick = { copyText(context, uri); onCopied(copied) }) { Text(stringResource(R.string.dex_copy_link)) }
+    }
 }
 
 @Composable
