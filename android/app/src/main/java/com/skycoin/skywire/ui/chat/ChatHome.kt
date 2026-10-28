@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -110,6 +111,9 @@ fun ChatHome(vm: ChatViewModel, onBack: () -> Unit) {
     val notif by repo.store.notif.collectAsState()
     val avatars by repo.store.avatarsChanged.collectAsState()
     val tab = local.tab.takeIf { it in TABS } ?: "all"
+    val listState = rememberLazyListState()
+    // A list keeps its first visible key, which would hide Saved Messages after a tab switch.
+    LaunchedEffect(tab) { listState.scrollToItem(0) }
     var startMenu by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     var qr by remember { mutableStateOf<QrSpec?>(null) }
@@ -232,7 +236,7 @@ fun ChatHome(vm: ChatViewModel, onBack: () -> Unit) {
             val dmTabs = tab == "all" || tab == "dm"
             val nothing = dmKeys.isEmpty() && groups.isEmpty() && summaries[SAVED_KEY]?.last == null
 
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
                 if (dmTabs) {
                     item(key = "saved") {
                         val s = summaries[SAVED_KEY]
