@@ -28,6 +28,34 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppComponent } from 'src/app/app.component';
 import { RewardService, VisorRewardData } from 'src/app/services/reward.service';
 
+// Where the compact-rows choice is remembered in this browser.
+const compactKey = 'nodeListCompact';
+
+function loadCompact(): boolean {
+  try {
+    return localStorage.getItem(compactKey) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+/** Major, minor, patch and commits-after-tag of a version like v1.3.103-122-gabc, or null. */
+export function versionParts(version: string | undefined): number[] | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-(\d+))?/.exec(version || '');
+
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4] || 0)] : null;
+}
+
+export function compareVersions(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return a[i] - b[i];
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Page for showing the node list.
  */
@@ -111,6 +139,18 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   // actually was. dataSource beside it was already initialized this way.
   allNodes: Node[] = [];
   filteredNodes!: Node[];
+
+  // Search box text and quick filter chip, applied after the filter dialog.
+  quickSearch = '';
+  quickChip: 'all' | 'online' | 'offline' | 'outdated' | 'no-reward' = 'all';
+  // How many visors the search box and chip are hiding right now.
+  quickFilterHides = 0;
+  // The newest version among the listed visors; older ones count as outdated.
+  newestVersion: number[] | null = null;
+  // One line per visor instead of the per-type transport breakdown.
+  compact = loadCompact();
+  // Keys of the visors ticked for a bulk action.
+  selected = new Set<string>();
   nodesToShow!: Node[] | null;
   hasOfflineNodes = false;
   numberOfPages = 1;
@@ -637,9 +677,19 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         this.filteredNodes = this.applyCustomOrder(this.filteredNodes);
       }
 
+      // The search box and the quick filter chips narrow the list further.
+      const everyNode = this.filteredNodes.concat(...this.subSections.map(s => s.nodes || []));
+      this.newestVersion = everyNode.reduce<number[] | null>((best, n) => {
+        const v = versionParts(n.version);
+
+        return v && (!best || compareVersions(v, best) > 0) ? v : best;
+      }, null);
+      const visible = this.filteredNodes.filter(n => this.matchesQuickFilter(n));
+      this.quickFilterHides = this.filteredNodes.length - visible.length;
+
       // Calculate the pagination values.
       const maxElements = AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.filteredNodes.length / maxElements);
+      this.numberOfPages = Math.ceil(visible.length / maxElements);
       if (this.currentPage > this.numberOfPages) {
         this.currentPage = this.numberOfPages;
       }
@@ -647,7 +697,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       // Limit the elements to show.
       const start = maxElements * (this.currentPage - 1);
       const end = start + maxElements;
-      this.nodesToShow = this.filteredNodes.slice(start, end);
+      this.nodesToShow = visible.slice(start, end);
     } else {
       this.nodesToShow = null;
     }
@@ -655,6 +705,145 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (this.nodesToShow) {
       this.dataSource = this.nodesToShow;
     }
+  }
+
+  /** Whether the visor runs an older version than the newest one in the list. */
+  isOutdated(node: Node): boolean {
+    const v = versionParts(node.version);
+
+    return !!v && !!this.newestVersion && compareVersions(v, this.newestVersion) < 0;
+  }
+
+  private matchesQuickFilter(node: Node): boolean {
+    switch (this.quickChip) {
+      case 'online':
+        if (!node.online) {
+          return false;
+        }
+        break;
+      case 'offline':
+        if (node.online) {
+          return false;
+        }
+        break;
+      case 'outdated':
+        if (!this.isOutdated(node)) {
+          return false;
+        }
+        break;
+      case 'no-reward':
+        if (node.rewardsAddress) {
+          return false;
+        }
+        break;
+    }
+    const q = this.quickSearch.trim().toLowerCase();
+    if (!q) {
+      return true;
+    }
+
+    return [node.label, node.localPk, node.ip, node.publicIp, node.cityName, node.regionName, node.countryCode, node.version]
+      .some(s => !!s && s.toLowerCase().includes(q));
+  }
+
+  /** A sub-hypervisor section's visors that pass the search box and chip. */
+  quickFiltered(nodes: Node[] | undefined): Node[] {
+    return (nodes || []).filter(n => this.matchesQuickFilter(n));
+  }
+
+  setQuickSearch(text: string) {
+    this.quickSearch = text;
+    this.recalculateElementsToShow();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  setQuickChip(chip: NodeListComponent['quickChip']) {
+    this.quickChip = this.quickChip === chip ? 'all' : chip;
+    this.recalculateElementsToShow();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  toggleCompact() {
+    this.compact = !this.compact;
+    try {
+      localStorage.setItem(compactKey, String(this.compact));
+    } catch {
+      // The choice then lasts only for this page view.
+    }
+  }
+
+  /** The per-type transport counts as one line each, for the compact row's tooltip. */
+  transportBreakdown(node: Node): string {
+    return this.getTransportCounts(node)
+      .map(e => `${e.type} ${e.count} (${e.incoming}↓ ${e.outgoing}↑)`).join('\n');
+  }
+
+  toggleSelected(node: Node) {
+    if (this.selected.has(node.localPk)) {
+      this.selected.delete(node.localPk);
+    } else {
+      this.selected.add(node.localPk);
+    }
+  }
+
+  /** Ticks every visor on this page, or clears them all when all are already ticked. */
+  toggleSelectPage() {
+    const page = this.dataSource || [];
+    if (page.length > 0 && page.every(n => this.selected.has(n.localPk))) {
+      page.forEach(n => this.selected.delete(n.localPk));
+    } else {
+      page.forEach(n => this.selected.add(n.localPk));
+    }
+  }
+
+  get pageAllSelected(): boolean {
+    const page = this.dataSource || [];
+
+    return page.length > 0 && page.every(n => this.selected.has(n.localPk));
+  }
+
+  clearSelection() {
+    this.selected.clear();
+  }
+
+  /** The ticked visors that are still in the list. */
+  private selectedNodes(): Node[] {
+    return (this.allNodes || []).filter(n => this.selected.has(n.localPk));
+  }
+
+  updateSelected() {
+    this.updateAll(this.selectedNodes());
+  }
+
+  rewardsSelected() {
+    this.changeRewardsToAll(this.selectedNodes());
+  }
+
+  /** Asks each ticked online visor to restart, after a confirmation. */
+  restartSelected() {
+    const nodes = this.selectedNodes().filter(n => n.online);
+    if (nodes.length === 0) {
+      this.snackbarService.showError('nodes.bulk.none-online');
+
+      return;
+    }
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(
+      this.dialog, this.translateService.instant('nodes.bulk.restart-confirmation', { n: nodes.length }),
+    );
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.close();
+      nodes.forEach(n => this.nodeService.restart(n.localPk).subscribe({
+        next: () => {
+          this.snackbarService.showDone(this.translateService.instant('nodes.bulk.restarting', { name: n.label }));
+          this.changeDetectorRef.markForCheck();
+        },
+        error: () => {
+          this.snackbarService.showError(this.translateService.instant('nodes.bulk.restart-error', { name: n.label }));
+          this.changeDetectorRef.markForCheck();
+        },
+      }));
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   /**
@@ -836,8 +1025,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   // Updates all visors.
-  updateAll() {
-    if (!this.dataSource || this.dataSource.length === 0) {
+  updateAll(nodes: Node[] = this.dataSource) {
+    if (!nodes || nodes.length === 0) {
       this.snackbarService.showError('nodes.no-visors-to-update');
 
       return;
@@ -845,7 +1034,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
     const updatableNodes: NodeData[] = [];
     const nonUpdatableNodes: NodeData[] = [];
-    this.dataSource.forEach(node => {
+    nodes.forEach(node => {
       if (node.online) {
         const nodeData: NodeData = {
           key: node.localPk,
@@ -866,15 +1055,15 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   // Opens the modal window for changing the rewards address of all online nodes.
-  changeRewardsToAll() {
-    if (!this.dataSource || this.dataSource.length === 0) {
+  changeRewardsToAll(nodes: Node[] = this.dataSource) {
+    if (!nodes || nodes.length === 0) {
       this.snackbarService.showError('nodes.no-visors-to-modify');
 
       return;
     }
 
     const nodesToModify: NodeToEditData[] = [];
-    this.dataSource.forEach(node => {
+    nodes.forEach(node => {
       if (node.online) {
         const nodeData: NodeToEditData = {
           key: node.localPk,

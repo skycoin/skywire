@@ -95,6 +95,39 @@
           }
         </div>
       </div>
+      @if (allNodes && allNodes.length > 0) {
+        <div class="fleet-toolbar">
+          <input
+            class="fleet-search"
+            [value]="quickSearch"
+            (input)="setQuickSearch($any($event.target).value)"
+            [placeholder]="'nodes.quick.search' | translate"
+          />
+          @for (chip of ['online', 'offline', 'outdated', 'no-reward']; track chip) {
+            <button class="fleet-chip" [class.on]="quickChip === chip" (click)="setQuickChip($any(chip))">
+              {{ 'nodes.quick.' + chip | translate }}
+            </button>
+          }
+          @if (quickFilterHides > 0) {
+            <span class="fleet-hidden">{{ 'nodes.quick.hidden' | translate: { n: quickFilterHides } }}</span>
+          }
+          <span class="fleet-spacer"></span>
+          @if (!showRewardsInfo) {
+            <button class="fleet-chip" [class.on]="compact" (click)="toggleCompact()" [matTooltip]="'nodes.quick.compact-tooltip' | translate">
+              {{ 'nodes.quick.compact' | translate }}
+            </button>
+          }
+        </div>
+        @if (selected.size > 0 && !showRewardsInfo) {
+          <div class="fleet-bulk">
+            <span>{{ 'nodes.bulk.selected' | translate: { n: selected.size } }}</span>
+            <button mat-stroked-button (click)="updateSelected()">{{ 'nodes.bulk.update' | translate }}</button>
+            <button mat-stroked-button (click)="rewardsSelected()">{{ 'nodes.bulk.reward' | translate }}</button>
+            <button mat-stroked-button (click)="restartSelected()">{{ 'nodes.bulk.restart' | translate }}</button>
+            <button mat-stroked-button (click)="clearSelection()">{{ 'nodes.bulk.clear' | translate }}</button>
+          </div>
+        }
+      }
       @if (dataSource.length !== 0) {
         <div class="rounded-elevated-box mt-3"><div class="box-internal-container overflow full-node-list-margins">
 
@@ -151,7 +184,7 @@
                 <th class="actions"></th>
               </tr>
               <!-- Values. -->
-              @for (node of dataSource; track node) {
+              @for (node of dataSource; track node.localPk) {
                 <a
                   [ngClass]="{'click-effect': true, 'wasm-visor-row': node.arch === 'wasm'}"
                   class="selectable link-row"
@@ -249,6 +282,9 @@
                    resetCustomOrder), so a sort always wins over a
                    previously-arranged manual order. -->
               <tr>
+                <th class="select-column">
+                  <mat-checkbox [checked]="pageAllSelected" (change)="toggleSelectPage()" [matTooltip]="'nodes.bulk.select-page' | translate"></mat-checkbox>
+                </th>
                 <th class="drag-handle-column"></th>
                 <th class="sortable-column small-column" (click)="changeSort(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
                   <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
@@ -317,14 +353,17 @@
                    via routerLink. cdkDragHandle scopes the drag to
                    the icon so the rest of the row keeps its
                    click-to-navigate behavior. -->
-              @for (node of dataSource; track node) {
+              @for (node of dataSource; track node.localPk) {
                 <a
-                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}"
+                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm', 'compact-row': compact}"
                   class="selectable link-row"
                   [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                   cdkDrag
                   [cdkDragData]="node"
                   >
+                  <td class="select-column" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSelected(node)">
+                    <mat-checkbox [checked]="selected.has(node.localPk)" (click)="$event.preventDefault()"></mat-checkbox>
+                  </td>
                   <td class="drag-handle-column" cdkDragHandle [matTooltip]="'nodes.drag-to-reorder' | translate" (click)="$event.stopPropagation(); $event.preventDefault();">
                     <mat-icon class="grey-text drag-handle-icon" [inline]="true">drag_indicator</mat-icon>
                   </td>
@@ -343,7 +382,11 @@
                     }
                   </td>
                   <td class="ip-cell">
-                    @if (node.ip || node.publicIp || node.countryCode) {
+                    @if (compact && (node.ip || node.publicIp || node.countryCode)) {
+                      <div style="font-size: 0.85em;" [matTooltip]="[node.ip, node.publicIp].join(' ')">
+                        {{ node.publicIp || node.ip }}@if (node.countryCode) { &middot; {{ node.cityName || node.countryCode }} }
+                      </div>
+                    } @else if (node.ip || node.publicIp || node.countryCode) {
                       @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
                         <div style="font-size: 0.85em;">{{ node.ip }}</div>
                         <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
@@ -361,7 +404,16 @@
                     }
                   </td>
                   <td>
-                    @if (node.transports && node.transports.length > 0) {
+                    @if (compact && node.transports && node.transports.length > 0) {
+                      @let ctotals = getTransportTotals(node);
+                      <span class="tp-compact" [matTooltip]="transportBreakdown(node)" matTooltipClass="multiline-tooltip">
+                        {{ node.transports.length }}
+                        @if (ctotals.incoming + ctotals.outgoing > 0) {
+                          <span class="tp-in">{{ ctotals.incoming }}&#8595;</span>
+                          <span class="tp-out">{{ ctotals.outgoing }}&#8593;</span>
+                        }
+                      </span>
+                    } @else if (node.transports && node.transports.length > 0) {
                       @let totals = getTransportTotals(node);
                       <div class="tp-counts">
                         @for (entry of getTransportCounts(node); track entry.type) {
@@ -388,7 +440,9 @@
                     }
                   </td>
                   <td>
-                    @if (getDmsgServerCount(node) > 0) {
+                    @if (compact && getDmsgServerCount(node) > 0) {
+                      <span>{{ getDmsgServerCount(node) }}</span>
+                    } @else if (getDmsgServerCount(node) > 0) {
                       <div class="dmsg-counts">
                         @for (entry of getDmsgCounts(node); track entry.type) {
                           <span class="dmsg-type">{{ entry.type }}</span>
@@ -405,7 +459,12 @@
                     {{ node.localPk }}
                   </td>
                   <td>
-                    @if (node.version && node.configVersion && node.version === node.configVersion) {
+                    @if (compact) {
+                      <div style="font-size: 0.85em;" [class.outdated]="isOutdated(node)"
+                        [matTooltip]="(isOutdated(node) ? ('nodes.quick.outdated-tooltip' | translate) + ' ' : '') + ('nodes.config-label' | translate) + ': ' + (node.configVersion || '-')">
+                        {{ node.version || '-' }}
+                      </div>
+                    } @else if (node.version && node.configVersion && node.version === node.configVersion) {
                       <div style="font-size: 0.85em;">{{ node.version }}</div>
                     } @else {
                       <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
@@ -413,7 +472,9 @@
                     }
                   </td>
                   <td>
-                    @if (getNodeServices(node).length > 0) {
+                    @if (compact && getNodeServices(node).length > 0) {
+                      <div style="font-size: 0.85em;">{{ getNodeServices(node).join(', ') }}</div>
+                    } @else if (getNodeServices(node).length > 0) {
                       @for (service of getNodeServices(node); track service) {
                         <div style="font-size: 0.85em;">{{ service }}</div>
                       }
@@ -499,7 +560,7 @@
                 </div>
               </td></tr>
               <!-- Values. -->
-              @for (node of dataSource; track node) {
+              @for (node of dataSource; track node.localPk) {
                 <a class="link-row" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
                   <div class="list-item-container">
                     <div class="left-part">
@@ -669,7 +730,7 @@
                       <th class="reward-column">{{ 'nodes.reward' | translate }}</th>
                       <th class="actions"></th>
                     </tr>
-                    @for (node of section.nodes; track node.localPk) {
+                    @for (node of quickFiltered(section.nodes); track node.localPk) {
                       <a
                         [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}"
                         class="selectable link-row"
