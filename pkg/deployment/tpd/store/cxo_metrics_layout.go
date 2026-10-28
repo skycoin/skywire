@@ -244,3 +244,49 @@ func OpenMetricsDays(now time.Time) int {
 	}
 	return 1
 }
+
+// PivotDay is one date's slice of PivotDailyMetrics(metrics, dates), where
+// current is dates[0]. It reads the whole window once per day instead of
+// holding every day's records at once, so a caller can encode a day and let
+// it go before the next.
+func PivotDay(metrics []TransportMetric, date, current string) []TransportMetric {
+	out := []TransportMetric{}
+	for i := range metrics {
+		m := &metrics[i]
+		if date != current {
+			for _, row := range m.Daily {
+				if row.Date == date {
+					out = append(out, TransportMetric{
+						ID:    m.ID,
+						Type:  m.Type,
+						Edges: m.Edges,
+						Daily: []DailyEdgeBandwidth{row},
+					})
+				}
+			}
+			continue
+		}
+		var currentRows []DailyEdgeBandwidth
+		for _, row := range m.Daily {
+			if row.Date == current {
+				currentRows = append(currentRows, row)
+			}
+		}
+		if m.Latency == nil && len(currentRows) == 0 {
+			continue
+		}
+		if currentRows == nil {
+			currentRows = []DailyEdgeBandwidth{}
+		}
+		out = append(out, TransportMetric{
+			ID:      m.ID,
+			Type:    m.Type,
+			Live:    m.Live,
+			Edges:   m.Edges,
+			Latency: m.Latency,
+			Daily:   currentRows,
+		})
+	}
+	sortMetricsByID(out)
+	return out
+}
