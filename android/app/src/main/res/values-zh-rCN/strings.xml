@@ -1620,5 +1620,6 @@
     <string name="chat_notif_new_message">新消息</string>
     <string name="chat_kind_public_short">公开</string>
     <string name="chat_kind_private_short">私密</string>
+    <string name="chat_error_no_reply">SkyChat 未能及时响应，请重试。</string>
     <!-- skychat-native:end -->
 </resources>
