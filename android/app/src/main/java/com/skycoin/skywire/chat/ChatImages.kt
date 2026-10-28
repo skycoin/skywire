@@ -4,7 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Rect
 import android.net.Uri
 import android.util.LruCache
@@ -65,12 +67,16 @@ object ChatImages {
         return null
     }
 
-    fun squareCrop(source: Bitmap, edge: Int): Bitmap {
+    private fun squareCrop(source: Bitmap, edge: Int): Bitmap {
         val side = minOf(source.width, source.height)
         val left = (source.width - side) / 2
         val top = (source.height - side) / 2
         val out = Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888)
-        Canvas(out).drawBitmap(source, Rect(left, top, left + side, top + side), Rect(0, 0, edge, edge), null)
+        // White first, as the web page does, so a transparent picture is not black as JPEG.
+        Canvas(out).apply {
+            drawColor(Color.WHITE)
+            drawBitmap(source, Rect(left, top, left + side, top + side), Rect(0, 0, edge, edge), Paint(Paint.FILTER_BITMAP_FLAG))
+        }
         return out
     }
 
