@@ -1,0 +1,48 @@
+@if (open) {
+  <div class="palette-backdrop" (click)="close()">
+    <div class="palette" role="dialog" [attr.aria-label]="'palette.placeholder' | translate" (click)="$event.stopPropagation()">
+      <div class="palette-search">
+        <mat-icon [inline]="true">search</mat-icon>
+        <input
+          #searchInput
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          [value]="query"
+          [placeholder]="'palette.placeholder' | translate"
+          (input)="onInput($event)"
+          (keydown)="onInputKey($event)"
+          >
+        <span class="palette-key">Esc</span>
+      </div>
+      <div class="palette-results">
+        @for (g of groups; track g.group) {
+          <div class="palette-group">{{ ('palette.groups.' + g.group) | translate }}</div>
+          @for (row of g.items; track row.index) {
+            <div
+              class="palette-item"
+              [id]="'palette-item-' + row.index"
+              [class.selected]="row.index === selected"
+              (mousemove)="hover(row.index, $event)"
+              (click)="run(row.item)"
+              >
+              <mat-icon [inline]="true">{{ row.item.icon }}</mat-icon>
+              <div class="palette-text">
+                <div class="palette-title">{{ row.item.title }}</div>
+                @if (row.item.detail) {
+                  <div class="palette-detail">{{ row.item.detail }}</div>
+                }
+                @if (row.item.meta) {
+                  <div class="palette-meta">{{ row.item.meta }}</div>
+                }
+              </div>
+            </div>
+          }
+        } @empty {
+          <div class="palette-empty">{{ 'palette.no-results' | translate }}</div>
+        }
+      </div>
+      <div class="palette-footer">{{ 'palette.footer' | translate }}</div>
+    </div>
+  </div>
+}

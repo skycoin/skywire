@@ -45,6 +45,7 @@ import { SkynetComponent } from './components/pages/node/skynet/skynet.component
 import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { VisorOverviewComponent } from './components/pages/node/node-info/visor-overview/visor-overview.component';
+import { CommandPaletteComponent } from './components/layout/command-palette/command-palette.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
@@ -112,6 +113,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         NodeSettingsComponent,
         NodeInfoContentComponent,
         VisorOverviewComponent,
+        CommandPaletteComponent,
         ResourceMonitorComponent,
         NodeResourcesComponent,
         SkychatComponent,
