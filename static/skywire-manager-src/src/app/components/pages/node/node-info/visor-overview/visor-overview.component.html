@@ -1,0 +1,65 @@
+@if (node) {
+  <div class="overview">
+    <div class="ov-card">
+      <span class="ov-title">{{ 'node.overview.health' | translate }}</span>
+      <span class="ov-big" [class]="healthClass(node.health?.servicesHealth)">
+        {{ 'node.overview.health-' + healthClass(node.health?.servicesHealth) | translate }}
+      </span>
+      <span class="ov-row"><span class="dot" [class]="healthClass(node.health?.uptimeTrackerHealth)"></span>{{ 'node.overview.uptime-tracker' | translate }}</span>
+      <span class="ov-row"><span class="dot" [class]="healthClass(node.health?.autoconnectHealth)"></span>{{ 'node.overview.autoconnect' | translate }}</span>
+      <span class="ov-row"><span class="dot" [class]="healthClass(node.health?.transportabilityHealth)"></span>{{ 'node.overview.transportability' | translate }}</span>
+    </div>
+
+    <a class="ov-card link" [routerLink]="['/nodes', node.localPk, 'transports']">
+      <span class="ov-title">{{ 'node.overview.transports' | translate }}</span>
+      <span class="ov-big">{{ node.transports?.length || 0 }}
+        @if (knowsDirection) {
+          <span class="ov-small"><span class="in">{{ incoming }}&#8595;</span> <span class="out">{{ outgoing }}&#8593;</span></span>
+        }
+      </span>
+      @for (t of transportTypes.slice(0, 4); track t.type) {
+        <span class="ov-row"><span class="ov-key">{{ t.type }}</span>{{ t.count }}</span>
+      }
+      @if (transportTypes.length > 4) {
+        <span class="ov-row dim">{{ 'node.overview.more-types' | translate: { n: transportTypes.length - 4 } }}</span>
+      }
+    </a>
+
+    <a class="ov-card link" [routerLink]="['/nodes', node.localPk, 'routing']">
+      <span class="ov-title">{{ 'node.overview.network' | translate }}</span>
+      <span class="ov-row"><span class="ov-key">{{ 'node.overview.dmsg-servers' | translate }}</span>{{ node.dmsgServers?.length || 0 }}</span>
+      <span class="ov-row"><span class="ov-key">{{ 'node.overview.routes' | translate }}</span>{{ node.routesCount || 0 }}</span>
+      <span class="ov-row"><span class="ov-key">{{ 'node.overview.min-hops' | translate }}</span>{{ node.minHops || 0 }}</span>
+      <span class="ov-row"><span class="ov-key">{{ 'node.overview.public' | translate }}</span>{{ (node.isPublic ? 'common.yes' : 'common.no') | translate }}</span>
+    </a>
+
+    <a class="ov-card link" [routerLink]="['/nodes', node.localPk, 'apps']">
+      <span class="ov-title">{{ 'node.overview.apps' | translate }}</span>
+      <span class="ov-big">{{ appsRunning }}<span class="ov-small"> / {{ node.apps?.length || 0 }} {{ 'node.overview.running' | translate }}</span></span>
+      <span class="ov-row"><span class="ov-key">{{ 'node.overview.autostart' | translate }}</span>{{ appsAutostart }}</span>
+      <span class="ov-row" [class.bad]="appsFailed > 0"><span class="ov-key">{{ 'node.overview.failed' | translate }}</span>{{ appsFailed }}</span>
+    </a>
+
+    <div class="ov-card">
+      <a class="ov-title link" [routerLink]="['/nodes', node.localPk, 'rewards']">{{ 'node.overview.rewards' | translate }} &rsaquo;</a>
+      @if (!node.rewardsAddress) {
+        <span class="ov-big wait">{{ 'node.overview.reward-not-set' | translate }}</span>
+      } @else if (node.rewardEligible === false) {
+        <span class="ov-big bad">{{ 'node.overview.reward-ineligible' | translate }}</span>
+      } @else {
+        <span class="ov-big ok">{{ 'node.overview.reward-set' | translate }}</span>
+      }
+      <a class="ov-row sub" [routerLink]="['/nodes', node.localPk, 'bandwidth']">{{ 'node.overview.bandwidth' | translate }} &rsaquo;</a>
+      <a class="ov-row sub" [routerLink]="['/nodes', node.localPk, 'uptime']">{{ 'node.overview.uptime' | translate }} &rsaquo;</a>
+    </div>
+  </div>
+
+  <div class="alerts">
+    @if (alerts.length === 0) {
+      <span class="alert ok">{{ 'node.overview.no-alerts' | translate }}</span>
+    }
+    @for (a of alerts; track a.text + ($index)) {
+      <span class="alert" [class.warn]="a.level === 'warn'">{{ a.text | translate: a.params }}</span>
+    }
+  </div>
+}
