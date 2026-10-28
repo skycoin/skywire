@@ -17,6 +17,8 @@ package commands
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/skychat/contacts"
 )
@@ -57,7 +59,7 @@ func openContactStore(path string) {
 func contactsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, contactNames())
+		writeJSON(w, shownNames())
 	case http.MethodPost:
 		var body struct {
 			PK   string `json:"pk"`
@@ -121,14 +123,64 @@ func contactNames() map[string]string {
 
 // displayName is what to CALL a peer anywhere a human will read it.
 //
-// The operator's own name for the key wins; otherwise the shortened key. A
-// name the peer publishes about itself is not consulted here on purpose — the
-// UI fetches those over the network (which a notification path must never do)
-// and writes one into the address book when there is no nickname yet, so by
-// the time it matters it is already the first case.
+// The operator's skychat nickname wins, then the visor contact book, then the
+// shortened key. A name the peer publishes about itself is not consulted here
+// on purpose — the UI fetches those over the network (which a notification
+// path must never do) and writes one into the address book when there is no
+// nickname yet, so by the time it matters it is already the first case.
 func displayName(pk string) string {
 	if name := contactStore.Name(pk); name != "" {
 		return name
 	}
+	if name := bookNames()[pk]; name != "" {
+		return name
+	}
 	return shortHexPK(pk)
+}
+
+// bookTTL bounds how stale the visor contact book can be here. It is read on
+// every notification, so it is cached rather than fetched per message.
+const bookTTL = 30 * time.Second
+
+var book struct {
+	mu      sync.Mutex
+	names   map[string]string
+	fetched time.Time
+}
+
+// bookNames is the visor contact book as key hex to name. Standalone, or when
+// the visor cannot answer, it is the last copy fetched (empty at first).
+func bookNames() map[string]string {
+	book.mu.Lock()
+	stale := appCl != nil && time.Since(book.fetched) >= bookTTL
+	if stale {
+		book.fetched = time.Now()
+	}
+	names := book.names
+	book.mu.Unlock()
+	if !stale {
+		return names
+	}
+	// Fetched outside the lock so a slow visor never stalls other callers.
+	fresh, err := appCl.ContactNames()
+	if err != nil {
+		return names
+	}
+	book.mu.Lock()
+	book.names = fresh
+	book.mu.Unlock()
+	return fresh
+}
+
+// shownNames is what the UI displays: the contact book, overlaid by skychat's
+// own nicknames so a nickname still wins. The export keeps only nicknames.
+func shownNames() map[string]string {
+	out := make(map[string]string)
+	for pk, name := range bookNames() {
+		out[pk] = name
+	}
+	for pk, name := range contactNames() {
+		out[pk] = name
+	}
+	return out
 }
