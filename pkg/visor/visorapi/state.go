@@ -116,6 +116,10 @@ type StateSnapshot struct {
 	// of the default snapshot.
 	Roles *RolesSnapshot `json:"roles,omitempty"`
 
+	// Network is the public IP, NAT class and advertised LAN addresses, and
+	// the last change of network the visor acted on. See NetworkState.
+	Network *NetworkState `json:"network,omitempty"`
+
 	// Notes collects per-section errors ("routing: <err>") so the snapshot is
 	// self-describing about what it could and could not read.
 	Notes []string `json:"notes,omitempty"`
@@ -143,13 +147,14 @@ const (
 	SelectDiag       = "diag"       // router intake, transport queues/handlers, vstream, dmsg ping/relay, runtime
 	SelectRoles      = "roles"      // in-process dmsg server, dmsg relay (both directions), transit refusal
 	SelectRuntime    = "runtime"    // GC and memory metrics from runtime/metrics, with 1m and 5m windows
+	SelectNetwork    = "network"    // public IP, NAT class, advertised LAN addresses, last network move
 )
 
 // StateSelectKeys is the documented set of --select keys, in help order.
 var StateSelectKeys = []string{
 	SelectSummary, SelectHealth, SelectRouting, SelectMux, SelectPool,
 	SelectApps, SelectTransports, SelectModules, SelectCXO, SelectServices, SelectProxy, SelectDiag,
-	SelectRoles, SelectRuntime,
+	SelectRoles, SelectRuntime, SelectNetwork,
 }
 
 // stateSelectAliases maps a snapshot JSON field name onto the --select key

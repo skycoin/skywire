@@ -422,6 +422,9 @@ type Dmsg interface {
 	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
+	// NetworkMoved makes the visor refresh its public IP, NAT class, LAN
+	// addresses and every registration, as after a move to another network.
+	NetworkMoved(reason string) error
 }
 
 // Routing is routes, route groups, their multiplexing and the router's settings.

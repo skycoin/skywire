@@ -11,15 +11,16 @@ description: One call runtime introspection of a visor with `skywire cli visor s
 1. `skywire cli visor state --shape` prints the schema skeleton with every field. It needs no live data, so read it first to learn the JSON paths.
 2. `skywire cli visor state --jq '<expr>'` projects what you want. `--jq` implies `--json`.
 3. `--via dmsg://<pk>` runs it against a remote visor. The remote must allow the caller, as for other debug surfaces.
-4. `--select a,b` builds only those subtrees on the server. The full snapshot is large, so select when you can. Keys are `summary`, `health`, `routing`, `mux`, `pool`, `apps`, `transports`, `modules`, `cxo`, `services`, `proxy`, `diag`, `roles`, `runtime`.
+4. `--select a,b` builds only those subtrees on the server. The full snapshot is large, so select when you can. Keys are `summary`, `health`, `routing`, `mux`, `pool`, `apps`, `transports`, `modules`, `cxo`, `services`, `proxy`, `diag`, `roles`, `runtime`, `network`.
 5. `--watch 1s` streams one NDJSON snapshot per tick. It composes with `--select`, `--jq` and `--via`.
 
 ## Top level keys
-`at`, `suspended`, `summary`, `health`, `service_health`, `routing_stats`, `route_groups`, `mux_route_groups`, `mux_counters`, `pool`, `routing_policy`, `router_config`, `apps`, `transports`, `persistent_transports`, `modules`, `cxo`, `services`, `proxy`, `roles`, `diag`, `runtime`, `tpd_leaf_publisher`, `notes`. The `--shape` output is the authority.
+`at`, `suspended`, `summary`, `health`, `service_health`, `routing_stats`, `route_groups`, `mux_route_groups`, `mux_counters`, `pool`, `routing_policy`, `router_config`, `apps`, `transports`, `persistent_transports`, `modules`, `cxo`, `services`, `proxy`, `roles`, `diag`, `runtime`, `network`, `tpd_leaf_publisher`, `notes`. The `--shape` output is the authority.
 - `summary` embeds the `visor info` overview.
 - `modules` shows which optional subsystems are wired, often the answer to "why is there no stats feed".
 - `services` lists each embedded deployment service with its running state, whether it has its own key, restarts, and its CXO aggregators and publishers.
 - `roles` shows what the visor is for the network, such as its dmsg server and relay roles.
+- `network` is the public IP (`public_ip_source` dmsg or stun, `public_ip_at`), the NAT class, `local_addresses` after the virtual interface filter, `advertised` per transport type, and the last move (`moves`, `last_move_reason`, `last_move_change`). `skywire cli visor network show` prints it as text.
 - `notes` holds per section errors. A suspended or half started visor still returns a useful snapshot.
 
 ## Common queries

@@ -2683,3 +2683,8 @@ func (rc *rpcClient) ContactsExport() ([]byte, error) {
 	err := rc.Call("ContactsExport", &struct{}{}, &out)
 	return out, err
 }
+
+// NetworkMoved makes the visor refresh what it advertises about its network.
+func (rc *rpcClient) NetworkMoved(reason string) error {
+	return rc.Call("NetworkMoved", &reason, &struct{}{})
+}

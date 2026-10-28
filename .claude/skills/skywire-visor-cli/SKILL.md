@@ -18,6 +18,7 @@ R means read only and safe on a live visor. M means it changes or loads the viso
 - `info` (also `-L` for a live view), `pk`, `pk dnslabel [key]`, `ver`, `user`, `ports`, `dmsg-servers`, `ip`.
 - `state` is the one call runtime snapshot. See skywire-visor-state.
 - `services` lists the deployment services this visor embeds. `services start|stop|restart <name>` (M) controls a service that has its own key. A service mounted on the visor runs with it.
+- `network show` (R) prints the public IP and how it was learned, the NAT class, the LAN addresses after the virtual interface filter, the addresses each transport type last bound with, and the last network move. `network moved [--reason r]` (M) asks for the refresh a move triggers: dmsg reconnect, STUN probe, public IP lookup, and a fresh address resolver bind of every type. It also runs on its own when the address watcher (`transport.network_watch_interval`, default 12s) or the public IP recheck (`transport.public_ip_check_interval`, default 12m) sees a change, and when the Android app posts `/api/dmsg/reconnect`. Both intervals change live with `config set`, and a negative value turns one off.
 - `skyenv [flag=value ...]` shows or edits the visor's `skywire.conf`, the settings every config regen is built from. `--unset <flag>` restores a default. Edits apply at the next regen. With `--via` it edits a remote visor's file, so treat it as M.
 
 ## Apps

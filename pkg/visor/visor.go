@@ -179,6 +179,8 @@ type Visor struct {
 
 	// STUN client state
 	stun stunState
+	// netMove tracks the network the visor is on and reacts to a move (netmove.go).
+	netMove netMoveState
 
 	tpM *transport.Manager
 	// dmsgSharedLis is the transport port's cmux branch for dmsg sessions,
@@ -591,7 +593,8 @@ type dtmState struct {
 
 // stunState manages STUN client state.
 type stunState struct {
-	client    *network.StunDetails
+	// client is replaced whole when a network move re-probes STUN.
+	client    atomic.Pointer[network.StunDetails]
 	ready     chan struct{}
 	readyOnce sync.Once
 }
@@ -1109,7 +1112,7 @@ func (v *Visor) processRuntimeErrs() bool {
 func (v *Visor) isStunReady() bool {
 	select {
 	case <-v.stun.ready:
-		return v.stun.client != nil
+		return v.stun.client.Load() != nil
 	default:
 		return false
 	}
