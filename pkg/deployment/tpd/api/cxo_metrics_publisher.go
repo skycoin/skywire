@@ -226,13 +226,13 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 	window := store.MetricsWindowDates(now, metricsWindowDays)
 	open := store.OpenMetricsDays(now)
 	days := open
-	saved := map[string][][]byte{}
+	have := map[string]bool{}
 	if full {
-		// Settled days an earlier run saved need no recompute; only when one
-		// is missing is the whole window read. The saved days still win over
-		// the reread, whose rows for older days may already be cleaned up.
-		saved = m.loadSettled(ctx, window[open:])
-		if len(saved) < len(window)-open {
+		// Settled days an earlier run saved need no recompute, and are
+		// published one at a time so they never sit in the heap together.
+		// Only when one is missing is the whole window read.
+		have = m.publishSaved(ctx, window[open:], window)
+		if len(have) < len(window)-open {
 			days = metricsWindowDays
 		}
 	}
@@ -246,19 +246,18 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		return
 	}
 
+	// One day at a time, since pivoting the window whole holds a second copy
+	// of every record beside the first.
 	fresh := window[:days]
-	byDate := store.PivotDailyMetrics(metrics, fresh)
-	if days > open {
-		perDay := make(map[string]int, len(fresh))
-		for _, d := range fresh {
-			perDay[d] = len(byDate[d])
-		}
-		m.log.WithField("transports", len(metrics)).WithField("per_day", perDay).Info("Rebuilt the metrics window")
-	}
-
 	bodies := make(map[string][][]byte, len(fresh))
+	perDay := make(map[string]int, len(fresh))
 	for _, date := range fresh {
-		parts, gerr := gzipPartsFrom(byDate[date], maxPublishBody, m.parts[date])
+		if have[date] {
+			continue
+		}
+		recs := store.PivotDay(metrics, date, window[0])
+		perDay[date] = len(recs)
+		parts, gerr := gzipPartsFrom(recs, maxPublishBody, m.parts[date])
 		if gerr != nil {
 			m.log.WithError(gerr).WithField("date", date).Warn("metrics marshal failed")
 			m.recordError(gerr)
@@ -266,8 +265,8 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		}
 		bodies[date] = parts
 	}
-	for date, parts := range saved {
-		bodies[date] = parts
+	if days > open {
+		m.log.WithField("transports", len(metrics)).WithField("per_day", perDay).Info("Rebuilt the metrics window")
 	}
 
 	// The whole window, so settled days are kept (planDayOps leaves a date
@@ -279,15 +278,36 @@ func (m *MetricsCXOPublisher) publish(ctx context.Context, full bool) {
 		return
 	}
 	m.parts = next
-	// Days loaded from the store are saved already; saving them again would
-	// rewrite every archived day and return old ones to redis on each start.
-	built := make(map[string][][]byte, len(bodies))
-	for date, parts := range bodies {
-		if _, ok := saved[date]; !ok {
-			built[date] = parts
+	// Only the days built here are settled; the saved ones are saved already.
+	m.settle(ctx, bodies, window[:open])
+}
+
+// publishSaved publishes the saved leaves of the given settled dates, one day
+// at a time, and returns the dates it published. A day the store has no good
+// leaf for is left out.
+func (m *MetricsCXOPublisher) publishSaved(ctx context.Context, dates, window []string) map[string]bool {
+	have := make(map[string]bool, len(dates))
+	for _, date := range dates {
+		got := m.loadSettled(ctx, []string{date})
+		parts, ok := got[date]
+		if !ok {
+			continue
+		}
+		ops, next := planDayOps(map[string][][]byte{date: parts}, window, m.parts, false)
+		if err := m.pub.PutBatch(ops); err != nil {
+			m.log.WithError(err).WithField("date", date).Warn("publisher PutBatch failed")
+			m.recordError(err)
+			continue
+		}
+		m.parts = next
+		have[date] = true
+		// The tree holds a copy until it is published; wait for that so the
+		// next day's copy does not pile on top of it.
+		if err := m.pub.Flush(); err != nil {
+			m.log.WithError(err).WithField("date", date).Debug("flush after a saved metrics day")
 		}
 	}
-	m.settle(ctx, built, window[:open])
+	return have
 }
 
 // planDayOps turns one cycle's gzipped bodies into the PutBatch that
