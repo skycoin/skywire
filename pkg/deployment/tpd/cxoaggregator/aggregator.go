@@ -39,6 +39,7 @@
 package cxoaggregator
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -177,6 +178,15 @@ type transportListLeaf struct {
 	// transport.EntryFromCompact(reporter, ce). Visors on develop publish
 	// this; older visors still publish Entries, which are read as-is.
 	Compact []transport.CompactEntry `json:"c,omitempty"`
+}
+
+// decodeTransportList unmarshals a list leaf. The compact rows are counted
+// first so the slice is allocated once instead of regrown by the decoder.
+func decodeTransportList(leaf []byte, list *transportListLeaf) error {
+	if n := bytes.Count(leaf, []byte("},{")); n > 0 {
+		list.Compact = make([]transport.CompactEntry, 0, n+1)
+	}
+	return json.Unmarshal(leaf, list)
 }
 
 // entries returns the reconstructed full-entry set from whichever form
@@ -858,7 +868,7 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 	}
 	leaf = cxoutils.Gunzip(leaf) // publisher may gzip; raw bodies pass through
 	var list transportListLeaf
-	if err := json.Unmarshal(leaf, &list); err != nil {
+	if err := decodeTransportList(leaf, &list); err != nil {
 		a.log.WithError(err).WithField("visor", reporter).WithField("path", path).
 			Debug("CXO aggregator: targeted transport list decode failed")
 		return nil, "", false
@@ -1030,7 +1040,7 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	// (register new + deregister absent).
 	if path == tpdListLeafName || path == "transports/list" {
 		var list transportListLeaf
-		if err := json.Unmarshal(leaf, &list); err != nil {
+		if err := decodeTransportList(leaf, &list); err != nil {
 			a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: transport list leaf decode failed")
 			return
 		}
