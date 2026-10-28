@@ -55,6 +55,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/elazarl/goproxy v1.9.2
+	github.com/emersion/go-vcard v0.1.0
 	github.com/fatih/color v1.19.0
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1

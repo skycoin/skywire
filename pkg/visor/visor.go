@@ -229,6 +229,9 @@ type Visor struct {
 	// caddySites caches the site names a local Caddy reports.
 	caddySites siteCache
 
+	// contacts is the address book, opened on first use.
+	contacts contactBook
+
 	// visorCharts samples this visor's load and traffic for /status/visor.
 	visorCharts atomic.Pointer[visorCharts]
 
