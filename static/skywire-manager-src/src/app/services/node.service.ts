@@ -855,6 +855,13 @@ return {
   }
 
   /**
+   * Asks a node to restart itself.
+   */
+  restart(nodeKey: string): Observable<any> {
+    return this.apiService.post(`visors/${nodeKey}/restart`);
+  }
+
+  /**
    * Checks if a node is currently being updated.
    */
   checkIfUpdating(nodeKey: string): Observable<any> {
