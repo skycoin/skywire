@@ -77,3 +77,23 @@ func TestListenWithFallback(t *testing.T) {
 	_, err = listenWithFallback(c, &port, func(string) (string, error) { return "", syscall.EADDRINUSE })
 	require.ErrorIs(t, err, io.ErrClosedPipe)
 }
+
+func TestRebindTriggersReRegister(t *testing.T) {
+	fastBindTimings(t)
+	reRegisterInterval = time.Hour
+	c := &genericClient{log: testLog(), done: make(chan struct{}), rebind: make(chan struct{}, 1)}
+	var calls atomic.Int32
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		c.reRegister("test", func() error { calls.Add(1); return nil }, nil)
+	}()
+	c.Rebind()
+	c.Rebind() // folded into the pending one, or a second bind; never blocks
+	require.Eventually(t, func() bool { return calls.Load() >= 1 }, time.Second, time.Millisecond)
+	close(c.done)
+	<-stopped
+
+	// A client with no loop ignores it.
+	(&genericClient{}).Rebind()
+}

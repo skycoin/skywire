@@ -1167,6 +1167,10 @@ func (proxyDefaultAPI) DmsgReconnect() (int, error) {
 	return 0, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) NetworkMoved(_ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) DmsgSetMinSessions(_ int) error {
 	return ErrProxyNotSupported
 }

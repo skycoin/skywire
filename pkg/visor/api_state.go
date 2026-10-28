@@ -205,6 +205,10 @@ func (v *Visor) StateSnapshotProjected(fields []string) (*visorapi.StateSnapshot
 		snap.Runtime = gcmon.Default().State()
 	}
 
+	if want.Has(visorapi.SelectNetwork) {
+		snap.Network = v.NetworkState()
+	}
+
 	// proxy is opt-in (never in the default snapshot): the visor-side
 	// proxystatus snapshot for the skysocks surface — per-leg mux telemetry,
 	// running flag, and the range-split summary when the client has pushed it.

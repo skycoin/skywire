@@ -728,6 +728,14 @@ type Transport struct {
 	// fully-offline visor). Applied on top of no_direct_transports. Legacy type
 	// aliases (quic/ws/wt) are accepted. Empty/omitted denies nothing.
 	TransportCreateDeny []string `json:"transport_create_deny,omitempty"`
+	// NetworkWatchInterval is how often the visor checks its interface
+	// addresses and route for a move to another network. Zero means 12s and
+	// a negative value turns the check off.
+	NetworkWatchInterval Duration `json:"network_watch_interval,omitempty"`
+	// PublicIPCheckInterval is how often the visor asks the dmsg servers
+	// for its public IP to notice a change the watcher cannot see. Zero
+	// means 12m and a negative value turns the check off.
+	PublicIPCheckInterval Duration `json:"public_ip_check_interval,omitempty"`
 }
 
 // WTPeer is a statically-configured WebTransport peer (transport.wt_table): the

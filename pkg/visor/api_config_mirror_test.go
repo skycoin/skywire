@@ -115,6 +115,8 @@ var regenKeeps = map[string]string{
 	"transport.autoconnect.max_per_type": "keepAutoconnect",
 	"transport.autoconnect.max_total":    "keepAutoconnect",
 	"transport.tcp_notsent_lowat":        "keepTCPNotSentLowat",
+	"transport.network_watch_interval":   "keepNetworkWatch",
+	"transport.public_ip_check_interval": "keepNetworkWatch",
 }
 
 // TestEveryLiveSettingSurvivesAutoconfig. A live change that neither reaches

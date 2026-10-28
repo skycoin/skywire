@@ -95,7 +95,9 @@ type Client struct {
 	sec            cipher.SecKey
 	addr           string // sanitized address of the client, which may differ from addr used in NewClient
 	clientPublicIP string // public ip of the local client needed as a header for dmsghttp
-	log            *logging.Logger
+	// publicIPFn, when set, supplies the header live in place of clientPublicIP.
+	publicIPFn atomic.Pointer[func() string]
+	log        *logging.Logger
 }
 
 // NewClient creates a new client setting a public key to the client to be used for Auth.
@@ -249,8 +251,8 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 	req.Header.Set("SW-Sig", sign.Hex())
 	req.Header.Set("SW-Public", c.key.Hex())
 	req.Header.Set(buildinfo.VersionHeader, buildinfo.Version())
-	if c.clientPublicIP != "" {
-		req.Header.Set("SW-PublicIP", c.clientPublicIP)
+	if ip := c.publicIP(); ip != "" {
+		req.Header.Set("SW-PublicIP", ip)
 	}
 
 	c.mu.Lock()
@@ -343,4 +345,21 @@ func ExtractError(r io.Reader) error {
 	}
 
 	return errors.New(apiError.Error)
+}
+
+// SetPublicIPFunc makes the SW-PublicIP header follow fn, so a visor that
+// moves to another network stops declaring the address it had at startup.
+func (c *Client) SetPublicIPFunc(fn func() string) {
+	if fn == nil {
+		c.publicIPFn.Store(nil)
+		return
+	}
+	c.publicIPFn.Store(&fn)
+}
+
+func (c *Client) publicIP() string {
+	if fn := c.publicIPFn.Load(); fn != nil {
+		return (*fn)()
+	}
+	return c.clientPublicIP
 }

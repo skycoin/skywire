@@ -71,10 +71,11 @@ func (a *autoconnector) loadReach(ctx context.Context, v *Visor) map[cipher.PubK
 func (v *Visor) selfNAT() string {
 	v.initLock.Lock()
 	defer v.initLock.Unlock()
-	if v.stun.client == nil {
+	sc := v.stun.client.Load()
+	if sc == nil {
 		return ""
 	}
-	return natClass(v.stun.client.NATType)
+	return natClass(sc.NATType)
 }
 
 // reachPeers returns the peers the feed says serve type t: bound for it at
