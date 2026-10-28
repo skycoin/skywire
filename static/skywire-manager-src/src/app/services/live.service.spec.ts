@@ -83,6 +83,14 @@ describe('LiveService', () => {
     expect(service.usable).toBeFalse();
   }));
 
+  it('gives up on a hypervisor that answers sub as an unknown request', () => {
+    let failed: any = null;
+    service.subscribe('/api/x', 5000).subscribe({ error: e => failed = e });
+    FakeSocket.all[0].open();
+    FakeSocket.all[0].push({ type: 'res', id: 1, status: 405, body: 'method not allowed on this transport' });
+    expect(failed instanceof LiveUnavailableError).toBeTrue();
+  });
+
   it('is not used by a serverless UI', () => {
     const serverless = new LiveService({ serverless: true } as any);
     let failed: any = null;

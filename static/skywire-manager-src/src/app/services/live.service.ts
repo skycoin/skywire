@@ -100,6 +100,13 @@ export class LiveService {
       } catch {
         return;
       }
+      // A hypervisor without subscriptions answers a sub frame as a request it
+      // cannot serve; give up so pages poll instead of waiting forever.
+      if (frame.type === 'res' && this.subs.has(frame.id) && frame.status >= 400) {
+        this.giveUp();
+
+        return;
+      }
       if (frame.type !== 'event') {
         return;
       }
