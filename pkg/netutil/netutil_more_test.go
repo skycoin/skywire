@@ -223,10 +223,11 @@ func TestExtractPort(t *testing.T) {
 }
 
 func TestIsVirtualInterface(t *testing.T) {
-	for _, n := range []string{"docker0", "br-abc", "veth123", "virbr0", "lxcbr0", "cni0", "flannel.1", "calico1"} {
+	for _, n := range []string{"docker0", "br-abc", "veth123", "virbr0", "lxcbr0", "cni0", "flannel.1", "calico1",
+		"skydns0", "tun0", "tap0", "wg0", "tailscale0", "utun3", "zt5u4y6kim"} {
 		assert.Truef(t, IsVirtualInterface(n), "%s should be virtual", n)
 	}
-	for _, n := range []string{"eth0", "en0", "wlan0", "br"} { // "br" shorter than "br-"
+	for _, n := range []string{"eth0", "en0", "wlan0", "br", "rmnet_data0", "enp3s0"} { // "br" shorter than "br-"
 		assert.Falsef(t, IsVirtualInterface(n), "%s should not be virtual", n)
 	}
 }
@@ -274,4 +275,14 @@ func (nonDeadlineConn) Close() error                { return nil }
 
 func TestForceInterruptNonDeadline(t *testing.T) {
 	assert.NotPanics(t, func() { forceInterrupt(nonDeadlineConn{}) })
+}
+
+func TestIsAdvertisableIP(t *testing.T) {
+	for _, s := range []string{"192.0.0.4", "192.0.0.1", "127.0.0.1", "::1", "fe80::1", "169.254.3.4"} {
+		assert.Falsef(t, IsAdvertisableIP(net.ParseIP(s)), "%s must not be advertised", s)
+	}
+	for _, s := range []string{"192.168.1.20", "10.0.0.5", "203.0.113.9", "192.0.0.8", "2001:db8::5"} {
+		assert.Truef(t, IsAdvertisableIP(net.ParseIP(s)), "%s should be advertised", s)
+	}
+	assert.False(t, IsAdvertisableIP(nil))
 }

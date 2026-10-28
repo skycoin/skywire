@@ -133,7 +133,7 @@ func LocalAddresses() ([]string, error) {
 		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		}
-		// Skip Docker/container bridge interfaces
+		// Skip container bridges, tunnels and other virtual interfaces
 		if IsVirtualInterface(iface.Name) {
 			continue
 		}
@@ -150,7 +150,7 @@ func LocalAddresses() ([]string, error) {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			if ip != nil && ip.IsGlobalUnicast() {
+			if ip != nil && ip.IsGlobalUnicast() && IsAdvertisableIP(ip) {
 				result = append(result, ip.String())
 			}
 		}
