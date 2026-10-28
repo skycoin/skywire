@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -173,6 +174,10 @@ func TestSkillFlagsExistSomewhere(t *testing.T) {
 	}
 	flags.InstallHelpTree(RootCmd)
 	known := map[string]bool{"help": true, "max-time": true, "remote-debugging-port": true}
+	if runtime.GOOS != "linux" {
+		// pty fs mount uses FUSE, so its flags exist only in Linux builds.
+		known["ro"], known["remote-root"] = true, true
+	}
 	walk(RootCmd, func(c *cobra.Command) {
 		c.Flags().VisitAll(func(f *pflag.Flag) { known[f.Name] = true })
 		c.PersistentFlags().VisitAll(func(f *pflag.Flag) { known[f.Name] = true })
