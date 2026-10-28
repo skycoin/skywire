@@ -10,7 +10,7 @@ func TestEditFor(t *testing.T) {
 		{"ishv", "true", "ISHYPERVISOR", "true"},
 		{"no-ishv", "true", "ISHYPERVISOR", "false"},
 		{"minsess", "3", "MINDMSGSESS", "3"},
-		{"hvpks", "a,b", "HYPERVISORPKS", "('a' 'b')"},
+		{"stun", "a,b", "STUNSERVERS", "('a' 'b')"},
 		{"hvdeskaddr", ":8010", "HVDESKADDR", "':8010'"},
 	}
 	for _, c := range cases {
