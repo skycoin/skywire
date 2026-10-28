@@ -112,32 +112,38 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	return nil
 }
 
-// resolvePublicIPForAR determines the visor's public IP(s) and geolocation —
-// via a connected dmsg-server (LookupIPGeo, then the Phase 2c family-aware
-// lookup), falling back to STUN — and pushes the result into the AR client. It
-// runs in the background, off the ar→tr→cli(RPC) init critical path, so the
-// slow lookup never delays the control plane. SetPublicIP is always called
-// exactly once (even with empty values) so the bind path's bounded wait is
-// released the moment the determination concludes.
+// resolvePublicIPForAR determines the visor's public IP(s) and geolocation
+// and pushes the result into the AR client. It runs in the background, off
+// the ar→tr→cli(RPC) init critical path, so the slow lookup never delays the
+// control plane. SetPublicIP is always called (even with empty values) so the
+// bind path's bounded wait is released the moment the determination
+// concludes. networkMoved runs the same lookup again after a network change.
 func (v *Visor) resolvePublicIPForAR(arClient addrresolver.APIClient, log *logging.Logger) {
 	ctx := v.ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	r := v.lookupPublicIP(ctx, log)
+	v.applyPublicIP(arClient, r)
+}
 
-	var pIP, pIPv6 string
-	// Always publish the outcome — even an empty result unblocks BindSTCPR's
-	// bounded wait so the data plane stops waiting and binds with whatever the
-	// AR can observe from the source IP.
-	defer func() { arClient.SetPublicIP(pIP, pIPv6) }()
+// publicIPResult is one determination of the visor's public addresses.
+type publicIPResult struct {
+	v4, v6 string
+	geo    *GeoData
+	source string // "dmsg", "stun" or "" when none was found
+}
 
-	// Get public IP (and ideally geolocation) from a connected dmsg-server.
+// lookupPublicIP asks a connected dmsg-server for the visor's public IP and
+// geolocation, falling back to STUN, then learns both families from the
+// connected dmsg sessions (#1525 Phase 2c).
+func (v *Visor) lookupPublicIP(ctx context.Context, log *logging.Logger) publicIPResult {
+	var r publicIPResult
 	// LookupIPGeo asks the server to fold in the geoip data using its own
 	// embedded MaxMind DB so the visor doesn't need an HTTP round-trip to the
 	// geoip service. Older dmsg-servers without the geo lookup hook return
 	// GeoCountry="" — we fall back to the visor's own embedded LookupGeo in
 	// that case. STUN is the last-resort path when dmsg can't answer.
-	var serverGeo *GeoData
 	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
 	resp, err := v.dmsgC.LookupIPGeo(lookupCtx, nil)
 	lookupCancel()
@@ -148,73 +154,70 @@ func (v *Visor) resolvePublicIPForAR(arClient addrresolver.APIClient, log *loggi
 		case <-time.After(20 * time.Second):
 			log.Warn("STUN not ready within 20s; proceeding without a STUN-derived public IP")
 		case <-ctx.Done():
-			return
+			return r
 		}
-		if v.stun.client != nil && v.stun.client.PublicIP != nil {
-			pIP = v.stun.client.PublicIP.IP()
-			log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
+		if ip := v.stunPublicIP(); ip != "" {
+			r.v4, r.source = ip, "stun"
+			log.WithField("public_ip", ip).Debug("Got public IP from STUN")
 		} else {
 			log.Warn("Failed to determine public IP from dmsg and STUN")
 		}
 	} else {
-		pIP = resp.IP.String()
-		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
+		r.v4, r.source = resp.IP.String(), "dmsg"
+		log.WithField("public_ip", r.v4).Debug("Got public IP from dmsg server")
 		if resp.GeoCountry != "" {
-			serverGeo = &GeoData{
+			r.geo = &GeoData{
 				CountryCode: resp.GeoCountry,
 				RegionCode:  resp.GeoRegion,
 				Latitude:    resp.GeoLat,
 				Longitude:   resp.GeoLon,
 			}
-			log.WithField("country", serverGeo.CountryCode).Debug("Got geolocation from dmsg server")
+			log.WithField("country", r.geo.CountryCode).Debug("Got geolocation from dmsg server")
 		}
 	}
 
-	// #1525 Phase 2c: learn BOTH families of the visor's public IP by
-	// iterating connected dmsg sessions and asking each server for the
-	// visor's source IP. The legacy LookupIPGeo above returns a single
-	// family (whichever session it happened to pick first). The result
-	// drives LocalAddresses.PublicIP / PublicIPv6 in subsequent AR
-	// binds, so the AR can register both family endpoints even when
-	// reached via the dmsg-routed default path where the AR observes
-	// the dmsg-bridge's source IP rather than the visor's actual family.
-	//
-	// Best-effort: requires the dmsg-client to have sessions over both
-	// families. A v4-only visor (or a dual-stack visor whose only
-	// reachable dmsg-server is v4) leaves pIPv6 empty and the visor
-	// proceeds without a v6 declaration — same as pre-Phase-2c.
+	// The legacy LookupIPGeo above returns a single family (whichever
+	// session it picked first). Asking every connected session for the
+	// visor's source IP learns both, so the AR can register both family
+	// endpoints even when reached via a dmsg bridge. A v4-only visor leaves
+	// v6 empty.
 	if v.dmsgC != nil {
 		v4FamilyIP, v6FamilyIP := v.dmsgC.LookupIPsByFamily(ctx)
-		// Prefer the family-aware results when populated; fall back to
-		// the legacy LookupIPGeo's pIP for the v4 slot when v4FamilyIP
-		// is empty (rare — would indicate no v4 dmsg session at all).
 		if v4FamilyIP != nil {
-			pIP = v4FamilyIP.String()
+			r.v4, r.source = v4FamilyIP.String(), "dmsg"
 		}
 		if v6FamilyIP != nil {
-			pIPv6 = v6FamilyIP.String()
-			log.WithField("public_ip_v6", pIPv6).Debug("Got public IPv6 from dmsg server (Phase 2c family-aware lookup)")
+			r.v6 = v6FamilyIP.String()
+			log.WithField("public_ip_v6", r.v6).Debug("Got public IPv6 from dmsg server (Phase 2c family-aware lookup)")
 		}
 	}
 
-	geoData := serverGeo
-	if geoData == nil {
-		if local := LookupGeo(pIP); local != nil {
+	if r.geo == nil {
+		if local := LookupGeo(r.v4); local != nil {
 			log.WithField("country", local.CountryCode).Debug("Got geolocation from embedded GeoIP database (fallback)")
-			geoData = local
+			r.geo = local
 		}
 	}
-	v.geo.mu.Lock()
-	if geoData != nil {
-		v.geo.data = geoData
+	return r
+}
+
+// applyPublicIP hands a determination to the AR client and records it for
+// the Overview and the network state.
+func (v *Visor) applyPublicIP(arClient addrresolver.APIClient, r publicIPResult) {
+	if arClient != nil {
+		arClient.SetPublicIP(r.v4, r.v6)
 	}
-	// Record the determined public IP for the Overview: the dmsg-observed
-	// address works where STUN cannot (browser visors, UDP-blocked networks),
-	// so the UI shows the real IP instead of a STUN failure label.
-	if pIP != "" {
-		v.geo.publicIP = pIP
+	v.geo.mu.Lock()
+	if r.geo != nil {
+		v.geo.data = r.geo
+	}
+	// The dmsg-observed address works where STUN cannot (browser visors,
+	// UDP-blocked networks), so the UI shows the real IP, not a STUN label.
+	if r.v4 != "" {
+		v.geo.publicIP = r.v4
 	}
 	v.geo.mu.Unlock()
+	v.netMove.notePublicIP(r)
 }
 
 func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
@@ -252,6 +255,8 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		// usually finishes AFTER this point, so the snapshot above is nil for the
 		// race-losers. GeoFunc lets each heartbeat re-read the current geo.
 		factory.GeoFunc = v.serviceGeo
+		// Live getter too, so the entries follow the visor to a new network.
+		factory.PublicIPFunc = v.currentPublicIP
 		// Mirror every entry these clients register onto the visor's live
 		// service set, which the SD-registration-over-CXO feed publishes.
 		// Inert until initSDRegCXO attaches a publisher. See
@@ -277,8 +282,8 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-			if v.stun.client != nil && v.stun.client.PublicIP != nil {
-				pIP = v.stun.client.PublicIP.IP()
+			if ip := v.stunPublicIP(); ip != "" {
+				pIP = ip
 				logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
 			} else {
 				logger.Warn("Failed to determine public IP for service discovery from dmsg and STUN")
@@ -334,7 +339,7 @@ func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
 	v.initLock.Lock()
-	v.stun.client = sc
+	v.setStun(sc)
 	v.initLock.Unlock()
 	v.stun.readyOnce.Do(func() { close(v.stun.ready) })
 
@@ -378,7 +383,7 @@ func (v *Visor) retryStunOnTransientFail(log *logging.Logger) {
 		// Install the new result regardless of whether SUDPH ends up usable
 		// (NATSymmetric still gets recorded for telemetry / diagnostics).
 		v.initLock.Lock()
-		v.stun.client = sc
+		v.setStun(sc)
 		v.initLock.Unlock()
 		log.Infof("STUN: detection succeeded on retry, NAT type: %v, public IP: %v", sc.NATType.String(), sc.PublicIP.String())
 
@@ -418,15 +423,15 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// (udp_address); when that field is missing, BindSUDPH returns a
 	// clear error and SUDPH simply stays unavailable for this AR. No
 	// reason to hard-skip up front.
-	if v.stun.client != nil {
-		switch v.stun.client.NATType {
+	if sc := v.stun.client.Load(); sc != nil {
+		switch sc.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
-			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stun.client.NATType.String())
+			log.Warnf("SUDPH transport wont be available as visor is under %v", sc.NATType.String())
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
 			// Initial STUN probe failed transiently — initStunClient has
 			// scheduled a background retry that will lazy-start SUDPH if
 			// detection later succeeds.
-			log.Warnf("SUDPH transport wont be available yet: STUN detection failed (%v); will retry in background", v.stun.client.NATType.String())
+			log.Warnf("SUDPH transport wont be available yet: STUN detection failed (%v); will retry in background", sc.NATType.String())
 		default:
 			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}
@@ -935,6 +940,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 		Geo:           v.serviceGeo(),
 		GeoFunc:       v.serviceGeo, // live: heartbeats re-read geo once the async lookup completes
+		PublicIPFunc:  v.currentPublicIP,
 	}
 	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, serviceDisc)

@@ -108,6 +108,9 @@ func (hv *Hypervisor) postDmsgReconnect() http.HandlerFunc {
 		}
 		hv.logger.WithField("sessions_closed", closed).
 			Info("Dmsg sessions dropped on request; the client will re-dial.")
+		// The Android app calls this when the phone changes network, and the
+		// public IP, NAT class and LAN addresses change with it.
+		hv.visor.networkMoved("android")
 		httputil.WriteJSON(w, r, http.StatusOK, DmsgReconnectResult{SessionsClosed: closed})
 	}
 }

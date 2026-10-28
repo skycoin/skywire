@@ -1901,6 +1901,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.MuxWeights(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".NetworkMoved", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.NetworkMoved(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".NetworkView", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {

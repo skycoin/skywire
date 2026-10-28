@@ -699,9 +699,9 @@ func (v *Visor) Ports() (map[string]visorapi.PortDetail, error) {
 			ports["sudph"] = visorapi.PortDetail{Port: sudphPort, Type: "UDP"}
 		}
 	}
-	if v.stun.client != nil {
-		if v.stun.client.PublicIP != nil {
-			ports["public_visor"] = visorapi.PortDetail{Port: fmt.Sprint(v.stun.client.PublicIP.Port()), Type: "TCP"}
+	if sc := v.stun.client.Load(); sc != nil {
+		if sc.PublicIP != nil {
+			ports["public_visor"] = visorapi.PortDetail{Port: fmt.Sprint(sc.PublicIP.Port()), Type: "TCP"}
 		}
 	}
 	if v.dmsgC != nil {

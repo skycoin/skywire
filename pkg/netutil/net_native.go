@@ -133,7 +133,7 @@ func LocalAddresses() ([]string, error) {
 		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		}
-		// Skip Docker/container bridge interfaces
+		// Skip container bridges, tunnels and other virtual interfaces
 		if IsVirtualInterface(iface.Name) {
 			continue
 		}
@@ -150,7 +150,7 @@ func LocalAddresses() ([]string, error) {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			if ip != nil && ip.IsGlobalUnicast() {
+			if ip != nil && ip.IsGlobalUnicast() && IsAdvertisableIP(ip) {
 				result = append(result, ip.String())
 			}
 		}
@@ -173,4 +173,23 @@ func LocalProtocol() bool {
 		return true
 	}
 	return false
+}
+
+// RouteSourceIPs returns the local addresses the kernel would send internet
+// traffic from, per family, or "" for a family with no route. Connecting a
+// UDP socket looks the route up and sends nothing.
+func RouteSourceIPs() (v4, v6 string) {
+	return routeSource("udp4", "198.51.100.1:9"), routeSource("udp6", "[2001:db8::1]:9")
+}
+
+func routeSource(network, addr string) string {
+	c, err := net.Dial(network, addr)
+	if err != nil {
+		return ""
+	}
+	defer c.Close() //nolint:errcheck
+	if u, ok := c.LocalAddr().(*net.UDPAddr); ok {
+		return u.IP.String()
+	}
+	return ""
 }

@@ -54,8 +54,23 @@ func (c *genericClient) bindUntilBound(name string, bind func() error) bool {
 	}
 }
 
+// Rebinder is a network client that can re-register with the address
+// resolver at once, as after a move to another network.
+type Rebinder interface {
+	Rebind()
+}
+
+// Rebind makes the re-registration loop bind now. A request made while one
+// is pending is folded into it. Types with no such loop ignore it.
+func (c *genericClient) Rebind() {
+	select {
+	case c.rebind <- struct{}{}:
+	default:
+	}
+}
+
 // reRegister calls bind every reRegisterInterval, and whenever trigger fires,
-// until the client closes. A nil trigger never fires.
+// until the client closes, and on Rebind. A nil trigger never fires.
 func (c *genericClient) reRegister(name string, bind func() error, trigger <-chan struct{}) {
 	ticker := time.NewTicker(reRegisterInterval)
 	defer ticker.Stop()
@@ -65,6 +80,7 @@ func (c *genericClient) reRegister(name string, bind func() error, trigger <-cha
 			return
 		case <-ticker.C:
 		case <-trigger:
+		case <-c.rebind:
 		}
 		err := bind()
 		if err == nil {

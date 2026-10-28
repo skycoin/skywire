@@ -9,45 +9,19 @@ import (
 	"sync"
 
 	"github.com/pion/ice/v4"
+
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
-// iceSkipPrefixes names interfaces that never carry a path to a peer:
-// container bridges, veth pairs and the visor's own tunnels.
-var iceSkipPrefixes = []string{"docker", "br-", "veth", "skydns", "tun"}
+func keepICEInterface(name string) bool { return !netutil.IsVirtualInterface(name) }
 
-func keepICEInterface(name string) bool {
-	for _, p := range iceSkipPrefixes {
-		if strings.HasPrefix(name, p) {
-			return false
-		}
-	}
-	return true
-}
-
-func keepICEIP(ip net.IP) bool {
-	return !ip.IsLinkLocalUnicast() && !ip.IsLoopback()
-}
+func keepICEIP(ip net.IP) bool { return netutil.IsAdvertisableIP(ip) }
 
 // iceLocalIPs lists the addresses a shared mux binds, as a stable key.
 func iceLocalIPs() string {
-	ifaces, err := net.Interfaces()
+	ips, err := netutil.LocalAddresses()
 	if err != nil {
 		return ""
-	}
-	var ips []string
-	for _, ifc := range ifaces {
-		if ifc.Flags&net.FlagUp == 0 || !keepICEInterface(ifc.Name) {
-			continue
-		}
-		addrs, err := ifc.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, a := range addrs {
-			if n, ok := a.(*net.IPNet); ok && keepICEIP(n.IP) {
-				ips = append(ips, n.IP.String())
-			}
-		}
 	}
 	sort.Strings(ips)
 	return strings.Join(ips, ",")
