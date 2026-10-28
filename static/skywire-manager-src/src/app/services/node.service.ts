@@ -470,215 +470,221 @@ return {
   public getNode(nodeKey: string): Observable<Node> {
     // Get the node data.
     return this.apiService.get(`visors/${nodeKey}/summary`).pipe(
-      map((response: any) => {
-        const node = new Node();
-
-        // Basic data.
-        node.localPk = response.overview.local_pk;
-        node.hostname = response.overview.hostname;
-        node.version = response.overview.build_info.version;
-        node.configVersion = response.config_version;
-        node.os = response.overview.build_info.os;
-        node.arch = response.overview.build_info.arch;
-        node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
-        node.minHops = response.min_hops;
-        node.buildTag = response.build_tag;
-        node.connectedDmsgServers = response.connected_dmsg_servers || [];
-        node.isSymmeticNat = response.overview.is_symmetic_nat;
-        node.publicIp = response.overview.public_ip;
-        node.autoconnectTransports = response.public_autoconnect;
-        node.isPublic = response.is_public;
-        node.rewardsAddress = response.reward_address;
-        node.rewardEligible = response.reward_eligible;
-        node.rewardIneligibleReason = response.reward_ineligible_reason;
-
-        // Hypervisor relationships. `hypervisors` are the PKs the
-        // visor was configured to report to (from skywire-config);
-        // `connected_hypervisor` are the sessions the visor reports
-        // as actively connected right now. Both are surfaced on the
-        // Info tab so the operator can see which hypervisor(s) own
-        // this visor and which ones are currently online.
-        node.hypervisors = Array.isArray(response.overview.hypervisors)
-          ? (response.overview.hypervisors as string[])
-          : [];
-        node.connectedHypervisors = Array.isArray(response.overview.connected_hypervisor)
-          ? (response.overview.connected_hypervisor as string[])
-          : [];
-
-        // Geolocation data.
-        if (response.overview.country_code) {
-          node.countryCode = response.overview.country_code;
-        }
-        if (response.overview.region_name) {
-          node.regionName = response.overview.region_name;
-        }
-        if (response.overview.city_name) {
-          node.cityName = response.overview.city_name;
-        }
-        if (response.overview.latitude) {
-          node.latitude = response.overview.latitude;
-        }
-        if (response.overview.longitude) {
-          node.longitude = response.overview.longitude;
-        }
-
-        // Ip.
-        if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
-          node.ip = response.overview.local_ip;
-        } else {
-          node.ip = null;
-        }
-
-        // Label.
-        const labelInfo = this.storageService.getLabelInfo(node.localPk);
-        node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
-
-        // Health info.
-        node.health = {
-          servicesHealth: response.health.services_health,
-          uptimeTrackerHealth: response.health.uptime_tracker_health,
-          autoconnectHealth: response.health.autoconnect_health,
-          transportabilityHealth: response.health.transportability_health,
-        };
-
-        // Transports.
-        node.transports = [];
-        if (response.overview.transports) {
-          (response.overview.transports as any[]).forEach(transport => {
-            node.transports.push({
-              id: transport.id,
-              localPk: transport.local_pk,
-              remotePk: transport.remote_pk,
-              type: transport.type,
-              recv: transport.log ? transport.log.recv : 0,
-              sent: transport.log ? transport.log.sent : 0,
-              latencyMs: transport.latency_ms || 0,
-              initiator: transport.initiator,
-            });
-          });
-        }
-
-        // Persistent Transports.
-        node.persistentTransports = [];
-        if (response.persistent_transports) {
-          (response.persistent_transports as any[]).forEach(persistentTransport => {
-            node.persistentTransports.push({
-              pk: persistentTransport.pk,
-              type: persistentTransport.type,
-            });
-          });
-        }
-
-        // Routes.
-        //
-        // Built locally and assigned once: node.routes is optional on the type,
-        // so every one of the pushes and index reads below would otherwise have
-        // to re-establish that the array assigned a line earlier still exists.
-        const routes: Route[] = [];
-        node.routes = routes;
-        if (response.routes) {
-          (response.routes as any[]).forEach(route => {
-            // Basic data.
-            routes.push({
-              key: route.key,
-              rule: route.rule,
-            });
-
-            if (route.rule_summary) {
-              // Rule summary.
-              routes[routes.length - 1].ruleSummary = {
-                keepAlive: route.rule_summary.keep_alive,
-                ruleType: route.rule_summary.rule_type,
-                keyRouteId: route.rule_summary.key_route_id,
-              };
-
-              // App fields, if any.
-              if (route.rule_summary.app_fields && route.rule_summary.app_fields.route_descriptor) {
-                routes[routes.length - 1].appFields = {
-                  routeDescriptor: {
-                    dstPk: route.rule_summary.app_fields.route_descriptor.dst_pk,
-                    dstPort: route.rule_summary.app_fields.route_descriptor.dst_port,
-                    srcPk: route.rule_summary.app_fields.route_descriptor.src_pk,
-                    srcPort: route.rule_summary.app_fields.route_descriptor.src_port,
-                  },
-                };
-              }
-
-              // Forward fields, if any.
-              if (route.rule_summary.forward_fields) {
-                const forwardFields = {
-                  nextRid: route.rule_summary.forward_fields.next_rid,
-                  nextTid: route.rule_summary.forward_fields.next_tid,
-                } as RouteForwardRuleSumary;
-                routes[routes.length - 1].forwardFields = forwardFields;
-
-                if (route.rule_summary.forward_fields.route_descriptor) {
-                  forwardFields.routeDescriptor = {
-                    dstPk: route.rule_summary.forward_fields.route_descriptor.dst_pk,
-                    dstPort: route.rule_summary.forward_fields.route_descriptor.dst_port,
-                    srcPk: route.rule_summary.forward_fields.route_descriptor.src_pk,
-                    srcPort: route.rule_summary.forward_fields.route_descriptor.src_port,
-                  };
-                }
-              }
-
-              // Intermediary forward fields, if any.
-              if (route.rule_summary.intermediary_forward_fields) {
-                routes[routes.length - 1].intermediaryForwardFields = {
-                  nextRid: route.rule_summary.intermediary_forward_fields.next_rid,
-                  nextTid: route.rule_summary.intermediary_forward_fields.next_tid,
-                };
-              }
-            }
-          });
-        }
-
-        // Apps.
-        node.apps = [];
-        if (response.overview.apps) {
-          (response.overview.apps as any[]).forEach(app => {
-            node.apps.push({
-              name: app.name,
-              status: app.status,
-              port: app.port,
-              autostart: app.auto_start,
-              detailedStatus: app.detailed_status,
-              args: app.args,
-              otp: app.otp,
-            });
-          });
-        }
-
-        let dmsgServerFound = false;
-        if (response.dmsg_stats) {
-          node.dmsgServerPk = response.dmsg_stats.server_public_key;
-          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
-
-          dmsgServerFound = true;
-        }
-
-        if (!dmsgServerFound) {
-          node.dmsgServerPk = '-';
-          node.roundTripPing = '-1';
-        }
-
-        // Parse dmsg_servers with per-server latencies
-        if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
-          node.dmsgServers = response.dmsg_servers.map((s: any) => {
-return {
-            pk: s.pk,
-            latency: s.latency || 0,
-            protocol: s.protocol || ''
-          }
-});
-        }
-
-        // Check if is hypervisor (local visor)
-        node.isHypervisor = response.is_hypervisor;
-
-        return node;
-      })
+      map((response: any) => this.nodeFromSummary(response)),
     );
+  }
+
+  /**
+   * Turns a /visors/{pk}/summary response into a Node. Shared by the request
+   * above and the live subscription in SingleNodeDataService.
+   */
+  public nodeFromSummary(response: any): Node {
+    const node = new Node();
+
+    // Basic data.
+    node.localPk = response.overview.local_pk;
+    node.hostname = response.overview.hostname;
+    node.version = response.overview.build_info.version;
+    node.configVersion = response.config_version;
+    node.os = response.overview.build_info.os;
+    node.arch = response.overview.build_info.arch;
+    node.secondsOnline = Math.floor(Number.parseFloat(response.uptime));
+    node.minHops = response.min_hops;
+    node.buildTag = response.build_tag;
+    node.connectedDmsgServers = response.connected_dmsg_servers || [];
+    node.isSymmeticNat = response.overview.is_symmetic_nat;
+    node.publicIp = response.overview.public_ip;
+    node.autoconnectTransports = response.public_autoconnect;
+    node.isPublic = response.is_public;
+    node.rewardsAddress = response.reward_address;
+    node.rewardEligible = response.reward_eligible;
+    node.rewardIneligibleReason = response.reward_ineligible_reason;
+
+    // Hypervisor relationships. `hypervisors` are the PKs the
+    // visor was configured to report to (from skywire-config);
+    // `connected_hypervisor` are the sessions the visor reports
+    // as actively connected right now. Both are surfaced on the
+    // Info tab so the operator can see which hypervisor(s) own
+    // this visor and which ones are currently online.
+    node.hypervisors = Array.isArray(response.overview.hypervisors)
+      ? (response.overview.hypervisors as string[])
+      : [];
+    node.connectedHypervisors = Array.isArray(response.overview.connected_hypervisor)
+      ? (response.overview.connected_hypervisor as string[])
+      : [];
+
+    // Geolocation data.
+    if (response.overview.country_code) {
+      node.countryCode = response.overview.country_code;
+    }
+    if (response.overview.region_name) {
+      node.regionName = response.overview.region_name;
+    }
+    if (response.overview.city_name) {
+      node.cityName = response.overview.city_name;
+    }
+    if (response.overview.latitude) {
+      node.latitude = response.overview.latitude;
+    }
+    if (response.overview.longitude) {
+      node.longitude = response.overview.longitude;
+    }
+
+    // Ip.
+    if (response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+      node.ip = response.overview.local_ip;
+    } else {
+      node.ip = null;
+    }
+
+    // Label.
+    const labelInfo = this.storageService.getLabelInfo(node.localPk);
+    node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
+
+    // Health info.
+    node.health = {
+      servicesHealth: response.health.services_health,
+      uptimeTrackerHealth: response.health.uptime_tracker_health,
+      autoconnectHealth: response.health.autoconnect_health,
+      transportabilityHealth: response.health.transportability_health,
+    };
+
+    // Transports.
+    node.transports = [];
+    if (response.overview.transports) {
+      (response.overview.transports as any[]).forEach(transport => {
+        node.transports.push({
+          id: transport.id,
+          localPk: transport.local_pk,
+          remotePk: transport.remote_pk,
+          type: transport.type,
+          recv: transport.log ? transport.log.recv : 0,
+          sent: transport.log ? transport.log.sent : 0,
+          latencyMs: transport.latency_ms || 0,
+          initiator: transport.initiator,
+        });
+      });
+    }
+
+    // Persistent Transports.
+    node.persistentTransports = [];
+    if (response.persistent_transports) {
+      (response.persistent_transports as any[]).forEach(persistentTransport => {
+        node.persistentTransports.push({
+          pk: persistentTransport.pk,
+          type: persistentTransport.type,
+        });
+      });
+    }
+
+    // Routes.
+    //
+    // Built locally and assigned once: node.routes is optional on the type,
+    // so every one of the pushes and index reads below would otherwise have
+    // to re-establish that the array assigned a line earlier still exists.
+    const routes: Route[] = [];
+    node.routes = routes;
+    if (response.routes) {
+      (response.routes as any[]).forEach(route => {
+        // Basic data.
+        routes.push({
+          key: route.key,
+          rule: route.rule,
+        });
+
+        if (route.rule_summary) {
+          // Rule summary.
+          routes[routes.length - 1].ruleSummary = {
+            keepAlive: route.rule_summary.keep_alive,
+            ruleType: route.rule_summary.rule_type,
+            keyRouteId: route.rule_summary.key_route_id,
+          };
+
+          // App fields, if any.
+          if (route.rule_summary.app_fields && route.rule_summary.app_fields.route_descriptor) {
+            routes[routes.length - 1].appFields = {
+              routeDescriptor: {
+                dstPk: route.rule_summary.app_fields.route_descriptor.dst_pk,
+                dstPort: route.rule_summary.app_fields.route_descriptor.dst_port,
+                srcPk: route.rule_summary.app_fields.route_descriptor.src_pk,
+                srcPort: route.rule_summary.app_fields.route_descriptor.src_port,
+              },
+            };
+          }
+
+          // Forward fields, if any.
+          if (route.rule_summary.forward_fields) {
+            const forwardFields = {
+              nextRid: route.rule_summary.forward_fields.next_rid,
+              nextTid: route.rule_summary.forward_fields.next_tid,
+            } as RouteForwardRuleSumary;
+            routes[routes.length - 1].forwardFields = forwardFields;
+
+            if (route.rule_summary.forward_fields.route_descriptor) {
+              forwardFields.routeDescriptor = {
+                dstPk: route.rule_summary.forward_fields.route_descriptor.dst_pk,
+                dstPort: route.rule_summary.forward_fields.route_descriptor.dst_port,
+                srcPk: route.rule_summary.forward_fields.route_descriptor.src_pk,
+                srcPort: route.rule_summary.forward_fields.route_descriptor.src_port,
+              };
+            }
+          }
+
+          // Intermediary forward fields, if any.
+          if (route.rule_summary.intermediary_forward_fields) {
+            routes[routes.length - 1].intermediaryForwardFields = {
+              nextRid: route.rule_summary.intermediary_forward_fields.next_rid,
+              nextTid: route.rule_summary.intermediary_forward_fields.next_tid,
+            };
+          }
+        }
+      });
+    }
+
+    // Apps.
+    node.apps = [];
+    if (response.overview.apps) {
+      (response.overview.apps as any[]).forEach(app => {
+        node.apps.push({
+          name: app.name,
+          status: app.status,
+          port: app.port,
+          autostart: app.auto_start,
+          detailedStatus: app.detailed_status,
+          args: app.args,
+          otp: app.otp,
+        });
+      });
+    }
+
+    let dmsgServerFound = false;
+    if (response.dmsg_stats) {
+      node.dmsgServerPk = response.dmsg_stats.server_public_key;
+      node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
+
+      dmsgServerFound = true;
+    }
+
+    if (!dmsgServerFound) {
+      node.dmsgServerPk = '-';
+      node.roundTripPing = '-1';
+    }
+
+    // Parse dmsg_servers with per-server latencies
+    if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+      node.dmsgServers = response.dmsg_servers.map((s: any) => {
+return {
+        pk: s.pk,
+        latency: s.latency || 0,
+        protocol: s.protocol || ''
+      }
+});
+    }
+
+    // Check if is hypervisor (local visor)
+    node.isHypervisor = response.is_hypervisor;
+
+    return node;
   }
 
   /**
