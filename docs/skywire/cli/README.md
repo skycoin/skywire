@@ -17,6 +17,7 @@ skywire cli
 ## Subcommands
 
 - [config](config/README.md) — Generate or update a skywire config
+- [contacts](contacts/README.md) — The visor's address book
 - [dmsg](dmsg/README.md) — Dmsg utilities
 - [got](got/README.md) — HTTP client with concurrent downloads (also speaks skynet:// and dmsg://)
 - [gotop](gotop/README.md) — Terminal based graphical activity monitor
