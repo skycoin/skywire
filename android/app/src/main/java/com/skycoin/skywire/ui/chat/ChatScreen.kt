@@ -1,416 +1,177 @@
 package com.skycoin.skywire.ui.chat
 
-import android.content.ActivityNotFoundException
-import android.net.Uri
-import android.os.SystemClock
-import android.webkit.PermissionRequest
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebView
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
-import com.skycoin.skywire.core.AppVisibility
-import com.skycoin.skywire.core.AppLocale
-import com.skycoin.skywire.core.ChatMedia
-import com.skycoin.skywire.core.ChatPageLog
+import com.skycoin.skywire.chat.ChatConn
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.navigation.HoldTabSwipe
-import com.skycoin.skywire.ui.theme.LocalDarkTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
+
+/** Snackbars any chat page can raise. */
+val LocalChatSnackbar = staticCompositionLocalOf<SnackbarHostState> { error("no chat snackbar") }
 
 /**
- * Chat tab — skychat's own web UI, embedded.
- *
- * Deliberately the *same* UI the desktop serves rather than a native rewrite:
- * one chat codebase, and its phone layout is a breakpoint inside it (the
- * conversation list is the screen until a chat is opened, which slides in
- * over it). Everything the page cannot do for itself — the password gate,
- * the microphone, the file picker, saving an attachment, and the phone's own
- * back gesture — is what [ChatWebView] adds around it.
+ * Chat tab: SkyChat drawn natively over skychat's HTTP API. The list is the
+ * screen until a conversation opens over it; every other page (contacts,
+ * settings, a group's admin panel…) stacks on top and back pops it.
  */
 @Composable
 fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
-    val state by viewModel.uiState.collectAsState()
+    val repo = viewModel.repo
+    val conn by repo.conn.collectAsState()
+    val pages by viewModel.pages.collectAsState()
+    val page = pages.last()
+    val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
 
-    var webView by remember { mutableStateOf<WebView?>(null) }
-    var loadedUrl by remember { mutableStateOf<String?>(null) }
-    var canGoBack by remember { mutableStateOf(false) }
-    // The page is loaded and can be driven. Distinct from "the WebView
-    // exists": a link handed to a page that is still loading would be
-    // evaluated against the document it is replacing.
-    var pageReady by remember { mutableStateOf(false) }
-    // The page's own error, kept apart from the view model's: one is "the
-    // surface never came up", the other "it came up and then broke".
-    var pageError by remember { mutableStateOf<String?>(null) }
-
-    // Read by the WebView clients, which are built once — these keep them
-    // looking at the current values instead of the ones at creation time.
-    val url = rememberUpdatedState(state.url)
-    val password = rememberUpdatedState(state.password)
-
-    // --- uploads: the page's <input type="file"> ---
-    var pendingFiles by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    val filePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        // Always answer the callback, cancel included: an unanswered file
-        // chooser leaves the page's input permanently unusable.
-        pendingFiles?.onReceiveValue(
-            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data),
-        )
-        pendingFiles = null
-    }
-
-    // --- full screen: a video the page asks to show over everything ---
-    val fullscreen = remember(context) { context.findActivity()?.let(::FullscreenVideo) }
-
-    // --- getUserMedia: voice messages now, video messages next ---
-    var pendingMedia by remember { mutableStateOf<PermissionRequest?>(null) }
-    val mediaPermissions = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { grants ->
-        val request = pendingMedia
-        pendingMedia = null
-        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
-        ChatPageLog.add("webview: Android answered $grants" + if (request == null) " with no request waiting" else "")
-        // Only the missing permissions were asked for, so one the phone had
-        // already granted (the microphone, for a first video) is not in grants.
-        request?.grantOrDeny { resource ->
-            ChatWebView.androidPermission(resource)
-                ?.let { grants[it] ?: ChatWebView.hasPermission(context, it) } ?: false
+    LaunchedEffect(Unit) {
+        repo.notes.collect { n ->
+            val args = n.args.map { a -> if (a is Int) a.toString() else a }.toTypedArray()
+            snackbar.showSnackbar(context.getString(n.res, *args))
         }
     }
 
-    // Android's permission dialog is an Activity, so showing it pauses ours. No pause
-    // and no answer means none is coming, and the page's request would wait forever.
-    val activity = remember(context) { context.findActivity() as? LifecycleOwner }
-    LaunchedEffect(pendingMedia) {
-        val request = pendingMedia ?: return@LaunchedEffect
-        val lifecycle = activity?.lifecycle ?: return@LaunchedEffect
-        val shown = withTimeoutOrNull(PROMPT_SHOW_MS) {
-            lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
-        }
-        if (shown != null || pendingMedia !== request) return@LaunchedEffect
-        ChatPageLog.add("webview: Android showed no permission dialog, refusing ${request.resources.joinToString()}")
-        pendingMedia = null
-        webView?.evaluateJavascript("window.skywirePermissionPrompt = false", null)
-        request.deny()
-    }
-
-    // One rule for both ways back, so the ← in the header and the phone's own
-    // gesture cannot disagree: inside the page (a conversation open over the
-    // list) back is the page's step, and only a page with nowhere left to go
-    // leaves the tab. The header button used to skip straight to the second
-    // half, which made ← from an open chat throw the reader out of SkyChat
-    // entirely.
-    val goBack: () -> Unit = {
-        val view = webView
-        if (canGoBack && view != null) view.goBack() else onBack()
-    }
-    BackHandler(enabled = canGoBack) { webView?.goBack() }
-    // An open conversation owns horizontal drags: slide to cancel a recording, seek bars.
-    HoldTabSwipe(canGoBack)
-    // Back leaves a full-screen video before it leaves anything else. After
-    // the handler above on purpose: the last one registered is asked first,
-    // and a video the player itself made full screen has no history entry
-    // of its own — the page's back would change the chat underneath it.
-    BackHandler(enabled = fullscreen?.showing == true) { fullscreen?.exit() }
-
-    // The page's JavaScript thread, checked from outside while it is on
-    // screen. A page stuck in a loop or a wait looks like one ignoring taps.
-    val onScreen by AppVisibility.isForeground.collectAsState()
-    LaunchedEffect(webView, pageReady, onScreen) {
-        val view = webView ?: return@LaunchedEffect
-        if (!pageReady || !onScreen) return@LaunchedEffect
-        var sent = 0L
-        var stalled = false
-        while (true) {
-            delay(PAGE_PING_MS)
-            val now = SystemClock.elapsedRealtime()
-            if (sent == 0L) {
-                sent = now
-                view.evaluateJavascript("0") {
-                    val waited = (SystemClock.elapsedRealtime() - sent) / 1000
-                    if (stalled) ChatPageLog.add("webview: page answering again after $waited s")
-                    sent = 0L
-                    stalled = false
-                }
-            } else if (!stalled && now - sent >= PAGE_STALL_MS) {
-                stalled = true
-                ChatPageLog.add("webview: page has not answered for ${(now - sent) / 1000} s")
+    // Only a thread actually in front of the user holds the focus lease.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.syncOpen(true)
+                Lifecycle.Event.ON_PAUSE -> viewModel.syncOpen(false)
+                else -> Unit
             }
         }
+        lifecycle.addObserver(observer)
+        viewModel.syncOpen(true)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            viewModel.syncOpen(false)
+        }
     }
 
-    // A skychat:// link another app opened us for. It waits here rather than
-    // at the Activity for as long as it has to: the core may still be
-    // connecting, and skychat only answers once it is. Cleared once the page
-    // has it — including when the page declines it, since retrying a link the
-    // page has already refused would only loop.
     val chatLink by DeepLinks.pendingChatLink.collectAsState()
-    LaunchedEffect(chatLink, pageReady) {
+    LaunchedEffect(chatLink, conn.ready) {
         val link = chatLink ?: return@LaunchedEffect
-        val view = webView
-        if (!pageReady || view == null) return@LaunchedEffect
+        if (!conn.ready) return@LaunchedEffect
         if (link.thread) {
-            ChatWebView.openThread(view, link.address)
+            val tag = link.address.removePrefix("join:").lowercase()
+            val key = repo.groups.value.firstOrNull { it.id.equals(link.address.removePrefix("join:"), true) }?.id ?: tag
+            viewModel.openThread(key)
         } else {
-            ChatWebView.openAddress(view, link.address)
+            viewModel.home()
+            viewModel.push(ChatPage.AddAddress(link.address, fromLink = true))
         }
         DeepLinks.chatLinkHandled(link)
     }
 
-    // The app's own Light/Dark/System choice, after that choice is resolved —
-    // not the system's, which is only one of its three inputs. Changing it
-    // while the chat is open moves the page over with the rest of the app
-    // instead of leaving one screen in the other theme until it reloads.
-    val darkTheme = LocalDarkTheme.current
-    val dark = rememberUpdatedState(darkTheme)
-    LaunchedEffect(darkTheme, pageReady) {
-        val view = webView
-        if (pageReady && view != null) ChatWebView.applyTheme(view, darkTheme)
+    // The composer rides the keyboard through imePadding; a panned window
+    // would move it twice and push the header off screen.
+    DisposableEffect(context) {
+        val window = context.activity()?.window
+        val previous = window?.attributes?.softInputMode
+        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        onDispose { previous?.let { window.setSoftInputMode(it) } }
     }
 
-    Scaffold(
-        topBar = {
-            // Back, title, ? — the same three as every other tab. The
-            // overflow menu that used to sit here held Reload and Logs:
-            // Logs moved to Settings ▸ Diagnostics with the other apps',
-            // and a one-item menu is not worth a button, so a wedged page
-            // is reloaded from the Retry the error state already offers.
-            SkyTopBar(
-                title = stringResource(R.string.app_skychat),
-                onBack = goBack,
-                help = HelpTopic(R.string.help_chat_title, R.string.help_chat_body),
-            )
-        },
-        // The system bars belong to the app scaffold this tab sits in, and
-        // are consumed there — claiming them again would offset the page and
-        // make the keyboard inset below double-count the navigation bar.
-        contentWindowInsets = WindowInsets(0),
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                // The composer sits at the bottom of the page, and the page
-                // is a fixed-height document — without this the keyboard
-                // covers the field it belongs to.
-                .imePadding(),
-        ) {
-            val ready = state.url != null && state.password != null && pageError == null
-            if (ready) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        ChatWebView.create(ctx).also { view ->
-                            view.webViewClient = ChatWebView.client(
-                                baseUrl = { url.value },
-                                password = { password.value },
-                                onHistoryChanged = { canGoBack = it },
-                                onPageReady = { pageReady = true },
-                                onError = { pageError = it },
-                            )
-                            view.webChromeClient = ChatWebView.chromeClient(
-                                // Read per dialog, not captured: the factory
-                                // runs once and the theme can change under an
-                                // open page.
-                                isDark = { dark.value },
-                                onPermissionRequest = { request ->
-                                    val needed = request.resources
-                                        .mapNotNull(ChatWebView::androidPermission)
-                                        .filterNot { ChatWebView.hasPermission(ctx, it) }
-                                    ChatPageLog.add(
-                                        "webview: page asked for ${request.resources.joinToString()}" +
-                                            if (needed.isEmpty()) ", already granted" else ", asking Android for $needed",
-                                    )
-                                    if (needed.isEmpty()) {
-                                        request.grantOrDeny { resource ->
-                                            ChatWebView.androidPermission(resource) != null
-                                        }
-                                    } else {
-                                        // Answer whatever is already waiting
-                                        // before replacing it, the way the
-                                        // file chooser below does. A dropped
-                                        // PermissionRequest is never granted
-                                        // and never denied, and the page's
-                                        // getUserMedia() promise then never
-                                        // settles — the composer button
-                                        // latches on it and stops responding
-                                        // for the life of the page. Chromium
-                                        // serialises the requests one frame
-                                        // makes, so this is the case that is
-                                        // left: requests from two frames, or
-                                        // a launch that never comes back.
-                                        pendingMedia?.deny()
-                                        pendingMedia = request
-                                        // The page times a device that does not
-                                        // open; time on this dialog is the user's.
-                                        view.evaluateJavascript("window.skywirePermissionPrompt = true", null)
-                                        mediaPermissions.launch(needed.toTypedArray())
-                                    }
-                                },
-                                onFileChooser = { callback, params ->
-                                    pendingFiles?.onReceiveValue(null)
-                                    pendingFiles = callback
-                                    try {
-                                        filePicker.launch(params.createIntent())
-                                        true
-                                    } catch (e: ActivityNotFoundException) {
-                                        pendingFiles = null
-                                        false
-                                    }
-                                },
-                                onShowFullscreen = { view, callback ->
-                                    // No Activity to put it in (never, in
-                                    // practice): refuse, so the page is not
-                                    // left believing it is full screen.
-                                    fullscreen?.show(view, callback) ?: callback.onCustomViewHidden()
-                                },
-                                onHideFullscreen = { fullscreen?.hide() },
-                            )
-                            view.setDownloadListener { link, _, disposition, mime, _ ->
-                                ChatWebView.download(ctx, link, disposition, mime, password.value)
-                            }
-                            // Lets the page put whatever it is playing in the
-                            // notification shade — which WebView will not do
-                            // for it, see ChatMedia.
-                            ChatMedia.attach(view)
-                            webView = view
-                        }
-                    },
-                    update = { view ->
-                        val target = state.url
-                        if (target != null && target != loadedUrl) {
-                            loadedUrl = target
-                            pageReady = false
-                            // The theme rides in the URL so the page can pick
-                            // one before it paints; `loadedUrl` deliberately
-                            // holds the address *without* it, so flipping the
-                            // app's theme never looks like a new URL and
-                            // never reloads the conversation out from under
-                            // the reader. Live changes go through applyTheme.
-                            // The language rides with it: the page translates
-                            // itself from this hint, and a language change
-                            // recreates the activity, which reloads anyway.
-                            view.loadUrl(
-                                target + ChatWebView.themeQuery(darkTheme) +
-                                    ChatWebView.langQuery(
-                                        AppLocale.current(context),
-                                        context.getString(R.string.chat_page_lang),
-                                    ),
-                            )
-                        }
-                    },
-                    onRelease = { view ->
-                        // A video left full screen would outlive the page
-                        // it belongs to — over a call screen, even.
-                        fullscreen?.hide()
-                        // A live SSE stream survives the composable otherwise.
-                        // The media notification must not: the page IS the
-                        // player, so controls for a destroyed one are buttons
-                        // that do nothing.
-                        ChatMedia.detach(view)
-                        ChatWebView.release(view)
-                        webView = null
-                        loadedUrl = null
-                        canGoBack = false
-                        pageReady = false
-                    },
-                )
-            } else {
-                ChatStatus(
-                    state = state,
-                    pageError = pageError,
-                    onRetry = {
-                        pageError = null
-                        loadedUrl = null
-                        viewModel.retry()
-                    },
-                )
+    BackHandler(enabled = pages.size > 1) { viewModel.pop() }
+    // Inside a conversation, horizontal drags belong to the chat (slide to cancel, seek bars).
+    HoldTabSwipe(pages.size > 1)
+
+    CompositionLocalProvider(LocalChatSnackbar provides snackbar) {
+        if (!conn.ready) {
+            Scaffold(
+                topBar = {
+                    SkyTopBar(
+                        title = stringResource(R.string.app_skychat),
+                        onBack = onBack,
+                        help = HelpTopic(R.string.help_chat_title, R.string.help_chat_body),
+                    )
+                },
+                snackbarHost = { SnackbarHost(snackbar) },
+            ) { padding ->
+                Box(Modifier.fillMaxSize().padding(padding)) {
+                    ChatStatus(conn, onRetry = repo::retry)
+                }
             }
+            return@CompositionLocalProvider
+        }
+        val back: () -> Unit = { if (!viewModel.pop()) onBack() }
+        Box(Modifier.fillMaxSize()) {
+            when (page) {
+                ChatPage.Home -> ChatHome(viewModel, onBack = onBack)
+                is ChatPage.Thread -> ThreadScreen(viewModel, page.key, onBack = back)
+                is ChatPage.Contacts -> ContactsScreen(viewModel, page.pick, onBack = back)
+                is ChatPage.ContactSettings -> ContactSettingsScreen(viewModel, page.pk, onBack = back)
+                is ChatPage.NewContact -> NewContactScreen(viewModel, page.prefill, onBack = back)
+                ChatPage.MyProfile -> MyProfileScreen(viewModel, onBack = back)
+                ChatPage.Settings -> ChatSettingsScreen(viewModel, onBack = back)
+                is ChatPage.GroupSettings -> GroupSettingsScreen(viewModel, page.gid, onBack = back)
+                is ChatPage.AddAddress -> AddAddressScreen(viewModel, page.prefill, page.fromLink, onBack = back)
+                is ChatPage.NewGroup -> NewGroupScreen(viewModel, page.channel, onBack = back)
+                ChatPage.Search -> SearchScreen(viewModel, onBack = back)
+                is ChatPage.Forward -> ForwardScreen(viewModel, page.fromKey, page.msgKey, onBack = back)
+                is ChatPage.Image -> ImageViewer(viewModel, page.source, page.name, onBack = back)
+                is ChatPage.Video -> VideoViewer(viewModel, page.source, page.name, page.startMs, onBack = back)
+            }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp))
         }
     }
 }
 
-/** Grant exactly the resources [allowed] accepts; deny the request outright otherwise. */
-private inline fun PermissionRequest.grantOrDeny(allowed: (String) -> Boolean) {
-    val granted = resources.filter(allowed).toTypedArray()
-    if (granted.isEmpty()) deny() else grant(granted)
-}
-
-/**
- * What the tab shows while there is no chat surface to show: the core has to
- * be running before skychat can be, and skychat has to answer before the
- * WebView is worth creating.
- */
+/** What the tab shows until skychat answers. */
 @Composable
-private fun ChatStatus(
-    state: ChatUiState,
-    pageError: String?,
-    onRetry: () -> Unit,
-) {
-    val error = pageError ?: state.error
-    val core = state.coreState
+private fun ChatStatus(conn: ChatConn, onRetry: () -> Unit) {
+    val core = conn.core
+    val error = conn.error
     val message = when {
         error != null -> error
         core is CoreState.Failed -> core.message
-        core is CoreState.Running ->
-            if (state.apiUp) stringResource(R.string.chat_starting)
-            else stringResource(R.string.chat_core_starting)
-        core is CoreState.Starting || core is CoreState.Restarting ->
-            stringResource(R.string.chat_core_starting)
+        core is CoreState.Running -> if (conn.apiUp) stringResource(R.string.chat_starting) else stringResource(R.string.chat_core_starting)
+        core is CoreState.Starting || core is CoreState.Restarting -> stringResource(R.string.chat_core_starting)
         else -> stringResource(R.string.chat_core_offline)
     }
+    val connecting = error == null && (conn.starting || core is CoreState.Starting || core is CoreState.Restarting || core is CoreState.Running)
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (error == null && state.connecting) {
+        if (connecting) {
             CircularProgressIndicator()
             Spacer(Modifier.height(20.dp))
         }
@@ -420,13 +181,15 @@ private fun ChatStatus(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        if (error != null && state.coreReady) {
+        if (error != null && core is CoreState.Running) {
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
         }
     }
 }
 
-private const val PAGE_PING_MS = 2_000L
-private const val PAGE_STALL_MS = 5_000L
-private const val PROMPT_SHOW_MS = 5_000L
+private tailrec fun android.content.Context.activity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.activity()
+    else -> null
+}
