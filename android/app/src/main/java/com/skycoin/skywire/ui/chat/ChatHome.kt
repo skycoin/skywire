@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.chat.CallRecord
@@ -585,14 +586,16 @@ fun outcomeLabel(outcome: String): String = when (outcome) {
 }
 
 /** Time for a list row: the clock today, the weekday this week, the date before. */
+@Composable
 fun listTime(ms: Long): String {
+    val locale = LocalConfiguration.current.locales[0]
     val zone = ZoneId.systemDefault()
     val t = Instant.ofEpochMilli(ms).atZone(zone)
     val today = LocalDate.now(zone)
     return when {
-        t.toLocalDate() == today -> t.format(DateTimeFormatter.ofPattern("HH:mm"))
-        t.toLocalDate().isAfter(today.minusDays(7)) -> t.format(DateTimeFormatter.ofPattern("EEE"))
-        else -> t.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
+        t.toLocalDate() == today -> t.format(DateTimeFormatter.ofPattern("HH:mm", locale))
+        t.toLocalDate().isAfter(today.minusDays(7)) -> t.format(DateTimeFormatter.ofPattern("EEE", locale))
+        else -> t.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale))
     }
 }
 
