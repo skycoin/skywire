@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef, Chan
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { Observable, ReplaySubject, delay, of, timer } from 'rxjs';
+import { EMPTY, Observable, ReplaySubject, catchError, delay, of, switchMap, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { Node } from '../../../app.datatypes';
@@ -11,6 +11,7 @@ import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from '../../../utils/home-tabs';
 import { visorSwitcherChips } from '../../../utils/visor-switcher';
 import { NodeService } from '../../../services/node.service';
+import { LiveService } from '../../../services/live.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
 import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
@@ -129,7 +130,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private boundVpnPk = '';
   private boundTerminalPk = '';
   // Throttle timestamp for the visor-switcher summaries call (see refreshNavRows).
-  private navSwitcherLoadedAt = 0;
 
   /**
    * Ask the currently displayed instance of this page to reload the node data.
@@ -176,6 +176,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer,
     private router: Router,
+    private live: LiveService,
   ) {
     super();
 
@@ -519,19 +520,18 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // per-node tabs: the home nav (top-level hypervisor tabs, incl. the "Local
   // Visor" tab, kept alongside "Visor list") and the visor switcher (one chip
   // per visor in the list, so the user can jump between visors without backing
-  // out). The switcher list is a single summaries call, throttled to ~10s.
+  // out). The switcher list follows the summaries over the live socket, every
+  // 10 s, started once per page.
   private refreshNavRows() {
     this.homeNavTabs = homeTabsData();
 
-    const now = Date.now();
-    if (this.switcherTabs.length > 0 && now - this.navSwitcherLoadedAt < 10000) {
+    if (this.switcherSubscription) {
       return;
     }
-    this.navSwitcherLoadedAt = now;
-    if (this.switcherSubscription) {
-      this.switcherSubscription.unsubscribe();
-    }
-    this.switcherSubscription = this.nodeService.getNodes().subscribe(
+    this.switcherSubscription = this.live.watch('visors-summary', 10000, () => this.nodeService.getNodes(),
+      b => this.nodeService.nodesFromSummaries(b)).pipe(
+      switchMap(res => res.pipe(catchError(() => EMPTY))),
+    ).subscribe(
       (nodes: Node[]) => {
         this.ngZone.run(() => {
           this.switcherTabs = visorSwitcherChips(nodes);

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
-import { Subscription, interval, startWith } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -9,6 +9,7 @@ import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { TrafficData } from 'src/app/services/single-node-data.service';
 import { RouteService } from 'src/app/services/route.service';
+import { LiveService } from 'src/app/services/live.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
@@ -190,6 +191,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   constructor(
     private formBuilder: UntypedFormBuilder,
     private routeService: RouteService,
+    private live: LiveService,
     private snackbarService: SnackbarService,
     private changeDetectorRef: ChangeDetectorRef,
   ) {
@@ -305,9 +307,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     // Active route groups change on tp churn. 5s is a reasonable
     // poll cadence — frequent enough to feel live, slow enough to
     // not hammer the visor's RPC.
-    this.groupsSubscription = interval(5000).pipe(
-      startWith(0),
-      switchMap(() => this.routeService.routeGroups(this.nodePK).pipe(
+    const groupsUrl = `visors/${this.nodePK}/routegroups`;
+    this.groupsSubscription = this.live.watch(groupsUrl, 5000, () => this.routeService.routeGroups(this.nodePK)).pipe(
+      switchMap(res => res.pipe(
         catchError((err) => {
           this.routeGroupsError = err?.message || 'Failed to fetch route groups';
           this.routeGroupsLoading = false;
@@ -334,9 +336,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     if (!this.nodePK) {
  return;
 }
-    this.muxSubscription = interval(3000).pipe(
-      startWith(0),
-      switchMap(() => this.routeService.routeMux(this.nodePK, this.muxApp).pipe(
+    const muxUrl = `visors/${this.nodePK}/route-mux${this.muxApp ? `?app=${encodeURIComponent(this.muxApp)}` : ''}`;
+    this.muxSubscription = this.live.watch(muxUrl, 3000, () => this.routeService.routeMux(this.nodePK, this.muxApp)).pipe(
+      switchMap(res => res.pipe(
         catchError((err) => {
           this.muxError = err?.message || 'Failed to fetch mux route groups';
           this.muxLoading = false;
@@ -477,9 +479,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     if (!this.nodePK) {
  return; 
 }
-    this.policiesSubscription = interval(15000).pipe(
-      startWith(0),
-      switchMap(() => this.routeService.routingPolicies(this.nodePK).pipe(
+    const policiesUrl = `visors/${this.nodePK}/routing-policies`;
+    this.policiesSubscription = this.live.watch(policiesUrl, 15000, () => this.routeService.routingPolicies(this.nodePK)).pipe(
+      switchMap(res => res.pipe(
         catchError((err) => {
           this.routingPoliciesError = err?.message || 'Failed to fetch routing policies';
           this.routingPoliciesLoading = false;

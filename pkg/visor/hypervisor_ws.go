@@ -65,9 +65,9 @@ const (
 	// socket occupy every handler goroutine.
 	wsMaxInFlight = 8
 
-	// wsMaxSubs bounds the subscriptions one connection may hold. A page
-	// subscribes to a handful of paths; this only stops a runaway client.
-	wsMaxSubs = 32
+	// wsMaxSubs bounds the subscriptions one connection may hold. The fleet
+	// resources page holds one per visor; this only stops a runaway client.
+	wsMaxSubs = 128
 
 	// wsSubDefaultEvery is how often a subscription re-runs its GET when the
 	// client names no interval.

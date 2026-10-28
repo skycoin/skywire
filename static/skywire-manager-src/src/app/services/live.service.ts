@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, Subscriber } from 'rxjs';
+import { Observable, Subscriber, catchError, defer, map, of, throwError, timer } from 'rxjs';
 
 import { AppModeService } from './app-mode.service';
 
@@ -79,6 +79,32 @@ export class LiveService {
     });
   }
 
+  /**
+   * Follows GET /api/<url> like interval(everyMs).pipe(startWith(0)) would, but
+   * pushed over the socket when it can be. Each emission is one result to
+   * subscribe to: the parsed pushed body, or request() when polling. An error
+   * status also goes through request(), so callers keep their HTTP error handling.
+   */
+  watch<T = any>(url: string, everyMs: number, request: () => Observable<T>, parse: (body: any) => T = b => b): Observable<Observable<T>> {
+    const poll = timer(0, everyMs).pipe(map(() => request()));
+    const path = '/api/' + url.replace(/^\/+/, '');
+
+    return this.subscribe(path, everyMs).pipe(
+      map(ev => {
+        // The hypervisor caps subscriptions per socket; past it, poll.
+        if (ev.status === 429) {
+          throw new LiveUnavailableError();
+        }
+        if (ev.status < 200 || ev.status >= 300) {
+          return request();
+        }
+
+        return defer(() => of(parse(decodeBody(ev.body))));
+      }),
+      catchError(err => err instanceof LiveUnavailableError ? poll : throwError(() => err)),
+    );
+  }
+
   private connect() {
     if (this.socket || this.reconnectTimer) {
       return;
@@ -153,5 +179,14 @@ export class LiveService {
     } catch {
       // A send on a closing socket is retried by the resubscribe after reconnect.
     }
+  }
+}
+
+// Bodies are JSON from the API's GET handlers; anything else is passed on as text.
+function decodeBody(body: string): any {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
   }
 }

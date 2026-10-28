@@ -138,7 +138,9 @@
           <label class="small">{{ 'mail.whitelist' | translate }}</label>
           <textarea class="mono" rows="5" [(ngModel)]="whitelistText"></textarea>
           <p class="small dim">{{ 'mail.whitelist-help' | translate }}</p>
-          <button mat-stroked-button (click)="saveWhitelist()">{{ 'mail.save' | translate }}</button>
+          <div class="mail-bar">
+            <button mat-stroked-button (click)="saveWhitelist()">{{ 'mail.save' | translate }}</button>
+          </div>
         </div>
       }
     </div>

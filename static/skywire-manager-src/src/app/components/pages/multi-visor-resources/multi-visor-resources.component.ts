@@ -1,12 +1,13 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, startWith, forkJoin, of } from 'rxjs';
-import { switchMap, catchError } from 'rxjs/operators';
+import { EMPTY, Observable, Subscription, combineLatest, of } from 'rxjs';
+import { catchError, distinctUntilChanged, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 import { NodeService } from 'src/app/services/node.service';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { Node } from 'src/app/app.datatypes';
 
 /**
@@ -45,6 +46,12 @@ interface HostStats {
   process?: HostProcess;
 }
 
+interface StatsEntry {
+  pk: string;
+  stats?: HostStats;
+  error?: string;
+}
+
 interface VisorRow {
   node: Node;
   stats?: HostStats;
@@ -75,6 +82,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
   constructor(
     private nodeService: NodeService,
     private api: ApiService,
+    private live: LiveService,
     private cdr: ChangeDetectorRef,
   ) {
     super();
@@ -82,57 +90,52 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
   }
 
   override ngOnInit() {
-    this.sub = interval(5000).pipe(
-      startWith(0),
-      switchMap(() => this.nodeService.getNodes()),
-      switchMap((nodes: Node[]) => {
-        const online = (nodes || []).filter((n) => n.online);
-        if (online.length === 0) {
-          return of({ nodes: nodes || [], stats: [] as ({ pk: string, stats?: HostStats, error?: string })[] });
-        }
-        // Fan out per-visor host-stats. catchError per-stream so a
-        // single timeout doesn't kill the whole batch.
-        const fetches = online.map((n) =>
-          this.api.get(`visors/${n.localPk}/host-stats`).pipe(
-            catchError((err) => of({ __error: err?.message || 'failed' })),
-          ),
-        );
-
-        return forkJoin(fetches).pipe(
-          switchMap((results: any[]) => of({
-            nodes: nodes || [],
-            stats: results.map((r, i) => {
-return {
-              pk: online[i].localPk,
-              stats: r && !r.__error ? (r as HostStats) : undefined,
-              error: r && r.__error ? r.__error : undefined,
-            }
-}),
-          })),
-        );
-      }),
-    ).subscribe({
-      next: ({ nodes, stats }) => {
-        this.mergeStats(nodes, stats);
-        this.loading = false;
-        this.error = null;
-        this.lastUpdated = new Date();
-        this.cdr.markForCheck();
-      },
-      error: (err) => {
+    const nodes = this.live.watch('visors-summary', 5000, () => this.nodeService.getNodes(), b => this.nodeService.nodesFromSummaries(b)).pipe(
+      switchMap(res => res.pipe(catchError((err) => {
         this.loading = false;
         this.error = err?.message || 'Failed to fetch resources';
-      },
+        this.cdr.markForCheck();
+
+        return EMPTY;
+      }))),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    // One host-stats stream per online visor, rebuilt only when that set
+    // changes. Each stream fails on its own so one timeout spares the rest.
+    const stats = nodes.pipe(
+      map((ns: Node[]) => (ns || []).filter((n) => n.online).map((n) => n.localPk).sort()),
+      distinctUntilChanged((a, b) => a.join() === b.join()),
+      switchMap((pks) => pks.length === 0 ? of([] as StatsEntry[]) : combineLatest(pks.map((pk) => this.hostStats(pk)))),
+    );
+
+    this.sub = combineLatest([nodes, stats]).subscribe(([ns, st]) => {
+      this.mergeStats(ns || [], st);
+      this.loading = false;
+      this.error = null;
+      this.lastUpdated = new Date();
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();
+  }
+
+  private hostStats(pk: string): Observable<StatsEntry> {
+    const url = `visors/${pk}/host-stats`;
+
+    return this.live.watch(url, 5000, () => this.api.get(url)).pipe(
+      switchMap(res => res.pipe(
+        map((r: any) => ({ pk: pk, stats: r as HostStats }) as StatsEntry),
+        catchError((err) => of({ pk: pk, error: err?.message || 'failed' })),
+      )),
+      startWith({ pk: pk } as StatsEntry),
+    );
   }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
   }
 
-  private mergeStats(nodes: Node[], stats: { pk: string, stats?: HostStats, error?: string }[]) {
+  private mergeStats(nodes: Node[], stats: StatsEntry[]) {
     const byPk = new Map<string, { stats?: HostStats, error?: string }>();
     stats.forEach((s) => byPk.set(s.pk, { stats: s.stats, error: s.error }));
 
@@ -145,7 +148,14 @@ return {
       const fresh = byPk.get(node.localPk);
       const prev = prevByPk.get(node.localPk);
       const row: VisorRow = { node: node, ...fresh };
-      if (fresh?.stats) {
+      // An unchanged sample (another visor pushed) keeps its rates.
+      if (fresh?.stats && prev && prev.stats === fresh.stats) {
+        row.prevSent = prev.prevSent;
+        row.prevRecv = prev.prevRecv;
+        row.txRate = prev.txRate;
+        row.rxRate = prev.rxRate;
+        row.lastSampleAt = prev.lastSampleAt;
+      } else if (fresh?.stats) {
         const sent = fresh.stats.net_bytes_sent || 0;
         const recv = fresh.stats.net_bytes_recv || 0;
         if (prev?.lastSampleAt && prev.prevSent !== undefined && prev.prevRecv !== undefined) {

@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, Input, ChangeDetectionStrategy } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { EMPTY, Subscription, catchError, firstValueFrom, switchMap } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
 import { Router } from '@angular/router';
@@ -7,6 +7,7 @@ import { Router } from '@angular/router';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { environment } from 'src/environments/environment';
 
@@ -165,6 +166,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   addMemberPk = '';
   inviteLink = '';
   private groupTimer: any = null;
+  private groupSub: Subscription | null = null;
   private lastGroupMsgLen = -1;
   // Locally-echoed sent messages per group id. The federated data plane does
   // NOT echo a sender its own messages (each member subscribes to the OTHER
@@ -184,6 +186,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   spkMuted = false;                           // caller muted (we hear nothing)
   private callStartMs = 0;                    // wall-clock when the current call went active
   private voiceTimer: any = null;
+  private voiceSub: Subscription | null = null;
   // Remember which ringing calls we've already surfaced, so re-polls don't
   // re-prompt (native auto-answer never rings; explicit-answer mode does).
   private voiceRingSeen = new Set<string>();
@@ -223,6 +226,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
 
   constructor(
     private api: ApiService,
+    private live: LiveService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
     private router: Router,
@@ -792,6 +796,11 @@ return {
   }
 
   private startGroupPoll() {
+    if (!this.groupSv) {
+      this.followGroups();
+
+      return;
+    }
     if (this.groupTimer) {
  return; 
 }
@@ -808,6 +817,65 @@ return {
     if (this.groupTimer) {
  clearInterval(this.groupTimer); this.groupTimer = null; 
 }
+    this.groupSub?.unsubscribe();
+    this.groupSub = null;
+  }
+
+  /**
+   * Native: follows the room list and the selected room over the live socket
+   * (polling without it). Called again when the selection changes.
+   */
+  private followGroups() {
+    this.groupSub?.unsubscribe();
+    if (!this.node) {
+      this.groupSub = null;
+
+      return;
+    }
+    const base = `visors/${this.node.localPk}/skychat/groups`;
+    this.groupSub = this.live.watch(base, 2000, () => this.api.get(base)).pipe(
+      switchMap(res => res.pipe(catchError((e) => {
+        this.groupError = this.groupErrMsg(e);
+        this.cdr.markForCheck();
+
+        return EMPTY;
+      }))),
+    ).subscribe((arr: any[]) => {
+      this.applyGroups(arr);
+      this.cdr.markForCheck();
+    });
+    if (this.selectedGroup) {
+      const id = this.selectedGroup.id;
+      const url = `${base}/messages?group_id=${encodeURIComponent(id)}`;
+      this.groupSub.add(this.live.watch(url, 2000, () => this.api.get(url)).pipe(
+        switchMap(res => res.pipe(catchError(() => EMPTY))),
+      ).subscribe((arr: any[]) => {
+        this.applyGroupMessages(id, this.nativeGroupMessages(arr));
+        this.cdr.markForCheck();
+      }));
+    }
+  }
+
+  private applyGroups(arr: any[]) {
+    if (!Array.isArray(arr)) {
+ return; 
+}
+    this.groups = arr.map((g: any): GroupView => {
+return {
+      id: g.id, name: g.name, mode: g.mode, role: g.role,
+      members: typeof g.members === 'number' ? g.members : (Array.isArray(g.members) ? g.members.length : 0),
+      status: g.status,
+    }
+});
+    // Keep the selection object fresh (member counts change).
+    if (this.selectedGroup) {
+      const upd = this.groups.find(g => g.id === this.selectedGroup!.id);
+      if (upd) {
+ this.selectedGroup = upd; 
+}
+    }
+    this.groupError = '';
+    this.cdr.markForCheck();
   }
 
   /** Refresh the room list from whichever transport this node uses. */
@@ -816,27 +884,7 @@ return {
  return; 
 }
     const sv = this.groupSv;
-    const done = (arr: any[]) => {
-      if (!Array.isArray(arr)) {
- return; 
-}
-      this.groups = arr.map((g: any): GroupView => {
-return {
-        id: g.id, name: g.name, mode: g.mode, role: g.role,
-        members: typeof g.members === 'number' ? g.members : (Array.isArray(g.members) ? g.members.length : 0),
-        status: g.status,
-      }
-});
-      // Keep the selection object fresh (member counts change).
-      if (this.selectedGroup) {
-        const upd = this.groups.find(g => g.id === this.selectedGroup!.id);
-        if (upd) {
- this.selectedGroup = upd; 
-}
-      }
-      this.groupError = '';
-      this.cdr.markForCheck();
-    };
+    const done = (arr: any[]) => this.applyGroups(arr);
     if (sv) {
       // Under the SharedWorker architecture skywireVisor is a MessagePort
       // proxy, so the hooks return Promises (not the raw JSON string the Go
@@ -903,33 +951,7 @@ return {
  return; 
 }
     const id = this.selectedGroup.id;
-    const me = this.node.localPk;
-    const done = (arr: any[]) => {
-      if (!Array.isArray(arr)) {
- return; 
-}
-      const sent = this.sentByGroup[id] || [];
-      // Rebuild when the incoming count changed OR we have local sends to
-      // interleave (send count is small, so this is cheap).
-      if (arr.length === this.lastGroupMsgLen && sent.length === 0) {
- return; 
-}
-      this.captureScroll();
-      const incoming: GroupMsg[] = arr.map((m: any): GroupMsg => {
-return {
-        group_id: m.group_id, from: m.from || m.sender_pk || '',
-        text: m.text || '', ts: m.ts || Date.now(),
-        out: (m.from || m.sender_pk || '') === me,
-      }
-});
-      // Drop optimistic echoes that the backend has since surfaced (the feed
-      // can return our own send back), so a sent message isn't shown twice.
-      const inKeys = new Set(incoming.map(m => m.from + '|' + m.text));
-      const sentUnique = sent.filter(m => !inKeys.has(m.from + '|' + m.text));
-      this.groupMessages = incoming.concat(sentUnique).sort((a, b) => a.ts - b.ts).slice(-500);
-      this.lastGroupMsgLen = arr.length;
-      this.cdr.markForCheck();
-    };
+    const done = (arr: any[]) => this.applyGroupMessages(id, arr);
     const sv = this.groupSv;
     if (sv) {
       // SharedWorker proxy → the hook returns a Promise; normalize.
@@ -946,16 +968,49 @@ return {
     // Native: since_ms omitted → full ring for this group.
     this.groupApi(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
       .then((arr) => {
- const result = done((arr || []).map((m: any) => {
-return {
-        group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
-        ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
-      }
-})); this.cdr.markForCheck();
+ const result = done(this.nativeGroupMessages(arr)); this.cdr.markForCheck();
 
  return result; 
 })
       .catch(() => { /* transient */ });
+  }
+
+  /** The native bridge names the sender sender_pk and may send ts as a string. */
+  private nativeGroupMessages(arr: any[]): any[] {
+    return (arr || []).map((m: any) => {
+return {
+      group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
+      ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
+    }
+});
+  }
+
+  private applyGroupMessages(id: string, arr: any[]) {
+    if (!Array.isArray(arr) || !this.selectedGroup || this.selectedGroup.id !== id) {
+ return; 
+}
+    const me = this.node.localPk;
+    const sent = this.sentByGroup[id] || [];
+    // Rebuild when the incoming count changed OR we have local sends to
+    // interleave (send count is small, so this is cheap).
+    if (arr.length === this.lastGroupMsgLen && sent.length === 0) {
+ return; 
+}
+    this.captureScroll();
+    const incoming: GroupMsg[] = arr.map((m: any): GroupMsg => {
+return {
+      group_id: m.group_id, from: m.from || m.sender_pk || '',
+      text: m.text || '', ts: m.ts || Date.now(),
+      out: (m.from || m.sender_pk || '') === me,
+    }
+});
+    // Drop optimistic echoes that the backend has since surfaced (the feed
+    // can return our own send back), so a sent message isn't shown twice.
+    const inKeys = new Set(incoming.map(m => m.from + '|' + m.text));
+    const sentUnique = sent.filter(m => !inKeys.has(m.from + '|' + m.text));
+    this.groupMessages = incoming.concat(sentUnique).sort((a, b) => a.ts - b.ts).slice(-500);
+    this.lastGroupMsgLen = arr.length;
+    this.cdr.markForCheck();
   }
 
   createGroup() {
@@ -1140,9 +1195,14 @@ return {
   }
 
   private startVoicePoll() {
-    if (this.voiceTimer || !this.node) {
+    if (this.voiceTimer || this.voiceSub || !this.node) {
  return; 
 }
+    if (!this.voiceSv) {
+      this.followVoice();
+
+      return;
+    }
     this.pollVoice();
     this.voiceTimer = setInterval(() => {
  this.pollVoice(); this.cdr.markForCheck(); 
@@ -1150,9 +1210,36 @@ return {
   }
 
   private stopVoicePoll() {
+    this.voiceSub?.unsubscribe();
+    this.voiceSub = null;
     if (this.voiceTimer) {
  clearInterval(this.voiceTimer); this.voiceTimer = null; 
 }
+  }
+
+  /** Native: follows the active and incoming calls over the live socket (polling without it). */
+  private followVoice() {
+    const base = `visors/${this.node.localPk}/skychat/voice`;
+    const active = `${base}/active`;
+    const incoming = `${base}/incoming`;
+    this.voiceSub = this.live.watch(active, 1800, () => this.api.get(active)).pipe(
+      switchMap(res => res.pipe(catchError((e) => {
+        if (e?.originalError?.status === 503) {
+          this.voiceAvailable = false;
+          this.cdr.markForCheck();
+        }
+
+        return EMPTY;
+      }))),
+    ).subscribe((r: any) => {
+      this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.syncCallState(); this.cdr.markForCheck();
+    });
+    // Transient or disabled: /active already flags availability.
+    this.voiceSub.add(this.live.watch(incoming, 1800, () => this.api.get(incoming)).pipe(
+      switchMap(res => res.pipe(catchError(() => EMPTY))),
+    ).subscribe((r: any) => {
+      this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck();
+    }));
   }
 
   /** Normalize active-call ids from either transport (wasm returns a JSON

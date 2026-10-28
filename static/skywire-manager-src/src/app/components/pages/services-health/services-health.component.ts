@@ -1,11 +1,12 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
-import { Subscription, interval, startWith } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { EMPTY, Subscription } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 
 import { ServiceHealthEntry, ServiceHealthService } from 'src/app/services/service-health.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { homeTabsData, isWasmHvCore } from 'src/app/utils/home-tabs';
 
 /** One RSN's remote /stats fetch result, mirrors pkg/visor.RSNRemoteStat. */
@@ -84,7 +85,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   drillError: { [name: string]: string } = {};
   drillLoading: { [name: string]: boolean } = {};
 
-  constructor(private healthSvc: ServiceHealthService, private api: ApiService, private cdr: ChangeDetectorRef) {
+  constructor(private healthSvc: ServiceHealthService, private api: ApiService, private live: LiveService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -93,45 +94,42 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     // The deployment-service health table works on every core (a browser wasm
     // core probes each service's /health over dmsg — SelfServiceHealth). Poll
     // every 15s, starting immediately.
-    this.sub = interval(15000)
+    this.sub = this.live.watch('service-health', 15000, () => this.healthSvc.get())
       .pipe(
-        startWith(0),
-        switchMap(() => this.healthSvc.get()),
-      )
-      .subscribe({
-        next: (entries: ServiceHealthEntry[]) => {
-          this.entries = entries || [];
-          this.loading = false;
-          this.error = null;
-          this.lastUpdated = new Date();
-          this.cdr.markForCheck();
-        },
-        error: (err) => {
+        // A failed fetch is shown and the next one still runs.
+        switchMap(res => res.pipe(catchError(err => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch services health';
           this.cdr.markForCheck();
-        },
+
+          return EMPTY;
+        }))),
+      )
+      .subscribe((entries: ServiceHealthEntry[]) => {
+        this.entries = entries || [];
+        this.loading = false;
+        this.error = null;
+        this.lastUpdated = new Date();
+        this.cdr.markForCheck();
       });
 
     // RSN stats are a native-hypervisor concept (the route-setup nodes it
     // fronts) — a browser edge has no such role, so skip the poll there. Slower
     // cadence otherwise; each entry is a DMSG round-trip the visor caches.
     if (this.rsnAvailable) {
-      this.rsnSub = interval(30000)
+      this.rsnSub = this.live.watch('route-setup-nodes/stats', 30000, () => this.api.get('route-setup-nodes/stats'))
         .pipe(
-          startWith(0),
-          switchMap(() => this.api.get('route-setup-nodes/stats')),
+          switchMap(res => res.pipe(catchError(() => {
+            this.rsnLoading = false;
+            this.cdr.markForCheck();
+
+            return EMPTY;
+          }))),
         )
-        .subscribe({
-          next: (rows: RSNRemoteStat[]) => {
-            this.rsnStats = Array.isArray(rows) ? rows : [];
-            this.rsnLoading = false;
-            this.cdr.markForCheck();
-          },
-          error: () => {
-            this.rsnLoading = false;
-            this.cdr.markForCheck();
-          },
+        .subscribe((rows: RSNRemoteStat[]) => {
+          this.rsnStats = Array.isArray(rows) ? rows : [];
+          this.rsnLoading = false;
+          this.cdr.markForCheck();
         });
     } else {
       this.rsnLoading = false;

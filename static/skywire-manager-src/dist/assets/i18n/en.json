@@ -166,6 +166,7 @@
       "alert-transportability": "No other visor has confirmed reaching this one by transport yet.",
       "alert-app-failed": "{{ app }} failed.",
       "alert-app-stopped": "{{ app }} is set to start with the visor but is not running.",
+      "alert-app-stopped-why": "{{ app }} is set to start with the visor but is not running: {{ why }}",
       "alert-no-transports": "This visor has no transports.",
       "alert-no-dmsg": "This visor is not connected to any DMSG server.",
       "alert-no-reward": "No reward address is set, so this visor earns no rewards.",
