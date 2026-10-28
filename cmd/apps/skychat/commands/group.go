@@ -362,12 +362,12 @@ func registerGroupHTTPHandlers(mux *http.ServeMux) {
 		return
 	}
 	mux.HandleFunc("/group", requireAuthFunc(groupRootHandler()))
-	mux.HandleFunc("/group/join", requireAuthFunc(groupJoinHandler()))
+	mux.HandleFunc("/group/join", requireAuthFunc(waitsOnPeer(groupJoinHandler())))
 	// Registered before the catch-all /group/ so it isn't swallowed by
 	// groupItemHandler, which reads the next path segment as a group ID.
-	mux.HandleFunc("/group/resolve", requireAuthFunc(groupResolveHandler()))
-	mux.HandleFunc("/group/catalog", requireAuthFunc(groupCatalogHandler()))
-	mux.HandleFunc("/group/", requireAuthFunc(groupItemHandler()))
+	mux.HandleFunc("/group/resolve", requireAuthFunc(waitsOnPeer(groupResolveHandler())))
+	mux.HandleFunc("/group/catalog", requireAuthFunc(waitsOnPeer(groupCatalogHandler())))
+	mux.HandleFunc("/group/", requireAuthFunc(waitsOnPeer(groupItemHandler())))
 }
 
 // groupRootHandler serves GET /group (list) and POST /group (create).
