@@ -33,6 +33,7 @@ import (
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
@@ -728,6 +729,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	logBroadcaster := logging.NewBroadcaster()
 	mLog.AddHook(logBroadcaster)
 
+	gcmon.Default()
 	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
 	defer stopPProf()
 
