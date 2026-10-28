@@ -67,7 +67,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import com.skycoin.skywire.ui.components.isShortScreen
+import com.skycoin.skywire.ui.components.rememberCollapsingHeader
 import com.skycoin.skywire.R
 import com.skycoin.skywire.chat.CallRecord
 import com.skycoin.skywire.chat.ChatMessage
@@ -191,120 +195,127 @@ fun ChatHome(vm: ChatViewModel, onBack: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            MeRow(
-                name = profile?.name.orEmpty(),
-                pk = myPk,
-                avatar = profile?.avatar.orEmpty(),
-                onClick = { vm.push(ChatPage.MyProfile) },
-            )
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                for (t in TABS) {
-                    FilterChip(
-                        selected = tab == t,
-                        onClick = { repo.setTab(t) },
-                        label = { Text(stringResource(tabLabel(t)), maxLines = 1) },
-                    )
-                }
-            }
-            if (tab == "calls") {
-                CallsList(vm)
-                return@Column
-            }
-            val requests = privacy?.requests.orEmpty().toSet()
-            val pinnedKey = local.pinned
-            fun fits(group: GroupInfo?): Boolean = when (tab) {
-                "all" -> true
-                "dm" -> group == null
-                "groups" -> group != null && !group.isChannel
-                "channels" -> group?.isChannel == true
-                else -> false
-            }
-            val dmKeys = local.recipients.filter { it != myPk }
-            val sortedDms = dmKeys.sortedByDescending { summaries[it]?.last?.ts ?: 0L }
-            val pinnedGroup = pinnedKey?.removePrefix("grp:")?.takeIf { pinnedKey.startsWith("grp:") }?.let { id -> groups.firstOrNull { it.id == id } }
-            val pinnedDm = pinnedKey?.removePrefix("dm:")?.takeIf { pinnedKey.startsWith("dm:") }
-            val showPinned = when {
-                pinnedGroup != null -> fits(pinnedGroup)
-                pinnedDm != null -> tab == "all" || tab == "dm"
-                else -> false
-            }
-            val visibleGroups = groups.filter { !it.isChannel }.sortedByDescending { summaries[it.id]?.last?.ts ?: 0L }
-            val visibleChannels = groups.filter { it.isChannel }.sortedByDescending { summaries[it.id]?.last?.ts ?: 0L }
-            val dmTabs = tab == "all" || tab == "dm"
-            val nothing = dmKeys.isEmpty() && groups.isEmpty() && summaries[SAVED_KEY]?.last == null
-
-            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
-                if (dmTabs) {
-                    item(key = "saved") {
-                        val s = summaries[SAVED_KEY]
-                        ConversationRow(
-                            title = stringResource(R.string.chat_saved_messages),
-                            preview = s?.last?.let { previewText(it, own = false) } ?: stringResource(R.string.chat_saved_sub),
-                            time = s?.last?.ts,
-                            avatar = { ChatAvatar(SAVED_KEY, "", 48.dp, AvatarKind.SAVED) },
-                            onClick = { vm.openThread(SAVED_KEY) },
+            // On a short screen (a phone in landscape) the profile row and the
+            // filters give way as the list scrolls.
+            val collapse = rememberCollapsingHeader(enabled = isShortScreen())
+            Column(collapse.modifier) {
+                MeRow(
+                    name = profile?.name.orEmpty(),
+                    pk = myPk,
+                    avatar = profile?.avatar.orEmpty(),
+                    onClick = { vm.push(ChatPage.MyProfile) },
+                )
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    for (t in TABS) {
+                        FilterChip(
+                            selected = tab == t,
+                            onClick = { repo.setTab(t) },
+                            label = { Text(stringResource(tabLabel(t)), maxLines = 1) },
                         )
                     }
                 }
-                if (showPinned) {
-                    section(R.string.chat_pinned)
-                    if (pinnedGroup != null) {
-                        item(key = "pin-g") {
-                            GroupRow(vm, pinnedGroup, summaries[pinnedGroup.id], muted = isMutedIn(notif.muted, pinnedGroup.id), pinned = true)
+            }
+            Box(Modifier.weight(1f).nestedScroll(collapse.connection)) {
+                if (tab == "calls") {
+                    CallsList(vm)
+                    return@Box
+                }
+                val requests = privacy?.requests.orEmpty().toSet()
+                val pinnedKey = local.pinned
+                fun fits(group: GroupInfo?): Boolean = when (tab) {
+                    "all" -> true
+                    "dm" -> group == null
+                    "groups" -> group != null && !group.isChannel
+                    "channels" -> group?.isChannel == true
+                    else -> false
+                }
+                val dmKeys = local.recipients.filter { it != myPk }
+                val sortedDms = dmKeys.sortedByDescending { summaries[it]?.last?.ts ?: 0L }
+                val pinnedGroup = pinnedKey?.removePrefix("grp:")?.takeIf { pinnedKey.startsWith("grp:") }?.let { id -> groups.firstOrNull { it.id == id } }
+                val pinnedDm = pinnedKey?.removePrefix("dm:")?.takeIf { pinnedKey.startsWith("dm:") }
+                val showPinned = when {
+                    pinnedGroup != null -> fits(pinnedGroup)
+                    pinnedDm != null -> tab == "all" || tab == "dm"
+                    else -> false
+                }
+                val visibleGroups = groups.filter { !it.isChannel }.sortedByDescending { summaries[it.id]?.last?.ts ?: 0L }
+                val visibleChannels = groups.filter { it.isChannel }.sortedByDescending { summaries[it.id]?.last?.ts ?: 0L }
+                val dmTabs = tab == "all" || tab == "dm"
+                val nothing = dmKeys.isEmpty() && groups.isEmpty() && summaries[SAVED_KEY]?.last == null
+
+                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
+                    if (dmTabs) {
+                        item(key = "saved") {
+                            val s = summaries[SAVED_KEY]
+                            ConversationRow(
+                                title = stringResource(R.string.chat_saved_messages),
+                                preview = s?.last?.let { previewText(it, own = false) } ?: stringResource(R.string.chat_saved_sub),
+                                time = s?.last?.ts,
+                                avatar = { ChatAvatar(SAVED_KEY, "", 48.dp, AvatarKind.SAVED) },
+                                onClick = { vm.openThread(SAVED_KEY) },
+                            )
                         }
-                    } else if (pinnedDm != null) {
-                        item(key = "pin-d") {
-                            DmRow(vm, pinnedDm, summaries[pinnedDm], names, presence[pinnedDm]?.online, pinned = true, paired = pinnedDm in pair.paired, muted = isMutedIn(notif.muted, pinnedDm), avatars = avatars)
+                    }
+                    if (showPinned) {
+                        section(R.string.chat_pinned)
+                        if (pinnedGroup != null) {
+                            item(key = "pin-g") {
+                                GroupRow(vm, pinnedGroup, summaries[pinnedGroup.id], muted = isMutedIn(notif.muted, pinnedGroup.id), pinned = true)
+                            }
+                        } else if (pinnedDm != null) {
+                            item(key = "pin-d") {
+                                DmRow(vm, pinnedDm, summaries[pinnedDm], names, presence[pinnedDm]?.online, pinned = true, paired = pinnedDm in pair.paired, muted = isMutedIn(notif.muted, pinnedDm), avatars = avatars)
+                            }
                         }
                     }
-                }
-                if (dmTabs && pair.invites.isNotEmpty()) {
-                    section(R.string.chat_pair_invites)
-                    items(pair.invites, key = { "inv-$it" }) { pk ->
-                        InviteRow(pk, onAccept = { repo.acceptInvite(pk) }, onDecline = { repo.declineInvite(pk) })
+                    if (dmTabs && pair.invites.isNotEmpty()) {
+                        section(R.string.chat_pair_invites)
+                        items(pair.invites, key = { "inv-$it" }) { pk ->
+                            InviteRow(pk, onAccept = { repo.acceptInvite(pk) }, onDecline = { repo.declineInvite(pk) })
+                        }
                     }
-                }
-                if (tab == "all" || tab == "groups") {
-                    val list = visibleGroups.filter { pinnedGroup?.id != it.id }
-                    if (list.isNotEmpty()) {
-                        section(R.string.chat_groups)
-                        items(list, key = { "g-" + it.id }) { g -> GroupRow(vm, g, summaries[g.id], muted = isMutedIn(notif.muted, g.id)) }
+                    if (tab == "all" || tab == "groups") {
+                        val list = visibleGroups.filter { pinnedGroup?.id != it.id }
+                        if (list.isNotEmpty()) {
+                            section(R.string.chat_groups)
+                            items(list, key = { "g-" + it.id }) { g -> GroupRow(vm, g, summaries[g.id], muted = isMutedIn(notif.muted, g.id)) }
+                        }
                     }
-                }
-                if (tab == "all" || tab == "channels") {
-                    val list = visibleChannels.filter { pinnedGroup?.id != it.id }
-                    if (list.isNotEmpty()) {
-                        section(R.string.chat_channels)
-                        items(list, key = { "c-" + it.id }) { g -> GroupRow(vm, g, summaries[g.id], muted = isMutedIn(notif.muted, g.id)) }
+                    if (tab == "all" || tab == "channels") {
+                        val list = visibleChannels.filter { pinnedGroup?.id != it.id }
+                        if (list.isNotEmpty()) {
+                            section(R.string.chat_channels)
+                            items(list, key = { "c-" + it.id }) { g -> GroupRow(vm, g, summaries[g.id], muted = isMutedIn(notif.muted, g.id)) }
+                        }
                     }
-                }
-                if (dmTabs) {
-                    val req = sortedDms.filter { it in requests }
-                    if (req.isNotEmpty()) {
-                        section(R.string.chat_requests)
-                        items(req, key = { "r-$it" }) { pk ->
+                    if (dmTabs) {
+                        val req = sortedDms.filter { it in requests }
+                        if (req.isNotEmpty()) {
+                            section(R.string.chat_requests)
+                            items(req, key = { "r-$it" }) { pk ->
+                                DmRow(vm, pk, summaries[pk], names, presence[pk]?.online, paired = pk in pair.paired, muted = isMutedIn(notif.muted, pk), avatars = avatars)
+                            }
+                        }
+                        val chats = sortedDms.filter { it !in requests && it != pinnedDm }
+                        if (chats.isNotEmpty()) section(R.string.chat_chats)
+                        items(chats, key = { "d-$it" }) { pk ->
                             DmRow(vm, pk, summaries[pk], names, presence[pk]?.online, paired = pk in pair.paired, muted = isMutedIn(notif.muted, pk), avatars = avatars)
                         }
                     }
-                    val chats = sortedDms.filter { it !in requests && it != pinnedDm }
-                    if (chats.isNotEmpty()) section(R.string.chat_chats)
-                    items(chats, key = { "d-$it" }) { pk ->
-                        DmRow(vm, pk, summaries[pk], names, presence[pk]?.online, paired = pk in pair.paired, muted = isMutedIn(notif.muted, pk), avatars = avatars)
-                    }
-                }
-                if (nothing) {
-                    item(key = "welcome") {
-                        Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                stringResource(R.string.chat_welcome_body),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    if (nothing) {
+                        item(key = "welcome") {
+                            Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(stringResource(R.string.chat_welcome), style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    stringResource(R.string.chat_welcome_body),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -585,14 +596,16 @@ fun outcomeLabel(outcome: String): String = when (outcome) {
 }
 
 /** Time for a list row: the clock today, the weekday this week, the date before. */
+@Composable
 fun listTime(ms: Long): String {
+    val locale = LocalConfiguration.current.locales[0]
     val zone = ZoneId.systemDefault()
     val t = Instant.ofEpochMilli(ms).atZone(zone)
     val today = LocalDate.now(zone)
     return when {
-        t.toLocalDate() == today -> t.format(DateTimeFormatter.ofPattern("HH:mm"))
-        t.toLocalDate().isAfter(today.minusDays(7)) -> t.format(DateTimeFormatter.ofPattern("EEE"))
-        else -> t.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
+        t.toLocalDate() == today -> t.format(DateTimeFormatter.ofPattern("HH:mm", locale))
+        t.toLocalDate().isAfter(today.minusDays(7)) -> t.format(DateTimeFormatter.ofPattern("EEE", locale))
+        else -> t.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale))
     }
 }
 

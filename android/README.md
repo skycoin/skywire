@@ -198,44 +198,23 @@ separate AAC track muxed in, because some camcorder profiles pair video with
 AMR audio that no browser plays. Both use the `voice-` and `video-` file name
 prefixes every skychat UI reads.
 
-**SkyDEX** (`ui/dex/`) is native above, embedded below. The market public key
-is a native field with a recent-markets dropdown; connecting writes
-`--market-pk` into the app's argv (`PUT …/apps/skydex-client` with `args`,
-then `status` — `pk` is allow-listed to skysocks/vpn and would be rejected),
-starts the app, and then POSTs `/api/connect` on **skydex-client's own** API
-at `127.0.0.1:8051`. That last call is what makes it one step: the flag alone
-only pre-fills the page's connect form, because the engine never dials on its
-own. The trading UI then loads in a WebView already connected, and
-`/api/status` is polled so the native header mirrors the app rather than
-guessing.
+**SkyDEX** (`ui/dex/`) is native screens over skydex-client's own control
+API at `127.0.0.1:8051` (`api/SkydexApi`). Connecting writes `--market-pk`
+into the app's argv (`PUT …/apps/skydex-client` with `args`, then `status` —
+`pk` is allow-listed to skysocks/vpn and would be rejected), starts the app,
+and POSTs `/api/connect`, because the engine never dials on its own. From
+there the tabs (Market, My Orders, My Listings, History, Settings) make the
+same calls the web trading page made: skydex-client passes each one to the
+market over dmsg and the market stays the source of truth. Polling runs only
+while the screen is in front, and when a call fails because the dmsg stream
+behind the connection closed, the screen dials the market again once.
 
-A stylesheet is injected at page-finished (again at `onPageFinished`, because
-the page is React and a removed node comes back on the next render). It drops
-the page's own header — brand, connected dot, market name and key, Disconnect
-— which duplicated the native row exactly, and adds the phone breakpoint the
-page never shipped: its own ~10 kB of CSS has no media query at all, so the
-tab strip hid *Settings* off the end of a scroll, banners kept their actions
-in a corner, and the grids held desktop column minimums.
-
-Its tables become cards. My Listings is ten columns wide; a phone showed five
-and cut off the rest, including **Actions** — the column holding Cancel. A
-closed card shows the fields named `Type`/`Amount`/`Price`/`Status` (four at
-most) plus the action button, one status badge rather than the whole lifecycle
-chain, and everything else behind a *Details* toggle. That part needs script,
-not just CSS — a `<td>` carries no clue which column it is in — and a
-MutationObserver re-applies it, because the page re-renders its tables every
-eight seconds while polling.
-
-`chromeClient` answers `onJsConfirm`/`onJsAlert` with a native dialog. Without
-that, a WebView suppresses `window.confirm()` and returns `false`, and the
-page guards cancelling a listing or an order behind exactly that call — so
-Cancel silently did nothing.
-
-All of the above binds to class names inside a **vendored, pre-built** bundle.
-If upstream rebuilds it with different markup nothing errors — the page just
-returns to being unusable on a phone. The durable fix is landing these
-breakpoints in the skycoin repo; skychat has no such exposure because its UI
-source lives here.
+What the page kept in localStorage lives in `dex/DexStore`: the addresses to
+pre-fill, and finished trades, which the market deletes after its cleanup
+window. History is keyed by side and order id, because the market lets a
+seller buy their own product and then reports the one order twice. The old
+page's storage is moved over once by `dex/DexLegacyImport`, the same hidden
+WebView read as the chat's.
 
 `core/SkydexProfile` pins two flags on every launch:
 
@@ -349,6 +328,7 @@ android/
     │   ├── core/                       # foreground service, config, secrets, prefs
     │   ├── api/                        # local-API client + DTOs
     │   ├── chat/                       # SkyChat client, event stream, local store
+    │   ├── dex/                        # SkyDEX local store, legacy import
     │   └── ui/                         # theme/, navigation/, components/, logs/,
     │                                   # home/ chat/ hub/ socks/ vpn/ dex/
     │                                   # fleet/ wallet/ settings/

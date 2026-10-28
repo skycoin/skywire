@@ -1,6 +1,8 @@
 package com.skycoin.skywire.ui.dex
 
 import kotlinx.serialization.Serializable
+import java.math.BigDecimal
+import java.util.Locale
 
 /**
  * A market the user has connected to before, offered again in the recents
@@ -8,7 +10,7 @@ import kotlinx.serialization.Serializable
  * a 66-character key is not something anyone recognises in a list.
  */
 @Serializable
-data class SavedMarket(val pk: String, val name: String = "") {
+data class SavedMarket(val pk: String, val name: String = "", val ts: Long = 0) {
     /** What the dropdown row reads as. */
     val label: String get() = if (name.isEmpty()) shortMarketPk(pk) else "$name · ${shortMarketPk(pk)}"
 }
@@ -82,3 +84,47 @@ private const val MARKET_PK_LENGTH = 66
 /** 8…6, the same shortening the trading UI's own header uses. */
 fun shortMarketPk(pk: String): String =
     if (pk.length <= 20) pk else pk.take(8) + "…" + pk.takeLast(6)
+
+/**
+ * A market amount the way the web page printed it: shortest decimal, never
+ * exponent form, so 1e-7 reads 0.0000001 and 5.0 reads 5.
+ */
+fun dexNumber(value: Double): String =
+    if (value.isNaN() || value.isInfinite()) "" else BigDecimal(value.toString()).stripTrailingZeros().toPlainString()
+
+/**
+ * The BIP-21 style link a wallet scans to fill in address and amount, or null
+ * for a coin whose scheme is not known (QrButton.jsx buildUri). The amount is
+ * plain decimal with up to 8 places: a wallet rejects "1e-7".
+ */
+fun paymentUri(address: String, amount: Double, coin: String): String? {
+    val scheme = URI_SCHEMES[coin.uppercase(Locale.ROOT)] ?: return null
+    if (address.isEmpty() || amount.isNaN() || amount <= 0) return null
+    val plain = String.format(Locale.US, "%.8f", amount).trimEnd('0').trimEnd('.')
+    return "$scheme:$address?amount=$plain"
+}
+
+/** Skycoin and the fibercoins share the address format and the skycoin: URI. */
+private val URI_SCHEMES = mapOf(
+    "BTC" to "bitcoin",
+    "LTC" to "litecoin",
+    "DOGE" to "dogecoin",
+    "DASH" to "dash",
+    "BCH" to "bitcoincash",
+    "SKY" to "skycoin",
+)
+
+/** A decimal typed with either separator: decimal keyboards in es/fr offer a comma. */
+fun parseDecimal(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+
+/** Ids and hashes: the first eight characters, as the page's tables showed them. */
+fun shortId(id: String): String = if (id.length <= 12) id else id.take(8) + "…"
+
+/** A seller or market key in a card: 8…4. */
+fun shortKey(pk: String): String = if (pk.length <= 14) pk else pk.take(8) + "…" + pk.takeLast(4)
+
+/** Buy orders worth polling get_order_status for: still waiting on the chain. */
+val IN_FLIGHT_STATUSES = setOf("pending_payment", "paid", "confirmed")
+
+/** The market's own threshold is in each order status; this is for one that omits it. */
+const val DEFAULT_REQUIRED_CONFIRMATIONS = 2
