@@ -18,6 +18,8 @@ export interface SkyenvFlag {
   env_negate?: boolean;
   env_default?: string;
   env_note?: string;
+  // The value rule beyond the format (autoconfigcmd.Check*): pk, pks, hostport, duration, loglevel.
+  check?: string;
 }
 
 /**
