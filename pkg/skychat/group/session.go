@@ -719,6 +719,10 @@ func Open(cfg Config) (*Session, error) {
 	}
 }
 
+// feedKeepRoots keeps about five minutes of heartbeat Roots, so a member on a
+// slow link can finish filling a Root after the next one is published.
+const feedKeepRoots = 10
+
 // openOwner brings up a publisher with the member allowlist plus
 // the relay listener that members dial when submitting messages.
 func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
@@ -732,6 +736,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		// re-sync from the publisher's in-memory tree on reconnect.
 		// Losing a torn batch at crash time is acceptable.
 		NoSyncCXDS: true,
+		KeepRoots:  feedKeepRoots,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: Open owner: build publisher: %w", err)
@@ -917,6 +922,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		// Member-side throwaway node — pure cache, no durability
 		// requirement at all.
 		NoSyncCXDS: true,
+		KeepRoots:  feedKeepRoots,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: Open member: build local node: %w", err)
