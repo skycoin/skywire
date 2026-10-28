@@ -473,7 +473,8 @@ func encode(msg Msg) (p []byte) {
 	return
 }
 
-// Decode encoded Type-prefixed data to message.
+// Decode encoded Type-prefixed data to message. Byte slices in the
+// message point into p, so the caller must not modify p afterwards.
 // It can returns encoding errors or InvalidTypeError
 func Decode(p []byte) (msg Msg, err error) {
 
@@ -496,7 +497,7 @@ func Decode(p []byte) (msg Msg, err error) {
 		n uint64
 	)
 
-	if n, err = encoder.DeserializeRawToValue(p[1:], val); err != nil {
+	if n, err = encoder.DeserializeRawToValueNoCopy(p[1:], val); err != nil {
 		return msg, err
 	}
 
