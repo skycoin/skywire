@@ -284,6 +284,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/mail') ||
+      this.lastUrl.includes('/contacts') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
@@ -355,6 +356,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'mail',
           label: 'node.tabs.mail',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'mail'] : null,
+        },
+        {
+          // The visor's contact book, which skychat also reads names from.
+          icon: 'contacts',
+          label: 'node.tabs.contacts',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'contacts'] : null,
         },
         {
           icon: 'monetization_on',
@@ -448,7 +455,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'chat', 'mail', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'mail', 'contacts', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {

@@ -1,0 +1,82 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow">
+      <div class="contacts-head">
+        <span class="section-title">{{ 'contacts.title' | translate }}</span>
+        <span class="small dim">{{ list.length }}</span>
+      </div>
+      <p class="small dim">{{ 'contacts.help' | translate }}</p>
+
+      @if (loadError) {
+        <p class="contacts-error">{{ loadError }}</p>
+      }
+
+      @if (view === 'list') {
+        <div class="contacts-bar">
+          <input class="filter" [(ngModel)]="filter" [placeholder]="'contacts.filter' | translate" />
+          <button mat-stroked-button (click)="add()">{{ 'contacts.add' | translate }}</button>
+          <span class="spacer"></span>
+          <label mat-stroked-button class="mdc-button mat-mdc-outlined-button file-btn">
+            {{ 'contacts.import' | translate }}
+            <input type="file" accept=".vcf,text/vcard" (change)="importFile($event)" hidden />
+          </label>
+          <a mat-stroked-button [href]="exportHref()" download>{{ 'contacts.export' | translate }}</a>
+        </div>
+
+        @if (loading && !list.length) {
+          <div class="loading-row"><mat-spinner [diameter]="16"></mat-spinner></div>
+        } @else if (!list.length) {
+          <p class="dim">{{ 'contacts.empty' | translate }}</p>
+        } @else if (!shown.length) {
+          <p class="dim">{{ 'contacts.no-match' | translate }}</p>
+        } @else {
+          <table class="responsive-table-translucid contacts-list">
+            <tr>
+              <th>{{ 'contacts.name' | translate }}</th>
+              <th>{{ 'contacts.keys' | translate }}</th>
+              <th>{{ 'contacts.groups' | translate }}</th>
+            </tr>
+            @for (c of shown; track c.uid) {
+              <tr class="contact-row" (click)="edit(c)">
+                <td>{{ c.name }}</td>
+                <td class="mono small keys">
+                  @for (k of c.keys || []; track k) {
+                    <div class="key" (click)="copy(k); $event.stopPropagation()" [title]="'contacts.copy' | translate">{{ k }}</div>
+                  }
+                </td>
+                <td class="small">{{ (c.groups || []).join(', ') }}</td>
+              </tr>
+            }
+          </table>
+        }
+      }
+
+      @if (view === 'edit') {
+        <div class="contacts-form">
+          <label>{{ 'contacts.name' | translate }}
+            <input [(ngModel)]="form.name" /></label>
+          <label>{{ 'contacts.keys' | translate }} <span class="dim">{{ 'contacts.one-per-line' | translate }}</span>
+            <textarea class="mono" rows="3" [(ngModel)]="form.keys"></textarea></label>
+          <label>{{ 'contacts.mail' | translate }} <span class="dim">{{ 'contacts.one-per-line' | translate }}</span>
+            <textarea class="mono" rows="2" [(ngModel)]="form.mail"></textarea></label>
+          <label>{{ 'contacts.payments' | translate }} <span class="dim">{{ 'contacts.payments-help' | translate }}</span>
+            <textarea class="mono" rows="2" [(ngModel)]="form.payments" placeholder="skycoin:2jBbGx..."></textarea></label>
+          <label>{{ 'contacts.groups' | translate }} <span class="dim">{{ 'contacts.groups-help' | translate }}</span>
+            <input [(ngModel)]="form.groups" /></label>
+          <label>{{ 'contacts.notes' | translate }}
+            <textarea rows="4" [(ngModel)]="form.notes"></textarea></label>
+          <div class="contacts-bar">
+            <button mat-flat-button color="primary" [disabled]="saving || !form.name.trim()" (click)="save()">
+              {{ 'contacts.save' | translate }}
+            </button>
+            <button mat-stroked-button (click)="cancel()">{{ 'contacts.cancel' | translate }}</button>
+            <span class="spacer"></span>
+            @if (form.uid) {
+              <button mat-stroked-button color="warn" (click)="remove()">{{ 'contacts.delete' | translate }}</button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
