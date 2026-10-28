@@ -192,9 +192,13 @@ internal object SseDispatch {
         repo.store.update { s -> s.copy(hiddenGroup = s.hiddenGroup + "$gid:$nano") }
         val by = m.deletedBy.lowercase()
         val me = repo.myPk.value
-        repo.mutate(gid) { list ->
-            list.filterNot { it.tsNano == nano && (it.from == by || (it.mine && by == me)) }.let { if (it.size == list.size) list else it }
-        }
+        repo.mutate(gid) { list -> withoutDeleted(list, nano, by, me) }
+    }
+
+    /** A tombstone is author-signed: it removes only that author's message with that feed id. */
+    fun withoutDeleted(list: List<ChatMessage>, nano: String, by: String, me: String): List<ChatMessage> {
+        val kept = list.filterNot { it.tsNano == nano && (it.from == by || (it.mine && by == me)) }
+        return if (kept.size == list.size) list else kept
     }
 
     private fun joinRequest(repo: ChatRepository, m: SseMessage) {
