@@ -4,6 +4,8 @@ import (
 	"container/list"
 	"testing"
 
+	"github.com/skycoin/skycoin/src/cipher"
+
 	"github.com/skycoin/skywire/pkg/cxo/node/log"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
 )
@@ -101,5 +103,31 @@ func TestFillHead_StaleReplyKeepsTheCount(t *testing.T) {
 	if fh.requesting != 1 || fh.fc.Len() != 0 || fh.rqo.Len() != 0 {
 		t.Fatalf("after stale replies: requesting=%d fc=%d rqo=%d, want 1 0 0",
 			fh.requesting, fh.fc.Len(), fh.rqo.Len())
+	}
+}
+
+// A peer that answers an object request with msg.Err does not hold that
+// Root anymore. It stops being a source for the Root but stays connected.
+func TestFillHead_notHeldKeepsConnection(t *testing.T) {
+	c, name := &Conn{}, "peer"
+	c.str.Store(&name)
+	f := newTestFillHead(&Node{Logger: log.NewLogger(log.NewConfig())})
+	f.cs = knownRoots{}
+	f.cs.addKnown(c, 4)
+	f.cs.addKnown(c, 5)
+	f.fill, f.requesting = 1, 1
+	f.rqo, f.fc = list.New(), list.New()
+
+	f.handleRequestFailure(failedRequest{c, 1, 5, cipher.SHA256{1}, ErrNotHeld})
+
+	got, ok := f.cs[c]
+	if !ok {
+		t.Fatal("the connection was dropped")
+	}
+	if len(got) != 1 || got[0] != 4 {
+		t.Fatalf("known of the peer = %v, want [4]", got)
+	}
+	if f.rqo.Len() != 1 {
+		t.Fatalf("%d objects queued, want the failed one back", f.rqo.Len())
 	}
 }
