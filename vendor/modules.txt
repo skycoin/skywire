@@ -1005,8 +1005,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261022015045-3b3712d25ce0
-## explicit; go 1.26.1
+# github.com/skycoin/skycoin v0.28.7-0.20261028120801-f7b9874807c2
+## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
@@ -1032,6 +1032,7 @@ github.com/skycoin/skycoin/src/cipher/encoder
 github.com/skycoin/skycoin/src/cipher/encrypt
 github.com/skycoin/skycoin/src/cipher/pbkdf2
 github.com/skycoin/skycoin/src/cipher/poly1305
+github.com/skycoin/skycoin/src/cipher/pqsig
 github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/scrypt
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
@@ -1083,6 +1084,7 @@ github.com/skycoin/skycoin/src/wallet
 github.com/skycoin/skycoin/src/wallet/bip44wallet
 github.com/skycoin/skycoin/src/wallet/collection
 github.com/skycoin/skycoin/src/wallet/deterministic
+github.com/skycoin/skycoin/src/wallet/pqwallet
 github.com/skycoin/skycoin/src/wallet/xpubwallet
 github.com/skycoin/skycoin/templates
 # github.com/soheilhy/cmux v0.1.5
