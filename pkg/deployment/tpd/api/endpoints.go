@@ -404,16 +404,22 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 // Shared by the HTTP handler and the per-key CXO feed, so both serve one
 // shape computed one way.
 func perKeyCounts(entries []*transport.Entry) map[string]map[string]int {
-	result := make(map[string]map[string]int)
+	// Count by key and hex-encode each distinct key once, not once per edge.
+	by := make(map[cipher.PubKey]map[string]int)
 	for _, entry := range entries {
 		for _, edge := range entry.Edges {
-			pkHex := edge.Hex()
-			if result[pkHex] == nil {
-				result[pkHex] = make(map[string]int)
+			m := by[edge]
+			if m == nil {
+				m = make(map[string]int, 4)
+				by[edge] = m
 			}
-			result[pkHex][string(entry.Type)]++
-			result[pkHex]["total"]++
+			m[string(entry.Type)]++
+			m["total"]++
 		}
+	}
+	result := make(map[string]map[string]int, len(by))
+	for pk, m := range by {
+		result[pk.Hex()] = m
 	}
 	return result
 }

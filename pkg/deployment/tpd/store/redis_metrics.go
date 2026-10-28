@@ -71,13 +71,17 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 // which is what every other transport read answers from.
 func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int, error) {
 	if entries, ok := s.live.snapshot(false, false, time.Now()); ok {
-		counts := make(map[string]int)
+		by := make(map[cipher.PubKey]int)
 		for _, e := range entries {
 			if e.Type == tptypes.DMSG {
 				continue
 			}
-			counts[e.Edges[0].Hex()]++
-			counts[e.Edges[1].Hex()]++
+			by[e.Edges[0]]++
+			by[e.Edges[1]]++
+		}
+		counts := make(map[string]int, len(by))
+		for pk, n := range by {
+			counts[pk.Hex()] = n
 		}
 		return counts, nil
 	}
