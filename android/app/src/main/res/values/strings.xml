@@ -1135,6 +1135,7 @@
     <string name="mail_via_hint">Every address in To and Cc goes over this network. dmsg needs no route; skynet is faster when one exists.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">No contacts yet. Add one, or save a sender from a message.</string>
+    <string name="mail_contacts_shared">The visor’s contact book. SkyChat names people from it too.</string>
     <string name="mail_save_contact">Save contact</string>
     <string name="mail_contact_name">Name</string>
     <string name="mail_contact_saved">Contact saved</string>

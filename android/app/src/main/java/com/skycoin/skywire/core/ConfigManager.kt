@@ -588,7 +588,8 @@ class ConfigManager(
      *
      * A visor's key *is* its identity: chat history is a conversation with
      * peers who addressed a key that is about to stop existing, and the app
-     * work dirs and transport logs under `local_path` are the same story. They
+     * work dirs and transport logs under `local_path` are the same story, and
+     * so is the visor's contact book, which the confirmation names. They
      * are cleared rather than carried over, so that what the confirmation
      * dialog promises is what happens — a phone that keeps a previous
      * identity's messages under a new one is showing a conversation nobody can
@@ -599,6 +600,7 @@ class ConfigManager(
      */
     private fun clearIdentityData() {
         paths.localDir.deleteRecursively()
+        paths.contactsDir.deleteRecursively()
         paths.processLogFile.delete()
         File(paths.processLogFile.parentFile, paths.processLogFile.name + ".1").delete()
         paths.ensureDirs()

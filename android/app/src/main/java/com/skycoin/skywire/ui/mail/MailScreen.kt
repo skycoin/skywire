@@ -656,7 +656,7 @@ private fun ContactDialog(
     )
 }
 
-/** SkyMail's own contacts: add, edit and delete without a message to start from. */
+/** The visor's contacts that mail reaches: add, edit and delete without a message to start from. */
 @Composable
 private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
     var editing by remember { mutableStateOf<MailContact?>(null) }
@@ -668,6 +668,12 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         item {
+            Text(
+                stringResource(R.string.mail_contacts_shared),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
             FilledTonalButton(onClick = { adding = true }) {
                 Icon(Icons.Rounded.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -684,7 +690,7 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
                 )
             }
         }
-        items(state.contacts, key = { it.address }) { c ->
+        items(state.contacts, key = { it.uid }) { c ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Box(
                     Modifier
@@ -755,7 +761,7 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
             address = c.address,
             onSave = { name, address ->
                 editing = null
-                viewModel.saveContact(name, address, replacing = c.address)
+                viewModel.saveContact(name, address, uid = c.uid, replacing = c.address)
             },
             onDismiss = { editing = null },
         )
@@ -767,7 +773,7 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
             confirmButton = {
                 TextButton(onClick = {
                     deleting = null
-                    viewModel.deleteContact(c.address)
+                    viewModel.deleteContact(c.uid)
                 }) { Text(stringResource(R.string.mail_delete)) }
             },
             dismissButton = {
@@ -841,10 +847,15 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                         }
                     }
                     state.contacts.forEach { c ->
-                        DropdownMenuItem(text = { Text(c.name) }, onClick = { add(c.address) })
+                        c.addresses.forEach { a ->
+                            DropdownMenuItem(
+                                text = { Text(if (c.addresses.size == 1) c.name else "${c.name} · ${shortAddress(a)}") },
+                                onClick = { add(a) },
+                            )
+                        }
                     }
-                    // SkyChat's names too, when it runs, for keys not saved here.
-                    val saved = state.contacts.mapNotNull { SkymailAddress.pkOfAddress(it.address) }.toSet()
+                    // SkyChat's names too, when it runs, for keys not in the book.
+                    val saved = state.contacts.flatMap { c -> c.addresses.mapNotNull(SkymailAddress::pkOfAddress) }.toSet()
                     val chat = book.entries.filter { it.key !in saved }.sortedBy { it.value.lowercase() }
                     if (chat.isNotEmpty()) {
                         if (state.contacts.isNotEmpty()) HorizontalDivider()
@@ -1116,7 +1127,7 @@ private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList(
     val text = raw.trim()
     val addr = text.substringAfter('<').substringBefore('>').trim()
     (pk.ifEmpty { null } ?: SkymailAddress.pkOfAddress(addr))?.let { key ->
-        contacts.firstOrNull { SkymailAddress.pkOfAddress(it.address).equals(key, ignoreCase = true) }
+        contacts.firstOrNull { c -> c.addresses.any { SkymailAddress.pkOfAddress(it).equals(key, ignoreCase = true) } }
             ?.let { return it.name }
         val named = VoiceCalls.displayName(key)
         if (named != VoiceCallWatcher.shortPk(key)) return named

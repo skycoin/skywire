@@ -1084,6 +1084,7 @@
     <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
+    <string name="mail_contacts_shared">这是节点的通讯录，SkyChat 也用这里的名称。</string>
     <string name="mail_save_contact">保存联系人</string>
     <string name="mail_contact_name">名称</string>
     <string name="mail_contact_saved">联系人已保存</string>

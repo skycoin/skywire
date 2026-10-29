@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.ContactRejectedException
 import com.skycoin.skywire.api.MailFolder
 import com.skycoin.skywire.api.MailMessage
 import com.skycoin.skywire.api.MailOutgoing
@@ -18,6 +19,7 @@ import com.skycoin.skywire.api.MailSendResult
 import com.skycoin.skywire.api.MailStatus
 import com.skycoin.skywire.api.MailSummary
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.chat.ChatRepository
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
@@ -80,7 +82,7 @@ data class MailUiState(
     val busy: Boolean = false,
     /** Message ids picked in the folder shown, for a batch delete. */
     val selection: Set<String> = emptySet(),
-    /** SkyMail's own address book, sorted by name. */
+    /** The visor's contacts that mail can reach, sorted by name. */
     val contacts: List<MailContact> = emptyList(),
     val contactsOpen: Boolean = false,
     /** A one-off line for the snackbar, then cleared. */
@@ -101,7 +103,9 @@ data class MailUiState(
 class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
-    private val contactBook = MailContacts(File(SkywirePaths(app).localDir, "skymail-contacts.json"))
+
+    /** Where SkyMail kept its contacts before the visor had a book. */
+    private val legacyContacts = File(SkywirePaths(app).localDir, "skymail-contacts.json")
     private val mutable = MutableStateFlow(MailUiState())
     val uiState: StateFlow<MailUiState> = mutable.asStateFlow()
 
@@ -112,10 +116,9 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
             CoreServiceState.state.collectLatest { core ->
                 mutable.update { it.copy(coreState = core, apiUp = false) }
                 if (core is CoreState.Running) {
-                    // A replaced identity cleared the book with the rest of local/.
-                    loadContacts()
                     while (!api.ping()) delay(PING_INTERVAL_MS)
                     mutable.update { it.copy(apiUp = true) }
+                    importLegacyContacts()
                     while (isActive) {
                         refreshNow()
                         openPendingLink()
@@ -139,6 +142,8 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun refreshNow() {
         if (!mutable.value.coreReady) return
+        // The book changes from SkyChat and the dashboard too.
+        loadContacts()
         runCatching { api.mailStatus() }
             .onSuccess { st -> mutable.update { it.copy(status = st, error = null) } }
             .onFailure { e -> mutable.update { it.copy(error = e.message) } }
@@ -389,32 +394,67 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- contacts ---
 
-    fun openContacts() = mutable.update { it.copy(contactsOpen = true) }
+    fun openContacts() {
+        mutable.update { it.copy(contactsOpen = true) }
+        viewModelScope.launch { loadContacts() }
+    }
 
     fun closeContacts() = mutable.update { it.copy(contactsOpen = false) }
 
-    /** Saves a contact, or edits the one at [replacing]: an address or a bare key. */
-    fun saveContact(name: String, address: String, replacing: String? = null) {
+    /**
+     * Saves [name] for [address], an address or a bare key, in the visor's
+     * book. Editing passes the contact's [uid] and the address it had.
+     */
+    fun saveContact(name: String, address: String, uid: String? = null, replacing: String? = null) {
         val clean = SkymailAddress.recipient(address)
         if (clean == null) {
             mutable.update { it.copy(notice = string(R.string.mail_bad_address, address.trim())) }
             return
         }
         if (name.isBlank()) return
-        changeContacts(string(R.string.mail_contact_saved)) { contactBook.put(MailContact(name.trim(), clean), replacing) }
+        changeContacts(string(R.string.mail_contact_saved)) {
+            api.contactPut(MailContacts.saved(api.contacts(), name, clean, uid, replacing))
+        }
     }
 
-    fun deleteContact(address: String) = changeContacts(null) { contactBook.remove(address) }
+    /** Removes the whole contact from the book, not only its mail addresses. */
+    fun deleteContact(uid: String) = changeContacts(null) { api.contactDelete(uid) }
 
     private suspend fun loadContacts() {
-        val list = withContext(Dispatchers.IO) { contactBook.load() }
-        mutable.update { it.copy(contacts = list) }
+        runCatching { api.contacts() }
+            .onSuccess { book -> mutable.update { it.copy(contacts = MailContacts.of(book)) } }
     }
 
-    private fun changeContacts(done: String?, change: () -> List<MailContact>) {
+    /**
+     * Moves the contacts SkyMail kept in its own file into the visor's book,
+     * once. The file stays until the visor has answered for every one of them.
+     */
+    private suspend fun importLegacyContacts(): Unit = withContext(Dispatchers.IO) {
+        if (!legacyContacts.exists()) return@withContext
+        runCatching {
+            MailContacts.imports(legacyContacts, api.contacts()).forEach { c ->
+                try {
+                    api.contactPut(c)
+                } catch (_: ContactRejectedException) {
+                    // A key that is no curve point is refused on every try.
+                }
+            }
+            legacyContacts.delete()
+            shareNames()
+        }
+    }
+
+    /** SkyChat names people from the same book, but fetches it only when its session starts. */
+    private suspend fun shareNames() = ChatRepository.get(getApplication()).syncNames()
+
+    private fun changeContacts(done: String?, change: suspend () -> Unit) {
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { change() } }
-                .onSuccess { list -> mutable.update { it.copy(contacts = list, notice = done ?: it.notice) } }
+            runCatching { change() }
+                .onSuccess {
+                    loadContacts()
+                    if (done != null) mutable.update { it.copy(notice = done) }
+                    shareNames()
+                }
                 .onFailure { e ->
                     mutable.update { it.copy(notice = string(R.string.mail_contact_failed, e.message.orEmpty())) }
                 }
