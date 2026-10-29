@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import com.skycoin.skywire.api.NetworkEvent
 import com.skycoin.skywire.api.VisorApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -131,6 +133,25 @@ internal class NetworkMoves {
 }
 
 /**
+ * Whether the network under the core is metered, as last told to the core.
+ *
+ * The framework re-reports capabilities freely, so only a change is news, and
+ * so is the first value: the core starts out assuming an unmetered network.
+ * Unknown is never news. Only the callback thread uses it.
+ */
+internal class MeteredFlag {
+
+    private var told: Boolean? = null
+
+    /** Records [now]; true when the core has not been told it yet. */
+    fun observe(now: Boolean?): Boolean {
+        if (now == null || now == told) return false
+        told = now
+        return true
+    }
+}
+
+/**
  * Tells the core the ground moved.
  *
  * A phone changes network constantly: Wi-Fi to cellular when you walk out the
@@ -150,9 +171,14 @@ internal class NetworkMoves {
  *
  * The system knows the instant it happens, so this listens and hands the core
  * the one fact it cannot observe for itself. The core does the rest:
- * `POST /api/dmsg/reconnect` closes the dead sessions, the dmsg client
- * re-dials and republishes its discovery entry, and the hypervisor RPC conn —
- * a stream on one of those sessions — is redialled behind it.
+ * `POST /api/network` with "moved" closes the dead sessions, the dmsg client
+ * re-dials and republishes its discovery entry, the hypervisor RPC conn — a
+ * stream on one of those sessions — is redialled behind it, and the core
+ * learns its public IP, NAT class and addresses again.
+ *
+ * It also passes on whether the network is metered, which the core cannot see
+ * either. On mobile data the core stops carrying other visors' traffic (its
+ * lean mode) and goes back to normal on Wi-Fi.
  *
  * Runs off the core service for the lifetime of one visor process, like the
  * other watchers there, so the baseline is re-taken every time the core
@@ -163,6 +189,12 @@ internal class NetworkWatcher(context: Context) {
     private val app = context.applicationContext
     private val api = VisorApi.get(app)
 
+    // Written on the callback thread, read when reporting.
+    private val metered = MeteredFlag()
+    private val movePending = AtomicBoolean(false)
+    @Volatile private var meteredNow: Boolean? = null
+    @Volatile private var ifname: String? = null
+
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         val cm = app.getSystemService(ConnectivityManager::class.java)
         if (cm == null) {
@@ -171,8 +203,10 @@ internal class NetworkWatcher(context: Context) {
         }
 
         // Conflated: a handover fires several callbacks in a row and they all
-        // mean the same single thing — re-dial once, after they settle.
-        val moves = Channel<Unit>(Channel.CONFLATED)
+        // mean the same single thing — report once, after they settle. Whether
+        // the burst held a move is kept on the side, so a metered flip landing
+        // in the same burst does not hide it.
+        val reports = Channel<Unit>(Channel.CONFLATED)
         val state = NetworkMoves()
 
         val callback = object : ConnectivityManager.NetworkCallback() {
@@ -184,9 +218,24 @@ internal class NetworkWatcher(context: Context) {
                 note(network, props)
             }
 
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                noteMetered(caps)
+            }
+
             override fun onLost(network: Network) {
                 state.lost(network.toString())
                 Log.d(TAG, "default network lost: $network")
+            }
+
+            /** A VPN is never metered itself: what counts is the network under it. */
+            private fun noteMetered(caps: NetworkCapabilities?) {
+                if (caps == null || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return
+                val now = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                meteredNow = now
+                if (metered.observe(now)) {
+                    Log.i(TAG, "network metered: $now")
+                    reports.trySend(Unit)
+                }
             }
 
             private fun note(network: Network, props: LinkProperties?) {
@@ -195,10 +244,13 @@ internal class NetworkWatcher(context: Context) {
                     network.toString(),
                     props?.linkAddresses.orEmpty().map { it.address },
                 )
-                val vpn = cm.getNetworkCapabilities(network)
-                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+                val caps = cm.getNetworkCapabilities(network)
+                val vpn = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
                 if (vpn) {
                     Log.d(TAG, "default is a VPN, not a move: $next")
+                } else {
+                    props?.interfaceName?.let { ifname = it }
+                    noteMetered(caps)
                 }
                 if (!state.observe(next, vpn)) {
                     // The first attachment is worth a line of its own: it is
@@ -211,7 +263,8 @@ internal class NetworkWatcher(context: Context) {
                     return
                 }
                 Log.i(TAG, "network moved: $was -> $next")
-                moves.trySend(Unit)
+                movePending.set(true)
+                reports.trySend(Unit)
             }
         }
 
@@ -248,12 +301,18 @@ internal class NetworkWatcher(context: Context) {
 
         try {
             while (coroutineContext.isActive) {
-                moves.receive()
+                reports.receive()
                 // Let the burst finish before acting: a handover reports the
                 // new network, then its addresses, sometimes twice.
                 delay(SETTLE_MS)
-                while (moves.tryReceive().isSuccess) { /* coalesce */ }
-                reconnect()
+                while (reports.tryReceive().isSuccess) { /* coalesce */ }
+                val moved = movePending.getAndSet(false)
+                if (!report(moved)) {
+                    // The core is not up yet or is busy failing over: offer
+                    // the same news again later, a move included.
+                    if (moved) movePending.set(true)
+                    launch { delay(PENDING_RETRY_MS); reports.trySend(Unit) }
+                }
             }
         } finally {
             // The framework holds this registration past our scope; unregister
@@ -269,19 +328,27 @@ internal class NetworkWatcher(context: Context) {
      * One attempt, then one retry. The core is normally right there on
      * loopback, but a move can land while it is still coming up or is itself
      * busy failing over — and a miss here costs the full keepalive wait this
-     * class exists to avoid, so it is worth asking twice.
+     * class exists to avoid, so it is worth asking twice. Returns false when
+     * the core did not get it.
      */
-    private suspend fun reconnect() {
+    private suspend fun report(moved: Boolean): Boolean {
+        val ev = NetworkEvent(
+            event = if (moved) "moved" else "changed",
+            metered = meteredNow,
+            ifname = ifname,
+        )
+        if (!moved && ev.metered == null) return true
         repeat(ATTEMPTS) { attempt ->
-            val closed = runCatching { api.dmsgReconnect() }
-                .onFailure { Log.d(TAG, "dmsg re-dial request failed: ${it.message}") }
+            val reply = runCatching { api.networkEvent(ev) }
+                .onFailure { Log.d(TAG, "network report failed: ${it.message}") }
                 .getOrNull()
-            if (closed != null) {
-                Log.i(TAG, "core re-dialling dmsg; $closed session(s) dropped")
-                return
+            if (reply != null) {
+                Log.i(TAG, "core told ${ev.event} (metered ${ev.metered}); mode ${reply.mode}")
+                return true
             }
             if (attempt < ATTEMPTS - 1) delay(RETRY_MS)
         }
+        return false
     }
 
     private companion object {
@@ -292,5 +359,8 @@ internal class NetworkWatcher(context: Context) {
 
         const val ATTEMPTS = 2
         const val RETRY_MS = 2_000L
+
+        /** How soon news the core missed is offered again; the core can take a minute to start. */
+        const val PENDING_RETRY_MS = 15_000L
     }
 }
