@@ -116,6 +116,7 @@ enum MI {
     static let roundedSettings = "mi-rounded-settings"
     static let roundedShare = "mi-rounded-share"
     static let roundedShortcut = "mi-rounded-shortcut"
+    static let roundedSystemUpdate = "mi-rounded-system-update"
     static let roundedVideocam = "mi-rounded-videocam"
     static let roundedVpnLock = "mi-rounded-vpn-lock"
     static let roundedWarning = "mi-rounded-warning"
