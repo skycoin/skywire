@@ -464,7 +464,8 @@
       "width:34px;height:34px;border-radius:50%;border:1px solid #33404f;background:#1d2632;",
       "color:#dbe6f3;font:16px/1 system-ui,sans-serif;cursor:pointer;opacity:.55;",
       "transition:opacity .15s}",
-      "#skywire-tour-launch:hover{opacity:1}"
+      "#skywire-tour-launch:hover{opacity:1}",
+      "@media (max-width:767.98px){#skywire-tour-launch{width:40px;height:40px}}"
     ].join("");
     var el = doc.createElement("style");
     el.id = "skywire-tour-css";

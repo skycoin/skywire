@@ -13,6 +13,12 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 // Column widths shared by the main local-section table AND the

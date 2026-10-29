@@ -219,6 +219,7 @@ $responsive-table-colors: (
 
   .title {
     margin-right: auto;
+    min-width: 0;
     font-size: $font-size-base;
     font-weight: bold;
 

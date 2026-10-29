@@ -70,3 +70,11 @@ tr.pending td {
     font-weight: bold;
   }
 }
+
+@media (max-width: 767.98px) {
+  td a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}

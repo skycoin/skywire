@@ -610,7 +610,7 @@
                           <span class="stale-caption">&nbsp;({{ lastSeenText(node) }})</span>
                         }
                       </div>
-                      @if (node.ip || node.publicIp) {
+                      @if (!compact && (node.ip || node.publicIp)) {
                         <div class="list-row">
                           <span class="title">{{ 'nodes.ip' | translate }}</span>:
                           @if (node.ip) {
@@ -634,17 +634,19 @@
                             }{{ node.countryCode }}
                           </div>
                         }
-                        <div class="list-row long-content">
-                          <span class="title">{{ 'nodes.key' | translate }}</span>:
-                          {{ node.localPk }}
-                        </div>
+                        @if (!compact) {
+                          <div class="list-row long-content">
+                            <span class="title">{{ 'nodes.key' | translate }}</span>:
+                            {{ node.localPk }}
+                          </div>
+                        }
                         @if (node.version) {
                           <div class="list-row">
                             <span class="title">{{ 'nodes.version' | translate }}</span>:
                             {{ node.version }}
                           </div>
                         }
-                        @if (node.configVersion) {
+                        @if (!compact && node.configVersion) {
                           <div class="list-row">
                             <span class="title">{{ 'nodes.config-version' | translate }}</span>:
                             {{ node.configVersion }}
