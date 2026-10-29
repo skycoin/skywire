@@ -62,6 +62,9 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   helpLoading = false;
   helpError = '';
   helpText = '';
+  // The generated flags form, collapsed by default. It edits the args field.
+  showFlagsForm = false;
+  flagsValid = true;
 
   private subs: Subscription[] = [];
 
@@ -124,6 +127,8 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     this.buildForm();
     // Different app — reset help state.
     this.showHelp = false;
+    this.showFlagsForm = false;
+    this.flagsValid = true;
     this.helpText = '';
     this.helpError = '';
   }
@@ -200,6 +205,18 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
       this.subs.push(sub);
       this.changeDetectorRef.markForCheck();
     });
+  }
+
+  toggleFlagsForm() {
+    this.showFlagsForm = !this.showFlagsForm;
+    // The raw args field is not checked, so a closed form does not block saving.
+    if (!this.showFlagsForm) {
+      this.flagsValid = true;
+    }
+  }
+
+  onFlagArgs(args: string) {
+    this.form.get('args')!.setValue(args);
   }
 
   cancel() {

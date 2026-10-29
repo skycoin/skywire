@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"sort"
 	"testing"
+
+	"github.com/spf13/pflag"
 )
 
 // TestHTTPHandlerRegistry covers the in-process HTTP-handler registry that
@@ -95,5 +97,23 @@ func TestAppMetadata(t *testing.T) {
 	}
 	if _, ok := AppMetadata("no-such-app"); ok {
 		t.Error("unknown app has metadata")
+	}
+}
+
+func TestAppFlagsRegistry(t *testing.T) {
+	fs := pflag.NewFlagSet("flags-test", pflag.ContinueOnError)
+	fs.String("b", "", "")
+	fs.Bool("a", false, "")
+	RegisterAppFlags("flags-test", fs)
+
+	var names []string
+	if !VisitAppFlags("flags-test", func(f *pflag.Flag) { names = append(names, f.Name) }) {
+		t.Fatal("registered flag set not found")
+	}
+	if len(names) != 2 || names[0] != "a" || names[1] != "b" {
+		t.Errorf("flags = %v, want [a b]", names)
+	}
+	if VisitAppFlags("no-such-app", func(*pflag.Flag) {}) {
+		t.Error("unregistered app reported a flag set")
 	}
 }

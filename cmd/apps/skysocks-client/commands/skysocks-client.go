@@ -160,6 +160,7 @@ func (c *clientConfig) parseArgs(args []string) error {
 
 func init() {
 	launcher.RegisterApp("skysocks-client", RunSkysocksClient)
+	launcher.RegisterAppFlags("skysocks-client", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&addr, "addr", skyenv.SkysocksClientAddr, "Client address to listen on")
 	RootCmd.Flags().StringVar(&serverPK, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&httpAddr, "http", "", "http proxy mode")

@@ -523,7 +523,24 @@
     "internal-unavailable": "Internal mode is not available for this app — only the seven shipped in-process apps (skysocks, skysocks-client, vpn-client, vpn-server, skychat, skynet, skynet-client) can run inside the visor process. Embedded subcommands like skycoin-daemon / skycoin-web run as external children regardless.",
     "autostart": "Autostart on visor boot",
     "saved": "Settings saved (restart the app for changes to take effect)",
-    "last-error": "Last error"
+    "last-error": "Last error",
+    "show-flags-form": "Edit flags",
+    "flags-invalid": "Fix the flagged values before saving"
+  },
+  "app-flags": {
+    "loading": "Loading flags…",
+    "none": "This app reports no flags.",
+    "reset": "Reset to default",
+    "default": "Default",
+    "empty": "empty",
+    "on": "On",
+    "off": "Off",
+    "list-placeholder": "Comma separated values",
+    "type-bool": "on / off",
+    "type-string": "text",
+    "type-int": "number",
+    "type-duration": "duration, like 10s or 5m",
+    "type-stringList": "list"
   },
   "skysocks-tab": {
     "select-server": {

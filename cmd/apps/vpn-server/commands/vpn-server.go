@@ -41,6 +41,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("vpn-server", RunVPNServer)
+	launcher.RegisterAppFlags("vpn-server", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")
 	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")

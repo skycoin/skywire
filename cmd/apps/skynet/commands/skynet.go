@@ -34,6 +34,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("skynet", RunSkynet)
+	launcher.RegisterAppFlags("skynet", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&localPorts, "ports", "", "comma-separated list of local ports to expose (e.g., '8080,9000')")
 	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (not currently supported)")
 	RootCmd.Flags().StringVar(&rpcAddr, "rpc", "localhost:3435", "visor RPC address")

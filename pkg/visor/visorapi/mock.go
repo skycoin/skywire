@@ -593,6 +593,9 @@ func (*mockRPCClient) SetAppEnvFull(string, []string) error { return nil }
 // SetAppLauncherMode implements API.
 func (*mockRPCClient) SetAppLauncherMode(string, string) error { return nil }
 
+// AppFlags implements API.
+func (*mockRPCClient) AppFlags(string) (AppFlags, error) { return AppFlags{}, nil }
+
 // AppHelp implements API.
 func (*mockRPCClient) AppHelp(string) (string, error) { return "", nil }
 

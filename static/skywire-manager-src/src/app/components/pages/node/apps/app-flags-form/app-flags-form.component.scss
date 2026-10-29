@@ -1,0 +1,102 @@
+.flags-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.flag-row {
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+
+  &.flag-set { border-left: 2px solid rgba(0, 212, 255, 0.6); }
+}
+
+.flag-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.flag-name {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.88em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.flag-type {
+  font-size: 0.75em;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: lowercase;
+}
+
+.flag-reset {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.78em;
+  padding: 2px 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+
+  &:hover { color: rgba(255, 255, 255, 0.95); border-color: rgba(255, 255, 255, 0.3); }
+}
+
+.flag-input input[type="text"],
+.flag-input input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: rgba(255, 255, 255, 0.95);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.86em;
+  outline: none;
+
+  &:focus { border-color: rgba(0, 212, 255, 0.6); }
+}
+
+.flag-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86em;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+
+  input[type="checkbox"] { accent-color: #00d4ff; }
+}
+
+.flag-error {
+  margin-top: 3px;
+  font-size: 0.8em;
+  color: rgba(248, 113, 113, 0.95);
+}
+
+.flag-usage {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.flag-default {
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.flags-status { color: rgba(255, 255, 255, 0.85); }
+.flags-error-text { color: rgba(248, 113, 113, 0.95); }
+.small { font-size: 0.82em; }
+.mono { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }

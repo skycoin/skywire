@@ -57,6 +57,7 @@ import { WalletComponent } from './components/pages/node/wallet/wallet.component
 import { WalletPageComponent } from './wallet/wallet-page.component';
 import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
 import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
+import { AppFlagsFormComponent } from './components/pages/node/apps/app-flags-form/app-flags-form.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { MailComponent } from './components/pages/node/mail/mail.component';
 import { ContactsComponent } from './components/pages/node/contacts/contacts.component';
@@ -126,6 +127,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         WalletComponent,
         WalletPageComponent,
         AppSettingsComponent,
+        AppFlagsFormComponent,
         WebProxyComponent,
         MailComponent,
         ContactsComponent,

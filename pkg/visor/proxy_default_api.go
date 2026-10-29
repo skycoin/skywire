@@ -363,6 +363,10 @@ func (proxyDefaultAPI) AppHelp(_ string) (string, error) {
 	return "", ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) AppFlags(_ string) (visorapi.AppFlags, error) {
+	return visorapi.AppFlags{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) LogsSince(_ time.Time, _ string) ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
