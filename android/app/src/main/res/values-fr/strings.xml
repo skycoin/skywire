@@ -1113,6 +1113,11 @@
     <string name="settings_update_retry">Réessayer</string>
     <string name="settings_update_notes">Ce qui a changé</string>
     <string name="settings_update_fdroid">Les mises à jour de cette version viennent de F-Droid.</string>
+    <string name="update_notice_title">Mise à jour disponible</string>
+    <string name="update_notice_body">Skywire %1$s est disponible. Vous avez la %2$s.</string>
+    <string name="update_notice_body_store">Skywire %1$s est disponible sur %2$s. Vous avez la %3$s.</string>
+    <string name="update_notice_update">Mettre à jour</string>
+    <string name="update_notice_later">Plus tard</string>
     <string name="settings_battery">Batterie</string>
     <string name="settings_battery_hint">Skywire continue de tourner en arrière-plan, mais Android peut quand même suspendre son réseau une fois l’écran éteint depuis un moment — messages et appels arrivent alors au prochain réveil du téléphone plutôt qu’au moment de leur envoi. Autoriser Skywire à ignorer l’optimisation de batterie ferme cet écart. Cela coûte de la batterie, et l’application fonctionne dans les deux cas.</string>
     <string name="settings_battery_exempt_hint">Skywire est autorisé à ignorer l’optimisation de batterie, donc ses connexions restent debout écran éteint. Les réglages de batterie d’Android peuvent reprendre cela à tout moment.</string>

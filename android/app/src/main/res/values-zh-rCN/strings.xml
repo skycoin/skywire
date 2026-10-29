@@ -1022,6 +1022,11 @@
     <string name="settings_update_retry">重试</string>
     <string name="settings_update_notes">更新内容</string>
     <string name="settings_update_fdroid">此版本的更新由 F-Droid 提供。</string>
+    <string name="update_notice_title">有可用更新</string>
+    <string name="update_notice_body">Skywire %1$s 已发布，当前版本为 %2$s。</string>
+    <string name="update_notice_body_store">Skywire %1$s 已在 %2$s 上发布，当前版本为 %3$s。</string>
+    <string name="update_notice_update">更新</string>
+    <string name="update_notice_later">稍后</string>
     <string name="settings_battery">电池</string>
     <string name="settings_battery_hint">Skywire 会在后台持续运行，但屏幕熄灭一段时间后，Android 仍可能暂停它的网络——消息和通话会等到手机下次唤醒时才到达，而不是在发出时到达。允许 Skywire 忽略电池优化可以消除这段延迟。这会更耗电；不允许也一样能用。</string>
     <string name="settings_battery_exempt_hint">Skywire 已获准忽略电池优化，因此屏幕熄灭时连接仍会保持。Android 的电池设置随时可能收回这项权限。</string>
