@@ -13,9 +13,17 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 )
 
-func keepICEInterface(name string) bool { return !netutil.IsVirtualInterface(name) }
+// keepICEInterface and keepICEIP apply the virtual interface filter and the
+// advertise policy, so ICE offers what the address resolver is told.
+func keepICEInterface(name string) bool {
+	pol := netutil.AdvertisePolicy()
+	if netutil.IsVirtualInterface(name) && !pol.AllowsNamed(name) {
+		return false
+	}
+	return !pol.DeniesInterface(name)
+}
 
-func keepICEIP(ip net.IP) bool { return netutil.IsAdvertisableIP(ip) }
+func keepICEIP(ip net.IP) bool { return netutil.IsAdvertisableIP(ip) && netutil.PolicyPermitsIP(ip) }
 
 // iceLocalIPs lists the addresses a shared mux binds, as a stable key.
 func iceLocalIPs() string {

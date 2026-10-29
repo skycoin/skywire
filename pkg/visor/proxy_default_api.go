@@ -1171,6 +1171,10 @@ func (proxyDefaultAPI) NetworkMoved(_ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) NetworkSet(_ visorapi.NetworkSettings) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) DmsgSetMinSessions(_ int) error {
 	return ErrProxyNotSupported
 }
