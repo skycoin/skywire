@@ -197,11 +197,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No setup-go cache. The step below restores GOCACHE, and -mod=vendor
+      # never reads the module cache.
       - uses: actions/setup-go@v7
         with:
           go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
       # packages return cached test results on incremental pushes (see linux job).
@@ -210,8 +211,8 @@ jobs:
         shell: pwsh
         run: echo "dir=$(go env GOCACHE)" >> $env:GITHUB_OUTPUT
 
-      - name: Cache Go build/test cache
-        uses: actions/cache@v4
+      - name: Restore Go build/test cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.gocache.outputs.dir }}
           key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
@@ -219,9 +220,13 @@ jobs:
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
 
+      # The lint make lint-windows runs, so the make step below only tests.
       - uses: golangci/golangci-lint-action@v9
+        env:
+          CGO_ENABLED: '0'
         with:
           version: latest
+          args: -c .golangci.yml --build-tags=withoutsystray,withoutgotop
 
       - name: Install Requirements
         shell: pwsh
@@ -229,12 +234,21 @@ jobs:
 
       # if: always() so a lint failure above can never prevent the test suite
       # from running and reporting (#4326).
-      - name: Checking (lint + test)
+      - name: Run tests
         if: always()
         run: |
           $env:GO111MODULE='on'
-          make check-windows
+          make test-windows
         shell: powershell
+
+      # Only develop pushes save the cache. Uploading it took 7 min on every
+      # PR run, and PRs restore develop's copy.
+      - name: Save Go build/test cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
 
   # Native (no-Docker) client-side e2e on macOS: runs a small skywire deployment
   # + two visors as host processes on 127.0.0.1 and exercises the CLIENT runtime

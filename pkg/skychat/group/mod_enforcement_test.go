@@ -153,8 +153,11 @@ func TestUnbanDoesNotReadmit(t *testing.T) {
 	s.cfg.Record.Members = append(s.cfg.Record.Members, victim)
 
 	gid := s.cfg.Record.ID
-	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, time.Now().UTC()))
-	s.applyModLeaf(signedMod(t, gid, ModOpUnban, victim, adminSK, time.Now().UTC()))
+	// Windows can read the same clock value twice, and an unban no newer
+	// than the ban is rejected as a replay.
+	banAt := time.Now().UTC()
+	s.applyModLeaf(signedMod(t, gid, ModOpBan, victim, adminSK, banAt))
+	s.applyModLeaf(signedMod(t, gid, ModOpUnban, victim, adminSK, banAt.Add(time.Second)))
 
 	if s.cfg.Record.IsBanned(victim) {
 		t.Fatal("unban did not lift the ban")
