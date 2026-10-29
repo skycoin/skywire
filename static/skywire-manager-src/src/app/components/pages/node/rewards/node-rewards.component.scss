@@ -1,26 +1,26 @@
 .title {
   font-size: 1.1em;
   font-weight: bold;
-  color: #f8f9f9;
+  color: var(--sw-text);
 }
 
 .label-text {
   font-size: 0.9em;
-  color: #aaa;
+  color: var(--sw-text-muted);
 }
 
 .active-days {
-  color: #4caf50 !important;
+  color: rgb(var(--sw-green-rgb)) !important;
   font-weight: bold;
 }
 
 .total-row {
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.1);
 }
 
 .error-msg {
-  color: #f44336;
+  color: rgb(var(--sw-red-alt-rgb));
   text-align: center;
 }
 
@@ -30,26 +30,26 @@
   font-size: 0.8em;
 
   &.sent {
-    background: rgba(76, 175, 80, 0.2);
-    color: #4caf50;
+    background: rgba(var(--sw-green-rgb), 0.2);
+    color: rgb(var(--sw-green-rgb));
   }
 
   &.pending {
-    background: rgba(255, 193, 7, 0.2);
-    color: #ffc107;
+    background: rgba(var(--sw-gold-rgb), 0.2);
+    color: rgb(var(--sw-gold-rgb));
   }
 
   &.no-reward {
-    color: #666;
+    color: rgba(var(--sw-fg-rgb), var(--sw-a45));
   }
 }
 
 tr.sent td {
-  border-left: 2px solid rgba(76, 175, 80, 0.3);
+  border-left: 2px solid rgba(var(--sw-green-rgb), 0.3);
 }
 
 tr.pending td {
-  border-left: 2px solid rgba(255, 193, 7, 0.3);
+  border-left: 2px solid rgba(var(--sw-gold-rgb), 0.3);
 }
 
 .exposure-warning {
@@ -58,14 +58,14 @@ tr.pending td {
   gap: 6px;
   margin: 8px 0;
   padding: 8px 10px;
-  border-left: 4px solid #f44336;
+  border-left: 4px solid rgb(var(--sw-red-alt-rgb));
   border-radius: 4px;
-  background: rgba(244, 67, 54, 0.12);
-  color: #ff8a80;
+  background: rgba(var(--sw-red-alt-rgb), 0.12);
+  color: rgb(var(--sw-rose-rgb));
 
   &.has-balance {
     border-left-width: 6px;
-    background: rgba(244, 67, 54, 0.28);
+    background: rgba(var(--sw-red-alt-rgb), 0.28);
     color: #ffffff;
     font-weight: bold;
   }

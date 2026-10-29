@@ -8,6 +8,7 @@
 @import "bootstrap/scss/functions";
 
 @import "assets/scss/variables";
+@import "assets/scss/tokens";
 @import "assets/scss/utilities/utilities";
 
 // Skywire bootstrap overrides (before Bootstrap variables)
@@ -50,7 +51,7 @@ html, body {
   min-height: 100%;
   font-family: $skywire-font-family;
   margin:0;
-  color: map.get($theme-colors, white) !important;
+  color: var(--sw-text) !important;
   font-size: $font-size-base;
   backface-visibility: hidden
 }
@@ -78,49 +79,32 @@ button:focus {
   display: flex;
 }
 
-// Global text-color fix for matInput / textarea on the dark hvui
-// theme. Material 21's default outline-appearance picks the
-// theme's foreground color, which renders as near-black on this
-// theme — so user-typed text is invisible against the dark surface
-// until you focus + start typing again. Force a readable tone
-// everywhere; component-scoped overrides aren't enough for ::ng-deep
-// reasons. (Mirrors the existing global mat-mdc-select-value fix
-// further down.)
+// Field colors come from the theme tokens. Dialogs rescope the tokens, so the
+// same rules read correctly on the light dialog surface.
 .mat-mdc-form-field input.mat-mdc-input-element,
 .mat-mdc-form-field textarea.mat-mdc-input-element {
-  color: rgba(255, 255, 255, 0.92) !important;
-  caret-color: rgba(255, 255, 255, 0.92) !important;
+  color: var(--sw-input-text) !important;
+  caret-color: var(--sw-input-text) !important;
 }
 .mat-mdc-form-field input.mat-mdc-input-element::placeholder,
 .mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
-  // Was 0.45 then 0.6 — placeholder hints (e.g. "127.0.0.1:1080") still read
-  // as too dark. 0.72 keeps them subordinate to entered text yet legible.
-  color: rgba(255, 255, 255, 0.72) !important;
+  color: var(--sw-input-placeholder) !important;
 }
-// Checkbox / radio / slide-toggle label text — Material's default tone is too
-// dark on this app's dark surfaces (e.g. the Web Proxy "Enable resolving
-// proxy" label). Make it clearly legible everywhere.
 .mdc-form-field > label,
 .mat-mdc-checkbox label,
 .mat-mdc-checkbox .mdc-label,
 .mat-mdc-radio-button label,
 .mat-mdc-slide-toggle label {
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: var(--sw-input-text) !important;
 }
-// Outline / floating label tone — legible but subordinate to entered text.
-// !important: Material 21's outlined-appearance label pulls its color from a
-// CSS custom property that outranks this rule otherwise, leaving mat-labels
-// (e.g. the Network page filters) near-black and unreadable on this dark theme.
-// The only focused-label override (skychat) is itself !important + more
-// specific, so it still wins.
 .mat-mdc-form-field .mdc-floating-label,
 .mat-mdc-form-field .mat-mdc-floating-label {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--sw-input-label) !important;
 }
 .mat-mdc-form-field .mdc-notched-outline__leading,
 .mat-mdc-form-field .mdc-notched-outline__notch,
 .mat-mdc-form-field .mdc-notched-outline__trailing {
-  border-color: rgba(255, 255, 255, 0.25) !important;
+  border-color: var(--sw-input-outline) !important;
 }
 
 .mdc-text-field--filled {
@@ -142,7 +126,7 @@ button:focus {
         margin: 0px;
         font-size: $font-size-mini;
         margin-bottom: 5px;
-        opacity: 0.55;
+        opacity: max(0.55, var(--sw-dim));
       }
     }
 
@@ -178,57 +162,37 @@ button:focus {
   }
 }
 
-// Material 21 mat-select on the dark node-detail panes:
-//   - Closed trigger (.mat-mdc-select-min-line / -value) inherits
-//     a dark color that matches the dark page bg → unreadable.
-//   - Open panel (.mat-mdc-select-panel) has the same problem on
-//     options (.mdc-list-item__primary-text), with a transparent
-//     surface that also reads dark.
-//
-// Match the rest of the page (dark surface, light text) for both
-// surfaces. Closed trigger fix is global because it's a page-wide
-// problem; panel fix is opt-in via panelClass="skynet-select-panel".
 
-// Closed trigger value text — applies anywhere the select is on a dark
-// surface in this app.
 .mat-mdc-select-value,
 .mat-mdc-select-min-line,
 .mat-mdc-select-placeholder,
 .mat-mdc-select-arrow {
-  color: rgba(255, 255, 255, 0.87) !important;
+  color: var(--sw-input-text) !important;
 }
 
-// Open panel — opt-in via panelClass since it renders in a CDK overlay
-// outside the component tree.
+// Panels opt in to the themed menu surface with panelClass="skynet-select-panel".
 .cdk-overlay-pane .skynet-select-panel.mdc-menu-surface,
 .cdk-overlay-pane .skynet-select-panel.mat-mdc-select-panel,
 .mat-mdc-select-panel.skynet-select-panel {
-  background-color: #1f2533 !important;
+  background-color: var(--sw-menu-bg) !important;
 
-  --mat-app-surface: #1f2533;
-  --mdc-theme-surface: #1f2533;
-  --mat-mdc-select-panel-background-color: #1f2533;
-  --mdc-list-list-item-label-text-color: rgba(255, 255, 255, 0.87);
-  --mdc-list-list-item-hover-label-text-color: #ffffff;
-  --mdc-list-list-item-focus-label-text-color: #ffffff;
-  --mdc-list-list-item-hover-state-layer-color: rgba(255, 255, 255, 0.08);
-  --mdc-list-list-item-focus-state-layer-color: rgba(255, 255, 255, 0.12);
-  --mat-option-label-text-color: rgba(255, 255, 255, 0.87);
-  --mat-option-selected-state-label-text-color: #ffffff;
+  --mat-select-panel-background-color: var(--sw-menu-bg);
+  --mat-option-label-text-color: rgba(var(--sw-fg-rgb), 0.87);
+  --mat-option-selected-state-label-text-color: var(--sw-text);
+  --mat-option-hover-state-layer-color: rgba(var(--sw-fg-rgb), 0.08);
+  --mat-option-focus-state-layer-color: rgba(var(--sw-fg-rgb), 0.12);
 
-  // Belt-and-braces: override rendered styles directly in case
-  // the custom-property channel gets stripped by a future upgrade.
   .mat-mdc-option,
   .mat-mdc-option .mdc-list-item__primary-text,
   .mdc-list-item__primary-text {
-    color: rgba(255, 255, 255, 0.87) !important;
+    color: rgba(var(--sw-fg-rgb), 0.87) !important;
   }
 
   .mat-mdc-option:hover:not(.mdc-list-item--disabled),
   .mat-mdc-option.mat-mdc-option-active,
   .mat-mdc-option.mdc-list-item--selected {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    color: #ffffff !important;
+    background-color: rgba(var(--sw-fg-rgb), 0.08) !important;
+    color: var(--sw-text) !important;
   }
 }
 
@@ -246,7 +210,7 @@ button:focus {
 }
 
 .transparent-50 {
-  opacity: 0.5;
+  opacity: var(--sw-dim);
 }
 
 .flag-container {
@@ -309,7 +273,7 @@ button:focus {
 }
 
 .mat-mdc-button:not(:disabled) {
-  color: $black;
+  color: var(--sw-text);
 }
 
 .mat-accent {

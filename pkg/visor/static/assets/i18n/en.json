@@ -987,6 +987,12 @@
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
+    "theme": {
+      "label": "Theme",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
     "visor-switcher-row": {
       "label": "Show the visor switcher as a full row of tabs",
       "info": "Off (default): the per-visor switcher is a compact dropdown, keeping the navigation clean. On: it's shown as a full second row of tabs for switching between individual visor pages."
@@ -1575,6 +1581,12 @@
     "no-results": "Nothing matches.",
     "footer": "Up and down to move, Enter to open, Esc to close. Type a visor name and a tab to open that tab.",
     "restart-confirmation": "Restart {{ name }}? It reconnects after a short while.",
+    "theme": {
+      "system": "Theme: follow the system",
+      "light": "Theme: light",
+      "dark": "Theme: dark",
+      "current": "Current"
+    },
     "groups": {
       "visors": "Visors",
       "pages": "Pages",

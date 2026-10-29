@@ -6,16 +6,16 @@
   max-height: 420px;
   overflow-y: auto;
   padding-right: 4px;
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  scrollbar-color: rgba(var(--sw-fg-rgb), 0.25) transparent;
 }
 
 .flag-row {
   padding: 7px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(var(--sw-shade-rgb), 0.25);
 
-  &.flag-set { border-left: 2px solid rgba(0, 212, 255, 0.6); }
+  &.flag-set { border-left: 2px solid rgba(var(--sw-cyan-rgb), 0.6); }
 }
 
 .flag-head {
@@ -28,21 +28,21 @@
 .flag-name {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.88em;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--sw-fg-rgb), 0.95);
 }
 
 .flag-type {
   font-size: 0.75em;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
   text-transform: lowercase;
 }
 
 .flag-reset {
   margin-left: auto;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--sw-fg-rgb), 0.05);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.15);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(var(--sw-fg-rgb), 0.8);
   font-size: 0.78em;
   padding: 2px 7px;
   cursor: pointer;
@@ -50,31 +50,31 @@
   align-items: center;
   gap: 3px;
 
-  &:hover { color: rgba(255, 255, 255, 0.95); border-color: rgba(255, 255, 255, 0.3); }
+  &:hover { color: rgba(var(--sw-fg-rgb), 0.95); border-color: rgba(var(--sw-fg-rgb), 0.3); }
 }
 
 .flag-input input[type="text"],
 .flag-input input[type="number"] {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(var(--sw-shade-rgb), 0.3);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.15);
   border-radius: 4px;
   padding: 6px 8px;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--sw-fg-rgb), 0.95);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.86em;
   outline: none;
 
-  &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  &:focus { border-color: rgba(var(--sw-cyan-rgb), 0.6); }
 }
 
 .flag-pick {
   margin-top: 5px;
-  background: rgba(0, 212, 255, 0.12);
-  border: 1px solid rgba(0, 212, 255, 0.45);
+  background: rgba(var(--sw-cyan-rgb), 0.12);
+  border: 1px solid rgba(var(--sw-cyan-rgb), 0.45);
   border-radius: 4px;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--sw-fg-rgb), 0.95);
   font-size: 0.8em;
   padding: 3px 9px;
   cursor: pointer;
@@ -82,7 +82,7 @@
   align-items: center;
   gap: 4px;
 
-  &:hover { background: rgba(0, 212, 255, 0.22); }
+  &:hover { background: rgba(var(--sw-cyan-rgb), 0.22); }
 }
 
 .flag-check {
@@ -90,29 +90,29 @@
   align-items: center;
   gap: 6px;
   font-size: 0.86em;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
   cursor: pointer;
 
-  input[type="checkbox"] { accent-color: #00d4ff; }
+  input[type="checkbox"] { accent-color: rgb(var(--sw-cyan-rgb)); }
 }
 
 .flag-error {
   margin-top: 3px;
   font-size: 0.8em;
-  color: rgba(248, 113, 113, 0.95);
+  color: rgba(var(--sw-err-rgb), 0.95);
 }
 
 .flag-usage {
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(var(--sw-fg-rgb), 0.78);
 }
 
 .flag-default {
   margin-left: 6px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
 }
 
-.flags-status { color: rgba(255, 255, 255, 0.85); }
-.flags-error-text { color: rgba(248, 113, 113, 0.95); }
+.flags-status { color: rgba(var(--sw-fg-rgb), 0.85); }
+.flags-error-text { color: rgba(var(--sw-err-rgb), 0.95); }
 .small { font-size: 0.82em; }
 .mono { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }

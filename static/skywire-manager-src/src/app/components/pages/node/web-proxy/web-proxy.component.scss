@@ -1,4 +1,4 @@
-.dim { color: rgba(255, 255, 255, 0.85); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.85); }
 .small { font-size: 0.85em; }
 .mono { font-family: monospace; word-break: break-all; }
 
@@ -16,8 +16,8 @@
   margin-bottom: 16px;
 
   td.mono { font-size: 11px; }
-  .wp-ok { color: #4caf50; }
-  .wp-off { color: rgba(255, 255, 255, 0.85); }
+  .wp-ok { color: rgb(var(--sw-green-rgb)); }
+  .wp-off { color: rgba(var(--sw-fg-rgb), 0.85); }
 }
 
 .wp-controls {
@@ -36,7 +36,7 @@
   .wp-upstream-field { flex: 1 1 320px; min-width: 220px; }
 
   .wp-refresh {
-    color: rgba(255, 255, 255, 0.85) !important;
+    color: rgba(var(--sw-fg-rgb), 0.85) !important;
     .mat-icon { color: inherit; }
   }
 }

@@ -24,29 +24,29 @@ span {
 }
 
 .green-text {
-  color: variables.$green;
+  color: var(--sw-green);
 }
 
 .green-clear-text {
-  color: variables.$green-clear;
+  color: var(--sw-green-clear);
 }
 
 .yellow-text {
-  color: variables.$yellow;
+  color: var(--sw-yellow);
 }
 
 .yellow-clear-text {
-  color: variables.$yellow-clear;
+  color: var(--sw-yellow-clear);
 }
 
 .red-text {
-  color: variables.$red;
+  color: var(--sw-red);
 }
 
 .red-clear-text {
-  color: variables.$red-clear;
+  color: var(--sw-red-clear);
 }
 
 .grey-text {
-  color: variables.$light-gray !important;
+  color: var(--sw-grey) !important;
 }

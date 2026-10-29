@@ -3,13 +3,13 @@
 @use "bootstrap_overrides";
 
 .time-button {
-  color: variables.$white;
+  color: var(--sw-text);
   border-radius: variables.$mat-dialog-radius;
   height: variables.$header-buttons-height;
 
   &[disabled] {
     opacity: 0.7 !important;
-    color: variables.$white;
+    color: var(--sw-text);
 
     span {
       // In combination with the previous opacity value, this makes the text even more transparent.
