@@ -124,4 +124,16 @@ describe('NodeService', () => {
       });
     });
   });
+
+  describe('nodesTreeFromResponse', () => {
+    it('keeps each visor\'s apps for the apps column and filter', () => {
+      const storage = { getLabelInfo: () => null, getDefaultLabel: () => 'x' };
+      const svc = new NodeService(apiService, storage as any);
+      const sections = svc.nodesTreeFromResponse({ sections: [{ hypervisor_pk: 'h', visors: [{
+        online: true,
+        overview: { local_pk: 'a', apps: [{ name: 'skysocks', status: 1, auto_start: true }] },
+      }] }] });
+      expect(sections[0].nodes[0].apps.map(a => [a.name, a.status, a.autostart])).toEqual([['skysocks', 1, true]]);
+    });
+  });
 });

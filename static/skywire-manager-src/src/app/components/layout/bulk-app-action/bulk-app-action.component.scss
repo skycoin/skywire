@@ -1,0 +1,66 @@
+@use 'variables';
+
+// The dialog surface is light, so text uses the dark blue of the other dialogs.
+.note {
+  font-size: 14px;
+  margin: 6px 0;
+  color: variables.$blue-medium;
+}
+
+.desc {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.start-after {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.rows {
+  font-size: 14px;
+  color: variables.$blue-medium;
+  max-height: 45vh;
+  overflow-y: auto;
+  margin: 8px 0;
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .label {
+    word-break: break-word;
+  }
+
+  .via, .muted {
+    color: #4a5563;
+    font-size: 0.9em;
+  }
+
+  .result {
+    text-align: right;
+    flex-shrink: 0;
+    max-width: 55%;
+    word-break: break-word;
+  }
+}
+
+.buttons {
+  margin-top: 12px;
+  text-align: right;
+}
+
+:host ::ng-deep .start-after .mdc-label {
+  color: variables.$blue-medium !important;
+}
+
+// The global select colors assume a dark surface.
+:host ::ng-deep .app-select {
+  .mat-mdc-select-value, .mat-mdc-select-min-line, .mat-mdc-select-placeholder, .mat-mdc-select-arrow {
+    color: variables.$blue-medium !important;
+  }
+}
