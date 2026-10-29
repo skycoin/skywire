@@ -71,6 +71,16 @@ func (r *RPC) Apps(_ *struct{}, reply *[]*appserver.AppState) (err error) {
 	return err
 }
 
+// AppCatalog lists every app the visor can run, merged with its configured instances.
+func (r *RPC) AppCatalog(_ *struct{}, reply *[]visorapi.CatalogEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "AppCatalog", nil)(reply, &err)
+
+	entries, err := r.visor.AppCatalog()
+	*reply = entries
+
+	return err
+}
+
 // StartApp start App with provided name.
 func (r *RPC) StartApp(in *visorapi.StartAppIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "StartApp", in)(nil, &err)

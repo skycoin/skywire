@@ -302,6 +302,9 @@ func (mc *mockRPCClient) DeleteRewardAddress() error {
 	return nil
 }
 
+// AppCatalog implements API.
+func (*mockRPCClient) AppCatalog() ([]CatalogEntry, error) { return nil, nil }
+
 // Apps implements API.
 func (mc *mockRPCClient) Apps() ([]*appserver.AppState, error) {
 	var apps []*appserver.AppState

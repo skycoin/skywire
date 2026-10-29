@@ -292,6 +292,8 @@ type Proxies interface {
 type Apps interface {
 	App(appName string) (*appserver.AppState, error)
 	Apps() ([]*appserver.AppState, error)
+	// AppCatalog lists every app this visor can run, merged with its configured instances.
+	AppCatalog() ([]CatalogEntry, error)
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
 	// SetAppRoutingPolicy installs (or clears, when path is "" /
