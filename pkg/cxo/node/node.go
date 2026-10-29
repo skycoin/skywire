@@ -101,6 +101,10 @@ type Node struct {
 	// etc.) can be counted distinctly.
 	deadConnsClosed atomic.Uint64
 
+	// fillsActive counts Roots this node is filling. With none, a missing
+	// object can never arrive, so handleRqObject refuses it at once.
+	fillsActive atomic.Int64
+
 	//
 	// rpc
 	//
