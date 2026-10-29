@@ -28,6 +28,7 @@
 @import "assets/scss/backgrounds";
 @import "assets/scss/dialogs";
 @import "assets/scss/vpn_client";
+@import "assets/scss/mobile";
 
 /***************************
 * Bootstrap 5
@@ -203,6 +204,12 @@ button:focus {
 .flex-1
 {
   flex: 1;
+}
+
+// Keys and other long values wrap inside their row instead of widening it.
+app-copy-to-clipboard-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .mat-mdc-snack-bar-container {

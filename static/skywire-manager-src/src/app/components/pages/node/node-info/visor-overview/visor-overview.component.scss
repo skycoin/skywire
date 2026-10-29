@@ -1,7 +1,7 @@
 // A row of small cards, as many per line as fit, styled like the Info cards below.
 .overview {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: 12px;
   margin-top: 16px;
 }
@@ -92,5 +92,13 @@
     }
 
     &.ok { border-left-color: rgb(var(--sw-green-rgb)); color: inherit; }
+  }
+}
+
+@media (max-width: 767.98px) {
+  a.ov-title, a.ov-row {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
   }
 }

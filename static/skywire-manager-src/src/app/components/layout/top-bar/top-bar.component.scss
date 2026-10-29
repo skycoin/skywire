@@ -164,6 +164,11 @@ $top-bar-height: 56px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+
+        // On a phone the tab picker needs the room.
+        @media (max-width: 767.98px) {
+          display: none;
+        }
       }
 
       // Opens the command palette; small so it stays out of the way.
