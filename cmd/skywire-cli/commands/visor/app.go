@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -50,6 +51,7 @@ func init() {
 	RootCmd.AddCommand(appCmd)
 	appCmd.AddCommand(
 		lsAppsCmd,
+		catalogAppCmd,
 		startAppCmd,
 		stopAppCmd,
 		restartAppCmd,
@@ -673,4 +675,40 @@ func ensureDir(path *string) error {
 		return fmt.Errorf("failed to create dir: %s", err)
 	}
 	return nil
+}
+
+var catalogAppCmd = &cobra.Command{
+	Use:   "catalog",
+	Short: "List every app the visor can run",
+	Long:  "\n  List every app the visor can run, with the instances it has configured",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			cmdutil.Exit(1)
+		}
+		entries, err := rpcClient.AppCatalog()
+		internal.Catch(cmd.Flags(), err)
+		internal.PrintOutput(cmd.Flags(), entries, formatAppCatalog(entries))
+	},
+}
+
+// formatAppCatalog renders one row per app, listing each configured
+// instance as name:status, or "-" when none is configured.
+func formatAppCatalog(entries []visorapi.CatalogEntry) string {
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "app\tkind\tinstances\tdescription") //nolint:errcheck
+	for _, e := range entries {
+		inst := "-"
+		if len(e.Instances) > 0 {
+			parts := make([]string, 0, len(e.Instances))
+			for _, i := range e.Instances {
+				parts = append(parts, i.Name+":"+i.Status)
+			}
+			inst = strings.Join(parts, ",")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Kind, inst, e.Description) //nolint:errcheck
+	}
+	w.Flush() //nolint:errcheck,gosec
+	return b.String()
 }

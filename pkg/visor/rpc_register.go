@@ -121,6 +121,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.App(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".AppCatalog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]visorapi.CatalogEntry)
+			return rpcReply, rpcRcvr.AppCatalog(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".AppDirectStreams", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(string)
 		if err := rpcDec.Decode(rpcArg); err != nil {

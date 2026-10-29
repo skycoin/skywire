@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 )
 
@@ -55,5 +56,44 @@ func TestHTTPHandlerRegistry(t *testing.T) {
 	RegisterHTTPHandler(name, nil)
 	if h := GetHTTPHandler(name); h != nil {
 		t.Fatalf("expected handler cleared after nil registration, got %v", h)
+	}
+}
+
+func TestRegisteredAppsSorted(t *testing.T) {
+	RegisterApp("zz-catalog-test", nil)
+	RegisterApp("aa-catalog-test", nil)
+	names := RegisteredApps()
+	if !sort.StringsAreSorted(names) {
+		t.Fatalf("names not sorted: %v", names)
+	}
+	var a, z bool
+	for _, n := range names {
+		a = a || n == "aa-catalog-test"
+		z = z || n == "zz-catalog-test"
+	}
+	if !a || !z {
+		t.Fatalf("registered names missing from %v", names)
+	}
+}
+
+func TestAppMetadata(t *testing.T) {
+	for name, info := range appInfo {
+		switch info.Kind {
+		case KindServer, KindClient, KindService:
+		default:
+			t.Errorf("%s: kind %q", name, info.Kind)
+		}
+		if info.Description == "" {
+			t.Errorf("%s: no description", name)
+		}
+	}
+	if info, ok := AppMetadata("skysocks-client"); !ok || info.Kind != KindClient || !info.MultiInstance {
+		t.Errorf("skysocks-client: %+v %v", info, ok)
+	}
+	if info, ok := AppMetadata("resolver-extra"); !ok || info.Kind != KindService {
+		t.Errorf("resolver-extra: %+v %v", info, ok)
+	}
+	if _, ok := AppMetadata("no-such-app"); ok {
+		t.Error("unknown app has metadata")
 	}
 }

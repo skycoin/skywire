@@ -932,6 +932,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				hv.contactsRoutes(r)
 				r.Get("/visors/{pk}/apps", hv.getApps())
 				r.Post("/visors/{pk}/apps", hv.postApp())
+				r.Get("/visors/{pk}/apps/catalog", hv.getAppCatalog())
 				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
 				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
 				r.Delete("/visors/{pk}/apps/{app}", hv.deleteApp())
