@@ -58,6 +58,14 @@ public final class Gio {
 		ctx.stopService(new Intent(ctx, GioForegroundService.class));
 	}
 
+	static void startNetworkWatch(Context ctx) {
+		GioNetwork.start(ctx);
+	}
+
+	static void stopNetworkWatch(Context ctx) {
+		GioNetwork.stop(ctx);
+	}
+
 	static void writeClipboard(Context ctx, String s) {
 		ClipboardManager m = (ClipboardManager)ctx.getSystemService(Context.CLIPBOARD_SERVICE);
 		m.setPrimaryClip(ClipData.newPlainText(null, s));

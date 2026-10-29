@@ -8,7 +8,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	rpc "github.com/0magnet/gobrpc"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -219,4 +222,23 @@ func TestPostNetworkEndpoint(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, post(`{"event":"bogus"}`).Code)
 	require.Equal(t, http.StatusBadRequest, post(`not json`).Code)
+}
+
+// Over the RPC client a false metered flag arrives as false. gob drops a
+// pointer to false, so without care it arrived as "unknown" and a phone back
+// on Wi-Fi stayed lean.
+func TestNetworkEventOverRPC(t *testing.T) {
+	fastNetMove(t)
+	v, _ := meterVisor(t)
+	v.netMove.refresh = func(string) {}
+	srv := rpc.NewServer()
+	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logrus.New()}))
+	sc, cc := net.Pipe()
+	go srv.ServeConn(sc)
+	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
+
+	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: boolp(true), Source: "android"}))
+	require.Equal(t, visorapi.ModeLean, v.NetworkState().Mode)
+	require.NoError(t, api.NetworkEvent(visorapi.NetworkEvent{Event: "moved", Metered: boolp(false), Source: "android"}))
+	require.Equal(t, visorapi.ModeNormal, v.NetworkState().Mode)
 }
