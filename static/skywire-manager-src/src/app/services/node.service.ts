@@ -448,6 +448,19 @@ return {
         });
       }
 
+      // Apps, for the services and apps columns and the running app filter.
+      node.apps = ((response.overview && response.overview.apps) || []).map((app: any) => {
+        return {
+          name: app.name,
+          autostart: app.auto_start,
+          port: app.port,
+          status: app.status,
+          detailedStatus: app.detailed_status,
+          args: app.args,
+          otp: app.otp,
+        };
+      });
+
       out.push(node);
     });
 

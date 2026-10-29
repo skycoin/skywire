@@ -1,0 +1,65 @@
+<app-dialog [headline]="headline | translate" [dialog]="dialogRef" [disableDismiss]="started && !finished">
+  @if (loadingCatalog) {
+    <div class="note blinking">{{ 'nodes.bulk-apps.loading-catalog' | translate }}</div>
+  }
+  @if (catalogError) {
+    <div class="note">{{ catalogError | translate }}</div>
+  }
+  @if (appOptions.length > 0) {
+    <mat-form-field>
+      <div class="field-container">
+        <label class="field-label">{{ 'nodes.bulk-apps.app' | translate }}</label>
+        <mat-select class="app-select" [value]="app" (selectionChange)="app = $event.value" [disabled]="started">
+          @for (name of appOptions; track name) {
+            <mat-option [value]="name">{{ name }}@if (descriptions.get(name)) { <span class="desc"> &middot; {{ descriptions.get(name) }}</span> }</mat-option>
+          }
+        </mat-select>
+      </div>
+    </mat-form-field>
+  }
+  @if (data.mode === 'add') {
+    <mat-checkbox class="start-after" color="primary" [checked]="startAfterAdd" [disabled]="started" (change)="startAfterAdd = $event.checked">
+      {{ 'nodes.bulk-apps.start-after-add' | translate }}
+    </mat-checkbox>
+  }
+
+  <div class="rows">
+    @for (row of rows; track row.node.key) {
+      <div class="result-row" [attr.data-pk]="row.node.key" [attr.data-state]="row.state">
+        <span class="label">
+          {{ row.node.label }}
+          @if (row.node.viaSubHypervisor) {
+            <span class="via">({{ 'nodes.bulk-apps.via-sub' | translate }})</span>
+          }
+        </span>
+        <span class="result" [class.green-text]="row.state === 'ok'" [class.red-text]="row.state === 'failed'">
+          @if (row.state === 'ok') {
+            {{ 'nodes.bulk-apps.ok' | translate }}
+          } @else if (row.state === 'failed' || row.state === 'skipped') {
+            {{ row.message | translate }}
+          } @else if (started) {
+            <span [class.blinking]="row.state === 'working'">{{ 'nodes.bulk-apps.' + row.state | translate }}</span>
+          } @else if (app && skipReason(row.node)) {
+            <span class="muted">{{ skipReason(row.node) | translate }}</span>
+          }
+        </span>
+      </div>
+    }
+  </div>
+
+  @if (finished) {
+    <div class="note summary">{{ 'nodes.bulk-apps.summary' | translate: counts }}</div>
+  }
+
+  <div class="buttons">
+    @if (!started) {
+      <button mat-raised-button color="primary" class="run-button" [disabled]="!app" (click)="run()">
+        {{ 'nodes.bulk-apps.run' | translate: { n: rows.length } }}
+      </button>
+    } @else {
+      <button mat-raised-button color="primary" class="close-button" [disabled]="!finished" (click)="close()">
+        {{ 'common.close' | translate }}
+      </button>
+    }
+  </div>
+</app-dialog>

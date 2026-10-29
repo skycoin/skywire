@@ -403,7 +403,34 @@
       "none-online": "None of the selected visors is online.",
       "restart-confirmation": "Restart {{ n }} visor(s)? Each one reconnects after a short while.",
       "restarting": "{{ name }} is restarting.",
-      "restart-error": "{{ name }} did not accept the restart."
+      "restart-error": "{{ name }} did not accept the restart.",
+      "add-app": "Add app…",
+      "start-app": "Start app…",
+      "stop-app": "Stop app…"
+    },
+    "apps-filter": {
+      "label": "Running app",
+      "any": "any",
+      "column": "Apps",
+      "column-tooltip": "Show each visor's apps. Green ones are running, grey ones are configured but stopped."
+    },
+    "bulk-apps": {
+      "title-add": "Add an app to the selected visors",
+      "title-start": "Start an app on the selected visors",
+      "title-stop": "Stop an app on the selected visors",
+      "app": "App",
+      "loading-catalog": "Loading the app catalog…",
+      "catalog-fallback": "The app catalog is not available, so the apps configured on the selected visors are offered.",
+      "start-after-add": "Start it after adding",
+      "run": "Run on {{ n }} visor(s)",
+      "summary": "{{ ok }} done, {{ failed }} failed, {{ skipped }} skipped",
+      "waiting": "waiting",
+      "working": "working…",
+      "ok": "done",
+      "offline": "offline",
+      "already-added": "already added",
+      "not-configured": "this app is not configured here",
+      "via-sub": "through a sub-hypervisor"
     },
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
@@ -511,6 +538,7 @@
   },
   "app-settings": {
     "title": "App Settings",
+    "restart-prompt": "{{ app }} is running. Save now and restart it so it uses the new server?",
     "args": "Args",
     "show-help": "Show help",
     "help-loading": "Loading help…",
@@ -529,6 +557,7 @@
   },
   "app-flags": {
     "loading": "Loading flags…",
+    "choose-server": "Choose server",
     "none": "This app reports no flags.",
     "reset": "Reset to default",
     "default": "Default",
@@ -546,12 +575,19 @@
     "select-server": {
       "button": "Choose server",
       "title": "Choose a proxy server",
+      "title-vpn": "Choose a VPN server",
       "help": "Pick a public skysocks server as the exit for {{ client }}, or enter a server public key manually.",
+      "help-vpn": "Pick a public VPN server for {{ client }}, or enter a server public key manually.",
       "manual-pk": "Server public key",
       "use": "Use",
       "filter": "Filter by location or key",
+      "country": "Country",
+      "all-countries": "All countries",
+      "count": "{{ shown }} of {{ total }} servers",
+      "latency-hint": "Latency of this visor's direct transport to the server",
       "unknown-location": "Unknown location",
       "empty": "No public proxy servers found in the discovery service.",
+      "empty-vpn": "No public VPN servers found in the discovery service.",
       "load-error": "Couldn't reach the discovery service.",
       "invalid-pk": "That doesn't look like a valid public key (66 hex characters).",
       "done": "Proxy server updated.",
@@ -1082,6 +1118,7 @@
     },
     "catalog": {
       "loading": "Loading the app catalog...",
+      "choose-server": "Choose server",
       "kinds": {
         "server": "Servers",
         "client": "Clients",

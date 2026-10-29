@@ -1695,6 +1695,16 @@ func (mc *mockRPCClient) HVStopApp(_ cipher.PubKey, _ string) error {
 	return fmt.Errorf("not supported in mock")
 }
 
+// HVAppCatalog implements API.
+func (mc *mockRPCClient) HVAppCatalog(_ cipher.PubKey) ([]CatalogEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVAddApp implements API.
+func (mc *mockRPCClient) HVAddApp(_ cipher.PubKey, _, _ string) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // HVSetMinHops implements API.
 func (mc *mockRPCClient) HVSetMinHops(_ cipher.PubKey, _ uint16) error {
 	return fmt.Errorf("not supported in mock")

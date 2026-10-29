@@ -26,6 +26,7 @@ import { ClipboardDirective } from '../directives/clipboard.directive';
 import { BundleMountComponent } from './bundle-mount/bundle-mount.component';
 
 import { BulkRewardAddressChangerComponent } from '../components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { BulkAppActionComponent } from '../components/layout/bulk-app-action/bulk-app-action.component';
 import { ButtonComponent } from '../components/layout/button/button.component';
 import { ConfirmationComponent } from '../components/layout/confirmation/confirmation.component';
 import { CopyToClipboardTextComponent } from '../components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
@@ -99,6 +100,7 @@ const SHARED_DECLARATIONS = [
   ClipboardDirective,
   BundleMountComponent,
   BulkRewardAddressChangerComponent,
+  BulkAppActionComponent,
   ButtonComponent,
   ConfirmationComponent,
   CopyToClipboardTextComponent,
