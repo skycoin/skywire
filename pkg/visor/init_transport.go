@@ -39,6 +39,7 @@ import (
 )
 
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
+	v.installNetworkPolicy()
 	conf := v.conf.Transport
 
 	// Address resolver is dmsg-only — plain HTTP to the AR is no longer

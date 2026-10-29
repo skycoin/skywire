@@ -736,6 +736,9 @@ type Transport struct {
 	// for its public IP to notice a change the watcher cannot see. Zero
 	// means 12m and a negative value turns the check off.
 	PublicIPCheckInterval Duration `json:"public_ip_check_interval,omitempty"`
+	// Network limits the interfaces and addresses the visor advertises to
+	// peers. Nil advertises every non-virtual interface.
+	Network *NetworkPolicy `json:"network,omitempty"`
 }
 
 // WTPeer is a statically-configured WebTransport peer (transport.wt_table): the

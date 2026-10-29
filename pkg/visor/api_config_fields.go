@@ -207,6 +207,16 @@ var liveConfigFieldTable = []liveConfigField{
 			return nil
 		},
 	}, {
+		Path: "transport.network",
+		Desc: "interfaces and addresses offered to peers: {\"allow\": [globs or CIDRs], \"deny\": [...]}, deny wins",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			var p visorconfig.NetworkPolicy
+			if np, ok := nv.Interface().(*visorconfig.NetworkPolicy); ok && np != nil {
+				p = *np
+			}
+			return v.setNetworkPolicy(p)
+		},
+	}, {
 		Path: "transport.tcp_notsent_lowat",
 		Desc: "unsent bytes the kernel holds per stcpr/stcp transport (0 = kernel default), for transports opened after the change",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {

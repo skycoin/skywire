@@ -211,7 +211,7 @@ func (v *Visor) refreshNetwork(reason string) {
 	before := v.NetworkState()
 
 	v.initLock.Lock()
-	arClient, tpM := v.arClient, v.tpM
+	arClient := v.arClient
 	v.initLock.Unlock()
 
 	// Sessions dialed from the old network can linger. The public IP lookup
@@ -238,20 +238,7 @@ func (v *Visor) refreshNetwork(reason string) {
 		v.applyPublicIP(arClient, v.lookupPublicIP(ctx, log))
 	}
 
-	// Drop the visor's own reach card and AR view so they are rebuilt from
-	// the binds below.
-	v.reach.mu.Lock()
-	v.reach.own = nil
-	v.reach.binds = nil
-	v.reach.mu.Unlock()
-	v.arSelf.invalidate()
-
-	if m, ok := arClient.(addrresolver.NetworkMover); ok {
-		m.NetworkMoved()
-	}
-	if tpM != nil {
-		tpM.Rebind()
-	}
+	v.readvertise()
 
 	after := v.NetworkState()
 	change := describeNetworkChange(before, after)
@@ -320,9 +307,14 @@ func (v *Visor) NetworkState() *visorapi.NetworkState {
 	if sc := v.stun.client.Load(); sc != nil {
 		out.NAT = sc.NATType.String()
 	}
-	if addrs, err := netutil.LocalAddresses(); err == nil {
+	if addrs, excluded, err := netutil.LocalAddressesDetail(); err == nil {
 		sort.Strings(addrs)
+		sort.Strings(excluded)
 		out.LocalAddresses = addrs
+		out.PolicyExcluded = excluded
+	}
+	if p := netutil.AdvertisePolicy(); !p.IsZero() {
+		out.Allow, out.Deny = p.Allow, p.Deny
 	}
 	v.reach.mu.Lock()
 	for t, raw := range v.reach.binds {

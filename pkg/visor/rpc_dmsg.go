@@ -226,3 +226,9 @@ func (r *RPC) NetworkMoved(in *string, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "NetworkMoved", in)(nil, &err)
 	return r.visor.NetworkMoved(*in)
 }
+
+// NetworkSet changes the network policy live.
+func (r *RPC) NetworkSet(in *visorapi.NetworkSettings, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkSet", in)(nil, &err)
+	return r.visor.NetworkSet(*in)
+}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // The ICE filter and address resolver registration share one list.
@@ -19,4 +21,16 @@ func TestICEFilterSharesVirtualList(t *testing.T) {
 	}
 	require.False(t, keepICEIP(net.ParseIP("192.0.0.4")), "CLAT address")
 	require.True(t, keepICEIP(net.ParseIP("192.168.1.20")))
+}
+
+// The advertise policy reaches ICE: a denied interface gathers nothing, an
+// allow glob brings back a virtual one, and a denied range drops its address.
+func TestICEFilterFollowsPolicy(t *testing.T) {
+	t.Cleanup(func() { netutil.SetAdvertisePolicy(netutil.AddrPolicy{}) })
+	netutil.SetAdvertisePolicy(netutil.AddrPolicy{Allow: []string{"wg*", "eth*"}, Deny: []string{"eth1", "192.0.2.0/24"}})
+	require.True(t, keepICEInterface("eth0"))
+	require.False(t, keepICEInterface("eth1"), "denied by name")
+	require.True(t, keepICEInterface("wg0"), "a virtual interface the allow list names")
+	require.False(t, keepICEInterface("tun0"), "still virtual")
+	require.False(t, keepICEIP(net.ParseIP("192.0.2.7")), "denied range")
 }

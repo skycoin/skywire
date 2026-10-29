@@ -20,7 +20,7 @@ description: One call runtime introspection of a visor with `skywire cli visor s
 - `modules` shows which optional subsystems are wired, often the answer to "why is there no stats feed".
 - `services` lists each embedded deployment service with its running state, whether it has its own key, restarts, and its CXO aggregators and publishers.
 - `roles` shows what the visor is for the network, such as its dmsg server and relay roles.
-- `network` is the public IP (`public_ip_source` dmsg or stun, `public_ip_at`), the NAT class, `local_addresses` after the virtual interface filter, `advertised` per transport type, and the last move (`moves`, `last_move_reason`, `last_move_change`). `skywire cli visor network show` prints it as text.
+- `network` is the public IP (`public_ip_source` dmsg or stun, `public_ip_at`), the NAT class, `local_addresses` after the virtual interface filter and the network policy (`allow`, `deny`, and `policy_excluded` for what it removed), `advertised` per transport type, and the last move (`moves`, `last_move_reason`, `last_move_change`). `skywire cli visor network show` prints it as text.
 - `notes` holds per section errors. A suspended or half started visor still returns a useful snapshot.
 
 ## Common queries
