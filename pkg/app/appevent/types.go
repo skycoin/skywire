@@ -24,3 +24,15 @@ type TCPCloseData struct {
 
 // Type returns the TCPClose type.
 func (TCPCloseData) Type() string { return TCPClose }
+
+// NetworkMoved is sent after the visor handled a change of network, so an
+// app holding routes or sockets tied to the old one can move them.
+const NetworkMoved = "network_moved"
+
+// NetworkMovedData says what triggered the change.
+type NetworkMovedData struct {
+	Reason string `json:"reason"`
+}
+
+// Type returns the NetworkMoved type.
+func (NetworkMovedData) Type() string { return NetworkMoved }

@@ -249,6 +249,11 @@ func (v *Visor) refreshNetwork(reason string) {
 	v.netMove.lastChange = change
 	v.netMove.mu.Unlock()
 	log.WithField("reason", reason).Infof("Network change handled: %s", change)
+	// Apps with routes tied to the old network, the VPN client's direct
+	// routes among them, move them now.
+	if v.ebc != nil {
+		v.ebc.SendNetworkMoved(ctx, reason)
+	}
 }
 
 func describeNetworkChange(before, after *visorapi.NetworkState) string {
