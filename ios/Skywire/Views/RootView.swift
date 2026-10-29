@@ -40,6 +40,7 @@ struct RootView: View {
                     .ignoresSafeArea(.keyboard, edges: .bottom)
             }
             .background(Color.skyBackground.ignoresSafeArea())
+            UpdateBanner().frame(maxHeight: .infinity, alignment: .top)
             // A call owns the display, bar and all (Android swaps the UI for CallScreen).
             if calls.state.busy {
                 CallScreen().accessibilityAddTraits(.isModal)
@@ -63,6 +64,8 @@ struct RootView: View {
         }
         // Whichever screen is up: the hub is read while the core is connected.
         .task(id: app.connected) { await notifications.run(app) }
+        // Once per process; a call at start-up only delays the banner.
+        .task { await UpdateNotice.shared.checkOnce() }
         // Calls are polled while the core is connected, whether or not a screen looks.
         .task(id: app.connected) { await CallCenter.shared.run(app) }
         // A skychat that is already running is followed before the tab is opened, so unread

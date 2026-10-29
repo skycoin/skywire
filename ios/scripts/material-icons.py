@@ -44,6 +44,7 @@ Rounded.DoneAll Rounded.FlipCameraAndroid Rounded.Fullscreen Rounded.GroupAdd Ro
 Rounded.InsertDriveFile Rounded.Link Rounded.LinkOff Rounded.Lock Rounded.Logout Rounded.Mic Rounded.MoreVert
 Rounded.Notifications Rounded.NotificationsOff Rounded.Pause Rounded.PlayArrow Rounded.PushPin Rounded.QrCode2
 Rounded.QrCodeScanner Rounded.RadioButtonUnchecked Rounded.Refresh Rounded.Schedule Rounded.Search Rounded.Shortcut
+Rounded.SystemUpdate
 """.split()
 
 

@@ -162,7 +162,7 @@ bind 127.0.0.1:8000 as well, so the app must not be connected while they run.
 | `Packages/WalletCore` (`swift test`) | the wallet against the Kotlin module's vectors and fixtures | Mac, CI |
 | `SkywireTests` | the core started and stopped through CoreBridge (it dials the real network); the string catalogues | Simulator, CI |
 | `SkywireAppTests` | SecretStore in the real Keychain, the wallet store, calls, the config regenerate, the diagnostics logs; `TunnelProbeTests` only on request (below) | Simulator (hosted by the app), CI |
-| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, the app's flows, chat, SOCKS, DEX, Fleet, Skymail and the wallet, some with a desktop peer; `FootprintTour` holds each state for the footprint table | Simulator, by hand |
+| `SkywireUITests` (scheme `SkywireTour`) | the screen tour in the three languages, the app's flows, chat, SOCKS, DEX, Fleet, Skymail, the update banner and the wallet, some with a desktop peer or a local stand-in for a store; `FootprintTour` holds each state for the footprint table | Simulator, by hand |
 
 The release candidate's full run is `ios/gates/regression.md`: every flow as a
 numbered step, with the desktop peer (`ios/scripts/desktop-peer.sh`), the
