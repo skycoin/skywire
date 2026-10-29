@@ -59,11 +59,10 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
     if (!this.node || !client) {
       return;
     }
-    const ref = this.dialog.open(SelectProxyServerComponent, {
-      width: '600px',
-      data: { clientName: client.name },
-    });
-    ref.afterClosed().subscribe((pk: string) => {
+    SelectProxyServerComponent.openDialog(this.dialog, {
+      clientName: client.name,
+      transports: this.node.transports,
+    }).subscribe(pk => {
       if (!pk) {
         return;
       }

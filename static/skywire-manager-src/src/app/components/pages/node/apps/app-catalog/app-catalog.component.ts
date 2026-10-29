@@ -12,6 +12,7 @@ import { NodeComponent } from '../../node.component';
 import { LogComponent } from '../node-apps-list/log/log.component';
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { processServiceError } from '../../../../../utils/errors';
+import { serverTypeFor } from '../app-flags-form/app-flags';
 
 /** One configured instance of a catalog app (visorapi.CatalogInstance). */
 export interface CatalogInstance {
@@ -96,6 +97,8 @@ export class AppCatalogComponent implements OnInit, OnDestroy {
   nodePK = '';
   busy = new Set<string>();
   openSettings = new Set<string>();
+  // Server picker requests per instance, passed to its settings panel.
+  pickRequests = new Map<string, number>();
 
   private apps = new Map<string, Application>();
   private nodeSub?: Subscription;
@@ -284,9 +287,22 @@ export class AppCatalogComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** True for a client whose servers are listed in the service discovery. */
+  canChooseServer(entry: CatalogEntry): boolean {
+    return entry.kind === 'client' && !!serverTypeFor(entry.name);
+  }
+
+  /** Opens the instance's settings with the server picker on its server flag. */
+  chooseServer(inst: CatalogInstance) {
+    this.openSettings.add(inst.name);
+    this.pickRequests.set(inst.name, (this.pickRequests.get(inst.name) || 0) + 1);
+    this.cdr.markForCheck();
+  }
+
   toggleSettings(name: string) {
     if (this.openSettings.has(name)) {
       this.openSettings.delete(name);
+      this.pickRequests.delete(name);
     } else {
       this.openSettings.add(name);
     }

@@ -63,6 +63,12 @@
                   <mat-icon [inline]="true">list</mat-icon>
                   {{ 'apps.view-logs' | translate }}
                 </button>
+                @if (appFor(inst) && canChooseServer(entry)) {
+                  <button mat-button class="cat-btn cat-choose-server" (click)="chooseServer(inst)">
+                    <mat-icon [inline]="true">dns</mat-icon>
+                    {{ 'apps.catalog.choose-server' | translate }}
+                  </button>
+                }
                 @if (appFor(inst)) {
                   <button mat-button class="cat-btn cat-settings" (click)="toggleSettings(inst.name)">
                     <mat-icon [inline]="true">{{ openSettings.has(inst.name) ? 'expand_less' : 'settings' }}</mat-icon>
@@ -73,6 +79,7 @@
               @if (openSettings.has(inst.name) && appFor(inst)) {
                 <app-app-settings
                   [app]="appFor(inst)!"
+                  [pickServer]="pickRequests.get(inst.name) || 0"
                   (saved)="toggleSettings(inst.name); refresh()"
                   (cancelled)="toggleSettings(inst.name)">
                 </app-app-settings>

@@ -69,6 +69,22 @@
   &:focus { border-color: rgba(0, 212, 255, 0.6); }
 }
 
+.flag-pick {
+  margin-top: 5px;
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.45);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.8em;
+  padding: 3px 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &:hover { background: rgba(0, 212, 255, 0.22); }
+}
+
 .flag-check {
   display: inline-flex;
   align-items: center;
