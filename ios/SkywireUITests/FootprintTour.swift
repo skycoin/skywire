@@ -52,7 +52,7 @@ final class FootprintTour: XCTestCase {
         keep("socks", for: hold)
     }
 
-    /// skydex-client started on a market: the trading page with
+    /// skydex-client started on a market: the trading screens with
     /// SKYWIRE_DEX_MARKET, else the screen with the dial's failure (secp256k1's
     /// generator point, where no market runs).
     func test5DexOpen() {
@@ -71,7 +71,7 @@ final class FootprintTour: XCTestCase {
         field.typeText(market ?? "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
         app.buttons["dex-connect"].tap()
         if market != nil {
-            XCTAssertTrue(app.webViews["dex-webview"].waitForExistence(timeout: 150), "no trading page")
+            XCTAssertTrue(app.buttons["dex-disconnect"].waitForExistence(timeout: 150), "no trading screens")
             keep("dex", for: hold)
         } else {
             XCTAssertTrue(app.staticTexts["dex-error"].waitForExistence(timeout: 150), "no answer from the dial")

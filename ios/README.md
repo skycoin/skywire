@@ -79,6 +79,12 @@ Mutes and the preview switch apply in `NotificationBridge`. Voice messages are
 AAC in `voice-<stamp>.m4a` and video messages H.264 with AAC in
 `video-<stamp>.mp4`, the names every skychat UI reads as recorded clips.
 
+SkyDEX is native too, over skydex-client's control API on `127.0.0.1:8051`,
+which passes every trading call to the market over dmsg (`SkydexMarket` in
+`CoreClient`, `Skywire/Views/Dex/`). The payout addresses and the finished
+trades the market forgets are kept in Application Support `skydex/state.json`,
+copied once from the old trading page's storage.
+
 ## Building and running
 
 Everything runs from the repo root, as for Android. Xcode 27 or later with
