@@ -1,0 +1,61 @@
+.dim { color: rgba(255, 255, 255, 0.7); }
+.small { font-size: 0.85em; }
+.mono { font-family: monospace; word-break: break-all; }
+
+.contacts-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contacts-error { color: #ff8a80; }
+
+.contacts-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+
+  .spacer { flex: 1; }
+
+  .filter { min-width: 200px; flex: 1; max-width: 360px; }
+
+  .file-btn { cursor: pointer; padding: 0 16px; height: 36px; display: inline-flex; align-items: center; }
+
+  // The theme's outlined buttons are faint on this dark card.
+  .mat-mdc-outlined-button:not(:disabled):not(.mat-warn) {
+    --mdc-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
+    --mat-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
+    --mdc-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
+    --mat-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+}
+
+.loading-row { padding: 12px 0; }
+
+.contacts-list {
+  .contact-row { cursor: pointer; }
+  .keys { max-width: 420px; }
+  .key { cursor: copy; }
+}
+
+.contacts-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  label { display: flex; flex-direction: column; gap: 2px; }
+}
+
+input,
+textarea {
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+}

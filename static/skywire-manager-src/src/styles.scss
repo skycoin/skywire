@@ -299,6 +299,11 @@ button:focus {
   word-break: break-word;
 }
 
+// A tooltip whose text keeps its line breaks.
+.multiline-tooltip .mdc-tooltip__surface {
+  white-space: pre-line;
+}
+
 .mat-mdc-button-touch-target {
   height: 100% !important;
 }

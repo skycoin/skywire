@@ -241,8 +241,8 @@ func getPublicIP(v *Visor, service string) (string, error) {
 	case <-time.After(20 * time.Second):
 		v.log.Warn("getPublicIP: STUN not ready within 20s; proceeding without a STUN-derived public IP")
 	}
-	if v.stun.client != nil && v.stun.client.PublicIP != nil {
-		pIP = v.stun.client.PublicIP.IP()
+	if ip := v.stunPublicIP(); ip != "" {
+		pIP = ip
 		return pIP, nil
 	}
 	// STUN could not determine a public IP (no reachable STUN server, or the
@@ -1463,8 +1463,8 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 			// remote-destination case still gets the full overlay above.)
 			if v.tpM != nil {
 				var self net.IP
-				if v.stun.client != nil && v.stun.client.PublicIP != nil {
-					self = net.ParseIP(v.stun.client.PublicIP.IP())
+				if ip := v.stunPublicIP(); ip != "" {
+					self = net.ParseIP(ip)
 				}
 				for _, pk := range v.tpM.SameLANPeers(self) {
 					if pk == remotePK {

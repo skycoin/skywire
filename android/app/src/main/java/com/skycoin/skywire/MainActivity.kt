@@ -20,6 +20,7 @@ import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.DeepLinks
+import com.skycoin.skywire.core.PhoneContacts
 import com.skycoin.skywire.core.VoiceCallWatcher
 import com.skycoin.skywire.core.VoiceCallReceiver
 import com.skycoin.skywire.core.ThemeMode
@@ -60,7 +61,7 @@ class MainActivity : FragmentActivity() {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        DeepLinks.offer(intent)
+        if (!PhoneContacts.offer(this, intent)) DeepLinks.offer(intent)
         offerCallAnswer(intent)
         // Permission to cross the lock screen lasts exactly as long as the
         // call that needs it. See the manifest for what declaring it there
@@ -184,7 +185,7 @@ class MainActivity : FragmentActivity() {
         // The full-screen intent lands here on a running Activity; make sure
         // the grant is current before it is shown.
         showOverKeyguard(VoiceCalls.state.value.busy)
-        DeepLinks.offer(intent)
+        if (!PhoneContacts.offer(this, intent)) DeepLinks.offer(intent)
         offerCallAnswer(intent)
     }
 

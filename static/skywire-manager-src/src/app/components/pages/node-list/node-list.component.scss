@@ -311,3 +311,85 @@
     column-gap: 3px;
   }
 }
+
+// Search box, quick filter chips and the compact switch above the list.
+.fleet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+
+  .fleet-search {
+    flex: 1;
+    min-width: 220px;
+    max-width: 420px;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font: inherit;
+  }
+
+  .fleet-chip {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 14px;
+    padding: 3px 12px;
+    font: inherit;
+    font-size: 0.85em;
+    cursor: pointer;
+
+    &.on {
+      background: rgba(255, 255, 255, 0.85);
+      color: #0b1324;
+    }
+  }
+
+  .fleet-hidden {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .fleet-spacer { flex: 1; }
+}
+
+// The bar that appears while visors are ticked.
+.fleet-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(66, 165, 245, 0.18);
+
+  .mat-mdc-outlined-button {
+    color: rgba(255, 255, 255, 0.92);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
+.select-column {
+  width: 36px;
+}
+
+.compact-row td {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+.tp-compact {
+  font-size: 0.85em;
+  white-space: nowrap;
+
+  .tp-in { color: #4caf50; margin-left: 4px; }
+  .tp-out { color: #42a5f5; margin-left: 2px; }
+}
+
+.outdated {
+  color: #ffb74d;
+}

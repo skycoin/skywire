@@ -206,9 +206,10 @@ func runPressureLoop(ctx context.Context, v *Visor, log *logging.Logger) {
 
 // inboundGate is the transport manager's check on a new inbound transport.
 // Under pressure it refuses automatic transports, except from this visor's
-// hypervisors and from visors this visor is the hypervisor of.
+// hypervisors and from visors this visor is the hypervisor of. A metered
+// mode refuses them the same way.
 func (v *Visor) inboundGate(remote cipher.PubKey, label transport.Label) bool {
-	if label != transport.LabelAutomatic || !v.pressure.busy.Load() {
+	if label != transport.LabelAutomatic || (!v.pressure.busy.Load() && !v.meter.lean.Load()) {
 		return true
 	}
 	for _, hv := range v.conf.Hypervisors {

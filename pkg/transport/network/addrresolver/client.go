@@ -71,7 +71,15 @@ var (
 	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
 	// ErrClosed is returned by a request made after the client was closed.
 	ErrClosed = errors.New("address resolver client closed")
+	// ErrBindingDisabled is returned by BindSUDPH after DisableBinding.
+	ErrBindingDisabled = errors.New("address resolver registration is disabled")
 )
+
+// BindDisabler is implemented by clients that can stop registering this visor
+// while still resolving peers.
+type BindDisabler interface {
+	DisableBinding()
+}
 
 // Error is the object returned to the client when there's an error.
 type Error struct {
@@ -133,6 +141,8 @@ type VisorData struct {
 type httpClient struct {
 	// fastResolve, when set, answers lookups other than sudph before HTTP.
 	fastResolve atomic.Pointer[FastResolve]
+	// bindOff makes every bind a no-op, so peers cannot resolve this visor.
+	bindOff atomic.Bool
 	// notFound remembers recent "no entry" answers (see notFoundFor).
 	notFound notFoundCache
 	// udpRes tracks sudph lookups sent on the control connection.
@@ -259,6 +269,32 @@ func (c *httpClient) noteBound(netType string, payload LocalAddresses) {
 	c.boundMu.Unlock()
 }
 
+// NetworkMover is implemented by clients that can refresh every registration
+// after the visor moves to another network. Kept off APIClient like
+// BindDisabler, so the mock and the browser clients need no change.
+type NetworkMover interface {
+	// NetworkMoved makes the next bind of every type reach the AR and drops
+	// the SUDPH session, whose reconnect sends a freshly built payload from
+	// the new network.
+	NetworkMoved()
+}
+
+// NetworkMoved implements NetworkMover.
+func (c *httpClient) NetworkMoved() {
+	c.boundMu.Lock()
+	c.bound = nil
+	c.boundMu.Unlock()
+	if c.isClosed() {
+		return
+	}
+	c.sudphArConnMu.Lock()
+	conn := c.sudphArConn
+	c.sudphArConnMu.Unlock()
+	if conn != nil {
+		_ = conn.Close() //nolint:errcheck,gosec
+	}
+}
+
 // forgetBound drops the memo for netType so its next bind reaches the AR.
 func (c *httpClient) forgetBound(netType string) {
 	c.boundMu.Lock()
@@ -370,6 +406,7 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 		}
 	}
 
+	httpAuthClient.SetPublicIPFunc(c.localPublicIPRaw)
 	c.httpClient = httpAuthClient
 
 	// #1525 Phase 2b: initialize the optional v6-forced auth client.
@@ -383,6 +420,7 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 		if v6Err != nil {
 			c.log.WithError(v6Err).Debug("v6 address-resolver init failed; proceeding v4-only")
 		} else {
+			v6AuthClient.SetPublicIPFunc(c.localPublicIPRaw)
 			c.httpClientV6 = v6AuthClient
 			c.log.Debug("v6 address-resolver init ok; BindSTCPR will dual-stack")
 		}
@@ -631,6 +669,9 @@ func (c *httpClient) awaitPublicIP(timeout time.Duration) {
 // source IP + this port are reachable. (NAT-mapped UDP discovery / hole
 // punching is a follow-up; this path targets reachable nodes first.)
 func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindQUIC")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -702,6 +743,9 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 // server cert. The hash rides VisorData via the embedded LocalAddresses, so
 // /resolve/wt returns it alongside the endpoint.
 func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindWT")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -770,6 +814,9 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash st
 }
 
 func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.BindSTCPR")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
@@ -897,8 +944,17 @@ func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses
 	log.Debug("v6 BindSTCPR: ok — AR will populate RemoteAddrV6")
 }
 
+// DisableBinding stops this visor from registering with the address resolver.
+// Binds become no-ops and BindSUDPH fails, while Resolve keeps working.
+func (c *httpClient) DisableBinding() {
+	c.bindOff.Store(true)
+}
+
 // delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
 func (c *httpClient) delBindSTCPR(ctx context.Context) error {
+	if c.bindOff.Load() {
+		return nil
+	}
 	log := c.log.WithField("func", "httpClient.delBindSTCPR")
 	c.forgetBound("stcpr")
 	if !c.isReady() {
@@ -943,13 +999,18 @@ type Handshake func(net.Conn) (net.Conn, error)
 // packet listener afterwards, which makes the read loop exit.
 func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) {
 	var (
-		wg           sync.WaitGroup
-		closeOnce    sync.Once
+		wg        sync.WaitGroup
+		closeOnce sync.Once
+		// dead stops the two timer loops at once, not at their next write.
+		dead         = make(chan struct{})
 		closeOnError = func() {
 			if c.isClosed() {
 				return
 			}
-			closeOnce.Do(func() { _ = arConn.Close() }) //nolint:errcheck
+			closeOnce.Do(func() {
+				close(dead)
+				_ = arConn.Close() //nolint:errcheck
+			})
 		}
 	)
 
@@ -961,12 +1022,12 @@ func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) 
 	}()
 	go func() {
 		defer wg.Done()
-		_ = c.keepSudphHeartbeatLoop(arConn) //nolint:errcheck
+		_ = c.keepSudphHeartbeatLoop(arConn, dead) //nolint:errcheck
 		closeOnError()
 	}()
 	go func() {
 		defer wg.Done()
-		_ = c.sudphReRegisterLoop(arConn) //nolint:errcheck
+		_ = c.sudphReRegisterLoop(arConn, dead) //nolint:errcheck
 		closeOnError()
 	}()
 
@@ -1332,7 +1393,7 @@ func (c *httpClient) Close() error {
 
 // Keep NAT mapping alive. Returns on c.closed (clean shutdown) or the
 // first Write error (connection dead → caller will reconnect).
-func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
+func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer, dead <-chan struct{}) error {
 	for {
 		select {
 		case <-c.closed:
@@ -1345,13 +1406,15 @@ func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 		select {
 		case <-c.closed:
 			return nil
+		case <-dead:
+			return nil
 		case <-time.After(udpKeepHeartbeatInterval):
 		}
 	}
 }
 
 // sudphReRegisterLoop periodically re-registers with address resolver to keep the entry alive.
-func (c *httpClient) sudphReRegisterLoop(w io.Writer) error {
+func (c *httpClient) sudphReRegisterLoop(w io.Writer, dead <-chan struct{}) error {
 	ticker := time.NewTicker(sudphReRegisterInterval)
 	defer ticker.Stop()
 
@@ -1359,6 +1422,8 @@ func (c *httpClient) sudphReRegisterLoop(w io.Writer) error {
 		select {
 		case <-c.closed:
 			c.log.Debug("Stopping SUDPH re-registration loop")
+			return nil
+		case <-dead:
 			return nil
 		case <-ticker.C:
 			c.log.Debug("Re-registering SUDPH with address resolver")

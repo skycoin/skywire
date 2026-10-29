@@ -27,7 +27,7 @@ func TestRootCmd_SubcommandsRegistered(t *testing.T) {
 	// init() renames each aggregated service to a short alias.
 	for _, name := range []string{
 		"tpd", "tps", "ar", "rf", "confbs", "conf", "se",
-		"sd", "sn", "nm", "ip", "stun", "run",
+		"sd", "sn", "ip", "stun", "run",
 	} {
 		require.True(t, got[name], "subcommand %q should be registered", name)
 	}

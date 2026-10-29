@@ -400,3 +400,22 @@ func TestMetricsDayPaths(t *testing.T) {
 		}
 	}
 }
+
+// PivotDay returns exactly the slice PivotDailyMetrics holds for the date.
+func TestPivotDayMatchesPivotDailyMetrics(t *testing.T) {
+	dates := MetricsWindowDates(time.Date(2026, 10, 28, 3, 0, 0, 0, time.UTC), 8)
+	metrics := windowFixture(40, append([]string{"2026-01-01"}, dates...))
+	for i := 0; i < len(metrics); i += 5 {
+		metrics[i].Latency = nil
+	}
+	want := PivotDailyMetrics(metrics, dates)
+	for _, d := range dates {
+		got := PivotDay(metrics, d, dates[0])
+		if !reflect.DeepEqual(got, want[d]) {
+			t.Errorf("date %s differs: %d records, want %d", d, len(got), len(want[d]))
+		}
+	}
+	if got := PivotDay(nil, dates[1], dates[0]); got == nil || len(got) != 0 {
+		t.Errorf("an empty day must be an empty slice, got %#v", got)
+	}
+}

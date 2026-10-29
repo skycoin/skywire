@@ -20,7 +20,7 @@ import (
 func TestDeletePeer_ErasesTheConversation(t *testing.T) {
 	gone := "03abc" + strings.Repeat("0", 61)
 	kept := "03def" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		base := time.Now().UTC()
 		for i, id := range []string{"id-0", "id-1", "id-2"} {
 			if err := s.Append(Message{Peer: gone, ID: id, Text: "msg-" + id, Timestamp: base.Add(time.Duration(i) * time.Millisecond)}); err != nil {
@@ -68,10 +68,10 @@ func TestDeletePeer_ErasesTheConversation(t *testing.T) {
 // A conversation emptied one message at a time must not be listed either.
 // BoltStore left the empty bucket behind and Peers listed it, so deleting
 // every message by hand still left a "New conversation" that came back on the
-// next load; MemStore already dropped the entry.
+// next load.
 func TestPeers_OmitsAConversationEmptiedByDeleteByID(t *testing.T) {
 	peer := "03abc" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if err := s.Append(Message{Peer: peer, ID: "only", Text: "one", Timestamp: time.Now().UTC()}); err != nil {
 			t.Fatalf("Append: %v", err)
 		}

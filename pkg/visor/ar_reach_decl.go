@@ -67,7 +67,7 @@ func natClass(n stun.NATType) string {
 func (v *Visor) reachDecl() arfeed.ReachDecl {
 	var d arfeed.ReachDecl
 	v.initLock.Lock()
-	sc := v.stun.client
+	sc := v.stun.client.Load()
 	tm := v.tpM
 	v.initLock.Unlock()
 	if sc != nil {
@@ -76,7 +76,7 @@ func (v *Visor) reachDecl() arfeed.ReachDecl {
 	if tm == nil {
 		return d
 	}
-	if v.pressure.busy.Load() {
+	if v.pressure.busy.Load() || v.meter.lean.Load() {
 		d.Accepts = []string{arfeed.AcceptsNone}
 		return d
 	}

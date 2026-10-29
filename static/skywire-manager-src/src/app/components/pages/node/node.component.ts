@@ -2,15 +2,17 @@ import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef, Chan
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs/internal/Subscription';
-import { Observable, ReplaySubject, delay, of, timer } from 'rxjs';
+import { EMPTY, Observable, ReplaySubject, catchError, delay, of, switchMap, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from '../../../utils/home-tabs';
+import { nodeTabsData } from '../../../utils/node-tabs';
 import { visorSwitcherChips } from '../../../utils/visor-switcher';
 import { NodeService } from '../../../services/node.service';
+import { LiveService } from '../../../services/live.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
 import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
@@ -129,7 +131,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private boundVpnPk = '';
   private boundTerminalPk = '';
   // Throttle timestamp for the visor-switcher summaries call (see refreshNavRows).
-  private navSwitcherLoadedAt = 0;
 
   /**
    * Ask the currently displayed instance of this page to reload the node data.
@@ -176,6 +177,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer,
     private router: Router,
+    private live: LiveService,
   ) {
     super();
 
@@ -284,6 +286,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/mail') ||
+      this.lastUrl.includes('/contacts') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
@@ -299,147 +302,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // above the per-node tabs, so navigation stays available on node pages.
       this.refreshNavRows();
 
-      this.tabsData = [
-        {
-          icon: 'info',
-          label: 'node.tabs.info',
-          // Info is now a real tab on every screen size — the right
-          // bar split-view that previously surfaced this content
-          // has been removed. DMSG settings folded into Info as a
-          // collapsible section to keep the tab row compact.
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'info'] : null,
-        },
-        {
-          icon: 'shuffle',
-          label: 'node.tabs.routing',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'routing'] : null,
-        },
-        {
-          icon: 'swap_horiz',
-          label: 'node.tabs.transports',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'transports'] : null,
-        },
-        {
-          icon: 'equalizer',
-          label: 'node.tabs.bandwidth',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'bandwidth'] : null,
-        },
-        // DMSG + Reachability tabs were dropped: DMSG is folded into
-        // Info as a collapsible section (the standalone /dmsg route
-        // redirects to /info for back-compat) and Reachability moved
-        // back to a future home — the per-node tab row was overflowing
-        // and these were the lowest-priority entries. Their routes
-        // still resolve so old bookmarks don't 404.
-        {
-          icon: 'schedule',
-          label: 'node.tabs.uptime',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'uptime'] : null,
-        },
-        {
-          // Apps tab: list view + sub-tabs for VPN / Skysocks. (Skychat
-          // was pulled out to its own top-level Chat tab below.)
-          icon: 'apps',
-          label: 'node.tabs.apps',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'apps'] : null,
-        },
-        {
-          // Chat tab: the visor's skychat client, promoted from an Apps
-          // sub-tab to its own top-level tab (parity with the wasm visor's
-          // ☰ Chat entry).
-          icon: 'forum',
-          label: 'node.tabs.chat',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'chat'] : null,
-        },
-        {
-          // The visor's mailbox, the same one the desk's mail window shows.
-          icon: 'mail',
-          label: 'node.tabs.mail',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'mail'] : null,
-        },
-        {
-          icon: 'monetization_on',
-          label: 'node.tabs.rewards',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'rewards'] : null,
-        },
-        {
-          icon: 'public',
-          label: 'node.tabs.skynet',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'skynet'] : null,
-        },
-        {
-          icon: 'language',
-          label: 'node.tabs.web-proxy',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'web-proxy'] : null,
-        },
-        {
-          // VPN tab: the full VPN UI, iframed in-place here (like the terminal
-          // tab) instead of only launchable in a separate window.
-          icon: 'vpn_lock',
-          label: 'node.tabs.vpn',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'vpn'] : null,
-        },
-        {
-          icon: 'memory',
-          label: 'node.tabs.resources',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'resources'] : null,
-        },
-        {
-          // 'terminal' was added to Material Icons in 2020 but the
-          // font we ship locally predates that. 'code' is in the
-          // bundled glyph map and reads as terminal-ish.
-          icon: 'code',
-          label: 'node.tabs.terminal',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'terminal'] : null,
-        },
-        {
-          icon: 'account_balance_wallet',
-          label: 'node.tabs.wallet',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'wallet'] : null,
-        },
-        {
-          icon: 'description',
-          label: 'node.tabs.logs',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'logs'] : null,
-        },
-        {
-          icon: 'tune',
-          label: 'node.tabs.settings',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'settings'] : null,
-        },
-      ];
-
-      // A browser/wasm visor can't back several tabs with anything usable, so
-      // drop them from the tab row (the flagship in-browser UI should show only
-      // what actually works in the tab runtime):
-      //   bandwidth / uptime / rewards / web-proxy — no host data source (404).
-      //   resources — host CPU/mem/disk/net; a tab has none (renders all-zeros).
-      // The terminal tab stays: the tab's visor hosts a websh session, and the
-      // page's WebSocket reaches it through vnet.webSocket.
-      //   settings  — the desk's own settings window edits the tab's conf, and
-      //               knows which variables the desk sets on every load.
-      // The wallet tab IS shown on wasm: the browser-tab visor serves /wallet/
-      // (client-side wallets, node/backend proxied over dmsg) just like the
-      // native HV-served wallet — the daemon-instance controls simply hide there.
-      // The host-only features (VPN, real skysocks, port forwarding)
-      // are the invitation to INSTALL the visor on the host. selectedTabIndex is
-      // computed by route below, so a shorter array stays correct.
-      if (this.node && (this.node as any).arch === 'wasm') {
-        const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
-          'vpn', 'resources', 'settings']);
-        this.tabsData = this.tabsData.filter(t => {
-          const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
-
-          return !wasmHiddenTabs.has(seg);
-        });
-        // The host bridge page this visor serves beside the dashboard: it hands
-        // out the bridge for the user's computer and connects to it.
-        this.tabsData.push({
-          icon: 'settings_ethernet',
-          label: 'node.tabs.host-bridge',
-          linkParts: null,
-          externalUrl: 'hostbridge/',
-        });
-      }
+      this.tabsData = nodeTabsData(NodeComponent.currentNodeKey, !!this.node && (this.node as any).arch === 'wasm');
 
       // Pick the selected tab by matching the URL to a tab's route (its last
       // linkParts segment), last match wins — robust to tabs being filtered out
@@ -448,7 +311,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'chat', 'mail', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'mail', 'contacts', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
@@ -512,19 +375,18 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // per-node tabs: the home nav (top-level hypervisor tabs, incl. the "Local
   // Visor" tab, kept alongside "Visor list") and the visor switcher (one chip
   // per visor in the list, so the user can jump between visors without backing
-  // out). The switcher list is a single summaries call, throttled to ~10s.
+  // out). The switcher list follows the summaries over the live socket, every
+  // 10 s, started once per page.
   private refreshNavRows() {
     this.homeNavTabs = homeTabsData();
 
-    const now = Date.now();
-    if (this.switcherTabs.length > 0 && now - this.navSwitcherLoadedAt < 10000) {
+    if (this.switcherSubscription) {
       return;
     }
-    this.navSwitcherLoadedAt = now;
-    if (this.switcherSubscription) {
-      this.switcherSubscription.unsubscribe();
-    }
-    this.switcherSubscription = this.nodeService.getNodes().subscribe(
+    this.switcherSubscription = this.live.watch('visors-summary', 10000, () => this.nodeService.getNodes(),
+      b => this.nodeService.nodesFromSummaries(b)).pipe(
+      switchMap(res => res.pipe(catchError(() => EMPTY))),
+    ).subscribe(
       (nodes: Node[]) => {
         this.ngZone.run(() => {
           this.switcherTabs = visorSwitcherChips(nodes);

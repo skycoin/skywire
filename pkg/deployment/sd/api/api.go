@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
-	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	sdmetrics "github.com/skycoin/skywire/pkg/deployment/sd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/sd/store"
 	"github.com/skycoin/skywire/pkg/geo"
@@ -41,10 +40,6 @@ var (
 	ErrMissingType = errors.New("missing service type in request")
 	// ErrFailedToGetGeoData is returned when we are unable to get the geo data.
 	ErrFailedToGetGeoData = errors.New("failed to get visor data")
-	// ErrUnauthorizedNetworkMonitor occurs in case of invalid network monitor key
-	ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
-	// ErrBadInput occurs in case of bad input
-	ErrBadInput = errors.New("error bad input")
 )
 
 const (
@@ -55,8 +50,8 @@ const (
 // HealthCheckResponse is the /health body every service shares.
 type HealthCheckResponse = httputil.HealthCheckResponse
 
-// WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = nmpk.GetWhitelistPKs()
+// WhitelistPKs holds the keys allowed to call the bulk deregistration endpoint.
+var WhitelistPKs = httpauth.NewWhitelist()
 
 // API represents the service-discovery API.
 type API struct {
@@ -247,8 +242,10 @@ const maxBodyBytes = 1 << 20
 // handler is safe to share across request goroutines.
 func (a *API) newRouter() *httputil.Router {
 	r := httputil.NewRouter()
+	r.Use(httputil.RequestID)
 	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(a.log))
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip service-discovery JSON responses on the wire (skips small bodies,
 	// honors Vary; net/http clients get transparent gzip).
@@ -259,6 +256,7 @@ func (a *API) newRouter() *httputil.Router {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
 		r.Use(metricsutil.RequestDurationMiddleware)
 	}
+	r.Use(httputil.SetLoggerMiddleware(a.log))
 	r.Use(httputil.Timeout(httpTimeout))
 
 	r.Use(httputil.CORS(httputil.CORSOptions{
@@ -577,57 +575,18 @@ func (a *API) delEntry(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 	a.log.Info("Deregistration process started.")
-	// check validation of request from network monitor
-	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	nmPk := cipher.PubKey{}
-	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	nmSign := cipher.Sig{}
-	if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
-		a.log.WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Veryfing request").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
+	if _, status, err := WhitelistPKs.Authorize(r); err != nil {
+		a.log.WithError(err).Error("Deregistration process interrupt.")
+		w.WriteHeader(status)
 		return
 	}
 
 	// read keys
-	keys := []cipher.PubKey{}
-	keysBody, err := io.ReadAll(r.Body)
+	keys, err := httpauth.ReadKeyList(r)
 	if err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Reading keys").Error("Deregistration process interrupt.")
+		a.log.WithError(err).Error("Deregistration process interrupt.")
 		w.WriteHeader(http.StatusBadRequest)
 		return
-	}
-	var keysSlice []string
-	if err := json.Unmarshal(keysBody, &keysSlice); err != nil {
-		a.log.WithError(ErrBadInput).WithField("Step", "Slicing keys").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	for _, key := range keysSlice {
-		tempKey := cipher.PubKey{}
-		if err := tempKey.UnmarshalText([]byte(key)); err != nil {
-			a.log.WithError(ErrBadInput).WithField("Step", "Checking keys").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		keys = append(keys, tempKey)
 	}
 
 	// check sType
@@ -651,7 +610,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 		a.cxoPublisher.DelEntry(sType, key)
 	}
 	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Type": sType}).Info("Deregistration process completed.")
-	a.writeJSON(w, r, http.StatusOK, true)
+	httputil.WriteJSON(w, r, http.StatusOK, true)
 }
 
 func (a *API) writeError(w http.ResponseWriter, r *http.Request, status int, err string) {
@@ -790,35 +749,13 @@ func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorS
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		ServiceName: "service-discovery",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
 		DmsgAddr:    a.dmsgAddr,
 		DmsgServers: a.DmsgServers,
 	})
-}
-
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to write json response")
-	}
-}
-
-func (a *API) logger(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
 }
 
 /*

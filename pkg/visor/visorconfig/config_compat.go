@@ -69,6 +69,7 @@ type v1JSON struct {
 
 	LogLevel             string                       `json:"log_level"`
 	LogHookLevel         string                       `json:"log_hook_level,omitempty"`
+	GCTraceSamples       int                          `json:"gc_trace_samples,omitempty"`
 	LocalPath            string                       `json:"local_path"`
 	Skyenv               string                       `json:"skyenv,omitempty"`
 	StunServers          []string                     `json:"stun_servers"`
@@ -138,6 +139,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.KeyRing = mirror.KeyRing
 	v.LogLevel = mirror.LogLevel
 	v.LogHookLevel = mirror.LogHookLevel
+	v.GCTraceSamples = mirror.GCTraceSamples
 	v.LocalPath = mirror.LocalPath
 	v.Skyenv = mirror.Skyenv
 	v.StunServers = mirror.StunServers

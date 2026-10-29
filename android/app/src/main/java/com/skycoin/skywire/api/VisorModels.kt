@@ -337,10 +337,22 @@ internal data class UserExists(@SerialName("exists") val exists: Boolean = false
 @Serializable
 internal data class CsrfToken(@SerialName("csrf_token") val token: String = "")
 
-/** What `POST /api/dmsg/reconnect` reports: sessions torn down for re-dial. */
+/**
+ * What the phone tells the core in `POST /api/network`: "moved" when the
+ * network changed under it, "changed" when only its metered flag did.
+ */
 @Serializable
-internal data class DmsgReconnectResult(
-    @SerialName("sessions_closed") val sessionsClosed: Int = 0,
+internal data class NetworkEvent(
+    @SerialName("event") val event: String,
+    @SerialName("metered") val metered: Boolean? = null,
+    @SerialName("ifname") val ifname: String? = null,
+)
+
+/** The part of the core's network section the watcher logs. */
+@Serializable
+internal data class NetworkReply(
+    @SerialName("mode") val mode: String = "",
+    @SerialName("metered") val metered: Boolean = false,
 )
 
 @Serializable

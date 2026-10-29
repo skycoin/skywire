@@ -247,6 +247,10 @@ type Client struct {
 	// turns it on (CountTraffic).
 	traffic trafficRegistry
 
+	// dialPaused holds the serve loop before it dials another server
+	// session. Sessions already up stay up (SetDialPaused).
+	dialPaused atomic.Bool
+
 	initBO time.Duration // initial backoff duration (constant)
 	bo     time.Duration // current backoff duration
 	maxBO  time.Duration // maximum backoff duration
@@ -558,6 +562,9 @@ serve:
 		if isClosed(ce.done) {
 			return
 		}
+		if !ce.waitDialAllowed() {
+			return
+		}
 		var entries []*disc.Entry
 		var err error
 		relayGen := ce.relayGeneration()
@@ -763,6 +770,9 @@ serve:
 		for n, entry := range entries {
 			if isClosed(ce.done) {
 				return
+			}
+			if ce.dialPaused.Load() {
+				continue serve
 			}
 			if ce.relayGeneration() != relayGen {
 				// Nominees changed during this pass (the wake-up sentinel is only
@@ -1493,7 +1503,9 @@ func (ce *Client) reconnectLoop(ctx context.Context) {
 		case <-ce.done:
 			return
 		case <-ticker.C:
-			ce.reconnectMissing(ctx)
+			if !ce.dialPaused.Load() {
+				ce.reconnectMissing(ctx)
+			}
 		}
 	}
 }
@@ -1871,3 +1883,33 @@ func (ce *Client) reapOrphanPorts() {
 		WithField("ports_reserved", ce.porter.Count()).
 		Debug("Reaped orphaned ephemeral port reservations")
 }
+
+// SetDialPaused stops the client dialing server sessions while p is true.
+// Sessions already up stay up and are not redialed when they drop. False
+// resumes dialing.
+func (ce *Client) SetDialPaused(p bool) {
+	ce.dialPaused.Store(p)
+}
+
+// DialPaused reports whether SetDialPaused(true) is in force.
+func (ce *Client) DialPaused() bool { return ce.dialPaused.Load() }
+
+// SetRelayPaused makes the client refuse every new relayed stream while p is
+// true, whatever dmsg.relay_max_streams allows.
+func (ce *Client) SetRelayPaused(p bool) { ce.relayPaused.Store(p) }
+
+// waitDialAllowed blocks while dialing is paused. False means the client
+// closed.
+func (ce *Client) waitDialAllowed() bool {
+	for ce.dialPaused.Load() {
+		select {
+		case <-ce.done:
+			return false
+		case <-time.After(dialPausePoll):
+		}
+	}
+	return !isClosed(ce.done)
+}
+
+// dialPausePoll is how soon a resumed client notices.
+var dialPausePoll = time.Second

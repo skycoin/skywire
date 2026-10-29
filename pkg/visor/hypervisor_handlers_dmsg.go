@@ -3,6 +3,8 @@ package visor
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -236,4 +238,27 @@ func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 		return hv.visor.dmsgTracker.manager.GetBulk(ctx, pks)
 	}
 	return []dmsgtracker.DmsgClientSummary{}
+}
+
+// postNetwork takes the host app's report of the network: {"event":"moved"}
+// when the phone changed network, which refreshes everything the visor
+// advertises (dmsg sessions included), and the system's metered flag, which
+// can switch the visor's mode. It answers with the visor's network section.
+func (hv *Hypervisor) postNetwork() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, map[string]string{"error": "visor not available"})
+			return
+		}
+		var ev visorapi.NetworkEvent
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&ev); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad network event: " + err.Error()})
+			return
+		}
+		if err := hv.visor.NetworkEvent(ev); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, hv.visor.NetworkState())
+	}
 }

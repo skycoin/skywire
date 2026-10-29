@@ -57,6 +57,10 @@ type Config struct {
 	// permanently registered with no country whenever it lost that race. With
 	// GeoFunc, the next heartbeat after the lookup completes carries the country.
 	GeoFunc func() *geo.LocationData
+	// PublicIPFunc, when non-nil, returns the visor's current public IP. It is
+	// re-read on every registration and request, so the entry and the
+	// SW-PublicIP header follow the visor to a new network.
+	PublicIPFunc func() string
 	// Sink, when non-nil, is handed a copy of every entry this client
 	// successfully registers, and of every entry it deregisters. It is how
 	// the visor's SD-registration-over-CXO publisher learns its own live
@@ -97,6 +101,8 @@ type HTTPClient struct {
 	entryMx        sync.Mutex // only used if RegisterEntry && DeleteEntry functions are used.
 	client         *http.Client
 	clientPublicIP string
+	// entryPublicIP is the public IP entry.LocalIPs was built with.
+	entryPublicIP string
 	// posted is the entry as the next unchanged heartbeat would send it,
 	// and postedEpoch the CXO keepalive epoch when it was last accepted over
 	// HTTP. Guarded by entryMx.
@@ -166,6 +172,9 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauthclient.Client, error) {
 	auth, err := httpauthclient.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.clientPublicIP, c.mLog)
 	if err != nil {
 		return nil, err
+	}
+	if c.conf.PublicIPFunc != nil {
+		auth.SetPublicIPFunc(c.publicIP)
 	}
 
 	authClient = auth
@@ -261,7 +270,9 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 	c.entryMx.Lock()
 	defer c.entryMx.Unlock()
-	if c.conf.Type == ServiceTypeVisor && len(c.entry.LocalIPs) == 0 {
+	pub := c.publicIP()
+	if c.conf.Type == ServiceTypeVisor && (len(c.entry.LocalIPs) == 0 || pub != c.entryPublicIP) {
+		c.entryPublicIP = pub
 		ips, err := netutil.DefaultNetworkInterfaceIPs()
 		if err != nil {
 			return Service{}, err
@@ -273,17 +284,17 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 
 		// Include public IP in local IPs for NAT compatibility
 		// Service discovery server checks that remote IP is in local IPs
-		if c.clientPublicIP != "" {
+		if pub != "" {
 			// Check if public IP is already in the list
 			found := false
 			for _, ip := range c.entry.LocalIPs {
-				if ip == c.clientPublicIP {
+				if ip == pub {
 					found = true
 					break
 				}
 			}
 			if !found {
-				c.entry.LocalIPs = append(c.entry.LocalIPs, c.clientPublicIP)
+				c.entry.LocalIPs = append(c.entry.LocalIPs, pub)
 			}
 		}
 	}
@@ -467,4 +478,15 @@ func (c *HTTPClient) Register(ctx context.Context) error {
 		return nil
 	}
 	return retrier.Do(ctx, run)
+}
+
+// publicIP is the visor's current public IP, live when Config.PublicIPFunc is
+// set and the address given to NewClient otherwise.
+func (c *HTTPClient) publicIP() string {
+	if c.conf.PublicIPFunc != nil {
+		if ip := c.conf.PublicIPFunc(); ip != "" {
+			return ip
+		}
+	}
+	return c.clientPublicIP
 }

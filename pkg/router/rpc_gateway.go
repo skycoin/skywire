@@ -4,6 +4,8 @@ package router
 //go:generate go run ../../internal/rpcgen -type RPCGateway=registerRPCGateway,SetupRPCGateway=RegisterSetupRPCGateway,TransportQueryRPCGateway=registerTransportQueryRPCGateway,directSetupGateway=registerDirectSetupGateway -o rpc_register.go
 
 import (
+	"sync/atomic"
+
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -18,6 +20,8 @@ type RPCGateway struct {
 	router Router
 	// noTransit refuses intermediary rules outright (routing.no_transit).
 	noTransit bool
+	// transitPaused, when set, refuses them too while it reads true.
+	transitPaused *atomic.Bool
 }
 
 // NewRPCGateway creates a new RPCGateway.
@@ -53,7 +57,7 @@ func (r *RPCGateway) AddEdgeRules(rules routing.EdgeRules, ok *bool) error {
 // exactly what routing.no_transit means. Edge rules arrive by AddEdgeRules and
 // are untouched, so routes that start or end here still work.
 func (r *RPCGateway) AddIntermediaryRules(rules []routing.Rule, ok *bool) error {
-	if r.noTransit {
+	if r.noTransit || (r.transitPaused != nil && r.transitPaused.Load()) {
 		*ok = false
 		r.logger.Debug("Refusing intermediary rules: this visor does not transit routes.")
 		return routing.Failure{Code: routing.FailureAddRules, Msg: "visor does not transit routes"}

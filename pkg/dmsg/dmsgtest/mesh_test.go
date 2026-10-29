@@ -304,14 +304,20 @@ func nonPublicReverseSetup(t *testing.T, ctx context.Context, allow bool) (strea
 		t.Fatal("Client B not ready")
 	}
 
-	// B dials A — only possible via the announced reverse-forward path.
-	for attempt := 0; attempt < 3; attempt++ {
+	// B dials A — only possible via the announced reverse-forward path. The
+	// announcement can land well after the sleep above on a slow runner, so an
+	// allowed dial keeps retrying for 20s; a refused one needs only a few tries.
+	window := 6 * time.Second
+	if allow {
+		window = 20 * time.Second
+	}
+	for attempt, deadline := 1, time.Now().Add(window); ; attempt++ {
 		streamB, dialErr = clientB.DialStream(ctx, dmsg.Addr{PK: pkA, Port: port})
-		if dialErr == nil {
+		if dialErr == nil || !time.Now().Before(deadline) {
 			break
 		}
-		t.Logf("Reverse dial attempt %d: %v", attempt+1, dialErr)
-		time.Sleep(2 * time.Second)
+		t.Logf("Reverse dial attempt %d: %v", attempt, dialErr)
+		time.Sleep(time.Second)
 	}
 
 	accA = lisA.AcceptStream

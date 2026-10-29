@@ -35,6 +35,7 @@ skywire cli serve
 - [add](add/README.md) — Register a forwarded port
 - [ls](ls/README.md) — List registered ports (same as bare `serve`)
 - [rm](rm/README.md) — Unregister a forwarded port
+- [sites](sites/README.md) — Show or hide the list of sites served on port 80
 - [vhost](vhost/README.md) — Serve local sites on port 80 by the request's Host
 - [whitelist](whitelist/README.md) — Set/replace/clear the PK whitelist on an already-registered port
 

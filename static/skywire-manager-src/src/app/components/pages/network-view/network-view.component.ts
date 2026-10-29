@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
-import { Subscription, interval, startWith } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { EMPTY, Subscription } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 
 import { NodeService } from '../../../services/node.service';
+import { LiveService } from '../../../services/live.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 import { PageBaseComponent } from 'src/app/utils/page-base';
@@ -64,7 +65,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
 
   private sub!: Subscription;
 
-  constructor(private nodeService: NodeService, private cdr: ChangeDetectorRef) {
+  constructor(private nodeService: NodeService, private live: LiveService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -74,18 +75,20 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
     // so anything finer-grained just hits the cache. The Refresh
     // button below the table forces a fresh fetch when the user
     // wants a current sample on demand.
-    this.sub = interval(300000)
+    this.sub = this.live.watch('network-view', 300000, () => this.nodeService.getNetworkView())
       .pipe(
-        startWith(0),
-        switchMap(() => this.nodeService.getNetworkView()),
-      )
-      .subscribe({
-        next: (resp: NetworkResponse) => this.onResponse(resp),
-        error: (err) => {
+        // A failed fetch is shown and the next one still runs.
+        switchMap(res => res.pipe(catchError(err => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch network view';
           this.cdr.markForCheck();
-        },
+
+          return EMPTY;
+        }))),
+      )
+      .subscribe((resp: NetworkResponse) => {
+        this.onResponse(resp);
+        this.cdr.markForCheck();
       });
 
     return super.ngOnInit();

@@ -35,6 +35,9 @@ type RPCIngressClient interface {
 	// it can dial over this same data plane — the resolving proxies, each with
 	// the hostname suffixes it answers for.
 	LocalServices() ([]appnet.LocalService, error)
+	// ContactNames fetches the visor contact book as key hex to name. Empty
+	// when this app may not read it.
+	ContactNames() (map[string]string, error)
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and
@@ -119,6 +122,15 @@ func (c *rpcIngressClient) SetAppPort(port routing.Port) error {
 func (c *rpcIngressClient) LocalServices() ([]appnet.LocalService, error) {
 	var resp []appnet.LocalService
 	if err := c.rpc.Call(c.formatMethod("LocalServices"), &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// ContactNames asks the visor for its contact book names.
+func (c *rpcIngressClient) ContactNames() (map[string]string, error) {
+	var resp map[string]string
+	if err := c.rpc.Call(c.formatMethod("ContactNames"), &struct{}{}, &resp); err != nil {
 		return nil, err
 	}
 	return resp, nil

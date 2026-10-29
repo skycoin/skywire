@@ -54,8 +54,7 @@ func TestTCPFactoryRoundTrip(t *testing.T) {
 	srvConn := acceptWithin(t, accepted, 10*time.Second)
 	defer srvConn.Close()
 
-	conn.GetChanOut() <- Frame{Body: []byte("over noise")}
-	conn.Kick()
+	conn.QueueFrame(Frame{Body: []byte("over noise")})
 	assert.Equal(t, []byte("over noise"), recvWithin(t, srvConn, 10*time.Second))
 }
 
@@ -110,8 +109,7 @@ func TestUDPFactoryRoundTrip(t *testing.T) {
 	srvConn := acceptWithin(t, accepted, 5*time.Second)
 	defer srvConn.Close()
 
-	conn.GetChanOut() <- Frame{Body: []byte("udp-msg")}
-	conn.Kick()
+	conn.QueueFrame(Frame{Body: []byte("udp-msg")})
 	assert.Equal(t, []byte("udp-msg"), recvWithin(t, srvConn, 5*time.Second))
 }
 

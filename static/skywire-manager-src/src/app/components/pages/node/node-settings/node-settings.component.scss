@@ -137,3 +137,8 @@ select option {
   color: #fff !important;
   border-color: rgba(255, 255, 255, 0.35) !important;
 }
+
+// A value the visor would refuse on save.
+.field input.invalid { border-color: #ff8a80; }
+.field-error { color: #ff8a80; font-size: 0.85em; margin-top: 2px; }
+.invalid-count { color: #ff8a80; font-size: 0.9em; }

@@ -3,11 +3,15 @@ package autoconfigcmd
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
 
@@ -33,6 +37,81 @@ type Flag struct {
 	EnvDefault string `json:"env_default,omitempty"`
 	// EnvNote is guidance about how this variable interacts with another.
 	EnvNote string `json:"env_note,omitempty"`
+	// Check names the rule a value must pass beyond its format, one of the
+	// Check* constants, so a form can test it before saving.
+	Check string `json:"check,omitempty"`
+}
+
+// The value rules a variable can carry beyond its .conf format.
+const (
+	CheckPK       = "pk"       // one public key
+	CheckPKs      = "pks"      // comma-separated public keys
+	CheckHostPort = "hostport" // host:port, the host may be empty
+	CheckDuration = "duration" // a Go duration such as 10s or 5m
+	CheckLogLevel = "loglevel" // a logrus level name
+)
+
+// envChecks maps a variable to its rule. Variables not listed take any text.
+var envChecks = map[string]string{
+	"ADDVPNPK":         CheckPK,
+	"PROXYCLIENTPK":    CheckPK,
+	"HYPERVISORPKS":    CheckPKs,
+	"DMSGPTYPKS":       CheckPKs,
+	"PROXYSERVERWL":    CheckPKs,
+	"VPNSERVERWL":      CheckPKs,
+	"ROUTESETUPPKS":    CheckPKs,
+	"TPSETUPPKS":       CheckPKs,
+	"SURVEYPKS":        CheckPKs,
+	"DMSGRELAYKEYS":    CheckPKs,
+	"HVHTTPADDR":       CheckHostPort,
+	"HVDESKADDR":       CheckHostPort,
+	"SKYCHATADDR":      CheckHostPort,
+	"SKYCOINWEBADDR":   CheckHostPort,
+	"DMSGRELAYADDR":    CheckHostPort,
+	"DMSGSERVERPUBLIC": CheckHostPort,
+	"LANDMSGPUBLIC":    CheckHostPort,
+	"REGTIMEOUT":       CheckDuration,
+	"SHUTDOWNTIMEOUT":  CheckDuration,
+	"LOGLVL":           CheckLogLevel,
+}
+
+// checkValue applies rule to value. An empty value always passes: it leaves
+// the variable blank, which config gen reads as its default.
+func checkValue(rule, value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	switch rule {
+	case CheckPK:
+		var pk cipher.PubKey
+		if err := pk.Set(value); err != nil {
+			return fmt.Errorf("%q is not a public key", value)
+		}
+	case CheckPKs:
+		for _, s := range strings.Split(value, ",") {
+			if err := checkValue(CheckPK, s); err != nil {
+				return err
+			}
+		}
+	case CheckHostPort:
+		_, port, err := net.SplitHostPort(value)
+		if err != nil {
+			return fmt.Errorf("%q is not host:port", value)
+		}
+		if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
+			return fmt.Errorf("%q has no valid port", value)
+		}
+	case CheckDuration:
+		if _, err := time.ParseDuration(value); err != nil {
+			return fmt.Errorf("%q is not a duration like 10s or 5m", value)
+		}
+	case CheckLogLevel:
+		if _, err := logrus.ParseLevel(value); err != nil {
+			return fmt.Errorf("%q is not a log level (trace, debug, info, warn, error, fatal, panic)", value)
+		}
+	}
+	return nil
 }
 
 // Describe returns every autoconfig flag in registration order, the order
@@ -54,6 +133,7 @@ func Describe() []Flag {
 			info.EnvNegate = m.Negate
 			info.EnvDefault = m.Default
 			info.EnvNote = m.Note
+			info.Check = envChecks[m.Key]
 		}
 		out = append(out, info)
 	})
@@ -90,8 +170,14 @@ func EditFor(flag, value string) (skyenvfile.Edit, error) {
 		}
 		e.Value = skyenvfile.FormatInt(i)
 	case EnvFormatBashArray:
+		if err := checkValue(envChecks[m.Key], value); err != nil {
+			return skyenvfile.Edit{}, fmt.Errorf("--%s: %w", flag, err)
+		}
 		e.Value = skyenvfile.FormatBashArray(value)
 	default:
+		if err := checkValue(envChecks[m.Key], value); err != nil {
+			return skyenvfile.Edit{}, fmt.Errorf("--%s: %w", flag, err)
+		}
 		e.Value = skyenvfile.FormatString(value)
 	}
 	return e, nil

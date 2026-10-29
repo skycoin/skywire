@@ -29,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -193,93 +192,38 @@ func (s *service) Run(ctx context.Context) error {
 	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(log)()
 
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			log.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
-	}
+	id := cfg.Identity(log)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-	}
-
-	sdAPI, err := s.build(runCtx, log, dmsgAddr, true)
+	sdAPI, err := s.build(runCtx, log, id.DmsgAddr, true)
 	if err != nil {
 		return err
 	}
 
-	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
-	if err != nil {
-		return fmt.Errorf("service-discovery: invalid mode: %w", err)
-	}
-
-	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
-	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
-	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr()
-	}
-	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := cfg.SurveyKeys()
-
-	addr := cfg.Addr
-	if addr == "" {
-		addr = ":9098"
-	}
-	h, err := svcmode.Start(runCtx, svcmode.Config{
-		Stats:               s.stats,
-		Mode:                resolvedMode,
-		LogHookLevel:        cfg.LogHookLevel,
-		HTTPAddr:            addr,
-		Handler:             sdAPI,
-		PK:                  pk,
-		SK:                  sk,
-		DmsgPort:            dmsgPort,
-		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
-		DmsgServerType:      cfg.Dmsg.ServerType,
-		EmbeddedDmsgServers: embeddedServers,
-		SurveyWhitelist:     surveyWL,
-		Log:                 log,
+	h, err := cfg.Listen(runCtx, id, services.Listener{
+		Name:        "service-discovery",
+		DefaultAddr: ":9098",
+		Handler:     sdAPI,
+		Dmsg:        cfg.Dmsg,
+		Stats:       s.stats,
 		OnDmsgServersUpdated: func(svrs []string) {
 			sdAPI.DmsgServers = svrs
 		},
-	})
+	}, log)
 	if err != nil {
-		return fmt.Errorf("service-discovery: start listeners: %w", err)
+		return err
 	}
 	defer h.Close()
 
-	if cfg.ChartsAddr != "" {
-		log.Infof("Serving the charts page on %s", cfg.ChartsAddr)
-		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(sdAPI.ChartsPage)); err != nil {
-				log.WithError(err).Error("charts listener failed")
-			}
-		}()
-	}
+	services.ServeCharts(runCtx, cfg.ChartsAddr, sdAPI.ChartsPage, log)
 
 	if h.DmsgClient != nil {
-		s.startCXO(runCtx, h.DmsgClient, nil, sdAPI, sk, log)
+		s.startCXO(runCtx, h.DmsgClient, nil, sdAPI, id.SK, log)
 	}
 
-	select {
-	case <-runCtx.Done():
-		return nil
-	case err := <-h.Errors():
-		log.WithError(err).Error("listener failed")
-		return err
-	}
+	return services.Wait(runCtx, h, log)
 }
 
 // servicesCXORepublishInterval is how often the SD services CXO feed

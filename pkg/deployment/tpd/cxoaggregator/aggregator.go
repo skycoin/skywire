@@ -39,6 +39,7 @@
 package cxoaggregator
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -177,6 +178,15 @@ type transportListLeaf struct {
 	// transport.EntryFromCompact(reporter, ce). Visors on develop publish
 	// this; older visors still publish Entries, which are read as-is.
 	Compact []transport.CompactEntry `json:"c,omitempty"`
+}
+
+// decodeTransportList unmarshals a list leaf. The compact rows are counted
+// first so the slice is allocated once instead of regrown by the decoder.
+func decodeTransportList(leaf []byte, list *transportListLeaf) error {
+	if n := bytes.Count(leaf, []byte("},{")); n > 0 {
+		list.Compact = make([]transport.CompactEntry, 0, n+1)
+	}
+	return json.Unmarshal(leaf, list)
 }
 
 // entries returns the reconstructed full-entry set from whichever form
@@ -858,7 +868,7 @@ func (a *Aggregator) fetchDiscoveryLeafWithGetter(g skyobject.Getter, r *registr
 	}
 	leaf = cxoutils.Gunzip(leaf) // publisher may gzip; raw bodies pass through
 	var list transportListLeaf
-	if err := json.Unmarshal(leaf, &list); err != nil {
+	if err := decodeTransportList(leaf, &list); err != nil {
 		a.log.WithError(err).WithField("visor", reporter).WithField("path", path).
 			Debug("CXO aggregator: targeted transport list decode failed")
 		return nil, "", false
@@ -1030,7 +1040,7 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	// (register new + deregister absent).
 	if path == tpdListLeafName || path == "transports/list" {
 		var list transportListLeaf
-		if err := json.Unmarshal(leaf, &list); err != nil {
+		if err := decodeTransportList(leaf, &list); err != nil {
 			a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: transport list leaf decode failed")
 			return
 		}
@@ -1148,7 +1158,7 @@ func (a *Aggregator) dispatchTelemetryShard(path string, leaf []byte, reporter c
 		}
 		k := telKey{id: e.ID, reporter: reporter}
 		snap := telSnap{sent: e.SentBytes, recv: e.RecvBytes, throughput: float64(e.ThroughputBps),
-			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tpType: tpType, sameNet: telemetrywire.SameNetwork(e.Type), at: now}
+			latMin: float64(e.LatMin), latMax: float64(e.LatMax), latAvg: float64(e.LatAvg), tp: tpCodeOf(tpType), sameNet: telemetrywire.SameNetwork(e.Type), at: now.UnixNano()}
 		for _, s := range a.pace.offer(k, snap, now) {
 			due = append(due, heldSnap{k: k, s: s})
 		}
@@ -1170,7 +1180,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 	a.heartbeat(ctx, id, tpType, at)
 	k := telKey{id: id, reporter: reporter}
 	s := telSnap{sent: sent, recv: recv, throughput: throughputBps,
-		latMin: latMin, latMax: latMax, latAvg: latAvg, tpType: tpType}
+		latMin: latMin, latMax: latMax, latAvg: latAvg, tp: tpCodeOf(tpType)}
 	for _, s := range a.pace.offer(k, s, time.Now()) {
 		a.applySnap(ctx, k, s)
 	}
@@ -1179,7 +1189,7 @@ func (a *Aggregator) applyTelemetry(ctx context.Context, id uuid.UUID, reporter 
 // applySnap writes one telemetry snapshot to the store.
 func (a *Aggregator) applySnap(ctx context.Context, k telKey, s telSnap) {
 	id, reporter := k.id, k.reporter
-	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType
+	sent, recv, throughputBps, tpType := s.sent, s.recv, s.throughput, s.tpType()
 	latMin, latMax, latAvg := s.latMin, s.latMax, s.latAvg
 	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, sent, recv, tpType); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")

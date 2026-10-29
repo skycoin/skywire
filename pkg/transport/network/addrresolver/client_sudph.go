@@ -32,6 +32,9 @@ type SUDPHBinder interface {
 }
 
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {
+	if c.bindOff.Load() {
+		return nil, ErrBindingDisabled
+	}
 	log := c.log.WithField("func", "httpClient.BindSUDPH")
 	if !c.isReady() {
 		log.Debug("BindSUDPH: Address resolver is not ready yet, waiting...")
@@ -117,17 +120,10 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		return nil, LocalAddresses{}, err
 	}
 
-	addresses, err := netutil.LocalAddresses()
+	localAddresses, err := c.sudphPayload(localPort)
 	if err != nil {
 		arConn.Close() //nolint:errcheck,gosec
 		return nil, LocalAddresses{}, err
-	}
-
-	localAddresses := LocalAddresses{
-		Addresses:  addresses,
-		Port:       localPort,
-		PublicIP:   c.LocalPublicIP(),
-		PublicIPv6: c.localPublicIPv6Raw(),
 	}
 
 	laData, err := json.Marshal(localAddresses)
@@ -197,4 +193,19 @@ func (c *httpClient) serveSUDPHReconnect(filter *pfilter.PacketFilter, hs Handsh
 		c.sudphLocalAddr = newLocalAddrs
 		c.log.Info("SUDPH reconnected to address-resolver")
 	}
+}
+
+// sudphPayload is the registration a SUDPH session sends, built from the
+// current addresses and public IP.
+func (c *httpClient) sudphPayload(port string) (LocalAddresses, error) {
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return LocalAddresses{}, err
+	}
+	return LocalAddresses{
+		Addresses:  addresses,
+		Port:       port,
+		PublicIP:   c.LocalPublicIP(),
+		PublicIPv6: c.localPublicIPv6Raw(),
+	}, nil
 }

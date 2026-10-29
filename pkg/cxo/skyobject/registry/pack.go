@@ -2,6 +2,9 @@
 package registry
 
 import (
+	"reflect"
+	"sync"
+
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/encoder"
 )
@@ -130,7 +133,58 @@ func get(
 		return
 	}
 
-	_, err = encoder.DeserializeRaw(val, obj)
+	_, err = decode(val, obj)
 
 	return
+}
+
+// byteSlices caches, per type, whether decoding it can leave a byte slice
+// pointing into the input.
+var byteSlices sync.Map // reflect.Type -> bool
+
+// decode decodes val into the pointer obj. The pack's val is shared with
+// the cache, so it is decoded without a copy only when obj has no byte
+// slice field to point into it. Strings and arrays are always copied out.
+func decode(val []byte, obj interface{}) (uint64, error) {
+	t := reflect.TypeOf(obj)
+	if t == nil || t.Kind() != reflect.Ptr {
+		return encoder.DeserializeRaw(val, obj)
+	}
+	t = t.Elem()
+	shares, ok := byteSlices.Load(t)
+	if !ok {
+		shares, _ = byteSlices.LoadOrStore(t, hasByteSlice(t, map[reflect.Type]bool{}))
+	}
+	if shares.(bool) {
+		return encoder.DeserializeRaw(val, obj)
+	}
+	return encoder.DeserializeRawNoCopy(val, obj)
+}
+
+func hasByteSlice(t reflect.Type, seen map[reflect.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t.Kind() {
+	case reflect.Slice:
+		if k := t.Elem().Kind(); k == reflect.Uint8 || k == reflect.Int8 {
+			return true
+		}
+		return hasByteSlice(t.Elem(), seen)
+	case reflect.Array, reflect.Ptr:
+		return hasByteSlice(t.Elem(), seen)
+	case reflect.Map:
+		return hasByteSlice(t.Key(), seen) || hasByteSlice(t.Elem(), seen)
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if hasByteSlice(t.Field(i).Type, seen) {
+				return true
+			}
+		}
+		return false
+	case reflect.Interface:
+		return true
+	}
+	return false
 }

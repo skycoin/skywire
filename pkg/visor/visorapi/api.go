@@ -47,6 +47,7 @@ type API interface {
 	Routing
 	Transports
 	Mail
+	Contacts
 }
 
 // Node is the visor itself: status, lifecycle, configuration, rewards and
@@ -421,6 +422,14 @@ type Dmsg interface {
 	DmsgPorterDiag() (*netutil.EphemeralDiagResult, error)
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
+	// NetworkMoved makes the visor refresh its public IP, NAT class, LAN
+	// addresses and every registration, as after a move to another network.
+	NetworkMoved(reason string) error
+	// NetworkSet changes the network policy (transport.network) live.
+	NetworkSet(in NetworkSettings) error
+	// NetworkEvent takes an app's report of a network change or of the
+	// network becoming metered or not.
+	NetworkEvent(ev NetworkEvent) error
 }
 
 // Routing is routes, route groups, their multiplexing and the router's settings.
@@ -1349,6 +1358,9 @@ type ForwardedPort struct {
 	// Vhosts are sites on port 80 chosen by the request's Host, each a local
 	// service reverse-proxied without Caddy. Set on the port 80 entry.
 	Vhosts []Vhost `json:"vhosts,omitempty"`
+	// HideSites keeps the sites served on port 80 off the landing page and
+	// GET /.skywire/sites. They are still served. Set on the port 80 entry.
+	HideSites bool `json:"hide_sites,omitempty"`
 }
 
 // Vhost is a site the visor serves on port 80 for one or more Host names, as

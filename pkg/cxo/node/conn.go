@@ -67,8 +67,6 @@ type Conn struct {
 	// debug lines format it on every message whether or not they print.
 	str atomic.Pointer[string]
 
-	sendq chan<- transport.Frame // channel from transport.Connection
-
 	// # stat
 	//
 	// Stat collection uses the connection mutex; lock-free counters could reduce overhead.
@@ -96,8 +94,6 @@ func (n *Node) newConnection(
 
 		closeq: make(chan struct{}),
 		doneq:  make(chan struct{}),
-
-		sendq: fc.GetChanOut(),
 
 		reqs: make(map[uint32]chan<- msg.Msg),
 	}
@@ -209,9 +205,8 @@ func (c *Conn) probe() {
 	f := c.encodeMsg(c.nextSeq(), 0, &msg.RqList{})
 	select {
 	case <-c.closeq:
-	case c.sendq <- f:
-		c.Kick()
 	default:
+		c.QueueFrame(f)
 	}
 }
 
@@ -616,13 +611,13 @@ func (c *Conn) encodeMsg(seq, rseq uint32, m msg.Msg) transport.Frame {
 }
 
 // sendMsgQueueTimeout is the max time sendMsg will wait to enqueue a
-// message into the per-conn sendq. The underlying transport.Connection
-// buffers 256 frames in the `out` channel; if the buffer is full it
+// message into the per-conn send queue. The underlying transport.Connection
+// queues up to 256 frames; if the queue is full it
 // means the writeLoop is stuck (e.g. the underlying net.Conn is in a
 // silent half-close — the kernel TCP write hasn't surfaced an error
 // yet, but the writer isn't draining either).
 //
-// Pre-fix sendMsg waited indefinitely on `c.sendq <- ...`. A single
+// Pre-fix sendMsg waited indefinitely on the queue. A single
 // stuck subscriber would block broadcastRoot's sequential iteration
 // over n.cs, so the publisher's runLoop hung and NO subscriber got
 // the next root push — symptom: peers reported group heartbeats
@@ -661,29 +656,20 @@ func (c *Conn) sendFrame(f transport.Frame) error {
 	default:
 	}
 
-	// Fast path: buffer has room, enqueue immediately.
-	select {
-	case c.sendq <- f:
-		c.Kick()
+	// A full queue waits a bounded time so a stuck subscriber doesn't stall
+	// the publisher's broadcastRoot iteration. closeq unblocks a concurrent
+	// Close cleanly.
+	switch err := c.SendFrame(f, c.closeq, sendMsgQueueTimeout); err {
+	case nil:
 		return nil
-	default:
-	}
-
-	// Slow path: buffer is full. Bound the wait so a stuck subscriber
-	// doesn't stall the publisher's broadcastRoot iteration. closeq
-	// is also selected so a concurrent Close unblocks us cleanly.
-	select {
-	case c.sendq <- f:
-		c.Kick()
-		return nil
-	case <-c.closeq:
-		return ErrClosed
-	case <-time.After(sendMsgQueueTimeout):
+	case transport.ErrSendTimeout:
 		c.n.sendMsgTimeoutCount.Add(1)
 		c.n.deadConnsClosed.Add(1)
 		c.n.Printf("[WARN] [%s] sendMsg: queue full for %s; declaring conn dead and closing",
 			c.String(), sendMsgQueueTimeout)
 		_ = c.Close() //nolint:errcheck,gosec
+		return ErrClosed
+	default:
 		return ErrClosed
 	}
 }

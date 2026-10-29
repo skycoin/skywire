@@ -57,6 +57,7 @@ describe('NodeService', () => {
       },
       { desc: 'skynetDisconnect', run: () => service.skynetDisconnect('NK', 'UUID'), verb: 'post', args: ['visors/NK/skynet-forwards/disconnect', { id: 'UUID' }] },
       { desc: 'shutdown', run: () => service.shutdown('NK'), verb: 'post', args: ['visors/NK/shutdown'] },
+      { desc: 'restart', run: () => service.restart('NK'), verb: 'post', args: ['visors/NK/restart'] },
     ];
 
     cases.forEach((c) => {

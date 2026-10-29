@@ -151,6 +151,16 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	defer close(nonDirectIPsCh)
 
 	eventSub := appevent.NewSubscriber()
+	// Subscribed before app.NewClient, whose handshake tells the visor which
+	// events to send: the visor names a network move once it handled one, and
+	// the direct routes then follow the new default gateway.
+	networkMovedCh := make(chan string, 1)
+	eventSub.OnNetworkMoved(func(data appevent.NetworkMovedData) {
+		select {
+		case networkMovedCh <- data.Reason:
+		default: // a re-pin is already queued
+		}
+	})
 
 	// Create app client early to get logger
 	appCl := app.NewClient(eventSub)
@@ -322,6 +332,25 @@ func RunVPNClient(ctx context.Context, args []string) error {
 			if err := vpnClient.RemoveDirectRoute(ip); err != nil {
 				logger.WithError(err).WithField("ip", ip.String()).Warn("Failed to remove direct route")
 				setAppErr(appCl, logger, err)
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case reason := <-networkMovedCh:
+				gw, moved, err := vpnClient.RepinDirectRoutes()
+				l := logger.WithField("reason", reason)
+				if err != nil {
+					l.WithError(err).Warn("Failed to move direct routes to the new gateway")
+					continue
+				}
+				if moved {
+					l.WithField("gateway", gw.String()).Info("Direct routes moved to the new default gateway")
+				}
 			}
 		}
 	}()

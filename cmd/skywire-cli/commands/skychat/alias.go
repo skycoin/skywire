@@ -36,8 +36,10 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/contacts"
 )
 
 const aliasFileName = "skywire/skychat-aliases.json"
@@ -128,6 +130,8 @@ func lookupAlias(pkHex string) string {
 //     store, even on accidental name collision).
 //   - any other input is treated as an alias name; the store is
 //     loaded and consulted.
+//   - a name that is not an alias is looked up in the visor contact
+//     book (contacts.KeyByName).
 //   - empty input → error.
 //
 // On unknown alias the error names the missing key so the operator
@@ -146,10 +150,29 @@ func resolveTarget(input string) (cipher.PubKey, error) {
 	}
 	hex, ok := s.entries[input]
 	if !ok {
-		return cipher.PubKey{}, fmt.Errorf("%q is neither a valid PK nor a known alias (try: skywire cli skychat alias ls)", input)
+		return bookTarget(input)
 	}
 	if err := pk.Set(hex); err != nil {
 		return cipher.PubKey{}, fmt.Errorf("alias %q maps to invalid PK %q: %w", input, hex, err)
+	}
+	return pk, nil
+}
+
+// bookTarget looks input up in the visor contact book, after the aliases so an
+// alias still wins.
+func bookTarget(input string) (cipher.PubKey, error) {
+	miss := fmt.Errorf("%q is neither a valid PK, a known alias (try: skywire cli skychat alias ls) nor a contact", input)
+	rpc, err := clirpc.ClientQuiet(nil)
+	if err != nil {
+		return cipher.PubKey{}, miss
+	}
+	list, err := rpc.ContactsList()
+	if err != nil {
+		return cipher.PubKey{}, miss
+	}
+	pk, err := contacts.KeyByName(list, input)
+	if err != nil {
+		return cipher.PubKey{}, fmt.Errorf("%q is not a valid PK or a known alias: %w", input, err)
 	}
 	return pk, nil
 }
@@ -170,7 +193,11 @@ Use a name anywhere a -t / --to / --peer / --from accepts a PK:
   skywire cli skychat listen --from claude2
 
 Full hex PKs always resolve directly, regardless of any same-named
-alias (so a typo on a real PK never gets silently rerouted).`,
+alias (so a typo on a real PK never gets silently rerouted).
+
+A name that is not an alias is looked up in the visor contact book
+(skywire cli contacts), matched without case. It must name one contact
+with one key.`,
 }
 
 var aliasAddCmd = &cobra.Command{

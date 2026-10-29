@@ -18,8 +18,8 @@ import java.io.File
  * added for this: the engine that serves the UI comes from the skycoin repo and
  * has no authentication, so the wrapper takes over `--addr`, puts basic auth on
  * it, and moves the engine to a loopback port drawn fresh at every start. The
- * password is a device-local secret ([SecretStore]) that the WebView answers the
- * challenge with and [com.skycoin.skywire.api.SkydexApi] sends on every call.
+ * password is a device-local secret ([SecretStore]) that
+ * [com.skycoin.skywire.api.SkydexApi] sends on every call.
  * Written before the app is ever started, so there is no window in which the
  * surface is open.
  */
@@ -33,7 +33,7 @@ object SkydexProfile {
 
     /**
      * Basic-auth username. The gate ignores it (`auth.go` checks the password
-     * alone), but a WebView challenge has to send something.
+     * alone), but basic auth has to send something.
      */
     const val USER = "skywire"
 
@@ -47,7 +47,7 @@ object SkydexProfile {
 
     fun passwordFile(paths: SkywirePaths): File = File(paths.localDir, PASSWORD_FILE)
 
-    /** Where the WebView loads the trading UI from. */
+    /** skydex-client's control API on this phone. */
     fun baseUrl(port: Int): String = "http://$HOST:$port/"
 
     fun listenPort(args: List<String>): Int =

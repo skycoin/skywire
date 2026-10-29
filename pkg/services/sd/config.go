@@ -8,8 +8,6 @@ import (
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/services"
 )
 
@@ -57,17 +55,4 @@ func ParseBlock(raw []byte) (*Config, error) {
 		return nil, fmt.Errorf("service-discovery: parse block: %w", err)
 	}
 	return &c, nil
-}
-
-func dmsgDiscEntries(configServers []*disc.Entry) []disc.Entry {
-	if len(configServers) == 0 {
-		return dmsg.Prod.DmsgServers
-	}
-	out := make([]disc.Entry, 0, len(configServers))
-	for _, e := range configServers {
-		if e != nil {
-			out = append(out, *e)
-		}
-	}
-	return out
 }

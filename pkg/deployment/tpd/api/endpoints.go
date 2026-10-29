@@ -263,7 +263,7 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		return json.Marshal(entries)
+		return marshalEntries(entries)
 	})
 	if err != nil {
 		if err != store.ErrTransportNotFound {
@@ -404,16 +404,22 @@ func (api *API) getAllTransportsPerKeyStats(w http.ResponseWriter, r *http.Reque
 // Shared by the HTTP handler and the per-key CXO feed, so both serve one
 // shape computed one way.
 func perKeyCounts(entries []*transport.Entry) map[string]map[string]int {
-	result := make(map[string]map[string]int)
+	// Count by key and hex-encode each distinct key once, not once per edge.
+	by := make(map[cipher.PubKey]map[string]int)
 	for _, entry := range entries {
 		for _, edge := range entry.Edges {
-			pkHex := edge.Hex()
-			if result[pkHex] == nil {
-				result[pkHex] = make(map[string]int)
+			m := by[edge]
+			if m == nil {
+				m = make(map[string]int, 4)
+				by[edge] = m
 			}
-			result[pkHex][string(entry.Type)]++
-			result[pkHex]["total"]++
+			m[string(entry.Type)]++
+			m["total"]++
 		}
+	}
+	result := make(map[string]map[string]int, len(by))
+	for pk, m := range by {
+		result[pk.Hex()] = m
 	}
 	return result
 }
@@ -526,42 +532,15 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	api.log(r).Info("Deregistration process started.")
 
-	nmPkString := r.Header.Get("NM-PK")
-	if ok := WhitelistPKs.Get(nmPkString); !ok {
-		api.log(r).WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	nmPk := cipher.PubKey{}
-	if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
-		api.log(r).WithError(ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	nmSign := cipher.Sig{}
-	if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-		api.log(r).WithError(ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
-		api.log(r).WithError(ErrUnauthorizedNetworkMonitor).WithField("Step", "Verifying request").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusForbidden)
+	if _, status, err := WhitelistPKs.Authorize(r); err != nil {
+		api.log(r).WithError(err).Error("Deregistration process interrupt.")
+		w.WriteHeader(status)
 		return
 	}
 
 	var tps []string
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		api.log(r).WithError(ErrBadInput).WithField("Step", "Reading transports ids").Error("Deregistration process interrupt.")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	if err := json.Unmarshal(body, &tps); err != nil {
-		api.log(r).WithError(ErrBadInput).WithField("Step", "Unmarshal transports ids").Error("Deregistration process interrupt.")
+	if err := httputil.ReadJSON(r, &tps); err != nil {
+		api.log(r).WithError(err).WithField("Step", "Reading transport ids").Error("Deregistration process interrupt.")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

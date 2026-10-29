@@ -146,3 +146,27 @@ func TestEmbeddedServiceRunsStandaloneWithoutKey(t *testing.T) {
 	require.Equal(t, "dmsg://"+filePK.Hex(), st[1].URL)
 	require.NoError(t, v.EmbeddedServiceControl("keyless", "stop"))
 }
+
+// The visor registers every service type a deployment host runs, so it does not
+// rely on the skywire svc command, which TinyGo builds leave out.
+func TestEmbeddedServiceTypesRegistered(t *testing.T) {
+	for _, typ := range []string{
+		"address-resolver", "config-bootstrapper", "dmsg-discovery", "dmsg-server", "geoip",
+		"route-finder", "service-discovery", "setup-node", "stun-server",
+		"transport-discovery", "transport-setup",
+	} {
+		_, ok := services.Lookup(typ)
+		require.True(t, ok, "service type %q is not registered", typ)
+	}
+}
+
+func TestOwnKeyServicesReportsUnknownType(t *testing.T) {
+	var b services.Block
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"no-such-service","name":"missing"}`), &b))
+	visorPK, visorSK := cipher.GenerateKeyPair()
+	common := &visorconfig.Common{PK: visorPK, SK: visorSK}
+	common.SetLogger(logging.NewMasterLogger())
+	v := &Visor{conf: &visorconfig.V1{Common: common, EmbeddedServices: []services.Block{b}}}
+	err := initOwnKeyServices(context.Background(), v, logging.MustGetLogger("test"))
+	require.ErrorContains(t, err, `unknown type "no-such-service"`)
+}

@@ -28,17 +28,38 @@ func countSocketFDs(t *testing.T) int {
 	return n
 }
 
-// TestWebRTCPeerConnectionsShareSockets opens several dial/accept pairs and
-// checks that they share sockets instead of binding their own, and that each
-// conn reports the selected candidate's IP as its remote address.
+// newAcceptMux makes the next accept use a socket of its own, as a different
+// remote visor would. The previous one closes with its last connection.
+func newAcceptMux() {
+	iceAcceptMux.mu.Lock()
+	defer iceAcceptMux.mu.Unlock()
+	if iceAcceptMux.cur != nil {
+		iceAcceptMux.cur.retire()
+	}
+	iceAcceptMux.cur, iceAcceptMux.key = nil, ""
+}
+
+// TestWebRTCPeerConnectionsShareSockets dials several peers and checks that the
+// dials share one socket per local address instead of binding their own, and
+// that each conn reports the selected candidate's IP as its remote address.
+//
+// Each peer accepts on its own socket. A shared mux routes by remote address,
+// so live connections between one pair of sockets would take each other's
+// packets; skywire keeps one transport per peer, so it never opens those.
 func TestWebRTCPeerConnectionsShareSockets(t *testing.T) {
 	const pairs = 8
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	sockBefore, grBefore := countSocketFDs(t), runtime.NumGoroutine()
-	var conns []net.Conn
+	var dials, accepts []net.Conn
+	defer func() {
+		for _, c := range append(dials, accepts...) {
+			c.Close() //nolint:errcheck,gosec
+		}
+	}()
 	for i := 0; i < pairs; i++ {
+		newAcceptMux()
 		sigA, sigB := net.Pipe()
 		var a, b net.Conn
 		var aErr, bErr error
@@ -50,18 +71,13 @@ func TestWebRTCPeerConnectionsShareSockets(t *testing.T) {
 		if aErr != nil || bErr != nil {
 			t.Fatalf("pair %d: dial %v, accept %v", i, aErr, bErr)
 		}
-		conns = append(conns, a, b)
+		dials, accepts = append(dials, a), append(accepts, b)
 	}
-	defer func() {
-		for _, c := range conns {
-			c.Close() //nolint:errcheck,gosec
-		}
-	}()
-	sockets := countSocketFDs(t) - sockBefore
-	goroutines := runtime.NumGoroutine() - grBefore
-	t.Logf("%d pairs: %d UDP sockets, %d goroutines", pairs, sockets, goroutines)
+	t.Logf("%d pairs: %d UDP sockets, %d goroutines", pairs,
+		countSocketFDs(t)-sockBefore, runtime.NumGoroutine()-grBefore)
 
-	for _, c := range conns {
+	dialAddrs := map[string]bool{}
+	for _, c := range append(dials, accepts...) {
 		u, ok := c.RemoteAddr().(*net.UDPAddr)
 		if !ok {
 			t.Fatalf("RemoteAddr = %T %v, want *net.UDPAddr", c.RemoteAddr(), c.RemoteAddr())
@@ -73,8 +89,11 @@ func TestWebRTCPeerConnectionsShareSockets(t *testing.T) {
 			t.Fatalf("selected a filtered address %v", u)
 		}
 	}
-	if sockets >= pairs {
-		t.Fatalf("%d sockets for %d pairs, want them shared", sockets, pairs)
+	for _, c := range dials {
+		dialAddrs[c.LocalAddr().String()] = true
+	}
+	if ips := len(strings.Split(iceLocalIPs(), ",")); len(dialAddrs) > ips {
+		t.Fatalf("%d dials used %d local addresses for %d local IPs, want one shared socket per IP", pairs, len(dialAddrs), ips)
 	}
 }
 

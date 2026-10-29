@@ -28,6 +28,55 @@ export interface SettingRow {
   value: string;
   // The visor reports only that it is set.
   secret: boolean;
+  // The rule the visor applies on save, from the flag's check.
+  check: string;
+}
+
+const logLevels = new Set(['trace', 'debug', 'info', 'warn', 'warning', 'error', 'fatal', 'panic']);
+
+function checkOne(rule: string, v: string): string {
+  switch (rule) {
+    case 'pk':
+      return /^[0-9a-fA-F]{66}$/.test(v) ? '' : `"${v}" is not a public key`;
+    case 'hostport': {
+      const m = /^(\[[^\]]*\]|[^:\s[\]]*):(\d{1,5})$/.exec(v);
+
+      return m && Number(m[2]) <= 65535 ? '' : `"${v}" is not host:port`;
+    }
+    case 'duration':
+      return /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/.test(v) ? '' : `"${v}" is not a duration like 10s or 5m`;
+    case 'loglevel':
+      return logLevels.has(v.toLowerCase()) ? '' : `"${v}" is not a log level`;
+  }
+
+  return '';
+}
+
+/**
+ * What is wrong with a value the form holds for a row, or '' when it would
+ * be accepted. The visor makes the same checks on save
+ * (autoconfigcmd.checkValue); this lets the form say so before then.
+ */
+export function settingError(r: SettingRow, value: string | undefined): string {
+  const v = (value || '').trim();
+  if (v === '' || (r.secret && v === skyenvRedacted)) {
+    return '';
+  }
+  if (r.format === 'int' && !/^-?\d+$/.test(v)) {
+    return `"${v}" is not a whole number`;
+  }
+  if (r.check === 'pks') {
+    for (const item of v.split(',').map(s => s.trim()).filter(s => s)) {
+      const err = checkOne('pk', item);
+      if (err) {
+        return err;
+      }
+    }
+
+    return '';
+  }
+
+  return checkOne(r.check, v);
 }
 
 export interface SettingChange {
@@ -67,7 +116,7 @@ function rowFor(f: SkyenvFlag, vals: { [key: string]: string }): SettingRow {
   const r: SettingRow = {
     key: key, flag: f.name, negate: !!f.env_negate, format: f.env_format || 'string',
     help: flagHelp(f.description), default: f.env_default || '', note: f.env_note || '',
-    set: false, value: '', secret: false,
+    set: false, value: '', secret: false, check: f.check || '',
   };
   if (key in vals) {
     const v = vals[key];
@@ -278,6 +327,16 @@ export class NodeSettingsComponent extends PageBaseComponent implements OnInit, 
 
   get visibleCount(): number {
     return this.rows.filter(r => this.visible(r)).length;
+  }
+
+  /** The field's problem, shown under it; '' when the value is acceptable. */
+  errorFor(r: SettingRow): string {
+    return settingError(r, this.form[r.key]);
+  }
+
+  /** How many fields hold a value the visor would refuse. */
+  get invalidCount(): number {
+    return this.rows.filter(r => this.errorFor(r) !== '').length;
   }
 
   placeholder(r: SettingRow): string {

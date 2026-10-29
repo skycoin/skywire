@@ -25,9 +25,10 @@ var gzipWriterPool = sync.Pool{
 }
 
 func gzipBytes(b []byte) []byte {
-	var buf bytes.Buffer
+	// Transport lists compress to about 30% (random keys and IDs).
+	buf := bytes.NewBuffer(make([]byte, 0, len(b)/3+64))
 	zw := gzipWriterPool.Get().(*gzip.Writer)
-	zw.Reset(&buf)
+	zw.Reset(buf)
 	_, _ = zw.Write(b) //nolint:errcheck
 	_ = zw.Close()     //nolint:errcheck
 	gzipWriterPool.Put(zw)

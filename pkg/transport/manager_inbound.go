@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -54,4 +56,36 @@ func (tm *Manager) SetInboundGate(gate InboundGate) {
 		return
 	}
 	tm.inboundGate.Store(&gate)
+}
+
+// CreateRestriction narrows outbound transport creation on top of
+// ManagerConfig. The visor's metered modes set it.
+type CreateRestriction int32
+
+const (
+	// RestrictNone leaves creation to ManagerConfig.
+	RestrictNone CreateRestriction = iota
+	// RestrictDirect refuses every direct type, as NoDirectTransports does.
+	RestrictDirect
+	// RestrictAll refuses every type, dmsg included.
+	RestrictAll
+)
+
+// SetCreateRestriction applies r to every later creation attempt.
+func (tm *Manager) SetCreateRestriction(r CreateRestriction) { tm.restrict.Store(int32(r)) }
+
+// CloseDirectTransports deletes every direct transport, inbound ones too, and
+// returns how many it closed. dmsg transports stay.
+func (tm *Manager) CloseDirectTransports() int {
+	var ids []uuid.UUID
+	tm.WalkTransports(func(tp *ManagedTransport) bool {
+		if types.IsDirect(types.NormalizeType(tp.Type())) {
+			ids = append(ids, tp.Entry.ID)
+		}
+		return true
+	})
+	for _, id := range ids {
+		tm.DeleteTransport(id)
+	}
+	return len(ids)
 }

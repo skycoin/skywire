@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -65,6 +67,7 @@ import com.skycoin.skywire.core.AppUpdates
 import com.skycoin.skywire.core.AppLanguage
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DnsServer
+import com.skycoin.skywire.core.PhoneContacts
 import com.skycoin.skywire.core.RewardXpub
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
@@ -76,6 +79,7 @@ import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.findFragmentActivity
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.wallet.WalletPrices
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -118,6 +122,17 @@ fun SettingsScreen(
     // the view model, and silent about a failure — see checkForUpdate.
     LaunchedEffect(Unit) { viewModel.checkForUpdate(manual = false) }
 
+    // The update banner's Update lands here, and the card is far below the
+    // fold. It is second from the end, above About. The wait is for the first
+    // layout, before which the list has no items to count.
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.revealUpdate) {
+        if (!state.revealUpdate) return@LaunchedEffect
+        val count = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it >= 2 }
+        listState.animateScrollToItem(count - 2)
+        viewModel.updateRevealed()
+    }
+
     LaunchedEffect(state.message) {
         state.message?.let { message ->
             snackbar.showSnackbar(message)
@@ -159,6 +174,7 @@ fun SettingsScreen(
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -240,6 +256,7 @@ fun SettingsScreen(
                 )
             }
             item { WalletPricesCard() }
+            item { PhoneContactsCard() }
             item { ThemeCard(state, viewModel::setThemeMode) }
             item {
                 LanguageCard(state) { language ->
@@ -832,6 +849,58 @@ private fun WalletPricesCard() {
             }
             Spacer(Modifier.width(12.dp))
             Switch(checked = on, onCheckedChange = { wanted -> scope.launch { prefs.putBoolean(WalletPrices.PREF_KEY, wanted) } })
+        }
+    }
+}
+
+/**
+ * The visor's contact book in the phone's own contacts, off until asked for:
+ * any app that may read contacts can read the copy. See [PhoneContacts].
+ */
+@Composable
+private fun PhoneContactsCard() {
+    val context = LocalContext.current
+    val prefs = remember(context) { AppPreferences(context) }
+    val wanted by prefs.boolean(PhoneContacts.PREF_KEY).collectAsState(initial = false)
+    var granted by remember { mutableStateOf(PhoneContacts.granted(context)) }
+    var denied by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        granted = PhoneContacts.granted(context)
+        denied = !granted
+        if (granted) scope.launch { PhoneContacts.enable(context) }
+    }
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_phone_contacts), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_phone_contacts_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = wanted && granted,
+                onCheckedChange = { on ->
+                    granted = PhoneContacts.granted(context)
+                    when {
+                        !on -> scope.launch { PhoneContacts.disable(context) }
+                        granted -> scope.launch { PhoneContacts.enable(context) }
+                        else -> ask.launch(PhoneContacts.PERMISSIONS)
+                    }
+                },
+            )
+        }
+        if (denied) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                stringResource(R.string.settings_phone_contacts_denied),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

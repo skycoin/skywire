@@ -44,6 +44,8 @@ import { ProxySettingsComponent } from './components/pages/node/actions/proxy-se
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
 import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
+import { VisorOverviewComponent } from './components/pages/node/node-info/visor-overview/visor-overview.component';
+import { CommandPaletteComponent } from './components/layout/command-palette/command-palette.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
@@ -56,6 +58,7 @@ import { FullAppHostComponent } from './components/pages/full-app-host/full-app-
 import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { MailComponent } from './components/pages/node/mail/mail.component';
+import { ContactsComponent } from './components/pages/node/contacts/contacts.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { SelectProxyServerComponent } from './components/pages/node/skysocks-tab/select-proxy-server/select-proxy-server.component';
@@ -109,6 +112,8 @@ const globalRippleConfig: RippleGlobalOptions = {
         SkynetComponent,
         NodeSettingsComponent,
         NodeInfoContentComponent,
+        VisorOverviewComponent,
+        CommandPaletteComponent,
         ResourceMonitorComponent,
         NodeResourcesComponent,
         SkychatComponent,
@@ -121,6 +126,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         AppSettingsComponent,
         WebProxyComponent,
         MailComponent,
+        ContactsComponent,
         VpnComponent,
         SkysocksTabComponent,
         SelectProxyServerComponent,

@@ -55,3 +55,8 @@ mat-form-field {
     margin-left: 5px;
   }
 }
+
+// The global dark-theme checkbox label rule (styles.scss) makes visor names white on this light dialog.
+:host ::ng-deep .list-container .mdc-label {
+  color: variables.$blue-medium !important;
+}

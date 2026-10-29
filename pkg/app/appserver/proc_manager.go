@@ -77,6 +77,12 @@ type ProcManager interface {
 	// ProxyStatus returns the visor-built status snapshot for appName. ok is
 	// false when no builder is wired (wasm/tests) or it has no data for the app.
 	ProxyStatus(appName string) (proxystatus.Snapshot, bool)
+	// SetContactNamesFn wires the read-only view of the visor's contact book
+	// (key hex to name) that the ContactNames app RPC answers from. The fn
+	// decides which apps may read it. Nil-safe: unset means no names.
+	SetContactNamesFn(fn func(appName string) map[string]string)
+	// ContactNames returns the contact book names appName may see, or nil.
+	ContactNames(appName string) map[string]string
 	// SetAppSettings replaces the live tuning knobs held for an app — the
 	// numeric map and the list map together — and returns the new version. The
 	// set OUTLIVES the app process (the visor persists it); see app_settings.go.
@@ -127,6 +133,10 @@ type procManager struct {
 	// app that serves its own reserved status host. Set once via
 	// SetProxyStatusFn right after construction; nil is valid (wasm/tests).
 	proxyStatusFn func(appName string) (proxystatus.Snapshot, bool)
+
+	// contactNamesFn answers ContactNames. Set once via SetContactNamesFn; nil
+	// is valid (wasm/tests).
+	contactNamesFn func(appName string) map[string]string
 
 	// settings holds the live tuning knobs per app name, pulled by the app on
 	// its own tick. Never nil after NewProcManager.
@@ -407,6 +417,26 @@ func (m *procManager) ProxyStatus(appName string) (proxystatus.Snapshot, bool) {
 	m.mx.RUnlock()
 	if fn == nil {
 		return proxystatus.Snapshot{}, false
+	}
+	return fn(appName)
+}
+
+// SetContactNamesFn wires the contact book view. See the ProcManager
+// interface doc.
+func (m *procManager) SetContactNamesFn(fn func(appName string) map[string]string) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.contactNamesFn = fn
+}
+
+// ContactNames returns the contact book names appName may see, or nil when no
+// view is wired.
+func (m *procManager) ContactNames(appName string) map[string]string {
+	m.mx.RLock()
+	fn := m.contactNamesFn
+	m.mx.RUnlock()
+	if fn == nil {
+		return nil
 	}
 	return fn(appName)
 }

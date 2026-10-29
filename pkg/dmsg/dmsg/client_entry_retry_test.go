@@ -131,3 +131,30 @@ func TestInitilizeClientEntryDoesNotRecordUpdate(t *testing.T) {
 	_, due := c.updateIsDue()
 	require.True(t, due, "the initial post published no delegated servers; it must not count as a registration")
 }
+
+// TestUpdateClientEntryLoop_RetriesFailedFirstPublish covers the first-session
+// publish, which runs before the loop starts. When it fails the loop must retry
+// on the backoff ladder, not wait a whole updateInterval with nothing published.
+func TestUpdateClientEntryLoop_RetriesFailedFirstPublish(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
+	srvPK, _ := cipher.GenerateKeyPair()
+
+	dc := &flakyPutDisc{entry: disc.NewClientEntry(pk, 1, nil)}
+
+	c := new(EntityCommon)
+	c.init(pk, sk, dc, logging.MustGetLogger("test"), time.Hour)
+	c.sessions[srvPK] = &SessionCommon{rPK: srvPK}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	defer close(done)
+
+	// No update recorded and no nudge: only the loop's own timer can publish.
+	go c.updateClientEntryLoop(ctx, done, "dmsg")
+
+	require.Eventually(t, func() bool {
+		return dc.attemptCount() >= 1
+	}, 10*time.Second, 100*time.Millisecond,
+		"loop waited a full updateInterval although nothing was ever published")
+}

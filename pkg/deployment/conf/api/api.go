@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -45,6 +43,9 @@ type API struct {
 // dmsgServersRefreshInterval is how often the bootstrap dmsg_servers list is
 // refreshed from dmsg-discovery. 5m matches the dmsghttp endpoint cache.
 const dmsgServersRefreshInterval = 5 * time.Minute
+
+// maxBodyBytes caps a request body. No route reads one.
+const maxBodyBytes = 64 << 10
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
@@ -107,8 +108,11 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 	r.Use(httputil.RealIP) //nolint:staticcheck
 	r.Use(httputil.NewLogMiddleware(log))
 	r.Use(httputil.Recoverer)
-	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	// Every route is a GET, so no handler reads a body. The cap only bounds what
+	// a misbehaving client can make the server drain.
+	r.Use(httputil.LimitBody(maxBodyBytes))
+	// gzip JSON responses on the wire. This router is also served over dmsg,
+	// where every byte is relayed.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
 	// smaller than the flate state that would compress them (httputil.CompressMin).
 	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
@@ -178,13 +182,9 @@ func (a *API) refreshDmsgServers() {
 	a.log.WithField("count", len(entries)).Debug("dmsg_servers refreshed from dmsg-discovery")
 }
 
-func (a *API) logger(r *http.Request) logrus.FieldLogger {
-	return httputil.GetLogger(r)
-}
-
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		ServiceName: "config-bootstrapper",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
@@ -194,7 +194,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
 	resp := a.Services()
-	a.writeJSON(w, r, http.StatusOK, &resp)
+	httputil.WriteJSON(w, r, http.StatusOK, &resp)
 }
 
 // Services returns a snapshot of the services config this API serves at
@@ -206,30 +206,12 @@ func (a *API) Services() deployment.Services {
 	return *a.services
 }
 
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) { //nolint
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.logger(r).WithError(err).Errorf("failed to write json response")
-	}
-}
-
 func (a *API) dmsghttp(w http.ResponseWriter, r *http.Request) {
 	if time.Now().Add(-5 * time.Minute).After(a.dmsghttpConfTs) {
 		a.dmsghttpConf = a.dmsghttpConfGen()
 		a.dmsghttpConfTs = time.Now()
 	}
-	a.writeJSON(w, r, http.StatusOK, a.dmsghttpConf)
+	httputil.WriteJSON(w, r, http.StatusOK, a.dmsghttpConf)
 }
 
 func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {

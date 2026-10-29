@@ -384,7 +384,7 @@ func (f *fillHead) handleRequestFailure(fr failedRequest) {
 		// closed
 		delete(f.cs, fr.c) // remove connection
 
-	case ErrTimeout:
+	case ErrTimeout, ErrNotHeld:
 
 		// probably don't have object we're requesting anymore
 		f.cs.removeKnown(fr.c, fr.seq)
@@ -723,6 +723,14 @@ func (f *fillHead) request(c *Conn, fill, seq uint64, key cipher.SHA256) {
 
 		select {
 		case f.successq <- doneRequest{c, fill}:
+		case <-f.closeq:
+		}
+
+	case *msg.Err:
+		// handleRqObject's answer when it cannot serve the object: the peer is
+		// no source for this Root, but its connection is fine.
+		select {
+		case f.failureq <- failedRequest{c, fill, seq, key, ErrNotHeld}:
 		case <-f.closeq:
 		}
 

@@ -45,7 +45,7 @@ func TestImport_IsNotRateLimited(t *testing.T) {
 	limits := DefaultLimits()
 	limits.PerPeerRatePerMin = 5
 
-	bothStoresWithLimits(t, limits, func(t *testing.T, s Store) {
+	withStoreLimits(t, limits, func(t *testing.T, s Store) {
 		msgs := archiveOf(peer, 50, base)
 
 		res, err := s.Import(msgs, nil)
@@ -89,7 +89,7 @@ func TestImport_SkipsDuplicates(t *testing.T) {
 	peer := testPeer("03bb")
 	base := time.Now().UTC().Add(-time.Hour)
 
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		msgs := archiveOf(peer, 10, base)
 
 		first, err := s.Import(msgs, nil)
@@ -124,7 +124,7 @@ func TestImport_DeduplicatesWithoutIDs(t *testing.T) {
 	peer := testPeer("03cc")
 	at := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		inbound := Message{Peer: peer, Text: "hello", Timestamp: at}
 		outbound := Message{Peer: peer, Text: "hello", Timestamp: at, Outgoing: true}
 
@@ -153,7 +153,7 @@ func TestImport_MergesIntoExistingHistory(t *testing.T) {
 	peer := testPeer("03dd")
 	base := time.Now().UTC().Add(-time.Hour)
 
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if err := s.Append(Message{
 			Peer: peer, Text: "already here", ID: "local-1", Timestamp: base.Add(time.Minute),
 		}); err != nil {
@@ -188,7 +188,7 @@ func TestImport_GroupMessages(t *testing.T) {
 	group := "group-1"
 	base := time.Now().UTC().Add(-time.Hour)
 
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		msgs := []GroupMessage{
 			{GroupID: group, SenderPK: testPeer("03ee"), Text: "one", Timestamp: base},
 			{GroupID: group, SenderPK: testPeer("03ff"), Text: "two", Timestamp: base.Add(time.Second)},
@@ -230,7 +230,7 @@ func TestImport_ReportsWhatTheCapEvicts(t *testing.T) {
 	limits := DefaultLimits()
 	limits.PerPeerCap = 10
 
-	bothStoresWithLimits(t, limits, func(t *testing.T, s Store) {
+	withStoreLimits(t, limits, func(t *testing.T, s Store) {
 		res, err := s.Import(archiveOf(peer, 25, base), nil)
 		if err != nil {
 			t.Fatalf("Import: %v", err)
@@ -263,7 +263,7 @@ func TestImport_CountsRecordsTheSweepWillTake(t *testing.T) {
 	limits := DefaultLimits()
 	limits.TTL = 24 * time.Hour
 
-	bothStoresWithLimits(t, limits, func(t *testing.T, s Store) {
+	withStoreLimits(t, limits, func(t *testing.T, s Store) {
 		msgs := []Message{
 			{Peer: peer, Text: "old", ID: "old-1", Timestamp: now.Add(-48 * time.Hour)},
 			{Peer: peer, Text: "recent", ID: "new-1", Timestamp: now.Add(-time.Minute)},
@@ -289,7 +289,7 @@ func TestImport_RejectsWhatTheLimitsRefuse(t *testing.T) {
 	limits := DefaultLimits()
 	limits.MaxMessageSize = 16
 
-	bothStoresWithLimits(t, limits, func(t *testing.T, s Store) {
+	withStoreLimits(t, limits, func(t *testing.T, s Store) {
 		res, err := s.Import([]Message{
 			{Peer: peer, Text: strings.Repeat("x", 64), ID: "big", Timestamp: now},
 			{Peer: "", Text: "orphan", ID: "orphan", Timestamp: now},
@@ -314,7 +314,7 @@ func TestImport_FullStoreTakesNothing(t *testing.T) {
 	limits := DefaultLimits()
 	limits.TotalCapBytes = 1 // any real record is bigger
 
-	bothStoresWithLimits(t, limits, func(t *testing.T, s Store) {
+	withStoreLimits(t, limits, func(t *testing.T, s Store) {
 		// Fill past the cap through the normal path first: the mem store
 		// measures stored bytes, so an empty one is not yet "full".
 		_ = s.Append(Message{Peer: peer, Text: "seed", ID: "seed", Timestamp: now}) //nolint:errcheck
@@ -332,7 +332,7 @@ func TestImport_FullStoreTakesNothing(t *testing.T) {
 }
 
 func TestImport_EmptyArchiveIsANoOp(t *testing.T) {
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		res, err := s.Import(nil, nil)
 		if err != nil {
 			t.Fatalf("Import: %v", err)
@@ -343,9 +343,8 @@ func TestImport_EmptyArchiveIsANoOp(t *testing.T) {
 	})
 }
 
-// bothStoresWithLimits is bothStores for a table that needs its own Limits.
-func bothStoresWithLimits(t *testing.T, limits Limits, fn func(t *testing.T, s Store)) {
+// withStoreLimits is withStore for a table that needs its own Limits.
+func withStoreLimits(t *testing.T, limits Limits, fn func(t *testing.T, s Store)) {
 	t.Helper()
 	t.Run("bolt", func(t *testing.T) { fn(t, newTestStore(t, limits)) })
-	t.Run("mem", func(t *testing.T) { fn(t, newTestMemStore(t, limits)) })
 }

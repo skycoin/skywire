@@ -55,7 +55,7 @@ func (a *API) handleError(w http.ResponseWriter, r *http.Request, e error) {
 
 	logAPIError(a.log(r), code, e)
 
-	a.writeJSON(w, r, code, disc.HTTPMessage{Code: code, Message: msg})
+	httputil.WriteJSON(w, r, code, disc.HTTPMessage{Code: code, Message: msg})
 }
 
 // logAPIError records a rejected request at a level that matches whose fault

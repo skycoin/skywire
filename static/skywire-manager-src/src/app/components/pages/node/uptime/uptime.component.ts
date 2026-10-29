@@ -1,11 +1,12 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, startWith, of } from 'rxjs';
+import { Observable, Subscription, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 
 /**
  * Per-visor Uptime tab. Reads from the visor's local bbolt stats
@@ -100,7 +101,7 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   private nodeSub!: Subscription;
   private pollSub!: Subscription;
 
-  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
+  constructor(private api: ApiService, private live: LiveService, private cdr: ChangeDetectorRef) {
  super(); 
 }
 
@@ -197,24 +198,23 @@ return {
     if (!this.node) {
  return; 
 }
-    this.fetchOnce().subscribe();
+    this.pollSub?.unsubscribe();
+    this.startPolling();
   }
 
   private startPolling() {
     // 60s cadence: tier bitmaps tick on the visor's 5-minute sampler,
     // so polling faster wastes RPC; slower delays "now" by too much.
-    this.pollSub = interval(60000).pipe(
-      startWith(0),
-      switchMap(() => this.fetchOnce()),
+    // No until: the visor reads it as now, so a subscribed path stays current.
+    const since = new Date(Date.now() - this.windowDays * 86400 * 1000);
+    const url = `visors/${this.node.localPk}/local-uptime-stats?since=${since.toISOString()}`;
+    this.pollSub = this.live.watch(url, 60000, () => this.api.get(url)).pipe(
+      switchMap(res => this.fetchOnce(res)),
     ).subscribe();
   }
 
-  private fetchOnce() {
-    const until = new Date();
-    const since = new Date(until.getTime() - this.windowDays * 86400 * 1000);
-    const qs = `?since=${since.toISOString()}&until=${until.toISOString()}`;
-
-    return this.api.get(`visors/${this.node.localPk}/local-uptime-stats${qs}`).pipe(
+  private fetchOnce(source: Observable<any>) {
+    return source.pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch uptime';
         this.loading = false;

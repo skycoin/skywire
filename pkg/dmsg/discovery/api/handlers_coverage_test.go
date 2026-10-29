@@ -194,11 +194,9 @@ func TestDeregisterEntry(t *testing.T) {
 	})
 
 	t.Run("whitelisted NM key deletes the listed entries", func(t *testing.T) {
-		nmPK, nmSK := cipher.GenerateKeyPair()
+		nmPK, _ := cipher.GenerateKeyPair()
 		WhitelistPKs.Set(nmPK.Hex())
 		t.Cleanup(func() { delete(WhitelistPKs, nmPK.Hex()) })
-		sig, err := cipher.SignPayload([]byte(nmPK.Hex()), nmSK)
-		require.NoError(t, err)
 
 		db := newTestStore(t)
 		entry, deadPK := signedClientEntry(t)
@@ -207,13 +205,12 @@ func TestDeregisterEntry(t *testing.T) {
 
 		body := []byte(`["` + deadPK.Hex() + `"]`)
 		r := httptest.NewRequest(http.MethodDelete, "/dmsg-discovery/deregister", bytes.NewReader(body))
-		r.Header.Set("NM-PK", nmPK.Hex())
-		r.Header.Set("NM-Sign", sig.Hex())
+		r.RemoteAddr = nmPK.Hex() + ":80"
 		rr := httptest.NewRecorder()
 		api.Handler.ServeHTTP(rr, r)
 
 		require.Equal(t, http.StatusOK, rr.Code)
-		_, err = db.Entry(context.Background(), deadPK)
+		_, err := db.Entry(context.Background(), deadPK)
 		require.Equal(t, disc.ErrKeyNotFound, err)
 	})
 }

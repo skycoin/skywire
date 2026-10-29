@@ -16,16 +16,15 @@ import (
 	"time"
 )
 
-// bothStores runs fn against each Store implementation.
-func bothStores(t *testing.T, fn func(t *testing.T, s Store)) {
+// withStore runs fn against each Store implementation.
+func withStore(t *testing.T, fn func(t *testing.T, s Store)) {
 	t.Helper()
 	t.Run("bolt", func(t *testing.T) { fn(t, newTestStore(t, DefaultLimits())) })
-	t.Run("mem", func(t *testing.T) { fn(t, newTestMemStore(t, DefaultLimits())) })
 }
 
 func TestDeleteByID_RemovesOnlyTheNamedMessage(t *testing.T) {
 	peer := "03abc" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		base := time.Now().UTC()
 		for i, id := range []string{"id-0", "id-1", "id-2"} {
 			if err := s.Append(Message{
@@ -66,7 +65,7 @@ func TestDeleteByID_RemovesOnlyTheNamedMessage(t *testing.T) {
 // that direction is the one OnDelete drives.
 func TestDeleteByID_DeletesInboundMessages(t *testing.T) {
 	peer := "03def" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if err := s.Append(Message{
 			Peer: peer, From: peer, Outgoing: false,
 			Text: "from them", ID: "theirs", Timestamp: time.Now().UTC(),
@@ -91,7 +90,7 @@ func TestDeleteByID_DeletesInboundMessages(t *testing.T) {
 // by its FileID, so a delete of an older file reaches it.
 func TestDeleteByID_MatchesAnOlderFileRowByFileID(t *testing.T) {
 	peer := "03bbb" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if err := s.Append(Message{
 			Peer: peer, Text: "clip.mp4", FileID: "xfer-1", Timestamp: time.Now().UTC(),
 		}); err != nil {
@@ -116,7 +115,7 @@ func TestDeleteByID_MatchesAnOlderFileRowByFileID(t *testing.T) {
 // error — the live tombstone still applies.
 func TestDeleteByID_UnknownIDIsNotAnError(t *testing.T) {
 	peer := "03aaa" + strings.Repeat("0", 61)
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if err := s.Append(Message{
 			Peer: peer, Text: "kept", ID: "keep-me", Timestamp: time.Now().UTC(),
 		}); err != nil {
@@ -148,7 +147,7 @@ func TestDeleteByID_UnknownIDIsNotAnError(t *testing.T) {
 }
 
 func TestDeleteByID_RejectsEmptyPeerAndIgnoresEmptyID(t *testing.T) {
-	bothStores(t, func(t *testing.T, s Store) {
+	withStore(t, func(t *testing.T, s Store) {
 		if _, err := s.DeleteByID("", "id"); err == nil {
 			t.Error("DeleteByID with an empty peer = nil error, want ErrEmptyPeer")
 		}

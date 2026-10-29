@@ -67,3 +67,57 @@ func TestPublisherDropPublishedLeaves(t *testing.T) {
 	reopened.Walk("metrics/day", func(p string, v []byte) bool { got[p] = v; return true })
 	require.Equal(t, want, got)
 }
+
+// A restarted publisher with DropPublishedLeaves does not copy the published
+// leaves into memory, still serves them, and publishes a change to one day
+// with the other days intact.
+func TestPublisherHydrateDropsPublishedLeaves(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "store")
+	_, sk := cipher.GenerateKeyPair()
+	body := func(day, part int) []byte { return bytes.Repeat([]byte(fmt.Sprintf("d%dp%d;", day, part)), 1000) }
+	path := func(day, part int) string { return fmt.Sprintf("metrics/day/2026-10-%02d/part/%04d", day, part) }
+
+	pub, err := NewWithTCP("127.0.0.1:0", sk, PubConfig{DataDir: dir, BatchWindow: 5 * time.Millisecond})
+	require.NoError(t, err)
+	want := map[string][]byte{}
+	var ops []PutOp
+	for d := 1; d <= 3; d++ {
+		for p := 0; p < 2; p++ {
+			ops = append(ops, PutOp{Path: path(d, p), Value: body(d, p)})
+			want[path(d, p)] = body(d, p)
+		}
+	}
+	require.NoError(t, pub.PutBatch(ops))
+	require.NoError(t, pub.Flush())
+	require.NoError(t, pub.Close())
+
+	conf := PubConfig{DataDir: dir, BatchWindow: 5 * time.Millisecond, DropPublishedLeaves: true}
+	pub, err = NewWithTCP("127.0.0.1:0", sk, conf)
+	require.NoError(t, err)
+	pub.mu.Lock()
+	for d := 1; d <= 3; d++ {
+		part := walkLivePath(pub.root, []string{"metrics", "day", fmt.Sprintf("2026-10-%02d", d), "part"})
+		require.NotNil(t, part)
+		require.True(t, part.cached)
+		for name, v := range part.leaves {
+			require.Nil(t, v, "leaf %s copied into memory", name)
+		}
+	}
+	pub.mu.Unlock()
+	got := map[string][]byte{}
+	pub.Walk("metrics/day", func(p string, v []byte) bool { got[p] = v; return true })
+	require.Equal(t, want, got)
+
+	changed := []byte("changed")
+	require.NoError(t, pub.Put(path(2, 0), changed))
+	require.NoError(t, pub.Flush())
+	want[path(2, 0)] = changed
+	require.NoError(t, pub.Close())
+
+	pub, err = NewWithTCP("127.0.0.1:0", sk, PubConfig{DataDir: dir, BatchWindow: 5 * time.Millisecond})
+	require.NoError(t, err)
+	defer pub.Close() //nolint:errcheck
+	got = map[string][]byte{}
+	pub.Walk("metrics/day", func(p string, v []byte) bool { got[p] = v; return true })
+	require.Equal(t, want, got)
+}

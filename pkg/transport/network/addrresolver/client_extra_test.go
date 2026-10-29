@@ -399,19 +399,19 @@ func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write failed
 func TestKeepSudphHeartbeatLoop(t *testing.T) {
 	// Write error → loop returns the error.
 	c := &httpClient{log: logging.MustGetLogger("ar-hb"), closed: make(chan struct{})}
-	require.Error(t, c.keepSudphHeartbeatLoop(errWriter{}))
+	require.Error(t, c.keepSudphHeartbeatLoop(errWriter{}, nil))
 
 	// Already-closed client → returns nil before writing.
 	c2 := &httpClient{log: logging.MustGetLogger("ar-hb"), closed: make(chan struct{})}
 	close(c2.closed)
-	require.NoError(t, c2.keepSudphHeartbeatLoop(errWriter{}))
+	require.NoError(t, c2.keepSudphHeartbeatLoop(errWriter{}, nil))
 }
 
 func TestSudphReRegisterLoopStops(t *testing.T) {
 	// Already-closed client → loop returns nil immediately.
 	c := &httpClient{log: logging.MustGetLogger("ar-rereg"), closed: make(chan struct{})}
 	close(c.closed)
-	require.NoError(t, c.sudphReRegisterLoop(errWriter{}))
+	require.NoError(t, c.sudphReRegisterLoop(errWriter{}, nil))
 }
 
 func TestDelBindSUDPHLoop(t *testing.T) {

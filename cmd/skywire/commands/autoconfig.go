@@ -50,6 +50,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
+	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -88,7 +89,36 @@ func init() {
 	// step, not via interactive discovery).
 	autoconfigCmd.Hidden = true
 	autoconfigCmd.Run = autoconfigRun
+	help := autoconfigCmd.HelpFunc()
+	autoconfigCmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+		showSkyenvDefaults(c)
+		help(c, args)
+	})
 	RootCmd.AddCommand(autoconfigCmd)
+}
+
+// showSkyenvDefaults puts the values in the skywire.conf autoconfig would edit
+// in place of the flag defaults, for --help only. A flag left out keeps that
+// value, since only the flags passed are written.
+func showSkyenvDefaults(c *cobra.Command) {
+	path := skyenvfile.Path()
+	vals, err := skyenvfile.Values(path)
+	if err != nil {
+		return
+	}
+	for _, f := range autoconfigcmd.Describe() {
+		v, ok := vals[f.EnvKey]
+		if f.EnvKey == "" || f.EnvNegate || !ok {
+			continue
+		}
+		if f.EnvFormat == string(autoconfigcmd.EnvFormatBashArray) {
+			v = strings.Join(strings.Fields(v), ",")
+		}
+		if fl := c.Flags().Lookup(f.Name); fl != nil {
+			fl.DefValue = v
+		}
+	}
+	c.Long += "\n\nDefaults shown are the values in " + path + "; a flag you leave out keeps its value."
 }
 
 // collectSkyenvEdits walks the autoSet* flags and assembles the list

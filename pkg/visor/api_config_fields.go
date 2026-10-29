@@ -183,6 +183,40 @@ var liveConfigFieldTable = []liveConfigField{
 			return v.conf.UpdateAutoconnect(func(a *visorconfig.Autoconnect) { a.MaxTotal = int(nv.Int()) })
 		},
 	}, {
+		Path: "transport.network_watch_interval",
+		Desc: "how often to check the interface addresses and route for a network change (0 = 12s, negative = off)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			d := visorconfig.Duration(nv.Int())
+			if err := v.conf.UpdateNetworkWatch(&d, nil); err != nil {
+				return err
+			}
+			v.netMove.watchNS.Store(int64(d))
+			v.netMove.poke()
+			return nil
+		},
+	}, {
+		Path: "transport.public_ip_check_interval",
+		Desc: "how often to ask the dmsg servers for the public IP (0 = 12m, negative = off)",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			d := visorconfig.Duration(nv.Int())
+			if err := v.conf.UpdateNetworkWatch(nil, &d); err != nil {
+				return err
+			}
+			v.netMove.ipCheckNS.Store(int64(d))
+			v.netMove.poke()
+			return nil
+		},
+	}, {
+		Path: "transport.network",
+		Desc: "interfaces and addresses offered to peers: {\"allow\": [globs or CIDRs], \"deny\": [...]}, deny wins",
+		apply: func(v *Visor, _ string, nv reflect.Value) error {
+			var p visorconfig.NetworkPolicy
+			if np, ok := nv.Interface().(*visorconfig.NetworkPolicy); ok && np != nil {
+				p = *np
+			}
+			return v.setNetworkPolicy(p)
+		},
+	}, {
 		Path: "transport.tcp_notsent_lowat",
 		Desc: "unsent bytes the kernel holds per stcpr/stcp transport (0 = kernel default), for transports opened after the change",
 		apply: func(v *Visor, _ string, nv reflect.Value) error {

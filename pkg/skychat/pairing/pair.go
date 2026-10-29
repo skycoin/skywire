@@ -50,6 +50,10 @@ const MessagePathPrefix = "msgs"
 // is a floor on retries, not a timer.
 const announceRetryAfter = 30 * time.Second
 
+// pairKeepRoots keeps the last few Roots, so a peer on a slow link can finish
+// filling a Root after the next one is published.
+const pairKeepRoots = 10
+
 // MessageTypeDelete marks a control record that retracts an earlier
 // message rather than carrying one: Type is set, ID names the target
 // (see Message.MsgID), and Text is empty.
@@ -250,6 +254,7 @@ func Open(cfg Config) (*Pair, error) {
 		// crash time costs at most one batch of un-acked messages,
 		// recoverable on the next sync.
 		NoSyncCXDS: true,
+		KeepRoots:  pairKeepRoots,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pairing: Open: build publisher: %w", err)

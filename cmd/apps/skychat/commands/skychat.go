@@ -1055,7 +1055,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux := http.NewServeMux()
 	logOSNotifyStartup()
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
-	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
+	mux.HandleFunc("/message", requireAuthFunc(waitsOnPeer(messageHandler(ctx))))
 	mux.HandleFunc("/link", requireAuthFunc(linkHandler()))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
 	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
@@ -1068,9 +1068,9 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
-	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
+	mux.HandleFunc("/request-file", requireAuthFunc(waitsOnPeer(requestFileHandler(ctx))))
 	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
-	mux.HandleFunc("/delete", requireAuthFunc(deleteHandler(ctx)))
+	mux.HandleFunc("/delete", requireAuthFunc(waitsOnPeer(deleteHandler(ctx))))
 	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
 	mux.HandleFunc("/notify-focus", requireAuthFunc(notifyFocusHandler))
 	registerPairHTTPHandlers(ctx, mux)
@@ -1353,6 +1353,21 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				"id": res.ID,
 			})
 		}
+	}
+}
+
+// peerWriteTimeout bounds a response that waits on another visor (a dial, a join
+// by address, a resolve); the server's 10 s WriteTimeout would drop it silently.
+const peerWriteTimeout = 2 * time.Minute
+
+// waitsOnPeer lifts the server WriteTimeout to peerWriteTimeout for one
+// handler, the way /sse and /send-file clear theirs.
+func waitsOnPeer(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(peerWriteTimeout)); err != nil && chatLog != nil {
+			chatLog.Debugf("peer write deadline: %v", err)
+		}
+		h(w, r)
 	}
 }
 

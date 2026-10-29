@@ -10,7 +10,7 @@
 //
 // Keyring is a single JSON file that holds all public/secret key pairs
 // for a skywire deployment — services, dmsg servers, route setup nodes,
-// transport setup nodes, survey whitelist, network monitors, and the
+// transport setup nodes, survey whitelist, deregistration keys and the
 // reward system.
 //
 // The file is NOT committed to the repo. It lives on the operator's
@@ -56,7 +56,6 @@ type Keyring struct {
 	ServiceDiscovery   *KeyPair `json:"service_discovery,omitempty"`
 	SetupNode          *KeyPair `json:"setup_node,omitempty"`
 	ConfService        *KeyPair `json:"conf_service,omitempty"`
-	NetworkMonitor     *KeyPair `json:"network_monitor,omitempty"`
 
 	// DMSG servers (multiple)
 	DmsgServers []NamedKeyPair `json:"dmsg_servers,omitempty"`
@@ -70,7 +69,7 @@ type Keyring struct {
 	// Survey whitelist
 	SurveyWhitelist []NamedKeyPair `json:"survey_whitelist,omitempty"`
 
-	// Network monitor keys (multiple — for deregistration authorization)
+	// Keys allowed to deregister entries from the discovery services
 	NetworkMonitorKeys []NamedKeyPair `json:"network_monitor_keys,omitempty"`
 
 	// Reward system
@@ -133,7 +132,6 @@ func (kr *Keyring) ExportKeyfiles(dir string) error {
 		"service_discovery":   kr.ServiceDiscovery,
 		"setup_node":          kr.SetupNode,
 		"conf_service":        kr.ConfService,
-		"network_monitor":     kr.NetworkMonitor,
 		"reward_system":       kr.RewardSystem,
 		"visor":               kr.Visor,
 	}
@@ -199,7 +197,6 @@ func (kr *Keyring) PublicKeys() map[string]string {
 	addPK("service_discovery", kr.ServiceDiscovery)
 	addPK("setup_node", kr.SetupNode)
 	addPK("conf_service", kr.ConfService)
-	addPK("network_monitor", kr.NetworkMonitor)
 	addPK("reward_system", kr.RewardSystem)
 	addPK("visor", kr.Visor)
 

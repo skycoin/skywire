@@ -18,15 +18,18 @@ name: Test
 permissions:
   contents: read
 
-# A newer push to a PR supersedes this run, and cancelling it
-# hands the runner straight to the head that matters. A develop push always
-# finishes, so develop has a result for every commit and the badge shows it.
+# A newer push to a PR supersedes this run, and cancelling it hands the runner
+# straight to the head that matters. A develop run in progress always finishes,
+# but a group holds only one pending run, so a newer push replaces a queued one.
+# PRs from 0magnet/skywire are merged as soon as they open, so every job skips
+# them: the develop run tests the same code once it lands.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   linux:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -84,6 +87,7 @@ jobs:
   # The emulong scenarios stay local: an 8 MB transfer that takes a couple of
   # seconds here took 90 s on this runner and still did not finish.
   emu:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -105,6 +109,7 @@ jobs:
   # e2e runs as its own job so it executes in parallel with the linux check
   # job above instead of serially after it — cutting overall wall-clock.
   e2e:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -142,6 +147,7 @@ jobs:
         run: make e2e-stop
 
   darwin:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -186,15 +192,17 @@ jobs:
         run: GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
 
+      # No setup-go cache. The step below restores GOCACHE, and -mod=vendor
+      # never reads the module cache.
       - uses: actions/setup-go@v7
         with:
           go-version: 'stable'
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
 
       # Persist the Go build/test cache ($GOCACHE) across runs so unchanged
       # packages return cached test results on incremental pushes (see linux job).
@@ -203,8 +211,8 @@ jobs:
         shell: pwsh
         run: echo "dir=$(go env GOCACHE)" >> $env:GITHUB_OUTPUT
 
-      - name: Cache Go build/test cache
-        uses: actions/cache@v4
+      - name: Restore Go build/test cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ steps.gocache.outputs.dir }}
           key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
@@ -212,9 +220,13 @@ jobs:
             ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-
             ${{ runner.os }}-gobuild-
 
+      # The lint make lint-windows runs, so the make step below only tests.
       - uses: golangci/golangci-lint-action@v9
+        env:
+          CGO_ENABLED: '0'
         with:
           version: latest
+          args: -c .golangci.yml --build-tags=withoutsystray,withoutgotop
 
       - name: Install Requirements
         shell: pwsh
@@ -222,12 +234,21 @@ jobs:
 
       # if: always() so a lint failure above can never prevent the test suite
       # from running and reporting (#4326).
-      - name: Checking (lint + test)
+      - name: Run tests
         if: always()
         run: |
           $env:GO111MODULE='on'
-          make check-windows
+          make test-windows
         shell: powershell
+
+      # Only develop pushes save the cache. Uploading it took 7 min on every
+      # PR run, and PRs restore develop's copy.
+      - name: Save Go build/test cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.gocache.outputs.dir }}
+          key: ${{ runner.os }}-gobuild-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
 
   # Native (no-Docker) client-side e2e on macOS: runs a small skywire deployment
   # + two visors as host processes on 127.0.0.1 and exercises the CLIENT runtime
@@ -236,6 +257,7 @@ jobs:
   # compiled as the runner user, then run under sudo so vpn-client/vpn-server can
   # create TUN devices and set up pf NAT (macOS vpn-server: os_server_darwin.go).
   e2e-darwin:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -264,6 +286,7 @@ jobs:
   # admin, so TUN creation + NAT work; wintun.dll is provisioned next to the
   # binary since it isn't embedded in the wintun Go binding.
   e2e-windows:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -306,6 +329,28 @@ jobs:
           $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
           go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
 
+  # The js/wasm visor, the one a browser tab runs, under Node against the
+  # native e2e deployment: it registers over a dmsg WebSocket session and a
+  # native visor holds a dmsg transport to it. See internal/nativee2e.
+  e2e-wasm:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Run the wasm visor e2e
+        run: go test -mod=vendor -tags client_e2e -v -timeout=25m -run 'TestVisorConnectivity|TestWasmVisor' ./internal/nativee2e/
+
   # Compile-only lane for the browser/wasm binaries. Every wasm main package is
   # guarded by //go:build js && wasm, so the default-GOARCH unit lanes never even
   # build them — a break in the js/wasm code (e.g. an import that isn't
@@ -313,6 +358,7 @@ jobs:
   # GOOS=js GOARCH=wasm (no run) so build regressions fail CI. Runs in parallel
   # with the other jobs; fast (build only, cached module deps).
   wasm:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -326,6 +372,13 @@ jobs:
       - name: Compile-check js/wasm binaries
         run: make build-wasm
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Run the js/wasm tests under Node
+        run: make test-wasm
+
       - name: Check the committed netview module is current
         run: make check-netview-wasm
 
@@ -335,6 +388,7 @@ jobs:
   # fetch-depth/tags mirror the linux job: `git describe` needs them so the
   # stamped $(BUILDINFO) version isn't a bare short SHA.
   android:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -360,6 +414,7 @@ jobs:
   # loader test exercises a fresh build instead of the committed (stale-able)
   # blob. Runs in parallel with the other jobs.
   wasm-tinygo:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -399,6 +454,7 @@ jobs:
   # run in headless Chrome via the ChromeHeadlessNoSandbox launcher (see
   # src/karma.conf.js); browser-actions/setup-chrome provides the binary.
   ui:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -454,6 +510,7 @@ jobs:
   # them running in NO job. This lane provides a Redis service and runs those
   # store packages WITHOUT no_ci so the redis-backed tests actually execute.
   redis-store:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == '0magnet/skywire') }}
     runs-on: ubuntu-latest
     services:
       redis:

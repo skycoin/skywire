@@ -9,6 +9,7 @@ package cxoutils
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"io"
 	"sync"
 )
@@ -50,14 +51,44 @@ func Gunzip(b []byte) []byte {
 	if len(b) < 2 || b[0] != gzipMagic[0] || b[1] != gzipMagic[1] {
 		return b
 	}
-	zr, err := gzip.NewReader(bytes.NewReader(b))
+	zr, _ := gzipReaderPool.Get().(*gzip.Reader)
+	var err error
+	if zr == nil {
+		zr, err = gzip.NewReader(bytes.NewReader(b))
+	} else {
+		err = zr.Reset(bytes.NewReader(b))
+	}
 	if err != nil {
 		return b
 	}
-	defer func() { _ = zr.Close() }() //nolint:errcheck
-	out, err := io.ReadAll(zr)
-	if err != nil {
-		return b
+	defer gzipReaderPool.Put(zr)
+	out := make([]byte, 0, gunzipSizeHint(b))
+	for {
+		if len(out) == cap(out) {
+			out = append(out, 0)[:len(out)] // let append pick the growth
+		}
+		n, err := zr.Read(out[len(out):cap(out)])
+		out = out[:len(out)+n]
+		if err == io.EOF {
+			return out
+		}
+		if err != nil {
+			return b
+		}
 	}
-	return out
+}
+
+// gzipReaderPool reuses readers, each of which allocates a 32 kB window.
+var gzipReaderPool sync.Pool
+
+// gunzipSizeHint is the output size to allocate up front: the stream's ISIZE
+// trailer (RFC 1952 section 2.3.1), which only a well formed stream gets right,
+// so it is capped at a ratio no real CXO body exceeds.
+func gunzipSizeHint(b []byte) int {
+	const maxRatio = 64
+	if len(b) < 18 {
+		return 512
+	}
+	n := int(binary.LittleEndian.Uint32(b[len(b)-4:]))
+	return min(n+1, len(b)*maxRatio)
 }

@@ -97,6 +97,10 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		return snap, true
 	})
 
+	// Skychat reads the contact book so a contact named there shows by name
+	// where the operator has not set a skychat nickname. No other app may.
+	procM.SetContactNamesFn(v.appContactNames)
+
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775
 	// (operator config wins — appsContains skips synthesis when

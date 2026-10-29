@@ -3,6 +3,8 @@
 
 package yamux
 
+import "time"
+
 // Logger is a abstract of *log.Logger
 type Logger interface {
 	Print(v ...interface{})
@@ -35,4 +37,20 @@ func min(a, b uint32) uint32 {
 		return a
 	}
 	return b
+}
+
+// getTimer returns a running timer for d, reusing a stopped one if any.
+func (s *Session) getTimer(d time.Duration) *time.Timer {
+	if t, ok := s.timers.Get().(*time.Timer); ok {
+		t.Reset(d)
+		return t
+	}
+	return time.NewTimer(d)
+}
+
+// putTimer stops t and keeps it for reuse. Since Go 1.23 a stopped
+// timer leaves no stale value in its channel.
+func (s *Session) putTimer(t *time.Timer) {
+	t.Stop()
+	s.timers.Put(t)
 }

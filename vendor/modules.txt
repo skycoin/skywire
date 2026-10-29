@@ -73,13 +73,14 @@ github.com/0magnet/dtls/v3/pkg/protocol/alert
 github.com/0magnet/dtls/v3/pkg/protocol/extension
 github.com/0magnet/dtls/v3/pkg/protocol/handshake
 github.com/0magnet/dtls/v3/pkg/protocol/recordlayer
-# github.com/0magnet/gio v0.10.4-0.20261023140628-7d7b8fd5abcc
+# github.com/0magnet/gio v0.10.4-0.20261029010759-891505dea57f
 ## explicit; go 1.24.0
 github.com/0magnet/gio/app
 github.com/0magnet/gio/app/internal/ibus
 github.com/0magnet/gio/app/internal/windows
 github.com/0magnet/gio/app/internal/xkb
 github.com/0magnet/gio/app/permission/foreground
+github.com/0magnet/gio/app/permission/networkstate
 github.com/0magnet/gio/f32
 github.com/0magnet/gio/font
 github.com/0magnet/gio/font/gofont
@@ -238,7 +239,7 @@ github.com/0magnet/wisp
 ## explicit; go 1.24
 github.com/0magnet/xterm-go
 github.com/0magnet/xterm-go/vt
-# github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
+# github.com/0magnet/yamux v0.1.3-0.20261028122158-2a102205992e
 ## explicit; go 1.23
 github.com/0magnet/yamux
 # github.com/ActiveState/termtest/conpty v0.5.0
@@ -439,6 +440,9 @@ github.com/elazarl/goproxy/internal/signer
 # github.com/eliukblau/pixterm/pkg/ansimage v0.0.0-20191210081756-9fb6cf8c2f75
 ## explicit; go 1.13
 github.com/eliukblau/pixterm/pkg/ansimage
+# github.com/emersion/go-vcard v0.1.0
+## explicit; go 1.13
+github.com/emersion/go-vcard
 # github.com/fatih/color v1.19.0
 ## explicit; go 1.25.0
 github.com/fatih/color
@@ -1002,8 +1006,8 @@ github.com/shopspring/decimal
 ## explicit; go 1.23
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.7-0.20261022015045-3b3712d25ce0
-## explicit; go 1.26.1
+# github.com/skycoin/skycoin v0.28.7-0.20261028120801-f7b9874807c2
+## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
 github.com/skycoin/skycoin/cmd/skycoin-cli/commands
@@ -1029,6 +1033,7 @@ github.com/skycoin/skycoin/src/cipher/encoder
 github.com/skycoin/skycoin/src/cipher/encrypt
 github.com/skycoin/skycoin/src/cipher/pbkdf2
 github.com/skycoin/skycoin/src/cipher/poly1305
+github.com/skycoin/skycoin/src/cipher/pqsig
 github.com/skycoin/skycoin/src/cipher/ripemd160
 github.com/skycoin/skycoin/src/cipher/scrypt
 github.com/skycoin/skycoin/src/cipher/secp256k1-go
@@ -1080,6 +1085,7 @@ github.com/skycoin/skycoin/src/wallet
 github.com/skycoin/skycoin/src/wallet/bip44wallet
 github.com/skycoin/skycoin/src/wallet/collection
 github.com/skycoin/skycoin/src/wallet/deterministic
+github.com/skycoin/skycoin/src/wallet/pqwallet
 github.com/skycoin/skycoin/src/wallet/xpubwallet
 github.com/skycoin/skycoin/templates
 # github.com/soheilhy/cmux v0.1.5

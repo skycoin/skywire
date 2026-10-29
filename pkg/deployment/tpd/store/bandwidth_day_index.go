@@ -287,7 +287,7 @@ func (s *redisStore) recoverBandwidthTypes(ctx context.Context, ix *bwDayIndex, 
 		_, _ = pipe.Exec(ctx) //nolint:errcheck // a missing hash leaves the type unknown
 		for i, id := range batch {
 			if typ, err := cmds[i].Result(); err == nil && typ != "" {
-				ix.types[id] = typ
+				ix.types[id] = internType(typ)
 			}
 		}
 	}

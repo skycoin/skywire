@@ -22,14 +22,17 @@ import (
 // out emptyUpdater. Client is typed `any` (an *http.Client on native) so this
 // shared struct definition stays net/http-free.
 type Factory struct {
-	Log               logrus.FieldLogger
-	MLog              *logging.MasterLogger
-	PK                cipher.PubKey
-	SK                cipher.SecKey
-	ServiceDisc       string // Address of service-discovery
-	DisplayNodeIP     bool
-	Client            any // *http.Client on native builds
-	ClientPublicIP    string
+	Log            logrus.FieldLogger
+	MLog           *logging.MasterLogger
+	PK             cipher.PubKey
+	SK             cipher.SecKey
+	ServiceDisc    string // Address of service-discovery
+	DisplayNodeIP  bool
+	Client         any // *http.Client on native builds
+	ClientPublicIP string
+	// PublicIPFunc, when set, returns the visor's current public IP, so the
+	// service entries follow the visor to a new network.
+	PublicIPFunc      func() string
 	HeartbeatInterval time.Duration // Interval for service discovery heartbeats
 	Geo               any           // *geo.LocationData on native builds; visor geolocation in service entries
 	// GeoFunc, when set, is a `func() *geo.LocationData` that returns the visor's

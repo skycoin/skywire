@@ -15,7 +15,6 @@ remains under each service's own directory:
 - [address-resolver/](address-resolver/README.md)
 - [config-bootstrapper/](config-bootstrapper/README.md)
 - [geoip/](geoip/README.md)
-- [network-monitor/](network-monitor/README.md)
 - [route-finder/](route-finder/README.md)
 - [service-discovery/](service-discovery/README.md)
 - [setup-node/](setup-node/README.md)

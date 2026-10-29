@@ -24,6 +24,9 @@ bouncycastle = "1.80"
 # the receive-address QR). The one camera dependency the wallet adds.
 zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
+# Video messages: CameraX records the clip; MediaRecorder alone would need a
+# hand-built Camera2 session per device quirk.
+camerax = "1.6.2"
 junit = "4.13.2"
 # Instrumented tests. The device is not a convenience here: the audio engine
 # is AudioRecord and a real socket, and "the microphone was released" is only
@@ -54,6 +57,10 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 zxing-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+camerax-video = { group = "androidx.camera", name = "camera-video", version.ref = "camerax" }
+camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }

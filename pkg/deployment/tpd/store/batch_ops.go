@@ -17,6 +17,13 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
+// EdgeExceptStore is implemented by stores that can list an edge's
+// transports outside a keep set without copying the rest. The API uses it
+// when present.
+type EdgeExceptStore interface {
+	GetTransportsByEdgeExcept(ctx context.Context, pk cipher.PubKey, keep map[uuid.UUID]struct{}) ([]*transport.Entry, error)
+}
+
 // BatchStore is implemented by stores that can apply a snapshot's writes in
 // batches. The API uses it when present.
 type BatchStore interface {

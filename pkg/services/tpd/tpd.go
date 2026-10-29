@@ -39,7 +39,6 @@ import (
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/telemetrywire"
 	"github.com/skycoin/skywire/pkg/transport"
 )
@@ -249,88 +248,38 @@ func (s *service) Run(ctx context.Context) error {
 	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(logger)()
 
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
-	}
-
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-	}
+	id := cfg.Identity(logger)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	b, err := s.build(runCtx, logger, dmsgAddr, true)
+	b, err := s.build(runCtx, logger, id.DmsgAddr, true)
 	if err != nil {
 		return err
 	}
 	defer b.close()
 	tpdAPI := b.api
 
-	addr := cfg.Addr
-	if addr == "" {
-		addr = ":9091"
-	}
-	logger.Infof("Listening on %s", addr)
-
-	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
-	if err != nil {
-		return fmt.Errorf("transport-discovery: invalid mode: %w", err)
-	}
-
-	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
-	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
-	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr()
-	}
-	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := cfg.SurveyKeys()
-
-	h, err := svcmode.Start(runCtx, svcmode.Config{
-		Stats:               s.stats,
-		Mode:                resolvedMode,
-		LogHookLevel:        cfg.LogHookLevel,
-		HTTPAddr:            addr,
-		Handler:             tpdAPI,
-		PK:                  pk,
-		SK:                  sk,
-		DmsgPort:            dmsgPort,
-		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
-		DmsgServerType:      cfg.Dmsg.ServerType,
-		EmbeddedDmsgServers: embeddedServers,
-		SurveyWhitelist:     surveyWL,
-		Log:                 logger,
+	h, err := cfg.Listen(runCtx, id, services.Listener{
+		Name:        "transport-discovery",
+		DefaultAddr: ":9091",
+		Handler:     tpdAPI,
+		Dmsg:        cfg.Dmsg,
+		Stats:       s.stats,
 		OnDmsgServersUpdated: func(s []string) {
 			tpdAPI.DmsgServers = s
 		},
-	})
+	}, logger)
 	if err != nil {
-		return fmt.Errorf("transport-discovery: start listeners: %w", err)
+		return err
 	}
 	defer h.Close()
 
-	if cfg.ChartsAddr != "" {
-		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
-		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(tpdAPI.ChartsPage), tpdAPI.ChartsExtra()...); err != nil {
-				logger.WithError(err).Error("charts listener failed")
-			}
-		}()
-	}
+	services.ServeCharts(runCtx, cfg.ChartsAddr, tpdAPI.ChartsPage, logger, tpdAPI.ChartsExtra()...)
 
 	if h.DmsgClient != nil {
-		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, sk, logger)
+		dmsgDiscDmsg := services.DmsgDiscovery(cfg.Dmsg)
+		s.startCXO(runCtx, h.DmsgClient, nil, b.st, tpdAPI, id.SK, logger)
 		tpdAPI.SetDmsgDiscovery(&http.Client{Transport: dmsghttp.MakeHTTPTransport(runCtx, h.DmsgClient)}, dmsgDiscDmsg)
 		if mgr := dmsgdFeed(h.DmsgClient, dmsgDiscDmsg, logger); mgr != nil {
 			tpdAPI.SetDmsgDiscoveryFeed(mgr)
@@ -346,13 +295,7 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
-	select {
-	case <-runCtx.Done():
-		return nil
-	case err := <-h.Errors():
-		logger.WithError(err).Error("listener failed")
-		return err
-	}
+	return services.Wait(runCtx, h, logger)
 }
 
 // startCXO brings up TPD's CXO aggregators (visor telemetry, and the

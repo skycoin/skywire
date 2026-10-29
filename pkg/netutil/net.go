@@ -8,6 +8,7 @@ package netutil
 import (
 	"fmt"
 	"net"
+	"strings"
 )
 
 // IsPublicIP returns true if the provided IP is public.
@@ -50,14 +51,35 @@ func ExtractPort(addr net.Addr) (uint16, error) {
 	}
 }
 
-// IsVirtualInterface returns true for Docker bridges, veth pairs, and other
-// virtual interfaces that shouldn't be registered with the address resolver.
+// virtualIfacePrefixes names interfaces that never carry a path a peer can
+// use: container bridges, veth pairs, VPN and overlay tunnels, and the
+// visor's own skydns and VPN interfaces. Address resolver registration and
+// the WebRTC ICE filter both read it.
+var virtualIfacePrefixes = []string{
+	"docker", "br-", "veth", "virbr", "lxc", "cni", "flannel", "calico",
+	"skydns", "tun", "tap", "wg", "tailscale", "utun", "zt",
+}
+
+// IsVirtualInterface reports whether name is an interface whose addresses
+// must not be advertised to peers (see virtualIfacePrefixes).
 func IsVirtualInterface(name string) bool {
-	prefixes := []string{"docker", "br-", "veth", "virbr", "lxc", "cni", "flannel", "calico"}
-	for _, p := range prefixes {
-		if len(name) >= len(p) && name[:len(p)] == p {
+	for _, p := range virtualIfacePrefixes {
+		if strings.HasPrefix(name, p) {
 			return true
 		}
 	}
 	return false
+}
+
+// clatNet is the IPv4 service continuity prefix a 464XLAT CLAT takes its
+// address from, RFC 7335 section 4. Nothing outside the host can reach it.
+var clatNet = &net.IPNet{IP: net.IPv4(192, 0, 0, 0).To4(), Mask: net.CIDRMask(29, 32)}
+
+// IsAdvertisableIP reports whether ip may be offered to peers as a local
+// address: not loopback, not link-local, and not a CLAT address.
+func IsAdvertisableIP(ip net.IP) bool {
+	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return false
+	}
+	return !clatNet.Contains(ip)
 }

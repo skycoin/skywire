@@ -39,11 +39,14 @@ package visor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 
@@ -61,6 +64,21 @@ const (
 	// socket slower than the XHR it replaces; an unbounded fan-out would let one
 	// socket occupy every handler goroutine.
 	wsMaxInFlight = 8
+
+	// wsMaxSubs bounds the subscriptions one connection may hold. The fleet
+	// resources page holds one per visor; this only stops a runaway client.
+	wsMaxSubs = 128
+
+	// wsSubDefaultEvery is how often a subscription re-runs its GET when the
+	// client names no interval.
+	wsSubDefaultEvery = 5 * time.Second
+)
+
+// The range a subscription's interval is clamped to. Variables so a test can
+// shorten them.
+var (
+	wsSubMinEvery = time.Second
+	wsSubMaxEvery = time.Minute
 )
 
 // muxRef boxes the finished router so it can go through an atomic.Value, which
@@ -75,6 +93,8 @@ type wsRequest struct {
 	Path    string            `json:"path"`
 	Body    *string           `json:"body,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+	// EveryMs is a "sub" frame's interval between re-runs, in milliseconds.
+	EveryMs int64 `json:"every_ms,omitempty"`
 }
 
 // wsResponse is one server→client frame.
@@ -185,8 +205,9 @@ func (hv *Hypervisor) getAPIWebSocket() http.HandlerFunc {
 		defer cancel()
 
 		var (
-			wmu sync.Mutex
-			wg  sync.WaitGroup
+			wmu  sync.Mutex
+			wg   sync.WaitGroup
+			subs = make(map[uint64]context.CancelFunc)
 		)
 		sem := make(chan struct{}, wsMaxInFlight)
 
@@ -208,6 +229,33 @@ func (hv *Hypervisor) getAPIWebSocket() http.HandlerFunc {
 				continue
 			}
 
+			switch req.Type {
+			case "sub":
+				if stop, ok := subs[req.ID]; ok {
+					stop()
+				}
+				if len(subs) >= wsMaxSubs {
+					hv.writeWS(ctx, c, &wmu, wsResponse{
+						Type: "event", ID: req.ID, Status: http.StatusTooManyRequests, Body: "too many subscriptions",
+					})
+					continue
+				}
+				subCtx, stop := context.WithCancel(ctx)
+				subs[req.ID] = stop
+				wg.Add(1)
+				go func(req wsRequest) {
+					defer wg.Done()
+					hv.runWSSub(subCtx, c, &wmu, sem, r, req)
+				}(req)
+				continue
+			case "unsub":
+				if stop, ok := subs[req.ID]; ok {
+					stop()
+					delete(subs, req.ID)
+				}
+				continue
+			}
+
 			// Labeled: a bare break here would leave the select, not the read
 			// loop, and the handler would keep accepting frames after the
 			// connection's context was already canceled.
@@ -226,6 +274,49 @@ func (hv *Hypervisor) getAPIWebSocket() http.HandlerFunc {
 
 		cancel()
 		wg.Wait()
+	}
+}
+
+// runWSSub serves one subscription: it replays the GET now and then every
+// interval, and sends an "event" frame only when the status or body changed.
+// The hypervisor still asks the visor each time, since visors do not announce
+// changes; what the client saves is its own polling and unchanged resends.
+func (hv *Hypervisor) runWSSub(ctx context.Context, c *websocket.Conn, wmu *sync.Mutex, sem chan struct{}, up *http.Request, req wsRequest) {
+	every := wsSubDefaultEvery
+	if req.EveryMs > 0 {
+		every = time.Duration(req.EveryMs) * time.Millisecond
+	}
+	every = min(max(every, wsSubMinEvery), wsSubMaxEvery)
+	req.Method = http.MethodGet
+
+	var last [sha256.Size]byte
+	sent := false
+	for {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		res := hv.serveWSRequest(ctx, up, req)
+		<-sem
+		if ctx.Err() != nil {
+			return
+		}
+		sum := sha256.Sum256([]byte(strconv.Itoa(res.Status) + "\n" + res.Body))
+		if !sent || sum != last {
+			res.Type = "event"
+			hv.writeWS(ctx, c, wmu, res)
+			last, sent = sum, true
+		}
+		// A rejected path or method never becomes valid, so stop after saying so.
+		if res.Status == http.StatusForbidden || res.Status == http.StatusMethodNotAllowed {
+			return
+		}
+		select {
+		case <-time.After(every):
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

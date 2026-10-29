@@ -228,6 +228,9 @@
           @if (appMode.isStartTitle(titleParts)) {
             <span class="mode-badge" [matTooltip]="appMode.localPk">{{ appMode.badge }}</span>
           }
+          <button type="button" class="palette-hint d-none d-lg-inline-flex" [matTooltip]="'palette.hint-tooltip' | translate" (click)="openPalette()">
+            <mat-icon [inline]="true">search</mat-icon>{{ paletteMac ? '⌘ K' : 'Ctrl K' }}
+          </button>
           @if (showUpdateButton) {
             <app-refresh-button
               [secondsSinceLastUpdate]="secondsSinceLastUpdate"

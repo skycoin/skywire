@@ -55,14 +55,14 @@ func TestResolveMode(t *testing.T) {
 		}
 	})
 
-	// Default: SK present → dual.
+	// Default: SK present → dmsg only.
 	t.Run("default with SK", func(t *testing.T) {
 		got, err := ResolveMode("", true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got != ModeDual {
-			t.Errorf("default with SK: got %v, want dual", got)
+		if got != ModeDmsg {
+			t.Errorf("default with SK: got %v, want dmsg", got)
 		}
 	})
 

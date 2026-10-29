@@ -33,7 +33,6 @@ The compose file defines the following services:
 | conf-service | `svc confbs` | configurable | none | Config bootstrap server for visor configuration |
 | dmsg-discovery | `dmsg disc` | 9090 | redis | DMSG discovery server |
 | dmsg-server | `dmsg server start` | 8080 (internal) | none | DMSG relay server |
-| network-monitor | `svc nm` | configurable | most services | Monitors network health and cleans stale entries |
 | route-finder | `svc rf` | 9092 | redis, dmsg-discovery, transport-discovery | Finds routes between visors |
 | service-discovery | `svc sd` | 9098 | redis, dmsg-discovery | Service discovery (VPN servers, etc.) |
 | setup-node | `svc sn` | none | dmsg-discovery | Route setup node |
@@ -58,7 +57,7 @@ The `.env` file contains:
 - Service ports
 - Secret keys for each service (generate with `skywire cli config gen-keys`)
 - Redis credentials
-- Network monitor public keys
+- Public keys allowed to deregister entries
 - DMSG server configuration
 - Pprof debug ports
 

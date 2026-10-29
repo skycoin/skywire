@@ -6,7 +6,7 @@ import android.content.Intent
 
 /**
  * The notification's transport buttons. A receiver rather than a service:
- * every one of these is a single call into the page that is already running,
+ * every one of these is a single call into the player that is already running,
  * with nothing to keep alive afterwards.
  */
 class ChatMediaReceiver : BroadcastReceiver() {

@@ -208,6 +208,21 @@ func (_m *MockRPCIngressClient) Notify(n NotifyReq) error {
 	return r0
 }
 
+// ContactNames provides a mock function with no fields
+func (_m *MockRPCIngressClient) ContactNames() (map[string]string, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ContactNames")
+	}
+
+	var r0 map[string]string
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(map[string]string)
+	}
+	return r0, ret.Error(1)
+}
+
 // LocalServices provides a mock function with no fields
 func (_m *MockRPCIngressClient) LocalServices() ([]appnet.LocalService, error) {
 	ret := _m.Called()

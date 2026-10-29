@@ -11,6 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.chat.ChatRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -107,6 +108,7 @@ internal class NotificationBridge(context: Context) {
     }
 
     private fun show(event: NotifyEvent) {
+        if (event.app == SKYCHAT && !chatAllows(event)) return
         val channel = channelFor(event.app)
         // SkyChat's tag names the conversation, so its notification opens it.
         // One request code per tag, or every chat would share one intent.
@@ -157,14 +159,32 @@ internal class NotificationBridge(context: Context) {
             .onFailure { Log.w(TAG, "cannot post a notification from ${event.app}", it) }
     }
 
+    /**
+     * The chat's own notification settings, which only this side can apply:
+     * skychat publishes whenever no UI shows the thread, and the tag is the
+     * conversation (peer key, group id, or `join:<group>` for a join request).
+     */
+    private fun chatAllows(event: NotifyEvent): Boolean {
+        val prefs = ChatRepository.get(app).store.notif.value
+        if (!prefs.enabled) return false
+        val thread = event.tag.lowercase()
+        if (thread.isEmpty() || thread.startsWith("join:")) return true
+        return thread !in prefs.muted && event.tag !in prefs.muted
+    }
+
     // SkyChat stores its call records in English (voice_missed.go callRecordText),
     // and a missed call is the one it notifies.
-    private fun shownBody(event: NotifyEvent): String =
-        if (event.app == SKYCHAT && event.body == MISSED_CALL) {
-            "$CALL_ICON " + AppLocale.localized(app).getString(R.string.call_missed_title)
-        } else {
-            event.body
+    private fun shownBody(event: NotifyEvent): String {
+        if (event.app != SKYCHAT) return event.body
+        if (event.body == MISSED_CALL) {
+            return "$CALL_ICON " + AppLocale.localized(app).getString(R.string.call_missed_title)
         }
+        val message = event.tag.isNotEmpty() && !event.tag.startsWith("join:") && !event.body.startsWith(CALL_ICON)
+        if (message && !ChatRepository.get(app).store.notif.value.preview) {
+            return AppLocale.localized(app).getString(R.string.chat_notif_new_message)
+        }
+        return event.body
+    }
 
     /**
      * The channel an app's notifications belong in, created on first use.

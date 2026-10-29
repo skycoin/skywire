@@ -340,6 +340,9 @@ func pathFromItem(it *bfsItem) []*vertex {
 // the edge transports between consecutive hops.
 func buildRoute(path []*vertex) (routing.Route, error) {
 	var route routing.Route
+	if len(path) > 1 {
+		route.Hops = make([]routing.Hop, 0, len(path)-1) // append growth left up to 3 spare hops per route
+	}
 	for i := 0; i < len(path)-1; i++ {
 		from := path[i]
 		to := path[i+1]

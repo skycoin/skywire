@@ -11,6 +11,7 @@ import (
 	"weak"
 
 	kcp "github.com/0magnet/kcp-go/v5"
+	"github.com/skycoin/skywire/pkg/httputil"
 )
 
 // sudphSessions follows every session the SUDPH listener hands out, so a
@@ -128,5 +129,5 @@ func (a *API) sudphSessionsReport(listClosed int) SudphSessionsReport {
 
 func (a *API) sudphSessionsHandler(w http.ResponseWriter, r *http.Request) {
 	n, _ := strconv.Atoi(r.URL.Query().Get("closed")) //nolint:errcheck
-	a.writeJSON(w, r, http.StatusOK, a.sudphSessionsReport(n))
+	httputil.WriteJSON(w, r, http.StatusOK, a.sudphSessionsReport(n))
 }

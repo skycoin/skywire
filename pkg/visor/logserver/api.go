@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -136,6 +137,8 @@ type API struct {
 	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
 	logLevelController   LogLevelController      // temporary log level, set via SetLogLevelController
 	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
+	websiteSites         func() []string         // optional: the site names websiteHandler serves by Host
+	sitesHidden          bool                    // list no sites, set via SetSitesHidden
 	// homePage renders the mesh directory for home.skynet and home.dmsg.
 	homePage func(suffix string, ownUser bool) []byte
 	// vhosts are sites chosen by the request's Host (SetVhosts), by name.
@@ -331,6 +334,8 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	authRoute("GET /debug/pprof/trace", pprof.Trace)
 	// The last seconds of execution trace, when the flight recorder runs.
 	authRoute("GET /debug/pprof/flightrecorder", flightrec.Handler().ServeHTTP)
+	// One line per 5 s sample of the garbage collector, ?json=1 for JSON.
+	authRoute("GET /debug/gctrace", gcmon.DefaultHandler().ServeHTTP)
 	// A full heap dump written to LocalPath/log, for finding what retains an object.
 	authRoute("POST /debug/heapdump", heapDumpHandler(localPath))
 
@@ -600,6 +605,17 @@ func (api *API) serveWebsite(w http.ResponseWriter, req *http.Request) {
 // - The reward system UI handler
 func (api *API) SetWebsiteHandler(h http.Handler) {
 	api.websiteHandler = h
+}
+
+// SetWebsiteSites lists the sites the website handler serves by Host, for a
+// port 80 forward that hands every name to a server such as Caddy. Nil lists none.
+func (api *API) SetWebsiteSites(sites func() []string) {
+	api.websiteSites = sites
+}
+
+// SetSitesHidden keeps every site off the landing page and the site list.
+func (api *API) SetSitesHidden(hidden bool) {
+	api.sitesHidden = hidden
 }
 
 // SetVisorStatusPage serves h at /status/visor to this visor, the survey
@@ -927,7 +943,15 @@ type SiteList struct {
 
 // sitesFor is each site name req's caller may open, sorted.
 func (api *API) sitesFor(req *http.Request) []string {
+	if api.sitesHidden {
+		return []string{}
+	}
 	seen := map[string]bool{}
+	if api.websiteSites != nil {
+		for _, s := range api.websiteSites() {
+			seen[s] = true
+		}
+	}
 	for _, v := range api.vhostList() {
 		if !callerAllowed(req, v.Whitelist) {
 			continue
@@ -953,9 +977,10 @@ func (api *API) sitesFor(req *http.Request) []string {
 func (api *API) SetVhosts(vs []Vhost) {
 	m := make(map[string]*Vhost, len(vs))
 	for i := range vs {
-		for _, n := range vs[i].Names {
+		v := &vs[i]
+		for _, n := range v.Names {
 			if n != "" {
-				m[n] = &vs[i]
+				m[n] = v
 			}
 		}
 	}

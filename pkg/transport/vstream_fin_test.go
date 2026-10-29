@@ -19,9 +19,9 @@ import (
 // lucky pick would pass the broken version.
 func TestVStreamReadDrainsBeforeEOF(t *testing.T) {
 	for i := 0; i < 200; i++ {
-		s := &VStream{readBuf: make(chan []byte, 4), closed: make(chan struct{})}
-		s.readBuf <- []byte("hello, ")
-		s.readBuf <- []byte("world")
+		s := &VStream{rq: newFrameQueue(), closed: make(chan struct{})}
+		s.rq.push([]byte("hello, "))
+		s.rq.push([]byte("world"))
 		close(s.closed) // the FIN, behind the data
 
 		got, err := io.ReadAll(s)

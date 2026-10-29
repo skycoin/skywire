@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
-import { Subscription, interval, startWith } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { EMPTY, Subscription } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 
 import {
   DmsgClientSessions,
@@ -10,6 +10,7 @@ import {
 } from 'src/app/services/dmsg-settings.service';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { LiveService } from 'src/app/services/live.service';
 import { NodeComponent } from '../node/node.component';
 import { Node } from '../../../app.datatypes';
 
@@ -53,6 +54,7 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
 
   constructor(
     private dmsgSvc: DmsgSettingsService,
+    private live: LiveService,
     private snackbar: SnackbarService,
     private changeDetectorRef: ChangeDetectorRef,
   ) {
@@ -81,36 +83,33 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
    *  sessions list changes rarely and we want to keep RPC traffic to
    *  the visor low. */
   private startPolling() {
-    this.pollSub = interval(20000)
+    this.pollSub?.unsubscribe();
+    this.pollSub = this.live.watch(`visors/${this.pk}/dmsg/sessions`, 20000, () => this.dmsgSvc.getSessions(this.pk))
       .pipe(
-        startWith(0),
-        switchMap(() => this.dmsgSvc.getSessions(this.pk)),
-      )
-      .subscribe({
-        next: (sessions) => {
-          this.sessions = sessions || {};
-          this.loading = false;
-          this.error = null;
-          this.lastUpdated = new Date();
-        },
-        error: (err) => {
+        // A failed fetch is shown and the next one still runs.
+        switchMap(res => res.pipe(catchError(err => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch dmsg sessions';
-        },
+          this.changeDetectorRef.markForCheck();
+
+          return EMPTY;
+        }))),
+      )
+      .subscribe((sessions) => {
+        this.sessions = sessions || {};
+        this.loading = false;
+        this.error = null;
+        this.lastUpdated = new Date();
+        this.changeDetectorRef.markForCheck();
       });
   }
 
+  /** Resubscribing makes the hypervisor send the sessions at once. */
   refresh(): void {
     if (!this.pk) {
  return; 
 }
-    this.dmsgSvc.getSessions(this.pk).subscribe({
-      next: (sessions) => {
-        this.sessions = sessions || {};
-        this.lastUpdated = new Date();
-      },
-      error: () => { /* next poll surfaces errors */ },
-    });
+    this.startPolling();
   }
 
   connectAll(): void {

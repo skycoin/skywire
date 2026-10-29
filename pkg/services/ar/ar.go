@@ -15,7 +15,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
-	"github.com/skycoin/skywire/pkg/cxo/storeconfig"
 	"github.com/skycoin/skywire/pkg/deployment/ar/api"
 	armetrics "github.com/skycoin/skywire/pkg/deployment/ar/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/ar/regcxo"
@@ -27,7 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -133,7 +131,7 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 
 	go arAPI.ListenUDP(udpListener)
 	arAPI.Stats = s.stats
-	arAPI.StartCharts(ctx, chartStore(storeConfig, logger), logger)
+	arAPI.StartCharts(ctx, services.OpenChartsStore(storeConfig, redisPrefix, logger), logger)
 	logger.Infof("UDP listener (SUDPH) on %s", udpAddr)
 
 	return &built{api: arAPI, store: transportStore, close: func() {
@@ -197,114 +195,45 @@ func (s *service) Run(ctx context.Context) error {
 	s.cxo.Stats = s.stats
 	defer cfg.StartPprof(logger)()
 
-	pk := cfg.PubKey
-	sk := cfg.SecKey
-	if pk.Null() && !sk.Null() {
-		if derived, err := sk.PubKey(); err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		} else {
-			pk = derived
-		}
-	}
-
-	dmsgPort := cfg.DmsgPort
-	if dmsgPort == 0 {
-		dmsgPort = dmsg.DefaultDmsgHTTPPort
-	}
-	var dmsgAddr string
-	if !pk.Null() {
-		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-	}
+	id := cfg.Identity(logger)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	b, err := s.build(runCtx, logger, dmsgAddr, true)
+	b, err := s.build(runCtx, logger, id.DmsgAddr, true)
 	if err != nil {
 		return err
 	}
 	defer b.close()
 	arAPI := b.api
 
-	resolvedMode, err := svcmode.ResolveMode(cfg.Mode, !sk.Null())
-	if err != nil {
-		return fmt.Errorf("address-resolver: invalid mode: %w", err)
-	}
-
-	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
-	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
-	if dmsgDiscDmsg == "" {
-		dmsgDiscDmsg = dmsg.DiscAddr()
-	}
-	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
-	surveyWL := cfg.SurveyKeys()
-
-	addr := cfg.Addr
-	if addr == "" {
-		addr = ":9093"
-	}
-
-	h, err := svcmode.Start(runCtx, svcmode.Config{
-		Stats:               s.stats,
-		Mode:                resolvedMode,
-		LogHookLevel:        cfg.LogHookLevel,
-		HTTPAddr:            addr,
-		Handler:             arAPI,
-		PK:                  pk,
-		SK:                  sk,
-		DmsgPort:            dmsgPort,
-		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
-		DmsgServerType:      cfg.Dmsg.ServerType,
-		EmbeddedDmsgServers: embeddedServers,
-		SurveyWhitelist:     surveyWL,
-		Log:                 logger,
+	h, err := cfg.Listen(runCtx, id, services.Listener{
+		Name:        "address-resolver",
+		DefaultAddr: ":9093",
+		Handler:     arAPI,
+		Dmsg:        cfg.Dmsg,
+		Stats:       s.stats,
 		OnDmsgServersUpdated: func(svrs []string) {
 			arAPI.DmsgServers = svrs
 		},
-	})
+	}, logger)
 	if err != nil {
-		return fmt.Errorf("address-resolver: start listeners: %w", err)
+		return err
 	}
 	defer h.Close()
 
-	if cfg.ChartsAddr != "" {
-		logger.Infof("Serving the charts page on %s", cfg.ChartsAddr)
-		go func() {
-			if err := charts.Serve(runCtx, cfg.ChartsAddr, http.HandlerFunc(arAPI.ChartsPage)); err != nil {
-				logger.WithError(err).Error("charts listener failed")
-			}
-		}()
-	}
+	services.ServeCharts(runCtx, cfg.ChartsAddr, arAPI.ChartsPage, logger)
 
 	if h.DmsgClient != nil {
-		s.startCXO(runCtx, h.DmsgClient, nil, sk, b, logger)
+		s.startCXO(runCtx, h.DmsgClient, nil, id.SK, b, logger)
 	}
 
-	select {
-	case <-runCtx.Done():
-		return nil
-	case err := <-h.Errors():
-		logger.WithError(err).Error("listener failed")
-		return err
-	}
+	return services.Wait(runCtx, h, logger)
 }
 
 // AggregatorPorts implements services.CXOAggregating.
 func (s *service) AggregatorPorts() []uint16 {
 	return []uint16{skyenv.DmsgVisorARBindCXOPort}
-}
-
-// chartStore keeps the chart samples in the resolver's redis.
-func chartStore(sc storeconfig.Config, log *logging.Logger) charts.Store {
-	if sc.Type != storeconfig.Redis {
-		return charts.NewMemoryStore()
-	}
-	st, err := charts.NewRedisStore(sc.URL, sc.Password, redisPrefix)
-	if err != nil {
-		log.WithError(err).Warn("charts: redis unavailable, keeping samples in memory")
-		return charts.NewMemoryStore()
-	}
-	return st
 }
 
 // ChartsPage is the charts page of the running service, for the host's status

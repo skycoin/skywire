@@ -1,303 +1,160 @@
 # Cascading Route Setup
 
+| Status   | Implemented, off by default                                            |
+|----------|------------------------------------------------------------------------|
+| Revision | 2026-10-27, skywire f37a464a4 |
+| Code     | `pkg/routing/cascade.go`, `pkg/router/cascade_*.go`, `pkg/router/setup_rpc_gateway.go`, `pkg/router/wrappers.go` |
+
+## Abstract
+
+Cascading route setup installs a route without the route setup node (RSN)
+dialing each hop. The RSN signs one nested message per path. The source visor
+sends it down its own transports, and each hop reserves route IDs or installs
+rules and passes the inner message on. Route setup by the RSN over dmsg
+([13](13-Setup_Node.md)) remains the default and the fallback.
+
 ## Overview
 
-Cascading Route Setup eliminates the Route Setup Node's (RSN) dependency on DMSG for installing routing rules on intermediate hops. Instead of the RSN independently dialing every hop via DMSG, it constructs a nested message that cascades along the route's own pre-existing transports using the route ID 0 control channel.
-
-This specification also covers:
-- RSN standalone visor configuration with transport manager
-- Transport label "setup" for RSN transports
-
-## Motivation
-
-Currently, route setup requires DMSG connectivity between the RSN and every visor in the route. If DMSG is unavailable, no routes can be established — the entire network depends on DMSG servers being online. DMSG was designed as a bootstrapping layer, not a permanent dependency.
-
-The cascade protocol moves route setup to the transport layer:
-- The RSN is reachable via transport-level relay (route ID 0)
-- Routing rules are installed hop-by-hop over the route's own transports
-- DMSG becomes a fallback, not a hard requirement
-
-## Design Principles
-
-1. **The RSN never participates in data routes.** It is an orchestrator, never an intermediary hop. Its transports carry only control-plane traffic.
-2. **The RSN provides authorization.** Only a trusted RSN can install routing rules. Each hop verifies the RSN's signature.
-3. **The RSN provides privacy.** Intermediate hops see the RSN's signature, not the requesting visor's identity. Intermediary forwarding rules contain only route IDs and transport IDs — not source or destination PKs.
-4. **Each hop knows only its neighbors.** An intermediate hop sees only the previous and next hop (from its rule and the transport it relays on). It cannot inspect the nested payload destined for later hops.
-5. **Transports in the route already exist.** Route setup is requested only after the path is calculated and all transports along it are established.
-
-## Architecture
-
-### RSN as a Standalone Visor
-
-The RSN is its own visor with:
-- Its own PK/SK identity
-- A transport manager (initiates STCPR/SUDPH transports outward)
-- Autoconnect enabled (to build its transport connectivity)
-- DMSG connectivity (as any visor, for bootstrapping and fallback)
-- No hosted applications
-- No registration in the address resolver (does not accept inbound transports — only initiates outward)
-- No participation as an intermediary hop in any data route
-
-### Transport Label "setup"
-
-The RSN creates all its transports with the label `"setup"`. The responder adopts this label via the settlement handshake (existing label propagation mechanism). Both ends of an RSN transport carry the "setup" label.
-
-Since visors periodically re-register their transports with transport discovery (TD), RSN transports will appear in TD with this label. The route finder and local route calculation **exclude transports with label "setup"** from data route path calculations. This is simpler and more reliable than matching against RSN public keys.
-
-The "setup" label means: this transport exists for control-plane communication with the RSN. It is visible in TD (the mesh is continuous), but it is never used as a hop in a data route.
-
-### Transport Capacity Management
-
-The RSN initiates transports to other visors via autoconnect. It does NOT register with the address resolver, so it never receives unsolicited inbound transports. The RSN controls its own connectivity by choosing which visors to transport.
-
-A configurable `max_transports` limits how many transports the RSN maintains. The autoconnect logic stops initiating new transports once the limit is reached.
-
-## Packet Types
-
-New packet types are added to the transport frame format, all using route ID 0:
-
-| Type | Value | Description |
-|------|-------|-------------|
-| `CascadeSetupPacket` | `10` | Carries a cascade setup message (reserve or install phase) |
-| `CascadeAckPacket` | `11` | Carries a cascade acknowledgment/confirmation |
-
-Both use route ID 0 and are intercepted at the transport layer before reaching the router. Old visors that don't recognize these types drop them silently (existing behavior for unknown packet types on route ID 0).
-
-### Capability Negotiation
-
-A new capability flag is added to the transport handshake:
-
-```
-CapCascade = 1 << 2
-```
-
-Visors that support the cascade protocol advertise this during the transport handshake. The RSN checks this flag to determine which hops support cascade.
-
-## Cascade Message Format
-
-### CascadeSetup
-
-```
-CascadeSetup {
-    Phase       uint8           // 0 = Reserve, 1 = Install
-    SessionID   uint64          // Correlates reserve/install phases
-    RSNPK       cipher.PubKey   // RSN that authorized this setup
-    Nonce       uint64          // Anti-replay, unique per session+hop
-    RSNSig      cipher.Sig      // Signature over (Phase || SessionID || RSNPK || Nonce || TargetPK || RuleData)
-    RuleData    []byte          // Serialized routing rules for this hop (empty in Reserve phase)
-    ReserveN    uint8           // Number of route IDs to reserve (Reserve phase only)
-    RelayTpID   uuid.UUID       // Transport to forward Payload on (zero = terminal hop)
-    Payload     []byte          // Next hop's CascadeSetup (opaque to this hop)
-}
-```
-
-### CascadeAck
-
-```
-CascadeAck {
-    SessionID   uint64
-    Phase       uint8           // 0 = Reserve, 1 = Install
-    RouteIDs    []RouteID       // Reserved IDs (Reserve phase) or empty (Install phase)
-    Error       string          // Non-empty on failure
-}
-```
-
-### Signature Verification
-
-Each hop verifies the cascade message independently:
-
-1. Check `RSNPK` against the visor's configured `route_setup_nodes` list
-2. Compute `hash(Phase || SessionID || RSNPK || Nonce || myPK || RuleData)`
-3. Verify `RSNSig` against the hash using `RSNPK`
-4. Reject if verification fails — do not install rules, do not relay
-
-This ensures:
-- Only a trusted RSN can install rules (authorization)
-- The message cannot be modified by relay hops (integrity)
-- The message cannot be replayed to a different visor (Nonce + TargetPK binding)
-- The relay hop cannot forge messages for its neighbors (lacks RSN SK)
-
-## Protocol Flow
-
-### Phase 1: Reserve Route IDs
-
-The RSN builds a nested reserve message from last hop to first:
-
-```
-Route: A --tp1--> C --tp2--> D --tp3--> B
-
-RSN constructs:
-  For B (terminal):  {Phase:Reserve, ReserveN:2, RelayTpID:0,   Payload:nil}
-  For D:             {Phase:Reserve, ReserveN:2, RelayTpID:tp3, Payload:serialize(B's msg)}
-  For C:             {Phase:Reserve, ReserveN:2, RelayTpID:tp2, Payload:serialize(D's msg)}
-  Sends to A:        {Phase:Reserve, ReserveN:2, RelayTpID:tp1, Payload:serialize(C's msg)}
-```
-
-Each hop:
-1. Verifies RSN signature
-2. Reserves `ReserveN` local route IDs
-3. If `RelayTpID != 0`: sends `Payload` as a `CascadeSetupPacket` on route ID 0 over transport `RelayTpID`
-4. Waits for `CascadeAck` from the next hop (bounded timeout, e.g., 10 seconds)
-5. Prepends its own reserved route IDs to the ACK
-6. Relays the combined ACK back to the previous hop
-
-The ACK cascades back: `B -> D -> C -> A -> RSN`. The RSN now has all reserved route IDs from every hop.
-
-### Phase 2: Install Rules
-
-With all route IDs known, the RSN computes routing rules (same as `GenerateRules` today) and builds a nested install message:
-
-```
-RSN constructs:
-  For B (terminal):  {Phase:Install, RuleData:[B's consume rule], RelayTpID:0,   Payload:nil}
-  For D:             {Phase:Install, RuleData:[D's fwd rule],     RelayTpID:tp3, Payload:serialize(B's msg)}
-  For C:             {Phase:Install, RuleData:[C's fwd rule],     RelayTpID:tp2, Payload:serialize(D's msg)}
-  Sends to A:        {Phase:Install, RuleData:[A's edge rules],   RelayTpID:tp1, Payload:serialize(C's msg)}
-```
-
-Each hop:
-1. Verifies RSN signature
-2. Installs rules from `RuleData` in its routing table
-3. If `RelayTpID != 0`: relays `Payload` on route ID 0 over transport `RelayTpID`
-4. Waits for ACK from next hop
-5. ACKs back to previous hop
-
-When A receives the final ACK, the route is live.
-
-### Timing
-
-Each hop: ~100-500ms round-trip. For a 5-hop route:
-- Reserve phase: ~2.5 seconds (cascade forward + ACK back)
-- Install phase: ~2.5 seconds
-- Total: ~5 seconds
-
-Well within the 10-minute route keepalive and the RSN's per-request timeout.
-
-## Reaching the RSN (Relay Mechanism)
-
-### Direct Transport
-
-If a visor has a direct transport to the RSN (labeled "setup"), it sends the setup request directly over that transport as an RPC call (same as today over DMSG, but over the transport's raw connection).
-
-### Relay Through a Neighbor
-
-If a visor does not directly transport the RSN:
-
-1. The visor knows the RSN's PK (from config)
-2. On first contact, the visor reaches the RSN via DMSG (current behavior)
-3. The RSN includes its current transport peer list (`relay_peers`) in the response
-4. The visor caches this list locally
-5. On subsequent requests, the visor checks: "do I transport any of these relay peers?"
-6. If yes: sends the request to that peer on route ID 0 with destination = RSN PK
-7. The peer forwards to the RSN over its direct "setup" transport
-8. Response returns via the same path
-
-If the cached relay peer list is stale, the request times out and the visor falls back to DMSG, receiving a fresh peer list.
-
-### Multi-Hop Relay
-
-If the visor doesn't transport any relay peer directly, but transports a visor that transports a relay peer, the relay can cascade multiple hops on route ID 0. Each hop checks its own transports for the RSN PK or a known relay peer, and forwards toward the RSN.
-
-## Failure Handling
-
-### Cascade Failures
-
-| Failure | Behavior |
-|---------|----------|
-| Transport to next hop is dead | Cascade fails at that hop. Error ACK propagates back to RSN. Route setup fails — the broken transport means the route is unusable anyway. |
-| RSN signature verification fails | Hop rejects the message. Does not install rules or relay. Returns error ACK. |
-| Reserve phase timeout | Session expires. Partially-reserved IDs expire via normal GC. |
-| Install phase timeout | Session expires. Partially-installed rules expire via DefaultRouteKeepAlive GC. |
-| RSN unreachable via relay | Fall back to DMSG. |
-
-### Mixed-Version Fallback
-
-When the route contains a mix of new visors (cascade-capable) and old visors (not cascade-capable):
-
-1. The RSN knows each hop's capabilities (from `CapCascade` flag in the transport handshake data, or from attempting the cascade).
-2. The cascade proceeds along cascade-capable hops from the source toward the destination.
-3. When the cascade reaches a hop that cannot relay to the next hop (because the next hop is an old visor that drops `CascadeSetupPacket`), the cascade times out at that hop.
-4. The timeout error propagates back to the RSN, identifying the break point.
-5. The RSN falls back to DMSG for the failing hop and all subsequent hops in the route.
-6. Hops before the break point already have their rules installed via cascade. Those rules remain valid.
-
-This means: cascade what you can from the source, DMSG the rest from the break point onward. As the network updates, the break point moves further along the route until eventually the entire cascade completes without DMSG.
-
-## RSN Standalone Configuration
-
-```json
-{
-  "version": "1.0",
-  "pk": "<RSN public key>",
-  "sk": "<RSN secret key>",
-  "dmsg": {
-    "discovery": "http://dmsg.discovery.skywire.skycoin.com",
-    "sessions_count": 6
-  },
-  "transport": {
-    "discovery": "http://tpd.skywire.skycoin.com",
-    "address_resolver": "",
-    "label": "setup",
-    "max_transports": 20,
-    "autoconnect": true,
-    "public_autoconnect": false
-  },
-  "cascade": {
-    "reserve_timeout": "10s",
-    "install_timeout": "10s",
-    "session_ttl": "30s"
-  },
-  "relay_peer_announce": true,
-  "log_level": "info"
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `transport.discovery` | Transport discovery URL (transports are registered here with label "setup") |
-| `transport.address_resolver` | Empty — RSN does not register with AR (no inbound transports) |
-| `transport.label` | Default label for transports created by this visor ("setup") |
-| `transport.max_transports` | Maximum transports to maintain |
-| `transport.autoconnect` | Enable autoconnect to build connectivity outward |
-| `transport.public_autoconnect` | Disabled — RSN does not advertise as a public visor |
-| `cascade.reserve_timeout` | Per-hop timeout for the reserve phase |
-| `cascade.install_timeout` | Per-hop timeout for the install phase |
-| `cascade.session_ttl` | How long to keep session state between phases |
-| `relay_peer_announce` | Include transport peer list in setup responses |
-
-## Route Finder Exclusion
-
-The route finder and local route calculation exclude transports with label `"setup"` from data route path calculations. This prevents the RSN from being included as an intermediary hop without requiring PK-based matching.
-
-Additionally, the RSN itself rejects any `AddIntermediaryRules` request — it never accepts forwarding rules. This is a hard enforcement backstop even if a route were somehow calculated through it.
-
-## Backward Compatibility
-
-- Old visors drop unknown packet types on route ID 0 (existing behavior)
-- The RSN checks `CapCascade` on hops before attempting cascade
-- Mixed-version routes: cascade up to the first old hop, DMSG the rest
-- The cascade and DMSG protocols coexist — the RSN selects per-hop based on capabilities
-- The embedded RSN continues working over DMSG as today (no cascade support needed)
-- Gradual rollout: as visors update, more hops support cascade, less DMSG load
-
-## Implementation Phases
-
-### Phase 1: Core Protocol
-- Transport label "setup" (add to `pkg/transport/entry.go`)
-- New packet types (`CascadeSetupPacket`, `CascadeAckPacket`)
-- Cascade message format and serialization (`pkg/routing/cascade.go`)
-- Transport-layer interception in `managed_transport.go`
-- Cascade handler on visor side (`pkg/router/cascade_handler.go`)
-- Cascade builder on RSN side (`pkg/router/cascade_builder.go`)
-- Capability negotiation (`CapCascade`)
-- RSN standalone visor with transport manager
-- Route finder exclusion of "setup" labeled transports
-
-### Phase 2: Relay and Discovery
-- Route ID 0 relay mechanism for reaching the RSN
-- Relay peer list in RSN responses
-- Relay peer caching on visors
-- Multi-hop relay forwarding
-
-### Phase 3: Privacy and Cleanup
-- Deprecate embedded RSN (optional, once standalone cascade is proven)
+The visor that wants the route is the source. It calls two RPCs on an RSN and
+carries the signed results itself. The RSN never contacts a hop and is never on
+the data path. Cascade messages travel as `routing.CascadeSetupPacket` and
+`routing.CascadeAckPacket` with route ID 0 on the transports of the route.
+
+## Addressing
+
+The RSN is reached as for any route setup, over dmsg port 36, over a direct
+transport labelled `setup`, or through a neighbour of the RSN. The hops are
+addressed by the transport ID of each hop, `routing.Hop.TpID`.
+
+## Data Formats
+
+### `routing.CascadeSetup`
+
+One layer per target visor. The target of the outermost layer is the source.
+The path is oriented source first for both directions. The reverse path is
+reversed and its hops swapped, keeping the transport IDs
+(`reverseHopsFromSource`). The binary layout is `CascadeSetup.Marshal`. All
+integers are big endian.
+
+| Field | Size | Meaning |
+|---|---|---|
+| `Phase` | 1 | `CascadePhaseReserve` (0) or `CascadePhaseInstall` (1). |
+| `SessionID` | 8 | Correlates the two phases and the acknowledgements. |
+| `RSNPK` | 33 | The signing RSN. |
+| `Nonce` | 8 | Starts at 1 on the innermost layer and rises by one per layer outward. |
+| `RSNSig` | 65 | Signature, see below. |
+| `ReserveN` | 1 | Route IDs to reserve. Reserve phase only. |
+| `RelayTpID` | 16 | Transport on which to send `Payload`. Zero marks the last hop. |
+| `RuleDataLen` | 2 | Length of `RuleData`. |
+| `RuleData` | n | `routing.SerializeRules`: a count byte, then each rule with a 2 byte length. Empty in the reserve phase. |
+| `PayloadLen` | 2 | Length of `Payload`. |
+| `Payload` | n | The next layer, opaque to this hop. |
+| `EdgeDesc` | 70 | `routing.RouteDescriptor`. Optional trailing data, zero unless the hop is the responding edge. |
+
+The message is at least `cascadeFixedSize` (132) plus 4 bytes. A reader accepts
+a message that ends before `EdgeDesc`, and then `EdgeDesc` is zero.
+
+**Signed fields.** `CascadeSetup.SignablePayload(targetPK)` is
+`Phase || SessionID || RSNPK || Nonce || TargetPK || RuleData`. The signature is
+`cipher.SignPayload` over the SHA-256 of that value. `TargetPK` is the key of the
+visor that receives the layer and is not in the message. `ReserveN`, `RelayTpID`,
+`Payload` and `EdgeDesc` are not signed.
+
+`EdgeDesc` is the responding edge's descriptor. A hop with a non zero `EdgeDesc`
+(`CascadeSetup.IsEdge`) installs `RuleData[0]` as the forward rule and
+`RuleData[1]` as the reverse rule of `routing.EdgeRules` through
+`router.IntroduceRules`, which creates the route group. Every other hop saves
+its rules.
+
+### `routing.CascadeAck`
+
+`SessionID` (8), `Phase` (1), `RouteIDCount` (1), the route IDs (4 each),
+`ErrorLen` (2) and `Error`. A reserving hop prepends its IDs to the ACK it
+receives from the next hop. A non empty `Error` is a failure.
+
+## Interfaces
+
+### RPC
+
+The source calls `SetupRPCGateway.CascadeSignReserve` and
+`SetupRPCGateway.CascadeSignInstall`. Their types are in [13](13-Setup_Node.md).
+Both are registered on an RSN that has a cascade builder. Without one they
+return `errCascadeUnavailable`.
+
+## Behaviour
+
+### Enabling
+
+The cascade is off by default. A visor uses it only when
+`routing.enable_cascade_route_setup` (`visorconfig.Routing.EnableCascadeRouteSetup`)
+is true. The generator sets it with `skywire cli config gen --cascade`, and sets
+it by default when it generates a configuration for `js/wasm`. When the setting
+is false the visor creates no source side builder and every route uses RSN setup
+over dmsg. An RSN needs a `cascade` object in its configuration
+(`router.SetupConfig.Cascade`, `CascadeConfig` with `reserve_timeout`,
+`install_timeout` and `session_ttl`, 10, 10 and 30 seconds when unset) and a
+transport manager of its own to build cascades.
+
+### Source driven setup
+
+`runSourceCascade` runs these steps for a route with at least one hop in each
+direction.
+
+1. The source calls `CascadeSignReserve`. The RSN builds, for each direction, a
+   reserve message for the source and every hop, with `ReserveN` equal to the
+   number of times that visor appears on that path, at least one. It signs each
+   layer for its target and returns both messages and their session IDs.
+2. The source processes the outer layer itself (`ProcessLocalOrigin`), which
+   reserves its IDs and relays the inner payload on `RelayTpID`. The two
+   directions run at the same time. Each hop verifies the layer, reserves IDs,
+   relays, and returns the ACK with its IDs prepended.
+3. The source calls `CascadeSignInstall` with the route, the session IDs and the
+   collected route IDs of both directions. The RSN rebuilds the ID reservation
+   from the IDs and recomputes all rules with `GenerateRules`. It does not accept
+   rules from the source. It returns the install messages and the initiating
+   `EdgeRules`.
+4. The source processes the outer install layers. The forward install message
+   sets `EdgeDesc` on the last layer. The reverse install message sets none.
+5. The source returns the initiating `EdgeRules` to the dialer.
+
+A hop accepts a layer when `RSNPK` is in its trusted route setup nodes
+(`CascadeHandler.trustedRSNs`) and the signature verifies against the hop's own
+key. Otherwise it returns an ACK with `ErrCascadeUntrustedRSN` or
+`ErrCascadeSigInvalid`. A hop with `routing.no_transit` refuses an install that
+is not an edge install. A hop waits 10 seconds (`defaultTimeout`) for the next
+hop's ACK.
+
+The source waits 6 seconds for the reserve ACK and 10 seconds for the install
+ACK (`CascadeBuilder.reserveTimeout`, `installTimeout`).
+
+### Capability and fallback
+
+An RSN advertises `cascade-sign` (`CapCascadeSign`) and `transport-query` in
+`Capabilities` and `HealthCheck` only when it has a cascade builder. The source
+does not check the capability first. It calls the RPC.
+
+- If the RSN answers "can't find method" or "can't find service"
+  (`isUnimplementedRPC`), the source falls back to `DialRouteGroup`.
+- Over dmsg, any other cascade error is logged and the source falls back to
+  `DialRouteGroup`, except when the connection to the RSN is lost, which fails the
+  attempt.
+- Over a transport virtual stream, any other cascade error fails the attempt.
+- When a route installed by cascade fails its data plane handshake, the router
+  sets `WithForceLegacyRouteSetup` on the context and the following attempts of
+  that dial use RSN setup only.
+
+A visor that is not source driven still processes cascade messages sent to it.
+
+## Security Considerations
+
+A hop installs rules only from an RSN it trusts, and the signature binds the
+phase, session, nonce, target and rules to that hop. `EdgeDesc` and `RelayTpID`
+are not signed, so a relay can change which action the last hop takes or where a
+layer is forwarded, which can break the route. The signed rules cannot be changed.
+The RSN recomputes the rules from the reserved IDs, so the source cannot choose
+them.
+
+## References
+
+- [13 Setup Node](13-Setup_Node.md)
+- [09 Route Setup Process](09-Route_Setup_Process.md)

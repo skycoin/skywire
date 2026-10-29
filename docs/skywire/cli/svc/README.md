@@ -8,7 +8,6 @@ Query the skywire DEPLOYMENT services over the mesh (read-only).
   tpd     Transport Discovery read endpoints (stats, versions, bandwidth, ...)
   dmsgd   DMSG Discovery read endpoints (servers, clients)
   ar      Address Resolver (/transports; 'ar check <pk>' for registration)
-  nm      network-monitor liveness (stand-in: probes TPD /health)
 
 Deployment services are DMSG-only. Subcommands fetch via the local visor's
 RPC by default and fall back to a CLI-owned client; pass --direct to force
@@ -25,7 +24,6 @@ skywire cli svc
 - [ar](ar/README.md) — Address Resolver endpoints
 - [dmsgd](dmsgd/README.md) — DMSG Discovery endpoints
 - [health](health/README.md) — Check health of the skywire deployment services
-- [nm](nm/README.md) — Network Monitor status (currently probes TPD /health — no NM endpoint deployed)
 - [tpd](tpd/README.md) — Transport Discovery endpoints
 
 ## Flags
@@ -38,7 +36,7 @@ skywire cli svc
       --no-dmsg            skip direct DMSG HTTP step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --tpdurl string      override the transport-discovery base URL (used by tpd / nm)
+      --tpdurl string      override the transport-discovery base URL (used by tpd)
 ```
 
 ## Global Flags

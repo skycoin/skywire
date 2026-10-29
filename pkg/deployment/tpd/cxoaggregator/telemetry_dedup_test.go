@@ -71,7 +71,7 @@ func TestTelemetryShardAppliedOnceHeartbeatPaced(t *testing.T) {
 	// since it was last written is not written again.
 	agg.pace.mu.Lock()
 	for _, e := range agg.pace.m {
-		e.applied = e.applied.Add(-telemetryApplyEvery)
+		e.applied -= int64(telemetryApplyEvery)
 	}
 	agg.pace.mu.Unlock()
 	entries[0].SentBytes = 600

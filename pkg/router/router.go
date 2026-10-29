@@ -757,6 +757,7 @@ type router struct {
 	intake           intakeCounters                                  // inbound-path counters for `visor state` (router_intake.go)
 	forward          forwardTable                                    // per-next-hop transit write queues, off the serve loop (router_forward.go)
 	muxFEC           atomic.Bool                                     // live mirror of Config.MuxFEC; read when a mux route group is built (settings.go)
+	transitPaused    atomic.Bool                                     // refuse transit on top of Config.NoTransit while set (SetTransitPaused)
 	muxEvents        muxEventRing                                    // bounded history of route-group/mux-leg changes with reasons (mux_events.go)
 	routeSource      routeSourceCounters                             // where routes came from (router_route_source.go)
 	datagramPorts    map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
@@ -935,7 +936,9 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 	go r.rulesGCLoop()
 	go r.poolArbiterLoop()
 
-	if err := registerRPCGateway(r.rpcSrv, RPCName, NewRPCGateway(r, config.MasterLogger, r.conf.NoTransit)); err != nil {
+	gw := NewRPCGateway(r, config.MasterLogger, r.conf.NoTransit)
+	gw.transitPaused = &r.transitPaused
+	if err := registerRPCGateway(r.rpcSrv, RPCName, gw); err != nil {
 		return nil, fmt.Errorf("failed to register RPC server: %w", err)
 	}
 
@@ -958,3 +961,8 @@ func (o *DialOptions) note(format string, args ...any) {
 	}
 	o.dialNotes = append(o.dialNotes, fmt.Sprintf(format, args...))
 }
+
+// SetTransitPaused refuses (true) or allows again (false) acting as an
+// intermediate hop on another visor's route, on top of Config.NoTransit.
+// Routes that start or end here are not affected.
+func (r *router) SetTransitPaused(p bool) { r.transitPaused.Store(p) }

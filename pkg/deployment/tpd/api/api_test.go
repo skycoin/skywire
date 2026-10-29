@@ -475,7 +475,7 @@ func TestPublicPostEndpoints(t *testing.T) {
 
 func TestDeregisterUnauthorized(t *testing.T) {
 	api := newTestAPI(t)
-	// No NM-PK header → the network-monitor whitelist check rejects it.
+	// A plain HTTP caller has no dmsg key → the whitelist check rejects it.
 	w := serveUnique(api, 1, http.MethodDelete, "/transports/deregister", nil, nil)
 	require.Equal(t, http.StatusForbidden, w.Code)
 }

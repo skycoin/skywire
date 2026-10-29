@@ -196,6 +196,18 @@ func (r *RPCIngressGateway) LocalServices(_ *struct{}, resp *[]appnet.LocalServi
 	return nil
 }
 
+// ContactNames returns the visor contact book as key hex to name, limited to
+// what the calling app may read (the visor decides by app name). Read-only;
+// an app that may not read it, or a visor with no book, gets an empty map.
+func (r *RPCIngressGateway) ContactNames(_ *struct{}, resp *map[string]string) (err error) {
+	defer rpcutil.LogCall(r.log, "ContactNames", nil)(nil, &err)
+	if r.proc == nil || r.proc.m == nil {
+		return nil
+	}
+	*resp = r.proc.m.ContactNames(r.proc.appName)
+	return nil
+}
+
 // AppSettings answers the calling app POLLING for its live tuning knobs — the
 // one visor->app value channel there is. The gateway is INGRESS only (the app
 // is the RPC client), so nothing can be pushed into a running app; the app asks

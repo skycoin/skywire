@@ -189,6 +189,10 @@ dependencies {
     // receive-address code into a Bitmap.
     implementation(libs.zxing.embedded)
     implementation(libs.zxing.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.video)
+    implementation(libs.camerax.view)
     debugImplementation(libs.compose.ui.tooling)
     // Host-side. For the few facts that are about the module's own sources
     // rather than about a running app — the manifest not handing the lock

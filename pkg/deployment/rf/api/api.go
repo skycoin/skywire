@@ -231,12 +231,12 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		routes[edge] = forwardPaths
 	}
 
-	a.writeJSON(w, r, http.StatusOK, routes)
+	httputil.WriteJSON(w, r, http.StatusOK, routes)
 }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, HealthCheckResponse{
 		ServiceName: "route-finder",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
@@ -250,24 +250,5 @@ func (a *API) handleError(w http.ResponseWriter, r *http.Request, code int, e er
 		a.log(r).Warnf("%d: %s", code, e)
 	}
 
-	a.writeJSON(w, r, code, rfclient.HTTPResponse{Error: &rfclient.HTTPError{Code: code, Message: e.Error()}})
-}
-
-// writeJSON writes a json object on a http.ResponseWriter with the given code
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.log(r).WithError(err).Errorf("failed to encode json response")
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject)
-	if err != nil {
-		a.log(r).WithError(err).Errorf("failed to write json response")
-	}
+	httputil.WriteJSON(w, r, code, rfclient.HTTPResponse{Error: &rfclient.HTTPError{Code: code, Message: e.Error()}})
 }

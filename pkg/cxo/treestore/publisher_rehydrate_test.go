@@ -314,7 +314,7 @@ func TestHydrateMemNodeWalksLeavesAndSubTrees(t *testing.T) {
 
 	dest := newMemNode()
 	var dropped []string
-	if err := hydrateMemNode(up, &outerNode, dest, &dropped, ""); err != nil {
+	if err := hydrateMemNode(up, &outerNode, dest, &dropped, "", false); err != nil {
 		t.Fatalf("hydrateMemNode: %v", err)
 	}
 	if len(dropped) != 0 {
@@ -368,7 +368,7 @@ func TestHydrateMemNodeSkipsDanglingSubRef(t *testing.T) {
 
 	dest := newMemNode()
 	var dropped []string
-	if err := hydrateMemNode(up, &outerNode, dest, &dropped, ""); err != nil {
+	if err := hydrateMemNode(up, &outerNode, dest, &dropped, "", false); err != nil {
 		t.Fatalf("hydrateMemNode: dangling sub-ref must not abort the walk: %v", err)
 	}
 	if got, want := string(dest.leaves["alpha"]), "alpha-value"; got != want {

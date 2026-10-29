@@ -64,7 +64,6 @@ Available Commands:
   conf      print services-config.json file
   confbs    Config Bootstrap Server for skywire
   ip        GeoIP service for skywire
-  nm        Network monitor for skywire VPN and Visor.
   rf        Route Finder Server for skywire
   run       Run multiple deployment services in one process
   sd        Service discovery server

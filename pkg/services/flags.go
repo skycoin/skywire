@@ -34,7 +34,7 @@ type FlagDefaults struct {
 func (f *Flags) Bind(fs *pflag.FlagSet, d FlagDefaults) {
 	fs.StringVarP(&f.ConfigPath, "config", "c", "", "path to a JSON config file; keys it sets override these flags\n\r(generate one with: skywire cli config gen --"+d.Gen+")")
 	fs.StringVarP(&f.Addr, "addr", "a", d.Addr, "plain-HTTP listen address")
-	fs.StringVar(&f.Mode, "mode", "", "listeners: http|dmsg|dual (default dual with a key, else http)")
+	fs.StringVar(&f.Mode, "mode", "", "listeners: http|dmsg|dual (default dmsg with a key, else http; dmsg-discovery dual)")
 	fs.Uint16Var(&f.DmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsghttp listener port")
 	fs.Var(&f.SecKey, "sk", "dmsg secret key")
 	fs.StringVar(&f.KeyFile, "keyfile", "", "file holding the secret key (generated if missing)")

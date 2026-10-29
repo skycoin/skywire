@@ -15,11 +15,11 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-func reachTestVisor(t *testing.T, arLimit int) *Visor {
+func reachTestVisor(t *testing.T) *Visor {
 	t.Helper()
 	pk, sk := cipher.GenerateKeyPair()
 	v := &Visor{
-		conf:   &visorconfig.V1{Common: &visorconfig.Common{PK: pk, SK: sk}, Transport: &visorconfig.Transport{ARTransportLimit: arLimit}},
+		conf:   &visorconfig.V1{Common: &visorconfig.Common{PK: pk, SK: sk}, Transport: &visorconfig.Transport{ARTransportLimit: 0}},
 		arSelf: newARSelfState(),
 	}
 	v.arSelf.set("stcpr", addrresolver.VisorData{RemoteAddr: "203.0.113.7:7773"})
@@ -30,7 +30,7 @@ func reachTestVisor(t *testing.T, arLimit int) *Visor {
 // The card is served exactly while the visor registers with the address
 // resolver, and carries its own records signed by it.
 func TestReachCardFollowsTheARLever(t *testing.T) {
-	v := reachTestVisor(t, 0)
+	v := reachTestVisor(t)
 	body, err := v.ReachCardBody()
 	require.NoError(t, err)
 	var card addrresolver.ReachCard
@@ -48,7 +48,7 @@ func TestReachCardFollowsTheARLever(t *testing.T) {
 // A held card answers its types; a peer that served none is not asked again
 // while the miss is fresh, and the visor never asks itself.
 func TestReachCardRecordUsesHeldCards(t *testing.T) {
-	v := reachTestVisor(t, 0)
+	v := reachTestVisor(t)
 	ctx := context.Background()
 	peer, _ := cipher.GenerateKeyPair()
 	none, _ := cipher.GenerateKeyPair()
@@ -74,7 +74,7 @@ func TestReachCardRecordUsesHeldCards(t *testing.T) {
 // A bind whose addresses changed drops the visor's own card and records, so
 // the next card is rebuilt; an unchanged re-bind keeps them.
 func TestReachBindChangeRebuildsTheCard(t *testing.T) {
-	v := reachTestVisor(t, 0)
+	v := reachTestVisor(t)
 	home := addrresolver.LocalAddresses{Port: "7773", Addresses: []string{"192.168.1.5"}}
 	v.noteReachBind("stcpr", home)
 	_, err := v.ReachCardBody()

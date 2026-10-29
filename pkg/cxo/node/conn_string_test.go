@@ -25,6 +25,10 @@ func TestConnStringCached(t *testing.T) {
 	c := &Conn{Connection: fc}
 	want := "↑ tcp://" + fc.GetRemoteAddr().String()
 	require.Equal(t, want, c.String())
+	// The second call returns the stored string. Counting allocations instead
+	// would also count the live connection's goroutines.
+	cached := c.str.Load()
+	require.NotNil(t, cached)
 	require.Equal(t, want, c.String())
-	require.Zero(t, testing.AllocsPerRun(100, func() { _ = c.String() }))
+	require.Same(t, cached, c.str.Load())
 }

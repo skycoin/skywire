@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/binary"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,17 +62,67 @@ type telKey struct {
 	reporter cipher.PubKey
 }
 
+// tpCode is a transport type as an index into a shared table, so a held
+// snapshot carries one byte instead of a string header. Code 0 is "".
+type tpCode uint8
+
+var tpCodes = struct {
+	sync.RWMutex
+	names []string
+	idx   map[string]tpCode
+}{names: []string{""}, idx: map[string]tpCode{"": 0}}
+
+// tpCodeOf returns the code for s. Once 255 types are known, a new one is
+// held as "", so junk types from the network cannot grow the table.
+func tpCodeOf(s string) tpCode {
+	tpCodes.RLock()
+	c, ok := tpCodes.idx[s]
+	tpCodes.RUnlock()
+	if ok {
+		return c
+	}
+	tpCodes.Lock()
+	defer tpCodes.Unlock()
+	if c, ok := tpCodes.idx[s]; ok {
+		return c
+	}
+	if len(tpCodes.names) > math.MaxUint8 {
+		return 0
+	}
+	s = strings.Clone(s)
+	c = tpCode(len(tpCodes.names)) //nolint:gosec // bounded above
+	tpCodes.names = append(tpCodes.names, s)
+	tpCodes.idx[s] = c
+	return c
+}
+
+func (c tpCode) String() string {
+	tpCodes.RLock()
+	defer tpCodes.RUnlock()
+	return tpCodes.names[c]
+}
+
 // telSnap is one telemetry report.
 type telSnap struct {
 	sent, recv             uint64
 	throughput             float64
 	latMin, latMax, latAvg float64
-	tpType                 string
+	// at is when the report arrived, in Unix nanoseconds; the store dates
+	// the row by it. Zero means unset.
+	at int64
+	tp tpCode
 	// sameNet: the reporter marked the peer as on its own network
 	// (telemetrywire.TypeFlagSameNetwork).
 	sameNet bool
-	// at is when the report arrived; the store dates the row by it.
-	at time.Time
+}
+
+func (s telSnap) tpType() string { return s.tp.String() }
+
+func (s telSnap) atTime() time.Time {
+	if s.at == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, s.at)
 }
 
 func (s telSnap) hasLatency() bool { return s.latMin > 0 && s.latMax > 0 && s.latAvg > 0 }
@@ -93,23 +144,24 @@ func (s telSnap) merge(older telSnap) telSnap {
 // sum fingerprints everything a row writes except throughput, which the
 // store keeps as a peak and is compared on its own.
 func (s telSnap) sum() uint64 {
-	buf := make([]byte, 0, 48+len(s.tpType))
-	for _, v := range []uint64{s.sent, s.recv, math.Float64bits(s.latMin), math.Float64bits(s.latMax), math.Float64bits(s.latAvg)} {
-		buf = binary.LittleEndian.AppendUint64(buf, v)
+	var buf [42]byte
+	for i, v := range [5]uint64{s.sent, s.recv, math.Float64bits(s.latMin), math.Float64bits(s.latMax), math.Float64bits(s.latAvg)} {
+		binary.LittleEndian.PutUint64(buf[i*8:], v)
 	}
 	if s.sameNet {
-		buf = append(buf, 1)
+		buf[40] = 1
 	}
-	buf = append(buf, s.tpType...)
-	return xxhash.Sum64(buf)
+	buf[41] = byte(s.tp)
+	return xxhash.Sum64(buf[:])
 }
 
+// pacedTel times are Unix nanoseconds, zero meaning never.
 type pacedTel struct {
-	applied time.Time
+	applied int64
 	day     int64
 	pending *telSnap
 	// wrote, lastSum and lastTput describe the last row written.
-	wrote    time.Time
+	wrote    int64
 	lastSum  uint64
 	lastTput float64
 }
@@ -137,20 +189,20 @@ func (p *telemetryPacer) setWindow(d time.Duration) {
 	p.every.Store(int64(min(d, maxTelemetryApplyEvery)))
 }
 
-func utcDay(t time.Time) int64 { return t.UTC().Unix() / 86400 }
+func utcDay(ns int64) int64 { return ns / int64(24*time.Hour) }
 
 // take records that s is due at now and reports whether it must be written:
 // false when it repeats the last row written and that is recent enough.
 func (e *pacedTel) take(s telSnap, now time.Time) bool {
-	day := utcDay(s.at)
+	day, nowNs := utcDay(s.at), now.UnixNano()
 	sum := s.sum()
-	same := !e.wrote.IsZero() && e.day == day && sum == e.lastSum &&
-		s.throughput <= e.lastTput && now.Sub(e.wrote) < unchangedRefresh
-	e.applied, e.day, e.pending = now, day, nil
+	same := e.wrote != 0 && e.day == day && sum == e.lastSum &&
+		s.throughput <= e.lastTput && nowNs-e.wrote < int64(unchangedRefresh)
+	e.applied, e.day, e.pending = nowNs, day, nil
 	if same {
 		return false
 	}
-	e.wrote, e.lastSum, e.lastTput = now, sum, s.throughput
+	e.wrote, e.lastSum, e.lastTput = nowNs, sum, s.throughput
 	return true
 }
 
@@ -162,8 +214,8 @@ func (p *telemetryPacer) offer(k telKey, s telSnap, now time.Time) []telSnap {
 	if p.m == nil {
 		p.m = make(map[telKey]*pacedTel)
 	}
-	if s.at.IsZero() {
-		s.at = now
+	if s.at == 0 {
+		s.at = now.UnixNano()
 	}
 	day := utcDay(s.at)
 	e := p.m[k]
@@ -181,7 +233,7 @@ func (p *telemetryPacer) offer(k telKey, s telSnap, now time.Time) []telSnap {
 			s = s.merge(*e.pending)
 		}
 	}
-	if e.day == day && now.Sub(e.applied) < p.window() {
+	if e.day == day && now.UnixNano()-e.applied < int64(p.window()) {
 		e.pending = &s
 		return out
 	}
@@ -205,7 +257,7 @@ func (p *telemetryPacer) retry(failed []heldSnap) {
 			e = &pacedTel{}
 			p.m[h.k] = e
 		}
-		e.wrote, e.applied = time.Time{}, time.Time{}
+		e.wrote, e.applied = 0, 0
 		switch s := h.s; {
 		case e.pending == nil:
 			e.pending = &s
@@ -227,18 +279,18 @@ type heldSnap struct {
 func (p *telemetryPacer) due(now time.Time) []heldSnap {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	window := p.window()
+	window, nowNs := int64(p.window()), now.UnixNano()
 	var out []heldSnap
 	for k, e := range p.m {
 		if e.pending != nil {
-			if now.Sub(e.applied) >= window || utcDay(now) != utcDay(e.pending.at) {
+			if nowNs-e.applied >= window || utcDay(nowNs) != utcDay(e.pending.at) {
 				if s := *e.pending; e.take(s, now) {
 					out = append(out, heldSnap{k, s})
 				}
 			}
 			continue
 		}
-		if now.Sub(e.applied) > telemetryStateSweepAfter {
+		if nowNs-e.applied > int64(telemetryStateSweepAfter) {
 			delete(p.m, k)
 		}
 	}

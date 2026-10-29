@@ -54,7 +54,7 @@ func TestDmsgServerHealth(t *testing.T) {
 		time.Sleep(3 * time.Second)
 	}
 	if err != nil {
-		t.Skipf("DMSG server health not reachable: %v", err)
+		t.Fatalf("DMSG server health not reachable: %v", err)
 	}
 
 	// dmsg curl may still append a trailing line (timestamp from
@@ -154,7 +154,7 @@ func TestDmsgCurl(t *testing.T) {
 		}
 	}
 	if err != nil {
-		t.Skipf("DMSG curl not reachable after %d attempts (Docker DMSG connectivity issue): %v", maxAttempts, err)
+		t.Fatalf("DMSG curl not reachable after %d attempts: %v", maxAttempts, err)
 	}
 	require.Equal(t, 0, result.ExitCode, "dmsg curl exit code should be 0; stderr: %s", result.Stderr())
 
@@ -203,7 +203,7 @@ func TestDmsgCurlIndex(t *testing.T) {
 		}
 	}
 	if err != nil {
-		t.Skipf("DMSG curl not reachable after %d attempts (Docker DMSG connectivity issue): %v", maxAttempts, err)
+		t.Fatalf("DMSG curl not reachable after %d attempts: %v", maxAttempts, err)
 	}
 	require.Equal(t, 0, result.ExitCode, "dmsg curl exit code should be 0; stderr: %s", result.Stderr())
 
@@ -250,9 +250,9 @@ func TestDmsgDirect(t *testing.T) {
 	// -t: resolve dmsg address to local port
 	// -p: local port to serve on
 	startCmd := fmt.Sprintf(
-		"sh -c 'nohup /release/skywire dmsg web -s %s -t %s -p %d -l debug > /tmp/dmsg-web-direct.log 2>&1 &'",
+		"nohup /release/skywire dmsg web -s %s -t %s -p %d -l debug > /tmp/dmsg-web-direct.log 2>&1 &",
 		testDmsgClientSK, resolveAddr, localPort)
-	_, err := env.execResult(startCmd)
+	_, err := env.execShell(startCmd)
 	require.NoError(t, err, "Failed to start dmsg web in resolve mode")
 
 	t.Logf("Started dmsg web resolve %s -> localhost:%d", resolveAddr, localPort)
@@ -260,9 +260,9 @@ func TestDmsgDirect(t *testing.T) {
 	// Wait for the local port to become available
 	if !env.waitForListeningPort(localPort, 30*time.Second) {
 		// Dump log for debugging
-		logResult, _ := env.execResult("sh -c 'cat /tmp/dmsg-web-direct.log 2>/dev/null || true'") //nolint:errcheck
-		_, _ = env.execResult("sh -c 'pkill -f \"dmsg web\" || true'")                             //nolint:errcheck
-		t.Skipf("dmsg web local port %d not listening after 30s (Docker DMSG issue); log: %s", localPort, logResult.Combined())
+		logResult, _ := env.execShell("cat /tmp/dmsg-web-direct.log 2>/dev/null || true") //nolint:errcheck
+		_, _ = env.execShell(`pkill -f "dmsg web" || true`)                               //nolint:errcheck
+		t.Fatalf("dmsg web local port %d not listening after 30s; log: %s", localPort, logResult.Combined())
 	}
 
 	// Now fetch /health through the local proxy with regular curl
@@ -280,8 +280,8 @@ func TestDmsgDirect(t *testing.T) {
 		time.Sleep(5 * time.Second)
 	}
 	if err != nil || result.ExitCode != 0 {
-		_, _ = env.execResult("sh -c 'pkill -f \"dmsg web\" || true'") //nolint:errcheck
-		t.Skipf("DMSG direct not reachable (Docker DMSG connectivity issue): err=%v exit=%d", err, result.ExitCode)
+		_, _ = env.execShell(`pkill -f "dmsg web" || true`) //nolint:errcheck
+		t.Fatalf("DMSG direct not reachable: err=%v exit=%d", err, result.ExitCode)
 	}
 
 	stdout := result.Stdout()
@@ -293,7 +293,7 @@ func TestDmsgDirect(t *testing.T) {
 	t.Logf("Health response via direct dmsg client: %s", truncate(stdout, 200))
 
 	// Cleanup: kill the dmsg web process
-	_, _ = env.execResult("sh -c 'pkill -f \"dmsg web\" || true'") //nolint:errcheck
+	_, _ = env.execShell(`pkill -f "dmsg web" || true`) //nolint:errcheck
 }
 
 // truncate returns s truncated to maxLen characters with "..." appended if needed.

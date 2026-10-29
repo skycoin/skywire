@@ -15,7 +15,7 @@ require (
 	github.com/0magnet/cosmos-go v0.0.1-0.20261013224518-2a1afb64bc57
 	github.com/0magnet/desk v0.0.3-0.20261020181434-20cf2197122e
 	github.com/0magnet/desk/panes v0.0.1-0.20261014102802-0dc854720e7a
-	github.com/0magnet/gio v0.10.4-0.20261023140628-7d7b8fd5abcc
+	github.com/0magnet/gio v0.10.4-0.20261029010759-891505dea57f
 	github.com/0magnet/gobrpc v0.0.1-0.20261023160255-9d9e8694d21a
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a
@@ -39,7 +39,7 @@ require (
 	github.com/0magnet/wfdrive v0.3.3-0.20261013224635-8e5aa89d1aa6
 	github.com/0magnet/winbox-go v0.0.1-0.20261020181245-bacce940cc20
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
-	github.com/0magnet/yamux v0.1.3-0.20261010151333-a0a36faac6f4
+	github.com/0magnet/yamux v0.1.3-0.20261028122158-2a102205992e
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
@@ -55,6 +55,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/elazarl/goproxy v1.9.2
+	github.com/emersion/go-vcard v0.1.0
 	github.com/fatih/color v1.19.0
 	github.com/flynn/noise v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -96,7 +97,7 @@ require (
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.7-0.20261022015045-3b3712d25ce0
+	github.com/skycoin/skycoin v0.28.7-0.20261028120801-f7b9874807c2
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2

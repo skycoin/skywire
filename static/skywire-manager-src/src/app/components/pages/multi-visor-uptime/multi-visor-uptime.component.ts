@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, startWith, of, forkJoin, timer } from 'rxjs';
+import { Subscription, combineLatest, of, timer } from 'rxjs';
 import { switchMap, catchError, takeUntil } from 'rxjs/operators';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
@@ -7,6 +7,7 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 import { NodeService } from 'src/app/services/node.service';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { Node } from 'src/app/app.datatypes';
 
 /**
@@ -144,6 +145,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   constructor(
     private nodeService: NodeService,
     private api: ApiService,
+    private live: LiveService,
     private cdr: ChangeDetectorRef,
   ) {
     super();
@@ -152,10 +154,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
 
   override ngOnInit() {
     // 60s cadence — matches the TPD publisher's recompute tick.
-    this.sub = interval(60000).pipe(
-      startWith(0),
-      switchMap(() => this.fetchOnce()),
-    ).subscribe();
+    this.follow();
 
     return super.ngOnInit();
   }
@@ -180,13 +179,16 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     this.applyFilter();
   }
 
+  /** (Re)subscribes for the current window; a new subscription answers at once. */
   refreshNow() {
-    this.fetchOnce().subscribe();
+    this.follow();
   }
 
-  private fetchOnce() {
-    return forkJoin({
-      summaries: this.api.get(`network/visor-uptime?days=${this.windowDays}`).pipe(
+  private follow() {
+    this.sub?.unsubscribe();
+    const uptimeUrl = `network/visor-uptime?days=${this.windowDays}`;
+    const summaries = this.live.watch(uptimeUrl, 60000, () => this.api.get(uptimeUrl)).pipe(
+      switchMap(res => res.pipe(
         // Bound the wait — a stuck TPD shouldn't park the spinner.
         takeUntil(timer(FETCH_TIMEOUT_MS)),
         catchError((err) => {
@@ -196,15 +198,15 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
 
           return of([]);
         }),
-      ),
-      nodes: this.nodeService.getNodes().pipe(catchError(() => of([] as Node[]))),
-    }).pipe(
-      switchMap(({ summaries, nodes }) => {
-        this.consume((summaries as VisorSummary[]) || [], nodes || []);
-
-        return of(null);
-      }),
+      )),
     );
+    const nodes = this.live.watch('visors-summary', 60000, () => this.nodeService.getNodes(), b => this.nodeService.nodesFromSummaries(b)).pipe(
+      switchMap(res => res.pipe(catchError(() => of([] as Node[])))),
+    );
+    this.sub = combineLatest([summaries, nodes]).subscribe(([s, n]) => {
+      this.consume((s as VisorSummary[]) || [], n || []);
+      this.cdr.markForCheck();
+    });
   }
 
   private consume(summaries: VisorSummary[], nodes: Node[]) {

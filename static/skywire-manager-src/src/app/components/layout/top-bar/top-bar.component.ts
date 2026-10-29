@@ -11,6 +11,7 @@ import { VpnHelpers } from '../../vpn/vpn-helpers';
 import { DataUnits, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { AppModeService } from 'src/app/services/app-mode.service';
 import { StorageService } from 'src/app/services/storage.service';
+import { CommandPaletteService, paletteIsMac } from 'src/app/services/command-palette.service';
 
 /**
  * Properties of a tab shown in TopBarComponent.
@@ -243,6 +244,8 @@ export class TopBarComponent implements OnInit, OnDestroy {
   remoteAccess = false;
   // If there was an error the last time the vpn app status was checked.
   errorsConnectingToVpn = false;
+  // Shows the Mac shortcut in the command palette hint.
+  readonly paletteMac = paletteIsMac();
 
   private langSubscriptionsGroup: Subscription[] = [];
   private vpnDataSubscription!: Subscription;
@@ -258,6 +261,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private vpnSavedDataService: VpnSavedDataService,
     public appMode: AppModeService,
     private storageService: StorageService,
+    private paletteService: CommandPaletteService,
     private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
@@ -270,6 +274,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /** Navigate to the visor list / front page (from the ☰ menu). */
   goHome(): void {
     this.router.navigate(['/nodes', 'list', '1']);
+  }
+
+  openPalette(): void {
+    this.paletteService.open();
   }
 
   ngOnInit() {

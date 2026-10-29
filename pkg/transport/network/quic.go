@@ -30,9 +30,6 @@ import (
 )
 
 const (
-	quicReRegisterInterval  = 90 * time.Second
-	quicBindRetryDelay      = 5 * time.Second
-	quicBindMaxRetryDelay   = 60 * time.Second
 	quicMaxIdleTimeout      = 60 * time.Second
 	quicKeepAlivePeriod     = 25 * time.Second
 	quicStreamAcceptTimeout = 30 * time.Second
@@ -348,19 +345,11 @@ func (c *quicClient) listen() (net.Listener, error) {
 		udpConn = c.sharedConn
 	} else {
 		var err error
-		confPort := ""
-		if c.port != 0 {
-			confPort = fmt.Sprintf(":%d", c.port)
-		}
-		for {
-			udpConn, err = c.socks().ListenPacket("udp", confPort)
-			if err != nil {
-				c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
-				c.port = nextListenPort(err, c.port)
-				confPort = fmt.Sprintf(":%d", c.port)
-				continue
-			}
-			break
+		udpConn, err = listenWithFallback(c.genericClient, &c.port, func(addr string) (net.PacketConn, error) {
+			return c.socks().ListenPacket("udp", addr)
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
 	c.udpConn = udpConn
@@ -390,38 +379,9 @@ func (c *quicClient) listen() (net.Listener, error) {
 func (c *quicClient) bindAndReRegister(port string) {
 	ctx, cancel := c.closeContext()
 	defer cancel()
-	delay := quicBindRetryDelay
-	for attempt := 1; ; attempt++ {
-		err := c.ar.BindQUIC(ctx, port)
-		if err == nil {
-			c.log.Debugf("Successfully bound QUIC to port %s on address resolver", port)
-			break
-		}
-		if c.isClosed() {
-			return
-		}
-		c.log.WithError(err).Warnf("Failed to bind QUIC (attempt %d), retrying in %v", attempt, delay)
-		if !c.sleepUnlessClosed(delay) {
-			return
-		}
-		delay *= 2
-		if delay > quicBindMaxRetryDelay {
-			delay = quicBindMaxRetryDelay
-		}
-	}
-
-	ticker := time.NewTicker(quicReRegisterInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-c.done:
-			c.log.Debug("Stopping QUIC re-registration loop")
-			return
-		case <-ticker.C:
-			if err := c.ar.BindQUIC(ctx, port); err != nil && !c.isClosed() {
-				c.log.WithError(err).Warn("Failed to re-register QUIC with address resolver")
-			}
-		}
+	bind := func() error { return c.ar.BindQUIC(ctx, port) }
+	if c.bindUntilBound("QUIC", bind) {
+		c.reRegister("QUIC", bind, nil)
 	}
 }
 

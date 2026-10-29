@@ -187,6 +187,15 @@ func (c *Client) LocalServices() ([]appnet.LocalService, error) {
 	return c.rpcC.LocalServices()
 }
 
+// ContactNames returns the visor contact book as key hex to name, or nothing
+// when this app may not read it. A nil receiver (no visor) reports nothing.
+func (c *Client) ContactNames() (map[string]string, error) {
+	if c == nil || c.rpcC == nil {
+		return nil, nil
+	}
+	return c.rpcC.ContactNames()
+}
+
 // SetStatusOrLog sets the detailed status and logs the error if any.
 // Status transitions are best-effort — the app keeps running even if
 // the visor can't be notified, so callers don't have to handle the

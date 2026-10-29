@@ -215,17 +215,6 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-func TestWriteJSON_MarshalError(t *testing.T) {
-	a := newHandlerAPI()
-	rec := httptest.NewRecorder()
-	// A channel can't be marshaled to JSON, forcing the encode-error branch.
-	a.writeJSON(rec, httptest.NewRequest(http.MethodGet, "/", nil), http.StatusOK, make(chan int))
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500 on marshal failure", rec.Code)
-	}
-}
-
 // --- dmsghttp endpoint + generation ---
 
 func dmsgServingHandler(dmsgAddr, serverStatic, serverAddr string) func(*http.Request) (*http.Response, error) {

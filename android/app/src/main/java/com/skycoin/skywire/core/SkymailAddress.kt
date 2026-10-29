@@ -80,6 +80,14 @@ object SkymailAddress {
         return of(text, suffix = suffix)
     }
 
+    /** The address itself with its key cut, never a name for it. */
+    fun short(address: String): String {
+        val local = address.substringBefore('@', address)
+        val domain = address.substringAfter('@', "")
+        if (domain.length <= 16) return address
+        return "$local@${domain.take(8)}…${domain.substring(domain.lastIndexOf('.'))}"
+    }
+
     /** [text] with every Skymail address in it moved onto the [suffix] network. */
     fun withNetwork(text: String, suffix: String): String =
         addressHost.replace(text) { it.groupValues[1] + suffix }

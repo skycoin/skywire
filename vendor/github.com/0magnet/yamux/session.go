@@ -73,6 +73,9 @@ type Session struct {
 	// or to send a header out directly.
 	sendCh chan *sendReady
 
+	// timers holds stopped timers for reuse by the wait paths.
+	timers sync.Pool
+
 	// recvDoneCh is closed when recv() exits to avoid a race
 	// between stream registration and stream shutdown
 	recvDoneCh chan struct{}
@@ -395,8 +398,8 @@ func (s *Session) waitForSend(hdr header, body []byte) error {
 // potential shutdown. Since there's the expectation that sends can happen
 // in a timely manner, we enforce the connection write timeout here.
 func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) error {
-	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
-	defer timer.Stop()
+	timer := s.getTimer(s.config.ConnectionWriteTimeout)
+	defer s.putTimer(timer)
 
 	ready := &sendReady{Hdr: hdr, Body: body, Err: errCh}
 	select {
@@ -443,8 +446,8 @@ func (s *Session) waitForSendErr(hdr header, body []byte, errCh chan error) erro
 // the send happens right here, we enforce the connection write timeout if we
 // can't queue the header to be sent.
 func (s *Session) sendNoWait(hdr header) error {
-	timer := time.NewTimer(s.config.ConnectionWriteTimeout)
-	defer timer.Stop()
+	timer := s.getTimer(s.config.ConnectionWriteTimeout)
+	defer s.putTimer(timer)
 
 	select {
 	case s.sendCh <- &sendReady{Hdr: hdr}:

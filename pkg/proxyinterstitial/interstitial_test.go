@@ -513,3 +513,15 @@ func TestSyntheticMarker(t *testing.T) {
 		}
 	})
 }
+
+// A permanent error that quotes a key or ID containing "202" is not dmsg error
+// 202. TestSOCKS5CountsDmsgRequests failed about one run in 25 on this.
+func TestIsTransientIgnores202InKeys(t *testing.T) {
+	permanent := fmt.Errorf(`dmsg address "297d96a2-8764-4817-8b5b-459202982c3f.020421f2.dmsg": routing label must be a dmsg server PK, not a transport ID`)
+	if IsTransient(permanent) {
+		t.Fatalf("permanent error classified transient: %v", permanent)
+	}
+	if !IsTransient(fmt.Errorf("dmsg error 202 - cannot connect to delegated server")) {
+		t.Fatal("dmsg error 202 must stay transient")
+	}
+}

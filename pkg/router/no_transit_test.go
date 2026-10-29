@@ -4,6 +4,7 @@
 package router
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -80,4 +81,30 @@ func TestCascadeHandler_RefusesTransitButNotEdges(t *testing.T) {
 	ch.SetNoTransit(true)
 	require.True(t, ch.refusesTransit(transit), "a wire install that is not an edge is transit")
 	require.False(t, ch.refusesTransit(edge), "a route that ENDS here is not transit")
+}
+
+// The metered pause refuses transit live on a visor configured to allow it,
+// on both paths, and lifting it allows transit again.
+func TestTransitPausedIsLive(t *testing.T) {
+	mlog := logging.NewMasterLogger()
+	rule := testInterRule
+	r := &MockRouter{}
+	r.On("SaveRoutingRules", rule).Return(testhelpers.NoErr)
+	var paused atomic.Bool
+	gw := NewRPCGateway(r, mlog, false)
+	gw.transitPaused = &paused
+	ch := &CascadeHandler{transitPaused: &paused}
+	transit := &routing.CascadeSetup{}
+
+	paused.Store(true)
+	var ok bool
+	require.Error(t, gw.AddIntermediaryRules([]routing.Rule{rule}, &ok))
+	require.False(t, ok)
+	require.True(t, ch.refusesTransit(transit))
+	r.AssertNotCalled(t, "SaveRoutingRules")
+
+	paused.Store(false)
+	require.NoError(t, gw.AddIntermediaryRules([]routing.Rule{rule}, &ok))
+	require.True(t, ok)
+	require.False(t, ch.refusesTransit(transit))
 }

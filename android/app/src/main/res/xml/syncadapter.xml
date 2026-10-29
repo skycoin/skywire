@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- supportsUploading=false makes the account read-only in the Contacts app:
+     the book lives in the visor, and a sync would undo any edit made here. -->
+<sync-adapter xmlns:android="http://schemas.android.com/apk/res/android"
+    android:contentAuthority="com.android.contacts"
+    android:accountType="@string/phone_contacts_account_type"
+    android:supportsUploading="false"
+    android:userVisible="true"
+    android:allowParallelSyncs="false"
+    android:isAlwaysSyncable="true" />

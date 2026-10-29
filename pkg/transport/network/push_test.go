@@ -68,7 +68,9 @@ func TestPushReaderOverKCP(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(3)) //nolint:gosec
 	var want []byte
-	msgs := make([][]byte, 2000)
+	// KCP's default window moves about 160 KB/s on loopback, so 3 MB took
+	// 19 s against the 20 s deadline.
+	msgs := make([][]byte, 300)
 	for i := range msgs {
 		msgs[i] = make([]byte, 1+rng.Intn(3000))
 		_, _ = rng.Read(msgs[i])

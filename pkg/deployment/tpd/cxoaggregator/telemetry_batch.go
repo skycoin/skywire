@@ -50,9 +50,9 @@ func (a *Aggregator) applyDue(ctx context.Context, due []heldSnap) {
 			ID: h.k.id, Reporter: h.k.reporter,
 			Sent: h.s.sent, Recv: h.s.recv, ThroughputBps: h.s.throughput,
 			LatMin: h.s.latMin, LatMax: h.s.latMax, LatAvg: h.s.latAvg,
-			Type:        h.s.tpType,
+			Type:        h.s.tpType(),
 			SameNetwork: h.s.sameNet,
-			At:          h.s.at,
+			At:          h.s.atTime(),
 		}
 	}
 	if err := bs.ApplyTelemetry(ctx, updates); err != nil {

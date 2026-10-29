@@ -201,6 +201,7 @@
         ]
       },
       "addr": ":9094",
+      "mode": "dual",
       "redis": "redis://redis:6379/1",
       "entry_timeout": "2m",
       "uptime_db": "",
@@ -227,6 +228,7 @@
         ]
       },
       "addr": ":9092",
+      "mode": "dual",
       "redis": "redis://redis:6379/1"
     },
     {
@@ -250,6 +252,7 @@
         ]
       },
       "addr": ":9091",
+      "mode": "dual",
       "redis": "redis://redis:6379/2",
       "entry_timeout": "2m"
     },
@@ -274,6 +277,7 @@
         ]
       },
       "addr": ":9093",
+      "mode": "dual",
       "udp_addr": ":9093",
       "public_udp_addr": "174.0.0.17:9093",
       "redis": "redis://redis:6379/3",

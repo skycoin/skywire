@@ -65,7 +65,6 @@ func eq(a, b []string) bool {
 func forEachBackend(t *testing.T, fn func(t *testing.T, st Store)) {
 	t.Helper()
 	t.Run("bolt", func(t *testing.T) { fn(t, newTestStore(t, DefaultLimits())) })
-	t.Run("mem", func(t *testing.T) { fn(t, newTestMemStore(t, DefaultLimits())) })
 }
 
 // A zero cursor must mean "the newest page", so a caller's first request

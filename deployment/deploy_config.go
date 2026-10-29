@@ -62,7 +62,7 @@ type ServiceConfig struct {
 	// EntryTimeout is the TTL for entries managed by this service.
 	EntryTimeout string `json:"entry_timeout,omitempty"`
 
-	// WhitelistKeys are network monitor PKs authorized to deregister entries.
+	// WhitelistKeys are the PKs authorized to deregister entries.
 	WhitelistKeys []string `json:"whitelist_keys,omitempty"`
 
 	// Mode is the listener mode: "http", "dmsg", or "dual".
@@ -104,7 +104,6 @@ type DeployEnvConfig struct {
 		RouteFinder        *ServiceConfig `json:"route_finder,omitempty"`
 		ServiceDiscovery   *ServiceConfig `json:"service_discovery,omitempty"`
 		SetupNode          *ServiceConfig `json:"setup_node,omitempty"`
-		NetworkMonitor     *ServiceConfig `json:"network_monitor,omitempty"`
 		ConfService        *ServiceConfig `json:"conf_service,omitempty"`
 		GeoIP              *ServiceConfig `json:"geoip,omitempty"`
 		Stun               *ServiceConfig `json:"stun,omitempty"`
@@ -139,7 +138,6 @@ func DefaultDeployConfig() *DeployConfig {
 				RouteFinder        *ServiceConfig `json:"route_finder,omitempty"`
 				ServiceDiscovery   *ServiceConfig `json:"service_discovery,omitempty"`
 				SetupNode          *ServiceConfig `json:"setup_node,omitempty"`
-				NetworkMonitor     *ServiceConfig `json:"network_monitor,omitempty"`
 				ConfService        *ServiceConfig `json:"conf_service,omitempty"`
 				GeoIP              *ServiceConfig `json:"geoip,omitempty"`
 				Stun               *ServiceConfig `json:"stun,omitempty"`
@@ -189,10 +187,6 @@ func DefaultDeployConfig() *DeployConfig {
 					ConfigFile: "/etc/skywire/setup-node/config.json",
 					PprofAddr:  ":6070",
 					GodebugEnv: "madvdontneed=1",
-				},
-				NetworkMonitor: &ServiceConfig{
-					Addr:      ":9080",
-					PprofAddr: ":6080",
 				},
 				ConfService: &ServiceConfig{
 					ConfigFile: "/etc/skywire/config-bootstrapper/config.json",

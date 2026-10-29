@@ -107,10 +107,11 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				}
 				// Without a ready STUN client we can't determine NAT type;
 				// skip SUDPH rather than nil-deref v.stun.client.
-				if !stunReady || v.stun.client == nil {
+				sc := v.stun.client.Load()
+				if !stunReady || sc == nil {
 					return false, nil
 				}
-				switch v.stun.client.NATType {
+				switch sc.NATType {
 				case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
 					stun.NATError, stun.NATUnknown, stun.NATBlocked:
 					return false, nil
@@ -592,8 +593,8 @@ func restoreRouterKnobs(v *Visor, log *logging.Logger) {
 // selfPublicIP is this visor's public IP, read live from STUN; nil until it
 // has resolved.
 func (v *Visor) selfPublicIP() net.IP {
-	if v.stun.client != nil && v.stun.client.PublicIP != nil {
-		return net.ParseIP(v.stun.client.PublicIP.IP())
+	if ip := v.stunPublicIP(); ip != "" {
+		return net.ParseIP(ip)
 	}
 	return nil
 }

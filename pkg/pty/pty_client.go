@@ -91,21 +91,27 @@ func (sc *PtyClient) Stop() error {
 func (sc *PtyClient) Read(b []byte) (int, error) {
 	reqN := len(b)
 	var respB []byte
-	err := sc.call("Read", &reqN, &respB)
-	return copy(b, respB), processRPCError(err)
+	if err := sc.call("Read", &reqN, &respB); err != nil {
+		return 0, processRPCError(err)
+	}
+	return copy(b, respB), nil
 }
 
 // Write writes to the pty.
 func (sc *PtyClient) Write(b []byte) (int, error) {
 	var n int
-	err := sc.call("Write", &b, &n)
-	return n, processRPCError(err)
+	if err := sc.call("Write", &b, &n); err != nil {
+		return 0, processRPCError(err)
+	}
+	return n, nil
 }
 
 func (*PtyClient) rpcMethod(m string) string {
 	return PtyRPCName + "." + m
 }
 
+// call returns io.ErrClosedPipe as soon as the client closes, while the RPC
+// client may still decode a late reply into reply. Callers read reply only on nil.
 func (sc *PtyClient) call(method string, args, reply interface{}) error {
 	call := sc.rpcC.Go(sc.rpcMethod(method), args, reply, nil)
 	select {
@@ -133,8 +139,10 @@ func (sc *PtyClient) Start(name string, env []string, arg ...string) error {
 // StartWithSize, giving up reconnect support against that host.
 func (sc *PtyClient) StartSession(name string, arg []string, size *WinSize, env []string) (string, error) {
 	var sid string
-	err := sc.call("StartSession", &CommandReq{Name: name, Arg: arg, Size: size, Env: env}, &sid)
-	return sid, processRPCError(err)
+	if err := sc.call("StartSession", &CommandReq{Name: name, Arg: arg, Size: size, Env: env}, &sid); err != nil {
+		return "", processRPCError(err)
+	}
+	return sid, nil
 }
 
 // Attach rebinds to an existing persistent session by id (from a prior

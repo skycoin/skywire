@@ -53,6 +53,29 @@ func TestTransportCreateGate(t *testing.T) {
 		}
 	})
 
+	t.Run("live restriction narrows and lifts", func(t *testing.T) {
+		tm := &Manager{Conf: &ManagerConfig{}}
+		tm.SetCreateRestriction(RestrictDirect)
+		for _, ty := range directTypes {
+			if tm.CanCreateTransport(ty) {
+				t.Errorf("RestrictDirect must block %q", ty)
+			}
+		}
+		if !tm.CanCreateTransport(types.DMSG) {
+			t.Error("RestrictDirect must keep dmsg")
+		}
+		tm.SetCreateRestriction(RestrictAll)
+		if tm.CanCreateTransport(types.DMSG) {
+			t.Error("RestrictAll must block dmsg too")
+		}
+		tm.SetCreateRestriction(RestrictNone)
+		for _, ty := range types.Known() {
+			if !tm.CanCreateTransport(ty) {
+				t.Errorf("lifting the restriction must allow %q again", ty)
+			}
+		}
+	})
+
 	t.Run("deny list is alias-aware", func(t *testing.T) {
 		// A deny entry given as the legacy alias must block the canonical type.
 		tm := &Manager{Conf: &ManagerConfig{TransportCreateDeny: []types.Type{types.QUICLegacy}}}

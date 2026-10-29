@@ -62,6 +62,21 @@ func (s *Subscriber) OnTCPClose(action func(data TCPCloseData)) {
 	}()
 }
 
+// OnNetworkMoved subscribes to the NetworkMoved event channel and calls
+// action on each event. The visor waits for action, so keep it short.
+func (s *Subscriber) OnNetworkMoved(action func(data NetworkMovedData)) {
+	evCh := s.ensureEventChan(NetworkMoved)
+
+	go func() {
+		for ev := range evCh {
+			var data NetworkMovedData
+			ev.Unmarshal(&data)
+			action(data)
+			ev.Done()
+		}
+	}()
+}
+
 func (s *Subscriber) ensureEventChan(eventType string) chan *Event {
 	s.mx.Lock()
 	ch, ok := s.m[eventType]

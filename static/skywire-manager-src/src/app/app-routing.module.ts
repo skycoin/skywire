@@ -19,6 +19,7 @@ import { FullAppHostComponent } from './components/pages/full-app-host/full-app-
 import { walletRoute } from './wallet/wallet.route';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { MailComponent } from './components/pages/node/mail/mail.component';
+import { ContactsComponent } from './components/pages/node/contacts/contacts.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
@@ -165,6 +166,10 @@ const routes: Routes = [
           {
             path: 'mail',
             component: MailComponent
+          },
+          {
+            path: 'contacts',
+            component: ContactsComponent
           },
           {
             path: 'bandwidth',

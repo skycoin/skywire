@@ -1,11 +1,12 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, startWith } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 
 /** Mirrors pkg/deployment/tpd/store.TransportLatency. */
@@ -125,7 +126,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
 
   private sub!: Subscription;
 
-  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
+  constructor(private api: ApiService, private live: LiveService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -134,14 +135,20 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
     // 5min cadence: TPD metrics roll up daily, no benefit in
     // anything tighter. The Refresh button below the table forces
     // a fresh fetch when the user wants a current sample.
-    this.sub = interval(300000)
-      .pipe(
-        startWith(0),
-        switchMap(() => this.fetch()),
-      )
-      .subscribe();
+    this.follow();
 
     return super.ngOnInit();
+  }
+
+  /** (Re)subscribes for the current options; a new subscription answers at once. */
+  private follow() {
+    this.sub?.unsubscribe();
+    const url = `network/transports?days=${this.days}` + (this.hideOffline ? '&live=true' : '');
+    this.sub = this.live.watch(url, 300000, () => this.api.get(url))
+      .pipe(
+        switchMap(res => this.fetch(res)),
+      )
+      .subscribe();
   }
 
   ngOnDestroy(): void {
@@ -149,7 +156,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   }
 
   refreshNow() {
- this.fetch().subscribe(); 
+ this.follow(); 
 }
 
   setDays(d: number) {
@@ -157,7 +164,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
  return; 
 }
     this.days = d;
-    this.fetch().subscribe();
+    this.follow();
   }
 
   setViewMode(m: ViewMode) {
@@ -177,7 +184,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
     // the response, and dead transports carry most of the historical bandwidth
     // on a real mesh, so filtering the capped rows locally would leave almost
     // nothing. Asking the server for live-only gets the top N that are live.
-    this.fetch().subscribe();
+    this.follow();
   }
 
   /** Compact-view rows after applying the offline filter. */
@@ -207,12 +214,10 @@ return {
  v.expanded = !v.expanded; 
 }
 
-  private fetch() {
+  private fetch(source: Observable<any>) {
     this.loading = this.byTransport.length === 0 && this.byVisor.length === 0;
 
-    return this.api.get(
-      `network/transports?days=${this.days}` + (this.hideOffline ? '&live=true' : '')
-    ).pipe(
+    return source.pipe(
       catchError((err) => {
         // 503 means the CXO metrics feed is still syncing — not a failure, and
         // it clears on its own. Saying "failed" there sends people looking for

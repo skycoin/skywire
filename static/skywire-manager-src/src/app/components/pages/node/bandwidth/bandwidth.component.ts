@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, startWith } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -7,6 +7,7 @@ import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 
 /**
  * Per-visor Bandwidth tab. Reads from the visor's local bbolt
@@ -78,7 +79,7 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
   private nodeSub!: Subscription;
   private pollSub!: Subscription;
 
-  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
+  constructor(private api: ApiService, private live: LiveService, private cdr: ChangeDetectorRef) {
     super();
   }
 
@@ -112,7 +113,8 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
     if (!this.node) {
  return; 
 }
-    this.fetchOnce().subscribe();
+    this.pollSub?.unsubscribe();
+    this.startPolling();
   }
 
   toggleRow(r: Row) {
@@ -122,14 +124,14 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
   private startPolling() {
     // 30s cadence — local store updates on the visor's 10s sampler,
     // so 30s catches changes promptly without flooding the RPC.
-    this.pollSub = interval(30000).pipe(
-      startWith(0),
-      switchMap(() => this.fetchOnce()),
+    const url = `visors/${this.node.localPk}/local-transport-stats`;
+    this.pollSub = this.live.watch(url, 30000, () => this.api.get(url)).pipe(
+      switchMap(res => this.fetchOnce(res)),
     ).subscribe();
   }
 
-  private fetchOnce() {
-    return this.api.get(`visors/${this.node.localPk}/local-transport-stats`).pipe(
+  private fetchOnce(source: Observable<any>) {
+    return source.pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch bandwidth';
         this.loading = false;
