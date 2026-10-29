@@ -1,3 +1,6 @@
+@use "sass:color";
+@use "variables";
+
 .sps-content {
   min-width: 340px;
   max-width: 560px;
@@ -18,8 +21,49 @@
   }
 }
 
+.sps-filters {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .sps-filter {
-  width: 100%;
+  flex: 1 1 220px;
+}
+
+.sps-country {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 1 200px;
+  font-size: 12px;
+
+  .sps-country-label {
+    color: color.scale(variables.$black, $alpha: -20%);
+  }
+
+  select {
+    background: variables.$white;
+    color: variables.$black;
+    border: 1px solid variables.$grey-separator;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 13px;
+  }
+
+}
+
+.sps-count {
+  color: color.scale(variables.$black, $alpha: -20%);
+  margin-bottom: 4px;
+}
+
+.sps-latency {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #1b6e30;
+  font-variant-numeric: tabular-nums;
 }
 
 .sps-msg {
@@ -28,7 +72,7 @@
   text-align: center;
 
   &.sps-error {
-    color: #ff8f8f;
+    color: variables.$red;
   }
 }
 
@@ -47,13 +91,13 @@
   padding: 8px 6px;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid variables.$grey-separator;
   cursor: pointer;
   text-align: left;
   color: inherit;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.05);
   }
 }
 
@@ -82,7 +126,7 @@
 
   .sps-pk {
     font-size: 11px;
-    opacity: 0.6;
+    opacity: 0.75;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

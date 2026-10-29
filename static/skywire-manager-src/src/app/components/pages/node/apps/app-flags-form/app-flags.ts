@@ -163,3 +163,29 @@ export function flagError(f: AppFlag, value: string): string {
 
   return settingError(row, value);
 }
+
+/** The service discovery type of the servers a client app connects to. */
+export type ServerType = 'proxy' | 'vpn';
+
+const clientServerTypes: { [app: string]: ServerType } = {
+  'skysocks-client': 'proxy',
+  'vpn-client': 'vpn',
+};
+
+/** The server type for an app name or binary, matching instances like vpn-client-2. */
+export function serverTypeFor(...names: (string | undefined)[]): ServerType | '' {
+  for (const name of names) {
+    for (const app of Object.keys(clientServerTypes)) {
+      if (name && (name === app || name.startsWith(app + '-'))) {
+        return clientServerTypes[app];
+      }
+    }
+  }
+
+  return '';
+}
+
+/** True for the flag that holds a client's server public key. */
+export function isServerFlag(f: AppFlag): boolean {
+  return f.name === 'srv' && f.check === 'pk';
+}

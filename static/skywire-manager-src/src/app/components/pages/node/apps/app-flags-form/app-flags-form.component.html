@@ -43,6 +43,12 @@
             <input id="flag-{{ appName }}-{{ f.name }}" type="text"
                    [value]="state[f.name]?.value" [placeholder]="f.type === 'stringList' ? ('app-flags.list-placeholder' | translate) : f.default"
                    (input)="setValue(f, $any($event.target).value)">
+            @if (canPick(f)) {
+              <button type="button" class="flag-pick" (click)="chooseServer(f)">
+                <mat-icon [inline]="true">dns</mat-icon>
+                {{ 'app-flags.choose-server' | translate }}
+              </button>
+            }
           }
         }
       </div>

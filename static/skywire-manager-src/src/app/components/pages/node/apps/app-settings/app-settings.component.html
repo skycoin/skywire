@@ -38,7 +38,9 @@
       </button>
       @if (showFlagsForm) {
         <app-app-flags-form [appName]="app.name" [args]="form.get('args')!.value"
-                            (argsChange)="onFlagArgs($event)" (validChange)="flagsValid = $event">
+                            [serverType]="serverType" [pickServer]="pickServer"
+                            (argsChange)="onFlagArgs($event)" (validChange)="flagsValid = $event"
+                            (serverChosen)="onServerChosen()">
         </app-app-flags-form>
       }
     </div>
