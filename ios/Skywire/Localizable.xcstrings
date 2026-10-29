@@ -24001,6 +24001,35 @@
         }
       }
     },
+    "mail_contacts_shared" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The visor’s contact book. SkyChat names people from it too."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La libreta de contactos del nodo. SkyChat también toma de aquí los nombres."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le carnet de contacts du visor. SkyChat y prend aussi les noms."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这是节点的通讯录，SkyChat 也用这里的名称。"
+          }
+        }
+      }
+    },
     "mail_copy" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27535,6 +27564,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要生成新身份吗？"
+          }
+        }
+      }
+    },
+    "settings_phone_contacts" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in the phone’s contacts"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar en los contactos del teléfono"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher dans les contacts du téléphone"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示在手机通讯录中"
+          }
+        }
+      }
+    },
+    "settings_phone_contacts_denied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contacts access was denied. Allow it for Skywire in the phone’s settings to turn this on."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se denegó el acceso a los contactos. Permítelo para Skywire en los ajustes del teléfono para activarlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’accès aux contacts a été refusé. Autorisez-le pour Skywire dans les paramètres du téléphone pour activer ceci."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通讯录权限被拒绝。请在手机设置中为 Skywire 允许后再开启。"
+          }
+        }
+      }
+    },
+    "settings_phone_contacts_hint_ios" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies the visor’s contact book into the phone’s Contacts app, in a Skywire group, and keeps the copy matching the book. Any app allowed to read your contacts can then read these names and keys. Off by default."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia la libreta de contactos del nodo en la app Contactos del teléfono, en un grupo Skywire, y mantiene la copia igual que la libreta. Cualquier app con permiso para leer tus contactos podrá leer estos nombres y claves. Desactivado por defecto."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copie le carnet de contacts du visor dans l’app Contacts du téléphone, dans un groupe Skywire, et garde la copie identique au carnet. Toute app autorisée à lire vos contacts pourra alors lire ces noms et ces clés. Désactivé par défaut."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把节点的通讯录复制到手机“通讯录”App 的 Skywire 分组中，并让副本与节点通讯录保持一致。任何有权读取通讯录的应用都能读到这些名称和密钥。默认关闭。"
           }
         }
       }

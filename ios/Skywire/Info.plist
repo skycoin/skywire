@@ -21,10 +21,13 @@
   leaves the foreground (M6), nothing else; the core's own receiving while
   suspended is the packet-tunnel extension's (Lane D).
   NSPhotoLibraryAddUsageDescription: the share sheet's "Save Image" and
-  "Save Video" for a chat download. All translated in InfoPlist.xcstrings.
+  "Save Video" for a chat download. NSContactsUsageDescription: the contact
+  book's copy in Contacts, once turned on in Settings (PhoneContacts). All
+  translated in InfoPlist.xcstrings.
   CFBundleURLTypes: skychat: links (the xcconfig's SKYWIRE_URL_SCHEME), which
-  the chat shows on its Add by address page (ChatRouter). Only skychat:
-  is claimed; skycoin: belongs to the Skycoin wallet.
+  the chat shows on its Add by address page (ChatRouter), and skymail: links,
+  which start a draft (MailRouter); the copied contacts' rows are both. Only
+  those are claimed; skycoin: belongs to the Skycoin wallet.
   UIAppFonts and UILaunchScreen: Android's two typefaces and its splash
   (the logo on white, #0A101C at night), M6.5.
 -->
@@ -48,6 +51,8 @@
 	<string>Skywire uses the camera to record video messages and scan QR codes in SkyChat and the wallet.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Skywire saves the pictures and videos you choose to your photo library.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Skywire copies the visor’s contact book into Contacts, in a Skywire group, when you turn that on in Settings.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -56,6 +61,14 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>$(SKYWIRE_URL_SCHEME)</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).skymail</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>skymail</string>
 			</array>
 		</dict>
 	</array>

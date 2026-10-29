@@ -462,6 +462,30 @@ public actor CoreClient {
         return id.map { "\(base)/\(Self.queryEncode($0))" } ?? base
     }
 
+    // MARK: Contacts
+
+    /// The visor's contact book, shared with SkyChat and the dashboard, sorted by name.
+    public func contacts() async throws -> [BookContact] {
+        try await getList("/api/visors/\(try await localPK())/contacts")
+    }
+
+    /// Adds `contact`, or replaces the one with its uid, and answers it as stored.
+    public func contactPut(_ contact: BookContact) async throws -> BookContact {
+        let path = "/api/visors/\(try await localPK())/contacts"
+        let response = try await authed(.post, path, body: try JSONEncoder().encode(contact))
+        if response.status == 400 { throw ContactRejected(message: Self.errorMessage(response)) }
+        try Self.check(response, "POST", path)
+        return try Self.decode(BookContact.self, response, path)
+    }
+
+    /// Removes the contact with `uid`; one already gone is no error.
+    public func contactDelete(_ uid: String) async throws {
+        let path = "/api/visors/\(try await localPK())/contacts/\(Self.queryEncode(uid))"
+        let response = try await authed(.delete, path)
+        if response.status == 404 { return }
+        try Self.check(response, "DELETE", path)
+    }
+
     // MARK: Rewards
 
     /// The reward address: an account xpub, a single address set before xpubs

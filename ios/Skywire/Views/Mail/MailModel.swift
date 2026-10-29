@@ -54,7 +54,7 @@ final class MailModel: ObservableObject {
     @Published private(set) var busy = false
     /// Message ids picked in the folder shown, for a batch delete.
     @Published private(set) var selection: Set<String> = []
-    /// SkyMail's own address book, sorted by name.
+    /// The visor's contacts that mail can reach, sorted by name.
     @Published private(set) var contacts: [MailContact] = []
     @Published private(set) var contactsOpen = false
     /// A one-off line for the snackbar, cleared once shown.
@@ -67,7 +67,6 @@ final class MailModel: ObservableObject {
     static let envelopeBytes: Int64 = 16 * 1024
 
     private var app: AppModel?
-    private var contactBook: MailContacts?
 
     var messages: [MailSummary]? { folder == MailFolder.sent ? sent : inbox }
     var myAddress: String? { status?.myAddress }
@@ -80,11 +79,8 @@ final class MailModel: ObservableObject {
     /// Runs while the screen is up and its key holds (`.task(id: app.connected)`).
     func run(_ app: AppModel) async {
         self.app = app
-        // Read on every start: a replaced identity cleared the book with the rest of local/.
-        let book = MailContacts(file: app.paths.localDir.appendingPathComponent(MailContacts.fileName))
-        contactBook = book
-        contacts = book.load()
         guard app.connected else { return }
+        await importLegacyContacts(app)
         while !Task.isCancelled {
             await refreshNow()
             openPendingLink()
@@ -101,6 +97,8 @@ final class MailModel: ObservableObject {
 
     private func refreshNow() async {
         guard let app, app.connected else { return }
+        // The book changes from SkyChat and the dashboard too.
+        await loadContacts()
         do {
             status = try await app.client.mailStatus()
         } catch {
@@ -359,40 +357,81 @@ final class MailModel: ObservableObject {
 
     func openContacts() {
         contactsOpen = true
+        Task { await loadContacts() }
     }
 
     func closeContacts() {
         contactsOpen = false
     }
 
-    /// Saves a contact, or edits the one at `replacing`: an address or a bare key.
-    func saveContact(name: String, address: String, replacing: String? = nil) {
+    /// Saves `name` for `address`, an address or a bare key, in the visor's book.
+    /// Editing passes the contact's `uid` and the address it had.
+    func saveContact(name: String, address: String, uid: String? = nil, replacing: String? = nil) {
         guard let clean = SkymailAddress.recipient(address) else {
             notice = L10n.format("mail_bad_address", address.trimmingCharacters(in: .whitespacesAndNewlines))
             return
         }
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        changeContacts(done: L10n.text("mail_contact_saved")) { try $0.put(MailContact(name: name, address: clean), replacing: replacing) }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        changeContacts(done: L10n.text("mail_contact_saved")) { client in
+            guard let contact = MailContacts.saved(try await client.contacts(), name: name, address: clean, uid: uid, replacing: replacing) else { return }
+            _ = try await client.contactPut(contact)
+        }
     }
 
-    func deleteContact(_ address: String) {
-        changeContacts(done: nil) { try $0.remove(address) }
+    /// Removes the whole contact from the book, not only its mail addresses.
+    func deleteContact(_ uid: String) {
+        changeContacts(done: nil) { try await $0.contactDelete(uid) }
     }
 
-    private func changeContacts(done: String?, _ change: (MailContacts) throws -> [MailContact]) {
-        guard let contactBook else { return }
+    private func loadContacts() async {
+        guard let app, let book = try? await app.client.contacts() else { return }
+        contacts = MailContacts.of(book)
+    }
+
+    /// Moves the contacts SkyMail kept in its own file into the visor's book,
+    /// once. The file stays until the visor has answered for every one of them.
+    private func importLegacyContacts(_ app: AppModel) async {
+        let file = app.paths.localDir.appendingPathComponent(MailContacts.legacyFileName)
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
         do {
-            contacts = try change(contactBook)
-            if let done { notice = done }
+            for contact in MailContacts.imports(file, try await app.client.contacts()) {
+                do {
+                    _ = try await app.client.contactPut(contact)
+                } catch is ContactRejected {
+                    // A key that is no curve point is refused on every try.
+                }
+            }
+            try? FileManager.default.removeItem(at: file)
+            await shareNames(app)
         } catch {
-            notice = L10n.format("mail_contact_failed", error.localizedDescription)
+            return
+        }
+    }
+
+    /// SkyChat names people from the same book, but fetches it only when its
+    /// session starts. The phone's contacts hold a copy of it when asked to.
+    private func shareNames(_ app: AppModel) async {
+        await PhoneContacts.sync(app.client)
+        await ChatRepository.shared.syncNames()
+    }
+
+    private func changeContacts(done: String?, _ change: @escaping @MainActor (CoreClient) async throws -> Void) {
+        guard let app else { return }
+        Task {
+            do {
+                try await change(app.client)
+                await loadContacts()
+                if let done { notice = done }
+                await shareNames(app)
+            } catch {
+                notice = L10n.format("mail_contact_failed", error.localizedDescription)
+            }
         }
     }
 
     /// The saved contact for a key, when there is one.
     func contact(forPK pk: String) -> MailContact? {
-        contacts.first { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() == pk.lowercased() }
+        contacts.first { c in c.addresses.contains { SkymailAddress.pk(ofAddress: $0)?.lowercased() == pk.lowercased() } }
     }
 
     // MARK: Settings
@@ -440,9 +479,18 @@ final class MailModel: ObservableObject {
 
     // MARK: A tapped notification
 
-    /// Opens the message a notification named, once the inbox has it.
+    /// Opens the message a notification named, once the inbox has it, or the draft a link asked for.
     func openPendingLink() {
         guard let link = MailRouter.shared.pending else { return }
+        if !link.to.isEmpty {
+            settingsOpen = false
+            contactsOpen = false
+            open = nil
+            selection = []
+            compose(to: link.to)
+            MailRouter.shared.handled(link)
+            return
+        }
         let summary = inbox?.first { $0.id == link.id }
         if let summary {
             folder = MailFolder.inbox

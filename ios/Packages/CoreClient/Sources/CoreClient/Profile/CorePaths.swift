@@ -18,6 +18,10 @@ public struct CorePaths: Sendable, Equatable {
     public var configBackupFile: URL { dataDir.appendingPathComponent("skywire-config.json.pre-update") }
     /// The config's `local_path`: app work dirs, log stores, the uptime DB.
     public var localDir: URL { dataDir.appendingPathComponent("local", isDirectory: true) }
+    /// The visor's contact book, beside `local_path` (pkg/visor/contacts.go).
+    public var contactsDir: URL { dataDir.appendingPathComponent("contacts", isDirectory: true) }
+    /// The Skymail mailbox, beside `local_path` too (skymailDir in pkg/visor/skymail.go).
+    public var mailDir: URL { dataDir.appendingPathComponent("mail", isDirectory: true) }
     /// The launcher's `bin_path`. The apps run in-process, so nothing is ever
     /// executed from it; the launcher only creates it at startup, which is why
     /// it has to be inside the container.
