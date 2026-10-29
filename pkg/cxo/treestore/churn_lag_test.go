@@ -117,9 +117,12 @@ func newChurnPair(t *testing.T, batchWindow time.Duration) (*Publisher, *churnSu
 		require.NoError(t, err)
 		pkA = pk
 	}
+	// With one Root kept, a subscriber that fills slower than the batch window
+	// asks for swept objects and waits out the 59 s response timeout.
 	pub, err := NewWithTCP("127.0.0.1:0", skA, PubConfig{
 		InMemoryDB:  true,
 		BatchWindow: batchWindow,
+		KeepRoots:   200,
 	})
 	require.NoError(t, err, "NewWithTCP publisher")
 	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
@@ -207,18 +210,8 @@ func TestCXOChurn_BurstFill(t *testing.T) {
 // and isolates whether the extreme-rate lost-delete is a real hazard at plausible
 // rates or only an artifact of an unthrottled loop.
 func TestCXOChurn_Sustained(t *testing.T) {
-	// Skipped on Windows, for the reason Test_send_receive and
-	// Test_send_receive_refs already skip there: CXO root filling is unreliable
-	// on those runners. This test reaches the same machinery through a busier
-	// door, so it went red on develop the moment a runner was slow enough.
-	//
-	// Not a diagnosis, and deliberately not called one. What the failing run
-	// shows is a subscriber that stopped at seq=4 with "no connections to fill
-	// from" and never recovered across 30s of grace, while the runner managed
-	// 1202 ops/s of the 4000 asked. Slowness alone does not explain 30s; a
-	// stalled connection would. Reproducing it needs a Windows runner — the
-	// same test passes on Linux at GOMAXPROCS=1 with 154 roots against the
-	// failing run's 4.
+	// The Windows failure looked like the KeepRoots stall newChurnPair now
+	// avoids. The skip stays until a Windows run shows that.
 	if runtime.GOOS == "windows" {
 		t.Skip("CXO root filling is unreliable on Windows CI runners")
 	}
