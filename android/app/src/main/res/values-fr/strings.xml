@@ -740,6 +740,11 @@
     <string name="wallet_tx_usd_now">Valeur actuelle</string>
     <string name="settings_wallet_prices">Prix en dollars US</string>
     <string name="settings_wallet_prices_hint">Affiche aussi les soldes et montants du portefeuille en USD. Les prix viennent de coinpaprika.com, qui voit alors l’adresse internet de ce téléphone et les pièces que vous consultez. Désactivé par défaut.</string>
+    <string name="settings_phone_contacts">Afficher dans les contacts du téléphone</string>
+    <string name="settings_phone_contacts_hint">Copie le carnet de contacts du visor dans l’app Contacts du téléphone, sous un compte Skywire non modifiable. Toute app autorisée à lire vos contacts pourra alors lire ces noms et ces clés. Désactivé par défaut.</string>
+    <string name="settings_phone_contacts_denied">L’accès aux contacts a été refusé. Autorisez-le pour Skywire dans les paramètres du téléphone pour activer ceci.</string>
+    <string name="phone_contacts_chat">Envoyer un message à %1$s</string>
+    <string name="phone_contacts_mail">Écrire à %1$s</string>
     <string name="wallet_add_coin_from_node">Fourni par le nœud si vide</string>
     <string name="wallet_node_invalid">Ce n’est pas une adresse http(s).</string>
     <string name="wallet_node_remove">Retirer ce nœud</string>

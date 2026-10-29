@@ -25,6 +25,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.MailContact
 import com.skycoin.skywire.core.MailContacts
+import com.skycoin.skywire.core.PhoneContacts
 import com.skycoin.skywire.core.SkymailAddress
 import com.skycoin.skywire.core.SkywirePaths
 import kotlinx.coroutines.Dispatchers
@@ -444,8 +445,14 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** SkyChat names people from the same book, but fetches it only when its session starts. */
-    private suspend fun shareNames() = ChatRepository.get(getApplication()).syncNames()
+    /**
+     * SkyChat names people from the same book, but fetches it only when its
+     * session starts. The phone's contacts hold a copy of it when asked to.
+     */
+    private suspend fun shareNames() {
+        PhoneContacts.refresh(getApplication())
+        ChatRepository.get(getApplication()).syncNames()
+    }
 
     private fun changeContacts(done: String?, change: suspend () -> Unit) {
         viewModelScope.launch {
@@ -502,6 +509,12 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
     /** Opens the message a notification named, once the inbox has it. */
     private fun openPendingLink() {
         val link = DeepLinks.pendingMail.value ?: return
+        if (link.to.isNotEmpty()) {
+            mutable.update { it.copy(contactsOpen = false, settingsOpen = false, open = null) }
+            compose(link.to)
+            DeepLinks.mailLinkHandled(link)
+            return
+        }
         val summary = mutable.value.inbox?.firstOrNull { it.id == link.id }
         if (summary != null) {
             mutable.update { it.copy(folder = MailFolder.INBOX, draft = null, settingsOpen = false, selection = emptySet()) }

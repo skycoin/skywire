@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.VisorApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +68,7 @@ class SkywireCoreService : Service() {
     private var callWatcher: Job? = null
     private var notifyBridge: Job? = null
     private var networkWatcher: Job? = null
+    private var contactsCopy: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -194,6 +196,14 @@ class SkywireCoreService : Service() {
                     networkWatcher?.cancel()
                     networkWatcher =
                         NetworkWatcher(this@SkywireCoreService).watch(scope)
+                    // The phone's copy of the contact book catches up with
+                    // whatever changed in it while the core was down.
+                    contactsCopy?.cancel()
+                    contactsCopy = launch {
+                        val api = VisorApi.get(this@SkywireCoreService)
+                        while (!api.ping()) delay(CONTACTS_PING_MS)
+                        PhoneContacts.refresh(this@SkywireCoreService)
+                    }
 
                     val pump = launch(Dispatchers.IO) {
                         process.inputStream.bufferedReader().forEachLine { log.line(it) }
@@ -207,6 +217,8 @@ class SkywireCoreService : Service() {
                     notifyBridge = null
                     networkWatcher?.cancel()
                     networkWatcher = null
+                    contactsCopy?.cancel()
+                    contactsCopy = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
@@ -362,6 +374,7 @@ class SkywireCoreService : Service() {
         private const val MAX_BACKOFF_MS = 30_000L
         private const val BACKOFF_SLICE_MS = 250L
         private const val STABLE_RUN_MS = 60_000L
+        private const val CONTACTS_PING_MS = 1_000L
         private const val GRACEFUL_STOP_S = 15L
 
         fun start(context: Context) {
