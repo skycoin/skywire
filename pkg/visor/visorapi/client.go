@@ -447,6 +447,13 @@ func (rc *rpcClient) Apps() ([]*appserver.AppState, error) {
 	return states, err
 }
 
+// AppCatalog calls AppCatalog.
+func (rc *rpcClient) AppCatalog() ([]CatalogEntry, error) {
+	out := make([]CatalogEntry, 0)
+	err := rc.Call("AppCatalog", &struct{}{}, &out)
+	return out, err
+}
+
 // App calls App.
 func (rc *rpcClient) App(appName string) (*appserver.AppState, error) {
 	var state *appserver.AppState

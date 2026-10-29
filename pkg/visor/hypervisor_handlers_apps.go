@@ -30,6 +30,18 @@ func (hv *Hypervisor) getApps() http.HandlerFunc {
 	})
 }
 
+// getAppCatalog lists every app the visor can run, merged with its configured instances.
+func (hv *Hypervisor) getAppCatalog() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		entries, err := ctx.API.AppCatalog()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
+	})
+}
+
 // returns an app summary of a given visor's pk and app name
 func (hv *Hypervisor) getApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {

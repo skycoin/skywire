@@ -234,6 +234,10 @@ func (proxyDefaultAPI) Apps() ([]*appserver.AppState, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) AppCatalog() ([]visorapi.CatalogEntry, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) StartApp(_ string) error {
 	return ErrProxyNotSupported
 }
