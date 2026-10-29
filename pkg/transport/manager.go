@@ -102,6 +102,9 @@ type Manager struct {
 	// inboundGate decides whether a new inbound transport is taken; see
 	// SetInboundGate.
 	inboundGate atomic.Pointer[InboundGate]
+	// restrict narrows outbound creation live, on top of Conf; see
+	// SetCreateRestriction.
+	restrict atomic.Int32
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
@@ -1510,6 +1513,14 @@ func (tm *Manager) SaveTransportWithOptions(ctx context.Context, remote cipher.P
 // route-setup hook, `tp add`, and `--direct` all funnel through saveTransportInternal.
 func (tm *Manager) transportCreateDenied(netType types.Type) bool {
 	nt := types.NormalizeType(netType)
+	switch CreateRestriction(tm.restrict.Load()) {
+	case RestrictAll:
+		return true
+	case RestrictDirect:
+		if types.IsDirect(nt) {
+			return true
+		}
+	}
 	if tm.Conf.NoDirectTransports && types.IsDirect(nt) {
 		return true
 	}

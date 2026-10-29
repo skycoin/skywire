@@ -229,3 +229,41 @@ func routeSource(network, addr string) string {
 	}
 	return ""
 }
+
+// IfaceAddr is one address and the interface holding it.
+type IfaceAddr struct {
+	Name string
+	IP   net.IP
+}
+
+// RouteInterfaces returns the interfaces and addresses the kernel would send
+// internet traffic from, one per family that has a route.
+func RouteInterfaces() []IfaceAddr {
+	v4, v6 := RouteSourceIPs()
+	want := map[string]bool{}
+	for _, s := range []string{v4, v6} {
+		if s != "" {
+			want[s] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	ifaces, err := anet.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []IfaceAddr
+	for _, iface := range ifaces {
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && want[n.IP.String()] {
+				out = append(out, IfaceAddr{Name: iface.Name, IP: n.IP})
+			}
+		}
+	}
+	return out
+}

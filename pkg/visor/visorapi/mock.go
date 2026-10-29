@@ -1971,3 +1971,8 @@ func (mc *mockRPCClient) NetworkMoved(_ string) error {
 func (mc *mockRPCClient) NetworkSet(_ NetworkSettings) error {
 	return nil
 }
+
+// NetworkEvent implements API.
+func (mc *mockRPCClient) NetworkEvent(_ NetworkEvent) error {
+	return nil
+}

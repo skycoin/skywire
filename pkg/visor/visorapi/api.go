@@ -427,6 +427,9 @@ type Dmsg interface {
 	NetworkMoved(reason string) error
 	// NetworkSet changes the network policy (transport.network) live.
 	NetworkSet(in NetworkSettings) error
+	// NetworkEvent takes an app's report of a network change or of the
+	// network becoming metered or not.
+	NetworkEvent(ev NetworkEvent) error
 }
 
 // Routing is routes, route groups, their multiplexing and the router's settings.

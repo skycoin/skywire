@@ -84,3 +84,19 @@ func TestLocalAddressesDetailPartition(t *testing.T) {
 	require.Contains(t, excluded[0], all[0]+" (")
 	require.Equal(t, len(all), len(kept)+len(excluded))
 }
+
+// The route interface carries the route source address, so a metered rule can
+// match it by name or by range.
+func TestRouteInterfacesHoldRouteSource(t *testing.T) {
+	v4, v6 := RouteSourceIPs()
+	ri := RouteInterfaces()
+	if v4 == "" && v6 == "" {
+		require.Empty(t, ri)
+		return
+	}
+	require.NotEmpty(t, ri)
+	for _, r := range ri {
+		require.NotEmpty(t, r.Name)
+		require.Contains(t, []string{v4, v6}, r.IP.String())
+	}
+}
