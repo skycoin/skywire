@@ -588,12 +588,11 @@ class ConfigManager(
      *
      * A visor's key *is* its identity: chat history is a conversation with
      * peers who addressed a key that is about to stop existing, and the app
-     * work dirs and transport logs under `local_path` are the same story, and
-     * so is the visor's contact book, which the confirmation names. They
-     * are cleared rather than carried over, so that what the confirmation
-     * dialog promises is what happens — a phone that keeps a previous
-     * identity's messages under a new one is showing a conversation nobody can
-     * continue.
+     * work dirs and transport logs under `local_path` are the same story, as
+     * are the mail and the contact book beside it. They are cleared rather
+     * than carried over, so that what the confirmation dialog promises is
+     * what happens — a phone that keeps a previous identity's messages under
+     * a new one is showing a conversation nobody can continue.
      *
      * `users.db` deliberately stays: the local API account is this app's own
      * device credential ([SecretStore]), not part of the visor's identity.
@@ -601,6 +600,9 @@ class ConfigManager(
     private fun clearIdentityData() {
         paths.localDir.deleteRecursively()
         paths.contactsDir.deleteRecursively()
+        // The mail goes, the mailbox's settings and whitelist stay: they are the
+        // user's choices (pkg/visor/skymail.go, pkg/skymail/mailbox.go).
+        paths.mailDir.listFiles()?.filterNot { it.name in MAILBOX_CHOICES }?.forEach { it.deleteRecursively() }
         paths.processLogFile.delete()
         File(paths.processLogFile.parentFile, paths.processLogFile.name + ".1").delete()
         paths.ensureDirs()
@@ -683,6 +685,7 @@ class ConfigManager(
 
     private companion object {
         const val TAG = "SkywireConfig"
+        val MAILBOX_CHOICES = setOf("settings.json", "whitelist")
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
         const val VPN_APP = "vpn-client"
