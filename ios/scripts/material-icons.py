@@ -38,11 +38,17 @@ Rounded.AttachFile Rounded.CheckCircle Rounded.Close Rounded.Contacts
 Rounded.ContentCopy Rounded.Delete Rounded.Download Rounded.Edit Rounded.Email
 Rounded.Reply Rounded.Send Rounded.Share Rounded.Warning
 Rounded.AlternateEmail Rounded.PersonAdd
+Rounded.Add Rounded.Block Rounded.Bookmark Rounded.Call Rounded.CallMade Rounded.CallReceived
+Rounded.CameraAlt Rounded.Campaign Rounded.Check Rounded.CropSquare Rounded.DeleteForever Rounded.Done
+Rounded.DoneAll Rounded.FlipCameraAndroid Rounded.Fullscreen Rounded.GroupAdd Rounded.Groups Rounded.Image
+Rounded.InsertDriveFile Rounded.Link Rounded.LinkOff Rounded.Lock Rounded.Logout Rounded.Mic Rounded.MoreVert
+Rounded.Notifications Rounded.NotificationsOff Rounded.Pause Rounded.PlayArrow Rounded.PushPin Rounded.QrCode2
+Rounded.QrCodeScanner Rounded.RadioButtonUnchecked Rounded.Refresh Rounded.Schedule Rounded.Search Rounded.Shortcut
 """.split()
 
 
 def snake(name):
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+    return re.sub(r"(?<!^)(?=[A-Z])|(?<=[a-z])(?=\d)", "_", name).lower()
 
 
 def asset_name(icon):

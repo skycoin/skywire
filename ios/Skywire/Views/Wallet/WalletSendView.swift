@@ -1052,8 +1052,13 @@ struct WalletResultView: View {
 }
 
 /// VisionKit's live scanner, QR codes only, the first one read wins.
-private struct QRScannerSheet: UIViewControllerRepresentable {
+struct QRScannerSheet: UIViewControllerRepresentable {
     let onFound: (String) -> Void
+
+    /// A camera that VisionKit can scan with (none on the Simulator).
+    static var available: Bool {
+        DataScannerViewController.isSupported && DataScannerViewController.isAvailable
+    }
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let scanner = DataScannerViewController(

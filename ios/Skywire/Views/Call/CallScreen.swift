@@ -8,8 +8,8 @@ struct CallScreen: View {
 
     var body: some View {
         let ui = model.ui
-        // Without a name, nothing (Android's `state.peer ?: return`): a call the chat page placed and
-        // the peer answered before the next poll arrives as an id only, and the page's panel has it.
+        // Without a name, nothing (Android's `state.peer ?: return`). A call the chat places is named
+        // at once (VoiceCalls.placed), so an answer that beats the next poll still shows here.
         if let peer = ui.peer {
             ZStack {
                 Color.skyBackground.ignoresSafeArea()

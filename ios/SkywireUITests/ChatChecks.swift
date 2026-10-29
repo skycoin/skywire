@@ -1,218 +1,118 @@
 import XCTest
 
-/// The Chat tab against the real network (M3), in the SkywireTour scheme like
-/// FlowChecks: skychat comes up, the page loads behind its password gate, and
-/// the page's JavaScript dialogs are answered.
+/// The native Chat tab against the real network, in the SkywireTour scheme
+/// like FlowChecks: skychat comes up, the list draws, notes are written and
+/// cleared, a conversation survives a tab switch, and with a peer the
+/// messages go both ways and a notification lands in the conversation.
 @MainActor
 final class ChatChecks: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
-    /// Connected, the Chat tab shows skychat's page: its own buttons are in
-    /// the web view, which they can only be once the gate let the page in.
-    func testChatPageComesUp() {
+    /// Connected, the Chat tab draws the list once skychat answered behind its password gate.
+    func testChatListComesUp() {
         let app = connectedApp()
         openTab(.chat, in: app)
-        let page = chatPage(app)
-        keep(page.debugDescription, named: "chat-page-tree")
-        snap("chat-page")
+        chatList(app)
+        snap("chat-list")
     }
 
-    /// A video message recorded in the page: a tap on the empty composer's
-    /// button switches it from voice to video, a hold records (the page's own
-    /// gesture), and the take lands in the thread. On the Simulator WebKit
-    /// records its mock camera and microphone (a test pattern and a beep);
-    /// the real devices are Lane D's.
-    func testVideoMessageRecords() {
+    /// A note written in Saved Messages, its sheet opened, then "Clear notes"
+    /// asked both ways: Cancel keeps it, OK clears it. Then back to the list.
+    func testNotesAreWrittenAndCleared() {
         let app = connectedApp()
         openTab(.chat, in: app)
-        let page = chatPage(app)
-        page.staticTexts["Saved Messages"].firstMatch.tap()
-        let voice = page.buttons["Voice message"].firstMatch
-        let video = page.buttons["Video message"].firstMatch
-        XCTAssertTrue(voice.waitForExistence(timeout: 10) || video.exists, "no record button")
-        if voice.exists { voice.tap() }
-        XCTAssertTrue(video.waitForExistence(timeout: 5), "the tap did not switch to video")
-        snap("video-mode")
-        video.press(forDuration: 3.5)
-        sleep(4)
-        snap("video-after-take")
-        keep(page.debugDescription, named: "video-thread-tree")
-    }
-
-    /// A video message plays full screen from its corner button and turns with the phone,
-    /// while the rest of the app stays upright: closing the video brings the app back to
-    /// portrait with the phone still on its side (Android: the video viewer, v0.0.6).
-    func testVideoPlaysFullScreenAndTurns() {
-        let app = connectedApp(arguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
-        openTab(.chat, in: app)
-        let page = chatPage(app)
-        page.staticTexts["Saved Messages"].firstMatch.tap()
-        let voice = page.buttons["Voice message"].firstMatch
-        let video = page.buttons["Video message"].firstMatch
-        XCTAssertTrue(voice.waitForExistence(timeout: 10) || video.exists, "no record button")
-        if voice.exists { voice.tap() }
-        XCTAssertTrue(video.waitForExistence(timeout: 5), "the tap did not switch to video")
-        let before = page.buttons.matching(NSPredicate(format: "label == %@", "Play video message")).count
-        video.press(forDuration: 3.5)
-        let takes = page.buttons.matching(NSPredicate(format: "label == %@", "Play video message"))
-        let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "count > %d", before), object: takes)
-        XCTAssertEqual(XCTWaiter().wait(for: [landed], timeout: 15), .completed, "the take did not land in the thread")
-        let window = app.windows.firstMatch
-        XCTAssertGreaterThan(window.frame.height, window.frame.width)
-        // The full-screen button sits inside the round player, itself a button, so
-        // accessibility folds it in: tap its corner (top 10 %, right 10 %, 30 of 200 px).
-        let take = takes.element(boundBy: takes.count - 1)
-        take.coordinate(withNormalizedOffset: CGVector(dx: 0.825, dy: 0.175)).tap()
-        sleep(2)
-        XCUIDevice.shared.orientation = .landscapeLeft
-        sleep(2)
-        snap("video-full-screen-landscape")
-        let landscape = app.windows.firstMatch.frame
-        XCTAssertGreaterThan(landscape.width, landscape.height, "the full-screen video did not turn with the phone")
-        let close = app.buttons["Close video"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 5), "no close button on the full-screen video")
-        close.tap()
-        sleep(2)
-        snap("video-closed-phone-on-side")
-        let after = app.windows.firstMatch.frame
-        XCUIDevice.shared.orientation = .portrait
-        XCTAssertGreaterThan(after.height, after.width, "the app stayed on its side after the video closed")
-    }
-
-    /// Leaving the Chat tab and coming back keeps the page where it was: a
-    /// thread left open is still open (G3 re-review: the page was torn down
-    /// and loaded again on every return, back on the chat list).
-    func testTabSwitchKeepsTheConversation() {
-        let app = connectedApp()
-        openTab(.chat, in: app)
-        let page = chatPage(app)
-        page.staticTexts["Saved Messages"].firstMatch.tap()
-        let back = page.buttons["Back to chats"].firstMatch
-        XCTAssertTrue(back.waitForExistence(timeout: 10), "the thread did not open")
-        // The page focuses its composer when a thread opens, and the keyboard
-        // covers the tab bar: put it away as a person would first.
-        let done = app.buttons["Done"].firstMatch
-        if done.waitForExistence(timeout: 3) {
-            done.tap()
-        } else {
-            page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-        }
-        openTab(.home, in: app)
-        openTab(.apps, in: app)
-        openTab(.chat, in: app)
-        XCTAssertTrue(back.waitForExistence(timeout: 5), "the page came back on the list: the thread was dropped")
-        XCTAssertFalse(page.buttons["All"].isHittable, "the chat list is on screen instead of the thread")
-        back.tap()
-    }
-
-    /// The page stays at its own scale: focusing the composer (14 px text,
-    /// which WebKit zooms into), a pinch and a double tap leave the thread's
-    /// header on screen and the composer inside the screen's width. Zoomed, the
-    /// conversation was magnified and scrolled sideways, the other side's
-    /// bubbles off the left edge (seen on the bench, 2026-09-30).
-    func testThePageKeepsItsScale() {
-        let app = connectedApp()
-        openTab(.chat, in: app)
-        let page = chatPage(app)
-        page.staticTexts["Saved Messages"].firstMatch.tap()
-        let composer = page.textViews.firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10))
-        composer.tap()
-        composer.typeText("z")
-        page.pinch(withScale: 3, velocity: 2)
-        page.doubleTap()
-        usleep(800_000)
-        snap("chat-scale")
-        let screen = app.windows.firstMatch.frame
-        XCTAssertTrue(page.buttons["Back to chats"].firstMatch.isHittable, "the thread's header left the screen")
-        XCTAssertGreaterThanOrEqual(composer.frame.minX, screen.minX, "the composer starts off the left edge")
-        XCTAssertLessThanOrEqual(composer.frame.maxX, screen.maxX, "the composer runs off the right edge")
-        // The double tap took the focus: back into the field to take the
-        // draft out again.
-        composer.tap()
-        composer.typeText(XCUIKeyboardKey.delete.rawValue)
-        page.buttons["Back to chats"].firstMatch.tap()
-    }
-
-    /// The page's `confirm()` is answered, both ways, through the app's
-    /// alert: Saved Messages' "Clear notes" asks first. Cancel keeps a note
-    /// just written, OK clears it, and in between the page still takes taps
-    /// (an unanswered dialog would have left it frozen, a missing delegate
-    /// would have answered no without asking). Then back to the list.
-    func testJavaScriptConfirmIsAnswered() {
-        let app = connectedApp()
-        openTab(.chat, in: app)
-        let page = chatPage(app)
-
-        page.staticTexts["Saved Messages"].firstMatch.tap()
-        let composer = page.textViews.firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10), "the notes thread has no composer")
-        composer.tap()
-        // One key at a time, checked, and sent with the page's own button:
-        // synthesized typing into a web text area drops keys when it runs
-        // ahead of the page, and a word the keyboard autocorrects on Return
-        // would no longer be the one to look for.
+        chatList(app).tap()
         let note = "note-" + UUID().uuidString.prefix(8).lowercased()
-        for key in note {
-            composer.typeText(String(key))
-        }
-        let typed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", note), object: composer)
-        XCTAssertEqual(XCTWaiter().wait(for: [typed], timeout: 5), .completed, "the composer holds \(composer.value ?? "nothing"), not \(note)")
-        page.buttons["Send"].firstMatch.tap()
-        let written = page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
+        send(note, in: app)
+        let written = message(note, in: app)
         XCTAssertTrue(written.waitForExistence(timeout: 10), "the note never showed")
+        snap("chat-note")
 
-        clearNotes(in: page, app, answer: "Cancel")
+        written.tap()
+        tapWhenUp("msg-copy", in: app)
+        XCTAssertTrue(app.staticTexts["Copied."].waitForExistence(timeout: 5), "Copy said nothing")
+
+        clearNotes(app, answer: "Cancel")
         XCTAssertTrue(written.exists, "Cancel cleared the notes anyway")
-
-        clearNotes(in: page, app, answer: "OK")
+        clearNotes(app, answer: "OK")
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: written)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 10), .completed, "OK did not clear the notes")
 
-        // Out of the thread with the page's own back, which steps its history.
-        // (The web view's edge swipe does the same for a finger; a synthetic
-        // drag under XCUITest does not register as an edge pan.)
-        page.buttons["Back to chats"].firstMatch.tap()
-        XCTAssertTrue(page.buttons["All"].waitForExistence(timeout: 10), "back did not return to the list")
+        goBack(app)
+        XCTAssertTrue(app.buttons["chat-row-saved"].waitForExistence(timeout: 10), "back did not return to the list")
     }
 
-    /// The thread's menu, "Clear notes", and the page's confirm answered with
-    /// `answer`.
-    private func clearNotes(in page: XCUIElement, _ app: XCUIApplication, answer: String) {
-        // The page exposes its menu button as a plain element, not a button.
-        page.descendants(matching: .any)["Chat actions"].firstMatch.tap()
-        let row = page.descendants(matching: .any)["Clear notes"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5), "the thread's menu has no Clear notes")
-        row.tap()
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "the page's confirm() raised no alert")
-        XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Delete every saved note?'")).firstMatch.exists,
-                      "the alert is not the page's question")
-        alert.buttons[answer].tap()
-        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: alert)
-        XCTAssertEqual(XCTWaiter().wait(for: [dismissed], timeout: 5), .completed)
+    /// Opening the Chat tab again after another one: the thread left open is still open.
+    func testTabSwitchKeepsTheConversation() {
+        let app = connectedApp()
+        openTab(.chat, in: app)
+        chatList(app).tap()
+        let title = app.buttons["thread-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "the thread did not open")
+        openTab(.home, in: app)
+        openTab(.apps, in: app)
+        openTab(.chat, in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "the tab came back on the list: the thread was dropped")
+        XCTAssertFalse(app.buttons["chat-row-saved"].isHittable, "the chat list is on screen instead of the thread")
+        goBack(app)
+    }
+
+    /// A group made on this phone: it opens, takes a post, shows the post's feed tick, and
+    /// its settings page names it. Then the profile page publishes a name.
+    func testGroupAndProfile() {
+        let app = connectedApp()
+        openTab(.chat, in: app)
+        chatList(app)
+        app.buttons["chat-start"].tap()
+        tapMenuItem("New group", in: app)
+        let name = "grp-" + UUID().uuidString.prefix(6).lowercased()
+        let field = app.textFields["group-name"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "no group name field")
+        field.tap()
+        field.typeText(name)
+        app.buttons["group-create"].tap()
+        XCTAssertTrue(app.buttons["thread-title"].waitForExistence(timeout: 60), "the new group did not open")
+        XCTAssertTrue(app.staticTexts[name].firstMatch.waitForExistence(timeout: 10), "the group's header does not name it")
+        let post = "post-" + UUID().uuidString.prefix(8).lowercased()
+        send(post, in: app)
+        XCTAssertTrue(message(post, in: app).waitForExistence(timeout: 10), "the post never showed")
+        let sent = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Sent'")).firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 60), "the post never got its feed tick")
+        snap("group-post")
+        app.buttons["thread-title"].tap()
+        XCTAssertTrue(app.staticTexts["Group settings"].waitForExistence(timeout: 10), "the settings page did not open")
+        snap("group-settings")
+        goBack(app)
+        goBack(app)
+
+        app.buttons["chat-me"].tap()
+        let display = app.textFields["profile-name"]
+        XCTAssertTrue(display.waitForExistence(timeout: 10), "the profile page has no name field")
+        display.tap()
+        display.typeText("Sim " + UUID().uuidString.prefix(4))
+        app.buttons["profile-save"].tap()
+        XCTAssertTrue(app.staticTexts["Profile published."].waitForExistence(timeout: 60), "the profile was not published")
+        goBack(app)
     }
 
     /// A conversation with a second visor over the real network, both ways,
-    /// and a notification from it tapped into the chat (items 3.3-3.5). The
-    /// peer is a desktop core on the Mac (playbook §5, peers) whose skychat
-    /// answers without a password on loopback and keeps its history
-    /// (`--persist`: the test reads it to see what arrived, and without it
-    /// /history answers "persistence not enabled"); the runner is told about it
-    /// through its environment, so this is skipped anywhere else (CI):
+    /// and a notification from it tapped into the chat. The peer is a desktop
+    /// core on the Mac (ios/scripts/desktop-peer.sh) whose skychat answers
+    /// without a password on loopback and keeps its history; the runner is
+    /// told about it through its environment, so this is skipped anywhere else:
     ///
     ///   TEST_RUNNER_SKYWIRE_PEER_PK=<pk> \
     ///   TEST_RUNNER_SKYWIRE_PEER_CHAT=http://127.0.0.1:18001 \
     ///   xcodebuild … -scheme SkywireTour test \
     ///     -only-testing:SkywireUITests/ChatChecks/testTwoWayConversationWithPeer
     ///
-    /// The link opens the page's Add-by-address dialog (the page shows it and
-    /// stops; Start Chat is the user's), the Simulator writes first so the
-    /// peer learns its key from its own history, the peer answers into the
+    /// The link opens Add by address (it shows the person and stops; Start chat
+    /// is the user's), the route is set to DMSG, the Simulator writes first so
+    /// the peer learns its key from its own history, the peer answers into the
     /// open conversation, then writes again while the app is away: the banner
-    /// shows, and a tap on it lands in the conversation.
+    /// shows, and a tap on it lands in the conversation, from the Home tab too.
     func testTwoWayConversationWithPeer() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard let peer = environment["SKYWIRE_PEER_PK"], let chat = environment["SKYWIRE_PEER_CHAT"].flatMap(URL.init(string:)) else {
@@ -220,61 +120,37 @@ final class ChatChecks: XCTestCase {
         }
         let app = connectedApp()
         app.open(URL(string: "skychat://\(peer)")!)
-        let page = chatPage(app)
-        let start = page.buttons.matching(NSPredicate(format: "label IN %@", ["Start Chat", "Open Chat"])).firstMatch
-        XCTAssertTrue(start.waitForExistence(timeout: 60), "the link never filled Add by address")
+        let start = app.buttons["address-start"]
+        // app.open relaunches the app and its core.
+        XCTAssertTrue(start.waitForExistence(timeout: 180), "the link never filled Add by address")
         snap("peer-link")
         start.tap()
 
         // Over DMSG, the direct path: a Skynet route between two visors that
-        // share no transport waits on route setup (it had not come up in 90 s
-        // on the bench, the message queued as "establishing connection").
-        // A <select>: labelled by its title, valued by the chosen option.
-        let network = page.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == 'Network type' OR value == 'Skynet'")).firstMatch
-        XCTAssertTrue(network.waitForExistence(timeout: 10), "no network selector")
-        network.tap()
-        let dmsg = app.descendants(matching: .any)["DMSG"].firstMatch
-        XCTAssertTrue(dmsg.waitForExistence(timeout: 5), "the selector offered no DMSG")
-        dmsg.tap()
+        // share no transport waits on route setup.
+        app.buttons["thread-menu"].tap()
+        tapMenuItem("Send over", in: app, opens: "DMSG")
+        tapMenuItem("DMSG", in: app)
 
         let mine = "sim-" + UUID().uuidString.prefix(8).lowercased()
-        let composer = page.textViews.firstMatch
-        XCTAssertTrue(composer.waitForExistence(timeout: 10))
-        composer.tap()
-        for key in mine {
-            composer.typeText(String(key))
-        }
-        page.buttons["Send"].firstMatch.tap()
-
-        // The peer learns this visor's key from its own history. skychat
-        // holds a new conversation's messages until its link to the peer is
-        // up, and that link was dialled over Skynet when the conversation
-        // opened (choosing DMSG while it runs changes nothing). Where no
-        // Skynet route comes up it fails after 45 s and the page offers
-        // Retry, which dials over the network now chosen, DMSG.
-        let retry = page.buttons["Retry"].firstMatch
+        send(mine, in: app)
         let me = try await poll("the peer never received \(mine)") { () async throws -> String? in
             for pk in try await self.peerHistoryPeers(chat) where try await self.peerHistory(chat, pk).contains(mine) {
                 return pk
             }
+            let retry = app.buttons["Retry"].firstMatch
             if retry.exists { retry.tap() }
             return nil
         }
         let theirs = "peer-" + UUID().uuidString.prefix(8).lowercased()
         try await peerSend(chat, to: me, theirs)
-        XCTAssertTrue(page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", theirs)).firstMatch.waitForExistence(timeout: 180),
-                      "the peer's answer never showed")
+        XCTAssertTrue(message(theirs, in: app).waitForExistence(timeout: 180), "the peer's answer never showed")
         snap("peer-two-way")
 
         // Away from the app: the conversation is no longer on screen, so
         // skychat notifies, and the banner comes from the app's bridge. Sent
-        // at once, inside the app's background grace (about 30 s; after it
-        // iOS suspends the app and its core, which is Lane D's to cover).
+        // inside the app's background grace.
         XCUIDevice.shared.press(.home)
-        // A moment away first, as a person would be: the app tells skychat
-        // nothing is on screen as it leaves (the frozen page cannot), and a
-        // message racing that by milliseconds is still "on screen" to skychat.
         try await Task.sleep(for: .seconds(3))
         let away = "away-" + UUID().uuidString.prefix(8).lowercased()
         try await peerSend(chat, to: me, away)
@@ -284,12 +160,11 @@ final class ChatChecks: XCTestCase {
         snap("peer-notification")
         banner.tap()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "the tap did not bring the app back")
-        XCTAssertTrue(page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", away)).firstMatch.waitForExistence(timeout: 30),
-                      "the tap did not land in the conversation")
+        XCTAssertTrue(message(away, in: app).waitForExistence(timeout: 30), "the tap did not land in the conversation")
         snap("peer-tapped")
 
-        // The same from another tab (the re-review's repro): the tap switches
-        // to Chat and the page opens the conversation, not the list.
+        // The same from another tab: the tap switches to Chat and opens the conversation, not the list.
+        goBack(app)
         openTab(.home, in: app)
         XCUIDevice.shared.press(.home)
         try await Task.sleep(for: .seconds(3))
@@ -299,10 +174,144 @@ final class ChatChecks: XCTestCase {
         XCTAssertTrue(second.waitForExistence(timeout: 60), "no notification for \(fromHome)")
         second.tap()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        XCTAssertTrue(page.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", fromHome)).firstMatch.waitForExistence(timeout: 30),
-                      "the tap from the Home tab did not land in the conversation")
-        XCTAssertTrue(page.buttons["Back to chats"].firstMatch.exists, "the chat list is on screen, not the conversation")
+        XCTAssertTrue(message(fromHome, in: app).waitForExistence(timeout: 30), "the tap from the Home tab did not land in the conversation")
+        XCTAssertTrue(app.buttons["thread-title"].exists, "the chat list is on screen, not the conversation")
         snap("peer-tapped-from-home")
+    }
+
+    /// Media and the message actions with the same peer (see testTwoWayConversationWithPeer for
+    /// the environment). The peer sends a picture and a voice message recorded the way the desktop
+    /// page records one (Opus in WebM, which only WebKit decodes on iOS; silent, so nothing sounds
+    /// on the Mac); the picture opens full screen and the clip plays. Then a reply reaches the
+    /// peer with its quote, a message is forwarded to Saved Messages, and one is deleted for both.
+    func testMediaAndActionsWithPeer() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let peer = environment["SKYWIRE_PEER_PK"], let chat = environment["SKYWIRE_PEER_CHAT"].flatMap(URL.init(string:)),
+              let voice = environment["SKYWIRE_PEER_VOICE"].map(URL.init(fileURLWithPath:)),
+              let picture = environment["SKYWIRE_PEER_PICTURE"].map(URL.init(fileURLWithPath:))
+        else {
+            throw XCTSkip("no peer: set TEST_RUNNER_SKYWIRE_PEER_PK, _PEER_CHAT, _PEER_VOICE (a .weba) and _PEER_PICTURE (a .png)")
+        }
+        let app = connectedApp()
+        app.open(URL(string: "skychat://\(peer)")!)
+        let start = app.buttons["address-start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 180), "the link never filled Add by address")
+        start.tap()
+        app.buttons["thread-menu"].tap()
+        tapMenuItem("Send over", in: app, opens: "DMSG")
+        tapMenuItem("DMSG", in: app)
+
+        let hello = "hello-" + UUID().uuidString.prefix(8).lowercased()
+        send(hello, in: app)
+        let me = try await poll("the peer never received \(hello)") { () async throws -> String? in
+            for pk in try await self.peerHistoryPeers(chat) where try await self.peerHistory(chat, pk).contains(hello) {
+                return pk
+            }
+            return nil
+        }
+
+        // A picture from the peer: its bubble, then the viewer.
+        let pictureName = "pic-" + UUID().uuidString.prefix(6).lowercased() + ".png"
+        try await peerSendFile(chat, to: me, picture, name: pictureName, type: "image/png")
+        let pictureBubble = app.buttons[pictureName].firstMatch
+        XCTAssertTrue(pictureBubble.waitForExistence(timeout: 120), "the picture never arrived")
+        pictureBubble.tap()
+        XCTAssertTrue(app.buttons["viewer-close"].waitForExistence(timeout: 10), "the picture did not open")
+        snap("peer-picture")
+        app.buttons["viewer-close"].tap()
+
+        // A WebM voice message: it plays (its button turns to Pause).
+        let voiceName = "voice-\(Self.stamp()).weba"
+        try await peerSendFile(chat, to: me, voice, name: voiceName, type: "audio/webm")
+        let play = app.buttons.matching(NSPredicate(format: "label == 'Play'")).element(boundBy: 0)
+        XCTAssertTrue(play.waitForExistence(timeout: 120), "the voice message never arrived")
+        play.tap()
+        XCTAssertTrue(app.buttons["Pause"].firstMatch.waitForExistence(timeout: 15), "the WebM voice message did not play")
+        snap("peer-voice-playing")
+
+        // A reply carries its quote to the peer.
+        let theirs = "quote-" + UUID().uuidString.prefix(8).lowercased()
+        try await peerSend(chat, to: me, theirs)
+        let quoted = message(theirs, in: app)
+        XCTAssertTrue(quoted.waitForExistence(timeout: 120), "the peer's message never showed")
+        quoted.tap()
+        tapWhenUp("msg-reply", in: app)
+        let answer = "answer-" + UUID().uuidString.prefix(8).lowercased()
+        send(answer, in: app)
+        _ = try await poll("the reply never reached the peer with its quote") { () async throws -> Bool? in
+            let history = try await self.peerHistory(chat, me)
+            return history.contains(answer) && history.contains(theirs) && history.contains("reply_to_preview") ? true : nil
+        }
+
+        // Delete for everyone: gone here and on the peer.
+        message(answer, in: app).tap()
+        tapWhenUp("msg-delete-all", in: app)
+        _ = try await poll("the peer still holds the deleted reply") { () async throws -> Bool? in
+            try await self.peerHistory(chat, me).contains(answer) ? nil : true
+        }
+
+        // Forward the peer's message to Saved Messages.
+        quoted.tap()
+        tapWhenUp("msg-forward", in: app)
+        let saved = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Saved Messages'")).firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 5), "the forward list has no Saved Messages")
+        saved.tap()
+        XCTAssertTrue(message(theirs, in: app).waitForExistence(timeout: 10), "the forward did not land in Saved Messages")
+        snap("forwarded-to-saved")
+    }
+
+    private static func stamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter.string(from: Date())
+    }
+
+    // MARK: Steps
+
+    /// The list, once skychat answered: its Saved Messages row.
+    @discardableResult
+    private func chatList(_ app: XCUIApplication) -> XCUIElement {
+        let saved = app.buttons["chat-row-saved"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 180), "the chat list never came up")
+        return saved
+    }
+
+    /// Types `text` into the open thread's composer and sends it with the button.
+    private func send(_ text: String, in app: XCUIApplication) {
+        let field = app.textFields["composer-field"].exists ? app.textFields["composer-field"] : app.textViews["composer-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the thread has no composer")
+        field.tap()
+        field.typeText(text)
+        app.buttons["composer-send"].tap()
+    }
+
+    /// A message's text in the open thread.
+    private func message(_ text: String, in app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    /// The thread's menu, "Clear notes", and the confirmation answered with `answer`.
+    private func clearNotes(_ app: XCUIApplication, answer: String) {
+        app.buttons["thread-menu"].tap()
+        tapMenuItem("Clear notes", in: app, opens: "Cancel")
+        let question = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Delete every saved note?'")).firstMatch
+        XCTAssertTrue(question.waitForExistence(timeout: 5), "Clear notes asked nothing")
+        tapWhenUp(answer, in: app)
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: question)
+        XCTAssertEqual(XCTWaiter().wait(for: [dismissed], timeout: 5), .completed)
+    }
+
+    /// A menu's row, tapped once the menu has settled; tapped again only when `opens`, what the
+    /// tap should bring up, did not appear (a tap made while the menu was still opening is lost).
+    private func tapMenuItem(_ label: String, in app: XCUIApplication, opens: String? = nil) {
+        let item = app.buttons[label].firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "no \(label) in the menu")
+        for _ in 0..<3 {
+            usleep(700_000)
+            item.tap()
+            guard let opens else { return }
+            if app.descendants(matching: .any)[opens].firstMatch.waitForExistence(timeout: 3) { return }
+        }
     }
 
     // MARK: The peer's skychat (plain HTTP on loopback, no password)
@@ -329,10 +338,28 @@ final class ChatChecks: XCTestCase {
         XCTAssertTrue((200..<300).contains(status), "the peer could not send (\(status)): \(String(decoding: data, as: UTF8.self))")
     }
 
-    /// Asks `check` every two seconds for up to five minutes: every
-    /// `xcodebuild test` install is a new identity, and a new visor's first
-    /// connection to another takes minutes (the page says so; the desktop peer
-    /// took five to attach to a dmsg relay).
+    /// The peer sends `file` to this visor as an attachment, once its link is up.
+    private func peerSendFile(_ chat: URL, to pk: String, _ file: URL, name: String, type: String) async throws {
+        var link = URLRequest(url: chat.appendingPathComponent("link"), timeoutInterval: 30)
+        link.httpMethod = "POST"
+        link.httpBody = try JSONSerialization.data(withJSONObject: ["pk": pk, "network": "dmsg"])
+        _ = try? await URLSession.shared.data(for: link)
+        let boundary = "b-" + UUID().uuidString
+        var body = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"pk\"\r\n\r\n\(pk)\r\n".utf8)
+        body += Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\nContent-Type: \(type)\r\n\r\n".utf8)
+        body += try Data(contentsOf: file)
+        body += Data("\r\n--\(boundary)--\r\n".utf8)
+        var request = URLRequest(url: chat.appendingPathComponent("send-file"), timeoutInterval: 120)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        XCTAssertTrue((200..<300).contains(status), "the peer could not send \(name) (\(status)): \(String(decoding: data, as: UTF8.self))")
+    }
+
+    /// Asks `check` every two seconds for up to five minutes: a new visor's
+    /// first connection to another takes minutes.
     private func poll<T>(_ failure: String, _ check: () async throws -> T?) async throws -> T {
         for _ in 0..<150 {
             if let value = try await check() { return value }
@@ -340,22 +367,6 @@ final class ChatChecks: XCTestCase {
         }
         XCTFail(failure)
         throw XCTSkip(failure)
-    }
-
-    /// The page's web view, once it has drawn something.
-    private func chatPage(_ app: XCUIApplication) -> XCUIElement {
-        let page = app.webViews["chat-webview"]
-        // As long as connectedApp gives a start: app.open relaunches the app and its core.
-        XCTAssertTrue(page.waitForExistence(timeout: 180), "the chat page never came up")
-        XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
-        return page
-    }
-
-    private func keep(_ text: String, named name: String) {
-        let attachment = XCTAttachment(string: text)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
     }
 
     private func snap(_ name: String) {

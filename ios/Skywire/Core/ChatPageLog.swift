@@ -1,9 +1,9 @@
 import CoreClient
 import Foundation
 
-/// The chat page's console and what its web view did, kept on disk for the
-/// diagnostics export (Android: core/ChatPageLog.kt). The page's errors never
-/// reach the core's logs, so a page that stopped answering left nothing to read.
+/// The chat's own events (skychat's answers at bring-up, the event stream, the
+/// one-time import), kept on disk for the diagnostics export (Android:
+/// core/ChatPageLog.kt). None of it reaches the core's logs.
 enum ChatPageLog {
     static let maxBytes = 256 * 1024
     static let file = CorePaths.appSupport().dataDir.appendingPathComponent("skychat-page.log")

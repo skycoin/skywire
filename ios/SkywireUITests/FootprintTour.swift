@@ -40,9 +40,7 @@ final class FootprintTour: XCTestCase {
     func test3ChatOpen() {
         let app = connectedApp()
         openTab(.chat, in: app)
-        let page = app.webViews["chat-webview"]
-        XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
-        XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
+        XCTAssertTrue(app.buttons["chat-row-saved"].waitForExistence(timeout: 90), "the chat list never came up")
         keep("chat", for: hold)
     }
 

@@ -67,6 +67,18 @@ ios/
 └── Frameworks/SkywireCore.xcframework   # build output of make ios-core, gitignored
 ```
 
+SkyChat is native SwiftUI over skychat's own HTTP API, the surface the
+desktop page uses. `CoreClient` holds the typed calls and the wire rules
+(`SkychatAPI`, `SkychatProtocol`), and `Skywire/Core/Chat/` holds
+`ChatRepository`, which keeps every conversation and does what the page did in
+the browser: threads cached on disk with their ticks, unread counts, read
+receipts, the peer link before a send, and the `/notify-focus` lease. Local
+state lives under Application Support `skychat-native/<visor pk>/`, and the
+first run copies what the old page kept in WebKit storage (`ChatLegacyImport`).
+Mutes and the preview switch apply in `NotificationBridge`. Voice messages are
+AAC in `voice-<stamp>.m4a` and video messages H.264 with AAC in
+`video-<stamp>.mp4`, the names every skychat UI reads as recorded clips.
+
 ## Building and running
 
 Everything runs from the repo root, as for Android. Xcode 27 or later with

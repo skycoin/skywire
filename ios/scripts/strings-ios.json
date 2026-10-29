@@ -156,6 +156,30 @@
       "zh-Hans": "访问 .dmsg 节点需要 iOS 17 或更高版本。",
       "es": "Para llegar a un nodo .dmsg hace falta iOS 17 o posterior.",
       "fr": "Joindre un nœud .dmsg demande iOS 17 ou une version plus récente."
+    },
+    "chat_attach_photo": {
+      "en": "Photo or video",
+      "zh-Hans": "照片或视频",
+      "es": "Foto o vídeo",
+      "fr": "Photo ou vidéo"
+    },
+    "chat_attach_file": {
+      "en": "File",
+      "zh-Hans": "文件",
+      "es": "Archivo",
+      "fr": "Fichier"
+    },
+    "chat_pause": {
+      "en": "Pause",
+      "zh-Hans": "暂停",
+      "es": "Pausar",
+      "fr": "Pause"
+    },
+    "dex_error_password": {
+      "en": "SkyDEX rejected the stored password",
+      "zh-Hans": "SkyDEX 拒绝了已保存的密码。",
+      "es": "SkyDEX rechazó la contraseña guardada",
+      "fr": "SkyDEX a rejeté le mot de passe enregistré"
     }
   },
   "InfoPlist": {

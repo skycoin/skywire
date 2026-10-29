@@ -103,9 +103,10 @@ final class NotificationBridge: NSObject, ObservableObject {
         }
     }
 
-    /// The app left the foreground: nothing is on screen any more, which the
-    /// chat page, frozen with the app, cannot tell skychat itself. Runs in the
-    /// app's background grace (AppModel.enteredBackground).
+    /// The app left the foreground: nothing is on screen any more. Said at
+    /// once rather than left to the chat's focus lease, whose next refresh may
+    /// not run before the app is suspended. Runs in the app's background grace
+    /// (AppModel.enteredBackground).
     func appLeft() {
         guard let skychat else { return }
         Task { [log] in
@@ -120,7 +121,7 @@ final class NotificationBridge: NSObject, ObservableObject {
             if skychat == nil, let state = try? await app.client.app(SkychatProfile.app) {
                 let origin = SkychatProfile.origin(port: SkychatProfile.listenPort(state.args))
                 // The secret read per request, not kept: a rotated one
-                // (ChatModel rewrites the gate's file) must not leave this
+                // (ChatRepository rewrites the gate's file) must not leave this
                 // asking with the old.
                 skychat = SkychatClient(transport: LoopbackTransport(origin: origin)) {
                     try SecretStore.app().password(.skychatPassword)
@@ -144,10 +145,11 @@ final class NotificationBridge: NSObject, ObservableObject {
     }
 
     private func post(_ event: NotifyEvent) {
+        if event.app == SkychatProfile.app && !Self.chatAllows(event, ChatRepository.shared.store.notif) { return }
         let style = Self.presentation(of: event.app)
         let content = UNMutableNotificationContent()
         content.title = event.title.isEmpty ? style.label : event.title
-        content.body = event.body
+        content.body = Self.shownBody(event, ChatRepository.shared.store.notif)
         content.sound = style.sound ? .default : nil
         content.interruptionLevel = style.level
         content.userInfo = ["app": event.app, "tag": event.tag]
@@ -165,6 +167,23 @@ final class NotificationBridge: NSObject, ObservableObject {
                 log.info("posted a notification from \(event.app, privacy: .public)\(key == nil ? "" : " (tagged)", privacy: .public)")
             }
         }
+    }
+
+    /// The chat's own notification settings, which only this side can apply:
+    /// skychat publishes whenever no screen shows the thread, and the tag is
+    /// the conversation (a key, a group id, or `join:<group>` for a join request).
+    static func chatAllows(_ event: NotifyEvent, _ prefs: NotifPrefs) -> Bool {
+        guard prefs.enabled else { return false }
+        let thread = event.tag.lowercased()
+        if thread.isEmpty || thread.hasPrefix("join:") { return true }
+        return !prefs.isMuted(event.tag)
+    }
+
+    /// A message's text, or a plain "new message" with previews off. Calls and join requests keep theirs.
+    static func shownBody(_ event: NotifyEvent, _ prefs: NotifPrefs) -> String {
+        guard event.app == SkychatProfile.app, !prefs.preview else { return event.body }
+        let message = !event.tag.isEmpty && !event.tag.hasPrefix("join:") && !event.body.hasPrefix("📞")
+        return message ? L10n.text("chat_notif_new_message") : event.body
     }
 
     /// How one app's notifications are presented. An unknown app is never
@@ -185,9 +204,8 @@ final class NotificationBridge: NSObject, ObservableObject {
 }
 
 extension NotificationBridge: UNUserNotificationCenterDelegate {
-    /// In the foreground too: the chat page shows no notifications of its own
-    /// (WebKit gives it no Notification API), and skychat already holds back
-    /// the ones for the conversation on screen.
+    /// In the foreground too: the chat shows no notifications of its own, and
+    /// skychat already holds back the ones for the conversation on screen.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,

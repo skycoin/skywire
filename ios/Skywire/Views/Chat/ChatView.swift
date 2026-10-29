@@ -1,41 +1,115 @@
+import CoreClient
 import SwiftUI
-import WebKit
 
-/// The Chat tab: skychat's own web UI, embedded (Android: ChatScreen).
-/// Everything the page cannot do for itself is ChatPage's; this screen
-/// decides when there is a page to show, and what to say while there is not.
+/// The pages inside the Chat tab; back pops one (Android: ui/chat/ChatViewModel.kt's ChatPage).
+enum ChatRoute: Equatable {
+    case home
+    case thread(String)
+    case contacts(pick: Bool)
+    case contactSettings(String)
+    case newContact(String)
+    case myProfile
+    case settings
+    case groupSettings(String)
+    case addAddress(String, fromLink: Bool)
+    case newGroup(channel: Bool)
+    case search
+    case forward(from: String, message: String)
+    case image(source: String, name: String)
+    case video(source: String, name: String, start: Double)
+}
+
+/// The Chat tab's own navigation and per-thread drafts. Everything about the
+/// conversations themselves lives in ChatRepository, which outlives this.
+@MainActor
+final class ChatNav: ObservableObject {
+    @Published private(set) var pages: [ChatRoute] = [.home]
+    @Published var replies: [String: ReplyRef] = [:]
+    /// A message to scroll to once its thread shows it: the thread and the message's time.
+    @Published var scrollTarget: (key: String, ts: Int64)?
+    /// Unsent text per thread, so leaving a chat does not lose it.
+    var drafts: [String: String] = [:]
+
+    var top: ChatRoute { pages.last ?? .home }
+
+    func push(_ page: ChatRoute) { pages.append(page) }
+
+    /// Back: false when there was nothing left to pop.
+    @discardableResult
+    func pop() -> Bool {
+        guard pages.count > 1 else { return false }
+        pages.removeLast()
+        return true
+    }
+
+    /// Opens a conversation from anywhere: it sits directly over the list.
+    func openThread(_ key: String) { pages = [.home, .thread(key)] }
+
+    func home() { pages = [.home] }
+
+    /// Leaves the current page and shows `page` in its place.
+    func replace(_ page: ChatRoute) {
+        pages.removeLast()
+        pages.append(page)
+    }
+
+    func setReply(_ key: String, _ reply: ReplyRef?) { replies[key] = reply }
+}
+
+/// The Chat tab: SkyChat drawn natively over skychat's HTTP API (Android:
+/// ui/chat/ChatScreen.kt). The list is the screen until a conversation opens
+/// over it; every other page stacks on top and back pops it.
 struct ChatView: View {
     @EnvironmentObject private var app: AppModel
     @EnvironmentObject private var router: ChatRouter
-    @StateObject private var model = ChatModel()
-    @StateObject private var page = ChatPage()
     @EnvironmentObject private var navigator: Navigator
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var dialogs: SkyDialogs
+    @ObservedObject private var repo = ChatRepository.shared
+    @StateObject private var nav = ChatNav()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layerVisible) private var onScreen
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Back is the page's own step while it has one, then the tab is left (Android).
-            SkyTopBar(title: Text("app_skychat"), onBack: {
-                if !page.goBack() { navigator.back() }
-            }, help: .chat)
-            content
+        Group {
+            if repo.conn.ready {
+                page.environmentObject(nav)
+            } else {
+                VStack(spacing: 0) {
+                    SkyTopBar(title: Text("app_skychat"), onBack: { navigator.back() }, help: .chat)
+                    ChatStatus(conn: repo.conn) { repo.retry() }
+                }
+            }
         }
         .background(Color.skyBackground)
-        .task(id: ChatModel.RunKey(connected: app.connected, attempt: model.attempt)) {
-            await model.run(app)
+        .environmentObject(repo)
+        .onAppear { repo.requestApp() }
+        .onChange(of: onScreen) { if $0 { repo.requestApp() } }
+        .onChange(of: app.connected) { if $0 && onScreen { repo.requestApp() } }
+        .onChange(of: repo.conn.ready) { _ in syncOpen() }
+        .onChange(of: nav.pages) { _ in syncOpen() }
+        .onChange(of: onScreen) { _ in syncOpen() }
+        .onChange(of: scenePhase) { _ in syncOpen() }
+        .onChange(of: repo.note) { note in
+            guard let note else { return }
+            dialogs.snackbar(Text(verbatim: note.text))
+            repo.noteShown(note)
         }
-        // A link or a tapped notification waits until the page can take it, and is dropped
-        // once it has: retrying one the page refused would only loop.
-        // Only while it is in front: a page behind another tab or the home screen is not asked.
-        .task(id: onScreen && scenePhase == .active && page.ready) {
-            if onScreen && scenePhase == .active && page.ready { await page.watchResponsiveness() }
-        }
-        .task(id: DriveKey(request: router.pending, ready: page.ready)) {
-            guard let request = router.pending, page.ready else { return }
-            _ = await page.perform(request.target)
+        .task(id: DriveKey(request: router.pending, ready: repo.conn.ready)) {
+            guard let request = router.pending, repo.conn.ready else { return }
+            switch request.target {
+            case let .address(address):
+                nav.home()
+                nav.push(.addAddress(address, fromLink: true))
+            case let .conversation(key):
+                if !key.isEmpty {
+                    let id = repo.groups.first { $0.id.caseInsensitiveCompare(key) == .orderedSame }?.id ?? key.lowercased()
+                    nav.openThread(id)
+                }
+            }
             router.handled(request)
+        }
+        .sheet(item: $repo.share) { file in
+            ActivitySheet(items: [file.url]) { repo.shareDone(file) }
         }
     }
 
@@ -44,68 +118,52 @@ struct ChatView: View {
         let ready: Bool
     }
 
-    private var showsPage: Bool {
-        model.url != nil && model.password != nil && page.error == nil
+    /// Only a thread actually in front of the user holds the focus lease.
+    private func syncOpen() {
+        let visible = onScreen && scenePhase == .active && repo.conn.ready
+        if visible, case let .thread(key) = nav.top {
+            repo.setOpen(key)
+        } else {
+            repo.setOpen(nil)
+        }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if showsPage, let url = model.url, let password = model.password {
-            ChatWebView(page: page, url: url, password: password, dark: colorScheme == .dark,
-                        lang: ChatPage.pageLang(app.settings.language))
-        } else {
-            ChatStatus(model: model, pageError: page.error) {
-                page.clearError()
-                model.retry()
-            }
+    private func back() {
+        if !nav.pop() { navigator.back() }
+    }
+
+    @ViewBuilder private var page: some View {
+        switch nav.top {
+        case .home: ChatHome(onBack: { navigator.back() })
+        case let .thread(key): ThreadView(key: key, onBack: back).id(key)
+        case let .contacts(pick): ContactsView(pick: pick, onBack: back)
+        case let .contactSettings(pk): ContactSettingsView(pk: pk, onBack: back).id(pk)
+        case let .newContact(prefill): NewContactView(prefill: prefill, onBack: back)
+        case .myProfile: MyProfileView(onBack: back)
+        case .settings: ChatSettingsView(onBack: back)
+        case let .groupSettings(gid): GroupSettingsView(gid: gid, onBack: back).id(gid)
+        case let .addAddress(prefill, fromLink): AddAddressView(prefill: prefill, fromLink: fromLink, onBack: back).id(prefill)
+        case let .newGroup(channel): NewGroupView(channel: channel, onBack: back)
+        case .search: ChatSearchView(onBack: back)
+        case let .forward(from, message): ForwardView(fromKey: from, msgKey: message, onBack: back)
+        case let .image(source, name): ImageViewer(source: source, name: name, onBack: back)
+        case let .video(source, name, start): VideoViewer(source: source, name: name, start: start, onBack: back)
         }
     }
 }
 
-/// The page's web view in SwiftUI. The view is ChatPage's; it is released
-/// when this leaves the screen (the surface went, or an error replaced it),
-/// not when another tab is selected.
-private struct ChatWebView: UIViewRepresentable {
-    let page: ChatPage
-    let url: URL
-    let password: String
-    let dark: Bool
-    let lang: String?
-
-    func makeCoordinator() -> ChatPage {
-        page
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        page.makeWebView()
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        page.show(url, password: password, dark: dark, lang: lang)
-    }
-
-    static func dismantleUIView(_ webView: WKWebView, coordinator page: ChatPage) {
-        page.release()
-    }
-}
-
-/// What the tab shows while there is no page to show: the core has to run
-/// before skychat can, and skychat has to answer before the page is worth
-/// loading.
+/// What the tab shows until skychat answers.
 private struct ChatStatus: View {
     @EnvironmentObject private var app: AppModel
-    @ObservedObject var model: ChatModel
-    let pageError: String?
+    let conn: ChatRepository.Conn
     let retry: () -> Void
 
-    private var error: String? { pageError ?? model.error }
-
     private var connecting: Bool {
-        error == nil && (model.starting || app.coreState == .starting || (app.coreState == .running && !app.apiUp))
+        conn.error == nil && (conn.starting || app.coreState == .starting || app.coreState == .running)
     }
 
     private var message: String {
-        if let error { return error }
+        if let error = conn.error { return error }
         switch app.coreState {
         case .failed: return app.lastError ?? L10n.text("home_error_start")
         case .running where app.apiUp: return L10n.text("chat_starting")
@@ -124,7 +182,7 @@ private struct ChatStatus: View {
                 .foregroundStyle(Color.skyOnSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("chat-status")
-            if error != nil, app.connected {
+            if conn.error != nil, app.connected {
                 // A closure literal, not `action: retry`: Xcode 26 crashed on a function passed here (M2).
                 Button {
                     retry()

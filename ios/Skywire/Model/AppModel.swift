@@ -26,11 +26,6 @@ final class AppModel: ObservableObject {
     /// The core runs and its API answers.
     var connected: Bool { coreState == .running && apiUp }
 
-    /// How many times the core's API has come up in this process: a screen
-    /// that keeps state across its own disappearances (the chat page) tells
-    /// "the same core" from "a core that restarted meanwhile" by it.
-    private(set) var coreSession = 0
-
     let settings: AppSettings
     let client: CoreClient
     let log: CoreLog
@@ -252,7 +247,6 @@ final class AppModel: ObservableObject {
     private func waitForAPI() async {
         while coreState == .running, !apiUp {
             if await client.ping() {
-                coreSession += 1
                 apiUp = true
                 break
             }

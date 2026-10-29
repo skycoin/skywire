@@ -12,10 +12,10 @@ final class CallChecks: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// A call the chat page placed and the peer answered within the app's poll reaches the app as
-    /// an id only. Its call screen then covered the page with a spinner and no Hang up (G8); now
-    /// it stays out of the way, as Android's does. Whether the answer beats the poll is a race.
-    func testACallThePagePlacedCanBeHungUp() async throws {
+    /// A call the chat placed and the peer answered within the app's poll reaches the watcher as
+    /// an id only. The chat names the call it placed at once, so the call screen and its Hang up
+    /// are there whether or not the answer beat the poll (it is a race).
+    func testACallTheChatPlacedCanBeHungUp() async throws {
         let env = ProcessInfo.processInfo.environment
         guard let origin = env["SKYWIRE_CALL_PEER"].flatMap(URL.init(string:)), let peerPK = env["SKYWIRE_CALL_PEER_PK"] else {
             throw XCTSkip("no peer: set TEST_RUNNER_SKYWIRE_CALL_PEER and _PK")
@@ -23,17 +23,13 @@ final class CallChecks: XCTestCase {
         let peer = CallPeer(origin: origin, pk: peerPK)
         let app = connectedApp(arguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"])
         app.open(URL(string: "skychat://\(peerPK)")!)
-        let page = app.webViews["chat-webview"]
-        XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
-        let open = page.buttons.matching(NSPredicate(format: "label IN %@", ["Start Chat", "Open Chat"])).firstMatch
-        XCTAssertTrue(open.waitForExistence(timeout: 60), "the link never filled Add by address")
+        let open = app.buttons["address-start"]
+        XCTAssertTrue(open.waitForExistence(timeout: 180), "the link never filled Add by address")
         open.tap()
 
-        let actions = page.descendants(matching: .any)["Chat actions"].firstMatch
-        XCTAssertTrue(actions.waitForExistence(timeout: 20), "no chat actions")
-        actions.tap()
-        let call = page.buttons["Call"].firstMatch
-        XCTAssertTrue(call.waitForExistence(timeout: 10), "the chat actions offer no Call")
+        // The header's Call shows once skychat's voice route answers (polled every 15 s).
+        let call = app.buttons["thread-call"]
+        XCTAssertTrue(call.waitForExistence(timeout: 40), "the conversation offers no Call")
         call.tap()
 
         // Answered the moment it rings, often before the app's next two-second poll.
@@ -45,16 +41,11 @@ final class CallChecks: XCTestCase {
         let id = try XCTUnwrap(callID, "the call never rang on the peer")
         try await peer.post("answer", ["call_id": id])
 
-        // Two polls, so the app has seen the call as active. Then whichever is in front ends it:
-        // the app's call screen if it saw the call ring, the page's panel if the answer beat it.
+        // Two polls, so the app has seen the call as active.
         try await Task.sleep(for: .seconds(5))
         snap("call-answered")
-        let screenHangUp = app.buttons["call-hang-up"]
-        var hangUp = screenHangUp
-        if !screenHangUp.exists {
-            hangUp = page.buttons["Hang up"].firstMatch
-            XCTAssertTrue(hangUp.waitForExistence(timeout: 10), "neither the app nor the page offers Hang up")
-        }
+        let hangUp = app.buttons["call-hang-up"]
+        XCTAssertTrue(hangUp.waitForExistence(timeout: 10), "the call screen offers no Hang up")
         hangUp.tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: hangUp)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 10), .completed, "the call is still on the phone")

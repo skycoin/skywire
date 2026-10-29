@@ -12,8 +12,8 @@ import Foundation
 /// costs a badge, and neither is worth an error on a screen that has other
 /// work to do.
 public struct SkychatClient: Sendable {
-    private let transport: any RequestTransport
-    private let password: @Sendable () throws -> String
+    let transport: any RequestTransport
+    let password: @Sendable () throws -> String
 
     /// - Parameters:
     ///   - transport: reaches skychat's origin (`SkychatProfile.baseURL`).
