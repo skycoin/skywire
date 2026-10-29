@@ -92,6 +92,27 @@ func (r *RPC) HVStopApp(in *visorapi.HVAppArgs, _ *struct{}) (err error) {
 	return v.HVStopApp(in.PK, in.AppName)
 }
 
+// HVAppCatalog lists the apps a remote visor can run.
+func (r *RPC) HVAppCatalog(pk *cipher.PubKey, out *[]visorapi.CatalogEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "HVAppCatalog", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	*out, err = v.HVAppCatalog(*pk)
+	return err
+}
+
+// HVAddApp adds an app entry to a remote visor.
+func (r *RPC) HVAddApp(in *visorapi.HVAddAppArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVAddApp", in)(nil, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	return v.HVAddApp(in.PK, in.AppName, in.BinaryName)
+}
+
 // HVSetMinHops sets min_hops on a remote visor.
 func (r *RPC) HVSetMinHops(in *visorapi.HVMinHopsArgs, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "HVSetMinHops", in)(nil, &err)

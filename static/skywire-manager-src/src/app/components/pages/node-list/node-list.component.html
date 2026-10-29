@@ -108,6 +108,17 @@
               {{ 'nodes.quick.' + chip | translate }}
             </button>
           }
+          @if (appNames.length > 0) {
+            <label class="fleet-app-filter">
+              {{ 'nodes.apps-filter.label' | translate }} &#9656;
+              <select class="fleet-select" [value]="appFilter" (change)="setAppFilter($any($event.target).value)">
+                <option value="">{{ 'nodes.apps-filter.any' | translate }}</option>
+                @for (name of appNames; track name) {
+                  <option [value]="name" [selected]="name === appFilter">{{ name }}</option>
+                }
+              </select>
+            </label>
+          }
           @if (quickFilterHides > 0) {
             <span class="fleet-hidden">{{ 'nodes.quick.hidden' | translate: { n: quickFilterHides } }}</span>
           }
@@ -115,6 +126,9 @@
           @if (!showRewardsInfo) {
             <button class="fleet-chip" [class.on]="compact" (click)="toggleCompact()" [matTooltip]="'nodes.quick.compact-tooltip' | translate">
               {{ 'nodes.quick.compact' | translate }}
+            </button>
+            <button class="fleet-chip apps-chip" [class.on]="showApps" (click)="toggleApps()" [matTooltip]="'nodes.apps-filter.column-tooltip' | translate">
+              {{ 'nodes.apps-filter.column' | translate }}
             </button>
           }
         </div>
@@ -124,6 +138,9 @@
             <button mat-stroked-button (click)="updateSelected()">{{ 'nodes.bulk.update' | translate }}</button>
             <button mat-stroked-button (click)="rewardsSelected()">{{ 'nodes.bulk.reward' | translate }}</button>
             <button mat-stroked-button (click)="restartSelected()">{{ 'nodes.bulk.restart' | translate }}</button>
+            <button mat-stroked-button class="bulk-add-app" (click)="appActionSelected('add')">{{ 'nodes.bulk.add-app' | translate }}</button>
+            <button mat-stroked-button class="bulk-start-app" (click)="appActionSelected('start')">{{ 'nodes.bulk.start-app' | translate }}</button>
+            <button mat-stroked-button class="bulk-stop-app" (click)="appActionSelected('stop')">{{ 'nodes.bulk.stop-app' | translate }}</button>
             <button mat-stroked-button (click)="clearSelection()">{{ 'nodes.bulk.clear' | translate }}</button>
           </div>
         }
@@ -340,6 +357,9 @@
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
+                @if (showApps) {
+                  <th class="apps-column">{{ 'nodes.apps-filter.column' | translate }}</th>
+                }
                 <th class="sortable-column reward-column" (click)="changeSort(rewardAddressSortData)">
                   {{ 'nodes.reward' | translate }}
                   @if (dataSorter.currentSortingColumn === rewardAddressSortData) {
@@ -483,6 +503,15 @@
                       <span>-</span>
                     }
                   </td>
+                  @if (showApps) {
+                    <td class="apps-cell">
+                      @for (chip of nodeAppChips(node); track chip.name) {
+                        <span class="app-chip" [class.running]="chip.running">{{ chip.name }}</span>
+                      } @empty {
+                        <span>-</span>
+                      }
+                    </td>
+                  }
                   <td>
                     @if (!node.rewardsAddress) {
                       <span style="color: #9e9e9e; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
@@ -713,6 +742,7 @@
                            the local section's dataSource), but the column
                            still has to exist so the columns to its right
                            line up vertically with the main table's. -->
+                      <th class="select-column"></th>
                       <th class="drag-handle-column"></th>
                       <th class="small-column" [matTooltip]="'nodes.hypervisor' | translate">
                         <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
@@ -727,6 +757,9 @@
                       <th class="key-column">{{ 'nodes.key' | translate }}</th>
                       <th class="version-column">{{ 'nodes.version' | translate }}</th>
                       <th class="services-column">{{ 'nodes.services' | translate }}</th>
+                      @if (showApps) {
+                        <th class="apps-column">{{ 'nodes.apps-filter.column' | translate }}</th>
+                      }
                       <th class="reward-column">{{ 'nodes.reward' | translate }}</th>
                       <th class="actions"></th>
                     </tr>
@@ -739,6 +772,9 @@
                         <!-- Empty drag-handle placeholder; main-table-only
                              feature, but the column has to exist so the
                              rest of the row aligns with the main table. -->
+                        <td class="select-column" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSelected(node)">
+                          <mat-checkbox [checked]="selected.has(node.localPk)" (click)="$event.preventDefault()"></mat-checkbox>
+                        </td>
                         <td class="drag-handle-column"></td>
                         <td>
                           @if (node.isHypervisor) {
@@ -834,6 +870,15 @@
                             <span>-</span>
                           }
                         </td>
+                        @if (showApps) {
+                          <td class="apps-cell">
+                            @for (chip of nodeAppChips(node); track chip.name) {
+                              <span class="app-chip" [class.running]="chip.running">{{ chip.name }}</span>
+                            } @empty {
+                              <span>-</span>
+                            }
+                          </td>
+                        }
                         <td>
                           @if (!node.rewardsAddress) {
                             <span style="color: #9e9e9e; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>

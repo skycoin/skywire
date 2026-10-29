@@ -632,6 +632,30 @@ func (v *Visor) HVStopApp(pk cipher.PubKey, appName string) error {
 	return sub.HVStopApp(pk, appName)
 }
 
+// HVAppCatalog lists the apps the visor identified by pk can run.
+func (v *Visor) HVAppCatalog(pk cipher.PubKey) ([]visorapi.CatalogEntry, error) {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return nil, err
+	}
+	if direct != nil {
+		return direct.AppCatalog()
+	}
+	return sub.HVAppCatalog(pk)
+}
+
+// HVAddApp adds an app entry to the visor identified by pk.
+func (v *Visor) HVAddApp(pk cipher.PubKey, appName, binaryName string) error {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return err
+	}
+	if direct != nil {
+		return direct.AddApp(appName, binaryName)
+	}
+	return sub.HVAddApp(pk, appName, binaryName)
+}
+
 // HVSetMinHops sets the routing min_hops on the visor identified by pk.
 func (v *Visor) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
 	direct, sub, err := v.hvDispatch(pk)

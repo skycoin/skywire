@@ -16,6 +16,7 @@ skywire cli visor hv
 ## Subcommands
 
 - [add](add/README.md) — Connect to a remote hypervisor at runtime (survives restart, not config regen)
+- [apps](apps/README.md) — Which visors run which apps, and start, stop or add an app across visors
 - [auth](auth/README.md) — Whether the hypervisor UI requires a login, at runtime
 - [cpk](cpk/README.md) — Public key of remote hypervisor(s) set in config
 - [disable](disable/README.md) — Disable the hypervisor entirely (DMSG-RPC + tracking + web UI) at runtime
