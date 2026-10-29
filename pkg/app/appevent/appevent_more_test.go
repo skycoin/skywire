@@ -267,3 +267,17 @@ func TestDoRespHandshake_ReadError(t *testing.T) {
 	_, err := DoRespHandshake(ebc, b)
 	require.Error(t, err)
 }
+
+func TestSubscriber_NetworkMoved(t *testing.T) {
+	require.Equal(t, NetworkMoved, NetworkMovedData{}.Type())
+	s := NewSubscriber()
+	got := make(chan NetworkMovedData, 1)
+	s.OnNetworkMoved(func(d NetworkMovedData) { got <- d })
+	require.True(t, s.Subscriptions()[NetworkMoved])
+	require.NoError(t, PushEvent(s, NewEvent(NetworkMoved, NetworkMovedData{Reason: "android"})))
+	require.Equal(t, "android", (<-got).Reason)
+
+	eb := NewBroadcaster(nil, time.Second)
+	defer func() { _ = eb.Close() }() //nolint
+	require.NotPanics(t, func() { eb.SendNetworkMoved(context.Background(), "manual") })
+}

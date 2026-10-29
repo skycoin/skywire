@@ -12,6 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
@@ -181,5 +184,42 @@ func TestPublicIPMoved(t *testing.T) {
 		moved, why := publicIPMoved(tc.cur4, tc.cur6, tc.v4, tc.v6)
 		require.Equalf(t, tc.moved, moved, "%+v", tc)
 		require.Equal(t, moved, strings.HasPrefix(why, "public ip"))
+	}
+}
+
+// eventSink is an app subscribed to network_moved.
+type eventSink struct {
+	got chan *appevent.Event
+}
+
+func (e *eventSink) Close() error { return nil }
+func (e *eventSink) Hello() *appcommon.Hello {
+	return &appcommon.Hello{EventSubs: map[string]bool{appevent.NetworkMoved: true}}
+}
+func (e *eventSink) Notify(_ context.Context, ev *appevent.Event) error {
+	e.got <- ev
+	return nil
+}
+
+// A handled move is announced to the apps, so the VPN client can move its
+// direct routes onto the new gateway.
+func TestRefreshNetworkTellsTheApps(t *testing.T) {
+	v := reachTestVisor(t)
+	v.initLock = new(sync.RWMutex)
+	v.arClient = &fakeMoveAR{}
+	sink := &eventSink{got: make(chan *appevent.Event, 1)}
+	v.ebc = appevent.NewBroadcaster(logging.MustGetLogger("ebc"), time.Second)
+	t.Cleanup(func() { _ = v.ebc.Close() }) //nolint:errcheck
+	v.ebc.AddClient(sink)
+
+	v.refreshNetwork("android")
+	select {
+	case ev := <-sink.got:
+		require.Equal(t, appevent.NetworkMoved, ev.Type)
+		var d appevent.NetworkMovedData
+		ev.Unmarshal(&d)
+		require.Equal(t, "android", d.Reason)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the apps were not told of the move")
 	}
 }
