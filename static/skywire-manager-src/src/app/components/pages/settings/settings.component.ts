@@ -10,6 +10,7 @@ import { StorageService } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { PageBaseComponent } from 'src/app/utils/page-base';
+import { ThemeChoice, ThemeService, themeChoices } from 'src/app/services/theme.service';
 
 // skywireAutoUpdate is exposed by autoupdate.js (injected only by `cli hv serve`
 // for the in-browser wasm-visor); absent for a native-hosted UI.
@@ -31,6 +32,8 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
 
   tabsData: TabButtonData[] = [];
   options: MenuOptionData[] = [];
+  readonly themeChoices = themeChoices;
+  themeChoice: ThemeChoice = 'system';
 
   // If true, the animation telling the user that the auth settings are being checked isn't shown.
   waitBeforeShowingLoading = true;
@@ -39,6 +42,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   authActive = false;
 
   private authSubscription!: Subscription;
+  private themeSubscription?: Subscription;
 
   // TODO: must be removed if the old updater is removed.
   //mustShowUpdaterSettings = !!localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
@@ -50,6 +54,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     private dialog: MatDialog,
     private storageService: StorageService,
     private changeDetectorRef: ChangeDetectorRef,
+    private themeService: ThemeService,
   ) {
     super();
 
@@ -66,6 +71,10 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     }, 500);
 
     this.checkAuth(0, true);
+    this.themeSubscription = this.themeService.choice$.subscribe(choice => {
+      this.themeChoice = choice;
+      this.changeDetectorRef.markForCheck();
+    });
 
     return super.ngOnInit();
   }
@@ -113,6 +122,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
 
   ngOnDestroy() {
     this.authSubscription.unsubscribe();
+    this.themeSubscription?.unsubscribe();
   }
 
   /**
@@ -152,6 +162,10 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
 
   setShowVisorSwitcherRow(show: boolean): void {
     this.storageService.setShowVisorSwitcherRow(show);
+  }
+
+  setThemeChoice(choice: ThemeChoice) {
+    this.themeService.setChoice(choice);
   }
 
   /** True only when served as an in-browser wasm-visor with auto-update wired. */

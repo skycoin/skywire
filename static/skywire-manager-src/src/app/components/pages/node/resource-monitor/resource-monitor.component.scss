@@ -1,5 +1,5 @@
 .resource-monitor {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   padding-top: 12px;
 }
 
@@ -18,7 +18,7 @@
 
 .rm-host-summary {
   margin-left: auto;
-  opacity: 0.6;
+  opacity: max(0.6, var(--sw-dim));
   font-size: 12px;
 }
 
@@ -33,11 +33,11 @@
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
-  opacity: 0.6;
+  opacity: max(0.6, var(--sw-dim));
 
   &.active {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--sw-fg-rgb), 0.06);
   }
 
   &:hover {
@@ -52,8 +52,8 @@
 }
 
 .rm-cell {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(var(--sw-fg-rgb), 0.03);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.06);
   border-radius: 6px;
   padding: 8px 10px;
   min-height: 110px;
@@ -84,6 +84,6 @@
 .rm-cell-foot {
   margin-top: 2px;
   font-size: 11px;
-  opacity: 0.5;
+  opacity: max(0.5, var(--sw-dim));
   font-variant-numeric: tabular-nums;
 }

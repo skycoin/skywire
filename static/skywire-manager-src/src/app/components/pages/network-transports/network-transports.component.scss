@@ -7,8 +7,8 @@
   flex-wrap: wrap;
   margin-bottom: 12px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--sw-fg-rgb), 0.04);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   border-radius: 6px;
 
   .control-group {
@@ -18,22 +18,22 @@
 
     .control-label {
       font-size: 0.85em;
-      color: rgba(255, 255, 255, 0.65);
+      color: rgba(var(--sw-fg-rgb), var(--sw-a65));
       margin-right: 4px;
     }
 
     button {
       min-width: 0;
       padding: 0 12px !important;
-      opacity: 0.6;
+      opacity: max(0.6, var(--sw-dim));
       // Global .mat-mdc-button:not(:disabled) { color: $black } in
       // styles.scss kicks in for inactive buttons, which renders as
       // invisible black-on-dark — force white explicitly.
-      color: rgba(255, 255, 255, 0.85) !important;
+      color: rgba(var(--sw-fg-rgb), 0.85) !important;
       &.active {
         opacity: 1;
-        background: rgba(33, 150, 243, 0.18) !important;
-        color: #fff !important;
+        background: rgba(var(--sw-blue-rgb), 0.18) !important;
+        color: var(--sw-text) !important;
       }
       .mat-icon { color: inherit; }
     }
@@ -41,7 +41,7 @@
 
   .refresh-btn {
     margin-left: auto;
-    color: rgba(255, 255, 255, 0.85) !important;
+    color: rgba(var(--sw-fg-rgb), 0.85) !important;
     .mat-icon { color: inherit; }
   }
 }
@@ -52,22 +52,22 @@
   align-items: center;
   padding: 24px 0;
 }
-.error-row { color: #f87171; }
+.error-row { color: rgb(var(--sw-err-rgb)); }
 
 .summary-line {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   font-size: 0.95em;
 
   .last-updated {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a55));
     font-size: 0.85em;
     margin-left: 8px;
   }
 }
 
-.dim { color: rgba(255, 255, 255, 0.85); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.85); }
 .small { font-size: 0.85em; }
 .mono { font-family: monospace; word-break: break-all; }
 .num { text-align: right; }
@@ -81,10 +81,10 @@
   // Offline rows: explicit red tint + warning border so they're
   // unmistakably distinct from live rows. Stays readable.
   tr.nt-row-offline {
-    background: rgba(229, 57, 53, 0.08);
+    background: rgba(var(--sw-red-rgb), 0.08);
     color: rgba(255, 180, 180, 0.95);
 
-    td:first-child { box-shadow: inset 3px 0 0 rgba(229, 57, 53, 0.7); }
+    td:first-child { box-shadow: inset 3px 0 0 rgba(var(--sw-red-rgb), 0.7); }
     td { opacity: 0.95; }
   }
 }
@@ -97,23 +97,23 @@
   border-radius: 3px;
   font-size: 11px;
   text-transform: lowercase;
-  background: rgba(33, 150, 243, 0.18);
-  border: 1px solid rgba(33, 150, 243, 0.35);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(var(--sw-blue-rgb), 0.18);
+  border: 1px solid rgba(var(--sw-blue-rgb), 0.35);
+  color: rgba(var(--sw-fg-rgb), 0.9);
 
   &.nt-type-offline {
-    background: rgba(229, 57, 53, 0.18);
-    border-color: rgba(229, 57, 53, 0.4);
-    color: rgba(255, 200, 200, 0.95);
+    background: rgba(var(--sw-red-rgb), 0.18);
+    border-color: rgba(var(--sw-red-rgb), 0.4);
+    color: rgba(var(--sw-blush-rgb), 0.95);
   }
 }
 
 .nt-offline-count {
   margin-left: 4px;
   font-size: 11px;
-  color: rgba(229, 57, 53, 0.85);
-  background: rgba(229, 57, 53, 0.12);
-  border: 1px solid rgba(229, 57, 53, 0.3);
+  color: rgba(var(--sw-red-rgb), 0.85);
+  background: rgba(var(--sw-red-rgb), 0.12);
+  border: 1px solid rgba(var(--sw-red-rgb), 0.3);
   border-radius: 3px;
   padding: 0 6px;
 }
@@ -125,8 +125,8 @@
 }
 
 .nt-visor {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(var(--sw-fg-rgb), 0.03);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.06);
   border-radius: 4px;
 
   .nt-visor-row {
@@ -137,10 +137,10 @@
     cursor: pointer;
     flex-wrap: wrap;
 
-    &:hover { background: rgba(255, 255, 255, 0.04); }
+    &:hover { background: rgba(var(--sw-fg-rgb), 0.04); }
 
-    .exp { color: rgba(255, 255, 255, 0.6); }
-    .nt-pk { flex: 1 1 320px; min-width: 0; font-size: 11px; color: rgba(255, 255, 255, 0.85); }
+    .exp { color: rgba(var(--sw-fg-rgb), var(--sw-a60)); }
+    .nt-pk { flex: 1 1 320px; min-width: 0; font-size: 11px; color: rgba(var(--sw-fg-rgb), 0.85); }
     .nt-bw { font-size: 13px; }
     .dim { font-size: 12px; }
   }
@@ -159,28 +159,28 @@
       font-size: 12px;
       padding: 2px 0;
 
-      .nt-prefix { font-family: monospace; color: rgba(255, 255, 255, 0.45); }
-      .nt-tp-id { font-size: 11px; color: rgba(255, 255, 255, 0.85); }
+      .nt-prefix { font-family: monospace; color: rgba(var(--sw-fg-rgb), var(--sw-a45)); }
+      .nt-tp-id { font-size: 11px; color: rgba(var(--sw-fg-rgb), 0.85); }
       .nt-tp-type {
-        background: rgba(33, 150, 243, 0.18);
-        border: 1px solid rgba(33, 150, 243, 0.35);
+        background: rgba(var(--sw-blue-rgb), 0.18);
+        border: 1px solid rgba(var(--sw-blue-rgb), 0.35);
         padding: 0 6px;
         border-radius: 3px;
         font-size: 10px;
         text-transform: lowercase;
 
         &.nt-type-offline {
-          background: rgba(229, 57, 53, 0.18);
-          border-color: rgba(229, 57, 53, 0.4);
-          color: rgba(255, 200, 200, 0.95);
+          background: rgba(var(--sw-red-rgb), 0.18);
+          border-color: rgba(var(--sw-red-rgb), 0.4);
+          color: rgba(var(--sw-blush-rgb), 0.95);
         }
       }
-      .nt-arrow { color: rgba(255, 255, 255, 0.45); }
-      .nt-tp-remote { font-size: 11px; color: rgba(255, 255, 255, 0.7); }
+      .nt-arrow { color: rgba(var(--sw-fg-rgb), var(--sw-a45)); }
+      .nt-tp-remote { font-size: 11px; color: rgba(var(--sw-fg-rgb), 0.7); }
 
       &.nt-child-offline {
         opacity: 0.55;
-        color: rgba(255, 200, 200, 0.7);
+        color: rgba(var(--sw-blush-rgb), 0.7);
       }
     }
   }

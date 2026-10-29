@@ -12,6 +12,20 @@
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
 
+    <div class="theme-setting mb-4">
+      <span class="theme-label" id="theme-label">{{ 'settings.theme.label' | translate }}</span>
+      <div class="theme-options" role="radiogroup" aria-labelledby="theme-label">
+        @for (choice of themeChoices; track choice) {
+          <button type="button" role="radio" class="theme-option"
+            [class.selected]="themeChoice === choice"
+            [attr.aria-checked]="themeChoice === choice"
+            (click)="setThemeChoice(choice)">
+            {{ ('settings.theme.' + choice) | translate }}
+          </button>
+        }
+      </div>
+    </div>
+
     <div class="d-flex align-items-center mb-4">
       <mat-slide-toggle
         color="primary"

@@ -17,6 +17,7 @@ import GeneralUtils from '../../../utils/generalUtils';
 import { PaletteGroup, PaletteItem, PaletteVisor, paletteEntries, paletteTokens, rankPalette } from '../../../utils/command-palette';
 import { NodeData, UpdateAllComponent } from '../update-all/update-all.component';
 import { BulkRewardAddressChangerComponent } from '../bulk-reward-address-changer/bulk-reward-address-changer.component';
+import { ThemeService } from '../../../services/theme.service';
 
 interface ShownGroup {
   group: PaletteGroup;
@@ -99,6 +100,7 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
     private clipboardService: ClipboardService,
     private snackbarService: SnackbarService,
     private cdr: ChangeDetectorRef,
+    private themeService: ThemeService,
   ) { }
 
   ngOnInit() {
@@ -175,7 +177,9 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
   run(item: PaletteItem) {
     this.previousFocus = null;
     this.close();
-    if (item.action && item.visor) {
+    if (item.theme) {
+      this.themeService.setChoice(item.theme);
+    } else if (item.action && item.visor) {
       this.runAction(item);
     } else if (item.externalUrl) {
       window.open(item.externalUrl, '_blank', 'noopener noreferrer');
@@ -254,6 +258,7 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
       homeTabs: homeTabsData(),
       tabsFor: v => nodePaletteTabs(v.pk, !!v.wasm),
       translate: k => this.translate.instant(k),
+      themeChoice: this.themeService.choice,
     }, paletteTokens(this.query));
     const ranked = rankPalette(entries, this.query);
     this.flat = [];

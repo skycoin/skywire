@@ -73,7 +73,7 @@
         }
       </div>
       <div class="d-flex align-items-center">
-        <span class="mr-2" style="font-size: 0.85em; color: #ccc;">Show:</span>
+        <span class="mr-2" style="font-size: 0.85em; color: rgba(var(--sw-fg-rgb), 0.8);">Show:</span>
         <button mat-button [class.active-days]="days === 7" (click)="changeDays(7)">7d</button>
         <button mat-button [class.active-days]="days === 30" (click)="changeDays(30)">30d</button>
         <button mat-button [class.active-days]="days === 90" (click)="changeDays(90)">90d</button>
@@ -82,16 +82,16 @@
 
     <!-- PK -->
     <div class="pk-row mb-3">
-      <span style="font-size: 0.75em; color: #999;">{{ pk }}</span>
+      <span style="font-size: 0.75em; color: var(--sw-status-stopped);">{{ pk }}</span>
     </div>
 
     <!-- Total -->
     @if (!loading && history.length > 0) {
       <div class="total-row mb-3">
-        <span style="font-size: 1.1em; font-weight: bold; color: #4caf50;">
+        <span style="font-size: 1.1em; font-weight: bold; color: rgb(var(--sw-green-rgb));">
           Total: {{ total.toFixed(2) }} SKY
         </span>
-        <span style="font-size: 0.85em; color: #999; margin-left: 12px;">
+        <span style="font-size: 0.85em; color: var(--sw-status-stopped); margin-left: 12px;">
           ({{ days }} days)
         </span>
       </div>
@@ -126,14 +126,14 @@
               @if (day.amount > 0) {
                 {{ day.amount.toFixed(6) }}
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
             <td>
               @if (day.share > 0) {
                 {{ day.share.toFixed(4) }}%
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
             <td>
@@ -142,11 +142,11 @@
             <td>
               @if (day.txid) {
                 <a [href]="'https://explorer.skycoin.com/app/transaction/' + day.txid" target="_blank" rel="noopener"
-                   style="font-size: 0.8em; color: #3399ff;">
+                   style="font-size: 0.8em; color: rgb(var(--sw-sky-rgb));">
                   {{ day.txid.substring(0, 12) }}...
                 </a>
               } @else {
-                <span style="color: #666;">-</span>
+                <span style="color: rgba(var(--sw-fg-rgb), var(--sw-a45));">-</span>
               }
             </td>
           </tr>
@@ -155,7 +155,7 @@
     }
 
     @if (!loading && history.length === 0 && !errorMsg) {
-      <div class="py-4 text-center" style="color: #999;">
+      <div class="py-4 text-center" style="color: var(--sw-status-stopped);">
         No reward data available for this visor.
       </div>
     }

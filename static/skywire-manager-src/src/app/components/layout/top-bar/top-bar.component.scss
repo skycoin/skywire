@@ -92,7 +92,7 @@ $top-bar-height: 56px;
     .tab-group-separator {
       width: 1px;
       height: 20px;
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(var(--sw-fg-rgb), 0.2);
       margin: 0 8px;
       align-self: center;
     }
@@ -106,9 +106,9 @@ $top-bar-height: 56px;
     }
 
     .tab-button {
-      color: variables.$white;
+      color: var(--sw-text);
       border-radius: variables.$mat-dialog-radius;
-      opacity: 0.5;
+      opacity: var(--sw-dim);
       margin-right: 0;
       text-decoration: none;
       height: variables.$header-buttons-height;
@@ -121,8 +121,8 @@ $top-bar-height: 56px;
 
       &[disabled] {
         opacity: 1 !important;
-        color: variables.$white;
-        background: variables.$dark-background !important;
+        color: var(--sw-text);
+        background: var(--sw-selected-bg) !important;
       }
     
       .mat-icon {
@@ -173,16 +173,16 @@ $top-bar-height: 56px;
         margin-right: 10px;
         padding: 2px 8px;
         font-size: variables.$font-size-smaller;
-        color: rgba(248, 249, 249, 0.85);
+        color: rgba(var(--sw-fg-rgb), 0.85);
         background: transparent;
-        border: 1px solid rgba(248, 249, 249, 0.4);
+        border: 1px solid rgba(var(--sw-fg-rgb), 0.4);
         border-radius: 4px;
         cursor: pointer;
         white-space: nowrap;
 
         &:hover {
-          color: variables.$white;
-          border-color: #00d4ff;
+          color: var(--sw-text);
+          border-color: rgb(var(--sw-cyan-rgb));
         }
       }
 
@@ -349,7 +349,7 @@ $top-bar-height: 56px;
   }
 
   mat-spinner ::ng-deep circle {
-    stroke: variables.$white;
+    stroke: var(--sw-text);
   }
 }
 
@@ -455,7 +455,7 @@ $top-bar-height: 56px;
   // chips render with Material's default near-black text on the dark bar
   // and are effectively invisible. Restate the legible styling here.
   .tab-button {
-    color: variables.$white;
+    color: var(--sw-text);
     opacity: 0.75;
     text-decoration: none;
     display: flex;
@@ -471,7 +471,7 @@ $top-bar-height: 56px;
     // filled background so "you are here" reads at a glance.
     &[disabled] {
       opacity: 1 !important;
-      color: variables.$white;
+      color: var(--sw-text);
       background: variables.$dark-background !important;
     }
 

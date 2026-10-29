@@ -3,7 +3,7 @@
 // Backgrounds for the tables used in the app.
 $responsive-table-colors: (
   // Background, background:hover, font color
-  translucid: (transparent, map.get($theme-colors,translucid-hover), map.get($theme-colors,white), map.get($theme-colors,translucid-hover-hard)),
+  translucid: (transparent, rgba(var(--sw-shade-rgb), 0.2), var(--sw-text), rgba(var(--sw-shade-rgb), 0.4)),
 );
 
 // Create styles for the tables. One per background color.
@@ -21,7 +21,7 @@ $responsive-table-colors: (
     td, th {
       color: list.nth($colors, 3) !important;
       padding: 12px 10px;
-      border-bottom: 1px solid $separator;
+      border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.15);
     }
 
     th {
@@ -83,7 +83,7 @@ $responsive-table-colors: (
       font-size: 16px;
       margin-right: 5px;
       padding: 0 !important;
-      color: white !important;
+      color: var(--sw-text) !important;
       min-width: 0 !important;
 
       &:last-child {
@@ -137,7 +137,7 @@ $responsive-table-colors: (
       }
 
       svg {
-        color: white !important;
+        color: var(--sw-text) !important;
       }
     }
 

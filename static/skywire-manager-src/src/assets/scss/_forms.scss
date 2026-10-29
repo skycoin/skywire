@@ -5,22 +5,22 @@ mat-form-field {
 
 // White form fields, to be shown with the dark background.
 .white-form-field {
-  color: $white;
-  
+  color: var(--sw-text);
+
   .mat-mdc-select-value, .mat-mdc-select-arrow {
-    color: $white !important;
+    color: var(--sw-text) !important;
   }
 
   .mdc-line-ripple::before {
-    border-bottom-color: color.scale($white, $alpha: -50%) !important;
+    border-bottom-color: rgba(var(--sw-fg-rgb), 0.5) !important;
   }
 
   input {
-    color: $white !important;
+    color: var(--sw-text) !important;
   }
 
   .mat-mdc-input-element {
-    caret-color: $white;
+    caret-color: var(--sw-text);
   }
 }
 
@@ -33,7 +33,7 @@ mat-form-field {
 
 .white-form-help-icon-container {
   @extend .form-help-icon-container;
-  color: color.scale($white, $alpha: -20%);
+  color: rgba(var(--sw-fg-rgb), 0.8);
 }
 
 // Used for showing a form field disabled.
@@ -64,7 +64,7 @@ mat-form-field {
   .link-icon {
     font-size: 20px;
     line-height: 1;
-    color: white !important;
+    color: var(--sw-link) !important;
     cursor: pointer;
   }
 
@@ -144,7 +144,7 @@ mat-form-field {
 .section-title {
   font-size: 0.95em;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   display: block;
   margin-bottom: 4px;
 }

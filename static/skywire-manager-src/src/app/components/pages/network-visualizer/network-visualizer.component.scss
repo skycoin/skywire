@@ -4,7 +4,7 @@
   gap: 10px;
   margin-bottom: 10px;
   font-size: 12px;
-  color: #aaa;
+  color: var(--sw-text-muted);
 
   .spacer { flex: 1; }
   .counts { font-weight: 600; }
@@ -17,7 +17,7 @@
   height: 72vh;
   min-height: 420px;
   background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   border-radius: 8px;
 
   &.hidden { display: none; }
@@ -29,7 +29,7 @@
   gap: 14px;
   margin-top: 10px;
   font-size: 11px;
-  color: #999;
+  color: var(--sw-text-muted);
   align-items: center;
 
   &.hidden { display: none; }
@@ -41,7 +41,7 @@
   .dot.unknown { background: #888; }
 
   .line { display: inline-block; width: 16px; height: 2px; margin-right: 4px; vertical-align: middle; }
-  .line.dmsg { background: #9d7cff; }
+  .line.dmsg { background: rgb(var(--sw-violet-rgb)); }
   .line.stcpr { background: #3f8cff; }
   .line.sudph { background: #3fb6a8; }
 }

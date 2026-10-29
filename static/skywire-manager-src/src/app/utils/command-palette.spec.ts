@@ -136,3 +136,18 @@ describe('command palette node pages', () => {
     expect(top.items[0].link).toEqual(['/nodes', pkA, 'apps', 'catalog']);
   });
 });
+
+describe('command palette theme', () => {
+  const themed = (query: string) => rankPalette(paletteEntries({ ...ctx(), themeChoice: 'system' }, paletteTokens(query)), query);
+
+  it('offers the three theme choices and marks the current one', () => {
+    const actions = themed('theme').find(g => g.group === 'actions')!;
+    expect(actions.items.map(i => i.theme).sort()).toEqual(['dark', 'light', 'system']);
+    expect(actions.items.find(i => i.theme === 'system')!.detail).toBe('palette.theme.current');
+    expect(themed('dark')[0].items[0].theme).toBe('dark');
+  });
+
+  it('keeps the theme out of the empty query', () => {
+    expect(themed('').some(g => g.items.some(i => !!i.theme))).toBeFalse();
+  });
+});

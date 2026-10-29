@@ -3,25 +3,25 @@
 .loading-row {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(var(--sw-fg-rgb), 0.75);
   padding: 24px 0;
 }
 
 .error-row {
   display: flex;
   align-items: center;
-  color: #f87171;
+  color: rgb(var(--sw-err-rgb));
   padding: 24px 0;
 }
 
 .summary-line {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   font-size: 0.95em;
 
   .last-updated {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a55));
     font-size: 0.85em;
     margin-left: 8px;
   }
@@ -33,39 +33,39 @@
   border-radius: 50%;
   display: inline-block;
 }
-.dot-green { background: #4caf50; }
-.dot-red { background: #f44336; }
+.dot-green { background: rgb(var(--sw-green-rgb)); }
+.dot-red { background: rgb(var(--sw-red-alt-rgb)); }
 
 .visor-link {
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--sw-fg-rgb), 0.95);
   text-decoration: none;
 
   &:hover { text-decoration: underline; }
 }
 
 .visor-pk {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a55));
   font-size: 11px;
   word-break: break-all;
   font-family: monospace;
 }
 
 .visor-err {
-  color: #f87171;
+  color: rgb(var(--sw-err-rgb));
   font-size: 12px;
   margin-top: 2px;
 }
 
-.dim { color: rgba(255, 255, 255, 0.85); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.85); }
 .small { font-size: 0.85em; }
 
-.pct-ok { color: #4caf50; font-weight: 500; }
-.pct-warn { color: #ff9800; font-weight: 500; }
-.pct-bad { color: #f44336; font-weight: 600; }
-.pct-na { color: rgba(255, 255, 255, 0.5); }
+.pct-ok { color: rgb(var(--sw-green-rgb)); font-weight: 500; }
+.pct-warn { color: rgb(var(--sw-orange-rgb)); font-weight: 500; }
+.pct-bad { color: rgb(var(--sw-red-alt-rgb)); font-weight: 600; }
+.pct-na { color: rgba(var(--sw-fg-rgb), var(--sw-a50)); }
 
 .mobile-card {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--sw-fg-rgb), 0.04);
   border-radius: 4px;
   padding: 12px;
   margin-bottom: 10px;
@@ -75,7 +75,7 @@
     align-items: center;
   }
   .mobile-pk {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a55));
     font-size: 11px;
     word-break: break-all;
     font-family: monospace;

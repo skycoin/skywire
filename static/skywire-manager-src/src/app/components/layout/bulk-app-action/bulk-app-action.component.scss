@@ -29,7 +29,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 5px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid rgba(var(--sw-shade-rgb), 0.08);
   }
 
   .label {
@@ -52,15 +52,4 @@
 .buttons {
   margin-top: 12px;
   text-align: right;
-}
-
-:host ::ng-deep .start-after .mdc-label {
-  color: variables.$blue-medium !important;
-}
-
-// The global select colors assume a dark surface.
-:host ::ng-deep .app-select {
-  .mat-mdc-select-value, .mat-mdc-select-min-line, .mat-mdc-select-placeholder, .mat-mdc-select-arrow {
-    color: variables.$blue-medium !important;
-  }
 }

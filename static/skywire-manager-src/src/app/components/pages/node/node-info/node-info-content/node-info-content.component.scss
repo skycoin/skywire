@@ -4,8 +4,8 @@
   font-size: variables.$font-size-base;
   font-weight: bold;
   text-transform: uppercase;
-  color: #00d4ff;
-  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5), 0 0 20px rgba(0, 212, 255, 0.3);
+  color: rgb(var(--sw-cyan-rgb));
+  text-shadow: 0 0 10px rgba(var(--sw-cyan-rgb), 0.5), 0 0 20px rgba(var(--sw-cyan-rgb), 0.3);
   letter-spacing: 1px;
   margin-bottom: 8px;
 }
@@ -41,8 +41,8 @@
 }
 
 .info-card {
-  background: rgba(0, 212, 255, 0.03);
-  border: 1px solid rgba(0, 212, 255, 0.12);
+  background: rgba(var(--sw-cyan-rgb), 0.03);
+  border: 1px solid rgba(var(--sw-cyan-rgb), 0.12);
   border-radius: 8px;
   padding: 14px 18px;
   display: flex;
@@ -126,9 +126,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 10px 12px;
-  background: rgba(0, 212, 255, 0.05);
+  background: rgba(var(--sw-cyan-rgb), 0.05);
   border-radius: 6px;
-  border-left: 2px solid rgba(0, 212, 255, 0.3);
+  border-left: 2px solid rgba(var(--sw-cyan-rgb), 0.3);
 
   .dmsg-server-item {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -137,40 +137,40 @@
     align-items: center;
     gap: 10px;
     padding: 4px 0;
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(var(--sw-fg-rgb), 0.95);
     transition: all 0.2s ease;
 
     &:hover {
-      color: #00d4ff;
-      text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+      color: rgb(var(--sw-cyan-rgb));
+      text-shadow: 0 0 8px rgba(var(--sw-cyan-rgb), 0.4);
     }
 
     .dmsg-protocol {
-      color: #9d7cff;
+      color: rgb(var(--sw-violet-rgb));
       font-weight: 500;
       font-size: 0.9em;
       text-transform: uppercase;
       letter-spacing: 0.03em;
       padding: 1px 6px;
-      border: 1px solid rgba(157, 124, 255, 0.4);
+      border: 1px solid rgba(var(--sw-violet-rgb), 0.4);
       border-radius: 4px;
-      background: rgba(157, 124, 255, 0.08);
+      background: rgba(var(--sw-violet-rgb), 0.08);
     }
 
     .dmsg-latency {
-      color: #4ade80;
+      color: rgb(var(--sw-ok-rgb));
       font-weight: 500;
       font-size: 0.95em;
-      text-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+      text-shadow: 0 0 6px rgba(var(--sw-ok-rgb), 0.3);
 
       &.latency-high {
-        color: #fbbf24;
-        text-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
+        color: rgb(var(--sw-warn-rgb));
+        text-shadow: 0 0 6px rgba(var(--sw-warn-rgb), 0.3);
       }
 
       &.latency-very-high {
-        color: #f87171;
-        text-shadow: 0 0 6px rgba(248, 113, 113, 0.3);
+        color: rgb(var(--sw-err-rgb));
+        text-shadow: 0 0 6px rgba(var(--sw-err-rgb), 0.3);
       }
     }
   }
@@ -200,21 +200,21 @@
 // tooltips. matTooltip handles mobile long-press automatically.
 .info-hint {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a45));
   cursor: help;
   margin-left: 4px;
 
   &:hover {
-    color: rgba(0, 212, 255, 0.85);
+    color: rgba(var(--sw-cyan-rgb), 0.85);
   }
 }
 
 // ★ next to the local hypervisor's PK in the per-visor list.
 .hypervisor-star {
-  color: #fbbf24;
+  color: rgb(var(--sw-warn-rgb));
   font-size: 14px;
   margin-right: 2px;
-  text-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+  text-shadow: 0 0 6px rgba(var(--sw-warn-rgb), 0.5);
 }
 
 .hypervisor-item {
@@ -224,7 +224,7 @@
   align-items: center;
   gap: 10px;
   padding: 4px 0;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(var(--sw-fg-rgb), 0.95);
 
   .hypervisor-state {
     font-family: inherit;
@@ -234,21 +234,21 @@
     border-radius: 4px;
 
     &.hypervisor-state-online {
-      color: #4ade80;
-      background: rgba(74, 222, 128, 0.12);
-      text-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+      color: rgb(var(--sw-ok-rgb));
+      background: rgba(var(--sw-ok-rgb), 0.12);
+      text-shadow: 0 0 6px rgba(var(--sw-ok-rgb), 0.3);
     }
 
     &.hypervisor-state-offline {
-      color: #f87171;
-      background: rgba(248, 113, 113, 0.12);
-      text-shadow: 0 0 6px rgba(248, 113, 113, 0.3);
+      color: rgb(var(--sw-err-rgb));
+      background: rgba(var(--sw-err-rgb), 0.12);
+      text-shadow: 0 0 6px rgba(var(--sw-err-rgb), 0.3);
     }
 
     &.hypervisor-state-runtime {
-      color: #fbbf24;
-      background: rgba(251, 191, 36, 0.12);
-      text-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
+      color: rgb(var(--sw-warn-rgb));
+      background: rgba(var(--sw-warn-rgb), 0.12);
+      text-shadow: 0 0 6px rgba(var(--sw-warn-rgb), 0.3);
     }
   }
 }
@@ -261,13 +261,13 @@
 
 // Status indicators with glow
 .status-online {
-  color: #4ade80;
-  text-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  color: rgb(var(--sw-ok-rgb));
+  text-shadow: 0 0 8px rgba(var(--sw-ok-rgb), 0.5);
 }
 
 .status-offline {
-  color: #f87171;
-  text-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+  color: rgb(var(--sw-err-rgb));
+  text-shadow: 0 0 8px rgba(var(--sw-err-rgb), 0.5);
 }
 
 // Raw config viewer (and editor textarea reuses the same styling
@@ -275,12 +275,12 @@
 .raw-config {
   margin-top: 10px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: rgba(var(--sw-shade-rgb), 0.3);
+  border: 1px solid rgba(var(--sw-cyan-rgb), 0.2);
   border-radius: 6px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.8em;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   overflow-x: auto;
   max-height: 400px;
   overflow-y: auto;
@@ -296,9 +296,9 @@ textarea.raw-config.config-editor {
   white-space: pre;       // preserve leading spaces so JSON indents
   word-break: normal;
   outline: none;
-  caret-color: #fff;
+  caret-color: var(--sw-input-text);
 
-  &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  &:focus { border-color: rgba(var(--sw-cyan-rgb), 0.6); }
   &:disabled { opacity: 0.6; }
 }
 
@@ -314,11 +314,11 @@ textarea.raw-config.config-editor {
   // black-on-dark — invisible. Force readable color on all buttons
   // inside the runtime-config control row.
   button.mat-mdc-button-base:not(:disabled):not(.mat-primary):not(.mat-accent):not(.mat-warn) {
-    color: rgba(255, 255, 255, 0.92) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
     .mat-icon { color: inherit; }
   }
   button.mat-mdc-outlined-button:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
   }
 
   .config-restart-hint {
@@ -326,7 +326,7 @@ textarea.raw-config.config-editor {
     margin-left: auto;
   }
   .config-save-msg {
-    color: rgba(76, 175, 80, 0.95);
+    color: rgba(var(--sw-green-rgb), 0.95);
     font-size: 0.9em;
   }
 }
@@ -334,10 +334,10 @@ textarea.raw-config.config-editor {
 .config-error {
   margin-top: 6px;
   padding: 8px 10px;
-  background: rgba(229, 57, 53, 0.12);
-  border: 1px solid rgba(229, 57, 53, 0.35);
+  background: rgba(var(--sw-red-rgb), 0.12);
+  border: 1px solid rgba(var(--sw-red-rgb), 0.35);
   border-radius: 4px;
-  color: rgba(255, 200, 200, 0.95);
+  color: rgba(var(--sw-blush-rgb), 0.95);
   font-size: 0.85em;
   display: flex;
   align-items: center;
@@ -355,9 +355,9 @@ textarea.raw-config.config-editor {
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-left: 2px solid rgba(0, 212, 255, 0.4);
+  background: rgba(var(--sw-shade-rgb), 0.18);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
+  border-left: 2px solid rgba(var(--sw-cyan-rgb), 0.4);
   border-radius: 4px;
 }
 
@@ -369,10 +369,10 @@ textarea.raw-config.config-editor {
   cursor: pointer;
   font-size: 0.9em;
 
-  input[type="checkbox"] { accent-color: #00d4ff; }
+  input[type="checkbox"] { accent-color: rgb(var(--sw-cyan-rgb)); }
 
   .rs-label {
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(var(--sw-fg-rgb), 0.92);
     flex: 0 0 auto;
   }
 
@@ -383,16 +383,16 @@ textarea.raw-config.config-editor {
 
   .rs-num {
     width: 80px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(var(--sw-shade-rgb), 0.3);
+    border: 1px solid rgba(var(--sw-fg-rgb), 0.15);
     border-radius: 4px;
     padding: 4px 8px;
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(var(--sw-fg-rgb), 0.95);
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 0.9em;
     outline: none;
 
-    &:focus { border-color: rgba(0, 212, 255, 0.6); }
+    &:focus { border-color: rgba(var(--sw-cyan-rgb), 0.6); }
   }
 }
 
@@ -400,7 +400,7 @@ textarea.raw-config.config-editor {
 .sub-health {
   padding-left: 12px;
   font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 
 // Collapsible section header (used by Ports section).
@@ -422,7 +422,7 @@ textarea.raw-config.config-editor {
 
   .count-badge {
     margin-left: 6px;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--sw-text-muted);
     font-weight: 400;
     font-size: 0.85em;
   }
@@ -430,7 +430,7 @@ textarea.raw-config.config-editor {
 
 // Transport stats styling
 .transport-stats {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 
   .transport-type {
     color: #a5b4fc;
@@ -438,7 +438,7 @@ textarea.raw-config.config-editor {
   }
 
   .transport-count {
-    color: #4ade80;
+    color: rgb(var(--sw-ok-rgb));
     font-weight: 600;
   }
 }
@@ -451,7 +451,7 @@ textarea.raw-config.config-editor {
 // Transports tabs.
 
 .reward-rules {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(var(--sw-shade-rgb), 0.25);
   padding: 8px 10px;
   margin: 6px 0;
   font-size: 12px;

@@ -3,7 +3,7 @@
 @use 'variables';
 @use 'text';
 
-$label-background: rgba(255, 255, 255, 0.25);
+$label-background: rgba(var(--sw-fg-rgb), 0.25);
 
 .options-container {
   display: flex;
