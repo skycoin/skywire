@@ -40,11 +40,10 @@ import (
 // while batching the startup burst of per-type binds into one publish.
 const arBindBatchWindow = 5 * time.Second
 
-// arBindAnnounceInterval is how often the visor pokes its CXO feed conn to the
-// AR. Short enough that a recovered visor/AR re-links within the health window.
-const arBindAnnounceInterval = 30 * time.Second
-
 func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
+	if !v.advertisesReach() {
+		return nil
+	}
 	if v.dmsgC == nil {
 		log.Warn("AR-bind-CXO: dmsg client absent; publisher not started")
 		return nil
@@ -115,7 +114,7 @@ func initARBindCXO(_ context.Context, v *Visor, log *logging.Logger) error {
 	// feed (PK = our PK). ConnectPK is idempotent, so the same loop handles
 	// initial announce + reconnect.
 	lastAnnounceOK := new(atomic.Int64)
-	go runARBindAnnounceLoop(v.ctx, pub, arPK, lastAnnounceOK, log)
+	go announceFeed(v.ctx, pub, arPK, lastAnnounceOK, "AR-bind-CXO", log)
 
 	// Alongside the bindings, the visor states what only it can know about
 	// reaching it: NAT class, types served, inbound accepts (ar_reach_decl.go).
@@ -150,32 +149,6 @@ func arBindCXOPeer(v *Visor) (cipher.PubKey, bool) {
 		raw = v.conf.Transport.AddressResolver
 	}
 	return parseDmsgPeer(raw)
-}
-
-// runARBindAnnounceLoop dials the AR on a ticker (ConnectPK is idempotent — a
-// live conn is a no-op, a dropped one redials) and stamps lastOK with the
-// wall-clock time of each success.
-func runARBindAnnounceLoop(ctx context.Context, pub *treestore.Publisher, arPK cipher.PubKey, lastOK *atomic.Int64, log *logging.Logger) {
-	t := time.NewTicker(arBindAnnounceInterval)
-	defer t.Stop()
-	announce := func() {
-		dctx, cancel := context.WithTimeout(ctx, arBindAnnounceInterval/2)
-		defer cancel()
-		if err := pub.AnnounceTo(dctx, arPK); err != nil {
-			log.WithError(err).WithField("ar_pk", arPK).Trace("AR-bind-CXO: announce to AR failed")
-			return
-		}
-		lastOK.Store(time.Now().UnixNano())
-	}
-	announce()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			announce()
-		}
-	}
 }
 
 // bindPublishHook mirrors each AR bind onto sink, one leaf per transport type

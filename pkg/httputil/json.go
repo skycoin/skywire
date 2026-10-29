@@ -13,3 +13,7 @@ type jsonCodec struct{}
 
 func (jsonCodec) NewEncoder(w io.Writer) *stdjson.Encoder { return stdjson.NewEncoder(w) }
 func (jsonCodec) NewDecoder(r io.Reader) *stdjson.Decoder { return stdjson.NewDecoder(r) }
+func (jsonCodec) Marshal(v any) ([]byte, error)           { return stdjson.Marshal(v) }
+func (jsonCodec) MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+	return stdjson.MarshalIndent(v, prefix, indent)
+}

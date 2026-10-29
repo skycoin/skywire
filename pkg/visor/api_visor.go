@@ -48,17 +48,17 @@ func (v *Visor) Overview() (*visorapi.Overview, error) {
 		})
 	}
 
-	if v.isStunReady() {
-		natType = v.stun.client.NATType.String()
-		switch v.stun.client.NATType {
+	if sc := v.stun.client.Load(); v.isStunReady() && sc != nil {
+		natType = sc.NATType.String()
+		switch sc.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
-			publicIP = v.stun.client.PublicIP.IP()
+			publicIP = sc.PublicIP.IP()
 			isSymmetricNAT = false
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			isSymmetricNAT = true
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
 			isSymmetricNAT = false
-			publicIP = v.stun.client.NATType.String()
+			publicIP = sc.NATType.String()
 		}
 	}
 

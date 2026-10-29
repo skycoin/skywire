@@ -16,7 +16,6 @@ import (
 	conf "github.com/skycoin/skywire/cmd/svc/conf/commands"
 	confbs "github.com/skycoin/skywire/cmd/svc/config-bootstrapper/commands"
 	geoip "github.com/skycoin/skywire/cmd/svc/geoip/commands"
-	nm "github.com/skycoin/skywire/cmd/svc/network-monitor/commands"
 	rf "github.com/skycoin/skywire/cmd/svc/route-finder/commands"
 	sd "github.com/skycoin/skywire/cmd/svc/service-discovery/commands"
 	sn "github.com/skycoin/skywire/cmd/svc/setup-node/commands"
@@ -56,7 +55,6 @@ func init() {
 		se.RootCmd,
 		sd.RootCmd,
 		sn.RootCmd,
-		nm.RootCmd,
 		geoip.RootCmd,
 		stunsvr.RootCmd,
 		run.RootCmd,
@@ -70,7 +68,6 @@ func init() {
 	se.RootCmd.Use = "se"
 	sd.RootCmd.Use = "sd"
 	sn.RootCmd.Use = "sn"
-	nm.RootCmd.Use = "nm"
 	conf.DmsghttpConfCmd.Use = "dmsghttp"
 	conf.HTTPConfCmd.Use = "http"
 	conf.ServicesConfCmd.Use = "conf"

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,9 @@ import (
 // that writes skywire.conf, or the mirror silently drops it.
 func TestAutoconfigFlagForIsValid(t *testing.T) {
 	conf, _ := newTestConfig(t)
+	// Gen writes the bridge block only when it is on; the mirror reads a
+	// missing block as its zero value.
+	conf.SkymailBridge = &visorconfig.SkymailBridgeConfig{}
 	root := reflect.ValueOf(conf).Elem()
 	for path, flagFor := range autoconfigFlagFor {
 		tgt, err := resolveConfigTarget(root, path)
@@ -111,6 +115,9 @@ var regenKeeps = map[string]string{
 	"transport.autoconnect.max_per_type": "keepAutoconnect",
 	"transport.autoconnect.max_total":    "keepAutoconnect",
 	"transport.tcp_notsent_lowat":        "keepTCPNotSentLowat",
+	"transport.network_watch_interval":   "keepNetworkWatch",
+	"transport.public_ip_check_interval": "keepNetworkWatch",
+	"transport.network":                  "keepNetworkWatch",
 }
 
 // TestEveryLiveSettingSurvivesAutoconfig. A live change that neither reaches
@@ -215,4 +222,28 @@ func TestAutoconnectLimitsAreMirrored(t *testing.T) {
 	env, err = os.ReadFile(envFile) //nolint:gosec
 	require.NoError(t, err)
 	require.NotContains(t, string(env), "\nAUTOCONNSITELINKS=")
+}
+
+// Turning the mail bridge on or off is written to SKYMAILBRIDGE, so the next
+// autoconfig keeps it. Before, `mail up` set it only until the next restart.
+func TestBridgeToggleReachesSkyenv(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("#SKYMAILBRIDGE=false\n"), 0o600))
+	conf.Skyenv = envFile
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test"), initLock: new(sync.RWMutex)}
+	v.watchSkyenv()
+
+	// Off needs no dmsg client, so the toggle itself can run here.
+	conf.SkymailBridge = &visorconfig.SkymailBridgeConfig{Enable: true}
+	require.NoError(t, conf.Flush())
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "SKYMAILBRIDGE=true")
+
+	require.NoError(t, v.SetEmbeddedProxyEnabled("bridge", false))
+	require.False(t, conf.SkymailBridge.Enable)
+	env, err = os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "SKYMAILBRIDGE=false")
 }

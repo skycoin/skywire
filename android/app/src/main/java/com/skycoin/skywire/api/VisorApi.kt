@@ -556,20 +556,22 @@ class VisorApi(context: Context) {
         }
 
     /**
-     * Drop the visor's dmsg sessions so it re-dials now.
+     * Tell the core what the phone knows about the network.
      *
-     * Called when the phone's default network changes underneath the core:
-     * the old sockets are dead but nothing on either end knows it yet, and
-     * the visor would otherwise wait out a dmsg keepalive to find out. The
-     * hypervisor RPC conn rides one of these sessions, so it comes back with
-     * them. Returns the number of sessions that were torn down.
+     * "moved" when the default network changed underneath it: the old sockets
+     * are dead but nothing on either end knows it yet. The core re-dials dmsg,
+     * looks its public IP and NAT up again and registers its new addresses;
+     * the hypervisor RPC conn rides one of the dmsg sessions, so it comes back
+     * with them. The metered flag lets the core stop carrying other visors'
+     * traffic on mobile data. Returns the core's mode afterwards.
      */
-    suspend fun dmsgReconnect(): Int = withContext(Dispatchers.IO) {
-        postWithRelogin("/api/dmsg/reconnect", "{}").use { resp ->
+    internal suspend fun networkEvent(ev: NetworkEvent): NetworkReply = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(NetworkEvent.serializer(), ev)
+        postWithRelogin("/api/network", body).use { resp ->
             if (!resp.isSuccessful) {
-                throw IOException("dmsg reconnect failed (${resp.code}): ${errorBody(resp)}")
+                throw IOException("network event failed (${resp.code}): ${errorBody(resp)}")
             }
-            decode<DmsgReconnectResult>(resp).sessionsClosed
+            decode<NetworkReply>(resp)
         }
     }
 
@@ -633,6 +635,28 @@ class VisorApi(context: Context) {
     private suspend fun mailPath(folder: String, id: String? = null): String {
         val base = "/api/visors/${localPk()}/mail/${URLEncoder.encode(folder, "UTF-8")}"
         return if (id == null) base else "$base/${URLEncoder.encode(id, "UTF-8")}"
+    }
+
+    // --- contacts: the visor's address book, shared with skychat and the dashboard ---
+
+    /** Every contact, sorted by name. */
+    suspend fun contacts(): List<BookContact> = authedGet("/api/visors/${localPk()}/contacts")
+
+    /** Adds [contact], or replaces the one with its uid, and answers it as stored. */
+    suspend fun contactPut(contact: BookContact): BookContact = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(BookContact.serializer(), contact)
+        postWithRelogin("/api/visors/${localPk()}/contacts", body).use { resp ->
+            if (resp.code == HTTP_BAD_REQUEST) throw ContactRejectedException(errorBody(resp))
+            if (!resp.isSuccessful) throw IOException(errorBody(resp))
+            decode<BookContact>(resp)
+        }
+    }
+
+    /** Removes the contact with [uid]; one already gone is no error. */
+    suspend fun contactDelete(uid: String): Unit = withContext(Dispatchers.IO) {
+        deleteWithRelogin("/api/visors/${localPk()}/contacts/${URLEncoder.encode(uid, "UTF-8")}").use { resp ->
+            if (!resp.isSuccessful && resp.code != HTTP_NOT_FOUND) throw IOException(errorBody(resp))
+        }
     }
 
     /** The reward address: an account xpub, a single address set before xpubs were required, or "" for none. */
@@ -793,6 +817,8 @@ class VisorApi(context: Context) {
          * `/visors/{pk}/…` routes, "that visor is reconnecting".
          */
         private const val HTTP_UNAVAILABLE = 503
+        private const val HTTP_NOT_FOUND = 404
+        private const val HTTP_BAD_REQUEST = 400
 
         /** Enough to outlast a hypervisor-client redial (measured ~4 s). */
         private const val RESTART_ATTEMPTS = 4

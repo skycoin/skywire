@@ -3,13 +3,10 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 )
 
 // bandwidthDailyLiveDays is how many days, today included, a transport's
@@ -54,19 +51,9 @@ func (s *redisStore) archivedDay(ctx context.Context, date string) map[string]Da
 	if err != nil || len(leaves[date]) == 0 {
 		return nil
 	}
-	day := make(map[string]DailyEdgeBandwidth)
-	for _, part := range leaves[date] {
-		var recs []TransportMetric
-		if json.Unmarshal(cxoutils.Gunzip(part), &recs) != nil {
-			return nil
-		}
-		for _, r := range recs {
-			for _, d := range r.Daily {
-				if d.Date == date {
-					day[r.ID] = d
-				}
-			}
-		}
+	day, err := leafDayRows(leaves[date], date)
+	if err != nil {
+		return nil
 	}
 
 	c.mu.Lock()
@@ -172,4 +159,23 @@ func (s *redisStore) bandwidthEdgesTTL() time.Duration {
 		return bandwidthHistoryTTL
 	}
 	return bandwidthDailyTTL + 24*time.Hour
+}
+
+// leafDayRows is the date's row of every record in a day leaf, by transport ID.
+// Only the two fields it reads are decoded.
+func leafDayRows(parts [][]byte, date string) (map[string]DailyEdgeBandwidth, error) {
+	type rows struct {
+		ID    string               `json:"id"`
+		Daily []DailyEdgeBandwidth `json:"daily"`
+	}
+	day := make(map[string]DailyEdgeBandwidth)
+	err := eachRecord(parts, func(r *rows) error {
+		for _, d := range r.Daily {
+			if d.Date == date {
+				day[r.ID] = d
+			}
+		}
+		return nil
+	})
+	return day, err
 }

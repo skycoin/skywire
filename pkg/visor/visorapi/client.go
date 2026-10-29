@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -2648,4 +2650,61 @@ func (rc *rpcClient) HostBridgeUnforward(host string) error {
 func (rc *rpcClient) RewardAddressExposure(addr string) (e rewardconfig.AddressExposure, err error) {
 	err = rc.Call("RewardAddressExposure", &addr, &e)
 	return e, err
+}
+
+// ContactsList calls ContactsList.
+func (rc *rpcClient) ContactsList() ([]contacts.Contact, error) {
+	var out []contacts.Contact
+	err := rc.Call("ContactsList", &struct{}{}, &out)
+	return out, err
+}
+
+// ContactsPut calls ContactsPut.
+func (rc *rpcClient) ContactsPut(c contacts.Contact) (*contacts.Contact, error) {
+	var out contacts.Contact
+	err := rc.Call("ContactsPut", &c, &out)
+	return &out, err
+}
+
+// ContactsDelete calls ContactsDelete.
+func (rc *rpcClient) ContactsDelete(uid string) error {
+	return rc.Call("ContactsDelete", &uid, &struct{}{})
+}
+
+// ContactsImport calls ContactsImport.
+func (rc *rpcClient) ContactsImport(vcf []byte) (int, error) {
+	var n int
+	err := rc.Call("ContactsImport", &vcf, &n)
+	return n, err
+}
+
+// ContactsExport calls ContactsExport.
+func (rc *rpcClient) ContactsExport() ([]byte, error) {
+	var out []byte
+	err := rc.Call("ContactsExport", &struct{}{}, &out)
+	return out, err
+}
+
+// NetworkMoved makes the visor refresh what it advertises about its network.
+func (rc *rpcClient) NetworkMoved(reason string) error {
+	return rc.Call("NetworkMoved", &reason, &struct{}{})
+}
+
+// NetworkSet changes the network policy live. gob drops an empty slice, so a
+// list being cleared travels as [""], which the visor drops.
+func (rc *rpcClient) NetworkSet(in NetworkSettings) error {
+	for _, l := range []**[]string{&in.Allow, &in.Deny, &in.MeteredInterfaces} {
+		if *l != nil && len(**l) == 0 {
+			*l = &[]string{""}
+		}
+	}
+	return rc.Call("NetworkSet", &in, &struct{}{})
+}
+
+// NetworkEvent reports a network change or metered flag to the visor.
+func (rc *rpcClient) NetworkEvent(ev NetworkEvent) error {
+	if ev.Metered != nil {
+		ev.MeteredText = strconv.FormatBool(*ev.Metered)
+	}
+	return rc.Call("NetworkEvent", &ev, &struct{}{})
 }

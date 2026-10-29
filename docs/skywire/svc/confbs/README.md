@@ -72,7 +72,7 @@ skywire svc confbs
                                    (default "skywire.skycoin.com")
       --keyfile string            path to file containing secret key (auto-generated if missing)
                                   
-      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http)
+      --mode string               listener mode: http|dmsg|dual (default dmsg if --sk, else http)
       --pprofaddr string          address to bind pprof debug server (e.g. localhost:6060)
       --sk cipher.SecKey          dmsg secret key
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)

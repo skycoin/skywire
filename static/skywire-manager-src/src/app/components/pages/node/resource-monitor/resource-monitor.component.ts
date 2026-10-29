@@ -1,7 +1,8 @@
 import { Component, Input, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, timer } from 'rxjs';
+import { EMPTY, Subscription, catchError, switchMap } from 'rxjs';
 
 import { NodeService } from '../../../../services/node.service';
+import { LiveService } from '../../../../services/live.service';
 
 /**
  * Resource Monitor — psutil-style live view of host + visor process
@@ -119,10 +120,10 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
 
   private hostSub!: Subscription | null;
   private procSub!: Subscription | null;
-  private pollSub!: Subscription | null;
 
   constructor(
     private nodeService: NodeService,
+    private live: LiveService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -201,60 +202,39 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
     this.firstProcSample = true;
     this.prevSampleAtMs = 0;
 
-    // Tick every second. Each tick fires both probes in parallel.
-    this.pollSub = timer(0, 1000).subscribe(() => {
-      this.pollHost();
-      this.pollProc();
+    // Both probes follow on a 1s cadence, pushed over the live socket when
+    // the hypervisor has it.
+    if (!this.nodeKey) {
+ return; 
+}
+    // Silent errors — keep sampling; the snackbar would scream once
+    // per second on a broken visor connection.
+    const quiet = () => {
       this.cdr.markForCheck();
-    });
+
+      return EMPTY;
+    };
+    const hostUrl = `visors/${this.nodeKey}/host-stats`;
+    this.hostSub = this.live.watch(hostUrl, 1000, () => this.nodeService.getHostStats(this.nodeKey)).pipe(
+      switchMap(res => res.pipe(catchError(quiet))),
+    ).subscribe((s: HostStats) => {
+ this.onHostStats(s); this.cdr.markForCheck(); 
+});
+    const procUrl = `visors/${this.nodeKey}/runtime-stats`;
+    this.procSub = this.live.watch(procUrl, 1000, () => this.nodeService.getRuntimeStats(this.nodeKey)).pipe(
+      switchMap(res => res.pipe(catchError(quiet))),
+    ).subscribe((s: RuntimeStats) => {
+ this.onRuntimeStats(s); this.cdr.markForCheck(); 
+});
   }
 
   private stopPolling() {
-    if (this.pollSub) {
- this.pollSub.unsubscribe(); this.pollSub = null; 
-}
     if (this.hostSub) {
  this.hostSub.unsubscribe(); this.hostSub = null; 
 }
     if (this.procSub) {
  this.procSub.unsubscribe(); this.procSub = null; 
 }
-  }
-
-  private pollHost() {
-    if (!this.nodeKey) {
- return; 
-}
-    if (this.hostSub) {
- this.hostSub.unsubscribe(); 
-}
-    this.hostSub = this.nodeService.getHostStats(this.nodeKey).subscribe(
-      (s: HostStats) => {
- this.onHostStats(s); this.cdr.markForCheck(); 
-},
-      // Silent error — keep polling; the snackbar would scream once
-      // per second on a broken visor connection.
-      () => {
-        this.cdr.markForCheck();
-      },
-    );
-  }
-
-  private pollProc() {
-    if (!this.nodeKey) {
- return; 
-}
-    if (this.procSub) {
- this.procSub.unsubscribe(); 
-}
-    this.procSub = this.nodeService.getRuntimeStats(this.nodeKey).subscribe(
-      (s: RuntimeStats) => {
- this.onRuntimeStats(s); this.cdr.markForCheck(); 
-},
-      () => {
-        this.cdr.markForCheck();
-      },
-    );
   }
 
   private onHostStats(s: HostStats) {

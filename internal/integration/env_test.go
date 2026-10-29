@@ -1030,6 +1030,18 @@ func (env *TestEnv) execResult(cmd string) (ExecResult, error) {
 	return Exec(ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
 }
 
+// execShell runs script with sh -c in the test runner. execResult splits its
+// command on spaces, which breaks a quoted script.
+func (env *TestEnv) execShell(script string) (ExecResult, error) {
+	if env.testRunnerID == "" {
+		return ExecResult{}, errors.New("env.testRunnerID is empty")
+	}
+
+	ctx, cancel := context.WithTimeout(env.ctx, defaultExecTimeout)
+	defer cancel()
+	return Exec(ctx, env.cli, env.testRunnerID, []string{"sh", "-c", script})
+}
+
 func (env *TestEnv) waitForVisorApp(app AppToRun) error {
 	const maxAttempts = 12 // 12 * 5s = 60s timeout
 	const retryDelay = 5 * time.Second
@@ -2220,8 +2232,8 @@ func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.D
 func (env *TestEnv) waitForListeningPort(port int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		cmd := fmt.Sprintf("sh -c 'netstat -tuln 2>/dev/null | grep :%d || ss -tuln 2>/dev/null | grep :%d || true'", port, port)
-		result, err := env.execResult(cmd)
+		cmd := fmt.Sprintf("netstat -tuln 2>/dev/null | grep :%d || ss -tuln 2>/dev/null | grep :%d || true", port, port)
+		result, err := env.execShell(cmd)
 		if err == nil {
 			stdout := result.Stdout()
 			if strings.Contains(stdout, fmt.Sprintf(":%d", port)) {

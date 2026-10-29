@@ -173,6 +173,8 @@ type modules struct {
 	// a CXO feed the service-discovery aggregates (SD-registration-over-CXO),
 	// always-on/additive
 	sdRegCXOMod vinit.Module
+	// netWatch reacts to a move to another network
+	netWatch vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 }

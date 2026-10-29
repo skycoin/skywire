@@ -69,10 +69,10 @@ func landmarkRouting() bool { return !landmarkRoutingOff.Load() }
 // every node and the selected hubs. Routes are full routing.Route values (not
 // just tpid sequences) so composition and latency-ranking reuse the existing
 // buildRoute/routeLatency machinery unchanged; a follow-up can compact these to
-// tpid-only if the ~10MB footprint ever matters.
+// tpid-only if the footprint matters more (73 MB live on prod01, 2026-10-27).
+// Only hub->node routes are kept; a node->hub route is one reversed on use.
 type landmarkTables struct {
 	hubs    []cipher.PubKey
-	toHub   map[cipher.PubKey]map[cipher.PubKey][]routing.Route // node -> hub  -> routes
 	fromHub map[cipher.PubKey]map[cipher.PubKey][]routing.Route // hub  -> node -> routes
 	builtAt time.Time
 }
@@ -123,10 +123,22 @@ func (g *Graph) routesFromHub(hub cipher.PubKey, k, maxLen, queueCap int) map[ci
 	if !ok {
 		return out
 	}
-	queue := []*bfsItem{{current: hubV, hops: 0}}
-	for len(queue) > 0 {
-		item := queue[0]
-		queue = queue[1:]
+	// The queue holds at most queueCap waiting items, and popped ones are dropped
+	// by moving the rest to the front, so it is allocated once rather than grown.
+	size := 1024
+	if queueCap > 0 {
+		size = 2 * queueCap
+	}
+	queue := make([]*bfsItem, 1, size)
+	queue[0] = &bfsItem{current: hubV, hops: 0}
+	for head := 0; head < len(queue); {
+		item := queue[head]
+		head++
+		if head >= 1024 && head >= len(queue)/2 {
+			n := copy(queue, queue[head:])
+			clear(queue[n:])
+			queue, head = queue[:n], 0
+		}
 
 		if item.hops >= 1 && item.hops <= maxLen {
 			pk := item.current.edge
@@ -146,7 +158,7 @@ func (g *Graph) routesFromHub(hub cipher.PubKey, k, maxLen, queueCap int) map[ci
 			if conn, ok := item.current.connections[neighbor.edge]; ok && conn.Type == tptypes.DMSG {
 				continue
 			}
-			if queueCap > 0 && len(queue) >= queueCap {
+			if queueCap > 0 && len(queue)-head >= queueCap {
 				break
 			}
 			queue = append(queue, &bfsItem{current: neighbor, parent: item, hops: item.hops + 1})
@@ -168,32 +180,32 @@ func reverseRoute(r routing.Route) routing.Route {
 	return out
 }
 
-// buildLandmarks materializes the node<->hub tables from g via ~2H hub-rooted
-// BFS (one per hub; the reverse fills node->hub for free). O(H * BFS), not
-// O(pairs * BFS).
+// buildLandmarks materializes the hub->node tables from g via one BFS per hub.
+// O(H * BFS), not O(pairs * BFS).
 func buildLandmarks(g *Graph) *landmarkTables {
 	hubs := selectHubs(g, defaultLandmarkHubs)
 	lt := &landmarkTables{
 		hubs:    hubs,
 		builtAt: time.Now(),
-		toHub:   make(map[cipher.PubKey]map[cipher.PubKey][]routing.Route),
 		fromHub: make(map[cipher.PubKey]map[cipher.PubKey][]routing.Route),
 	}
 	for _, h := range hubs {
-		fromH := g.routesFromHub(h, defaultLandmarkK, defaultLandmarkMaxLen, landmarkBFSBudget)
-		lt.fromHub[h] = fromH
-		for node, routes := range fromH {
-			if lt.toHub[node] == nil {
-				lt.toHub[node] = make(map[cipher.PubKey][]routing.Route)
-			}
-			rev := make([]routing.Route, len(routes))
-			for i, r := range routes {
-				rev[i] = reverseRoute(r)
-			}
-			lt.toHub[node][h] = rev
-		}
+		lt.fromHub[h] = g.routesFromHub(h, defaultLandmarkK, defaultLandmarkMaxLen, landmarkBFSBudget)
 	}
 	return lt
+}
+
+// toHub returns node's routes to hub, the reverse of the hub's routes to node.
+func (lt *landmarkTables) toHub(node, hub cipher.PubKey) []routing.Route {
+	from := lt.fromHub[hub][node]
+	if len(from) == 0 {
+		return nil
+	}
+	out := make([]routing.Route, len(from))
+	for i, r := range from {
+		out[i] = reverseRoute(r)
+	}
+	return out
 }
 
 // landmarkMaxAge is how long a graph reuses the landmark tables of the graph
@@ -218,39 +230,46 @@ func (g *Graph) ensureLandmarks() *landmarkTables {
 	return g.landmarks
 }
 
-// joinRoutes concatenates l (src->hub) and r (hub->dst) into one route, rejecting
-// the join if it would revisit any node (a loop across the seam). Returns ok=false
-// on a loop or a broken seam (l's end != r's start).
-func joinRoutes(l, r routing.Route) (routing.Route, bool) {
-	if len(l.Hops) == 0 || len(r.Hops) == 0 {
+// joinReversed joins the reverse of l (hub->src) with r (hub->dst) into one
+// src->dst route without building the reversed l, rejecting a join that
+// revisits a node (a loop across the seam).
+func joinReversed(l, r routing.Route) (routing.Route, bool) {
+	n := len(l.Hops)
+	if n == 0 || len(r.Hops) == 0 {
 		return routing.Route{}, false
 	}
-	if l.Hops[len(l.Hops)-1].To != r.Hops[0].From {
+	if l.Hops[0].From != r.Hops[0].From {
 		return routing.Route{}, false // seam doesn't meet
 	}
-	seen := make(map[cipher.PubKey]struct{}, len(l.Hops)+len(r.Hops)+1)
+	var buf [16]cipher.PubKey
+	seen := buf[:0]
 	add := func(pk cipher.PubKey) bool {
-		if _, dup := seen[pk]; dup {
-			return false
+		for _, s := range seen {
+			if s == pk {
+				return false
+			}
 		}
-		seen[pk] = struct{}{}
+		seen = append(seen, pk)
 		return true
 	}
-	if !add(l.Hops[0].From) {
+	if !add(l.Hops[n-1].To) {
 		return routing.Route{}, false
 	}
-	for _, h := range l.Hops { // adds ... hub (l's last To)
+	for i := n - 1; i >= 0; i-- { // adds ... hub (l's first From)
+		if !add(l.Hops[i].From) {
+			return routing.Route{}, false
+		}
+	}
+	for _, h := range r.Hops {
 		if !add(h.To) {
 			return routing.Route{}, false
 		}
 	}
-	for _, h := range r.Hops { // r.Hops[0].From == hub already in seen; add its To's
-		if !add(h.To) {
-			return routing.Route{}, false
-		}
+	joined := routing.Route{Hops: make([]routing.Hop, 0, n+len(r.Hops))}
+	for i := n - 1; i >= 0; i-- {
+		h := l.Hops[i]
+		joined.Hops = append(joined.Hops, routing.Hop{From: h.To, To: h.From, TpID: h.TpID, Latency: h.Latency, Type: h.Type, ThroughputBps: h.ThroughputBps})
 	}
-	joined := routing.Route{Hops: make([]routing.Hop, 0, len(l.Hops)+len(r.Hops))}
-	joined.Hops = append(joined.Hops, l.Hops...)
 	joined.Hops = append(joined.Hops, r.Hops...)
 	return joined, true
 }
@@ -288,24 +307,24 @@ func (g *Graph) composeLandmark(lt *landmarkTables, src, dst cipher.PubKey, numb
 			}
 		}
 	}
-	if th, ok := lt.toHub[src]; ok {
-		for _, r := range th[dst] { // dst is a hub
-			if inBounds(r) {
-				cands = append(cands, r)
-			}
+	for _, r := range lt.toHub(src, dst) { // dst is a hub
+		if inBounds(r) {
+			cands = append(cands, r)
 		}
 	}
 	// General case: src->hub + hub->dst.
-	srcTo := lt.toHub[src]
 	for _, h := range lt.hubs {
 		if h == src || h == dst {
 			continue
 		}
-		left := srcTo[h]
 		right := lt.fromHub[h][dst]
+		if len(right) == 0 {
+			continue
+		}
+		left := lt.fromHub[h][src] // hub->src, joined reversed
 		for _, l := range left {
 			for _, rr := range right {
-				if j, ok := joinRoutes(l, rr); ok && inBounds(j) {
+				if j, ok := joinReversed(l, rr); ok && inBounds(j) {
 					cands = append(cands, j)
 				}
 			}

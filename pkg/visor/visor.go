@@ -33,6 +33,7 @@ import (
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/flightrec"
+	"github.com/skycoin/skywire/pkg/gcmon"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
@@ -178,6 +179,10 @@ type Visor struct {
 
 	// STUN client state
 	stun stunState
+	// netMove tracks the network the visor is on and reacts to a move (netmove.go).
+	netMove netMoveState
+	// meter is the metered signal and the mode it puts the visor in.
+	meter meterState
 
 	tpM *transport.Manager
 	// dmsgSharedLis is the transport port's cmux branch for dmsg sessions,
@@ -228,6 +233,9 @@ type Visor struct {
 
 	// caddySites caches the site names a local Caddy reports.
 	caddySites siteCache
+
+	// contacts is the address book, opened on first use.
+	contacts contactBook
 
 	// visorCharts samples this visor's load and traffic for /status/visor.
 	visorCharts atomic.Pointer[visorCharts]
@@ -588,7 +596,8 @@ type dtmState struct {
 
 // stunState manages STUN client state.
 type stunState struct {
-	client    *network.StunDetails
+	// client is replaced whole when a network move re-probes STUN.
+	client    atomic.Pointer[network.StunDetails]
 	ready     chan struct{}
 	readyOnce sync.Once
 }
@@ -768,6 +777,8 @@ func run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 	logBroadcaster := logging.NewBroadcaster()
 	mLog.AddHook(logBroadcaster)
 
+	gcmon.Configure(conf.GCTraceSamples)
+	gcmon.Default()
 	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), opts.PprofMode, opts.PprofAddr)
 	defer stopPProf()
 
@@ -1119,7 +1130,7 @@ func (v *Visor) processRuntimeErrs() bool {
 func (v *Visor) isStunReady() bool {
 	select {
 	case <-v.stun.ready:
-		return v.stun.client != nil
+		return v.stun.client.Load() != nil
 	default:
 		return false
 	}

@@ -96,7 +96,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http)")
+	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dmsg if --sk, else http)")
 }
 
 // RootCmd contains the root command

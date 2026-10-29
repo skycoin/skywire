@@ -59,6 +59,10 @@ import (
 // same lesson the expensive way.
 const bindingsBatchWindow = 30 * time.Second
 
+// arKeepRoots keeps about five minutes of Roots, so a visor whose fill
+// outlasts one publish can still fetch the objects it needs.
+const arKeepRoots = 10
+
 // bindingsFlushWindow coalesces the per-bucket leaf re-encode (resolve + JSON +
 // gzip). Under the fleet's ~90s SUDPH re-bind cadence roughly twenty peers go
 // dirty per second, most of them in distinct buckets, so flushing per mark
@@ -131,6 +135,7 @@ func StartBindingsCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, st store.St
 		InMemoryDB:  true, // the tree is recomputed from the store on every resync
 		DmsgPort:    skyenv.DmsgARBindingsCXOPort,
 		BatchWindow: bindingsBatchWindow,
+		KeepRoots:   arKeepRoots,
 	})
 	if err != nil {
 		return nil, err

@@ -1,219 +1,119 @@
 # Config Bootstrapper
 
-The *Config Bootstrapper* (CB) is a service that provides initial configuration data to Skywire Visors during startup. It enables visors to discover service endpoints and network parameters without hardcoding them.
+| Status   | Implemented                                                              |
+|----------|--------------------------------------------------------------------------|
+| Revision | 2026-10-27, skywire f37a464a4 |
+| Code     | `pkg/deployment/conf`, `pkg/services/confbs`, `deployment`               |
+
+## Abstract
+
+The Config Bootstrapper serves the deployment's service configuration. It
+returns the list of deployment services with their dmsg addresses, the dmsg
+servers to bootstrap from, and the key lists that visors trust. It publishes the
+same document as a signed CXO feed.
 
 ## Overview
 
-The Config Bootstrapper provides:
+A visor that has no configuration for the deployment asks the bootstrapper for
+the services and the dmsg servers it needs to reach them. A running visor
+subscribes to the CXO feed and so follows changes to the document without a new
+release. The document served is `deployment.Services`, which is also embedded in
+the binary as `deployment.Prod`.
 
-- **Service endpoints**: URLs for address resolver, transport discovery, etc.
-- **DMSG configuration**: DMSG discovery URLs and server lists
-- **Network parameters**: Default settings for transport limits, timeouts, etc.
-- **DMSG HTTP configuration**: Configuration for HTTP-over-DMSG routing
+## Addressing
 
-## Code Structure
+The bootstrapper is served over dmsg HTTP at `dmsg://<conf-pk>:80`. The dmsg
+port is the service setting `dmsg_port`, `dmsg.DefaultDmsgHTTPPort` when 0. The
+CXO feed is served on dmsg port 78 (`skyenv.DmsgConfCXOPort`).
 
-The code should be in the `skycoin/skywire-services` repository:
+## Data Formats
 
-- `/cmd/config-bootstrapper/config-bootstrapper.go` is the main executable for the *Config Bootstrapper*.
-- `/pkg/deployment/conf/api/` contains the RESTFUL API definitions.
+### Services document
 
-## Database
+`deployment.Services`, the body of `GET /` and the content of the CXO leaf. Every
+field is optional in the encoding.
 
-The Config Bootstrapper is primarily a read-only service that serves static or semi-static configuration. Configuration is typically loaded from files or environment variables at startup.
+| JSON key                  | Type              | Meaning                                    |
+|---------------------------|-------------------|--------------------------------------------|
+| `dmsg_discovery`, `transport_discovery`, `address_resolver`, `route_finder`, `service_discovery` | string | service addresses |
+| `dmsg_discovery_dmsg`, `transport_discovery_dmsg`, `address_resolver_dmsg`, `route_finder_dmsg`, `service_discovery_dmsg` | string | `dmsg://<pk>:80` addresses of the services |
+| `reward_system`, `reward_system_dmsg` | string | reward system address                 |
+| `conf_dmsg`               | string            | address of the bootstrapper                |
+| `route_setup_nodes`       | []string          | public keys of route setup nodes           |
+| `transport_setup`         | []string          | public keys of transport setup nodes       |
+| `survey_whitelist`        | []string          | public keys allowed to read surveys        |
+| `stun_servers`            | []string          | STUN servers                               |
+| `dns_server`, `geoip`     | string            | DNS and geoip addresses                    |
+| `dmsg_servers`            | []object          | `deployment.DmsgServerEntry`: `static` (server key), `server.address`, optional `server.address_ws` |
+| `wss_domain_suffix`, `wss_domain_aliases`, `browse_origin_suffix`, `wasm_module_source` | | settings for browser visors |
 
-## Endpoint Definitions
+### dmsghttp document
 
-All endpoint calls should include an `Accept: application/json` field in the request header, and the response header should include a `Content-Type: application/json` field.
+`httputil.DMSGHTTPConf`, the body of `GET /dmsghttp`.
 
-### GET Bootstrap Configuration
+| JSON key              | Type     | Meaning                                       |
+|-----------------------|----------|-----------------------------------------------|
+| `dmsg_servers`        | []object | `static` and `server.address` of each server (`httputil.DMSGServersConf`) |
+| `dmsg_discovery`      | string   | `dmsg://` address of dmsg discovery           |
+| `transport_discovery` | string   | `dmsg://` address of Transport Discovery      |
+| `address_resolver`    | string   | `dmsg://` address of the Address Resolver     |
+| `route_finder`        | string   | `dmsg://` address of the Route Finder         |
+| `service_discovery`   | string   | `dmsg://` address of Service Discovery        |
 
-Returns the full bootstrap configuration for a visor.
+### Overrides file
 
-**Request:**
+The service setting `config_path` names a JSON file of type `api.Config`. A
+missing file, or an empty path, leaves the embedded defaults in place.
 
-```
-GET /
-```
+| JSON key            | Type     | Replaces                       |
+|---------------------|----------|--------------------------------|
+| `stun_servers`      | []string | `Services.StunServers`         |
+| `route_setup_nodes` | []string | `Services.RouteSetupNodes`     |
+| `survey_whitelist`  | []string | `Services.SurveyWhitelist`     |
+| `transport_setup`   | []string | `Services.TransportSetupPKs`   |
 
-**Response:**
+A field absent from the file keeps its default.
 
-- 200 OK (Success).
-    ```json
-    {
-        "dmsg_discovery": "https://dmsgd.skywire.skycoin.com",
-        "transport_discovery": "https://tpd.skywire.skycoin.com",
-        "address_resolver": "https://ar.skywire.skycoin.com",
-        "route_finder": "https://rf.skywire.skycoin.com",
-        "service_discovery": "https://sd.skywire.skycoin.com",
-        "stun_servers": [
-            "stun.skywire.skycoin.com:3478",
-            "stun2.skywire.skycoin.com:3478"
-        ],
-        "dmsg_servers": [
-            {
-                "pk": "02abc123...",
-                "address": "dmsg1.skywire.skycoin.com:8081"
-            },
-            {
-                "pk": "02def456...",
-                "address": "dmsg2.skywire.skycoin.com:8081"
-            }
-        ],
-        "default_settings": {
-            "max_transports": 200,
-            "transport_timeout": 30,
-            "heartbeat_interval": 60
-        }
-    }
-    ```
+## Interfaces
 
-**Response Fields:**
+### HTTP API
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `dmsg_discovery` | string | DMSG Discovery service URL |
-| `transport_discovery` | string | Transport Discovery service URL |
-| `address_resolver` | string | Address Resolver service URL |
-| `route_finder` | string | Route Finder service URL |
-| `service_discovery` | string | Service Discovery service URL |
-| `stun_servers` | array | STUN server addresses for NAT traversal |
-| `dmsg_servers` | array | Known DMSG servers with public keys |
-| `default_settings` | object | Default visor configuration parameters |
+None of the routes requires authentication.
 
-### GET DMSG HTTP Configuration
+| Method and path | Response                                                          |
+|-----------------|-------------------------------------------------------------------|
+| `GET /`         | 200 with the `deployment.Services` document                       |
+| `GET /dmsghttp` | 200 with the `httputil.DMSGHTTPConf` document                     |
+| `GET /health`   | 200 with `service_name` `config-bootstrapper`, `build_info`, `started_at`, `dmsg_address` |
 
-Returns configuration for HTTP-over-DMSG routing.
+### CXO Feeds
 
-**Request:**
+The publisher (`api.ServicesCXOPublisher`) serves one feed on dmsg port 78,
+signed by the bootstrapper's key. The leaf `services/current`
+(`deployment.ServicesCXOPath`) holds the gzipped JSON of the `Services` document
+that `GET /` returns. The publisher compares the document with the last one it
+published every minute (`servicesPublishInterval`) and publishes only when it
+changed. The feed is open to any subscriber, and its sequence prevents an older
+document from replacing a newer one.
 
-```
-GET /dmsghttp
-```
+## Behaviour
 
-**Response:**
+The served document starts as `deployment.Prod`, with the overrides applied. The
+`dmsg_servers` list is refreshed from dmsg discovery at start and then every 5
+minutes (`dmsgServersRefreshInterval`), by reading `/dmsg-discovery/all_servers`.
+If the answer is empty or the request fails, the previous list is kept.
 
-- 200 OK (Success).
-    ```json
-    {
-        "dmsg_servers": [
-            {
-                "pk": "02abc123...",
-                "address": "dmsg1.skywire.skycoin.com:8081"
-            }
-        ],
-        "dmsg_discovery": "https://dmsgd.skywire.skycoin.com",
-        "http_routes": {
-            "tpd.skywire.skycoin.com": {
-                "pk": "03tpd123...",
-                "port": 80
-            },
-            "ar.skywire.skycoin.com": {
-                "pk": "03ar789...",
-                "port": 80
-            }
-        },
-        "test_routes": {
-            "test.skywire.skycoin.com": {
-                "pk": "03test...",
-                "port": 80
-            }
-        }
-    }
-    ```
+`GET /dmsghttp` builds its document from the `*_dmsg` addresses of the services
+document and from the current server list. The result is cached for 5 minutes.
 
-**Response Fields:**
+## Security Considerations
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `dmsg_servers` | array | DMSG servers for HTTP transport |
-| `dmsg_discovery` | string | DMSG Discovery service URL |
-| `http_routes` | object | HTTP hostnames mapped to DMSG addresses |
-| `http_routes.*.pk` | string | Public key of the DMSG server hosting this route |
-| `http_routes.*.port` | integer | Port number for the HTTP service |
-| `test_routes` | object | Test/development HTTP routes |
+The document is public. Visors that use it trust the dmsg identity of the
+bootstrapper and, for the CXO feed, the signature of its key. The document
+carries the keys that visors trust for route setup, transport setup and surveys,
+so these are changed at the bootstrapper.
 
-### GET Specific Configuration
+## References
 
-Returns a specific configuration section.
-
-**Request:**
-
-```
-GET /config/{section}
-```
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `section` | string | Configuration section: "services", "dmsg", "stun", "defaults" |
-
-**Response:**
-
-- 200 OK (Success - example for "services").
-    ```json
-    {
-        "dmsg_discovery": "https://dmsgd.skywire.skycoin.com",
-        "transport_discovery": "https://tpd.skywire.skycoin.com",
-        "address_resolver": "https://ar.skywire.skycoin.com",
-        "route_finder": "https://rf.skywire.skycoin.com",
-        "service_discovery": "https://sd.skywire.skycoin.com"
-    }
-    ```
-
-- 404 Not Found (Unknown section).
-    ```json
-    {
-        "error": {
-            "code": 404,
-            "message": "unknown configuration section"
-        }
-    }
-    ```
-
-### GET Health Check
-
-Returns service health information.
-
-**Request:**
-
-```
-GET /health
-```
-
-**Response:**
-
-- 200 OK (Success).
-    ```json
-    {
-        "build_info": {
-            "version": "v1.0.0",
-            "commit": "abc123def456",
-            "date": "2024-02-25T10:30:00Z"
-        },
-        "started_at": "2024-02-25T10:00:00Z",
-        "config_loaded_at": "2024-02-25T10:00:00Z",
-        "config_version": "2024.02.25"
-    }
-    ```
-
----
-
-## Configuration Sections
-
-| Section | Description |
-|---------|-------------|
-| `services` | Service endpoint URLs |
-| `dmsg` | DMSG servers and discovery |
-| `stun` | STUN server addresses |
-| `defaults` | Default visor parameters |
-
-## Endpoint Summary
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/` | GET | No | Full bootstrap configuration |
-| `/dmsghttp` | GET | No | DMSG HTTP routing configuration |
-| `/config/{section}` | GET | No | Specific configuration section |
-| `/health` | GET | No | Health check |
+- Skywire Visor
+- Service Discovery

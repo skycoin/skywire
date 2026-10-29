@@ -27,3 +27,8 @@ func (eb *Broadcaster) sendEvent(_ context.Context, event *Event) {
 		eb.log.WithError(err).Warnf("failed to broadcast event: %v", event)
 	}
 }
+
+// SendNetworkMoved tells the apps that the visor handled a network change.
+func (eb *Broadcaster) SendNetworkMoved(ctx context.Context, reason string) {
+	eb.sendEvent(ctx, NewEvent(NetworkMoved, NetworkMovedData{Reason: reason}))
+}

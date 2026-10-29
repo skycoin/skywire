@@ -62,14 +62,12 @@ type ReadWriter struct {
 
 	rawInput *bufio.Reader
 	input    bytes.Buffer
-	plain    []byte // reused plaintext of the frame being read, under rMx
 
 	rErr error
 	rMx  sync.Mutex
 
 	wErr error
 	wMx  sync.Mutex
-	wbuf []byte // reused frame being written, under wMx
 }
 
 // NewReadWriter constructs a new ReadWriter.
@@ -77,8 +75,7 @@ func NewReadWriter(rw io.ReadWriter, ns *Noise) *ReadWriter {
 	return &ReadWriter{
 		origin:   rw,
 		ns:       ns,
-		rawInput: bufio.NewReaderSize(rw, maxFrameSize*2), // can fit 2 frames.
-		wbuf:     make([]byte, 0, maxFrameSize),
+		rawInput: bufio.NewReaderSize(rw, maxFrameSize), // one whole frame
 	}
 }
 
@@ -94,20 +91,22 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 		return 0, rw.rErr
 	}
 
+	// Decrypt straight out of the read buffer into a pooled one, so an idle
+	// stream holds no plaintext buffer.
+	bp := framePool.Get().(*[]byte)
+	defer framePool.Put(bp)
 	for {
-		// Decrypt straight out of the read buffer into a reused one.
 		ciphertext, size, err := peekRawFrame(rw.rawInput)
 		if err != nil {
 			return 0, rw.processReadError(err)
 		}
-		plaintext, err := rw.ns.decryptAppend(rw.plain[:0], ciphertext)
+		plaintext, err := rw.ns.decryptAppend((*bp)[:0], ciphertext)
 		if _, derr := rw.rawInput.Discard(size); derr != nil && err == nil {
 			err = fmt.Errorf("unexpected error when discarding %d bytes: %w", size, derr)
 		}
 		if err != nil {
 			return 0, rw.processReadError(err)
 		}
-		rw.plain = plaintext
 
 		if len(plaintext) == 0 {
 			continue
@@ -146,6 +145,10 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 		return 0, rw.wErr
 	}
 
+	// A pooled frame, so an idle stream holds no write buffer. io.Writer
+	// implementations must not retain the frame (https://pkg.go.dev/io#Writer).
+	bp := framePool.Get().(*[]byte)
+	defer framePool.Put(bp)
 	for len(p) > 0 {
 		// Enforce max frame size.
 		wn := len(p)
@@ -153,10 +156,9 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 			wn = maxPayloadSize
 		}
 
-		// Encrypt into the reused frame after its 2 byte length prefix.
-		frame := rw.ns.encryptAppend(rw.wbuf[:prefixSize], p[:wn])
+		// Encrypt into the frame after its 2 byte length prefix.
+		frame := rw.ns.encryptAppend((*bp)[:prefixSize], p[:wn])
 		binary.BigEndian.PutUint16(frame, uint16(len(frame)-prefixSize)) //nolint:gosec // at most maxFrameSize
-		rw.wbuf = frame[:0]
 		written, err := rw.origin.Write(frame)
 		if err != nil {
 			// when a short write occurs, it is hard to recover from so we

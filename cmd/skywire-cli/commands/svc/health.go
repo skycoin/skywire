@@ -60,7 +60,6 @@ var RootCmd = &cobra.Command{
   tpd     Transport Discovery read endpoints (stats, versions, bandwidth, ...)
   dmsgd   DMSG Discovery read endpoints (servers, clients)
   ar      Address Resolver (/transports; 'ar check <pk>' for registration)
-  nm      network-monitor liveness (stand-in: probes TPD /health)
 
 Deployment services are DMSG-only. Subcommands fetch via the local visor's
 RPC by default and fall back to a CLI-owned client; pass --direct to force

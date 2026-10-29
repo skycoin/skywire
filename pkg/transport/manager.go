@@ -102,6 +102,9 @@ type Manager struct {
 	// inboundGate decides whether a new inbound transport is taken; see
 	// SetInboundGate.
 	inboundGate atomic.Pointer[InboundGate]
+	// restrict narrows outbound creation live, on top of Conf; see
+	// SetCreateRestriction.
+	restrict atomic.Int32
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
@@ -1516,6 +1519,14 @@ func (tm *Manager) SaveTransportWithOptions(ctx context.Context, remote cipher.P
 // route-setup hook, `tp add`, and `--direct` all funnel through saveTransportInternal.
 func (tm *Manager) transportCreateDenied(netType types.Type) bool {
 	nt := types.NormalizeType(netType)
+	switch CreateRestriction(tm.restrict.Load()) {
+	case RestrictAll:
+		return true
+	case RestrictDirect:
+		if types.IsDirect(nt) {
+			return true
+		}
+	}
 	if tm.Conf.NoDirectTransports && types.IsDirect(nt) {
 		return true
 	}
@@ -2094,3 +2105,15 @@ func (tm *Manager) SetHostedEntries(f func() []*Entry) { tm.hostedEntries.Store(
 
 // RepublishTPDList publishes the transport list now, as after a change.
 func (tm *Manager) RepublishTPDList() { tm.publishTPDList(tm.currentBareEntries()) }
+
+// Rebind makes every network client that registers with the address
+// resolver re-register now, as after the visor moved to another network.
+func (tm *Manager) Rebind() {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	for _, c := range tm.netClients {
+		if r, ok := c.(network.Rebinder); ok {
+			r.Rebind()
+		}
+	}
+}

@@ -208,7 +208,8 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		// The vhosts share the port 80 entry and outlive its website.
-		fp.Vhosts = vhostsOn(cmd, rpcClient, port)
+		k := kept80(cmd, rpcClient, port)
+		fp.Vhosts, fp.HideSites = k.Vhosts, k.HideSites
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -333,8 +334,9 @@ var servePortRmCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if vs := vhostsOn(cmd, rpcClient, port); len(vs) > 0 {
-			if err := rpcClient.UpdateForwardedPort(visorapi.ForwardedPort{Port: 80, Vhosts: vs}); err != nil {
+		if k := kept80(cmd, rpcClient, port); len(k.Vhosts) > 0 {
+			vs := k.Vhosts
+			if err := rpcClient.UpdateForwardedPort(visorapi.ForwardedPort{Port: 80, Vhosts: vs, HideSites: k.HideSites}); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 			internal.PrintOutput(cmd.Flags(), map[string]any{"port": port, "removed": true, "vhosts": len(vs)},

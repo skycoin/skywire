@@ -74,6 +74,9 @@ DOCKER_REGISTRY:=skycoin
 # ones — its wall clock is dominated by fixed network timeouts — so the
 # -race CI run measures about the same as a local run without it.
 TEST_OPTS:=-cover -timeout=25m -mod=vendor -tags no_ci
+# Windows skips -race. Linux runs the suite with it, and under it the wasm
+# presets package alone took over 10 min on the windows lane.
+TEST_OPTS_WINDOWS:=$(TEST_OPTS)
 
 GOARCH:=$(shell go env GOARCH)
 
@@ -696,8 +699,7 @@ test-32bit: ## Run the packages that use 64-bit atomics under a 32-bit GOARCH, w
 	CGO_ENABLED=0 GOARCH=386 go test  ./pkg/transport/... ./pkg/router/... ./pkg/dmsg/... ./pkg/logging/... ./pkg/vpn/... ./pkg/httpauthclient/... ./pkg/metricsutil/...
 
 test-windows: ## Run tests on windows
-	@go clean -testcache
-	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
+	${OPTS} go test ${TEST_OPTS_WINDOWS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest

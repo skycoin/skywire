@@ -54,7 +54,7 @@ dozen subcommands. The visor's secret key is never included.
 --select builds ONLY the requested subtree(s) SERVER-side, so a cheap
 '--select mux' skips the ~307 KB transports build (full snapshot ~900 KB, mux
 ~75 KB). Keys (comma-separated): summary, health, routing, mux, pool, apps,
-transports, modules, cxo, services, proxy, diag, roles. 'services' lists the
+transports, modules, cxo, services, proxy, diag, roles, runtime. 'services' lists the
 deployment services the visor embeds (stores, CXO aggregators and publishers).
 'pool' is the standby-tunnel pool table (one row per standby tunnel: local port,
 first-hop pk+transport type, hop count, capacity prior bps, audition age, leg
@@ -80,6 +80,7 @@ Examples:
   skywire cli visor state --select mux            # server builds ONLY mux_route_groups
   skywire cli visor state --select health,routing # several subtrees
   skywire cli visor state --select roles          # dmsg server + relay + transit roles
+  skywire cli visor state --select runtime        # GC and memory metrics with 1m and 5m windows
   skywire cli visor state --watch 1s --select mux --jq '.mux_route_groups'
   skywire cli visor state --via dmsg://<pk> --jq '.routing_policy'  # a remote visor`,
 	Run: func(cmd *cobra.Command, _ []string) {

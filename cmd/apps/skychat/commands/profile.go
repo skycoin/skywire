@@ -31,7 +31,7 @@ func registerProfileHTTPHandlers(mux *http.ServeMux) {
 		return
 	}
 	mux.HandleFunc("/profile", requireAuthFunc(profileHandler()))
-	mux.HandleFunc("/profile/peer", requireAuthFunc(profilePeerHandler()))
+	mux.HandleFunc("/profile/peer", requireAuthFunc(waitsOnPeer(profilePeerHandler())))
 }
 
 // profileHandler serves this visor's own profile:

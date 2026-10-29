@@ -135,6 +135,45 @@
       "stale": "Offline (stale)",
       "stale-tooltip": "The visor is offline; showing last-known data."
     },
+    "overview": {
+      "health": "Health",
+      "health-ok": "Healthy",
+      "health-bad": "Unhealthy",
+      "health-wait": "Checking",
+      "uptime-tracker": "Uptime tracker",
+      "autoconnect": "Autoconnect",
+      "transportability": "Reachable by transports",
+      "transports": "Transports",
+      "more-types": "and {{ n }} more types",
+      "network": "Network",
+      "dmsg-servers": "DMSG servers",
+      "routes": "Routes",
+      "min-hops": "Min hops",
+      "public": "Public visor",
+      "apps": "Apps",
+      "running": "running",
+      "autostart": "Start with the visor",
+      "failed": "Failed",
+      "rewards": "Rewards",
+      "reward-not-set": "No address",
+      "reward-ineligible": "Not eligible",
+      "reward-set": "Address set",
+      "bandwidth": "Bandwidth",
+      "uptime": "Uptime",
+      "no-alerts": "Nothing needs attention.",
+      "alert-uptime-tracker": "The uptime tracker has not confirmed this visor yet.",
+      "alert-autoconnect": "Autoconnect has not confirmed its transports yet.",
+      "alert-transportability": "No other visor has confirmed reaching this one by transport yet.",
+      "alert-app-failed": "{{ app }} failed.",
+      "alert-app-stopped": "{{ app }} is set to start with the visor but is not running.",
+      "alert-app-stopped-why": "{{ app }} is set to start with the visor but is not running: {{ why }}",
+      "alert-no-transports": "This visor has no transports.",
+      "alert-no-dmsg": "This visor is not connected to any DMSG server.",
+      "alert-no-reward": "No reward address is set, so this visor earns no rewards.",
+      "alert-reward-ineligible": "Not eligible for rewards: {{ reason }}",
+      "alert-config-version": "The config was made by {{ config }}, not by the running version.",
+      "alert-symmetric-nat": "This visor is behind a symmetric NAT, so it is harder for others to reach."
+    },
     "details": {
       "node-info": {
         "title": "Visor",
@@ -276,6 +315,7 @@
       "terminal": "Terminal",
       "wallet": "Wallet",
       "mail": "Mail",
+      "contacts": "Contacts",
       "host-bridge": "Host bridge",
       "logs": "Logs",
       "settings": "Settings"
@@ -341,6 +381,29 @@
     "view-node": "View visor",
     "delete-node": "Remove visor",
     "delete-all-offline": "Remove all offline visors",
+    "quick": {
+      "search": "Search label, key, IP, place or version",
+      "online": "Online",
+      "offline": "Offline",
+      "outdated": "Outdated",
+      "no-reward": "No reward address",
+      "hidden": "{{ n }} hidden",
+      "compact": "Compact",
+      "compact-tooltip": "One line per visor. Hover a transport count for the breakdown.",
+      "outdated-tooltip": "Older than the newest version in this list."
+    },
+    "bulk": {
+      "select-page": "Select every visor on this page",
+      "selected": "{{ n }} selected",
+      "update": "Update",
+      "reward": "Set reward address",
+      "restart": "Restart",
+      "clear": "Clear",
+      "none-online": "None of the selected visors is online.",
+      "restart-confirmation": "Restart {{ n }} visor(s)? Each one reconnects after a short while.",
+      "restarting": "{{ name }} is restarting.",
+      "restart-error": "{{ name }} did not accept the restart."
+    },
     "error-load": "An error occurred while refreshing the list. Retrying...",
     "empty": "There aren't any visors connected to this hypervisor.",
     "empty-with-filter": "No visor matches the selected filtering criteria.",
@@ -578,6 +641,34 @@
         "api-sets": "--enable-gui-api-sets"
       }
     }
+  },
+  "contacts": {
+    "title": "Contacts",
+    "help": "The visor's address book. Skychat shows these names for anyone you have not given a chat nickname, and the CLI accepts them wherever it takes a key.",
+    "filter": "Search names, keys, mail or groups",
+    "add": "New contact",
+    "import": "Import .vcf",
+    "export": "Export .vcf",
+    "empty": "No contacts yet.",
+    "no-match": "No contact matches the search.",
+    "name": "Name",
+    "keys": "Public keys",
+    "mail": "Mail addresses",
+    "payments": "Payment addresses",
+    "payments-help": "one per line, as coin:address",
+    "groups": "Groups",
+    "groups-help": "comma separated",
+    "notes": "Notes",
+    "one-per-line": "one per line",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "copy": "Click to copy",
+    "copied": "Copied.",
+    "saved": "Contact saved.",
+    "deleted": "Contact deleted.",
+    "imported": "Imported {{ n }} contact(s).",
+    "bad-payment": "Write each payment address as coin:address."
   },
   "mail": {
     "title": "Mail",
@@ -1397,6 +1488,26 @@
       "any-type-option": "Any"
     }
   },
+  "palette": {
+    "placeholder": "Search visors, pages and actions",
+    "hint-tooltip": "Search visors, pages and actions",
+    "no-results": "Nothing matches.",
+    "footer": "Up and down to move, Enter to open, Esc to close. Type a visor name and a tab to open that tab.",
+    "restart-confirmation": "Restart {{ name }}? It reconnects after a short while.",
+    "groups": {
+      "visors": "Visors",
+      "pages": "Pages",
+      "actions": "Actions"
+    },
+    "actions": {
+      "copy-key": "Copy public key",
+      "terminal": "Open terminal",
+      "logs": "Open logs",
+      "restart": "Restart",
+      "update": "Update",
+      "reward": "Set reward address"
+    }
+  },
   "copy": {
     "tooltip": "Click to copy",
     "tooltip-with-text": "{{ text }} (Click to copy)",
@@ -1609,7 +1720,6 @@
       "unknown": "Unknown",
       "tabs": {
         "public": "Public",
-        "history": "History",
         "favorites": "Favorites",
         "blocked": "Blocked"
       },

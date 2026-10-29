@@ -17,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -157,14 +158,18 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 		v.initLock.Unlock()
 		if runtime == nil {
 			if !enable {
-				return nil
+				return v.persistSkymailBridge(false)
 			}
 			return fmt.Errorf("embedded skymail-bridge could not be constructed")
 		}
 		if enable {
-			return runtime.Start()
+			if err := runtime.Start(); err != nil {
+				return err
+			}
+		} else if err := runtime.Stop(); err != nil {
+			return err
 		}
-		return runtime.Stop()
+		return v.persistSkymailBridge(enable)
 	default:
 		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\", \"skynet\", or \"bridge\")", kind)
 	}
@@ -388,4 +393,21 @@ func skynetStatsToAPI(s skynetweb.StatsSnapshot) *visorapi.EmbeddedProxyStats {
 		LastFailureAt: s.LastFailureAt,
 		LastError:     s.LastError,
 	}
+}
+
+// persistSkymailBridge records a bridge toggle in the config. Unlike the
+// resolving proxies, `mail up` is meant to last, and the config flush mirrors
+// it to SKYMAILBRIDGE so the next autoconfig keeps it.
+func (v *Visor) persistSkymailBridge(enable bool) error {
+	if v.conf == nil {
+		return nil
+	}
+	if v.conf.SkymailBridge == nil {
+		if !enable {
+			return nil
+		}
+		v.conf.SkymailBridge = &visorconfig.SkymailBridgeConfig{Addr: skyenv.SkymailBridgeAddr, Mode: "b"}
+	}
+	v.conf.SkymailBridge.Enable = enable
+	return v.conf.Flush()
 }

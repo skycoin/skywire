@@ -129,7 +129,8 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	// per-entry path); build the authoritative keep-set.
 	keep := make(map[uuid.UUID]struct{}, len(entries))
 	accepted := make([]*transport.Entry, 0, len(entries))
-	touchedEdges := map[cipher.PubKey]struct{}{}
+	// Each accepted entry adds at most its remote edge to the reporter.
+	touchedEdges := make(map[cipher.PubKey]struct{}, len(entries)+1)
 	for _, e := range entries {
 		if e == nil || e.EdgeIndex(reporter) < 0 {
 			continue
@@ -206,7 +207,7 @@ func (api *API) reconcileFromCXO(ctx context.Context, entries []*transport.Entry
 	// exactly what a tombstone was in the delta model.
 	// Unless the other edge still lists it: then the two lists only disagree
 	// for now, and it goes once neither does (reconcileThrottle.listedByOther).
-	existing, err := api.store.GetTransportsByEdgeNoLatency(ctx, reporter)
+	existing, err := api.edgeTransportsExcept(ctx, reporter, keep)
 	if err != nil {
 		// A reporter with no prior transports in the store (first snapshot, or all
 		// aged out) returns ErrTransportNotFound here. That is not a reconcile
@@ -276,4 +277,13 @@ func (api *API) registerAgain(ctx context.Context, reporter cipher.PubKey, versi
 	if err := api.store.RegisterTransportsBatch(ctx, reporter, signed); err != nil {
 		api.reconcile.forget(again)
 	}
+}
+
+// edgeTransportsExcept lists pk's transports that are not in keep, and
+// ErrTransportNotFound when pk has none at all.
+func (api *API) edgeTransportsExcept(ctx context.Context, pk cipher.PubKey, keep map[uuid.UUID]struct{}) ([]*transport.Entry, error) {
+	if es, ok := api.store.(store.EdgeExceptStore); ok {
+		return es.GetTransportsByEdgeExcept(ctx, pk, keep)
+	}
+	return api.store.GetTransportsByEdgeNoLatency(ctx, pk)
 }

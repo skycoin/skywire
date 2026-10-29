@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, Subscription, delay, mergeMap, of, tap } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subscription, catchError, delay, mergeMap, of, tap } from 'rxjs';
 
 import { StorageService } from './storage.service';
 import { Node } from '../app.datatypes';
@@ -7,6 +7,7 @@ import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
 import { NodeService, NodeSection } from './node.service';
+import { LiveService, LiveUnavailableError } from './live.service';
 
 /**
  * Data about the node list, returned by MultipleNodeDataService.
@@ -68,6 +69,7 @@ export class MultipleNodeDataService {
   constructor(
     private storageService: StorageService,
     private nodeService: NodeService,
+    private live: LiveService,
   ) {
     // Get the data refresing time set by the user.
     this.storageService.getRefreshTimeObservable().subscribe(val => {
@@ -84,7 +86,7 @@ export class MultipleNodeDataService {
    */
   startRequestingData(): Observable<MultipleNodesBackendData | null> {
     if (!this.firstCallToGetDataMade) {
-      this.getData(0);
+      this.startUpdates();
     }
 
     return this.dataSubject.asObservable();
@@ -98,6 +100,50 @@ export class MultipleNodeDataService {
       this.updateSubscription.unsubscribe();
       this.firstCallToGetDataMade = false;
     }
+  }
+
+  /** Follows the list over the live socket when possible, else polls. */
+  private startUpdates() {
+    if (this.live.usable) {
+      this.startLiveSubscription();
+    } else {
+      this.getData(0);
+    }
+  }
+
+  /**
+   * Gets the list pushed over the live socket, which sends it at once and then
+   * whenever it changes. A new subscription also serves as a forced refresh.
+   * Falls back to polling if the socket cannot be used.
+   */
+  private startLiveSubscription() {
+    this.firstCallToGetDataMade = true;
+
+    if (this.updateSubscription) {
+      this.updateSubscription.unsubscribe();
+    }
+
+    this.updateSubscription = this.live.subscribe('/api/visors-tree-summary', this.dataRefreshDelay).pipe(
+      mergeMap(ev => {
+        if (ev.status === 429) {
+          throw new LiveUnavailableError();
+        }
+        if (ev.status >= 200 && ev.status < 300) {
+          return of(this.nodeService.nodesTreeFromResponse(JSON.parse(ev.body)));
+        }
+
+        // Ask over HTTP once, so the error is processed (and a lost session
+        // redirects to the login page) exactly as when polling.
+        return this.nodeService.getNodesTree().pipe(catchError(err => {
+          this.emitError(err);
+
+          return EMPTY;
+        }));
+      }),
+    ).subscribe({
+      next: sections => this.emitSections(sections),
+      error: () => this.getData(0),
+    });
   }
 
   /**
@@ -127,50 +173,58 @@ export class MultipleNodeDataService {
       // that don't care about sections keep working unchanged.
       mergeMap(() => this.nodeService.getNodesTree()))
     .subscribe((sections: NodeSection[]) => {
-      // Flat list = section 0 (LOCAL hypervisor's directly-connected
-      // visors) only. Visors connected only to a sub-hypervisor live
-      // in their own section's table, never in the main flat list —
-      // a visor should appear in the list of the hypervisor it's
-      // actually connected to and nowhere else. Concatenating
-      // sub-sections into the flat list caused visors connected to
-      // both local and a sub-hyp to render twice in the main table,
-      // and dragged the section's own ★ flag into the main table
-      // where it was visually wrong.
-      const flat: Node[] = sections.length > 0 ? sections[0].nodes.slice() : [];
-      // Send the event.
-      this.lastEmitedData = {
-        data: flat,
-        sections: sections,
-        error: null,
-        momentOfLastCorrectUpdate: Date.now(),
-        updating: false
-      };
-      this.dataSubject.next(this.lastEmitedData);
+      this.emitSections(sections);
 
       // Schedule the next update.
       this.getData(this.dataRefreshDelay);
     }, err => {
-      err = processServiceError(err);
-
-      // Send the event.
-      this.lastEmitedData = {
-        data: this.lastEmitedData.data,
-        sections: this.lastEmitedData.sections,
-        error: err,
-        momentOfLastCorrectUpdate: this.lastEmitedData.momentOfLastCorrectUpdate,
-        updating: false
-      };
-      this.dataSubject.next(this.lastEmitedData);
+      this.emitError(err);
 
       // Schedule the next update.
       this.getData(AppConfig.connectionRetryDelay);
     });
   }
 
+  private emitSections(sections: NodeSection[]) {
+    // Flat list = section 0 (LOCAL hypervisor's directly-connected
+    // visors) only. Visors connected only to a sub-hypervisor live
+    // in their own section's table, never in the main flat list —
+    // a visor should appear in the list of the hypervisor it's
+    // actually connected to and nowhere else. Concatenating
+    // sub-sections into the flat list caused visors connected to
+    // both local and a sub-hyp to render twice in the main table,
+    // and dragged the section's own ★ flag into the main table
+    // where it was visually wrong.
+    const flat: Node[] = sections.length > 0 ? sections[0].nodes.slice() : [];
+    // Send the event.
+    this.lastEmitedData = {
+      data: flat,
+      sections: sections,
+      error: null,
+      momentOfLastCorrectUpdate: Date.now(),
+      updating: false
+    };
+    this.dataSubject.next(this.lastEmitedData);
+  }
+
+  private emitError(err: any) {
+    err = processServiceError(err);
+
+    // Send the event.
+    this.lastEmitedData = {
+      data: this.lastEmitedData.data,
+      sections: this.lastEmitedData.sections,
+      error: err,
+      momentOfLastCorrectUpdate: this.lastEmitedData.momentOfLastCorrectUpdate,
+      updating: false
+    };
+    this.dataSubject.next(this.lastEmitedData);
+  }
+
   /**
    * Makes the service immediately refresh the node list.
    */
   forceRefresh() {
-    this.getData(0);
+    this.startUpdates();
   }
 }

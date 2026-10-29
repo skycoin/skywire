@@ -17,6 +17,10 @@ Use a name anywhere a -t / --to / --peer / --from accepts a PK:
 Full hex PKs always resolve directly, regardless of any same-named
 alias (so a typo on a real PK never gets silently rerouted).
 
+A name that is not an alias is looked up in the visor contact book
+(skywire cli contacts), matched without case. It must name one contact
+with one key.
+
 ## Usage
 
 ```

@@ -498,7 +498,7 @@ func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, er
 }
 
 // DeregisterService deregisters the specified public keys from service discovery.
-// This requires the visor's public key to be whitelisted as a network monitor in the service discovery.
+// The visor's key must be in service discovery's deregistration whitelist.
 // serviceType must be one of: "vpn", "visor", "skysocks" (or "proxy")
 func (v *Visor) DeregisterService(pks []cipher.PubKey, serviceType string) error {
 	if len(pks) == 0 {
@@ -514,41 +514,37 @@ func (v *Visor) DeregisterService(pks []cipher.PubKey, serviceType string) error
 		return fmt.Errorf("invalid service type %q: must be vpn, visor, or skysocks (proxy)", serviceType)
 	}
 
-	// Sign the visor's public key with its secret key (network monitor authentication)
-	nmSign, err := cipher.SignPayload([]byte(v.conf.PK.Hex()), v.conf.SK)
-	if err != nil {
-		return fmt.Errorf("failed to sign payload: %w", err)
+	// The dmsg URL may be in either field: dmsg-only configs keep it in
+	// service_discovery, legacy dual configs in service_discovery_dmsg.
+	sdURL := v.conf.Launcher.ServiceDiscDmsg
+	if !strings.HasPrefix(sdURL, "dmsg://") {
+		sdURL = v.conf.Launcher.ServiceDisc
 	}
-
-	// Build the URL
-	sdURL := v.conf.Launcher.ServiceDisc
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	// Service discovery authorizes the caller by its dmsg or skynet key, so the
+	// request goes through the visor's service client and carries no signature.
+	client, err := getHTTPClient(ctx, v, sdURL)
+	if err != nil {
+		return fmt.Errorf("service discovery client: %w", err)
+	}
 	reqURL := fmt.Sprintf("%s/api/services/deregister/%s", sdURL, sType)
 
-	// Convert public keys to hex strings
 	pkStrings := make([]string, len(pks))
 	for i, pk := range pks {
 		pkStrings[i] = pk.Hex()
 	}
-
-	// Marshal the public keys to JSON
 	jsonData, err := json.Marshal(pkStrings)
 	if err != nil {
 		return fmt.Errorf("failed to marshal public keys: %w", err)
 	}
 
-	// Create the request
-	req, err := http.NewRequest(http.MethodDelete, reqURL, bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, bytes.NewReader(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-
-	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("NM-PK", v.conf.PK.Hex())
-	req.Header.Set("NM-Sign", nmSign.Hex())
 
-	// Send the request
-	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
@@ -709,9 +705,9 @@ func (v *Visor) Ports() (map[string]visorapi.PortDetail, error) {
 			ports["sudph"] = visorapi.PortDetail{Port: sudphPort, Type: "UDP"}
 		}
 	}
-	if v.stun.client != nil {
-		if v.stun.client.PublicIP != nil {
-			ports["public_visor"] = visorapi.PortDetail{Port: fmt.Sprint(v.stun.client.PublicIP.Port()), Type: "TCP"}
+	if sc := v.stun.client.Load(); sc != nil {
+		if sc.PublicIP != nil {
+			ports["public_visor"] = visorapi.PortDetail{Port: fmt.Sprint(sc.PublicIP.Port()), Type: "TCP"}
 		}
 	}
 	if v.dmsgC != nil {

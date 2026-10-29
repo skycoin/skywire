@@ -62,6 +62,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
 		GeoFunc:       f.geoFunc(),
+		PublicIPFunc:  f.PublicIPFunc,
 		Sink:          f.entrySink(),
 	}
 
@@ -95,6 +96,7 @@ func (f *Factory) PublicVisorUpdater(
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
 		GeoFunc:       f.geoFunc(),
+		PublicIPFunc:  f.PublicIPFunc,
 		Sink:          f.entrySink(),
 	}
 
@@ -132,14 +134,15 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 
 	getServiceDiscConf := func(conf appcommon.ProcConfig, sType string) servicedisc.Config {
 		return servicedisc.Config{
-			Type:     sType,
-			PK:       f.PK,
-			SK:       f.SK,
-			Port:     uint16(conf.RoutingPort),
-			DiscAddr: f.ServiceDisc,
-			Geo:      f.geoData(),
-			GeoFunc:  f.geoFunc(),
-			Sink:     f.entrySink(),
+			Type:         sType,
+			PK:           f.PK,
+			SK:           f.SK,
+			Port:         uint16(conf.RoutingPort),
+			DiscAddr:     f.ServiceDisc,
+			Geo:          f.geoData(),
+			GeoFunc:      f.geoFunc(),
+			PublicIPFunc: f.PublicIPFunc,
+			Sink:         f.entrySink(),
 		}
 	}
 

@@ -326,11 +326,11 @@ func registerPairHTTPHandlers(ctx context.Context, mux *http.ServeMux) {
 	if !pairEnable {
 		return
 	}
-	mux.HandleFunc("/pair", requireAuthFunc(pairRootHandler(ctx)))
+	mux.HandleFunc("/pair", requireAuthFunc(waitsOnPeer(pairRootHandler(ctx))))
 	mux.HandleFunc("/pair/invites", requireAuthFunc(pairInvitesListHandler()))
-	mux.HandleFunc("/pair/invites/", requireAuthFunc(pairInvitesItemHandler(ctx)))
+	mux.HandleFunc("/pair/invites/", requireAuthFunc(waitsOnPeer(pairInvitesItemHandler(ctx))))
 	mux.HandleFunc("/pair/inbox", requireAuthFunc(pairInboxHandler()))
-	mux.HandleFunc("/pair/", requireAuthFunc(pairItemHandler(ctx)))
+	mux.HandleFunc("/pair/", requireAuthFunc(waitsOnPeer(pairItemHandler(ctx))))
 }
 
 // pairInboxHandler serves GET /pair/inbox — snapshot of inbound pair

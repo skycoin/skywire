@@ -250,11 +250,13 @@ func (v *Visor) EmbeddedServiceControl(name, action string) error {
 // as the address resolver client needs an address resolver run here.
 func initOwnKeyServices(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	for _, es := range v.embeddedServices() {
-		if !es.standalone {
-			continue
-		}
+		// A block that failed to build, such as one of an unknown type, is
+		// never standalone, so check it first or it would be skipped silently.
 		if es.err != nil {
 			return fmt.Errorf("embedded services: %w", es.err)
+		}
+		if !es.standalone {
+			continue
 		}
 		es.mu.Lock()
 		started := es.started

@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { Subscription } from 'rxjs';
+import { EMPTY, Subscription, catchError, skip, switchMap } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 
 /** One line of a folder listing (skymail.Summary). */
@@ -72,10 +73,11 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
   whitelistText = '';
 
   private nodeSub?: Subscription;
-  private refresh?: ReturnType<typeof setInterval>;
+  private followSub?: Subscription;
 
   constructor(
     private api: ApiService,
+    private live: LiveService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
   ) {
@@ -89,26 +91,60 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
       if (first && node) {
         this.loadStatus();
         this.loadList();
+        this.follow();
       }
       this.cdr.markForCheck();
     });
-    // New mail arrives without the page asking; refresh the folder quietly.
-    this.refresh = setInterval(() => {
-      if (this.view === 'list') {
-        this.loadStatus();
-        this.loadList(true);
-      }
-      this.cdr.markForCheck();
-    }, 15000);
 
     return super.ngOnInit();
   }
 
   ngOnDestroy(): void {
     this.nodeSub?.unsubscribe();
-    if (this.refresh) {
-      clearInterval(this.refresh);
-    }
+    this.followSub?.unsubscribe();
+  }
+
+  /**
+   * New mail arrives without the page asking, so the status and the open
+   * folder are followed quietly while the list is shown. The first result
+   * is skipped because loadStatus and loadList have just fetched it.
+   */
+  private follow() {
+    this.followSub?.unsubscribe();
+    this.followSub = new Subscription();
+    const listUrl = `${this.base}/${this.folder}`;
+    this.followSub.add(this.live.watch(this.base, 15000, () => this.api.get(this.base)).pipe(
+      skip(1),
+      switchMap(res => res.pipe(catchError((err: any) => {
+        if (this.view === 'list') {
+          this.statusError = this.errText(err);
+          this.cdr.markForCheck();
+        }
+
+        return EMPTY;
+      }))),
+    ).subscribe((st: any) => {
+      if (this.view === 'list') {
+        this.applyStatus(st);
+      }
+      this.cdr.markForCheck();
+    }));
+    this.followSub.add(this.live.watch(listUrl, 15000, () => this.api.get(listUrl)).pipe(
+      skip(1),
+      switchMap(res => res.pipe(catchError(() => EMPTY))),
+    ).subscribe((l: MailSummary[]) => {
+      if (this.view === 'list') {
+        this.list = l || [];
+        this.cdr.markForCheck();
+      }
+    }));
+  }
+
+  private applyStatus(st: any) {
+    this.status = st;
+    this.statusError = '';
+    this.whitelistText = (st?.whitelist || []).join('\n');
+    this.cdr.markForCheck();
   }
 
   private get base(): string {
@@ -117,12 +153,7 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
 
   loadStatus() {
     this.api.get(this.base).subscribe({
-      next: (st: any) => {
-        this.status = st;
-        this.statusError = '';
-        this.whitelistText = (st?.whitelist || []).join('\n');
-        this.cdr.markForCheck();
-      },
+      next: (st: any) => this.applyStatus(st),
       error: (err: any) => {
         this.statusError = this.errText(err);
         this.cdr.markForCheck();
@@ -131,9 +162,13 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   showFolder(folder: string) {
+    const changed = folder !== this.folder;
     this.folder = folder;
     this.view = 'list';
     this.loadList();
+    if (changed) {
+      this.follow();
+    }
   }
 
   loadList(quiet = false) {

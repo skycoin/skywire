@@ -2,6 +2,7 @@
 package msg
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"reflect"
@@ -277,8 +278,15 @@ type Object struct {
 // Type implements Msg interface
 func (*Object) Type() Type { return ObjectType }
 
-// Encode the Object
-func (o *Object) Encode() []byte { return encode(o) }
+// Encode the Object. It writes what encode would, the type byte then the
+// length-prefixed Value, in one allocation instead of two copies of Value.
+func (o *Object) Encode() []byte {
+	p := make([]byte, 5+len(o.Value))
+	p[0] = byte(ObjectType)
+	binary.LittleEndian.PutUint32(p[1:], uint32(len(o.Value))) //nolint:gosec // CXO frames are under 64 MiB
+	copy(p[5:], o.Value)
+	return p
+}
 
 //
 // preview
@@ -465,7 +473,8 @@ func encode(msg Msg) (p []byte) {
 	return
 }
 
-// Decode encoded Type-prefixed data to message.
+// Decode encoded Type-prefixed data to message. Byte slices in the
+// message point into p, so the caller must not modify p afterwards.
 // It can returns encoding errors or InvalidTypeError
 func Decode(p []byte) (msg Msg, err error) {
 
@@ -488,7 +497,7 @@ func Decode(p []byte) (msg Msg, err error) {
 		n uint64
 	)
 
-	if n, err = encoder.DeserializeRawToValue(p[1:], val); err != nil {
+	if n, err = encoder.DeserializeRawToValueNoCopy(p[1:], val); err != nil {
 		return msg, err
 	}
 

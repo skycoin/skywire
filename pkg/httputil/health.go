@@ -2,14 +2,10 @@
 package httputil
 
 import (
-	"context"
-	"net/http"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 )
-
-var path = "/health"
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
@@ -55,33 +51,4 @@ type DmsgServerHealth struct {
 // DmsgServerHealthOf converts a server's Stats for /health.
 func DmsgServerHealthOf(clients, peers int, active int64, streams, up, down uint64) *DmsgServerHealth {
 	return &DmsgServerHealth{ClientSessions: clients, PeerSessions: peers, ActiveStreams: active, StreamsRelayed: streams, BytesUp: up, BytesDown: down}
-}
-
-// GetServiceHealth gets the response from the given service url
-func GetServiceHealth(ctx context.Context, url string) (health *HealthCheckResponse, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+path, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp != nil {
-		defer func() {
-			if cErr := resp.Body.Close(); cErr != nil && err == nil {
-				err = cErr
-			}
-		}()
-	}
-	if resp.StatusCode != http.StatusOK {
-		var hErr HTTPError
-		if err = json.NewDecoder(resp.Body).Decode(&hErr); err != nil {
-			return nil, err
-		}
-		return nil, &hErr
-	}
-	err = json.NewDecoder(resp.Body).Decode(&health)
-
-	return health, nil
 }

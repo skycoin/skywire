@@ -10,7 +10,8 @@
 
 .idea/
 .vscode/
-.claude/
+.claude/*
+!.claude/skills/
 tmp/
 ./skywire.json
 ./build/

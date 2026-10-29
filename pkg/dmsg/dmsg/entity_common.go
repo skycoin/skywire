@@ -190,8 +190,10 @@ type EntityCommon struct {
 	// bridging on the same server is not counted. Set on Server entities.
 	maxRelayedStreams int
 	relayedStreams    atomic.Int64
-	relayShare        map[cipher.PubKey]int64
-	relayShareMx      sync.Mutex
+	// relayPaused refuses every new relayed stream while set, whatever the cap.
+	relayPaused  atomic.Bool
+	relayShare   map[cipher.PubKey]int64
+	relayShareMx sync.Mutex
 	// relayRefused counts stream requests this entity turned away with
 	// ErrRelayCapacityReached (308). An overload error with no counter is an
 	// overload you first hear about from a user reporting an unreachable
@@ -495,7 +497,7 @@ func (c *EntityCommon) maxRelayedStreamsPerPeer() int64 {
 // (client entities) — reject rather than relay unbounded. Pair every true
 // return with a releaseRelaySlot for the same peer.
 func (c *EntityCommon) tryAcquireRelaySlot(peer cipher.PubKey) bool {
-	if c.maxRelayedStreams <= 0 {
+	if c.maxRelayedStreams <= 0 || c.relayPaused.Load() {
 		return false
 	}
 	perPeer := c.maxRelayedStreamsPerPeer()
@@ -1349,6 +1351,11 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 		}
 		consecutiveFailures++
 		t.Reset(entryFailureBackoff(consecutiveFailures))
+	}
+	// The first-session publish runs before this loop starts. If nothing has
+	// been published, it failed or timed out, so start on the backoff ladder.
+	if c.lastUpdate.Load() == 0 {
+		rearm(false)
 	}
 
 	for {

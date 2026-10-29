@@ -71,13 +71,17 @@ func transportDailyBandwidth(result map[string]string) uint64 {
 // which is what every other transport read answers from.
 func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int, error) {
 	if entries, ok := s.live.snapshot(false, false, time.Now()); ok {
-		counts := make(map[string]int)
+		by := make(map[cipher.PubKey]int)
 		for _, e := range entries {
 			if e.Type == tptypes.DMSG {
 				continue
 			}
-			counts[e.Edges[0].Hex()]++
-			counts[e.Edges[1].Hex()]++
+			by[e.Edges[0]]++
+			by[e.Edges[1]]++
+		}
+		counts := make(map[string]int, len(by))
+		for pk, n := range by {
+			counts[pk.Hex()] = n
 		}
 		return counts, nil
 	}
@@ -486,9 +490,23 @@ func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, string, bool) {
 	}
 	typ := ""
 	if len(parts) == 3 {
-		typ = parts[2]
+		typ = internType(parts[2])
 	}
 	return edges, typ, true
+}
+
+// internType returns the canonical string for a known transport type, or a copy
+// of an unknown one. A substring of the bw:edges value would keep the whole
+// value alive in the bandwidth index, one per transport.
+var knownTypes = tptypes.Known()
+
+func internType(s string) string {
+	for _, t := range knownTypes {
+		if string(t) == s {
+			return string(t)
+		}
+	}
+	return strings.Clone(s)
 }
 
 // GetTransportMetricsByIDs returns metrics for specific transports.
@@ -604,16 +622,24 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 	}
 
-	// Fetch bandwidth data via pipeline
-	type bwKey struct {
-		idx    int
-		dayIdx int
-	}
-	var bwKeys []bwKey
-	var bwResults []*redis.StringStringMapCmd
+	// Bandwidth is read a chunk of transports at a time and folded into
+	// bwByEntry before the next chunk is fetched, so only one chunk of
+	// HGETALL replies is ever held as maps.
+	bwByEntry := make([][]DailyEdgeBandwidth, len(filtered))
 	// dateStrs[d] is the "2006-01-02" string for day d; shared across all
 	// entries so it is formatted `days` times, not once per (entry × day).
 	var dateStrs []string
+
+	// A visor is an edge of many transports; encode each key once and share it.
+	hexes := make(map[cipher.PubKey]string)
+	hexOf := func(pk cipher.PubKey) string {
+		h, ok := hexes[pk]
+		if !ok {
+			h = pk.Hex()
+			hexes[pk] = h
+		}
+		return h
+	}
 
 	if query.Bandwidth {
 		dateStrs = make([]string, days)
@@ -621,101 +647,56 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			dateStrs[d] = now.AddDate(0, 0, -d).Format("2006-01-02")
 		}
 		ix := s.bwIndex.peek()
-		n := len(filtered) * 2
-		if ix == nil {
-			n = len(filtered) * days
-		}
-		bwKeys = make([]bwKey, 0, n)
-		bwResults = make([]*redis.StringStringMapCmd, 0, n)
-		pipe := s.batchedPipe(ctx)
-		for i := range filtered {
-			idStr := idStrs[i]
-			for _, d := range ix.fetchDays(filtered[i].entry.ID, now, days) {
-				if !s.liveBandwidthDay(d) {
-					continue // from the archive below
+		for lo := 0; lo < len(filtered); {
+			// Same key as bandwidthDailyKey ("<svc>:bw:daily:<id>:<date>")
+			// but built by concat (single alloc, no fmt reflection) with the
+			// id + date precomputed above rather than re-formatting per day.
+			var bwDays [][]int
+			queued := 0
+			hi := lo
+			for hi < len(filtered) && queued < metricsChunkCmds {
+				var fetch []int
+				for _, d := range ix.fetchDays(filtered[hi].entry.ID, now, days) {
+					if s.liveBandwidthDay(d) { // the rest is from the archive below
+						fetch = append(fetch, d)
+					}
 				}
-				// Same key as bandwidthDailyKey ("<svc>:bw:daily:<id>:<date>")
-				// but built by concat (single alloc, no fmt reflection) with the
-				// id + date precomputed above rather than re-formatting per day.
-				key := serviceName + ":bw:daily:" + idStr + ":" + dateStrs[d]
-				bwKeys = append(bwKeys, bwKey{idx: i, dayIdx: d})
-				bwResults = append(bwResults, pipe.next().HGetAll(ctx, key))
+				bwDays = append(bwDays, fetch)
+				queued += len(fetch)
+				hi++
 			}
-		}
-		if err := pipe.exec(); err != nil {
-			return nil, err
-		}
-	}
-
-	// Build bandwidth lookup map: entryIdx -> []DailyEdgeBandwidth
-	bwByEntry := make(map[int][]DailyEdgeBandwidth)
-	// Edge hexes and the four field keys depend only on the entry, and bwKeys
-	// are built strictly entry-major, so compute them once per entry (was per
-	// entry × day-with-data — ~390k → ~13k Hex() calls + key concats).
-	lastIdx := -1
-	var kASent, kARecv, kBSent, kBRecv string
-	for i, bk := range bwKeys {
-		result, err := bwResults[i].Result()
-		if err != nil || len(result) == 0 {
-			continue
-		}
-
-		if bk.idx != lastIdx {
-			f := filtered[bk.idx]
-			edgeAHex := f.entry.Edges[0].Hex()
-			edgeBHex := f.entry.Edges[1].Hex()
-			kASent, kARecv = edgeAHex+":sent", edgeAHex+":recv"
-			kBSent, kBRecv = edgeBHex+":sent", edgeBHex+":recv"
-			lastIdx = bk.idx
-		}
-
-		// Try to read per-reporter sent/recv fields (new format)
-		var aSent, aRecv, bSent, bRecv uint64
-		hasPerEdge := false
-		if val, ok := result[kASent]; ok {
-			aSent = parseBWUint(val)
-			hasPerEdge = true
-		}
-		if val, ok := result[kARecv]; ok {
-			aRecv = parseBWUint(val)
-			hasPerEdge = true
-		}
-		if val, ok := result[kBSent]; ok {
-			bSent = parseBWUint(val)
-			hasPerEdge = true
-		}
-		if val, ok := result[kBRecv]; ok {
-			bRecv = parseBWUint(val)
-			hasPerEdge = true
-		}
-
-		dateStr := dateStrs[bk.dayIdx]
-		_, sameNet := result[sameNetworkField]
-		if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
-			dailyMetric := DailyEdgeBandwidth{
-				Date:        dateStr,
-				A:           &EdgeBandwidth{Sent: aSent, Recv: aRecv},
-				B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
-				SameNetwork: sameNet,
-			}
-			verifiedFields(result, kASent, dailyMetric.A)
-			verifiedFields(result, kBSent, dailyMetric.B)
-			bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
-		} else {
-			// Fallback for old data: split combined total equally
-			var bw uint64
-			if val, ok := result["bandwidth"]; ok {
-				bw = parseBWUint(val)
-			}
-			if bw > 0 {
-				halfBW := bw / 2
-				dailyMetric := DailyEdgeBandwidth{
-					Date: dateStr,
-					A:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
-					B:    &EdgeBandwidth{Sent: halfBW, Recv: halfBW},
+			cmds := make([]*redis.StringStringMapCmd, 0, queued)
+			pipe := s.batchedPipe(ctx)
+			for i := lo; i < hi; i++ {
+				for _, d := range bwDays[i-lo] {
+					key := serviceName + ":bw:daily:" + idStrs[i] + ":" + dateStrs[d]
+					cmds = append(cmds, pipe.next().HGetAll(ctx, key))
 				}
-				bwByEntry[bk.idx] = append(bwByEntry[bk.idx], dailyMetric)
 			}
+			if err := pipe.exec(); err != nil {
+				return nil, err
+			}
+			n := 0
+			for i := lo; i < hi; i++ {
+				f := filtered[i]
+				// The four field keys depend only on the entry.
+				edgeAHex := hexOf(f.entry.Edges[0])
+				edgeBHex := hexOf(f.entry.Edges[1])
+				kASent, kARecv := edgeAHex+":sent", edgeAHex+":recv"
+				kBSent, kBRecv := edgeBHex+":sent", edgeBHex+":recv"
+				for _, d := range bwDays[i-lo] {
+					result, err := cmds[n].Result()
+					cmds[n] = nil
+					n++
+					if err != nil || len(result) == 0 {
+						continue
+					}
+					if m, ok := dailyBandwidth(result, dateStrs[d], kASent, kARecv, kBSent, kBRecv); ok {
+						bwByEntry[i] = append(bwByEntry[i], m)
+					}
+				}
+			}
+			lo = hi
 		}
 	}
 
@@ -746,7 +727,7 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		}
 
 		if query.Edges {
-			metric.Edges = []string{f.entry.Edges[0].Hex(), f.entry.Edges[1].Hex()}
+			metric.Edges = []string{hexOf(f.entry.Edges[0]), hexOf(f.entry.Edges[1])}
 		}
 
 		// Process latency result from the durable lat:<id> key.
@@ -776,4 +757,55 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		return []TransportMetric{}, nil
 	}
 	return results, nil
+}
+
+// metricsChunkCmds is how many daily-hash reads buildTransportMetrics holds
+// at once. Each reply is a map, so the whole window at once is the startup
+// memory peak.
+const metricsChunkCmds = 2000
+
+// dailyBandwidth reads one transport's day from its hash. The k* arguments are
+// the sent and recv fields of its two edges, A then B. It reports false when
+// the day carries no bandwidth.
+func dailyBandwidth(result map[string]string, dateStr, kASent, kARecv, kBSent, kBRecv string) (DailyEdgeBandwidth, bool) {
+	var aSent, aRecv, bSent, bRecv uint64
+	hasPerEdge := false
+	if val, ok := result[kASent]; ok {
+		aSent = parseBWUint(val)
+		hasPerEdge = true
+	}
+	if val, ok := result[kARecv]; ok {
+		aRecv = parseBWUint(val)
+		hasPerEdge = true
+	}
+	if val, ok := result[kBSent]; ok {
+		bSent = parseBWUint(val)
+		hasPerEdge = true
+	}
+	if val, ok := result[kBRecv]; ok {
+		bRecv = parseBWUint(val)
+		hasPerEdge = true
+	}
+	if hasPerEdge && (aSent+aRecv+bSent+bRecv) > 0 {
+		_, sameNet := result[sameNetworkField]
+		m := DailyEdgeBandwidth{
+			Date:        dateStr,
+			A:           &EdgeBandwidth{Sent: aSent, Recv: aRecv},
+			B:           &EdgeBandwidth{Sent: bSent, Recv: bRecv},
+			SameNetwork: sameNet,
+		}
+		verifiedFields(result, kASent, m.A)
+		verifiedFields(result, kBSent, m.B)
+		return m, true
+	}
+	// Old data keeps one combined total, split equally.
+	if bw := parseBWUint(result["bandwidth"]); bw > 0 {
+		half := bw / 2
+		return DailyEdgeBandwidth{
+			Date: dateStr,
+			A:    &EdgeBandwidth{Sent: half, Recv: half},
+			B:    &EdgeBandwidth{Sent: half, Recv: half},
+		}, true
+	}
+	return DailyEdgeBandwidth{}, false
 }

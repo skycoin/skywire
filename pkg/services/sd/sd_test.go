@@ -1,5 +1,5 @@
 // Package sd — pkg/services/sd/sd_test.go: covers the config plumbing
-// (LoadFile / ParseBlock / dmsgDiscEntries), the registration init,
+// (LoadFile / ParseBlock), the registration init,
 // factory / New, and the validation branches of Run that return before
 // the service touches a live store. Run's redis-, store-, and dmsg-
 // dependent body (svcmode listeners, CXO publisher) needs a real redis +
@@ -17,8 +17,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 )
@@ -99,29 +97,6 @@ func TestLoadFile(t *testing.T) {
 		writeFile(t, path, `{"addr":":9098","bogus_field":true}`)
 		if _, err := LoadFile(path); err == nil {
 			t.Fatal("expected error for unknown field")
-		}
-	})
-}
-
-// --- dmsgDiscEntries -------------------------------------------------
-
-func TestDmsgDiscEntries(t *testing.T) {
-	t.Run("empty falls back to embedded prod servers", func(t *testing.T) {
-		got := dmsgDiscEntries(nil)
-		if len(got) != len(dmsg.Prod.DmsgServers) {
-			t.Errorf("empty input → %d entries, want prod set (%d)", len(got), len(dmsg.Prod.DmsgServers))
-		}
-	})
-
-	t.Run("non-empty copies entries and skips nils", func(t *testing.T) {
-		e1 := &disc.Entry{Static: cipher.PubKey{0x02}}
-		e2 := &disc.Entry{Static: cipher.PubKey{0x03}}
-		got := dmsgDiscEntries([]*disc.Entry{e1, nil, e2})
-		if len(got) != 2 {
-			t.Fatalf("got %d entries, want 2 (nil skipped)", len(got))
-		}
-		if got[0].Static != e1.Static || got[1].Static != e2.Static {
-			t.Errorf("entries not copied in order: %+v", got)
 		}
 	})
 }

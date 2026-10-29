@@ -9,6 +9,7 @@ import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
 import { NodeService } from './node.service';
+import { LiveService } from './live.service';
 
 /**
  * Data about a node, returned by SingleNodeDataService.
@@ -130,6 +131,7 @@ export class SingleNodeDataService {
   constructor(
     private storageService: StorageService,
     private nodeService: NodeService,
+    private live: LiveService,
   ) {
     // Get the data refresing time set by the user.
     this.storageService.getRefreshTimeObservable().subscribe(val => {
@@ -173,7 +175,7 @@ export class SingleNodeDataService {
 
       this.nodesMap.set(publicKey, nodeData);
 
-      this.startDataSubscription(0, nodeData);
+      this.startUpdates(nodeData);
     } else {
       // Cancel any previous stop request.
       nodeData.stopRequestedDate = -1;
@@ -347,8 +349,88 @@ export class SingleNodeDataService {
   forceSpecificNodeRefresh(publicKey: string) {
     const nodeData = this.nodesMap.get(publicKey);
     if (nodeData) {
+      this.startUpdates(nodeData);
+    }
+  }
+
+  /** Follows the node over the live socket when possible, else polls. */
+  private startUpdates(nodeData: NodeData) {
+    if (this.live.usable) {
+      this.startLiveSubscription(nodeData);
+    } else {
       this.startDataSubscription(0, nodeData);
     }
+  }
+
+  /**
+   * Gets the node's summary pushed over the live socket, which sends it at
+   * once and then whenever it changes. A new subscription also serves as a
+   * forced refresh. Falls back to polling if the socket cannot be used.
+   */
+  private startLiveSubscription(nodeData: NodeData) {
+    if (nodeData.updateSubscription) {
+      nodeData.updateSubscription.unsubscribe();
+    }
+
+    nodeData.updateSubscription = this.live.subscribe(`/api/visors/${nodeData.pk}/summary`, this.dataRefreshDelay).subscribe({
+      next: ev => {
+        // The hypervisor caps subscriptions per socket; past it, poll.
+        if (ev.status === 429) {
+          this.startDataSubscription(0, nodeData);
+
+          return;
+        }
+        if (ev.status >= 200 && ev.status < 300) {
+          let node: Node;
+          try {
+            node = this.nodeService.nodeFromSummary(JSON.parse(ev.body));
+          } catch (e) {
+            return;
+          }
+          nodeData.consecutiveErrors = 0;
+
+          // A pushed summary comes when it changed, not once per interval, so
+          // the traffic history advances by the intervals that really passed.
+          const now = Date.now();
+          const elapsed = nodeData.whenUpdateWasScheduled > 0 ? now - nodeData.whenUpdateWasScheduled : 0;
+          const slots = elapsed >= this.dataRefreshDelay * 0.8 ? Math.max(1, Math.round(elapsed / this.dataRefreshDelay)) : 0;
+          this.updateTrafficData(node.transports, nodeData.lastEmitedData.trafficData, now - slots * this.dataRefreshDelay);
+          if (slots > 0 || nodeData.whenUpdateWasScheduled === 0) {
+            nodeData.whenUpdateWasScheduled = now;
+          }
+
+          nodeData.lastEmitedData = {
+            data: node,
+            error: null,
+            momentOfLastCorrectUpdate: now,
+            updating: false,
+            trafficData: nodeData.lastEmitedData.trafficData
+          };
+          nodeData.dataSubject.next(nodeData.lastEmitedData);
+
+          return;
+        }
+
+        const err = processServiceError(new HttpErrorResponse({ status: ev.status, error: ev.body }));
+        nodeData.consecutiveErrors = (nodeData.consecutiveErrors || 0) + 1;
+        nodeData.lastEmitedData = {
+          data: nodeData.lastEmitedData.data,
+          error: err,
+          momentOfLastCorrectUpdate: nodeData.lastEmitedData.momentOfLastCorrectUpdate,
+          updating: false,
+          trafficData: nodeData.lastEmitedData.trafficData
+        };
+        nodeData.dataSubject.next(nodeData.lastEmitedData);
+
+        // The same rule as polling: an unknown node stops being followed.
+        if (ev.status === 400) {
+          nodeData.dataSubject.complete();
+          nodeData.updateSubscription.unsubscribe();
+          this.nodesMap.delete(nodeData.pk);
+        }
+      },
+      error: () => this.startDataSubscription(0, nodeData),
+    });
   }
 
   /**

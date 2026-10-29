@@ -18,7 +18,7 @@ import (
 // skip.
 const testRedisEnv = "SKYWIRE_TEST_REDIS"
 
-func newTestRedisStore(t *testing.T) *redisStore {
+func newTestRedisStore(t testing.TB) *redisStore {
 	t.Helper()
 	url := os.Getenv(testRedisEnv)
 	if url == "" {

@@ -1,11 +1,12 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
-import { Subscription, interval, of, startWith } from 'rxjs';
+import { Observable, Subscription, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { LiveService } from 'src/app/services/live.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 
 /**
@@ -60,6 +61,7 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
 
   constructor(
     private api: ApiService,
+    private live: LiveService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
   ) {
@@ -89,7 +91,8 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
     if (!this.node) {
  return; 
 }
-    this.fetchOnce().subscribe();
+    this.pollSub?.unsubscribe();
+    this.startPolling();
   }
 
   /**
@@ -123,14 +126,14 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
     // 5s feels live without spamming RPC. Sessions change on
     // dmsg-server churn — minutes, typically — so faster polling
     // wastes work.
-    this.pollSub = interval(5000).pipe(
-      startWith(0),
-      switchMap(() => this.fetchOnce()),
+    const url = `visors/${this.node.localPk}/dmsg/sessions`;
+    this.pollSub = this.live.watch(url, 5000, () => this.api.get(url)).pipe(
+      switchMap(res => this.fetchOnce(res)),
     ).subscribe();
   }
 
-  private fetchOnce() {
-    return this.api.get(`visors/${this.node.localPk}/dmsg/sessions`).pipe(
+  private fetchOnce(source: Observable<any>) {
+    return source.pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch dmsg sessions';
         this.loading = false;

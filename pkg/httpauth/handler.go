@@ -127,7 +127,7 @@ func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) ht
 		original.ServeHTTP(&sw, r.WithContext(context.WithValue(
 			r.Context(), ContextAuthKey, auth.Key)))
 
-		if sw.status == http.StatusOK {
+		if sw.status >= 200 && sw.status < 300 {
 			_, err := store.IncrementNonce(r.Context(), auth.Key)
 			if err != nil {
 				logger.Error(err)

@@ -45,6 +45,8 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	m.disc = maker("discovery", initDiscovery, &m.dmsgC, &m.sc, &m.dmsgHTTP)
 	m.tr = maker("transport", initTransport, &m.ar, &m.ebc, &m.dmsgHTTP)
 	m.sc = maker("stun_client", initStunClient)
+	// A phone moves between networks often (netmove.go).
+	m.netWatch = maker("network_watch", initNetworkWatch, &m.ar, &m.tr, &m.dmsgC)
 	m.sudphC = maker("sudph", initSudphClient, &m.sc, &m.tr)
 	m.stcprC = maker("stcpr", initStcprClient, &m.tr)
 	m.stcpC = maker("stcp", initStcpClient, &m.tr)
@@ -129,7 +131,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc,
 		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.pv, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC,
-		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.skymail)
+		&m.skyFwd, &m.pi, &m.dmsgPi, &m.tpdco, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.skymail, &m.netWatch)
 	// Hypervisor: the local API the app talks to (plus Fleet, opt-in).
 	m.hv = maker("hypervisor", initHypervisor, &m.vis)
 	return m

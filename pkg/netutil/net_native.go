@@ -119,25 +119,32 @@ func HasPublicIP() (bool, error) {
 	return false, nil
 }
 
-// LocalAddresses returns a list of all local addresses
+// LocalAddresses returns the addresses the visor may offer peers: global
+// unicast, on an up interface that is not virtual, and permitted by the
+// advertise policy (see SetAdvertisePolicy).
 func LocalAddresses() ([]string, error) {
-	result := make([]string, 0)
+	kept, _, err := LocalAddressesDetail()
+	return kept, err
+}
 
+// LocalAddressesDetail is LocalAddresses plus what the advertise policy
+// removed, each as "address (interface)".
+func LocalAddressesDetail() (kept, excluded []string, err error) {
 	ifaces, err := anet.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
+	pol := AdvertisePolicy()
+	kept = make([]string, 0)
 	for _, iface := range ifaces {
-		// Skip loopback and down interfaces
 		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		}
-		// Skip Docker/container bridge interfaces
-		if IsVirtualInterface(iface.Name) {
+		// Container bridges, tunnels and other virtual interfaces stay out
+		// unless an allow entry names them.
+		if IsVirtualInterface(iface.Name) && !pol.AllowsNamed(iface.Name) {
 			continue
 		}
-
 		addrs, err := anet.InterfaceAddrsByInterface(&iface)
 		if err != nil {
 			continue
@@ -150,13 +157,42 @@ func LocalAddresses() ([]string, error) {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			if ip != nil && ip.IsGlobalUnicast() {
-				result = append(result, ip.String())
+			if ip == nil || !ip.IsGlobalUnicast() || !IsAdvertisableIP(ip) {
+				continue
+			}
+			if !pol.Permits(iface.Name, ip) {
+				excluded = append(excluded, ip.String()+" ("+iface.Name+")")
+				continue
+			}
+			kept = append(kept, ip.String())
+		}
+	}
+	return kept, excluded, nil
+}
+
+// PolicyPermitsIP reports whether the advertise policy lets ip be offered,
+// looking up the interface that holds it.
+func PolicyPermitsIP(ip net.IP) bool {
+	pol := AdvertisePolicy()
+	if pol.IsZero() {
+		return true
+	}
+	ifaces, err := anet.Interfaces()
+	if err != nil {
+		return pol.Permits("", ip)
+	}
+	for _, iface := range ifaces {
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+				return pol.Permits(iface.Name, ip)
 			}
 		}
 	}
-
-	return result, nil
+	return pol.Permits("", ip)
 }
 
 // LocalProtocol check a condition to use dmsghttp or direct url
@@ -173,4 +209,61 @@ func LocalProtocol() bool {
 		return true
 	}
 	return false
+}
+
+// RouteSourceIPs returns the local addresses the kernel would send internet
+// traffic from, per family, or "" for a family with no route. Connecting a
+// UDP socket looks the route up and sends nothing.
+func RouteSourceIPs() (v4, v6 string) {
+	return routeSource("udp4", "198.51.100.1:9"), routeSource("udp6", "[2001:db8::1]:9")
+}
+
+func routeSource(network, addr string) string {
+	c, err := net.Dial(network, addr)
+	if err != nil {
+		return ""
+	}
+	defer c.Close() //nolint:errcheck
+	if u, ok := c.LocalAddr().(*net.UDPAddr); ok {
+		return u.IP.String()
+	}
+	return ""
+}
+
+// IfaceAddr is one address and the interface holding it.
+type IfaceAddr struct {
+	Name string
+	IP   net.IP
+}
+
+// RouteInterfaces returns the interfaces and addresses the kernel would send
+// internet traffic from, one per family that has a route.
+func RouteInterfaces() []IfaceAddr {
+	v4, v6 := RouteSourceIPs()
+	want := map[string]bool{}
+	for _, s := range []string{v4, v6} {
+		if s != "" {
+			want[s] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	ifaces, err := anet.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []IfaceAddr
+	for _, iface := range ifaces {
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && want[n.IP.String()] {
+				out = append(out, IfaceAddr{Name: iface.Name, IP: n.IP})
+			}
+		}
+	}
+	return out
 }

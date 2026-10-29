@@ -109,15 +109,6 @@ func TestMirrorsAndBackfill_NoMirror(t *testing.T) {
 	a.updateMetrics() // exercise the metrics path
 }
 
-func TestWriteJSON_MarshalError(t *testing.T) {
-	a := newTestAPI(t)
-	rec := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/x", nil)
-	// channels can't be JSON-marshaled -> 500.
-	a.writeJSON(rec, r, http.StatusOK, make(chan int))
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-}
-
 // ---- health / transports (no auth) ----------------------------------------
 
 func TestHealth(t *testing.T) {
@@ -321,7 +312,7 @@ func TestDeregister(t *testing.T) {
 		a := newTestAPI(t)
 		nmPK, _ := cipher.GenerateKeyPair()
 		req := httptest.NewRequest(http.MethodDelete, "/deregister/stcpr", nil)
-		req.Header.Set("NM-PK", nmPK.Hex())
+		req.RemoteAddr = nmPK.Hex() + ":80"
 		rec := httptest.NewRecorder()
 		a.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusForbidden, rec.Code)
@@ -329,16 +320,12 @@ func TestDeregister(t *testing.T) {
 
 	t.Run("whitelisted bad network type -> 400", func(t *testing.T) {
 		a := newTestAPI(t)
-		nmPK, nmSK := cipher.GenerateKeyPair()
+		nmPK, _ := cipher.GenerateKeyPair()
 		WhitelistPKs.Set(nmPK.Hex())
 		defer delete(WhitelistPKs, nmPK.Hex())
 
-		sig, err := cipher.SignPayload([]byte(nmPK.Hex()), nmSK)
-		require.NoError(t, err)
-
 		req := httptest.NewRequest(http.MethodDelete, "/deregister/bogus", nil)
-		req.Header.Set("NM-PK", nmPK.Hex())
-		req.Header.Set("NM-Sign", sig.Hex())
+		req.RemoteAddr = nmPK.Hex() + ":80"
 		rec := httptest.NewRecorder()
 		a.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -350,21 +337,18 @@ func TestDeregister(t *testing.T) {
 		target, _ := cipher.GenerateKeyPair()
 		require.NoError(t, a.store.Bind(ctx, types.STCPR, target, addrresolver.VisorData{RemoteAddr: "203.0.113.5"}))
 
-		nmPK, nmSK := cipher.GenerateKeyPair()
+		nmPK, _ := cipher.GenerateKeyPair()
 		WhitelistPKs.Set(nmPK.Hex())
 		defer delete(WhitelistPKs, nmPK.Hex())
-		sig, err := cipher.SignPayload([]byte(nmPK.Hex()), nmSK)
-		require.NoError(t, err)
 
 		body, _ := json.Marshal([]string{target.Hex()}) //nolint
 		req := httptest.NewRequest(http.MethodDelete, "/deregister/stcpr", bytes.NewReader(body))
-		req.Header.Set("NM-PK", nmPK.Hex())
-		req.Header.Set("NM-Sign", sig.Hex())
+		req.RemoteAddr = nmPK.Hex() + ":80"
 		rec := httptest.NewRecorder()
 		a.ServeHTTP(rec, req)
 		require.Equal(t, http.StatusOK, rec.Code)
 
-		_, err = a.store.Resolve(ctx, types.STCPR, target)
+		_, err := a.store.Resolve(ctx, types.STCPR, target)
 		require.ErrorIs(t, err, store.ErrNoEntry)
 	})
 }

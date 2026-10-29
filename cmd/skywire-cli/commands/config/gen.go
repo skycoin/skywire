@@ -482,7 +482,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
 	skyenvIntVar(genConfigCmd.Flags(), &publicVisorMaxTransports, "maxtransports", "${MAXTRANSPORTS:-0}", "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
-	gHiddenFlags = append(gHiddenFlags, "muxroutes")
 	skyenvStringVar(genConfigCmd.Flags(), &cliAddr, "cliaddr", "${CLIADDR}", "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
@@ -819,6 +818,7 @@ var genConfigCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		keepTCPNotSentLowat()
+		keepNetworkWatch()
 		configureWSPeers(log)
 
 		configureApps(log)
@@ -1777,6 +1777,16 @@ func keepAutoconnect() {
 func keepTCPNotSentLowat() {
 	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.TCPNotSentLowat = oldConfCache.Transport.TCPNotSentLowat
+	}
+}
+
+// keepNetworkWatch carries the network watcher periods and policy over a
+// regenerate: they are set live with config set and have no skywire.conf variable.
+func keepNetworkWatch() {
+	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
+		conf.Transport.NetworkWatchInterval = oldConfCache.Transport.NetworkWatchInterval
+		conf.Transport.PublicIPCheckInterval = oldConfCache.Transport.PublicIPCheckInterval
+		conf.Transport.Network = oldConfCache.Transport.Network
 	}
 }
 

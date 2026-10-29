@@ -220,3 +220,25 @@ func (r *RPC) DmsgPorterDiag(_ *struct{}, out *netutil.EphemeralDiagResult) (err
 	*out = *diag
 	return nil
 }
+
+// NetworkMoved makes the visor refresh what it advertises about its network.
+func (r *RPC) NetworkMoved(in *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkMoved", in)(nil, &err)
+	return r.visor.NetworkMoved(*in)
+}
+
+// NetworkSet changes the network policy live.
+func (r *RPC) NetworkSet(in *visorapi.NetworkSettings, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkSet", in)(nil, &err)
+	return r.visor.NetworkSet(*in)
+}
+
+// NetworkEvent takes an app's report of the network.
+func (r *RPC) NetworkEvent(in *visorapi.NetworkEvent, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkEvent", in)(nil, &err)
+	if in.Metered == nil && in.MeteredText != "" {
+		m := in.MeteredText == "true"
+		in.Metered = &m
+	}
+	return r.visor.NetworkEvent(*in)
+}

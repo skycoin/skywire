@@ -47,6 +47,7 @@ var commandGroup = map[string]string{
 	"ports":        groupNetwork,
 	"dmsg-servers": groupNetwork,
 	"ip":           groupNetwork,
+	"network":      groupNetwork,
 	"app":          groupSubsystems,
 	"hv":           groupSubsystems,
 	"proxies":      groupSubsystems,

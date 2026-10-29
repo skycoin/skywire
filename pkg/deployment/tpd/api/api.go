@@ -16,7 +16,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
-	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/deployment/tpd/metrics"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -44,12 +43,10 @@ var (
 	ErrEmptyTransportID = errors.New("transport ID cannot be empty")
 	// ErrInvalidTransportID indicates that provided transport ID is invalid.
 	ErrInvalidTransportID = errors.New("transport ID is invalid")
-	// ErrUnauthorizedNetworkMonitor occurs in case of invalid network monitor key
-	ErrUnauthorizedNetworkMonitor = errors.New("invalid network monitor key")
 	// ErrBadInput occurs in case of bad input
 	ErrBadInput = errors.New("error bad input")
-	// WhitelistPKs store whitelisted pks of network monitor
-	WhitelistPKs = nmpk.GetWhitelistPKs()
+	// WhitelistPKs holds the keys allowed to call the bulk deregistration endpoint.
+	WhitelistPKs = httpauth.NewWhitelist()
 )
 
 // API register all the API endpoints.
@@ -156,7 +153,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	// dmsg, where every byte is relayed.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
 	// smaller than the flate state that would compress them (httputil.CompressMin).
 	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))

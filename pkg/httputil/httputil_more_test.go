@@ -60,41 +60,6 @@ func TestHTTPErrorTimeoutTemporary(t *testing.T) {
 
 // --- health.go ---
 
-func TestGetServiceHealth(t *testing.T) {
-	t.Run("ok", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/health", r.URL.Path)
-			_ = json.NewEncoder(w).Encode(HealthCheckResponse{ServiceName: "svc", PublicKey: "pk"}) //nolint
-		}))
-		defer srv.Close()
-
-		h, err := GetServiceHealth(context.Background(), srv.URL)
-		require.NoError(t, err)
-		require.NotNil(t, h)
-		assert.Equal(t, "svc", h.ServiceName)
-		assert.Equal(t, "pk", h.PublicKey)
-	})
-
-	t.Run("non-200 returns HTTPError", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(HTTPError{Status: 503, Body: "down"}) //nolint
-		}))
-		defer srv.Close()
-
-		_, err := GetServiceHealth(context.Background(), srv.URL)
-		require.Error(t, err)
-		he, ok := err.(*HTTPError)
-		require.True(t, ok)
-		assert.Equal(t, 503, he.Status)
-	})
-
-	t.Run("unreachable", func(t *testing.T) {
-		_, err := GetServiceHealth(context.Background(), "http://127.0.0.1:1")
-		assert.Error(t, err)
-	})
-}
-
 // --- httputil.go ---
 
 func TestWriteJSON(t *testing.T) {
@@ -165,16 +130,6 @@ func TestBoolFromQuery(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSplitRPCAddr(t *testing.T) {
-	host, port, err := SplitRPCAddr("localhost:8080")
-	require.NoError(t, err)
-	assert.Equal(t, "localhost", host)
-	assert.Equal(t, uint16(8080), port)
-
-	_, _, err = SplitRPCAddr("localhost:notaport")
-	assert.Error(t, err)
-}
-
 func TestGetLogger(t *testing.T) {
 	t.Run("absent returns a logger", func(t *testing.T) {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -238,4 +193,12 @@ func TestLogMiddleware(t *testing.T) {
 func TestLogEntrySetFieldNoMiddleware(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	assert.NotPanics(t, func() { LogEntrySetField(r, "k", "v") })
+}
+
+func TestWriteJSON_UnencodableValueAnswers500(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	require.NotPanics(t, func() { WriteJSON(w, r, http.StatusOK, make(chan int)) })
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, w.Body.String())
 }

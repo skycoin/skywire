@@ -17,12 +17,12 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
-	"github.com/skycoin/skywire/pkg/deployment/monitor/nmpk"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/store"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/fastjson"
+	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -32,8 +32,8 @@ var log = logging.MustGetLogger("dmsg-discovery")
 
 var json = fastjson.JSON
 
-// WhitelistPKs store whitelisted pks of network monitor
-var WhitelistPKs = nmpk.GetWhitelistPKs()
+// WhitelistPKs holds the keys allowed to call the bulk deregistration endpoint.
+var WhitelistPKs = httpauth.NewWhitelist()
 
 const maxGetAvailableServersResult = 512
 
@@ -97,6 +97,12 @@ type API struct {
 	allClientsAt     time.Time
 	allClientsErr    error
 	allClientsSingle singleflight // dedupes concurrent refreshes
+
+	// byServerCache is the grouped form of allClientsCache, built once per
+	// refresh instead of hex-encoding every key on each request.
+	byServerMu    sync.Mutex
+	byServerFor   []*disc.Entry
+	byServerCache map[string][]string
 
 	// cxoPublisher mirrors set/del entry events into a CXO TreeStore
 	// feed under clients-by-server/<server>/<client>/{entry,tombstone}.
@@ -169,7 +175,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.LimitBody(maxBodyBytes))
 	// gzip JSON responses on the wire — this router is also served over
-	// dmsg, where every byte is relayed. Matches rf/ut/sd.
+	// dmsg, where every byte is relayed.
 	// gzip only bodies over CompressMinBytes: single entries and health lines are
 	// smaller than the flate state that would compress them (httputil.CompressMin).
 	r.Use(httputil.CompressMin(httputil.CompressMinBytes, 5))
@@ -344,7 +350,7 @@ func (a *API) getEntry() func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		a.writeJSON(w, r, http.StatusOK, entry)
+		httputil.WriteJSON(w, r, http.StatusOK, entry)
 	}
 }
 
@@ -358,7 +364,7 @@ func (a *API) allEntries() func(w http.ResponseWriter, r *http.Request) {
 			a.handleError(w, r, err)
 			return
 		}
-		a.writeJSON(w, r, http.StatusOK, entries)
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 	}
 }
 
@@ -396,7 +402,7 @@ func (a *API) batchEntries() func(w http.ResponseWriter, r *http.Request) {
 			result[pkStr] = entry
 		}
 
-		a.writeJSON(w, r, http.StatusOK, result)
+		httputil.WriteJSON(w, r, http.StatusOK, result)
 	}
 }
 
@@ -410,7 +416,7 @@ func (a *API) allVisorEntries() func(w http.ResponseWriter, r *http.Request) {
 			a.handleError(w, r, err)
 			return
 		}
-		a.writeJSON(w, r, http.StatusOK, entries)
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 	}
 }
 
@@ -421,55 +427,17 @@ func (a *API) deregisterEntry() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Info("Deregistration process started.")
 
-		nmPkString := r.Header.Get("NM-PK")
-		if ok := WhitelistPKs.Get(nmPkString); !ok {
-			log.WithError(disc.ErrUnauthorizedNetworkMonitor).WithField("Step", "Checking NMs PK").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusForbidden)
+		if _, status, err := WhitelistPKs.Authorize(r); err != nil {
+			log.WithError(err).Error("Deregistration process interrupt.")
+			w.WriteHeader(status)
 			return
 		}
 
-		nmPk := cipher.PubKey{}
-		if err := nmPk.UnmarshalText([]byte(nmPkString)); err != nil {
-			log.WithError(disc.ErrBadInput).WithField("Step", "Reading NMs PK").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		nmSign := cipher.Sig{}
-		if err := nmSign.UnmarshalText([]byte(r.Header.Get("NM-Sign"))); err != nil {
-			log.WithError(disc.ErrBadInput).WithField("Step", "Checking sign").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if err := cipher.VerifyPubKeySignedPayload(nmPk, nmSign, []byte(nmPk.Hex())); err != nil {
-			log.WithError(disc.ErrUnauthorizedNetworkMonitor).WithField("Step", "Veryfing request").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		keys := []cipher.PubKey{}
-		keysBody, err := io.ReadAll(r.Body)
+		keys, err := httpauth.ReadKeyList(r)
 		if err != nil {
-			log.WithError(disc.ErrBadInput).WithField("Step", "Reading keys").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
+			log.WithError(err).Error("Deregistration process interrupt.")
+			a.handleError(w, r, disc.ErrBadInput)
 			return
-		}
-		var keysSlice []string
-		if err := json.Unmarshal(keysBody, &keysSlice); err != nil {
-			log.WithError(disc.ErrBadInput).WithField("Step", "Slicing keys").Error("Deregistration process interrupt.")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		for _, key := range keysSlice {
-			tempKey := cipher.PubKey{}
-			if err := tempKey.UnmarshalText([]byte(key)); err != nil {
-				log.WithError(disc.ErrBadInput).WithField("Step", "Checking keys").Error("Deregistration process interrupt.")
-				a.handleError(w, r, disc.ErrBadInput)
-				return
-			}
-			keys = append(keys, tempKey)
 		}
 
 		for _, key := range keys {
@@ -481,7 +449,7 @@ func (a *API) deregisterEntry() func(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys}).Info("Deregistration process completed.")
-		a.writeJSON(w, r, http.StatusOK, nil)
+		httputil.WriteJSON(w, r, http.StatusOK, nil)
 	}
 }
 
@@ -617,7 +585,7 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 				_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
 			}
 
-			a.writeJSON(w, r, http.StatusOK, disc.MsgEntrySet)
+			httputil.WriteJSON(w, r, http.StatusOK, disc.MsgEntrySet)
 
 			return
 		} else if err != nil {
@@ -651,7 +619,7 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 			_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
 		}
 
-		a.writeJSON(w, r, http.StatusOK, disc.MsgEntryUpdated)
+		httputil.WriteJSON(w, r, http.StatusOK, disc.MsgEntryUpdated)
 	}
 }
 
@@ -716,7 +684,7 @@ func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 		// deleted client entry was previously delegated to.
 		a.cxoPublisher.PublishDelEntry(preDelEntry)
 
-		a.writeJSON(w, r, http.StatusOK, disc.MsgEntryDeleted)
+		httputil.WriteJSON(w, r, http.StatusOK, disc.MsgEntryDeleted)
 	}
 }
 
@@ -732,7 +700,7 @@ func (a *API) getAvailableServers() http.HandlerFunc {
 		}
 
 		if len(entries) == 0 {
-			a.writeJSON(w, r, http.StatusNotFound, disc.HTTPMessage{
+			httputil.WriteJSON(w, r, http.StatusNotFound, disc.HTTPMessage{
 				Code:    http.StatusNotFound,
 				Message: disc.ErrNoAvailableServers.Error(),
 			})
@@ -740,7 +708,7 @@ func (a *API) getAvailableServers() http.HandlerFunc {
 			return
 		}
 
-		a.writeJSON(w, r, http.StatusOK, entries)
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 	}
 }
 
@@ -756,7 +724,7 @@ func (a *API) getAllServers() http.HandlerFunc {
 		}
 
 		if len(entries) == 0 {
-			a.writeJSON(w, r, http.StatusNotFound, disc.HTTPMessage{
+			httputil.WriteJSON(w, r, http.StatusNotFound, disc.HTTPMessage{
 				Code:    http.StatusNotFound,
 				Message: disc.ErrNoAvailableServers.Error(),
 			})
@@ -764,7 +732,7 @@ func (a *API) getAllServers() http.HandlerFunc {
 			return
 		}
 
-		a.writeJSON(w, r, http.StatusOK, entries)
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 	}
 }
 
@@ -838,23 +806,7 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 			return
 		}
 
-		result := make(map[string][]string)
-		for _, entry := range entries {
-			if entry.Client == nil {
-				continue
-			}
-			clientPK := entry.Static.Hex()
-			for _, serverPK := range entry.Client.DelegatedServers {
-				// Hex once per (entry, server) pair — previously
-				// called twice per inner iter (map key + value
-				// lookup), doubling the hex-encode load on every
-				// invocation of this endpoint.
-				sHex := serverPK.Hex()
-				result[sHex] = append(result[sHex], clientPK)
-			}
-		}
-
-		a.writeJSON(w, r, http.StatusOK, result)
+		httputil.WriteJSON(w, r, http.StatusOK, a.clientsGroupedByServer(entries))
 	}
 }
 
@@ -889,7 +841,7 @@ func (a *API) clientsByServer() http.HandlerFunc {
 			}
 		}
 
-		a.writeJSON(w, r, http.StatusOK, result)
+		httputil.WriteJSON(w, r, http.StatusOK, result)
 	}
 }
 
@@ -927,7 +879,7 @@ func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 	if summaries == nil {
 		summaries = []store.VisorSummary{}
 	}
-	a.writeJSON(w, r, http.StatusOK, summaries)
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
 }
 
 // bulkUptimesRequest is the JSON body for POST /uptimes.
@@ -940,7 +892,7 @@ type bulkUptimesRequest struct {
 func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
 	var req bulkUptimesRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
-		a.writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
 	v2 := req.Version == "v2" || req.Version == "v3"
@@ -972,12 +924,12 @@ func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
 	if summaries == nil {
 		summaries = []store.VisorSummary{}
 	}
-	a.writeJSON(w, r, http.StatusOK, summaries)
+	httputil.WriteJSON(w, r, http.StatusOK, summaries)
 }
 
 func (a *API) serviceHealth(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
-	a.writeJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
+	httputil.WriteJSON(w, r, http.StatusOK, httputil.HealthCheckResponse{
 		ServiceName: "dmsg-discovery",
 		BuildInfo:   info,
 		StartedAt:   a.startedAt,
@@ -1002,22 +954,6 @@ func isLoopbackAddr(addr string) (bool, error) {
 		return false, nil
 	}
 	return ip.IsLoopback(), nil
-}
-
-// writeJSON writes a json object on a http.ResponseWriter with the given code.
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
-	jsonObject, err := json.Marshal(object)
-	if err != nil {
-		a.log(r).Warnf("Failed to encode json response: %s", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-
-	_, err = w.Write(jsonObject) //nolint:gosec // G705: jsonObject is marshaled, not raw user input
-	if err != nil {
-		a.log(r).Warnf("Failed to write response: %s", err)
-	}
 }
 
 func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger) {
@@ -1047,4 +983,28 @@ func (a *API) updateInternalState(ctx context.Context, logger logrus.FieldLogger
 
 	a.metrics.SetClientsCount(clientsCount)
 	a.metrics.SetServersCount(serversCount)
+}
+
+// clientsGroupedByServer groups client PKs by delegated server. The result
+// is reused while entries is the same cached slice and must not be mutated.
+func (a *API) clientsGroupedByServer(entries []*disc.Entry) map[string][]string {
+	a.byServerMu.Lock()
+	defer a.byServerMu.Unlock()
+	if a.byServerCache != nil && len(a.byServerFor) == len(entries) &&
+		(len(entries) == 0 || &a.byServerFor[0] == &entries[0]) {
+		return a.byServerCache
+	}
+	result := make(map[string][]string)
+	for _, entry := range entries {
+		if entry.Client == nil {
+			continue
+		}
+		clientPK := entry.Static.Hex()
+		for _, serverPK := range entry.Client.DelegatedServers {
+			sHex := serverPK.Hex()
+			result[sHex] = append(result[sHex], clientPK)
+		}
+	}
+	a.byServerFor, a.byServerCache = entries, result
+	return result
 }
