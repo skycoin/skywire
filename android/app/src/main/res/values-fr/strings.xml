@@ -1177,6 +1177,7 @@
     <string name="mail_via_hint">Toutes les adresses de À et Cc passent par ce réseau. dmsg n’exige pas de route ; skynet est plus rapide quand il en existe une.</string>
     <string name="mail_contacts">Contacts</string>
     <string name="mail_no_contacts">Pas encore de contacts. Ajoutez-en un, ou enregistrez un expéditeur depuis un message.</string>
+    <string name="mail_contacts_shared">Le carnet de contacts du visor. SkyChat y prend aussi les noms.</string>
     <string name="mail_save_contact">Enregistrer le contact</string>
     <string name="mail_contact_name">Nom</string>
     <string name="mail_contact_saved">Contact enregistré</string>
