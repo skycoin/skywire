@@ -100,6 +100,7 @@ func TestNetworkSetOverRPC(t *testing.T) {
 	resetAdvertisePolicy(t)
 	conf, _ := newTestConfig(t)
 	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.meter.levers = &fakeLevers{}
 	srv := rpc.NewServer()
 	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logrus.New()}))
 	sc, cc := net.Pipe()
@@ -109,6 +110,11 @@ func TestNetworkSetOverRPC(t *testing.T) {
 	deny := []string{"eno1"}
 	require.NoError(t, api.NetworkSet(visorapi.NetworkSettings{Deny: &deny}))
 	require.Equal(t, deny, netutil.AdvertisePolicy().Deny)
+
+	on := "true"
+	require.NoError(t, api.NetworkSet(visorapi.NetworkSettings{Metered: &on}))
+	require.Equal(t, visorapi.ModeLean, v.NetworkState().Mode)
+	require.Equal(t, deny, netutil.AdvertisePolicy().Deny, "a metered change keeps the policy")
 
 	cleared := []string{}
 	require.NoError(t, api.NetworkSet(visorapi.NetworkSettings{Deny: &cleared}))

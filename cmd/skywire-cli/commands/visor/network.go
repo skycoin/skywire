@@ -19,13 +19,19 @@ func init() {
 	networkCmd.AddCommand(networkShowCmd, networkMovedCmd, networkSetCmd)
 	networkSetCmd.Flags().StringSliceVar(&networkAllow, "allow", nil, "interface globs or CIDRs to advertise; empty allows every interface")
 	networkSetCmd.Flags().StringSliceVar(&networkDeny, "deny", nil, "interface globs or CIDRs never to advertise; wins over --allow")
+	networkSetCmd.Flags().StringVar(&networkMetered, "metered", "", "treat the network as metered: true, false, or auto to follow the apps and --metered-interfaces (not saved)")
+	networkSetCmd.Flags().StringVar(&networkMeteredMode, "metered-mode", "", "mode while metered: "+strings.Join(visorapi.Modes, ", ")+" (default lean)")
+	networkSetCmd.Flags().StringSliceVar(&networkMeteredIfaces, "metered-interfaces", nil, "interface globs or CIDRs whose route makes the network metered")
 	networkMovedCmd.Flags().StringVar(&networkMovedReason, "reason", "manual", "reason recorded in the visor log and state")
 }
 
 var (
-	networkMovedReason string
-	networkAllow       []string
-	networkDeny        []string
+	networkMovedReason   string
+	networkAllow         []string
+	networkDeny          []string
+	networkMetered       string
+	networkMeteredMode   string
+	networkMeteredIfaces []string
 )
 
 var networkCmd = &cobra.Command{
@@ -78,7 +84,7 @@ background; "network show" reports it once done.`,
 
 var networkSetCmd = &cobra.Command{
 	Use:   "set",
-	Short: "Change the network policy live",
+	Short: "Change the network policy and metered mode live",
 	Long: `Change which interfaces and addresses the visor offers to peers. An entry
 is an interface name glob ("wlan*") or an address range ("10.0.0.0/8").
 Deny wins over allow, and an empty allow list allows every interface. An
@@ -86,8 +92,19 @@ allow glob naming a virtual interface (wg0, tailscale0) brings it back.
 The change is saved to transport.network and the visor registers its new
 address set at once. Pass a flag with an empty value to clear that list.
 
+On a metered network the visor runs in the metered mode, lean unless set:
+  lean       no autoconnect, transit, dmsg relaying or new automatic inbound
+             transports; dmsg and the transports it has stay
+  dmsg-only  lean, and direct transports closed, at most two dmsg sessions
+  offline    dmsg-only, and nothing dialed at all
+The Android app reports the system's metered flag, --metered-interfaces
+names links that are metered ("rmnet*", "wwan*"), and --metered overrides
+both until set to auto.
+
   skywire cli visor network set --deny "docker*,10.8.0.0/16"
-  skywire cli visor network set --deny ""`,
+  skywire cli visor network set --deny ""
+  skywire cli visor network set --metered=true
+  skywire cli visor network set --metered-mode dmsg-only --metered-interfaces "wwan*"`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		var in visorapi.NetworkSettings
@@ -97,8 +114,17 @@ address set at once. Pass a flag with an empty value to clear that list.
 		if cmd.Flags().Changed("deny") {
 			in.Deny = &networkDeny
 		}
+		if cmd.Flags().Changed("metered") {
+			in.Metered = &networkMetered
+		}
+		if cmd.Flags().Changed("metered-mode") {
+			in.MeteredMode = &networkMeteredMode
+		}
+		if cmd.Flags().Changed("metered-interfaces") {
+			in.MeteredInterfaces = &networkMeteredIfaces
+		}
 		if in == (visorapi.NetworkSettings{}) {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("nothing to set: pass --allow or --deny"))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("nothing to set: pass --allow, --deny, --metered, --metered-mode or --metered-interfaces"))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -140,6 +166,14 @@ func formatNetworkState(n *visorapi.NetworkState) string {
 	}
 	if len(n.PolicyExcluded) > 0 {
 		fmt.Fprintf(&b, "not advertised: %s\n", strings.Join(n.PolicyExcluded, ", "))
+	}
+	metered := "no"
+	if n.Metered {
+		metered = "yes (" + n.MeteredSource + ")"
+	}
+	fmt.Fprintf(&b, "mode:           %s%s, metered %s, metered mode %s\n", orDash(n.Mode), at(n.ModeSince), metered, orDash(n.MeteredMode))
+	if len(n.MeteredInterfaces) > 0 {
+		fmt.Fprintf(&b, "metered links:  %s\n", strings.Join(n.MeteredInterfaces, ", "))
 	}
 	types := make([]string, 0, len(n.Advertised))
 	for t := range n.Advertised {

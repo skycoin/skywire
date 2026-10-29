@@ -76,7 +76,7 @@ func (v *Visor) reachDecl() arfeed.ReachDecl {
 	if tm == nil {
 		return d
 	}
-	if v.pressure.busy.Load() {
+	if v.pressure.busy.Load() || v.meter.lean.Load() {
 		d.Accepts = []string{arfeed.AcceptsNone}
 		return d
 	}
