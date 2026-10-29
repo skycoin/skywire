@@ -29,8 +29,10 @@ import com.skycoin.skywire.core.SkywireCoreService
 import com.skycoin.skywire.core.SkywirePaths
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.core.UpdateInstallReceiver
+import com.skycoin.skywire.core.UpdateNotice
 import com.skycoin.skywire.ui.vpn.VpnArgs
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -106,6 +108,8 @@ data class SettingsUiState(
     val appVersion: String = "",
     /** Where the in-app update has got to — see [UpdateStatus]. */
     val update: UpdateStatus = UpdateStatus.Idle,
+    /** The update banner sent the user here; the screen scrolls to the card once. */
+    val revealUpdate: Boolean = false,
     /** From the running visor's own summary; empty while the core is down. */
     val coreVersion: String = "",
     /** An identity operation is in flight; the core is coming down and back. */
@@ -201,6 +205,17 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     mutable.update { it.copy(update = UpdateStatus.Failed(reason)) }
                 }
+            }
+        }
+        // Undispatched, so a request already waiting is taken before the
+        // screen's own check runs, and the card opens on the download.
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            UpdateNotice.pendingDownload.collect { release ->
+                if (release == null) return@collect
+                UpdateNotice.downloadTaken(release)
+                mutable.update { it.copy(revealUpdate = true) }
+                val now = mutable.value.update
+                if (now !is UpdateStatus.Downloading && now !is UpdateStatus.Ready) download(release)
             }
         }
         viewModelScope.launch {
@@ -351,7 +366,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             AppUpdates.clearDownloads(app)
             AppUpdates.check(app)
                 .onSuccess { release ->
+                    // Only over its own Checking: the banner may have started
+                    // a download while this was out.
                     mutable.update {
+                        if (it.update !is UpdateStatus.Checking) return@update it
                         it.copy(
                             update = when {
                                 release != null -> UpdateStatus.Available(release)
@@ -362,6 +380,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 .onFailure {
                     mutable.update {
+                        if (it.update !is UpdateStatus.Checking) return@update it
                         it.copy(
                             update = if (manual) {
                                 UpdateStatus.Failed(app.getString(R.string.settings_update_check_failed))
@@ -381,10 +400,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             is UpdateStatus.Ready -> state.release
             else -> return
         }
+        download(release)
+    }
+
+    fun updateRevealed() {
+        mutable.update { it.copy(revealUpdate = false) }
+    }
+
+    private fun download(release: AppUpdates.Release) {
         downloadJob?.cancel()
+        mutable.update { it.copy(update = UpdateStatus.Downloading(release, 0f)) }
         downloadJob = viewModelScope.launch {
             val app = getApplication<Application>()
-            mutable.update { it.copy(update = UpdateStatus.Downloading(release, 0f)) }
             AppUpdates.download(app, release) { fraction ->
                 // Only while this is still the download being watched: a
                 // cancelled job can emit one last chunk on its way out.
