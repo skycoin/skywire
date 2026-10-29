@@ -1,24 +1,24 @@
 import Foundation
 
-/// What something outside the chat page asks it to show: a `skychat:` link
-/// another app (or the page itself) opened us with, or the conversation a
+/// What something outside the chat asks it to show: a `skychat:` link
+/// another app opened us with, or the conversation a
 /// tapped notification came from (Android: core/DeepLinks.kt, plus the
 /// notification's open intent).
 ///
 /// App-wide rather than held by a screen, because the two ends never line up:
-/// the request arrives at the app, and the page that acts on it may not exist
-/// yet (a cold start), may be waiting for the core, or may still be loading.
-/// Parking it here lets each side move at its own pace: offered once, pending
-/// until the page has acted on it. The Chat tab is selected when one arrives.
+/// the request arrives at the app, and the chat that acts on it may not be up
+/// yet (a cold start, or waiting for the core and skychat). Parking it here
+/// lets each side move at its own pace: offered once, pending until the chat
+/// has acted on it. The Chat tab is selected when one arrives.
 @MainActor
 final class ChatRouter: ObservableObject {
     static let shared = ChatRouter()
 
     enum Target: Equatable {
         /// A skychat address as written (`skychat://<pk>`,
-        /// `skychat://<pk>/<group>`, `skychat:invite:<…>`), for the page's
-        /// Add-by-address dialog. The page shows it and stops there: it never
-        /// adds, opens or joins on a link's say-so.
+        /// `skychat://<pk>/<group>`, `skychat:invite:<…>`), for Add by
+        /// address. It shows it and stops there: it never adds, opens or
+        /// joins on a link's say-so.
         case address(String)
         /// A conversation: a peer's key or a group's ID, the tag skychat puts
         /// on its notifications. Empty: the chat, whichever screen it is on.
@@ -46,7 +46,7 @@ final class ChatRouter: ObservableObject {
     func offer(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == Self.scheme else { return false }
         // The original text, not a rebuilt URL: an invite is the opaque form
-        // `skychat:invite:<base64url>`, and the page's resolver takes every
+        // `skychat:invite:<base64url>`, and skychat's resolver takes every
         // form as written.
         let address = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !address.isEmpty else { return false }
@@ -62,9 +62,8 @@ final class ChatRouter: ObservableObject {
         request(.conversation(key))
     }
 
-    /// Drops `request` once the page acted on it (or declined it: a request
-    /// the page refused would only be refused again). A newer one that
-    /// arrived meanwhile stays.
+    /// Drops `request` once the chat acted on it. A newer one that arrived
+    /// meanwhile stays.
     func handled(_ request: Request) {
         if pending == request {
             pending = nil

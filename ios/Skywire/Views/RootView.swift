@@ -65,6 +65,9 @@ struct RootView: View {
         .task(id: app.connected) { await notifications.run(app) }
         // Calls are polled while the core is connected, whether or not a screen looks.
         .task(id: app.connected) { await CallCenter.shared.run(app) }
+        // A skychat that is already running is followed before the tab is opened, so unread
+        // counts and receipts are live; opening the tab is what starts it.
+        .task(id: app.connected) { await ChatRepository.shared.follow(app) }
         .onChange(of: router.pending) { request in
             if request != nil { navigator.select(.chat) }
         }

@@ -1,15 +1,14 @@
 import UIKit
 
-/// The app is drawn for portrait. A video the chat page plays full screen turns with the phone,
-/// as Android's video viewer does: WebKit shows it over the app, and only while it is up does
-/// the app allow landscape.
+/// The app is drawn for portrait. A video the chat plays full screen turns with the phone, as
+/// Android's video viewer does: only while the viewer is up does the app allow landscape.
 @MainActor
 enum Orientation {
     private(set) static var videoFullScreen = false
 
     static var allowed: UIInterfaceOrientationMask { videoFullScreen ? .allButUpsideDown : .portrait }
 
-    /// The page's video went full screen or came back; leaving puts the app upright again.
+    /// The chat's video went full screen or came back; leaving puts the app upright again.
     static func setVideoFullScreen(_ on: Bool) {
         guard on != videoFullScreen else { return }
         videoFullScreen = on

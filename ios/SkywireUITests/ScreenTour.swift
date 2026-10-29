@@ -50,11 +50,9 @@ final class ScreenTour: XCTestCase {
         app.buttons["visor-expand"].tap()
         snap("\(language)-2-home-connected")
 
-        // The chat page, once skychat answered and the page drew its list.
+        // The chat list, once skychat answered.
         openTab(.chat, in: app)
-        let page = app.webViews["chat-webview"]
-        XCTAssertTrue(page.waitForExistence(timeout: 60), "the chat page never came up")
-        XCTAssertTrue(page.buttons.firstMatch.waitForExistence(timeout: 30), "the chat page drew nothing")
+        XCTAssertTrue(app.buttons["chat-row-saved"].waitForExistence(timeout: 90), "the chat list never came up")
         snap("\(language)-3-chat")
 
         // The apps hub and its screens (M4).

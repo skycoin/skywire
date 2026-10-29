@@ -14,17 +14,16 @@
   the extension never gets: recovery phrases stay with the app.
   NSFaceIDUsageDescription: the app lock (Settings), and the check before a
   wallet send or a recovery phrase is shown. NSMicrophoneUsageDescription
-  and NSCameraUsageDescription: the chat page's voice and video messages and
-  its QR scanner (getUserMedia; without them the app is killed at the first
-  capture), the wallet's address scanner, and the microphone a call lends
-  the visor (M6).
+  and NSCameraUsageDescription: the chat's voice and video messages and its
+  QR scanner (without them the app is killed at the first capture), the
+  wallet's address scanner, and the microphone a call lends the visor (M6).
   UIBackgroundModes audio: a connected call keeps its audio when the app
   leaves the foreground (M6), nothing else; the core's own receiving while
   suspended is the packet-tunnel extension's (Lane D).
   NSPhotoLibraryAddUsageDescription: the share sheet's "Save Image" and
   "Save Video" for a chat download. All translated in InfoPlist.xcstrings.
   CFBundleURLTypes: skychat: links (the xcconfig's SKYWIRE_URL_SCHEME), which
-  the chat page shows in its Add-by-address dialog (ChatRouter). Only skychat:
+  the chat shows on its Add by address page (ChatRouter). Only skychat:
   is claimed; skycoin: belongs to the Skycoin wallet.
   UIAppFonts and UILaunchScreen: Android's two typefaces and its splash
   (the logo on white, #0A101C at night), M6.5.

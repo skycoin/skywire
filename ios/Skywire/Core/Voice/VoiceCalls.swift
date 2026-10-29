@@ -184,6 +184,13 @@ final class VoiceCalls: ObservableObject {
         )
     }
 
+    /// A call this phone just placed, until the watcher's next tick reports it.
+    func placed(_ call: OutgoingCall) {
+        guard !state.dialing.contains(where: { $0.callId == call.callId }) else { return }
+        state.dialing.insert(call, at: 0)
+        refreshWanted = true
+    }
+
     /// The core is going away, so the calls are too.
     func clear() {
         ended = []
