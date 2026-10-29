@@ -556,20 +556,22 @@ class VisorApi(context: Context) {
         }
 
     /**
-     * Drop the visor's dmsg sessions so it re-dials now.
+     * Tell the core what the phone knows about the network.
      *
-     * Called when the phone's default network changes underneath the core:
-     * the old sockets are dead but nothing on either end knows it yet, and
-     * the visor would otherwise wait out a dmsg keepalive to find out. The
-     * hypervisor RPC conn rides one of these sessions, so it comes back with
-     * them. Returns the number of sessions that were torn down.
+     * "moved" when the default network changed underneath it: the old sockets
+     * are dead but nothing on either end knows it yet. The core re-dials dmsg,
+     * looks its public IP and NAT up again and registers its new addresses;
+     * the hypervisor RPC conn rides one of the dmsg sessions, so it comes back
+     * with them. The metered flag lets the core stop carrying other visors'
+     * traffic on mobile data. Returns the core's mode afterwards.
      */
-    suspend fun dmsgReconnect(): Int = withContext(Dispatchers.IO) {
-        postWithRelogin("/api/dmsg/reconnect", "{}").use { resp ->
+    internal suspend fun networkEvent(ev: NetworkEvent): NetworkReply = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(NetworkEvent.serializer(), ev)
+        postWithRelogin("/api/network", body).use { resp ->
             if (!resp.isSuccessful) {
-                throw IOException("dmsg reconnect failed (${resp.code}): ${errorBody(resp)}")
+                throw IOException("network event failed (${resp.code}): ${errorBody(resp)}")
             }
-            decode<DmsgReconnectResult>(resp).sessionsClosed
+            decode<NetworkReply>(resp)
         }
     }
 
