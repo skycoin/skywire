@@ -914,6 +914,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/dmsg/sessions", hv.getDmsgSessions())
 				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
 				r.Post("/dmsg/reconnect", hv.postDmsgReconnect())
+				r.Post("/network", hv.postNetwork())
 				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())
 
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())

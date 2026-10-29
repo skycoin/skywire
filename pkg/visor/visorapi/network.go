@@ -25,6 +25,16 @@ type NetworkState struct {
 	Allow          []string `json:"allow,omitempty"`
 	Deny           []string `json:"deny,omitempty"`
 	PolicyExcluded []string `json:"policy_excluded,omitempty"`
+	// Metered says whether the network counts as metered, and
+	// MeteredSource what said so: "manual", an app ("android"), or "rule".
+	Metered       bool   `json:"metered"`
+	MeteredSource string `json:"metered_source,omitempty"`
+	// Mode is the mode in force since ModeSince, and MeteredMode the one
+	// configured for a metered network.
+	Mode              string    `json:"mode"`
+	ModeSince         time.Time `json:"mode_since,omitzero"`
+	MeteredMode       string    `json:"metered_mode"`
+	MeteredInterfaces []string  `json:"metered_interfaces,omitempty"`
 	// Advertised is the address list of the last bind of each transport type.
 	Advertised map[string][]string `json:"advertised,omitempty"`
 	// Moves counts network changes acted on since start. The last one is
@@ -46,4 +56,45 @@ type NetworkState struct {
 type NetworkSettings struct {
 	Allow *[]string `json:"allow,omitempty"`
 	Deny  *[]string `json:"deny,omitempty"`
+	// Metered overrides the metered signal: "true", "false", or "auto" to
+	// follow the apps and the interface rule again. Not saved.
+	Metered *string `json:"metered,omitempty"`
+	// MeteredMode is the mode used while metered, one of the Mode values.
+	MeteredMode *string `json:"metered_mode,omitempty"`
+	// MeteredInterfaces are the globs or ranges that mark the network as
+	// metered while the route to the internet leaves through one.
+	MeteredInterfaces *[]string `json:"metered_interfaces,omitempty"`
+}
+
+// The modes a visor runs in. A metered network switches to the configured
+// MeteredMode, lean unless set otherwise, and back to normal when it ends.
+const (
+	// ModeNormal is the visor's usual behavior.
+	ModeNormal = "normal"
+	// ModeLean keeps dmsg and the transports it has, but stops autoconnect,
+	// transit, dmsg relaying and new automatic inbound transports.
+	ModeLean = "lean"
+	// ModeDmsgOnly is lean, closes every direct transport, refuses new ones
+	// and keeps at most two dmsg sessions.
+	ModeDmsgOnly = "dmsg-only"
+	// ModeOffline is dmsg-only that also stops dialing anything, dmsg
+	// sessions and dmsg transports included.
+	ModeOffline = "offline"
+)
+
+// Modes lists the modes in order of how much they cut.
+var Modes = []string{ModeNormal, ModeLean, ModeDmsgOnly, ModeOffline}
+
+// NetworkEvent is what an app reports about the network, the body of POST
+// /api/network and the argument of the NetworkEvent RPC.
+type NetworkEvent struct {
+	// Event is "moved" when the network changed under the visor, or
+	// "changed" when only its properties did.
+	Event string `json:"event"`
+	// Metered is the system's metered flag, nil when the app cannot tell.
+	Metered *bool `json:"metered,omitempty"`
+	// Interface is the interface the system now routes through, if known.
+	Interface string `json:"ifname,omitempty"`
+	// Source names the reporter, "android" when empty.
+	Source string `json:"source,omitempty"`
 }

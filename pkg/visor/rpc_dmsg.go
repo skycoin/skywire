@@ -232,3 +232,9 @@ func (r *RPC) NetworkSet(in *visorapi.NetworkSettings, _ *struct{}) (err error) 
 	defer rpcutil.LogCall(r.log, "NetworkSet", in)(nil, &err)
 	return r.visor.NetworkSet(*in)
 }
+
+// NetworkEvent takes an app's report of the network.
+func (r *RPC) NetworkEvent(in *visorapi.NetworkEvent, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkEvent", in)(nil, &err)
+	return r.visor.NetworkEvent(*in)
+}

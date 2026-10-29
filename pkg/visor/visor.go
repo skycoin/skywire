@@ -181,6 +181,8 @@ type Visor struct {
 	stun stunState
 	// netMove tracks the network the visor is on and reacts to a move (netmove.go).
 	netMove netMoveState
+	// meter is the metered signal and the mode it puts the visor in.
+	meter meterState
 
 	tpM *transport.Manager
 	// dmsgSharedLis is the transport port's cmux branch for dmsg sessions,

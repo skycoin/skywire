@@ -2699,3 +2699,8 @@ func (rc *rpcClient) NetworkSet(in NetworkSettings) error {
 	}
 	return rc.Call("NetworkSet", &in, &struct{}{})
 }
+
+// NetworkEvent reports a network change or metered flag to the visor.
+func (rc *rpcClient) NetworkEvent(ev NetworkEvent) error {
+	return rc.Call("NetworkEvent", &ev, &struct{}{})
+}

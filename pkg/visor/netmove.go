@@ -316,6 +316,7 @@ func (v *Visor) NetworkState() *visorapi.NetworkState {
 	if p := netutil.AdvertisePolicy(); !p.IsZero() {
 		out.Allow, out.Deny = p.Allow, p.Deny
 	}
+	v.meterNetworkState(out)
 	v.reach.mu.Lock()
 	for t, raw := range v.reach.binds {
 		var la addrresolver.LocalAddresses
@@ -395,6 +396,7 @@ func (v *Visor) watchNetwork(ctx context.Context) {
 			continue
 		case <-tick:
 		}
+		v.meterEvaluate()
 		cur := fp()
 		if cur == last || cur == "" {
 			continue
@@ -468,6 +470,7 @@ func initNetworkWatch(_ context.Context, v *Visor, _ *logging.Logger) error {
 		v.setNetworkIntervals(time.Duration(v.conf.Transport.NetworkWatchInterval),
 			time.Duration(v.conf.Transport.PublicIPCheckInterval))
 	}
+	v.meterEvaluate()
 	ctx := v.ctx
 	if ctx == nil {
 		return nil

@@ -7,6 +7,7 @@ package router
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +46,8 @@ type CascadeHandler struct {
 	// processInstall to lay THIS visor's own rules as the source of its own
 	// route, and refusing there would stop it originating routes at all.
 	noTransit bool
+	// transitPaused refuses them too while it reads true (metered mode).
+	transitPaused *atomic.Bool
 }
 
 // SetNoTransit makes the handler refuse cascade installs that would make this
@@ -55,7 +58,8 @@ func (ch *CascadeHandler) SetNoTransit(v bool) { ch.noTransit = v }
 // make this visor a transit hop it has been configured not to be. An EDGE
 // install means the route ENDS here, which no_transit does not forbid.
 func (ch *CascadeHandler) refusesTransit(msg *routing.CascadeSetup) bool {
-	return ch.noTransit && !msg.IsEdge()
+	paused := ch.transitPaused != nil && ch.transitPaused.Load()
+	return (ch.noTransit || paused) && !msg.IsEdge()
 }
 
 // NewCascadeHandler creates a new cascade handler. introduceRules is the
