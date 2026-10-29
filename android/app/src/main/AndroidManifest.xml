@@ -63,6 +63,13 @@
     <!-- A call puts the audio manager in communication mode (VoiceAudio),
          which needs this. Install-time permission, no runtime prompt. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Copying the visor's contact book into the phone's contacts, only
+         after the Settings switch asks for it. See PhoneContacts. The sync
+         settings ones are install-time. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -147,6 +154,15 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="skychat" />
             </intent-filter>
+
+            <!-- A tap on a SkyChat or SkyMail row of a contact in the phone's
+                 Contacts app, which names the row. See PhoneContacts.offer. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="vnd.android.cursor.item/vnd.com.skycoin.skywire.chat" />
+                <data android:mimeType="vnd.android.cursor.item/vnd.com.skycoin.skywire.mail" />
+            </intent-filter>
         </activity>
 
         <!-- The visor core: execs libskywire-mobile.so as a child process and
@@ -219,6 +235,32 @@
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:screenOrientation="fullUser"
             tools:replace="screenOrientation" />
+        <!-- The Skywire account and its contacts sync. Exported because the
+             system binds them; neither takes anything from a caller, and a
+             sync only copies the local visor's book again. -->
+        <service
+            android:name=".core.PhoneContactsAuthService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accounts.AccountAuthenticator" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accounts.AccountAuthenticator"
+                android:resource="@xml/authenticator" />
+        </service>
+        <service
+            android:name=".core.PhoneContactsSyncService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/syncadapter" />
+            <meta-data
+                android:name="android.provider.CONTACTS_STRUCTURE"
+                android:resource="@xml/contacts" />
+        </service>
     </application>
 
 </manifest>

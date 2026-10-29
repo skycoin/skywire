@@ -43,8 +43,8 @@ object DeepLinks {
     const val ACTION_OPEN_MAIL = "com.skycoin.skywire.OPEN_MAIL"
     const val EXTRA_MAIL_ID = "mail_id"
 
-    /** An inbox message a notification asked to show. */
-    data class MailLink(val id: String, val seq: Long)
+    /** An inbox message a notification asked to show, or with [to] set, a draft to start. */
+    data class MailLink(val id: String, val seq: Long, val to: String = "")
 
     private val mail = MutableStateFlow<MailLink?>(null)
 
@@ -52,6 +52,11 @@ object DeepLinks {
 
     fun mailLinkHandled(link: MailLink) {
         mail.compareAndSet(link, null)
+    }
+
+    /** A draft to [to], from a contact's SkyMail row in the phone's Contacts app. */
+    fun composeMail(to: String) {
+        mail.value = MailLink("", seq.incrementAndGet(), to)
     }
 
     private val seq = AtomicLong()

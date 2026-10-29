@@ -723,7 +723,7 @@ private fun ContactsView(state: MailUiState, viewModel: MailViewModel) {
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            shortAddress(c.address.trim()),
+                            SkymailAddress.short(c.address.trim()),
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -849,7 +849,7 @@ private fun ComposeView(state: MailUiState, viewModel: MailViewModel) {
                     state.contacts.forEach { c ->
                         c.addresses.forEach { a ->
                             DropdownMenuItem(
-                                text = { Text(if (c.addresses.size == 1) c.name else "${c.name} · ${shortAddress(a)}") },
+                                text = { Text(if (c.addresses.size == 1) c.name else "${c.name} · ${SkymailAddress.short(a)}") },
                                 onClick = { add(a) },
                             )
                         }
@@ -1134,15 +1134,7 @@ private fun displayAddress(raw: String, contacts: List<MailContact> = emptyList(
     }
     val name = text.substringBefore('<', "").trim().trim('"')
     if (name.isNotEmpty() && '<' in text) return name
-    return shortAddress(addr)
-}
-
-/** The address itself with its key cut, never a name for it. */
-private fun shortAddress(addr: String): String {
-    val local = addr.substringBefore('@', addr)
-    val domain = addr.substringAfter('@', "")
-    if (domain.length <= 16) return addr
-    return "$local@${domain.take(8)}…${domain.substring(domain.lastIndexOf('.'))}"
+    return SkymailAddress.short(addr)
 }
 
 private fun shortDate(rfc3339: String): String = runCatching {

@@ -589,10 +589,11 @@ class ConfigManager(
      * A visor's key *is* its identity: chat history is a conversation with
      * peers who addressed a key that is about to stop existing, and the app
      * work dirs and transport logs under `local_path` are the same story, as
-     * are the mail and the contact book beside it. They are cleared rather
-     * than carried over, so that what the confirmation dialog promises is
-     * what happens — a phone that keeps a previous identity's messages under
-     * a new one is showing a conversation nobody can continue.
+     * are the mail and the contact book beside it and the book's copy in the
+     * phone's contacts. They are cleared rather than carried over, so that
+     * what the confirmation dialog promises is what happens — a phone that
+     * keeps a previous identity's messages under a new one is showing a
+     * conversation nobody can continue.
      *
      * `users.db` deliberately stays: the local API account is this app's own
      * device credential ([SecretStore]), not part of the visor's identity.
@@ -603,6 +604,7 @@ class ConfigManager(
         // The mail goes, the mailbox's settings and whitelist stay: they are the
         // user's choices (pkg/visor/skymail.go, pkg/skymail/mailbox.go).
         paths.mailDir.listFiles()?.filterNot { it.name in MAILBOX_CHOICES }?.forEach { it.deleteRecursively() }
+        PhoneContacts.forget(context)
         paths.processLogFile.delete()
         File(paths.processLogFile.parentFile, paths.processLogFile.name + ".1").delete()
         paths.ensureDirs()
