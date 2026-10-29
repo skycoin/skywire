@@ -16,11 +16,17 @@ import (
 
 func init() {
 	RootCmd.AddCommand(networkCmd)
-	networkCmd.AddCommand(networkShowCmd, networkMovedCmd)
+	networkCmd.AddCommand(networkShowCmd, networkMovedCmd, networkSetCmd)
+	networkSetCmd.Flags().StringSliceVar(&networkAllow, "allow", nil, "interface globs or CIDRs to advertise; empty allows every interface")
+	networkSetCmd.Flags().StringSliceVar(&networkDeny, "deny", nil, "interface globs or CIDRs never to advertise; wins over --allow")
 	networkMovedCmd.Flags().StringVar(&networkMovedReason, "reason", "manual", "reason recorded in the visor log and state")
 }
 
-var networkMovedReason string
+var (
+	networkMovedReason string
+	networkAllow       []string
+	networkDeny        []string
+)
 
 var networkCmd = &cobra.Command{
 	Use:   "network",
@@ -70,6 +76,41 @@ background; "network show" reports it once done.`,
 	},
 }
 
+var networkSetCmd = &cobra.Command{
+	Use:   "set",
+	Short: "Change the network policy live",
+	Long: `Change which interfaces and addresses the visor offers to peers. An entry
+is an interface name glob ("wlan*") or an address range ("10.0.0.0/8").
+Deny wins over allow, and an empty allow list allows every interface. An
+allow glob naming a virtual interface (wg0, tailscale0) brings it back.
+The change is saved to transport.network and the visor registers its new
+address set at once. Pass a flag with an empty value to clear that list.
+
+  skywire cli visor network set --deny "docker*,10.8.0.0/16"
+  skywire cli visor network set --deny ""`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		var in visorapi.NetworkSettings
+		if cmd.Flags().Changed("allow") {
+			in.Allow = &networkAllow
+		}
+		if cmd.Flags().Changed("deny") {
+			in.Deny = &networkDeny
+		}
+		if in == (visorapi.NetworkSettings{}) {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("nothing to set: pass --allow or --deny"))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		if err := rpcClient.NetworkSet(in); err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), "OK", "network settings applied\n")
+	},
+}
+
 func formatNetworkState(n *visorapi.NetworkState) string {
 	var b strings.Builder
 	at := func(t time.Time) string {
@@ -94,6 +135,12 @@ func formatNetworkState(n *visorapi.NetworkState) string {
 	}
 	fmt.Fprintf(&b, "nat:            %s%s\n", orDash(n.NAT), at(n.NATAt))
 	fmt.Fprintf(&b, "lan addresses:  %s\n", orDash(strings.Join(n.LocalAddresses, ", ")))
+	if len(n.Allow) > 0 || len(n.Deny) > 0 {
+		fmt.Fprintf(&b, "policy:         allow %s, deny %s\n", orDash(strings.Join(n.Allow, ",")), orDash(strings.Join(n.Deny, ",")))
+	}
+	if len(n.PolicyExcluded) > 0 {
+		fmt.Fprintf(&b, "not advertised: %s\n", strings.Join(n.PolicyExcluded, ", "))
+	}
 	types := make([]string, 0, len(n.Advertised))
 	for t := range n.Advertised {
 		types = append(types, t)

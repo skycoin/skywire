@@ -425,6 +425,8 @@ type Dmsg interface {
 	// NetworkMoved makes the visor refresh its public IP, NAT class, LAN
 	// addresses and every registration, as after a move to another network.
 	NetworkMoved(reason string) error
+	// NetworkSet changes the network policy (transport.network) live.
+	NetworkSet(in NetworkSettings) error
 }
 
 // Routing is routes, route groups, their multiplexing and the router's settings.

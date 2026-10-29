@@ -1780,12 +1780,13 @@ func keepTCPNotSentLowat() {
 	}
 }
 
-// keepNetworkWatch carries the network watcher periods over a regenerate:
-// they are set live with config set and have no skywire.conf variable.
+// keepNetworkWatch carries the network watcher periods and policy over a
+// regenerate: they are set live with config set and have no skywire.conf variable.
 func keepNetworkWatch() {
 	if isRegen && oldConfCache != nil && conf.Transport != nil && oldConfCache.Transport != nil {
 		conf.Transport.NetworkWatchInterval = oldConfCache.Transport.NetworkWatchInterval
 		conf.Transport.PublicIPCheckInterval = oldConfCache.Transport.PublicIPCheckInterval
+		conf.Transport.Network = oldConfCache.Transport.Network
 	}
 }
 

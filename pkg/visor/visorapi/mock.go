@@ -1966,3 +1966,8 @@ func (mc *mockRPCClient) ContactsExport() ([]byte, error) { return nil, nil }
 func (mc *mockRPCClient) NetworkMoved(_ string) error {
 	return nil
 }
+
+// NetworkSet implements API.
+func (mc *mockRPCClient) NetworkSet(_ NetworkSettings) error {
+	return nil
+}

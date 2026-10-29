@@ -119,25 +119,32 @@ func HasPublicIP() (bool, error) {
 	return false, nil
 }
 
-// LocalAddresses returns a list of all local addresses
+// LocalAddresses returns the addresses the visor may offer peers: global
+// unicast, on an up interface that is not virtual, and permitted by the
+// advertise policy (see SetAdvertisePolicy).
 func LocalAddresses() ([]string, error) {
-	result := make([]string, 0)
+	kept, _, err := LocalAddressesDetail()
+	return kept, err
+}
 
+// LocalAddressesDetail is LocalAddresses plus what the advertise policy
+// removed, each as "address (interface)".
+func LocalAddressesDetail() (kept, excluded []string, err error) {
 	ifaces, err := anet.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
+	pol := AdvertisePolicy()
+	kept = make([]string, 0)
 	for _, iface := range ifaces {
-		// Skip loopback and down interfaces
 		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
 			continue
 		}
-		// Skip container bridges, tunnels and other virtual interfaces
-		if IsVirtualInterface(iface.Name) {
+		// Container bridges, tunnels and other virtual interfaces stay out
+		// unless an allow entry names them.
+		if IsVirtualInterface(iface.Name) && !pol.AllowsNamed(iface.Name) {
 			continue
 		}
-
 		addrs, err := anet.InterfaceAddrsByInterface(&iface)
 		if err != nil {
 			continue
@@ -150,13 +157,42 @@ func LocalAddresses() ([]string, error) {
 			case *net.IPAddr:
 				ip = v.IP
 			}
-			if ip != nil && ip.IsGlobalUnicast() && IsAdvertisableIP(ip) {
-				result = append(result, ip.String())
+			if ip == nil || !ip.IsGlobalUnicast() || !IsAdvertisableIP(ip) {
+				continue
+			}
+			if !pol.Permits(iface.Name, ip) {
+				excluded = append(excluded, ip.String()+" ("+iface.Name+")")
+				continue
+			}
+			kept = append(kept, ip.String())
+		}
+	}
+	return kept, excluded, nil
+}
+
+// PolicyPermitsIP reports whether the advertise policy lets ip be offered,
+// looking up the interface that holds it.
+func PolicyPermitsIP(ip net.IP) bool {
+	pol := AdvertisePolicy()
+	if pol.IsZero() {
+		return true
+	}
+	ifaces, err := anet.Interfaces()
+	if err != nil {
+		return pol.Permits("", ip)
+	}
+	for _, iface := range ifaces {
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+				return pol.Permits(iface.Name, ip)
 			}
 		}
 	}
-
-	return result, nil
+	return pol.Permits("", ip)
 }
 
 // LocalProtocol check a condition to use dmsghttp or direct url
