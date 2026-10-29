@@ -161,4 +161,20 @@ final class IdentityVaultTests: XCTestCase {
         XCTAssertFalse(exists(vault.sealedFile))
         XCTAssertTrue(exists(paths.localDir))
     }
+
+    /// The old identity's mail and contact book go; the mailbox's settings and whitelist stay.
+    func testResettingClearsTheMailAndTheBook() throws {
+        try writeConfig("{}")
+        let files = FileManager.default
+        for dir in [paths.contactsDir, paths.mailDir.appendingPathComponent("cur"), paths.mailDir.appendingPathComponent(".Sent/new")] {
+            try files.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        for file in [paths.contactsDir.appendingPathComponent("contacts.json"), paths.mailDir.appendingPathComponent("cur/1.eml"),
+                     paths.mailDir.appendingPathComponent("settings.json"), paths.mailDir.appendingPathComponent("whitelist")] {
+            try Data("x".utf8).write(to: file)
+        }
+        try Identity.reset(paths: paths, vault: vault)
+        XCTAssertFalse(exists(paths.contactsDir))
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: paths.mailDir.path).sorted(), ["settings.json", "whitelist"])
+    }
 }

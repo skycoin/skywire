@@ -1,3 +1,4 @@
+import CoreClient
 import Foundation
 
 /// What something outside the chat asks it to show: a `skychat:` link
@@ -39,7 +40,7 @@ final class ChatRouter: ObservableObject {
 
     /// Only `skychat:` is claimed. `skycoin:` in particular is not ours: the
     /// Skycoin wallet answers it on the same phone.
-    static let scheme = "skychat"
+    nonisolated static let scheme = "skychat"
 
     /// True when `url` is a link this app claims (and it is now pending).
     @discardableResult
@@ -76,17 +77,22 @@ final class ChatRouter: ObservableObject {
     }
 }
 
-/// The inbox message a tapped Skymail notification asked to show (Android:
-/// DeepLinks.pendingMail). The visor tags a mail notification with the
-/// message's id; the Skymail screen opens it once its inbox lists it.
+/// The inbox message a tapped Skymail notification asked to show, or a draft
+/// to start (Android: DeepLinks.pendingMail). The visor tags a mail
+/// notification with the message's id; the Skymail screen opens it once its
+/// inbox lists it. A `skymail:` link, from a contact's SkyMail row in the
+/// Contacts app (PhoneContacts), starts a draft to its address.
 @MainActor
 final class MailRouter: ObservableObject {
     static let shared = MailRouter()
 
-    /// A message id with the sequence that makes two taps on one two events.
+    nonisolated static let scheme = "skymail"
+
+    /// A message id, or with `to` set a draft, with the sequence that makes two taps on one two events.
     struct Link: Equatable {
         let id: String
         let sequence: Int
+        var to = ""
     }
 
     @Published private(set) var pending: Link?
@@ -98,6 +104,18 @@ final class MailRouter: ObservableObject {
         guard !id.isEmpty else { return }
         sequence += 1
         pending = Link(id: id, sequence: sequence)
+    }
+
+    /// True when `url` is a `skymail:` link to a Skymail address, now pending as a draft.
+    @discardableResult
+    func offer(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == Self.scheme else { return false }
+        let address = String(url.absoluteString.dropFirst(Self.scheme.count + 1))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/").union(.whitespacesAndNewlines))
+        guard let to = SkymailAddress.recipient(address.removingPercentEncoding ?? address) else { return false }
+        sequence += 1
+        pending = Link(id: "", sequence: sequence, to: to)
+        return true
     }
 
     /// Drops `link` once the screen opened it or knows it never will; a newer one stays.

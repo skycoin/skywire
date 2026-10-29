@@ -69,14 +69,25 @@ enum Identity {
         try clearIdentityData(paths)
     }
 
-    /// What belonged to the replaced identity: chat history and the apps' work in `local/`.
-    /// users.db stays; the API account is this app's, not the visor's.
+    /// What belonged to the replaced identity: chat history and the apps' work in `local/`, the
+    /// mail and the contact book beside it, and the book's copy in Contacts, as the reset dialog
+    /// promises. users.db stays; the API account is this app's, not the visor's.
     private static func clearIdentityData(_ paths: CorePaths) throws {
-        if FileManager.default.fileExists(atPath: paths.localDir.path) {
-            try FileManager.default.removeItem(at: paths.localDir)
+        let files = FileManager.default
+        for dir in [paths.localDir, paths.contactsDir] where files.fileExists(atPath: dir.path) {
+            try files.removeItem(at: dir)
         }
+        // The mailbox's settings and whitelist are the user's choices, not mail
+        // (pkg/visor/skymail.go, pkg/skymail/mailbox.go).
+        let mail = (try? files.contentsOfDirectory(at: paths.mailDir, includingPropertiesForKeys: nil)) ?? []
+        for item in mail where !mailboxChoices.contains(item.lastPathComponent) {
+            try files.removeItem(at: item)
+        }
+        PhoneContacts.forget()
         try paths.createDirectories()
     }
+
+    static let mailboxChoices: Set<String> = ["settings.json", "whitelist"]
 
     struct IdentityError: LocalizedError {
         let message: String

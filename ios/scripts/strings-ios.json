@@ -180,6 +180,12 @@
       "zh-Hans": "SkyDEX 拒绝了已保存的密码。",
       "es": "SkyDEX rechazó la contraseña guardada",
       "fr": "SkyDEX a rejeté le mot de passe enregistré"
+    },
+    "settings_phone_contacts_hint_ios": {
+      "en": "Copies the visor’s contact book into the phone’s Contacts app, in a Skywire group, and keeps the copy matching the book. Any app allowed to read your contacts can then read these names and keys. Off by default.",
+      "zh-Hans": "把节点的通讯录复制到手机“通讯录”App 的 Skywire 分组中，并让副本与节点通讯录保持一致。任何有权读取通讯录的应用都能读到这些名称和密钥。默认关闭。",
+      "es": "Copia la libreta de contactos del nodo en la app Contactos del teléfono, en un grupo Skywire, y mantiene la copia igual que la libreta. Cualquier app con permiso para leer tus contactos podrá leer estos nombres y claves. Desactivado por defecto.",
+      "fr": "Copie le carnet de contacts du visor dans l’app Contacts du téléphone, dans un groupe Skywire, et garde la copie identique au carnet. Toute app autorisée à lire vos contacts pourra alors lire ces noms et ces clés. Désactivé par défaut."
     }
   },
   "InfoPlist": {
@@ -206,6 +212,12 @@
       "zh-Hans": "Skywire 会把你选择的图片和视频保存到照片图库。",
       "es": "Skywire guarda en tu fototeca las imágenes y los vídeos que elijas.",
       "fr": "Skywire enregistre dans votre photothèque les images et les vidéos que vous choisissez."
+    },
+    "NSContactsUsageDescription": {
+      "en": "Skywire copies the visor’s contact book into Contacts, in a Skywire group, when you turn that on in Settings.",
+      "zh-Hans": "在设置中开启后，Skywire 会把节点的通讯录复制到“通讯录”的 Skywire 分组中。",
+      "es": "Skywire copia la libreta de contactos del nodo en Contactos, en un grupo Skywire, cuando lo activas en Ajustes.",
+      "fr": "Skywire copie le carnet de contacts du visor dans Contacts, dans un groupe Skywire, quand vous l’activez dans Réglages."
     }
   }
 }

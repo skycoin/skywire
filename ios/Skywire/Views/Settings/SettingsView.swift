@@ -30,11 +30,12 @@ struct SettingsView: View {
                     RemoteCard(model: model).scrollPlaceItem(5)
                     AppLockCard().scrollPlaceItem(6)
                     WalletPricesCard().scrollPlaceItem(7)
-                    ThemeCard().scrollPlaceItem(8)
-                    LanguageCard().scrollPlaceItem(9)
-                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(10)
-                    UpdatesCard().scrollPlaceItem(11)
-                    AboutCard(model: model).scrollPlaceItem(12)
+                    PhoneContactsCard().scrollPlaceItem(8)
+                    ThemeCard().scrollPlaceItem(9)
+                    LanguageCard().scrollPlaceItem(10)
+                    DiagnosticsRow { navigator.push(.diagnostics) }.scrollPlaceItem(11)
+                    UpdatesCard().scrollPlaceItem(12)
+                    AboutCard(model: model).scrollPlaceItem(13)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -500,6 +501,43 @@ private struct WalletPricesCard: View {
             SwitchRow(title: L10n.key("settings_wallet_prices"), hint: L10n.key("settings_wallet_prices_hint"),
                       isOn: Binding(get: { settings.walletUsdPrices }, set: { settings.walletUsdPrices = $0 }),
                       identifier: "settings-wallet-prices")
+        }
+    }
+}
+
+/// The visor's contact book in the phone's Contacts app, off until asked for: any app that may
+/// read contacts can read the copy. See PhoneContacts.
+private struct PhoneContactsCard: View {
+    @EnvironmentObject private var app: AppModel
+    @AppStorage(PhoneContacts.prefKey) private var wanted = false
+    @State private var granted = PhoneContacts.granted
+    @State private var denied = false
+
+    var body: some View {
+        SectionCard {
+            SwitchRow(title: L10n.key("settings_phone_contacts"), hint: L10n.key("settings_phone_contacts_hint_ios"),
+                      isOn: Binding(get: { wanted && granted }, set: { on in set(on) }),
+                      identifier: "settings-phone-contacts")
+            if denied {
+                Text("settings_phone_contacts_denied")
+                    .skyText(.bodySmall)
+                    .foregroundStyle(Color.skyError)
+                    .padding(.top, 10)
+            }
+        }
+        // Access can be taken back in the Settings app while Skywire is away.
+        .onAppear { granted = PhoneContacts.granted }
+    }
+
+    private func set(_ on: Bool) {
+        Task {
+            if on {
+                denied = !(await PhoneContacts.enable(app.client))
+            } else {
+                await PhoneContacts.disable()
+                denied = false
+            }
+            granted = PhoneContacts.granted
         }
     }
 }

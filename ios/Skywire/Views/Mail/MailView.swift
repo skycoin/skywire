@@ -505,7 +505,7 @@ private struct MailContactDialog: View {
     }
 }
 
-/// SkyMail's own contacts: add, edit and delete without a message to start from.
+/// The visor's contacts that mail reaches: add, edit and delete without a message to start from.
 private struct MailContactsView: View {
     @ObservedObject var model: MailModel
     @EnvironmentObject private var dialogs: SkyDialogs
@@ -513,6 +513,10 @@ private struct MailContactsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
+                Text("mail_contacts_shared")
+                    .skyText(.bodySmall)
+                    .foregroundStyle(Color.skyOnSurfaceVariant)
+                    .padding(.bottom, 8)
                 Button {
                     dialogs.showCustom {
                         MailContactDialog(title: Text("mail_contact_add"), name: "", address: "") { name, address in
@@ -527,7 +531,7 @@ private struct MailContactsView: View {
                 if model.contacts.isEmpty {
                     Text("mail_no_contacts").skyText(.bodyMedium).foregroundStyle(Color.skyOnSurfaceVariant).padding(.top, 12)
                 }
-                ForEach(model.contacts, id: \.address) { contact in
+                ForEach(model.contacts, id: \.uid) { contact in
                     row(contact)
                     SkyDivider()
                 }
@@ -562,7 +566,7 @@ private struct MailContactsView: View {
             Button {
                 dialogs.showCustom {
                     MailContactDialog(title: Text("mail_contact_edit"), name: contact.name, address: contact.address) { name, address in
-                        model.saveContact(name: name, address: address, replacing: contact.address)
+                        model.saveContact(name: name, address: address, uid: contact.uid, replacing: contact.address)
                     }
                 }
             } label: {
@@ -573,7 +577,7 @@ private struct MailContactsView: View {
             Button {
                 dialogs.show(SkyDialog(message: Text(verbatim: L10n.format("mail_contact_delete_confirm", contact.name)), actions: [
                     SkyDialog.Action(label: Text("cancel")),
-                    SkyDialog.Action(label: Text("mail_delete")) { model.deleteContact(contact.address) },
+                    SkyDialog.Action(label: Text("mail_delete")) { model.deleteContact(contact.uid) },
                 ]))
             } label: {
                 MaterialIcon(MI.roundedDelete).foregroundStyle(Color.skyOnSurfaceVariant).frame(width: 48, height: 48)
@@ -697,12 +701,17 @@ private struct MailComposeView: View {
         }
     }
 
-    /// SkyMail's contacts, then SkyChat's names for keys not saved here, then the way to edit them.
+    /// The book's contacts, an entry per mailbox, then SkyChat's names for keys not in the
+    /// book, then the way to edit them.
     @ViewBuilder private var picker: some View {
-        ForEach(model.contacts, id: \.address) { contact in
-            Button { model.addRecipient(address: contact.address) } label: { Text(verbatim: contact.name) }
+        ForEach(model.contacts, id: \.uid) { contact in
+            ForEach(contact.addresses, id: \.self) { address in
+                Button { model.addRecipient(address: address) } label: {
+                    Text(verbatim: contact.addresses.count == 1 ? contact.name : "\(contact.name) · \(MailText.shortAddress(address))")
+                }
+            }
         }
-        let saved = Set(model.contacts.compactMap { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() })
+        let saved = Set(model.contacts.flatMap { $0.addresses.compactMap { SkymailAddress.pk(ofAddress: $0)?.lowercased() } })
         let chat = VoiceCalls.shared.addressBook
             .filter { !saved.contains($0.key.lowercased()) }
             .sorted { $0.value.lowercased() < $1.value.lowercased() }
@@ -839,7 +848,7 @@ enum MailText {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = bareAddress(text)
         if let key = pk.isEmpty ? SkymailAddress.pk(ofAddress: address) : pk {
-            if let contact = contacts.first(where: { SkymailAddress.pk(ofAddress: $0.address)?.lowercased() == key.lowercased() }) {
+            if let contact = contacts.first(where: { c in c.addresses.contains { SkymailAddress.pk(ofAddress: $0)?.lowercased() == key.lowercased() } }) {
                 return contact.name
             }
             if let name = VoiceCalls.shared.addressBook[key.lowercased()] ?? VoiceCalls.shared.addressBook[key], !name.isEmpty {

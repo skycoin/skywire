@@ -30,6 +30,35 @@
         }
       }
     },
+    "NSContactsUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copies the visor’s contact book into Contacts, in a Skywire group, when you turn that on in Settings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copia la libreta de contactos del nodo en Contactos, en un grupo Skywire, cuando lo activas en Ajustes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skywire copie le carnet de contacts du visor dans Contacts, dans un groupe Skywire, quand vous l’activez dans Réglages."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设置中开启后，Skywire 会把节点的通讯录复制到“通讯录”的 Skywire 分组中。"
+          }
+        }
+      }
+    },
     "NSFaceIDUsageDescription" : {
       "extractionState" : "manual",
       "localizations" : {

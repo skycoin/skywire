@@ -134,6 +134,62 @@ final class MailChecks: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 5), .completed, "the contact was not deleted")
     }
 
+    /// Settings copies the book into Contacts: a contact saved in Skymail shows there, its
+    /// SkyMail row opens a draft back in Skywire, and turning the copy off removes it. Grant
+    /// access first, or the system asks:
+    ///   xcrun simctl privacy booted grant contacts com.skycoin.skywire
+    func testTheBookReachesThePhoneContacts() {
+        let app = connectedApp(arguments: Self.english)
+        openTab(.settings, in: app)
+        let toggle = app.switches["settings-phone-contacts"]
+        scroll(to: toggle, in: app)
+        if toggle.value as? String == "1" { toggle.tap() }
+        XCTAssertTrue(waitValue(toggle, "0", timeout: 10))
+        toggle.tap()
+        XCTAssertTrue(waitValue(toggle, "1", timeout: 15), "the copy did not turn on")
+        snap("settings-phone-contacts")
+
+        let address = openMail(app)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let subject = "Book \(stamp)", name = "Book \(stamp)"
+        send(app, to: address, subject: subject, body: "Copy me.")
+        let row = mailRow(app, subject)
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the message never arrived")
+        row.tap()
+        app.buttons["mail-save-contact"].tap()
+        let nameField = app.textFields["mail-contact-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "no contact dialog")
+        nameField.tap()
+        nameField.typeText(name)
+        tapWhenUp("Save", in: app)
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 10), "the contact was not saved")
+        goBack(app)
+
+        let contacts = XCUIApplication(bundleIdentifier: "com.apple.MobileAddressBook")
+        contacts.launch()
+        let entry = contacts.staticTexts[name].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 15), "Contacts does not list the copy")
+        entry.tap()
+        let link = contacts.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'skymail:'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 5), "the copy has no SkyMail row")
+        snap("contacts-copy")
+        link.tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.buttons["Open"].waitForExistence(timeout: 3) { springboard.buttons["Open"].tap() }
+        let to = app.textFields["mail-to"]
+        XCTAssertTrue(to.waitForExistence(timeout: 15), "the SkyMail row opened no draft")
+        XCTAssertEqual((to.value as? String)?.lowercased(), address.lowercased(), "the draft is not to the contact")
+        snap("contacts-link-draft")
+        goBack(app)
+
+        openTab(.settings, in: app)
+        scroll(to: toggle, in: app)
+        toggle.tap()
+        XCTAssertTrue(waitValue(toggle, "0", timeout: 15), "the copy did not turn off")
+        contacts.launch()
+        XCTAssertFalse(contacts.staticTexts[name].waitForExistence(timeout: 5), "the copy outlived the switch")
+    }
+
     /// The settings switch turns the mailbox off and on again.
     func testMailboxTurnsOffAndOn() {
         let app = connectedApp(arguments: Self.english)

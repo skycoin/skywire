@@ -68,6 +68,10 @@ struct RootView: View {
         // A skychat that is already running is followed before the tab is opened, so unread
         // counts and receipts are live; opening the tab is what starts it.
         .task(id: app.connected) { await ChatRepository.shared.follow(app) }
+        // The book's copy in Contacts catches up with what changed while the core was down.
+        .task(id: app.connected) {
+            if app.connected { await PhoneContacts.sync(app.client) }
+        }
         .onChange(of: router.pending) { request in
             if request != nil { navigator.select(.chat) }
         }
@@ -84,6 +88,8 @@ struct RootView: View {
                 notifications.appLeft()
             case .active:
                 app.becameActive()
+                // iOS has no sync adapter: the dashboard and SkyChat change the book too.
+                if app.connected { Task { await PhoneContacts.sync(app.client) } }
             default:
                 break
             }

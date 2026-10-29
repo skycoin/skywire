@@ -32,8 +32,10 @@ struct SkywireApp: App {
                 .environmentObject(router)
                 .environmentObject(notifications)
                 .environmentObject(callModel)
-                // skychat: links (Info.plist CFBundleURLTypes).
-                .onOpenURL { url in router.offer(url) }
+                // skychat: and skymail: links (Info.plist CFBundleURLTypes).
+                .onOpenURL { url in
+                    if !MailRouter.shared.offer(url) { router.offer(url) }
+                }
         }
     }
 }
