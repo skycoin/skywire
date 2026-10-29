@@ -49,12 +49,6 @@ func (c *churnSub) apply(events []UpdateEvent) {
 	c.lastEvAt = time.Now()
 }
 
-func (c *churnSub) size() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.present)
-}
-
 func (c *churnSub) has(path string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -91,13 +85,13 @@ func (c *churnSub) diff(want map[string]struct{}) (missing, extra []string) {
 	return missing, extra
 }
 
-// waitConverge blocks until the subscriber's present-set size equals want (or
-// timeout), returning the time it took and whether it got there.
-func (c *churnSub) waitConverge(want int, timeout time.Duration) (time.Duration, bool) {
+// waitConverge blocks until the subscriber's present set equals want (or
+// timeout). It compares paths, since net-zero churn keeps a stale set's size.
+func (c *churnSub) waitConverge(want map[string]struct{}, timeout time.Duration) (time.Duration, bool) {
 	start := time.Now()
 	end := start.Add(timeout)
 	for {
-		if c.size() == want {
+		if missing, extra := c.diff(want); len(missing) == 0 && len(extra) == 0 {
 			return time.Since(start), true
 		}
 		if time.Now().After(end) {
@@ -105,6 +99,15 @@ func (c *churnSub) waitConverge(want int, timeout time.Duration) (time.Duration,
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
+}
+
+// pathSet returns the paths fmt.Sprintf(format, i) for i in [from, to).
+func pathSet(format string, from, to int) map[string]struct{} {
+	s := make(map[string]struct{}, to-from)
+	for i := from; i < to; i++ {
+		s[fmt.Sprintf(format, i)] = struct{}{}
+	}
+	return s
 }
 
 func newChurnPair(t *testing.T, batchWindow time.Duration) (*Publisher, *churnSub) {
@@ -194,7 +197,7 @@ func TestCXOChurn_BurstFill(t *testing.T) {
 			}
 			pubDur := time.Since(pubStart)
 
-			lag, ok := cs.waitConverge(n, 10*time.Second)
+			lag, ok := cs.waitConverge(pathSet("tp/%05d", 0, n), 10*time.Second)
 			present, events, roots := cs.snapshot()
 			t.Logf("burst N=%d batch=%s: publish took %s; subscriber converged=%v in %s (present=%d events=%d roots=%d)",
 				n, bw, pubDur.Round(time.Millisecond), ok, lag.Round(time.Millisecond), present, events, roots)
@@ -232,7 +235,7 @@ func TestCXOChurn_Sustained(t *testing.T) {
 				require.NoError(t, pub.Put(fmt.Sprintf("tp/%05d", i), []byte("seed")))
 			}
 			require.NoError(t, pub.Flush())
-			_, seedOK := cs.waitConverge(liveTarget, 5*time.Second)
+			_, seedOK := cs.waitConverge(pathSet("tp/%05d", 0, liveTarget), 5*time.Second)
 			require.True(t, seedOK, "seed set must converge before churn")
 
 			// One mutation = add newest + delete oldest (net-zero live size),
@@ -258,12 +261,9 @@ func TestCXOChurn_Sustained(t *testing.T) {
 			// The live set after churn is the last liveTarget paths written:
 			// every iteration added one and deleted one, so [oldest, next) is
 			// exactly what the publisher should be holding.
-			wantLive := make(map[string]struct{}, liveTarget)
-			for i := oldest; i < next; i++ {
-				wantLive[fmt.Sprintf("tp/%05d", i)] = struct{}{}
-			}
+			wantLive := pathSet("tp/%05d", oldest, next)
 
-			tailLag, ok := cs.waitConverge(liveTarget, convergeBudget)
+			tailLag, ok := cs.waitConverge(wantLive, convergeBudget)
 			// Missing the budget is ambiguous on a loaded runner, and the two
 			// readings call for opposite responses: the subscriber may still be
 			// draining (CI noise), or an update may be gone for good (the
@@ -274,7 +274,7 @@ func TestCXOChurn_Sustained(t *testing.T) {
 			var graceLag time.Duration
 			graceOK := false
 			if !ok {
-				graceLag, graceOK = cs.waitConverge(liveTarget, convergeGrace)
+				graceLag, graceOK = cs.waitConverge(wantLive, convergeGrace)
 			}
 
 			present, events, roots := cs.snapshot()
@@ -294,7 +294,9 @@ func TestCXOChurn_Sustained(t *testing.T) {
 				t.Fatalf("rate=%d/s: subscriber never reached the publisher's final live set, even after %s + %s of grace — this is a DROPPED UPDATE, not slowness.\n  present=%d want=%d events=%d roots=%d\n  missing (publisher has, subscriber lacks): %v\n  extra (subscriber has, publisher deleted): %v",
 					mutPerSec, convergeBudget, convergeGrace, present, liveTarget, events, roots, missing, extra)
 			}
-			require.Equal(t, liveTarget, present, "no stale/lost entries after convergence (rate=%d/s)", mutPerSec)
+			missing, extra := cs.diff(wantLive)
+			require.Empty(t, missing, "lost entries after convergence (rate=%d/s)", mutPerSec)
+			require.Empty(t, extra, "stale entries after convergence (rate=%d/s)", mutPerSec)
 		})
 	}
 }
