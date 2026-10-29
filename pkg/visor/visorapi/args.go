@@ -630,6 +630,12 @@ type HVAppArgs struct {
 	AppName string
 }
 
+type HVAddAppArgs struct {
+	PK         cipher.PubKey
+	AppName    string
+	BinaryName string
+}
+
 type HVMinHopsArgs struct {
 	PK   cipher.PubKey
 	Hops uint16

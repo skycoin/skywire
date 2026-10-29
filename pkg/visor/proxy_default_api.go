@@ -1259,6 +1259,14 @@ func (proxyDefaultAPI) HVStopApp(_ cipher.PubKey, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) HVAppCatalog(_ cipher.PubKey) ([]visorapi.CatalogEntry, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVAddApp(_ cipher.PubKey, _, _ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) HVSetMinHops(_ cipher.PubKey, _ uint16) error {
 	return ErrProxyNotSupported
 }

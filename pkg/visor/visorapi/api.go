@@ -142,6 +142,8 @@ type Hypervisors interface {
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
 	HVStartApp(pk cipher.PubKey, appName string) error
 	HVStopApp(pk cipher.PubKey, appName string) error
+	HVAppCatalog(pk cipher.PubKey) ([]CatalogEntry, error)
+	HVAddApp(pk cipher.PubKey, appName, binaryName string) error
 	HVSetMinHops(pk cipher.PubKey, hops uint16) error
 	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
 	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error

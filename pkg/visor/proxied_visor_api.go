@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -104,6 +105,28 @@ func (p *proxiedVisorAPI) Apps() ([]*appserver.AppState, error) {
 		return nil, ErrProxyNotSupported
 	}
 	return s.Overview.Apps, nil
+}
+
+// App reads one app from the summary, which the app routes need before acting.
+func (p *proxiedVisorAPI) App(appName string) (*appserver.AppState, error) {
+	apps, err := p.Apps()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range apps {
+		if a.Name == appName {
+			return a, nil
+		}
+	}
+	return nil, fmt.Errorf("app %q not found on %s", appName, p.targetPK)
+}
+
+func (p *proxiedVisorAPI) AppCatalog() ([]visorapi.CatalogEntry, error) {
+	return p.hvAPI.HVAppCatalog(p.targetPK)
+}
+
+func (p *proxiedVisorAPI) AddApp(appName, binaryName string) error {
+	return p.hvAPI.HVAddApp(p.targetPK, appName, binaryName)
 }
 
 func (p *proxiedVisorAPI) Transports(_ []string, _ []cipher.PubKey, _ bool) ([]*visorapi.TransportSummary, error) {

@@ -1301,6 +1301,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.GrowMuxRoute(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HVAddApp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.HVAddAppArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.HVAddApp(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".HVAddTransport", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.HVAddTransportArgs)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -1309,6 +1319,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.TransportSummary)
 			return rpcReply, rpcRcvr.HVAddTransport(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".HVAppCatalog", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(cipher.PubKey)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]visorapi.CatalogEntry)
+			return rpcReply, rpcRcvr.HVAppCatalog(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".HVDeregisterTCPPort", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

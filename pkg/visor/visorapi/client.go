@@ -2379,6 +2379,18 @@ func (rc *rpcClient) HVStopApp(pk cipher.PubKey, appName string) error {
 	return rc.Call("HVStopApp", &HVAppArgs{PK: pk, AppName: appName}, &struct{}{})
 }
 
+// HVAppCatalog lists the apps a remote visor can run.
+func (rc *rpcClient) HVAppCatalog(pk cipher.PubKey) ([]CatalogEntry, error) {
+	var out []CatalogEntry
+	err := rc.Call("HVAppCatalog", &pk, &out)
+	return out, err
+}
+
+// HVAddApp adds an app entry to a remote visor.
+func (rc *rpcClient) HVAddApp(pk cipher.PubKey, appName, binaryName string) error {
+	return rc.Call("HVAddApp", &HVAddAppArgs{PK: pk, AppName: appName, BinaryName: binaryName}, &struct{}{})
+}
+
 // HVSetMinHops sets min_hops on a remote visor.
 func (rc *rpcClient) HVSetMinHops(pk cipher.PubKey, hops uint16) error {
 	return rc.Call("HVSetMinHops", &HVMinHopsArgs{PK: pk, Hops: hops}, &struct{}{})
