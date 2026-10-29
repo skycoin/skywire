@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -77,6 +79,7 @@ import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.findFragmentActivity
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.wallet.WalletPrices
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -119,6 +122,17 @@ fun SettingsScreen(
     // the view model, and silent about a failure — see checkForUpdate.
     LaunchedEffect(Unit) { viewModel.checkForUpdate(manual = false) }
 
+    // The update banner's Update lands here, and the card is far below the
+    // fold. It is second from the end, above About. The wait is for the first
+    // layout, before which the list has no items to count.
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.revealUpdate) {
+        if (!state.revealUpdate) return@LaunchedEffect
+        val count = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it >= 2 }
+        listState.animateScrollToItem(count - 2)
+        viewModel.updateRevealed()
+    }
+
     LaunchedEffect(state.message) {
         state.message?.let { message ->
             snackbar.showSnackbar(message)
@@ -160,6 +174,7 @@ fun SettingsScreen(
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.padding(padding),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

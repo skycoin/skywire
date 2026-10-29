@@ -7,6 +7,7 @@ import android.content.pm.PackageInstaller
 import android.provider.Settings
 import android.util.Log
 import androidx.core.net.toUri
+import com.skycoin.skywire.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -57,6 +58,9 @@ object AppUpdates {
 
     /** The releases page, for the fallback that opens a browser instead. */
     const val RELEASES_PAGE = "https://github.com/skycoin/skywire/releases"
+
+    /** F-Droid's public index, by package name. It answers 404 until the app is listed. */
+    private const val FDROID_API = "https://f-droid.org/api/v1/packages/"
 
     /** GitHub rejects an API request that does not say who is asking. */
     private const val USER_AGENT = "skywire-android"
@@ -174,6 +178,34 @@ object AppUpdates {
             .mapNotNull(::toRelease)
             .filter { it.version > installed }
             .maxByOrNull { it.version }
+
+    /**
+     * The version F-Droid offers when it is newer than this build, else null.
+     *
+     * Asked of F-Droid and not GitHub because F-Droid builds each release
+     * itself, days after the tag, and pointing at it sooner finds nothing new.
+     */
+    suspend fun checkFdroid(context: Context): Result<String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            client.newCall(
+                Request.Builder()
+                    .url(FDROID_API + context.packageName)
+                    .header("User-Agent", USER_AGENT)
+                    .build(),
+            ).execute().use { response ->
+                if (response.code == 404) return@runCatching null
+                if (!response.isSuccessful) error("F-Droid answered ${response.code}")
+                selectFdroidUpdate(response.body.string(), BuildConfig.VERSION_CODE.toLong())
+            }
+        }.onFailure { Log.w(TAG, "F-Droid check failed", it) }
+    }
+
+    /** The suggested version's name, once its code is above [installedCode]. */
+    internal fun selectFdroidUpdate(body: String, installedCode: Long): String? {
+        val index = json.decodeFromString<FdroidIndex>(body)
+        if (index.suggestedVersionCode <= installedCode) return null
+        return index.packages.firstOrNull { it.versionCode == index.suggestedVersionCode }?.versionName
+    }
 
     /**
      * Whether a release is one of *this app's*.
@@ -422,4 +454,13 @@ object AppUpdates {
         val size: Long = 0L,
         @SerialName("browser_download_url") val browserDownloadUrl: String,
     )
+
+    @Serializable
+    private data class FdroidIndex(
+        val suggestedVersionCode: Long = 0L,
+        val packages: List<FdroidPackage> = emptyList(),
+    )
+
+    @Serializable
+    private data class FdroidPackage(val versionName: String, val versionCode: Long)
 }
