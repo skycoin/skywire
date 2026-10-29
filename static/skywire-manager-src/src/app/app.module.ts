@@ -35,6 +35,7 @@ import { ServicesHealthComponent } from './components/pages/services-health/serv
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
+import { AppCatalogComponent } from './components/pages/node/apps/app-catalog/app-catalog.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
@@ -105,6 +106,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         ServicesHealthComponent,
         DmsgSettingsComponent,
         AllAppsComponent,
+        AppCatalogComponent,
         TransportDetailsComponent,
         LogFilterComponent,
         InitialSetupComponent,

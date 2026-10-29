@@ -1,5 +1,5 @@
 import { matchScore, paletteEntries, paletteTokens, PaletteContext, PaletteVisor, rankPalette } from './command-palette';
-import { nodeTabsData } from './node-tabs';
+import { nodePaletteTabs, nodeTabsData } from './node-tabs';
 import { homeTabsData } from './home-tabs';
 import { isPaletteShortcut, visorPkFromUrl } from '../components/layout/command-palette/command-palette.component';
 
@@ -122,5 +122,17 @@ describe('command palette shortcut', () => {
     expect(visorPkFromUrl('/nodes/' + pkA + '/routing')).toBe(pkA);
     expect(visorPkFromUrl('/nodes/' + pkA)).toBe(pkA);
     expect(visorPkFromUrl('/nodes/list/1')).toBeUndefined();
+  });
+});
+
+describe('command palette node pages', () => {
+  it('reaches the app catalog without adding it to the tab row', () => {
+    expect(nodeTabsData(pkA, false).some(t => t.label === 'node.tabs.app-catalog')).toBeFalse();
+    const c = ctx({ pk: pkA, label: 'magnetosphere' });
+    c.tabsFor = v => nodePaletteTabs(v.pk, !!v.wasm);
+    c.translate = k => k === 'node.tabs.app-catalog' ? 'App catalog' : labels[k] || k;
+    const top = rankPalette(paletteEntries(c, paletteTokens('catalog')), 'catalog')[0];
+    expect(top.items[0].title).toBe('App catalog');
+    expect(top.items[0].link).toEqual(['/nodes', pkA, 'apps', 'catalog']);
   });
 });
