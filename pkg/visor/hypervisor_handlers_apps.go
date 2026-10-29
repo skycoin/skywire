@@ -101,6 +101,18 @@ func (hv *Hypervisor) appHelp() http.HandlerFunc {
 	})
 }
 
+// appFlags describes the flags the named app accepts, for the settings form.
+func (hv *Hypervisor) appFlags() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		out, err := ctx.API.AppFlags(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
+	})
+}
+
 // deleteApp removes an app entry from the launcher config (and
 // stops it first if running). Pairs with postApp for the
 // add-instance / remove-instance lifecycle that the hypervisor UI

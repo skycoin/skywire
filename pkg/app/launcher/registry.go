@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/spf13/pflag"
+
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 )
 
@@ -153,4 +155,31 @@ func ClearHTTPHandler(name string, h http.Handler) {
 	if httpHandlers[name] == h {
 		delete(httpHandlers, name)
 	}
+}
+
+var (
+	appFlagsMu sync.Mutex
+	appFlags   = make(map[string]*pflag.FlagSet)
+)
+
+// RegisterAppFlags publishes the flag set an in-process app parses, so the
+// visor can describe the app's settings without running its --help.
+func RegisterAppFlags(name string, fs *pflag.FlagSet) {
+	appFlagsMu.Lock()
+	defer appFlagsMu.Unlock()
+	appFlags[name] = fs
+}
+
+// VisitAppFlags calls fn for each flag registered for name, sorted by name,
+// and reports whether name has a flag set. VisitAll sorts lazily, so it runs
+// under the lock.
+func VisitAppFlags(name string, fn func(*pflag.Flag)) bool {
+	appFlagsMu.Lock()
+	defer appFlagsMu.Unlock()
+	fs, ok := appFlags[name]
+	if !ok || fs == nil {
+		return false
+	}
+	fs.VisitAll(fn)
+	return true
 }

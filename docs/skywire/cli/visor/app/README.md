@@ -19,6 +19,7 @@ skywire cli visor app
 - [conns](conns/README.md) — Show an app's connection summary (bytes, latency)
 - [deregister](deregister/README.md) — Deregister app
 - [env](env/README.md) — Set, replace, or delete an env-var entry on an app
+- [flags](flags/README.md) — List the flags an app accepts
 - [log](log/README.md) — Logs from app
 - [ls](ls/README.md) — List apps
 - [register](register/README.md) — Register app

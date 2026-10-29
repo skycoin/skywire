@@ -38,6 +38,7 @@ var (
 
 func init() {
 	launcher.RegisterApp("skysocks", RunSkysocks)
+	launcher.RegisterAppFlags("skysocks", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&whitelist, "whitelist", "", "comma-separated list of public keys allowed to connect (empty = allow all)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }

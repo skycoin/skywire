@@ -168,6 +168,14 @@ func (r *RPC) SetAppLauncherMode(in *visorapi.SetAppLauncherModeIn, _ *struct{})
 	return r.visor.SetAppLauncherMode(in.AppName, in.Mode)
 }
 
+// AppFlags describes the flags an app accepts and the values its args set.
+func (r *RPC) AppFlags(in *visorapi.AppNameIn, reply *visorapi.AppFlags) (err error) {
+	defer rpcutil.LogCall(r.log, "AppFlags", in)(reply, &err)
+	out, err := r.visor.AppFlags(in.AppName)
+	*reply = out
+	return err
+}
+
 // AppHelp returns the captured `<binary> --help` output for an app.
 func (r *RPC) AppHelp(in *visorapi.AppNameIn, reply *string) (err error) {
 	defer rpcutil.LogCall(r.log, "AppHelp", in)(reply, &err)

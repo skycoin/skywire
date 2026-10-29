@@ -57,6 +57,7 @@ var defaultMeshCADir = filepath.Join(skyenv.PackageConfig().LocalPath, "mesh-gat
 
 func init() {
 	launcher.RegisterApp("vpn-client", RunVPNClient)
+	launcher.RegisterAppFlags("vpn-client", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&serverPKStr, "srv", "", "PubKey of the server to connect to")
 	RootCmd.Flags().StringVar(&localPKStr, "pk", "", "local pubkey")
 	RootCmd.Flags().StringVar(&localSKStr, "sk", "", "local seckey")

@@ -32,6 +32,15 @@
           <pre class="help-text">{{ helpText }}</pre>
         }
       }
+      <button type="button" class="show-flags-toggle flags-form-toggle" (click)="toggleFlagsForm()">
+        <mat-icon [inline]="true">{{ showFlagsForm ? 'expand_less' : 'expand_more' }}</mat-icon>
+        {{ 'app-settings.show-flags-form' | translate }}
+      </button>
+      @if (showFlagsForm) {
+        <app-app-flags-form [appName]="app.name" [args]="form.get('args')!.value"
+                            (argsChange)="onFlagArgs($event)" (validChange)="flagsValid = $event">
+        </app-app-flags-form>
+      }
     </div>
 
     <div class="field">
@@ -80,6 +89,13 @@
       </div>
     </div>
 
+    @if (!flagsValid) {
+      <div class="error-box">
+        <mat-icon [inline]="true">error_outline</mat-icon>
+        <span>{{ 'app-settings.flags-invalid' | translate }}</span>
+      </div>
+    }
+
     @if (saveError) {
       <div class="error-box">
         <mat-icon [inline]="true">error_outline</mat-icon>
@@ -91,7 +107,7 @@
       <button type="button" mat-button (click)="cancel()" [disabled]="saving">
         {{ 'common.cancel' | translate }}
       </button>
-      <button type="submit" mat-raised-button color="primary" [disabled]="saving">
+      <button type="submit" mat-raised-button color="primary" [disabled]="saving || !flagsValid">
         <mat-icon [inline]="true">save</mat-icon>
         {{ saving ? ('common.loading' | translate) : ('common.save' | translate) }}
       </button>

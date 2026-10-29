@@ -1,0 +1,58 @@
+<div class="flags-form">
+  @if (loading) {
+    <div class="flags-status small">{{ 'app-flags.loading' | translate }}</div>
+  }
+  @if (error) {
+    <div class="flags-status flags-error-text">{{ error }}</div>
+  }
+  @if (!loading && !error && flags.length === 0) {
+    <div class="flags-status small">{{ 'app-flags.none' | translate }}</div>
+  }
+  @for (f of flags; track f.name) {
+    <div class="flag-row" [attr.data-flag]="f.name" [class.flag-set]="state[f.name]?.set">
+      <div class="flag-head">
+        <label class="flag-name" for="flag-{{ appName }}-{{ f.name }}">
+          @if (f.shorthand) {
+            <span>-{{ f.shorthand }}, </span>
+          }--{{ f.name }}
+        </label>
+        <span class="flag-type">{{ 'app-flags.type-' + f.type | translate }}</span>
+        @if (state[f.name]?.set) {
+          <button type="button" class="flag-reset" (click)="reset(f)" title="{{ 'app-flags.reset' | translate }}">
+            <mat-icon [inline]="true">undo</mat-icon>
+            {{ 'app-flags.reset' | translate }}
+          </button>
+        }
+      </div>
+      <div class="flag-input">
+        @switch (f.type) {
+          @case ('bool') {
+            <label class="flag-check">
+              <input id="flag-{{ appName }}-{{ f.name }}" type="checkbox"
+                     [checked]="state[f.name]?.value === 'true'"
+                     (change)="setValue(f, $any($event.target).checked)">
+              <span>{{ (state[f.name]?.value === 'true' ? 'app-flags.on' : 'app-flags.off') | translate }}</span>
+            </label>
+          }
+          @case ('int') {
+            <input id="flag-{{ appName }}-{{ f.name }}" type="number" step="1"
+                   [value]="state[f.name]?.value" [placeholder]="f.default"
+                   (input)="setValue(f, $any($event.target).value)">
+          }
+          @default {
+            <input id="flag-{{ appName }}-{{ f.name }}" type="text"
+                   [value]="state[f.name]?.value" [placeholder]="f.type === 'stringList' ? ('app-flags.list-placeholder' | translate) : f.default"
+                   (input)="setValue(f, $any($event.target).value)">
+          }
+        }
+      </div>
+      @if (errorFor(f)) {
+        <div class="flag-error">{{ errorFor(f) }}</div>
+      }
+      <div class="flag-usage small">
+        {{ f.usage }}
+        <span class="flag-default">{{ 'app-flags.default' | translate }}: <span class="mono">{{ f.default || ('app-flags.empty' | translate) }}</span></span>
+      </div>
+    </div>
+  }
+</div>

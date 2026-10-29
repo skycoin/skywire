@@ -744,6 +744,7 @@ func parseEventChannels(csv string) map[string]bool {
 
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
+	launcher.RegisterAppFlags("skychat", RootCmd.Flags())
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
 	RootCmd.Flags().BoolVar(&portless, "portless", false, "don't bind a TCP port; reach the UI only through the visor's control surface (the in-process surface is published either way)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")

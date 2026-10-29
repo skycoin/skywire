@@ -337,6 +337,8 @@ type Apps interface {
 	SetAppEnvFull(appName string, env []string) error
 	SetAppLauncherMode(appName, mode string) error
 	AppHelp(appName string) (string, error)
+	// AppFlags describes the flags an app accepts and the values its args set.
+	AppFlags(appName string) (AppFlags, error)
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	RecentAppLog(appName, level string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
