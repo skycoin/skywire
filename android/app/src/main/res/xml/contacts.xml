@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How the Contacts app shows the rows PhoneContacts writes: data2 is the
+     app, data3 the action. A tap opens Skywire on the row (PhoneContacts.offer). -->
+<ContactsAccountType xmlns:android="http://schemas.android.com/apk/res/android">
+    <ContactsDataKind
+        android:mimeType="vnd.android.cursor.item/vnd.com.skycoin.skywire.chat"
+        android:icon="@mipmap/ic_launcher"
+        android:summaryColumn="data2"
+        android:detailColumn="data3" />
+    <ContactsDataKind
+        android:mimeType="vnd.android.cursor.item/vnd.com.skycoin.skywire.mail"
+        android:icon="@mipmap/ic_launcher"
+        android:summaryColumn="data2"
+        android:detailColumn="data3" />
+</ContactsAccountType>

@@ -664,6 +664,11 @@
     <string name="wallet_tx_usd_now">当前价值</string>
     <string name="settings_wallet_prices">以美元显示价格</string>
     <string name="settings_wallet_prices_hint">同时以美元显示钱包余额和金额。价格来自 coinpaprika.com，它会因此看到这部手机的网络地址以及你查看的币种。默认关闭。</string>
+    <string name="settings_phone_contacts">显示在手机通讯录中</string>
+    <string name="settings_phone_contacts_hint">把节点的通讯录复制到手机的通讯录应用中，放在一个不可编辑的 Skywire 账户下。任何有权读取通讯录的应用都能读到这些名称和密钥。默认关闭。</string>
+    <string name="settings_phone_contacts_denied">通讯录权限被拒绝。请在手机设置中为 Skywire 允许后再开启。</string>
+    <string name="phone_contacts_chat">给 %1$s 发消息</string>
+    <string name="phone_contacts_mail">写信给 %1$s</string>
     <string name="wallet_add_coin_from_node">留空则从节点服务器获取</string>
     <string name="wallet_node_invalid">不是 http(s) 地址。</string>
     <string name="wallet_node_remove">移除此节点</string>
@@ -1084,6 +1089,7 @@
     <string name="mail_via_hint">收件人和抄送中的所有地址都经由此网络发送。dmsg 无需路由；有路由时 skynet 更快。</string>
     <string name="mail_contacts">联系人</string>
     <string name="mail_no_contacts">还没有联系人。添加一个，或从邮件中保存发件人。</string>
+    <string name="mail_contacts_shared">这是节点的通讯录，SkyChat 也用这里的名称。</string>
     <string name="mail_save_contact">保存联系人</string>
     <string name="mail_contact_name">名称</string>
     <string name="mail_contact_saved">联系人已保存</string>

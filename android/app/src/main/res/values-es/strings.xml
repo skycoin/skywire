@@ -742,6 +742,11 @@
     <string name="wallet_tx_usd_now">Valor actual</string>
     <string name="settings_wallet_prices">Precios en dólares</string>
     <string name="settings_wallet_prices_hint">Muestra también los saldos y cantidades de la billetera en USD. Los precios vienen de coinpaprika.com, que así ve la dirección de internet de este teléfono y qué monedas miras. Desactivado por defecto.</string>
+    <string name="settings_phone_contacts">Mostrar en los contactos del teléfono</string>
+    <string name="settings_phone_contacts_hint">Copia la libreta de contactos del nodo en la app Contactos del teléfono, en una cuenta Skywire que no se puede editar. Cualquier app con permiso para leer tus contactos podrá leer estos nombres y claves. Desactivado por defecto.</string>
+    <string name="settings_phone_contacts_denied">Se denegó el acceso a los contactos. Permítelo para Skywire en los ajustes del teléfono para activarlo.</string>
+    <string name="phone_contacts_chat">Enviar mensaje a %1$s</string>
+    <string name="phone_contacts_mail">Escribir a %1$s</string>
     <string name="wallet_add_coin_from_node">Del nodo si se deja vacío</string>
     <string name="wallet_node_invalid">No es una dirección http(s).</string>
     <string name="wallet_node_remove">Quitar este nodo</string>
@@ -1179,6 +1184,7 @@
     <string name="mail_via_hint">Todas las direcciones de Para y Cc van por esta red. dmsg no necesita ruta; skynet es más rápido cuando hay una.</string>
     <string name="mail_contacts">Contactos</string>
     <string name="mail_no_contacts">Aún no hay contactos. Añade uno o guarda un remitente desde un mensaje.</string>
+    <string name="mail_contacts_shared">La libreta de contactos del nodo. SkyChat también toma de aquí los nombres.</string>
     <string name="mail_save_contact">Guardar contacto</string>
     <string name="mail_contact_name">Nombre</string>
     <string name="mail_contact_saved">Contacto guardado</string>

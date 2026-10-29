@@ -637,6 +637,28 @@ class VisorApi(context: Context) {
         return if (id == null) base else "$base/${URLEncoder.encode(id, "UTF-8")}"
     }
 
+    // --- contacts: the visor's address book, shared with skychat and the dashboard ---
+
+    /** Every contact, sorted by name. */
+    suspend fun contacts(): List<BookContact> = authedGet("/api/visors/${localPk()}/contacts")
+
+    /** Adds [contact], or replaces the one with its uid, and answers it as stored. */
+    suspend fun contactPut(contact: BookContact): BookContact = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(BookContact.serializer(), contact)
+        postWithRelogin("/api/visors/${localPk()}/contacts", body).use { resp ->
+            if (resp.code == HTTP_BAD_REQUEST) throw ContactRejectedException(errorBody(resp))
+            if (!resp.isSuccessful) throw IOException(errorBody(resp))
+            decode<BookContact>(resp)
+        }
+    }
+
+    /** Removes the contact with [uid]; one already gone is no error. */
+    suspend fun contactDelete(uid: String): Unit = withContext(Dispatchers.IO) {
+        deleteWithRelogin("/api/visors/${localPk()}/contacts/${URLEncoder.encode(uid, "UTF-8")}").use { resp ->
+            if (!resp.isSuccessful && resp.code != HTTP_NOT_FOUND) throw IOException(errorBody(resp))
+        }
+    }
+
     /** The reward address: an account xpub, a single address set before xpubs were required, or "" for none. */
     suspend fun rewardAddress(): String = authedGet("/api/visors/${localPk()}/reward")
 
@@ -795,6 +817,8 @@ class VisorApi(context: Context) {
          * `/visors/{pk}/…` routes, "that visor is reconnecting".
          */
         private const val HTTP_UNAVAILABLE = 503
+        private const val HTTP_NOT_FOUND = 404
+        private const val HTTP_BAD_REQUEST = 400
 
         /** Enough to outlast a hypervisor-client redial (measured ~4 s). */
         private const val RESTART_ATTEMPTS = 4
