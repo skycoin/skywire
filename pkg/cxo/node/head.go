@@ -544,6 +544,7 @@ func (f *fillHead) createFiller(cr connRoot) {
 	f.fill++
 	f.rq = make(chan cipher.SHA256, f.maxParallel())
 	f.f = f.node().c.Fill(cr.r, f.rq, f.maxParallel())
+	f.node().fillsActive.Add(1)
 
 	f.rqo = list.New()                   // create list of keys
 	f.fc = f.cs.buildConnsList(cr.r.Seq) // create list of connections
@@ -578,6 +579,7 @@ func (f *fillHead) closeFiller() {
 
 	f.f.Close() //nolint:errcheck,gosec
 	f.f = nil
+	f.node().fillsActive.Add(-1)
 
 	f.rqo, f.fc, f.rq = nil, nil, nil
 	f.tc, f.hardTc = nil, nil

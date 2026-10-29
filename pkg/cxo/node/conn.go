@@ -1055,7 +1055,12 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 		c.sendSharedBody(c.nextSeq(), seq, c.n.objBodies.body(rq.Key, obj.Val)) //nolint:errcheck,gosec
 		return
 	default:
-		// wait
+		// Without a fill of our own the object can only be one we swept, so
+		// answer now and let the peer move on to a newer Root.
+		if c.n.fillsActive.Load() == 0 {
+			c.sendMsg(c.nextSeq(), seq, &msg.Err{}) //nolint:errcheck,gosec
+			return
+		}
 	}
 
 	if rt := c.responseTimeout(); rt > 0 {
