@@ -141,6 +141,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.AppDirectStreams(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".AppFlags", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.AppNameIn)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.AppFlags)
+			return rpcReply, rpcRcvr.AppFlags(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".AppHelp", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(visorapi.AppNameIn)
 		if err := rpcDec.Decode(rpcArg); err != nil {

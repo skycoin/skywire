@@ -71,6 +71,7 @@ var (
 
 func init() {
 	launcher.RegisterApp(skyenv.SkydexClientName, RunSkydexClient)
+	launcher.RegisterAppFlags(skyenv.SkydexClientName, RootCmd.Flags())
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.SkydexClientAddr, "address to serve the trading UI on")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&marketPK, "market-pk", "", "default skydex-market public key (pre-filled in the UI; not auto-connected)")

@@ -705,6 +705,13 @@ func (rc *rpcClient) AppHelp(appName string) (string, error) {
 	return out, nil
 }
 
+// AppFlags implements API.
+func (rc *rpcClient) AppFlags(appName string) (AppFlags, error) {
+	var out AppFlags
+	err := rc.Call("AppFlags", &AppNameIn{AppName: appName}, &out)
+	return out, err
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)

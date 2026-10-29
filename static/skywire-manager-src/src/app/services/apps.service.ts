@@ -71,6 +71,14 @@ export class AppsService {
   }
 
   /**
+   * Returns the flags an app accepts with their defaults and the values its
+   * args set. Backs the generated flags form in the settings panel.
+   */
+  getAppFlags(nodeKey: string, appName: string) {
+    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/flags`);
+  }
+
+  /**
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {

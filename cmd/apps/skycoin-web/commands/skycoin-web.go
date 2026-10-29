@@ -37,6 +37,7 @@ var RootCmd = &cobra.Command{
 
 func init() {
 	launcher.RegisterApp(skyenv.SkycoinWebName, RunSkycoinWeb)
+	launcher.RegisterAppFlags(skyenv.SkycoinWebName, RootCmd.Flags())
 	// Mount the vendored skycoin-web command as the `web` subcommand.
 	skycoinweb.RootCmd.Use = "web"
 	RootCmd.AddCommand(skycoinweb.RootCmd)

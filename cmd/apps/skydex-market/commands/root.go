@@ -48,6 +48,7 @@ var (
 
 func init() {
 	launcher.RegisterApp(skyenv.SkydexMarketName, RunSkydexMarket)
+	launcher.RegisterAppFlags(skyenv.SkydexMarketName, RootCmd.Flags())
 	RootCmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database file (default: <work-dir>/skydex-market.db)")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.SkydexMarketAddr, "address to serve the operator UI on")

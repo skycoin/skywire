@@ -91,6 +91,7 @@ func registerFlags(fs *pflag.FlagSet) {
 
 func init() {
 	launcher.RegisterApp(skyenv.VPNRouterName, RunVPNRouter)
+	launcher.RegisterAppFlags(skyenv.VPNRouterName, RootCmd.Flags())
 	registerFlags(RootCmd.Flags())
 }
 
