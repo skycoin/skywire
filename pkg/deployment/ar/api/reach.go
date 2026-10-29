@@ -665,3 +665,25 @@ func (b *reachBook) counts() reachCounts {
 	}
 	return c
 }
+
+// declAccepts returns what the visor's fresh declaration says it accepts.
+// ok is false when the declaration cannot answer: none was seen, it is
+// stale, its list is empty, or it is AcceptsNone, which turns away automatic
+// transports for a while and says nothing about whether the visor is
+// reachable.
+func (b *reachBook) declAccepts(pk cipher.PubKey, now time.Time) (accepts []string, ok bool) {
+	if b == nil {
+		return nil, false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	p := b.peers[pk]
+	if p == nil || p.decl == nil || now.Sub(p.declSeen) > declTTL {
+		return nil, false
+	}
+	acc := p.decl.Accepts
+	if len(acc) == 0 || (len(acc) == 1 && acc[0] == arfeed.AcceptsNone) {
+		return nil, false
+	}
+	return append([]string(nil), acc...), true
+}

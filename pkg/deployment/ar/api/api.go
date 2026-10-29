@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -470,9 +471,9 @@ func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.T
 		}
 	}
 
-	if !a.hasAddress(remoteAddr, localAddresses) {
-		// visor didn't provide the IP it's trying to bind from
-		// probably is behind NAT and shouldn't bind
+	if !a.bindDialable(tpType, pk, remoteAddr, localAddresses) {
+		// Not declared as accepting the type and not naming the address: the
+		// visor is probably behind NAT and peers could not dial it here.
 		err := fmt.Sprintf("Cannot bind %v to %v (%s). Remote address not present in request: %v", pk, remoteAddr, tpType, localAddresses)
 		a.logger(r).Errorf("%s", err)
 
@@ -546,6 +547,21 @@ func (a *API) delBind(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	a.logger(r).Debugf("Deleted bind %v from %v (STCPR)", pk, remoteAddr)
+}
+
+// bindDialable decides whether peers can dial the visor at remoteAddr, the
+// address the AR sees it at, for type t. A fresh reach declaration that
+// accepts t settles it. Otherwise the visor must name remoteAddr in its bind,
+// which a visor behind NAT passes by appending its public IP. A declaration
+// that leaves t out does not refuse the bind: a visor publishes its first one
+// before all its transport clients are up.
+func (a *API) bindDialable(t types.Type, pk cipher.PubKey, remoteAddr string, local addrresolver.LocalAddresses) bool {
+	if name, known := bookTypeName[types.NormalizeType(t)]; known {
+		if acc, ok := a.reach.declAccepts(pk, time.Now()); ok && slices.Contains(acc, name) {
+			return true
+		}
+	}
+	return a.hasAddress(remoteAddr, local)
 }
 
 // Check if localAddresses contains given address
