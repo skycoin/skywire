@@ -48,8 +48,10 @@ type Client struct {
 	// them to leave the OS routing table alone.
 	addDirect, delDirect func(net.IP) error
 	defaultGateway       net.IP
-	closeC               chan struct{}
-	closeOnce            sync.Once
+	// gatewayFn looks the default gateway up again after a network move.
+	gatewayFn func() (net.IP, error)
+	closeC    chan struct{}
+	closeOnce sync.Once
 
 	prevTUNGateway   net.IP
 	prevTUNGatewayMu sync.Mutex
@@ -87,10 +89,11 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		}
 	}
 
-	defaultGateway, err := DefaultNetworkGateway()
+	gatewayFn := DefaultNetworkGateway
 	if cfg.Host {
-		defaultGateway, err = hostGateway()
+		gatewayFn = hostGateway
 	}
+	defaultGateway, err := gatewayFn()
 	if err != nil {
 		return nil, fmt.Errorf("error getting default network gateway: %w", err)
 	}
@@ -102,6 +105,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 		appCl:          appCl,
 		directIPs:      filterOutEqualIPs(directIPs),
 		defaultGateway: defaultGateway,
+		gatewayFn:      gatewayFn,
 		closeC:         make(chan struct{}),
 	}
 	c.initDirectRoutes()
@@ -763,7 +767,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	// Only a real gateway address belongs in the reserve list: the embedded
 	// client (browser) has none, and a nil/unspecified IP in the hello makes
 	// the server's ipGen.Reserve fail the whole handshake as malformed.
-	if gw := c.defaultGateway; len(gw) > 0 && !gw.IsUnspecified() {
+	if gw := c.gateway(); len(gw) > 0 && !gw.IsUnspecified() {
 		unavailableIPs = append(unavailableIPs, gw)
 	}
 
@@ -915,4 +919,45 @@ func filterOutEqualIPs(ips []net.IP) []net.IP {
 	}
 
 	return filteredIPs
+}
+
+// gateway is the default gateway the direct routes go through.
+func (c *Client) gateway() net.IP {
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+	return c.defaultGateway
+}
+
+// RepinDirectRoutes moves every direct route onto the current default
+// gateway after the visor reports a change of network. Routes through the
+// old gateway are removed first, and one the kernel already dropped with
+// its interface is not an error. It returns the gateway in use afterwards
+// and whether it changed.
+func (c *Client) RepinDirectRoutes() (net.IP, bool, error) {
+	if c.gatewayFn == nil {
+		return nil, false, errors.New("no default gateway lookup")
+	}
+	gw, err := c.gatewayFn()
+	if err != nil {
+		return nil, false, fmt.Errorf("error getting default network gateway: %w", err)
+	}
+	if len(gw) == 0 || gw.IsUnspecified() {
+		return nil, false, errors.New("no default gateway")
+	}
+	c.directIPSMu.Lock()
+	defer c.directIPSMu.Unlock()
+	if gw.Equal(c.defaultGateway) {
+		return gw, false, nil
+	}
+	for _, ip := range c.directIPs {
+		_ = c.delDirect(ip) //nolint:errcheck
+	}
+	c.defaultGateway = gw
+	var errs []error
+	for _, ip := range c.directIPs {
+		if err := c.addDirect(ip); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return gw, true, errors.Join(errs...)
 }
