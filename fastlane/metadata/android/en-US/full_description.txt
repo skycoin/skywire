@@ -14,6 +14,8 @@ Your node has its own cryptographic identity. You can export or replace it, lock
 
 The node runs as a foreground service so connections survive in the background. Skywire uses Skycoin's public discovery servers to find other nodes; their software is open source in the same repository.
 
-The wallet reads balances and history from public services, and each coin's Node screen can point it at another, including your own: node.skycoin.com for Skycoin, mempool.space for Bitcoin, and ethereum-rpc.publicnode.com with the eth.blockscout.com indexer for Ethereum and its tokens. SkyVPN looks up ordinary names with Cloudflare's 1.1.1.1 unless you set another DNS server in Settings. SkyDNS on its own uses the phone's own DNS.
+The wallet reads balances and history from public services, and each coin's Node screen can point it at another, including your own: node.skycoin.com for Skycoin, mempool.space for Bitcoin, and ethereum-rpc.publicnode.com with the eth.blockscout.com indexer for Ethereum and its tokens. Prices in US dollars are off by default and come from coinpaprika when turned on. SkyVPN looks up ordinary names with Cloudflare's 1.1.1.1 unless you set another DNS server in Settings. SkyDNS on its own uses the phone's own DNS.
+
+Skywire rewards stay off until you set a reward xpub in Settings. The node then shares a hardware survey with Skycoin's reward service, which includes a hash of the phone's Android ID.
 
 Skywire is free software under the GNU AGPL v3.0. A commercial license is available for uses that cannot comply with the AGPL.
