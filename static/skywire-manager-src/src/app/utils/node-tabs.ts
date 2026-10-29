@@ -156,3 +156,19 @@ export function nodeTabsData(key: string | undefined, wasm: boolean): TabButtonD
 
   return tabs;
 }
+
+/**
+ * The node tabs plus the pages inside them that the command palette can open
+ * directly, such as the Apps tab's catalog.
+ */
+export function nodePaletteTabs(key: string | undefined, wasm: boolean): TabButtonData[] {
+  const tabs = nodeTabsData(key, wasm);
+  const apps = tabs.findIndex(t => t.label === 'node.tabs.apps');
+  tabs.splice(apps + 1, 0, {
+    icon: 'view_module',
+    label: 'node.tabs.app-catalog',
+    linkParts: key ? ['/nodes', key, 'apps', 'catalog'] : null,
+  });
+
+  return tabs;
+}

@@ -1,21 +1,25 @@
 <div class="apps-subnav">
-  <button mat-button class="sub-btn" [class.active]="sub === 'list'" (click)="sub = 'list'">
+  <a mat-button class="sub-btn" [class.active]="sub === 'list'" [routerLink]="subLink('list')">
     <mat-icon [inline]="true">apps</mat-icon>
     {{ 'apps.tabs.list' | translate }}
-  </button>
+  </a>
+  <a mat-button class="sub-btn" [class.active]="sub === 'catalog'" [routerLink]="subLink('catalog')">
+    <mat-icon [inline]="true">view_module</mat-icon>
+    {{ 'apps.tabs.catalog' | translate }}
+  </a>
   <!-- Skychat moved to its own top-level Chat tab (node.tabs.chat). -->
   <!-- VPN (TUN) and skysocks-server can't run in an in-browser wasm visor; hide
        their sub-tabs for it (install on the host to use them). A remote native
        visor managed from the wasm hypervisor is not wasm, so it keeps them. -->
   @if (!wasmNode) {
-    <button mat-button class="sub-btn" [class.active]="sub === 'vpn'" (click)="sub = 'vpn'">
+    <a mat-button class="sub-btn" [class.active]="sub === 'vpn'" [routerLink]="subLink('vpn')" [queryParams]="subQuery('vpn')">
       <mat-icon [inline]="true">vpn_lock</mat-icon>
       {{ 'apps.tabs.vpn' | translate }}
-    </button>
-    <button mat-button class="sub-btn" [class.active]="sub === 'skysocks'" (click)="sub = 'skysocks'">
+    </a>
+    <a mat-button class="sub-btn" [class.active]="sub === 'skysocks'" [routerLink]="subLink('skysocks')" [queryParams]="subQuery('skysocks')">
       <mat-icon [inline]="true">cloud_download</mat-icon>
       {{ 'apps.tabs.skysocks' | translate }}
-    </button>
+    </a>
   }
 </div>
 
@@ -34,6 +38,10 @@
     [nodePK]="nodePK"
     [nodeIp]="nodeIp">
   </app-node-app-list>
+}
+
+@if (sub === 'catalog') {
+  <app-app-catalog></app-app-catalog>
 }
 
 @if (sub === 'chat') {

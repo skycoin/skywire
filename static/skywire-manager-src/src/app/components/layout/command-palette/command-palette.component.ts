@@ -11,7 +11,7 @@ import { NodeService } from '../../../services/node.service';
 import { ClipboardService } from '../../../services/clipboard.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { homeTabsData } from '../../../utils/home-tabs';
-import { nodeTabsData } from '../../../utils/node-tabs';
+import { nodePaletteTabs } from '../../../utils/node-tabs';
 import { ptyUrl } from '../../../utils/pty-url';
 import GeneralUtils from '../../../utils/generalUtils';
 import { PaletteGroup, PaletteItem, PaletteVisor, paletteEntries, paletteTokens, rankPalette } from '../../../utils/command-palette';
@@ -252,7 +252,7 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
       visors: this.visors,
       current: current,
       homeTabs: homeTabsData(),
-      tabsFor: v => nodeTabsData(v.pk, !!v.wasm),
+      tabsFor: v => nodePaletteTabs(v.pk, !!v.wasm),
       translate: k => this.translate.instant(k),
     }, paletteTokens(this.query));
     const ranked = rankPalette(entries, this.query);
