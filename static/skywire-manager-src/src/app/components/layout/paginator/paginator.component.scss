@@ -20,7 +20,7 @@
     border-left: variables.$separator solid 1px;
     min-width: 40px;
     text-align: center;
-    color: color.scale(variables.$white, $alpha: -50%);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a50));
     text-decoration: none;
     display: flex;
     align-items: center;
@@ -41,7 +41,7 @@
   }
 
   .selected {
-    color: variables.$white;
+    color: var(--sw-text);
     background: color.scale(map.get(variables.$theme-colors,translucid-hover), $alpha: 20%);
     padding: $elements-padding ($elements-padding * 2);
     cursor: pointer;

@@ -6,15 +6,15 @@
   gap: 6px;
   padding: 0 4px;
 
-  // Material's default mat-button label is near-black (rgba(0,0,0,0.87)),
+  // Material's default mat-button label is near-black (rgba(var(--sw-shade-rgb), 0.87)),
   // which is invisible on this dark surface. Force a legible tone for the
   // inactive tabs; the active tab is brighter and gets the pill background.
   button {
-    color: rgba(255, 255, 255, 0.7) !important;
+    color: rgba(var(--sw-fg-rgb), 0.7) !important;
   }
   button.active {
-    background-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.95) !important;
+    background-color: rgba(var(--sw-fg-rgb), 0.12);
+    color: rgba(var(--sw-fg-rgb), 0.95) !important;
   }
 }
 
@@ -23,12 +23,12 @@
 .empty-row,
 .error-row {
   padding: 18px 16px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
   display: flex;
   align-items: center;
 }
 .error-row {
-  color: #ff6b6b;
+  color: rgb(var(--sw-salmon-rgb));
 }
 
 // Role badges in the route-groups table.
@@ -38,12 +38,12 @@
   border-radius: 10px;
   font-size: 0.85em;
   font-weight: 600;
-  background-color: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(var(--sw-fg-rgb), 0.08);
+  color: rgba(var(--sw-fg-rgb), 0.7);
 }
 .rg-role.rg-initiator {
-  background-color: rgba(76, 175, 80, 0.18);
-  color: #81c784;
+  background-color: rgba(var(--sw-green-rgb), 0.18);
+  color: rgb(var(--sw-leaf-rgb));
 }
 
 // Truncate the long-PK and tp-id cells via mono.small instead of
@@ -65,27 +65,27 @@ td.mono.small,
 .route-input {
   flex: 1 1 280px;
   min-width: 180px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(var(--sw-fg-rgb), 0.08);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.18);
   border-radius: 4px;
   padding: 6px 10px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   font-family: monospace;
   font-size: 0.92em;
 }
 .route-input-num {
   width: 64px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(var(--sw-fg-rgb), 0.08);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.18);
   border-radius: 4px;
   padding: 6px 8px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   font-size: 0.92em;
   text-align: right;
 }
 
 .section-desc {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a60));
   font-size: 0.92em;
   margin: 4px 0 12px 0;
 }
@@ -95,15 +95,15 @@ td.mono.small,
   display: inline-block;
   font-family: monospace;
   font-size: 0.85em;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 .hop-arrow {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a40));
   margin: 0 6px;
 }
 
 .results-summary {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
   font-size: 0.92em;
   margin: 8px 0 0 0;
 }
@@ -123,16 +123,16 @@ td.mono.small,
 }
 .route-input-app {
   width: 150px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(var(--sw-fg-rgb), 0.08);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.18);
   border-radius: 4px;
   padding: 4px 8px;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   font-family: monospace;
   font-size: 0.85em;
 }
 .mux-reload {
-  color: rgba(255, 255, 255, 0.75) !important;
+  color: rgba(var(--sw-fg-rgb), 0.75) !important;
   min-width: 0;
 }
 
@@ -140,9 +140,9 @@ td.mono.small,
 .mux-group {
   margin-top: 14px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.1);
   border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(var(--sw-fg-rgb), 0.03);
 }
 .mux-group-head {
   display: flex;
@@ -153,14 +153,14 @@ td.mono.small,
 }
 .mux-src,
 .mux-dst {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   word-break: break-all;
 }
 .mux-port {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a50));
 }
 .mux-flow {
-  color: rgba(157, 124, 255, 0.9);
+  color: rgba(var(--sw-violet-rgb), 0.9);
   margin: 0 4px;
 }
 .mux-spacer {
@@ -173,8 +173,8 @@ td.mono.small,
   font-size: 0.75em;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.72);
+  background-color: rgba(var(--sw-fg-rgb), 0.1);
+  color: rgba(var(--sw-fg-rgb), 0.72);
 }
 .mux-badge.on {
   background-color: rgba(80, 200, 120, 0.2);
@@ -205,7 +205,7 @@ td.mono.small,
   margin-top: 6px;
   font-family: monospace;
   font-size: 0.82em;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
 }
 .agg-up {
   color: rgba(140, 230, 170, 0.95);
@@ -214,10 +214,10 @@ td.mono.small,
   color: rgba(150, 190, 240, 0.95);
 }
 .agg-bytes {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a55));
 }
 .agg-sep {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a30));
 }
 .agg-gap {
   width: 14px;
@@ -230,7 +230,7 @@ td.mono.small,
 .mux-leg {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  border-top: 1px dashed rgba(var(--sw-fg-rgb), 0.08);
 }
 .mux-leg[data-state='dead'] {
   opacity: 0.5;
@@ -254,10 +254,10 @@ td.mono.small,
   color: #e0af68;
 }
 .leg-glyph.st-dead {
-  color: #ff6b6b;
+  color: rgb(var(--sw-salmon-rgb));
 }
 .leg-id {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--sw-fg-rgb), 0.9);
   font-weight: 600;
 }
 .leg-tag {
@@ -268,7 +268,7 @@ td.mono.small,
   color: rgba(140, 230, 170, 0.9);
 }
 .leg-rtt {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 .leg-metric.up {
   color: rgba(140, 230, 170, 0.95);
@@ -281,7 +281,7 @@ td.mono.small,
   width: 72px;
   height: 8px;
   border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(var(--sw-fg-rgb), 0.1);
   overflow: hidden;
 }
 .leg-share-bar {
@@ -308,24 +308,24 @@ td.mono.small,
   padding: 1px 0;
 }
 .mux-hop.dim {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a55));
 }
 .hop-connector {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a35));
 }
 .hop-pk {
   color: rgba(200, 180, 255, 0.92);
   word-break: break-all;
 }
 .hop-tp-type {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a50));
 }
 .hop-tp-id {
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a42));
   word-break: break-all;
 }
 .hop-rtt {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(var(--sw-fg-rgb), 0.75);
 }
 
 // Routing-policy panel styling. Active / inactive badges visually

@@ -1,9 +1,9 @@
 @use 'sass:map';
 // Solid circles
 $dot-icons: (
-  green: map.get($theme-colors, green),
-  red: map.get($theme-colors, red),
-  yellow: map.get($theme-colors, yellow),
+  green: var(--sw-green),
+  red: var(--sw-red),
+  yellow: var(--sw-yellow),
 );
 
 $dot-size:    10px;
@@ -29,8 +29,8 @@ $dot-size-sm: 7px;
 
 // Circle outlines
 $outlines: (
-  white: map.get($theme-colors, white),
-  gray: map.get($theme-colors, light-gray)
+  white: var(--sw-text),
+  gray: var(--sw-grey)
 );
 
 @each $color-name, $color-value in $outlines

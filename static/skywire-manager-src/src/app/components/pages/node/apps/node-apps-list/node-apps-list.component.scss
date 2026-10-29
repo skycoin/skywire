@@ -23,7 +23,7 @@
 }
 
 .skychat-link {
-  color: variables.$white;
+  color: var(--sw-text);
   text-decoration: none;
 
   .big-action-button {

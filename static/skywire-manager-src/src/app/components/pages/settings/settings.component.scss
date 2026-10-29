@@ -13,3 +13,36 @@
   cursor: pointer;
   font-size: variables.$font-size-smaller;
 }
+
+.theme-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.theme-options {
+  display: inline-flex;
+  border: 1px solid var(--sw-card-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.theme-option {
+  min-height: 40px;
+  min-width: 72px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--sw-text);
+  cursor: pointer;
+
+  & + & { border-left: 1px solid var(--sw-card-border); }
+  &:hover { background: rgba(var(--sw-fg-rgb), 0.08); }
+  &:focus-visible { outline: none; box-shadow: inset var(--sw-focus-ring); }
+
+  &.selected {
+    background: var(--sw-accent);
+    color: var(--sw-on-accent);
+  }
+}

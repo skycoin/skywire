@@ -1,4 +1,4 @@
-.dim { color: rgba(255, 255, 255, 0.7); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.7); }
 .small { font-size: 0.85em; }
 .mono { font-family: monospace; word-break: break-all; }
 
@@ -8,7 +8,7 @@
   gap: 12px;
 }
 
-.contacts-error { color: #ff8a80; }
+.contacts-error { color: rgb(var(--sw-rose-rgb)); }
 
 .contacts-bar {
   display: flex;
@@ -25,12 +25,12 @@
 
   // The theme's outlined buttons are faint on this dark card.
   .mat-mdc-outlined-button:not(:disabled):not(.mat-warn) {
-    --mdc-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
-    --mat-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
-    --mdc-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
-    --mat-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
-    color: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    --mdc-outlined-button-label-text-color: rgba(var(--sw-fg-rgb), 0.92);
+    --mat-outlined-button-label-text-color: rgba(var(--sw-fg-rgb), 0.92);
+    --mdc-outlined-button-outline-color: rgba(var(--sw-fg-rgb), 0.35);
+    --mat-outlined-button-outline-color: rgba(var(--sw-fg-rgb), 0.35);
+    color: rgba(var(--sw-fg-rgb), 0.92);
+    border: 1px solid rgba(var(--sw-fg-rgb), 0.35);
   }
 }
 
@@ -52,9 +52,9 @@
 
 input,
 textarea {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(var(--sw-shade-rgb), 0.25);
   color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.25);
   border-radius: 4px;
   padding: 6px 8px;
   font: inherit;

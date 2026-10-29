@@ -3,7 +3,7 @@
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(var(--sw-shade-rgb), 0.55);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -16,11 +16,11 @@
   max-height: 72vh;
   display: flex;
   flex-direction: column;
-  background: #0a1421;
-  color: #f8f9f9;
-  border: 1px solid rgba(0, 212, 255, 0.35);
+  background: var(--sw-page-bg-2);
+  color: var(--sw-text);
+  border: 1px solid rgba(var(--sw-cyan-rgb), 0.35);
   border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 40px rgba(var(--sw-shade-rgb), 0.6);
   overflow: hidden;
 }
 
@@ -29,7 +29,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.15);
   font-size: 1.2rem;
 
   input {
@@ -38,19 +38,19 @@
     background: transparent;
     border: none;
     outline: none;
-    color: #f8f9f9;
+    color: var(--sw-text);
     font-size: 1rem;
 
-    &::placeholder { color: rgba(248, 249, 249, 0.6); }
+    &::placeholder { color: rgba(var(--sw-fg-rgb), var(--sw-a60)); }
   }
 }
 
 .palette-key {
   font-size: 0.7rem;
   padding: 2px 6px;
-  border: 1px solid rgba(248, 249, 249, 0.45);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.45);
   border-radius: 4px;
-  color: rgba(248, 249, 249, 0.85);
+  color: rgba(var(--sw-fg-rgb), 0.85);
 }
 
 .palette-results {
@@ -64,7 +64,7 @@
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: #00d4ff;
+  color: rgb(var(--sw-cyan-rgb));
 }
 
 .palette-item {
@@ -78,12 +78,12 @@
   mat-icon {
     font-size: 1.1rem;
     margin-top: 2px;
-    color: rgba(248, 249, 249, 0.85);
+    color: rgba(var(--sw-fg-rgb), 0.85);
   }
 
   &.selected {
-    background: rgba(0, 212, 255, 0.14);
-    border-left-color: #00d4ff;
+    background: rgba(var(--sw-cyan-rgb), 0.14);
+    border-left-color: rgb(var(--sw-cyan-rgb));
   }
 }
 
@@ -101,23 +101,23 @@
 .palette-detail {
   font-family: monospace;
   font-size: 0.75rem;
-  color: rgba(248, 249, 249, 0.78);
+  color: rgba(var(--sw-fg-rgb), 0.78);
   word-break: break-all;
 }
 
 .palette-empty {
   padding: 16px;
-  color: rgba(248, 249, 249, 0.78);
+  color: rgba(var(--sw-fg-rgb), 0.78);
 }
 
 .palette-footer {
   padding: 6px 16px;
   font-size: 0.75rem;
-  color: rgba(248, 249, 249, 0.72);
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(var(--sw-fg-rgb), 0.72);
+  border-top: 1px solid rgba(var(--sw-fg-rgb), 0.15);
 }
 
 .palette-meta {
   font-size: 0.75rem;
-  color: rgba(248, 249, 249, 0.78);
+  color: rgba(var(--sw-fg-rgb), 0.78);
 }

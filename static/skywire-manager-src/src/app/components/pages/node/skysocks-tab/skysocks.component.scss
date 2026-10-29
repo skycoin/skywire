@@ -8,8 +8,8 @@
 .ssx-card {
   padding: 14px 16px;
   margin: 0 0 12px 0;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--sw-shade-rgb), 0.18);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.08);
   border-radius: 6px;
 
   &:last-child { margin-bottom: 0; }
@@ -21,13 +21,13 @@
   gap: 8px;
   margin-bottom: 6px;
 
-  .mat-icon { color: #00d4ff; }
+  .mat-icon { color: rgb(var(--sw-cyan-rgb)); }
 }
 
 .ssx-card-title {
   font-size: 1.05em;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--sw-fg-rgb), 0.92);
   letter-spacing: 0.5px;
 }
 
@@ -41,12 +41,12 @@
   font-size: 0.85em;
   padding: 2px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.65);
+  background: rgba(var(--sw-fg-rgb), 0.08);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a65));
 
-  &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
-  &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
-  &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  &.status-running { background: rgba(var(--sw-ok-rgb), 0.18); color: rgb(var(--sw-ok-rgb)); }
+  &.status-stopped { background: rgba(var(--sw-err-rgb), 0.15); color: rgb(var(--sw-err-rgb)); }
+  &.status-starting { background: rgba(var(--sw-warn-rgb), 0.15); color: rgb(var(--sw-warn-rgb)); }
 }
 
 .ssx-card-help {
@@ -57,8 +57,8 @@
 .ssx-instance {
   margin-top: 10px;
   padding: 10px 12px;
-  background: rgba(0, 212, 255, 0.05);
-  border-left: 2px solid rgba(0, 212, 255, 0.3);
+  background: rgba(var(--sw-cyan-rgb), 0.05);
+  border-left: 2px solid rgba(var(--sw-cyan-rgb), 0.3);
   border-radius: 4px;
 
   .ssx-instance-row {
@@ -69,7 +69,7 @@
   }
 
   .ssx-instance-name {
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(var(--sw-fg-rgb), 0.92);
     font-size: 0.95em;
   }
 }
@@ -86,13 +86,13 @@
   gap: 8px;
 
   button.mat-mdc-outlined-button:not(:disabled) {
-    color: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.35) !important;
+    color: rgba(var(--sw-fg-rgb), 0.92) !important;
+    border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }
 
 .mono { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }
 .small { font-size: 0.85em; }
-.dim { color: rgba(255, 255, 255, 0.85); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.85); }
 .mt-3 { margin-top: 12px; }

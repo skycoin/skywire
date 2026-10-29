@@ -5,7 +5,7 @@
   border-radius: $mat-dialog-radius !important;
   background-image: url('../img/modal-background-pattern.png') !important;
   box-shadow: inset 0 0 100px 0 rgba(255, 255, 255, 0.5), 5px 5px 15px 0 rgba(0, 0, 0, 1) !important;
-  background-color: $modal-background !important;
+  background-color: var(--sw-dialog-bg) !important;
   overflow: hidden;
   padding: $mat-dialog-padding !important;
 }
@@ -14,7 +14,7 @@
   font-family: $skywire-font-family !important;
   margin: (0px) (-$mat-dialog-padding) (-$mat-dialog-padding) (-$mat-dialog-padding) !important;
   padding: $mat-dialog-padding !important;
-  color: $black !important;
+  color: var(--sw-text) !important;
   line-height: 1.5 !important;
 }
 
@@ -58,7 +58,7 @@ app-dialog {
 .info-dialog {
   word-break: break-all;
   font-size: $font-size-sm;
-  color: $black;
+  color: var(--sw-text);
 
   .title {
     margin-bottom: 2px;

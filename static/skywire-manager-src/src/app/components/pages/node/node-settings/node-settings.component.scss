@@ -8,19 +8,19 @@
 }
 
 code {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--sw-fg-rgb), 0.1);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
 }
 
 .status {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--sw-fg-rgb), 0.7);
   font-size: 13px;
   margin-bottom: 12px;
 
-  &.error { color: #ef5350; }
-  &.ok { color: #4caf50; }
+  &.error { color: rgb(var(--sw-coral-rgb)); }
+  &.ok { color: rgb(var(--sw-green-rgb)); }
 }
 
 .bar {
@@ -34,24 +34,24 @@ code {
 .spacer { flex: 1; }
 
 .count {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a60));
   font-size: 12px;
 }
 
 input, select {
-  background: rgba(0, 0, 0, 0.25);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(var(--sw-shade-rgb), 0.25);
+  color: var(--sw-input-text);
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.2);
   border-radius: 4px;
   padding: 6px 8px;
   font-size: 13px;
   box-sizing: border-box;
 
-  &::placeholder { color: rgba(255, 255, 255, 0.4); }
+  &::placeholder { color: rgba(var(--sw-fg-rgb), var(--sw-a40)); }
 }
 
 select option {
-  background: #1f2533;
+  background: var(--sw-menu-bg);
 }
 
 .filter { width: 220px; }
@@ -62,9 +62,9 @@ select option {
   align-items: center;
   gap: 6px 16px;
   padding: 8px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
 
-  &.is-set .name .mono { color: #4caf50; }
+  &.is-set .name .mono { color: rgb(var(--sw-green-rgb)); }
 }
 
 .about {
@@ -77,18 +77,18 @@ select option {
 }
 
 .flag {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a50));
   font-size: 12px;
   margin-left: 6px;
 }
 
 .help {
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(var(--sw-fg-rgb), var(--sw-a65));
   font-size: 12px;
 }
 
 .note {
-  color: #ffb74d;
+  color: rgb(var(--sw-amber-rgb));
   font-size: 12px;
 }
 
@@ -108,12 +108,12 @@ select option {
   th, td {
     padding: 6px 10px;
     text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
     word-break: break-all;
   }
 
   th {
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(var(--sw-fg-rgb), var(--sw-a60));
     font-weight: 500;
     font-size: 12px;
   }
@@ -134,11 +134,11 @@ select option {
 
 // The theme's outlined button is dark text on the dark page.
 .secondary {
-  color: #fff !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
+  color: var(--sw-text) !important;
+  border-color: rgba(var(--sw-fg-rgb), 0.35) !important;
 }
 
 // A value the visor would refuse on save.
-.field input.invalid { border-color: #ff8a80; }
-.field-error { color: #ff8a80; font-size: 0.85em; margin-top: 2px; }
-.invalid-count { color: #ff8a80; font-size: 0.9em; }
+.field input.invalid { border-color: rgb(var(--sw-rose-rgb)); }
+.field-error { color: rgb(var(--sw-rose-rgb)); font-size: 0.85em; margin-top: 2px; }
+.invalid-count { color: rgb(var(--sw-rose-rgb)); font-size: 0.9em; }

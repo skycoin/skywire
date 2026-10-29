@@ -97,7 +97,7 @@
   color: inherit;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(var(--sw-shade-rgb), 0.05);
   }
 }
 

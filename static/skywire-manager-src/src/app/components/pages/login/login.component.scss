@@ -25,7 +25,7 @@ app-lang-button {
   width: 300px;
   overflow: hidden;
   border-radius: variables.$mat-dialog-radius;
-  box-shadow: 0 3px 8px 0 rgba(0, 0, 0, 0.10), 0 6px 20px 0 rgba(0, 0, 0, 0.10);
+  box-shadow: 0 3px 8px 0 rgba(var(--sw-shade-rgb), 0.10), 0 6px 20px 0 rgba(var(--sw-shade-rgb), 0.10);
   display: flex;
 
   input[type='password'] {
@@ -60,7 +60,7 @@ app-lang-button {
 }
 
 .config-link {
-  color: variables.$white;
+  color: var(--sw-text);
   font-size: variables.$font-size-mini;
   margin-top: 20px;
   @extend .cursor-pointer;

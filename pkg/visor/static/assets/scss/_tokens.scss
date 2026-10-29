@@ -1,0 +1,230 @@
+// Theme tokens. ThemeService sets data-theme on <html>; dark is the default.
+// Translucent colors use the *-rgb triplets, as in rgba(var(--sw-fg-rgb), 0.7).
+
+@mixin dark-tokens {
+  color-scheme: dark;
+
+  --sw-page-bg-1: #{$blue-dark-Background1};
+  --sw-page-bg-2: #{$blue-dark-Background2};
+  --sw-page-glow: rgba(96, 141, 205, 0.25);
+  --sw-page-bg-wasm-1: #{$violet-dark-Background1};
+  --sw-page-bg-wasm-2: #{$violet-dark-Background2};
+  --sw-page-glow-wasm: rgba(140, 110, 205, 0.25);
+
+  --sw-card-border: #{$box-border};
+  --sw-card-inset: rgba(53, 87, 134, 0.4);
+  --sw-card-shadow: rgba(0, 0, 0, 0.35);
+  --sw-dialog-bg: #{$modal-background};
+  --sw-menu-bg: #1f2533;
+  --sw-overlay-bg: #ffffff;
+  --sw-overlay-text: rgba(0, 0, 0, 0.87);
+  --sw-input-bg: rgba(0, 0, 0, 0.3);
+  --sw-selected-bg: #{$dark-background};
+  --sw-dim: 0.5;
+
+  --sw-fg-rgb: 255, 255, 255;
+  // Text alphas. On a light surface anything under about 0.65 fails 4.5:1.
+  --sw-a25: 0.25;
+  --sw-a30: 0.3;
+  --sw-a35: 0.35;
+  --sw-a38: 0.38;
+  --sw-a40: 0.4;
+  --sw-a42: 0.42;
+  --sw-a45: 0.45;
+  --sw-a50: 0.5;
+  --sw-a55: 0.55;
+  --sw-a60: 0.6;
+  --sw-a65: 0.65;
+  --sw-shade-rgb: 0, 0, 0;
+  --sw-text: #{$white};
+  --sw-text-muted: rgba(255, 255, 255, 0.7);
+  --sw-input-text: rgba(255, 255, 255, 0.92);
+  --sw-input-placeholder: rgba(255, 255, 255, 0.72);
+  --sw-input-label: rgba(255, 255, 255, 0.85);
+  --sw-input-outline: rgba(255, 255, 255, 0.25);
+  --sw-heading: #{$white};
+  --sw-link: #{$white};
+
+  --sw-accent: #{$blue-medium};
+  --sw-on-accent: #ffffff;
+  --sw-cyan-rgb: 0, 212, 255;
+  --sw-blue-rgb: 33, 150, 243;
+  --sw-sky-rgb: 66, 165, 245;
+  --sw-mint-rgb: 165, 214, 167;
+  --sw-control-bg: #16213a;
+  --sw-leaf-rgb: 129, 199, 132;
+  --sw-coral-rgb: 239, 83, 80;
+  --sw-rose-rgb: 255, 138, 128;
+  --sw-gold-rgb: 255, 193, 7;
+  --sw-blush-rgb: 255, 200, 200;
+  --sw-on-fg: #0b1324;
+  --sw-violet-rgb: 157, 124, 255;
+  --sw-ok-rgb: 74, 222, 128;
+  --sw-green-rgb: 76, 175, 80;
+  --sw-err-rgb: 248, 113, 113;
+  --sw-red-rgb: 229, 57, 53;
+  --sw-red-alt-rgb: 244, 67, 54;
+  --sw-salmon-rgb: 255, 107, 107;
+  --sw-warn-rgb: 251, 191, 36;
+  --sw-orange-rgb: 255, 152, 0;
+  --sw-amber-rgb: 255, 183, 77;
+
+  --sw-green: #{$green};
+  --sw-green-clear: #{$green-clear};
+  --sw-yellow: #{$yellow};
+  --sw-yellow-clear: #{$yellow-clear};
+  --sw-red: #{$red};
+  --sw-red-clear: #{$red-clear};
+  --sw-grey: #{$light-gray};
+
+  --sw-status-running: #{$green};
+  --sw-status-stopped: #{$lighter-gray};
+  --sw-status-error: #{$red-clear};
+  --sw-status-warning: #{$yellow-clear};
+  --sw-focus-ring: 0 0 0 2px rgba(0, 212, 255, 0.7);
+}
+
+@mixin light-tokens {
+  color-scheme: light;
+
+  --sw-page-bg-1: #f8fafc;
+  --sw-page-bg-2: #edf1f6;
+  --sw-page-glow: rgba(96, 141, 205, 0.12);
+  --sw-page-bg-wasm-1: #f7f4fc;
+  --sw-page-bg-wasm-2: #e8e0f4;
+  --sw-page-glow-wasm: rgba(140, 110, 205, 0.12);
+
+  --sw-card-border: rgba(33, 95, 158, 0.28);
+  --sw-card-inset: rgba(53, 87, 134, 0.06);
+  --sw-card-shadow: rgba(40, 60, 90, 0.18);
+  --sw-dialog-bg: #{$modal-background};
+  --sw-menu-bg: #ffffff;
+  --sw-overlay-bg: #ffffff;
+  --sw-overlay-text: rgba(0, 0, 0, 0.87);
+  --sw-input-bg: #ffffff;
+  --sw-selected-bg: rgba(33, 95, 158, 0.14);
+  --sw-dim: 0.85;
+
+  --sw-fg-rgb: 20, 28, 40;
+  --sw-a25: 0.72;
+  --sw-a30: 0.72;
+  --sw-a35: 0.72;
+  --sw-a38: 0.72;
+  --sw-a40: 0.72;
+  --sw-a42: 0.72;
+  --sw-a45: 0.72;
+  --sw-a50: 0.72;
+  --sw-a55: 0.72;
+  --sw-a60: 0.72;
+  --sw-a65: 0.72;
+  --sw-shade-rgb: 255, 255, 255;
+  --sw-text: #{$black};
+  --sw-text-muted: rgba(20, 28, 40, 0.75);
+  --sw-input-text: rgba(20, 28, 40, 0.92);
+  --sw-input-placeholder: rgba(20, 28, 40, 0.62);
+  --sw-input-label: rgba(20, 28, 40, 0.8);
+  --sw-input-outline: rgba(20, 28, 40, 0.3);
+  --sw-heading: #{$blue-dark};
+  --sw-link: #{$blue-medium};
+
+  --sw-accent: #{$blue-medium};
+  --sw-on-accent: #ffffff;
+  --sw-cyan-rgb: 0, 88, 128;
+  --sw-blue-rgb: 16, 80, 160;
+  --sw-sky-rgb: 16, 80, 160;
+  --sw-mint-rgb: 24, 96, 34;
+  --sw-control-bg: #ffffff;
+  --sw-leaf-rgb: 24, 96, 34;
+  --sw-coral-rgb: 165, 25, 25;
+  --sw-rose-rgb: 165, 25, 25;
+  --sw-gold-rgb: 110, 72, 0;
+  --sw-blush-rgb: 140, 20, 20;
+  --sw-on-fg: #ffffff;
+  --sw-violet-rgb: 85, 50, 170;
+  --sw-ok-rgb: 18, 100, 44;
+  --sw-green-rgb: 24, 96, 34;
+  --sw-err-rgb: 165, 25, 25;
+  --sw-red-rgb: 165, 25, 25;
+  --sw-red-alt-rgb: 165, 25, 25;
+  --sw-salmon-rgb: 165, 25, 25;
+  --sw-warn-rgb: 110, 72, 0;
+  --sw-orange-rgb: 130, 60, 0;
+  --sw-amber-rgb: 110, 72, 0;
+
+  --sw-green: #167334;
+  --sw-green-clear: #3b6a0c;
+  --sw-yellow: #825500;
+  --sw-yellow-clear: #825500;
+  --sw-red: #b41e1e;
+  --sw-red-clear: #b41e1e;
+  --sw-grey: #5d6470;
+
+  --sw-status-running: #167334;
+  --sw-status-stopped: #5d6470;
+  --sw-status-error: #b41e1e;
+  --sw-status-warning: #825500;
+  --sw-focus-ring: 0 0 0 2px rgba(0, 103, 145, 0.8);
+}
+
+:root {
+  @include dark-tokens;
+}
+
+:root[data-theme="light"] {
+  @include light-tokens;
+}
+
+// The VPN client keeps its own dark artwork in both themes.
+:root[data-theme="light"]:has(.content > .background) {
+  @include dark-tokens;
+}
+
+// Dialogs are light in both themes. Black shading keeps their look unchanged.
+.mat-mdc-dialog-surface {
+  @include light-tokens;
+
+  --sw-shade-rgb: 0, 0, 0;
+  --sw-heading: #{$blue-medium};
+}
+
+:root[data-theme="light"] .mat-mdc-dialog-surface {
+  --sw-dialog-bg: #eef1f6;
+}
+
+// Angular Material reads the tokens above.
+:root, .mat-mdc-dialog-surface {
+  --mat-form-field-outlined-input-text-color: var(--sw-input-text);
+  --mat-form-field-filled-input-text-color: var(--sw-input-text);
+  --mat-form-field-outlined-label-text-color: var(--sw-input-label);
+  --mat-form-field-filled-label-text-color: var(--sw-input-label);
+  --mat-form-field-outlined-input-text-placeholder-color: var(--sw-input-placeholder);
+  --mat-form-field-filled-input-text-placeholder-color: var(--sw-input-placeholder);
+  --mat-form-field-outlined-outline-color: var(--sw-input-outline);
+  --mat-form-field-outlined-caret-color: var(--sw-input-text);
+  --mat-form-field-filled-caret-color: var(--sw-input-text);
+  --mat-form-field-enabled-select-arrow-color: var(--sw-input-text);
+  --mat-select-enabled-trigger-text-color: var(--sw-input-text);
+  --mat-select-placeholder-text-color: var(--sw-input-placeholder);
+  --mat-select-enabled-arrow-color: var(--sw-input-text);
+  --mat-checkbox-label-text-color: var(--sw-input-text);
+  --mat-slide-toggle-label-text-color: var(--sw-input-text);
+  --mat-radio-label-text-color: var(--sw-input-text);
+  --mat-dialog-container-color: var(--sw-dialog-bg);
+  --mat-dialog-supporting-text-color: var(--sw-text);
+  --mat-dialog-subhead-color: var(--sw-text);
+  --mat-button-text-label-text-color: var(--sw-text);
+}
+
+// Overlay panels render outside the page, so they take the overlay set.
+.cdk-overlay-container {
+  --mat-select-panel-background-color: var(--sw-overlay-bg);
+  --mat-option-label-text-color: var(--sw-overlay-text);
+  --mat-menu-container-color: var(--sw-overlay-bg);
+  --mat-menu-item-label-text-color: var(--sw-overlay-text);
+  --mat-autocomplete-background-color: var(--sw-overlay-bg);
+}
+
+// The white spinners would vanish on the light page.
+:root[data-theme="light"] .white-theme {
+  --mat-progress-spinner-active-indicator-color: var(--sw-text);
+}

@@ -1,8 +1,8 @@
-.dim { color: rgba(255, 255, 255, 0.7); }
+.dim { color: rgba(var(--sw-fg-rgb), 0.7); }
 .small { font-size: 0.85em; }
 .mono { font-family: monospace; word-break: break-all; }
 .nowrap { white-space: nowrap; }
-.ok { color: #4caf50; margin-left: 4px; }
+.ok { color: rgb(var(--sw-green-rgb)); margin-left: 4px; }
 
 .mail-head {
   display: flex;
@@ -14,12 +14,12 @@
   font-size: 0.8em;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--sw-fg-rgb), 0.12);
 
-  &.on { background: rgba(76, 175, 80, 0.35); }
+  &.on { background: rgba(var(--sw-green-rgb), 0.35); }
 }
 
-.mail-error { color: #ff8a80; }
+.mail-error { color: rgb(var(--sw-rose-rgb)); }
 
 .mail-addrs {
   margin: 8px 0;
@@ -38,14 +38,14 @@
 
   // The theme's outlined buttons are faint on this dark card.
   .mat-mdc-outlined-button:not(:disabled):not(.mat-warn) {
-    --mdc-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
-    --mat-outlined-button-label-text-color: rgba(255, 255, 255, 0.92);
-    --mdc-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
-    --mat-outlined-button-outline-color: rgba(255, 255, 255, 0.35);
-    color: rgba(255, 255, 255, 0.92);
+    --mdc-outlined-button-label-text-color: rgba(var(--sw-fg-rgb), 0.92);
+    --mat-outlined-button-label-text-color: rgba(var(--sw-fg-rgb), 0.92);
+    --mdc-outlined-button-outline-color: rgba(var(--sw-fg-rgb), 0.35);
+    --mat-outlined-button-outline-color: rgba(var(--sw-fg-rgb), 0.35);
+    color: rgba(var(--sw-fg-rgb), 0.92);
   }
 
-  .sel { background: rgba(255, 255, 255, 0.15); }
+  .sel { background: rgba(var(--sw-fg-rgb), 0.15); }
 }
 
 .loading-row { padding: 12px 0; }
@@ -65,7 +65,7 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-family: inherit;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(var(--sw-shade-rgb), 0.2);
     padding: 12px;
     border-radius: 4px;
     margin: 12px 0;
@@ -88,9 +88,9 @@
 
   input,
   textarea {
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(var(--sw-shade-rgb), 0.25);
     color: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(var(--sw-fg-rgb), 0.25);
     border-radius: 4px;
     padding: 6px 8px;
     font: inherit;
