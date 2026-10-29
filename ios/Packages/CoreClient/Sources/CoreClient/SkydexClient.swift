@@ -26,11 +26,12 @@ public struct MarketStatus: Decodable, Sendable, Equatable {
 }
 
 /// skydex-client's own control API (127.0.0.1:8051 by default), apart from
-/// the visor's (Android: api/SkydexApi.kt). The seam that lets the market key
-/// be entered natively while the trading UI stays the page the desktop
-/// serves: the engine never dials a market by itself (`--market-pk` only
-/// pre-fills the page's form), so something has to POST `/api/connect`.
-/// Every request answers the phone's gate (`SkydexProfile`) with Basic auth.
+/// the visor's (Android: api/SkydexApi.kt): the market connection here, and
+/// every trading call in SkydexMarket.swift, which skydex-client passes to the
+/// market over dmsg. The engine never dials a market by itself
+/// (`--market-pk` only pre-fills a form), so something has to POST
+/// `/api/connect`. Every request answers the phone's gate (`SkydexProfile`)
+/// with Basic auth.
 public struct SkydexClient: Sendable {
     private let transport: any RequestTransport
     private let password: @Sendable () throws -> String
@@ -47,7 +48,7 @@ public struct SkydexClient: Sendable {
     /// on a bad one.
     static let dialTimeout: TimeInterval = 95
 
-    /// True once the trading UI answers: the gate for showing the page.
+    /// True once the control API answers.
     public func probe() async -> Bool {
         (try? await send(.get, "/"))?.isSuccess ?? false
     }
@@ -80,7 +81,7 @@ public struct SkydexClient: Sendable {
         _ = try? await send(.post, "/api/disconnect", body: Data("{}".utf8))
     }
 
-    private func send(_ method: HTTPMethod, _ path: String, body: Data? = nil, timeout: TimeInterval = SkydexClient.timeout) async throws -> HTTPResponse {
+    func send(_ method: HTTPMethod, _ path: String, body: Data? = nil, timeout: TimeInterval = SkydexClient.timeout) async throws -> HTTPResponse {
         var headers = ["Authorization": BasicAuth.header(user: SkydexProfile.user, password: try password())]
         if body != nil {
             headers["Content-Type"] = "application/json"

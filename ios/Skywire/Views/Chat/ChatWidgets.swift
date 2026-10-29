@@ -374,9 +374,9 @@ struct ChatSearchField: View {
 
 extension SkyDialogs {
     /// Yes or no before something that cannot be undone.
-    func confirm(_ text: String, confirm label: String, danger: Bool = true, _ action: @escaping () -> Void) {
+    func confirm(_ text: String, confirm label: String, cancel: String? = nil, danger: Bool = true, _ action: @escaping () -> Void) {
         show(SkyDialog(message: Text(verbatim: text), actions: [
-            SkyDialog.Action(label: Text("cancel")),
+            SkyDialog.Action(label: cancel.map { Text(verbatim: $0) } ?? Text("cancel")),
             SkyDialog.Action(label: Text(verbatim: label), destructive: danger, handler: action),
         ]))
     }
