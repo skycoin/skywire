@@ -310,6 +310,7 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
+      "app-catalog": "App catalog",
       "vpn": "VPN",
       "resources": "Resources",
       "terminal": "Terminal",
@@ -1059,7 +1060,33 @@
       "list": "All Apps",
       "chat": "Skychat",
       "vpn": "VPN",
-      "skysocks": "Skysocks"
+      "skysocks": "Skysocks",
+      "catalog": "Catalog"
+    },
+    "catalog": {
+      "loading": "Loading the app catalog...",
+      "kinds": {
+        "server": "Servers",
+        "client": "Clients",
+        "service": "Services",
+        "external": "External"
+      },
+      "kind": {
+        "server": "Server",
+        "client": "Client",
+        "service": "Service",
+        "external": "External"
+      },
+      "not-added": "Not added",
+      "add": "Add",
+      "add-another": "Add another",
+      "port": "Port",
+      "autostart": "Autostart",
+      "on": "on",
+      "off": "off",
+      "failed": "Failed",
+      "name-prompt": "Instance name (must be unique on this visor):",
+      "start-prompt": "{{ app }} was added. Start it now?"
     },
     "log": {
       "title": "Log",
