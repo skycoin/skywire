@@ -132,6 +132,18 @@ describe('AppCatalogComponent', () => {
     expect(NodeComponent.refreshCurrentDisplayedData).toHaveBeenCalled();
   });
 
+  it('offers the server picker on proxy and vpn client cards only', () => {
+    expect(card('skysocks').querySelector('.cat-choose-server')).toBeNull();
+    const comp = fixture.componentInstance;
+    click(card('skysocks-client'), '.cat-choose-server');
+    expect(comp.openSettings.has('skysocks-client')).toBeTrue();
+    expect(comp.pickRequests.get('skysocks-client')).toBe(1);
+    comp.chooseServer({ name: 'skysocks-client', port: 13, auto_start: false, status: 'stopped' });
+    expect(comp.pickRequests.get('skysocks-client')).toBe(2);
+    comp.toggleSettings('skysocks-client');
+    expect(comp.pickRequests.has('skysocks-client')).toBeFalse();
+  });
+
   it('flips autostart', () => {
     click(card('skysocks'), '.cat-autostart');
     expect(apps.changeAppAutostart).toHaveBeenCalledWith(PK, 'skysocks', false);

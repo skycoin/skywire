@@ -34,6 +34,8 @@ export class ProxyDiscoveryService {
    */
   getServices(getProxies: boolean): Observable<ProxyDiscoveryEntry[]> {
     const wantType = getProxies ? 'proxy' : 'vpn';
+    // The CXO feed files proxies under "skysocks" (servicedisc.ServiceTypeSkysocks).
+    const accepted = getProxies ? ['proxy', 'skysocks'] : ['vpn'];
 
     return this.http.get(this.discoveryServiceUrl + wantType).pipe(
       // In case of error, retry.
@@ -68,9 +70,9 @@ export class ProxyDiscoveryService {
           }
           currentEntry.pk = pk;
 
-          // If the entry declares its service types, keep only the requested one
-          // (the map shape carries a `services` array); tolerate entries without.
-          if (Array.isArray(raw.services) && raw.services.length && !raw.services.includes(wantType)) {
+          // The map shape lists every visor, so keep only entries offering this
+          // service. The array shape has no `services` and is already filtered.
+          if (Array.isArray(raw.services) && !raw.services.some((t: string) => accepted.includes(t))) {
             return;
           }
 

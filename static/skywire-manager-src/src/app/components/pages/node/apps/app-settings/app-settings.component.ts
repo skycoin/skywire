@@ -1,6 +1,8 @@
 import {
   Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, UntypedFormArray, UntypedFormControl } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
+import { TranslateService } from '@ngx-translate/core';
 import { Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 
@@ -8,6 +10,8 @@ import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { NodeComponent } from '../../node.component';
 import { Application, Node } from 'src/app/app.datatypes';
+import GeneralUtils from 'src/app/utils/generalUtils';
+import { ServerType, serverTypeFor } from '../app-flags-form/app-flags';
 
 /**
  * Universal app-settings panel. Replaces all the per-app dialog
@@ -51,6 +55,8 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   @Input() app!: Application;
   @Output() saved = new EventEmitter<void>();
   @Output() cancelled = new EventEmitter<void>();
+  // Each increase opens the flags form and its server picker.
+  @Input() pickServer = 0;
 
   form!: UntypedFormGroup;
   saving = false;
@@ -79,6 +85,8 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
     private changeDetectorRef: ChangeDetectorRef,
+    private dialog: MatDialog,
+    private translate: TranslateService,
   ) {}
 
   /** True iff the launcher's "internal" mode is meaningful for this
@@ -107,14 +115,25 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     return false;
   }
 
+  /** The servers this app connects to, for the picker on its server flag. */
+  get serverType(): ServerType | '' {
+    return this.app ? serverTypeFor(this.app.name, (this.app as any).binary) : '';
+  }
+
   ngOnInit() {
     this.buildForm();
     this.boundAppName = this.app?.name || '';
+    if (this.pickServer > 0) {
+      this.showFlagsForm = true;
+    }
   }
 
   ngOnChanges(changes: SimpleChanges) {
+    if (changes['pickServer'] && this.pickServer > 0) {
+      this.showFlagsForm = true;
+    }
     if (!changes['app']) {
- return; 
+ return;
 }
     const next = (this.app && this.app.name) || '';
     if (next === this.boundAppName) {
@@ -212,11 +231,29 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     // The raw args field is not checked, so a closed form does not block saving.
     if (!this.showFlagsForm) {
       this.flagsValid = true;
+      this.pickServer = 0;
     }
   }
 
   onFlagArgs(args: string) {
     this.form.get('args')!.setValue(args);
+  }
+
+  /** Offers to save at once when the app runs, as saving args restarts it. */
+  onServerChosen() {
+    const status = this.app ? this.app.status : 0;
+    if (status !== 1 && status !== 3) {
+      return;
+    }
+    const text = this.translate.instant('app-settings.restart-prompt', { app: this.app.name });
+    const confirm = GeneralUtils.createConfirmationDialog(this.dialog, text);
+    confirm.componentInstance.operationAccepted.subscribe(() => {
+      confirm.close();
+      if (this.flagsValid) {
+        this.save();
+      }
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   cancel() {
