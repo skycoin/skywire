@@ -29,6 +29,12 @@ class SkywirePaths(context: Context) {
     /** Config `local_path` — app workdirs, log DBs, uptime.db land here. */
     val localDir: File = File(dataDir, "local")
 
+    /** The visor's contact book, beside `local_path` (pkg/visor/contacts.go). */
+    val contactsDir: File = File(dataDir, "contacts")
+
+    /** The Skymail mailbox, beside `local_path` too (skymailDir in pkg/visor/skymail.go). */
+    val mailDir: File = File(dataDir, "mail")
+
     /** The app install the config was last generated for; see [ConfigManager]. */
     val configStampFile: File = File(dataDir, "skywire-config.installed-at")
 
