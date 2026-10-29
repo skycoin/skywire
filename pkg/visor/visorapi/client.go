@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -2702,5 +2703,8 @@ func (rc *rpcClient) NetworkSet(in NetworkSettings) error {
 
 // NetworkEvent reports a network change or metered flag to the visor.
 func (rc *rpcClient) NetworkEvent(ev NetworkEvent) error {
+	if ev.Metered != nil {
+		ev.MeteredText = strconv.FormatBool(*ev.Metered)
+	}
 	return rc.Call("NetworkEvent", &ev, &struct{}{})
 }

@@ -236,5 +236,9 @@ func (r *RPC) NetworkSet(in *visorapi.NetworkSettings, _ *struct{}) (err error) 
 // NetworkEvent takes an app's report of the network.
 func (r *RPC) NetworkEvent(in *visorapi.NetworkEvent, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "NetworkEvent", in)(nil, &err)
+	if in.Metered == nil && in.MeteredText != "" {
+		m := in.MeteredText == "true"
+		in.Metered = &m
+	}
 	return r.visor.NetworkEvent(*in)
 }

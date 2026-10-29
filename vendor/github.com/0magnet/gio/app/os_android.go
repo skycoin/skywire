@@ -236,6 +236,8 @@ var android struct {
 	mwakeupMainThread C.jmethodID
 	mstartForeground  C.jmethodID
 	mstopForeground   C.jmethodID
+	mstartNetwork     C.jmethodID
+	mstopNetwork      C.jmethodID
 
 	// android.view.accessibility.AccessibilityNodeInfo class.
 	accessibilityNodeInfo struct {
@@ -436,6 +438,8 @@ func initJVM(env *C.JNIEnv, gio C.jclass, ctx C.jobject) {
 	android.mwakeupMainThread = getStaticMethodID(env, gio, "wakeupMainThread", "()V")
 	android.mstartForeground = getStaticMethodID(env, gio, "startForeground", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V")
 	android.mstopForeground = getStaticMethodID(env, gio, "stopForeground", "(Landroid/content/Context;)V")
+	android.mstartNetwork = getStaticMethodID(env, gio, "startNetworkWatch", "(Landroid/content/Context;)V")
+	android.mstopNetwork = getStaticMethodID(env, gio, "stopNetworkWatch", "(Landroid/content/Context;)V")
 
 	intern := func(s string) C.jstring {
 		ref := C.jni_NewGlobalRef(env, C.jobject(javaString(env, s)))
@@ -1580,4 +1584,32 @@ func stopForeground() {
 	runInJVM(javaVM(), func(env *C.JNIEnv) {
 		callStaticVoidMethod(env, android.gioCls, android.mstopForeground, jvalue(android.appCtx))
 	})
+}
+
+func startNetworkWatch() error {
+	var err error
+	runInJVM(javaVM(), func(env *C.JNIEnv) {
+		err = callStaticVoidMethod(env, android.gioCls, android.mstartNetwork, jvalue(android.appCtx))
+	})
+	return err
+}
+
+func stopNetworkWatch() {
+	runInJVM(javaVM(), func(env *C.JNIEnv) {
+		callStaticVoidMethod(env, android.gioCls, android.mstopNetwork, jvalue(android.appCtx))
+	})
+}
+
+//export Java_org_gioui_GioNetwork_onNetwork
+func Java_org_gioui_GioNetwork_onNetwork(env *C.JNIEnv, class C.jclass, jid, jifname, jaddrs C.jstring, metered C.jint, vpn C.jboolean) {
+	var addrs []string
+	if s := goString(env, jaddrs); s != "" {
+		addrs = strings.Split(s, ",")
+	}
+	networkChanged(goString(env, jid), goString(env, jifname), addrs, int(metered), vpn == C.JNI_TRUE)
+}
+
+//export Java_org_gioui_GioNetwork_onNetworkLost
+func Java_org_gioui_GioNetwork_onNetworkLost(env *C.JNIEnv, class C.jclass, jid C.jstring) {
+	networkLost(goString(env, jid))
 }

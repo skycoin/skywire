@@ -97,4 +97,7 @@ type NetworkEvent struct {
 	Interface string `json:"ifname,omitempty"`
 	// Source names the reporter, "android" when empty.
 	Source string `json:"source,omitempty"`
+	// MeteredText carries Metered over gob, which drops a pointer to false.
+	// The RPC client fills it and the RPC server reads it.
+	MeteredText string `json:"-"`
 }
