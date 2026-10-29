@@ -2692,7 +2692,7 @@ func (rc *rpcClient) NetworkMoved(reason string) error {
 // NetworkSet changes the network policy live. gob drops an empty slice, so a
 // list being cleared travels as [""], which the visor drops.
 func (rc *rpcClient) NetworkSet(in NetworkSettings) error {
-	for _, l := range []**[]string{&in.Allow, &in.Deny} {
+	for _, l := range []**[]string{&in.Allow, &in.Deny, &in.MeteredInterfaces} {
 		if *l != nil && len(**l) == 0 {
 			*l = &[]string{""}
 		}
