@@ -32,7 +32,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ env.RELEASE_TAG }}" \
+          # A tag like v1.3.104-alpha1 is a prerelease, never "Latest".
+          pre=""
+          case "${{ env.RELEASE_TAG }}" in *-*) pre="--prerelease" ;; esac
+          gh release create "${{ env.RELEASE_TAG }}" $pre \
             --repo ${{ github.repository }} \
             --title "${{ env.RELEASE_TAG }}" \
             --generate-notes || true

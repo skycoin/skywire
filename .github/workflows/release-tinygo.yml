@@ -1,0 +1,119 @@
+name: Release TinyGo
+
+# Experimental TinyGo builds of skywire, uploaded beside the Go release
+# assets with a -tinygo suffix. A failed arch here never blocks the release.
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing release tag to build TinyGo assets for
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  # TinyGo 0.44 supports Go up to 1.27.
+  GO_VERSION: '1.27.x'
+  TINYGO_RELEASE: v0.44.0-skywire.3
+  TINYGO_SHA256: 667abf8bc745f74ef4902d952c91ff7e22beb966d766479176c9be4d631fe8cf
+  MODULE: github.com/skycoin/skywire
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The cores scheduler is what runs on prod01. The fork has it for
+          # linux amd64 and arm64 only, the rest use TinyGo's default.
+          - { goos: linux, goarch: amd64, arch: amd64, scheduler: cores }
+          - { goos: linux, goarch: arm64, arch: arm64, scheduler: cores }
+          - { goos: linux, goarch: arm, goarm: "6", arch: arm }
+          - { goos: linux, goarch: arm, goarm: "7", arch: armhf }
+          - { goos: linux, goarch: "386", arch: "386" }
+          # darwin fails to link: TinyGo's syscall has no Syscall there and
+          # its libSystem stubs lack statfs. windows waits for logrus to leave
+          # terminal_check_windows.go out under tinygo (v1.10.2).
+    steps:
+      - name: Checkout skywire at the tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install the TinyGo fork
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o tinygo.tar.gz "https://github.com/0magnet/tinygo/releases/download/${TINYGO_RELEASE}/tinygo.linux-amd64.tar.gz"
+          echo "${TINYGO_SHA256}  tinygo.tar.gz" | sha256sum -c -
+          tar -xzf tinygo.tar.gz
+          echo "$RUNNER_TEMP/tinygo/bin" >> "$GITHUB_PATH"
+          sudo apt-get update && sudo apt-get install -y llvm time
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          TINYGO_LTO_OPT: "0"
+        run: |
+          set -euo pipefail
+          tinygo version
+          sched=""
+          [ -n "${{ matrix.scheduler }}" ] && sched="-scheduler=${{ matrix.scheduler }}"
+          mkdir -p "$RUNNER_TEMP/out"
+          /usr/bin/time -v tinygo build -no-debug -interp-timeout=10s -stack-size=1MB -gc=boehm $sched \
+            -tags withoutsystray \
+            -ldflags "-X ${MODULE}/pkg/buildinfo.version=${RELEASE_TAG}-tinygo" \
+            -o "$RUNNER_TEMP/out/skywire${{ matrix.ext }}" . 2> "$RUNNER_TEMP/time.txt" || { cat "$RUNNER_TEMP/time.txt"; exit 1; }
+          grep -E "Elapsed|Maximum resident" "$RUNNER_TEMP/time.txt"
+          llvm-strip "$RUNNER_TEMP/out/skywire${{ matrix.ext }}"
+          ls -l "$RUNNER_TEMP/out"
+          if [ "${{ matrix.goos }}/${{ matrix.goarch }}" = linux/amd64 ]; then
+            "$RUNNER_TEMP/out/skywire" --version
+          fi
+
+      - name: Create archive
+        run: |
+          set -euo pipefail
+          name="skywire-${RELEASE_TAG}-${{ matrix.goos }}-${{ matrix.arch }}-tinygo"
+          mkdir -p "$RUNNER_TEMP/dist"
+          cd "$RUNNER_TEMP/out"
+          if [ "${{ matrix.goos }}" = windows ]; then
+            zip -9 "$RUNNER_TEMP/dist/$name.zip" skywire.exe
+            file="$name.zip"
+          else
+            tar -cf - skywire | xz -9e -T0 -c > "$RUNNER_TEMP/dist/$name.tar.xz"
+            file="$name.tar.xz"
+          fi
+          cd "$RUNNER_TEMP/dist" && sha256sum "$file" > "$file.sha256"
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${RELEASE_TAG}" "$RUNNER_TEMP"/dist/* --repo ${{ github.repository }} --clobber
+
+      - name: Keep as a workflow artifact
+        if: ${{ !(startsWith(github.ref, 'refs/tags/') || inputs.tag != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: skywire-${{ matrix.goos }}-${{ matrix.arch }}-tinygo
+          path: ${{ runner.temp }}/dist
