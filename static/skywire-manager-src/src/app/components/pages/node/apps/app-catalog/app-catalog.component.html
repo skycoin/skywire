@@ -47,8 +47,8 @@
                 <span>{{ 'apps.catalog.autostart' | translate }}:
                   {{ (autostart(inst) ? 'apps.catalog.on' : 'apps.catalog.off') | translate }}</span>
               </div>
-              @if (detail(inst)) {
-                <div class="cat-detail">{{ detail(inst) }}</div>
+              @if (extraDetail(inst)) {
+                <div class="cat-detail">{{ extraDetail(inst) }}</div>
               }
               <div class="cat-actions">
                 <button mat-button class="cat-btn cat-state" [disabled]="busy.has(inst.name)" (click)="toggleState(inst)">

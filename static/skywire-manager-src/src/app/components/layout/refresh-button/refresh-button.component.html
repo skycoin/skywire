@@ -3,7 +3,7 @@
   class="time-button subtle-transparent-button white-theme"
   [disabled]="showLoading"
   [ngClass]="{'grey-button-background' : !showLoading}"
-  [matTooltip]="showAlert ? ('refresh-button.error-tooltip' | translate:{time: refeshRate}) : ''"
+  [matTooltip]="showAlert ? ('refresh-button.error-tooltip' | translate:{time: refeshRate}) : (elapsedTime ? (('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime}) : '')"
   >
   <div class="internal-container">
     @if (showLoading) {
@@ -21,7 +21,7 @@
       }
     }
     @if (elapsedTime) {
-      <span class="d-none d-md-inline">{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
+      <span class="elapsed d-none d-md-inline">{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
     }
   </div>
 </button>
