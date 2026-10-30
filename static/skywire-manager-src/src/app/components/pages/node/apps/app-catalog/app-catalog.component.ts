@@ -71,6 +71,13 @@ export function statusCode(status: string): number {
   }
 }
 
+/** Whether a detailed status says more than the status badge beside it. */
+export function detailAddsInfo(detail: string, ...shown: string[]): boolean {
+  const norm = (s: string) => (s || '').trim().toLowerCase();
+
+  return norm(detail) !== '' && !shown.some(s => norm(s) === norm(detail));
+}
+
 /**
  * Every app the visor can run, grouped by kind, with add, start, stop and
  * autostart actions. Follows the catalog over the live socket.
@@ -188,6 +195,13 @@ export class AppCatalogComponent implements OnInit, OnDestroy {
     const app = this.appFor(inst);
 
     return (app ? app.detailedStatus : inst.detailed_status) || '';
+  }
+
+  /** The detailed status, or nothing when it only repeats the badge. */
+  extraDetail(inst: CatalogInstance): string {
+    const d = this.detail(inst);
+
+    return detailAddsInfo(d, this.translate.instant(this.statusKey(inst)), inst.status) ? d : '';
   }
 
   statusKey(inst: CatalogInstance): string {

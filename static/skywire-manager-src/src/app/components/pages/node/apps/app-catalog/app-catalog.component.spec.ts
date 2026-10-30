@@ -10,7 +10,7 @@ import { AppsService } from '../../../../../services/apps.service';
 import { LiveService } from '../../../../../services/live.service';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { NodeComponent } from '../../node.component';
-import { AppCatalogComponent, CatalogEntry, groupCatalog, nextInstanceName } from './app-catalog.component';
+import { AppCatalogComponent, CatalogEntry, detailAddsInfo, groupCatalog, nextInstanceName } from './app-catalog.component';
 
 const PK = '0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c';
 
@@ -40,6 +40,13 @@ describe('app catalog grouping', () => {
     const e = catalog()[3];
     expect(nextInstanceName(e)).toBe('skysocks-client-2');
     expect(nextInstanceName(e, ['skysocks-client-2'])).toBe('skysocks-client-3');
+  });
+
+  it('shows a detailed status only when it differs from the badge', () => {
+    expect(detailAddsInfo('Running', 'Running', 'running')).toBe(false);
+    expect(detailAddsInfo(' running ', 'Läuft', 'running')).toBe(false);
+    expect(detailAddsInfo('', 'Stopped')).toBe(false);
+    expect(detailAddsInfo('permission denied', 'Failed', 'errored')).toBe(true);
   });
 });
 
@@ -147,6 +154,17 @@ describe('AppCatalogComponent', () => {
   it('flips autostart', () => {
     click(card('skysocks'), '.cat-autostart');
     expect(apps.changeAppAutostart).toHaveBeenCalledWith(PK, 'skysocks', false);
+  });
+
+  it('does not repeat the badge as a detail line', () => {
+    node$.next({ localPk: PK, apps: [
+      { name: 'skysocks', status: 1, autostart: true, detailedStatus: 'Running' },
+      { name: 'skysocks-client', status: 2, autostart: false, detailedStatus: 'dial failed' },
+      { name: 'custom-thing', status: 0, autostart: false },
+    ] } as unknown as Node);
+    fixture.detectChanges();
+    expect(card('skysocks').querySelector('.cat-detail')).toBeNull();
+    expect(card('skysocks-client').querySelector('.cat-detail')?.textContent).toContain('dial failed');
   });
 
   it('takes the status from the node apps and refetches when the app set changes', () => {

@@ -44,5 +44,13 @@
 
   span {
     font-size: variables.$font-size-mini-plus;
+    white-space: nowrap;
+  }
+
+  // The header is crowded below this width, so the time moves to the tooltip.
+  @media (max-width: 1599.98px) {
+    .elapsed {
+      display: none !important;
+    }
   }
 }

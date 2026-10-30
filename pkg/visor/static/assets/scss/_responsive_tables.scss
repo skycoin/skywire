@@ -15,7 +15,8 @@ $responsive-table-colors: (
     margin-right: auto;
     border-collapse: separate !important;
     width: 100%;
-    word-break: break-all;
+    // Words wrap whole; only a token wider than its cell (a key) breaks.
+    overflow-wrap: anywhere;
     color: list.nth($colors, 3) !important;
 
     td, th {
@@ -168,7 +169,7 @@ $responsive-table-colors: (
         }
 
         .long-content {
-          word-break: break-all;
+          overflow-wrap: anywhere;
         }
       }
 
