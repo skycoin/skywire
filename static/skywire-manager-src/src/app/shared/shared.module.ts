@@ -21,6 +21,7 @@ import { DragDropModule } from '@angular/cdk/drag-drop';
 import { TranslateDirective, TranslatePipe } from '@ngx-translate/core';
 
 import { AutoScalePipe } from '../pipes/auto-scale.pipe';
+import { VersionLabelPipe } from '../pipes/version-label.pipe';
 import { ClipboardDirective } from '../directives/clipboard.directive';
 
 import { BundleMountComponent } from './bundle-mount/bundle-mount.component';
@@ -97,6 +98,7 @@ const SHARED_ANGULAR_MODULES = [
 
 const SHARED_DECLARATIONS = [
   AutoScalePipe,
+  VersionLabelPipe,
   ClipboardDirective,
   BundleMountComponent,
   BulkRewardAddressChangerComponent,

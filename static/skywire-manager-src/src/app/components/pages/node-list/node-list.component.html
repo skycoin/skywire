@@ -481,13 +481,13 @@
                   <td>
                     @if (compact) {
                       <div style="font-size: 0.85em;" [class.outdated]="isOutdated(node)"
-                        [matTooltip]="(isOutdated(node) ? ('nodes.quick.outdated-tooltip' | translate) + ' ' : '') + ('nodes.config-label' | translate) + ': ' + (node.configVersion || '-')">
-                        {{ node.version || '-' }}
+                        [matTooltip]="(node.version ? node.version + ' · ' : '') + (isOutdated(node) ? ('nodes.quick.outdated-tooltip' | translate) + ' ' : '') + ('nodes.config-label' | translate) + ': ' + (node.configVersion || '-')">
+                        {{ (node.version | versionLabel) || '-' }}
                       </div>
                     } @else if (node.version && node.configVersion && node.version === node.configVersion) {
-                      <div style="font-size: 0.85em;">{{ node.version }}</div>
+                      <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
                     } @else {
-                      <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
+                      <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ 'nodes.visor-version' | translate }}: {{ (node.version | versionLabel) || '-' }}</div>
                       <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
                     }
                   </td>
@@ -643,7 +643,7 @@
                         @if (node.version) {
                           <div class="list-row">
                             <span class="title">{{ 'nodes.version' | translate }}</span>:
-                            {{ node.version }}
+                            <span [matTooltip]="node.version">{{ node.version | versionLabel }}</span>
                           </div>
                         }
                         @if (!compact && node.configVersion) {
@@ -856,9 +856,9 @@
                         </td>
                         <td>
                           @if (node.version && node.configVersion && node.version === node.configVersion) {
-                            <div style="font-size: 0.85em;">{{ node.version }}</div>
+                            <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
                           } @else {
-                            <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
+                            <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ 'nodes.visor-version' | translate }}: {{ (node.version | versionLabel) || '-' }}</div>
                             <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
                           }
                         </td>
