@@ -13,3 +13,9 @@ mat-form-field ::ng-deep {
     margin-bottom: 0px !important;
   }
 }
+
+.refresh-rate-hint {
+  margin-top: 4px;
+  font-size: variables.$font-size-smaller;
+  color: var(--sw-text-muted);
+}

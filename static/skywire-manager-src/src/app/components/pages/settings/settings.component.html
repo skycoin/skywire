@@ -29,6 +29,7 @@
     <div class="d-flex align-items-center mb-4">
       <mat-slide-toggle
         color="primary"
+        hideIcon
         [checked]="showVisorSwitcherRow"
         (change)="setShowVisorSwitcherRow($event.checked)"
       >{{ 'settings.visor-switcher-row.label' | translate }}</mat-slide-toggle>
@@ -39,6 +40,7 @@
       <div class="d-flex align-items-center mb-4">
         <mat-slide-toggle
           color="primary"
+          hideIcon
           [checked]="autoUpdateEnabled"
           (change)="setAutoUpdate($event.checked)"
         >{{ 'settings.auto-update.label' | translate }}</mat-slide-toggle>

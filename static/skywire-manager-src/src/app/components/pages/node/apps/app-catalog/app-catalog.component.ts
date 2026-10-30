@@ -13,6 +13,7 @@ import { LogComponent } from '../node-apps-list/log/log.component';
 import GeneralUtils from '../../../../../utils/generalUtils';
 import { processServiceError } from '../../../../../utils/errors';
 import { serverTypeFor } from '../app-flags-form/app-flags';
+import { appStatusTone } from '../../../../../utils/app-status';
 
 /** One configured instance of a catalog app (visorapi.CatalogInstance). */
 export interface CatalogInstance {
@@ -210,7 +211,7 @@ export class AppCatalogComponent implements OnInit, OnDestroy {
   }
 
   statusClass(inst: CatalogInstance): string {
-    return ['status-stopped', 'status-running', 'status-failed', 'status-starting'][this.status(inst)] || 'status-stopped';
+    return 'status-' + appStatusTone(this.status(inst));
   }
 
   isRunning(inst: CatalogInstance): boolean {

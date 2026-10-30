@@ -26,7 +26,8 @@
 
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  // auto-fit lets a group with few entries use the whole row; phones keep one column.
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -108,7 +109,7 @@
   color: rgba(var(--sw-fg-rgb), 0.75);
 
   &.status-running { background: rgba(var(--sw-ok-rgb), 0.18); color: rgb(var(--sw-ok-rgb)); }
-  &.status-stopped { background: rgba(var(--sw-err-rgb), 0.15); color: rgb(var(--sw-err-rgb)); }
+  &.status-stopped { background: rgba(var(--sw-fg-rgb), 0.08); color: var(--sw-status-stopped); }
   &.status-failed { background: rgba(var(--sw-err-rgb), 0.25); color: #fca5a5; }
   &.status-starting { background: rgba(var(--sw-warn-rgb), 0.15); color: rgb(var(--sw-warn-rgb)); }
 }
@@ -132,8 +133,33 @@
 .cat-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+
+  .cat-state {
+    margin-right: auto;
+    border: 1px solid rgba(var(--sw-cyan-rgb), 0.5);
+    color: rgb(var(--sw-cyan-rgb)) !important;
+  }
+}
+
+.cat-icon-btn {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: rgba(var(--sw-fg-rgb), 0.75) !important;
+
+  &.on { color: rgb(var(--sw-cyan-rgb)) !important; }
+
+  &:hover { color: rgb(var(--sw-cyan-rgb)) !important; }
+
+  &[disabled] { color: rgba(var(--sw-fg-rgb), var(--sw-a40)) !important; }
+
+  .mat-icon { font-size: 20px; height: 20px; width: 20px; }
 }
 
 .cat-btn {
