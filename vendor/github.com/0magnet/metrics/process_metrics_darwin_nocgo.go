@@ -1,4 +1,4 @@
-//go:build darwin && !ios && !cgo
+//go:build darwin && !ios && (!cgo || tinygo)
 
 package metrics
 
