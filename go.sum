@@ -103,8 +103,8 @@ github.com/0magnet/kcp-go/v5 v5.6.84 h1:oxyCqV3YYgjL8NAxvqjUCfRPfOgCNyrU1z1AsDUy
 github.com/0magnet/kcp-go/v5 v5.6.84/go.mod h1:f9AyOlxJMQQz1LCr85Cv06db6r+z3iN8NIXeesFzGBg=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489 h1:e9oQciGjDuTPFtS0t9cX+C6pOcVVIJIsa5AjcTPsjtA=
 github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489/go.mod h1:DbbClVrvQ558CvwGWU78xx0k03aEY/uS9qf5Wtw+n3o=
-github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63 h1:XxaDWKe26asi8R5Kkrp1Ikg+UsWKuDMBwFTKWUTzBdM=
-github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63/go.mod h1:SwLy2vvXGWJQxefDI4DncGdXJWIob5IGczxeFMtUIj8=
+github.com/0magnet/metrics v1.44.1-0.20261030214321-4512eb5384f3 h1:LSLA70y+23mslJE9o+dm1aq9fjMPHQqF69OvqLMSAZs=
+github.com/0magnet/metrics v1.44.1-0.20261030214321-4512eb5384f3/go.mod h1:SwLy2vvXGWJQxefDI4DncGdXJWIob5IGczxeFMtUIj8=
 github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b h1:Nfe6QIrJSq6e3x5rDljq/kvwHrHLlnVjKgs4Mh0rrVw=
 github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b/go.mod h1:0UGPmH5MoyGHYRJ840Rpi0qh0spNqdOsq7GBi1xqyHc=
 github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e h1:xgnm3iQ60rpRnZs2CiDTcFdXK7LSgxfqLk4tBHcto5k=
