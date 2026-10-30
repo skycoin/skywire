@@ -225,6 +225,11 @@ func (r *filteredConn) SyscallConn() (syscall.RawConn, error) {
 // connection to fn on its read goroutine, instead of queueing it for
 // ReadFrom. fn must not keep b after it returns. A read error on the
 // underlying connection reaches fn as err, after which no more calls follow.
+// A nil fn removes the receiver and packets queue for ReadFrom again.
 func (r *filteredConn) SetPacketReceiver(fn func(b []byte, addr net.Addr, err error)) {
+	if fn == nil {
+		r.receiver.Store(nil)
+		return
+	}
 	r.receiver.Store(&fn)
 }
