@@ -155,7 +155,7 @@ github.com/0magnet/kcp-go/v5
 # github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489
 ## explicit; go 1.25.0
 github.com/0magnet/lolcat-go/lol
-# github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
+# github.com/0magnet/metrics v1.44.1-0.20261030214321-4512eb5384f3
 ## explicit; go 1.24.0
 github.com/0magnet/metrics
 # github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b
