@@ -149,8 +149,8 @@ github.com/0magnet/gotop/v4/widgets
 # github.com/0magnet/img2txt-go v0.0.1-0.20261013220954-ae0d760b7d2b
 ## explicit; go 1.26.0
 github.com/0magnet/img2txt-go/shape
-# github.com/0magnet/kcp-go/v5 v5.6.83
-## explicit; go 1.24.0
+# github.com/0magnet/kcp-go/v5 v5.6.84
+## explicit; go 1.26.0
 github.com/0magnet/kcp-go/v5
 # github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489
 ## explicit; go 1.25.0
@@ -164,7 +164,7 @@ github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
 ## explicit; go 1.25.0
 github.com/0magnet/osnotify
-# github.com/0magnet/pfilter v0.0.14
+# github.com/0magnet/pfilter v0.0.15
 ## explicit; go 1.26.0
 github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d

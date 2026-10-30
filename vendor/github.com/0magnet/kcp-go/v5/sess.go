@@ -137,6 +137,7 @@ type (
 
 		// settings
 		remote     net.Addr               // remote peer address
+		pushedFrom net.Addr               // peer pinned by pushedPacket when remote is nil
 		rd         atomic.Value           // read deadline
 		readNotify atomic.Pointer[func()] // see SetReadNotify
 		wd         atomic.Value           // write deadline
@@ -161,7 +162,12 @@ type (
 
 		// packets waiting to be sent on wire
 		postQueue sendQueue
-		ppRunning atomic.Bool // a postProcess goroutine is running
+		ppRunning atomic.Bool // queued for or served by a postProcess worker
+		ppHeld    struct {    // a batch waiting for the rate limiter
+			w     *ppWorker
+			bytes int
+			until time.Time
+		}
 
 		// platform-dependent optimizations
 		platform platform
@@ -425,6 +431,10 @@ func (s *UDPSession) Close() error {
 		return nil
 	}
 
+	if pp, ok := s.conn.(PacketPusher); ok {
+		pp.SetPacketReceiver(nil)
+	}
+
 	if s.ownConn { // client socket close
 		return s.conn.Close()
 	}
@@ -621,8 +631,8 @@ func (s *UDPSession) Control(f func(conn net.PacketConn) error) error {
 //
 // Pipeline: KCP output -> postQueue -> [FEC] -> [Encrypt] -> TxQueue -> Network
 //
-// It returns once the queue is empty or after ppBudget packets, and reports
-// whether s still has packets queued.
+// It returns once the queue is empty, after ppBudget packets, or when s keeps
+// a batch for the rate limiter, and reports whether s needs serving again.
 func (s *UDPSession) postProcess(w *ppWorker) bool {
 	bytesToSend := 0
 	for n := 0; n < ppBudget; n++ {
@@ -711,12 +721,14 @@ func (s *UDPSession) postProcess(w *ppWorker) bool {
 
 		// transmit when postQueue is empty or we've reached max batch size
 		if s.postQueue.len() == 0 || len(w.txqueue) >= maxBatchSize {
-			s.flushTx(w, bytesToSend)
+			if s.flushTx(w, bytesToSend) {
+				return true
+			}
 			bytesToSend = 0
 		}
 	}
-	if len(w.txqueue) > 0 {
-		s.flushTx(w, bytesToSend)
+	if len(w.txqueue) > 0 && s.flushTx(w, bytesToSend) {
+		return true
 	}
 	return s.postQueue.len() > 0
 }
@@ -1198,6 +1210,13 @@ func (l *Listener) packetInput(data []byte, addr net.Addr) {
 	s = newUDPSession(conv, l.dataShards, l.parityShards, l, l.conn, false, addr, l.block)
 	s.kcpInput(data)
 	l.sessionLock.Lock()
+	select {
+	case <-l.die:
+		l.sessionLock.Unlock()
+		s.Close()
+		return
+	default:
+	}
 	l.sessions[addr.String()] = s
 	l.sessionLock.Unlock()
 	l.chAccepts <- s
@@ -1312,14 +1331,19 @@ func (l *Listener) SetWriteDeadline(t time.Time) error {
 // Close stops listening on the UDP address, and closes the socket
 func (l *Listener) Close() error {
 	var once bool
+	l.sessionLock.Lock()
 	l.dieOnce.Do(func() {
 		close(l.die)
 		once = true
 	})
 
 	if !once {
+		l.sessionLock.Unlock()
 		return errors.WithStack(io.ErrClosedPipe)
 	}
+
+	l.releasePusherLocked()
+	l.sessionLock.Unlock()
 
 	if l.ownConn {
 		return l.conn.Close()
@@ -1344,9 +1368,26 @@ func (l *Listener) closeSession(remote net.Addr) (ret bool) {
 
 	if _, ok := l.sessions[remote.String()]; ok {
 		delete(l.sessions, remote.String())
+		l.releasePusherLocked()
 		return true
 	}
 	return false
+}
+
+// releasePusherLocked removes the PacketPusher receiver once the Listener is
+// closed and its last session has gone. sessionLock must be held.
+func (l *Listener) releasePusherLocked() {
+	select {
+	case <-l.die:
+	default:
+		return
+	}
+	if len(l.sessions) > 0 {
+		return
+	}
+	if pp, ok := l.conn.(PacketPusher); ok {
+		pp.SetPacketReceiver(nil)
+	}
 }
 
 // Addr returns the listener's network address, The Addr returned is shared by all invocations of Addr, so do not modify it.
@@ -1493,6 +1534,7 @@ func stopTimer(t *time.Timer) {
 	}
 }
 
+// buffersEmpty reports whether v holds no bytes.
 func buffersEmpty(v [][]byte) bool {
 	for _, b := range v {
 		if len(b) > 0 {
