@@ -208,6 +208,15 @@
   --mat-select-enabled-arrow-color: var(--sw-input-text);
   --mat-checkbox-label-text-color: var(--sw-input-text);
   --mat-slide-toggle-label-text-color: var(--sw-input-text);
+  // The default unselected track is 12% black, invisible on the dark theme.
+  --mat-slide-toggle-unselected-track-color: rgba(var(--sw-fg-rgb), 0.42);
+  --mat-slide-toggle-unselected-hover-track-color: rgba(var(--sw-fg-rgb), 0.5);
+  --mat-slide-toggle-unselected-focus-track-color: rgba(var(--sw-fg-rgb), 0.5);
+  --mat-slide-toggle-unselected-pressed-track-color: rgba(var(--sw-fg-rgb), 0.5);
+  --mat-slide-toggle-unselected-handle-color: #f1f1f1;
+  --mat-slide-toggle-unselected-hover-handle-color: #ffffff;
+  --mat-slide-toggle-unselected-focus-handle-color: #ffffff;
+  --mat-slide-toggle-unselected-pressed-handle-color: #ffffff;
   --mat-radio-label-text-color: var(--sw-input-text);
   --mat-dialog-container-color: var(--sw-dialog-bg);
   --mat-dialog-supporting-text-color: var(--sw-text);

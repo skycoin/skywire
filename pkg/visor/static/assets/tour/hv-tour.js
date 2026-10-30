@@ -461,10 +461,12 @@
       // The launcher: small, out of the way, and the only thing the tour adds
       // to the page when it is not running.
       "#skywire-tour-launch{position:fixed;right:14px;bottom:14px;z-index:2147483645;",
-      "width:34px;height:34px;border-radius:50%;border:1px solid #33404f;background:#1d2632;",
-      "color:#dbe6f3;font:16px/1 system-ui,sans-serif;cursor:pointer;opacity:.55;",
-      "transition:opacity .15s}",
-      "#skywire-tour-launch:hover{opacity:1}",
+      // Theme tokens keep the glyph and border above 3:1 against the page in both themes.
+      "width:34px;height:34px;border-radius:50%;border:1px solid rgba(var(--sw-fg-rgb,255,255,255),.6);",
+      "background:var(--sw-menu-bg,#1d2632);color:var(--sw-text,#fff);",
+      "font:16px/1 system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35);",
+      "transition:border-color .15s}",
+      "#skywire-tour-launch:hover,#skywire-tour-launch:focus-visible{border-color:rgb(var(--sw-cyan-rgb,0,180,255))}",
       "@media (max-width:767.98px){#skywire-tour-launch{width:40px;height:40px}}"
     ].join("");
     var el = doc.createElement("style");
@@ -483,6 +485,7 @@
     b.type = "button";
     b.textContent = "?";
     b.title = "Take the hypervisor UI tour";
+    b.setAttribute("aria-label", b.title);
     b.onclick = function () { startTour(doc); };
     doc.body.appendChild(b);
   }

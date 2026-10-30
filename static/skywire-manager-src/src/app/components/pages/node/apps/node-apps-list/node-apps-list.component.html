@@ -1,6 +1,9 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title">
+    @if (!showShortList_) {
+      <h3 class="list-heading">{{ (showOfficialApps ? 'apps.apps-list.heading-official' : 'apps.apps-list.heading-other') | translate }}</h3>
+    }
     @if (showShortList_ && showOfficialApps.toString()) {
       <span class="uppercase">{{ 'apps.apps-list.title-official' | translate }}</span>
     }
@@ -80,6 +83,7 @@
     <table
       class="responsive-table-translucid d-none d-md-table"
       [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
+      [class.apps-table]="!showShortList_"
       cellspacing="0" cellpadding="0"
       >
       <!-- Column names. -->
@@ -141,7 +145,7 @@
             {{ app.name }}
           </td>
           <td>
-            {{ app.port }}
+            {{ portLabel(app.port) }}
           </td>
           <td>
             @if (app.otp) {
@@ -256,7 +260,7 @@
               </div>
               <div class="list-row">
                 <span class="title">{{ 'apps.apps-list.port' | translate }}</span>:
-                {{ app.port }}
+                {{ portLabel(app.port) }}
               </div>
               <div class="list-row">
                 <span class="title">{{ 'apps.apps-list.state' | translate }}</span>:

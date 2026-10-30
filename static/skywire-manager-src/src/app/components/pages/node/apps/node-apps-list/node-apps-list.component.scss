@@ -30,3 +30,24 @@
     margin-right: 5px;
   }
 }
+
+.list-heading {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(var(--sw-fg-rgb), 0.85);
+}
+
+// Fixed column widths so the two lists on the apps tab line up.
+.apps-table {
+  table-layout: fixed;
+
+  th:nth-child(1) { width: 56px; }
+  th:nth-child(2) { width: 44px; }
+  th:nth-child(4) { width: 12%; }
+  th:nth-child(5) { width: 14%; }
+  th:nth-child(6) { width: 12%; }
+  th.actions { width: 170px; }
+}

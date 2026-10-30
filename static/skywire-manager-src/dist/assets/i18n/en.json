@@ -1047,8 +1047,9 @@
       "remove-confirmation": "Are you sure you want to remove the custom settings?"
     },
     "change-password": "Change password",
-    "refresh-rate": "Refresh rate",
-    "refresh-rate-help": "Time the system waits to update the data automatically.",
+    "refresh-rate": "Fallback refresh rate",
+    "refresh-rate-help": "Pages update live over the hypervisor socket. This rate is how often they poll instead when live updates are unavailable.",
+    "refresh-rate-hint": "Used only when live updates are unavailable.",
     "refresh-rate-confirmation": "Refresh rate changed.",
     "seconds": "seconds"
   },
@@ -1168,6 +1169,8 @@
       "title": "Applications",
       "title-official": "Official Applications",
       "title-user": "User Applications",
+      "heading-official": "Apps",
+      "heading-other": "Services and other apps",
       "list-title": "Application list",
       "app-name": "Name",
       "port": "Port",
