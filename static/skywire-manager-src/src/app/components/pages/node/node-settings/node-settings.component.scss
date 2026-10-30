@@ -109,7 +109,7 @@ select option {
     padding: 6px 10px;
     text-align: left;
     border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
-    word-break: break-all;
+    overflow-wrap: anywhere;
   }
 
   th {
