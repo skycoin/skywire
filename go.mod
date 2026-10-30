@@ -20,12 +20,12 @@ require (
 	github.com/0magnet/golang-ipc v1.2.5-0.20260915170035-de9342a68204
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a
 	github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54
-	github.com/0magnet/kcp-go/v5 v5.6.83
+	github.com/0magnet/kcp-go/v5 v5.6.84
 	github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489
 	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b
 	github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
-	github.com/0magnet/pfilter v0.0.14
+	github.com/0magnet/pfilter v0.0.15
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 	github.com/0magnet/progkit v0.0.0-20261024094515-51a7330475eb
 	github.com/0magnet/progterm v0.0.0-20261024094609-2e1f4c86cbec
