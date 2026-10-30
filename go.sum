@@ -814,8 +814,8 @@ github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBB
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9 h1:DElGw1Fhj4amuW1KM5q8Xowosb3RiOQce0lDJw0Qv0Y=
 github.com/skycoin/encodertest v0.0.0-20190217072920-14c2e31898b9/go.mod h1:OQz8NXVJUWEw7PWYASZ/1BIw5GXgVMTGvrCGDlZa9+k=
-github.com/skycoin/skycoin v0.28.7-0.20261028120801-f7b9874807c2 h1:icEmXEWorTWUAinPamDDGiBT6FBERa+lH+0AcuUV5xg=
-github.com/skycoin/skycoin v0.28.7-0.20261028120801-f7b9874807c2/go.mod h1:3Is0tT5/06gAcLp4rhnquwRhH5k/pve97TtJzkw0OT4=
+github.com/skycoin/skycoin v0.28.7-0.20261030204438-9e2e84a05e97 h1:vMS7C1An19hD9Du7R+zGpsXI4ssMT1Sk4N/3Fua0GDU=
+github.com/skycoin/skycoin v0.28.7-0.20261030204438-9e2e84a05e97/go.mod h1:3Is0tT5/06gAcLp4rhnquwRhH5k/pve97TtJzkw0OT4=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
