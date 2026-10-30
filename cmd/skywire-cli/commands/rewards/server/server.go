@@ -877,7 +877,7 @@ func buildRouter() http.Handler {
 			l += "</tr>\n"
 			l += "</thead>\n"
 			l += "<tbody>\n"
-			rewardtxncsvs, _ := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Replace(wd+"/hist/", "").Replace("_rewardtxn0.csv", "").Slice() //nolint:errcheck,gosec
+			rewardtxncsvs, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
 			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
 				statsFile := wd + "/hist/" + rewardtxncsvs[i] + "_stats.txt"
 				skycoinpershare1 := ""
@@ -1020,20 +1020,16 @@ func buildRouter() http.Handler {
 				w.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			// Find all combined transaction CSVs. Anchored to
-			// YYYY-MM-DD_rewardtxn0.csv so the per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv) from
-			// PR #2946 are NOT listed here — those are informational
-			// only, not broadcast inputs, and would derail the
-			// distribution flow.
-			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Slice()
+			// Find all combined transaction CSVs, the broadcast inputs.
+			dates, err := histRewardDates(wd + `/hist`)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				w.Write([]byte("histRewardDates(wd + /hist):\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//and range through the results
-			for _, f1 := range f {
+			for _, d := range dates {
+				f1 := wd + `/hist/` + d + "_rewardtxn0.csv"
 				//look for .txt file with the same date
 				g, err := script.File(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				//error is expected here - file does not exist when rewards have not been distributed for that _rewardtxn0.csv
@@ -1087,12 +1083,9 @@ func buildRouter() http.Handler {
 				return
 			}
 			w.Header().Set("Server", "")
-			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
-			// #2946) are excluded — they are informational, not
-			// broadcast inputs.
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
-			for _, f1 := range f {
+			dates, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
+			for _, d := range dates {
+				f1 := d + "_rewardtxn0.csv"
 				g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
 					w.Header().Set("Content-Type", "text/plain")
@@ -1119,12 +1112,9 @@ func buildRouter() http.Handler {
 			}
 			w.Header().Set("Server", "")
 			w.Header().Set("Content-Type", "text/plain")
-			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
-			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
-			// #2946) are excluded — they are informational, not
-			// broadcast inputs.
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
-			for _, f1 := range f {
+			dates, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
+			for _, d := range dates {
+				f1 := d + "_rewardtxn0.csv"
 				g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
 				if g != "" && g != "\n" {
 					http.Redirect(w, r, "/skycoin-rewards/hist/"+f1, http.StatusFound)
@@ -1553,7 +1543,7 @@ func buildRouter() http.Handler {
 
 		r1.HandleFunc("GET /skycoin-rewards.json", func(w http.ResponseWriter, r *http.Request) {
 			data := rewards{}
-			rewardtxncsvs, err := script.FindFiles(wd+`/hist`).MatchRegexp(regexp.MustCompile(".?.?.?.?-.?.?-.?.?_rewardtxn0.csv")).Basename().Replace("_rewardtxn0.csv", "").Slice()
+			rewardtxncsvs, err := histRewardDates(wd + `/hist`)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("500 Internal Server Error #1 " + err.Error())) //nolint:errcheck,gosec
