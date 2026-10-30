@@ -82,14 +82,12 @@ type NotifyHub struct {
 }
 
 type notifySub struct {
-	ch chan appserver.NotifyReq
-	// atomic.Uint64 rather than a bare uint64: on 32-bit targets (the 386 /
-	// arm / armhf builds this repo ships) a bare uint64 following the channel
-	// pointer lands at offset 4 and every atomic.AddUint64 on it panics with
-	// "unaligned 64-bit atomic operation". atomic.Uint64 carries its own
-	// alignment guarantee, so the field order stops mattering.
+	// First, so it is 8-byte aligned on 32-bit targets. A uint64 after the
+	// channel pointer lands at offset 4 and 64-bit atomics on it panic.
+	// atomic.Uint64 fixes that under Go but not under TinyGo on 386.
 	dropped atomic.Uint64
 	closed  atomic.Bool
+	ch      chan appserver.NotifyReq
 }
 
 // Compile-time guard for the alignment note above: if `dropped` ever reverts to
