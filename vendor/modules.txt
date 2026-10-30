@@ -164,9 +164,6 @@ github.com/0magnet/netscrape
 # github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
 ## explicit; go 1.25.0
 github.com/0magnet/osnotify
-# github.com/0magnet/pfilter v0.0.15
-## explicit; go 1.26.0
-github.com/0magnet/pfilter
 # github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 ## explicit; go 1.25
 github.com/0magnet/plot-go
@@ -245,6 +242,9 @@ github.com/0magnet/yamux
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
+# github.com/AudriusButkevicius/pfilter v0.0.12
+## explicit; go 1.27.0
+github.com/AudriusButkevicius/pfilter
 # github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc
 ## explicit; go 1.25.0
 github.com/Azure/go-ansiterm
