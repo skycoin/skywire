@@ -1,0 +1,276 @@
+import SwiftUI
+
+/// The app under the lock: Android's shell (SkywireApp.kt), the screen over the floating bar.
+struct RootView: View {
+    @EnvironmentObject private var app: AppModel
+    @EnvironmentObject private var lock: AppLock
+    @EnvironmentObject private var router: ChatRouter
+    @EnvironmentObject private var notifications: NotificationBridge
+    @ObservedObject private var settings: AppSettings
+    @ObservedObject private var calls = VoiceCalls.shared
+    @ObservedObject private var mailRouter = MailRouter.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var navigator = Navigator()
+    @StateObject private var dialogs = SkyDialogs()
+    @State private var keyboardShown = false
+
+    init(settings: AppSettings) {
+        self.settings = settings
+    }
+
+    var body: some View {
+        ZStack {
+            ZStack(alignment: .bottom) {
+                ZStack {
+                    ForEach(AppTab.allCases, id: \.self) { tab in
+                        if navigator.visited.contains(tab) {
+                            let shown = navigator.tab == tab
+                            TabStack(tab: tab, navigator: navigator).stackLayer(shown: shown)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A new language rebuilds the screens, as Android recreates its activity: text
+                // made in a body (L10n.text) is not redrawn by the locale alone. The stacks are
+                // kept, and Settings its scroll place (ScrollPlaces).
+                .id(settings.language)
+                // The keyboard takes the bar's place, as Android's imePadding does.
+                .padding(.bottom, keyboardShown ? 0 : SkyBottomBar.height)
+                SkyBottomBar(navigator: navigator)
+                    .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+            .background(Color.skyBackground.ignoresSafeArea())
+            UpdateBanner().frame(maxHeight: .infinity, alignment: .top)
+            // A call owns the display, bar and all (Android swaps the UI for CallScreen).
+            if calls.state.busy {
+                CallScreen().accessibilityAddTraits(.isModal)
+            }
+            SkySheetLayer(dialogs: dialogs)
+            SkyDialogLayer(dialogs: dialogs)
+        }
+        .environmentObject(navigator)
+        .environmentObject(dialogs)
+        .environmentObject(settings)
+        .modifier(LockCover(lock: lock, enabled: settings.appLockEnabled))
+        // Settings ▸ Language, at once: the views' strings follow the locale, L10n its bundle.
+        .environment(\.locale, settings.language.locale)
+        .onChange(of: settings.themeMode) { $0.apply() }
+        .onAppear {
+            settings.themeMode.apply()
+            app.launch()
+            // A link or a tap that launched the app.
+            if router.pending != nil { navigator.select(.chat) }
+            if mailRouter.pending != nil { navigator.push(.mail) }
+        }
+        // Whichever screen is up: the hub is read while the core is connected.
+        .task(id: app.connected) { await notifications.run(app) }
+        // Once per process; a call at start-up only delays the banner.
+        .task { await UpdateNotice.shared.checkOnce() }
+        // Calls are polled while the core is connected, whether or not a screen looks.
+        .task(id: app.connected) { await CallCenter.shared.run(app) }
+        // A skychat that is already running is followed before the tab is opened, so unread
+        // counts and receipts are live; opening the tab is what starts it.
+        .task(id: app.connected) { await ChatRepository.shared.follow(app) }
+        // The book's copy in Contacts catches up with what changed while the core was down.
+        .task(id: app.connected) {
+            if app.connected { await PhoneContacts.sync(app.client) }
+        }
+        .onChange(of: router.pending) { request in
+            if request != nil { navigator.select(.chat) }
+        }
+        // A tapped mail notification opens Skymail over whatever is up; the screen opens the message.
+        .onChange(of: mailRouter.pending) { link in
+            if link != nil { navigator.push(.mail) }
+        }
+        .onChange(of: scenePhase) { phase in
+            AppExits.entered(phase == .active ? "active" : phase == .inactive ? "inactive" : "background")
+            switch phase {
+            case .background:
+                lock.didEnterBackground()
+                app.enteredBackground()
+                notifications.appLeft()
+            case .active:
+                app.becameActive()
+                // iOS has no sync adapter: the dashboard and SkyChat change the book too.
+                if app.connected { Task { await PhoneContacts.sync(app.client) } }
+            default:
+                break
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            AppExits.entered("terminated")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            lock.willEnterForeground()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardShown = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardShown = false
+        }
+    }
+}
+
+/// The bar's destinations (Android Routes: home, chat, hub, wallet, settings).
+enum AppTab: CaseIterable, Hashable {
+    case home, chat, hub, wallet, settings
+}
+
+/// Screens pushed over a tab (Android's non-tab routes).
+enum Route: Hashable {
+    case socks, dex, fleet, vpn, mail, diagnostics
+    case logs(LogSource)
+}
+
+/// Android's NavHost semantics (Routes.kt, SkywireApp.kt) over one stack per tab.
+@MainActor
+final class Navigator: ObservableObject {
+    @Published private(set) var tab: AppTab = .home
+    @Published private(set) var visited: Set<AppTab> = [.home]
+    @Published private var stacks: [AppTab: [Route]] = [:]
+    /// Where a tab root's back goes when it was opened from the hub.
+    private var parent: [AppTab: AppTab] = [:]
+    /// Scroll places a language change's rebuild puts back.
+    let scrollPlaces = ScrollPlaces()
+
+    /// NavHost's default: a 700 ms cross-fade, FastOutSlowIn.
+    static let fade = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.7)
+
+    func stack(_ tab: AppTab) -> [Route] {
+        stacks[tab] ?? []
+    }
+
+    /// The highlighted bar slot: none on the hub, its app screens or a log viewer.
+    var selectedSlot: AppTab? {
+        if tab == .hub { return nil }
+        if case .logs = stack(tab).last { return nil }
+        return tab
+    }
+
+    /// A bar slot: that tab with its saved stack.
+    func select(_ tab: AppTab) {
+        parent[tab] = nil
+        go(tab)
+    }
+
+    /// The cloud: always the hub's list, never an app screen left open under it.
+    func openHub() {
+        parent[.hub] = nil
+        withAnimation(Self.fade) { stacks[.hub] = [] }
+        go(.hub)
+    }
+
+    /// Hub ▸ SkyChat or Wallet: that tab's root, with back returning to the hub.
+    func openFromHub(_ tab: AppTab) {
+        withAnimation(Self.fade) { stacks[tab] = [] }
+        parent[tab] = .hub
+        go(tab)
+    }
+
+    func push(_ route: Route) {
+        if stack(tab).last == route { return }
+        withAnimation(Self.fade) { stacks[tab, default: []].append(route) }
+    }
+
+    /// Back: pop, or leave a tab root for the hub (if it came from there) or Home.
+    func back() {
+        if var stack = stacks[tab], !stack.isEmpty {
+            stack.removeLast()
+            withAnimation(Self.fade) { stacks[tab] = stack }
+            return
+        }
+        guard tab != .home else { return }
+        let target = parent[tab] ?? .home
+        parent[tab] = nil
+        go(target)
+    }
+
+    private func go(_ tab: AppTab) {
+        withAnimation(Self.fade) {
+            visited.insert(tab)
+            self.tab = tab
+        }
+    }
+}
+
+/// One tab: its root and the screens pushed over it, the top one shown.
+private struct TabStack: View {
+    let tab: AppTab
+    @ObservedObject var navigator: Navigator
+    @EnvironmentObject private var app: AppModel
+
+    var body: some View {
+        let stack = navigator.stack(tab)
+        ZStack {
+            layer(root, shown: stack.isEmpty)
+            ForEach(Array(stack.enumerated()), id: \.offset) { index, route in
+                layer(destination(route), shown: index == stack.count - 1)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func layer(_ view: some View, shown: Bool) -> some View {
+        view.stackLayer(shown: shown)
+    }
+
+    @ViewBuilder private var root: some View {
+        switch tab {
+        case .home: HomeView()
+        case .chat: ChatView()
+        case .hub: HubView()
+        case .wallet: WalletTab()
+        case .settings: SettingsView()
+        }
+    }
+
+    @ViewBuilder private func destination(_ route: Route) -> some View {
+        switch route {
+        case .socks: SocksView(settings: app.settings)
+        case .dex: DexView()
+        case .fleet: FleetView(settings: app.settings)
+        case .vpn: VpnView(settings: app.settings)
+        case .mail: MailView()
+        case .diagnostics: DiagnosticsView()
+        case .logs(let source): LogsView(source: source)
+        }
+    }
+}
+
+extension View {
+    /// A screen kept alive under the one on top: invisible, untouchable and out of accessibility.
+    func stackLayer(shown: Bool) -> some View {
+        modifier(StackLayer(shown: shown))
+    }
+}
+
+private struct LayerVisibleKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+private struct StackLayer: ViewModifier {
+    let shown: Bool
+    // A layer inside a hidden one (a tab's screen while another tab is up) is hidden too.
+    @Environment(\.layerVisible) private var outer
+
+    func body(content: Content) -> some View {
+        let visible = shown && outer
+        content
+            .environment(\.layerVisible, visible)
+            .opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            // Hiding alone leaves scroll views' contents to VoiceOver; collapsing the layer first
+            // takes them out, and hiding then drops the empty element left.
+            .accessibilityElement(children: visible ? .contain : .ignore)
+            .accessibilityHidden(!visible)
+    }
+}
+
+extension EnvironmentValues {
+    /// Whether this screen is the one in front, in the tab in front.
+    var layerVisible: Bool {
+        get { self[LayerVisibleKey.self] }
+        set { self[LayerVisibleKey.self] = newValue }
+    }
+}

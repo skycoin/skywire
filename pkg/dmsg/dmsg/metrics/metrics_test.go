@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package metrics metrics_test.go: unit tests for the Empty and
 // VictoriaMetrics implementations of the Metrics interface. The setters are
 // fire-and-forget, so the tests assert interface conformance, clean

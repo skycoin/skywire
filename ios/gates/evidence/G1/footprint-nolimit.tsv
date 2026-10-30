@@ -1,0 +1,22 @@
+pid=93780 t0=2026-09-29T12:47:54Z args=-SkywireMemoryLimit none
+0	1444 KB	peak 1508 KB	ping 
+30	44 MB	peak 45 MB	ping 
+60	48 MB	peak 49 MB	ping "PONG!"
+90	57 MB	peak 57 MB	ping "PONG!"
+120	57 MB	peak 57 MB	ping "PONG!"
+151	56 MB	peak 57 MB	ping "PONG!"
+181	57 MB	peak 57 MB	ping "PONG!"
+211	55 MB	peak 57 MB	ping "PONG!"
+242	55 MB	peak 57 MB	ping "PONG!"
+272	57 MB	peak 58 MB	ping "PONG!"
+302	58 MB	peak 58 MB	ping "PONG!"
+332	59 MB	peak 61 MB	ping "PONG!"
+362	62 MB	peak 62 MB	ping "PONG!"
+392	61 MB	peak 63 MB	ping "PONG!"
+422	62 MB	peak 63 MB	ping "PONG!"
+452	60 MB	peak 63 MB	ping "PONG!"
+483	61 MB	peak 63 MB	ping "PONG!"
+513	60 MB	peak 63 MB	ping "PONG!"
+543	60 MB	peak 63 MB	ping "PONG!"
+573	60 MB	peak 63 MB	ping "PONG!"
+done

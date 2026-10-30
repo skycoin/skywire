@@ -41,7 +41,7 @@ type arBindingsIndex struct {
 // GET /resolve. It reports false whenever the feed cannot answer.
 func (v *Visor) arResolveFast(_ context.Context, tType string, pk cipher.PubKey) (addrresolver.VisorData, bool) {
 	t := types.NormalizeType(types.Type(tType))
-	if t == types.SUDPH {
+	if t == types.SUDPH || !takesNetworkFeeds {
 		return addrresolver.VisorData{}, false
 	}
 	mgr := v.CXOSubMgr()
@@ -121,6 +121,9 @@ func (idx *arBindingsIndex) mayServe(key string, now time.Time) bool {
 // bindings feed, so automatic transports need not fetch every peer's list
 // from the address resolver. ok is false until the feed has synced.
 func (v *Visor) arAdvertised(pk cipher.PubKey) (map[types.Type]bool, bool) {
+	if !takesNetworkFeeds {
+		return nil, false
+	}
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
 		return nil, false

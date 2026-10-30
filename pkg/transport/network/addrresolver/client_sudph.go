@@ -10,6 +10,7 @@
 package addrresolver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -37,7 +38,9 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	log := c.log.WithField("func", "httpClient.BindSUDPH")
 	if !c.isReady() {
 		log.Debug("BindSUDPH: Address resolver is not ready yet, waiting...")
-		<-c.ready
+		if err := c.awaitReady(context.Background()); err != nil {
+			return nil, err
+		}
 		log.Debug("BindSUDPH: Address resolver became ready, binding")
 	}
 

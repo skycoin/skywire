@@ -6,16 +6,12 @@ package netutil
 
 import (
 	"bufio"
-	"fmt"
 	"io"
-	"net"
 	"os"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/wlynxg/anet"
 )
 
 // DefaultNetworkInterface fetches default network interface name: the
@@ -35,7 +31,7 @@ func DefaultNetworkInterface() (string, error) {
 			}
 		}
 	}
-	if name := routedInterface(); name != "" {
+	if name, err := interfaceOfDefaultRoute(); err == nil && name != "" {
 		return name, nil
 	}
 	return firstRoutableInterface()
@@ -74,67 +70,4 @@ func defaultRouteInterfaces(r io.Reader) []string {
 		}
 	}
 	return ifcs
-}
-
-// routedInterface is the interface the kernel would send a packet to the
-// internet through, or "". Connecting a UDP socket looks the route up and
-// sends nothing.
-func routedInterface() string {
-	c, err := net.Dial("udp4", "198.51.100.1:9") // TEST-NET-2, never answered
-	if err != nil {
-		return ""
-	}
-	defer c.Close() //nolint:errcheck
-	local, ok := c.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return ""
-	}
-	ifaces, err := anet.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for _, iface := range ifaces {
-		addrs, err := anet.InterfaceAddrsByInterface(&iface)
-		if err != nil {
-			continue
-		}
-		for _, a := range addrs {
-			if n, ok := a.(*net.IPNet); ok && n.IP.Equal(local.IP) {
-				return iface.Name
-			}
-		}
-	}
-	return ""
-}
-
-func firstRoutableInterface() (string, error) {
-	ifaces, err := anet.Interfaces()
-	if err != nil {
-		return "", fmt.Errorf("error getting network interfaces: %w", err)
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		if IsVirtualInterface(iface.Name) {
-			continue
-		}
-		addrs, err := anet.InterfaceAddrsByInterface(&iface)
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip != nil && ip.To4() != nil && ip.IsGlobalUnicast() {
-				return iface.Name, nil
-			}
-		}
-	}
-	return "", nil
 }

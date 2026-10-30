@@ -234,29 +234,30 @@ func (hv *Hypervisor) startUI() error {
 		return nil
 	}
 	h := hv.HTTPHandler()
+	lis, err := vnet.Listen("tcp", hv.c.HTTPAddr)
+	if err != nil {
+		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)
+	}
 	hv.httpSrv = &http.Server{
 		Handler:           h,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	lis, err := vnet.Listen("tcp", hv.c.HTTPAddr)
-	if err != nil {
-		hv.httpSrv = nil
-		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)
-	}
-	go func() {
+	// The server is passed in, as for the desk below: stopUI may clear
+	// hv.httpSrv before this goroutine runs.
+	go func(srv *http.Server) {
 		hv.logger.Infof("Hypervisor HTTP serving on %s", hv.c.HTTPAddr)
 		var srvErr error
 		if hv.c.EnableTLS {
-			srvErr = hv.httpSrv.ServeTLS(lis, hv.c.TLSCertFile, hv.c.TLSKeyFile)
+			srvErr = srv.ServeTLS(lis, hv.c.TLSCertFile, hv.c.TLSKeyFile)
 		} else {
-			srvErr = hv.httpSrv.Serve(lis)
+			srvErr = srv.Serve(lis)
 		}
 		if srvErr != nil && !errors.Is(srvErr, http.ErrServerClosed) {
 			hv.logger.WithError(srvErr).Error("Hypervisor HTTP server error")
 		}
-	}()
+	}(hv.httpSrv)
 
 	// The desk on its own listener, SAME handler: only the root differs (see
 	// uiHandler). Not started when the build has no command module — there is
@@ -1148,7 +1149,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 		})
 
 		// A call's audio, for a visor whose device belongs to the app that
-		// started it (Android) — see hypervisor_handlers_voice_audio.go.
+		// started it (Android, iOS) — see hypervisor_handlers_voice_audio.go.
 		//
 		// Out here for the same reason the notification stream is, and it cost
 		// a debugging session to find out: inside /api these carry

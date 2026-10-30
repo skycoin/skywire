@@ -1,0 +1,414 @@
+import Foundation
+import WalletCore
+
+/// Which family a coin belongs to — the protocols this wallet speaks
+/// (Android: wallet/WalletModels.kt, as are the rest of this file's types).
+enum CoinKind: String, Codable, Sendable {
+    case skyFiber = "SKY_FIBER"
+    case btc = "BTC"
+    case eth = "ETH"
+    case erc20 = "ERC20"
+}
+
+/// A coin the wallet can hold. SKY, BTC, ETH and USDT ship built in; fiber
+/// coins and ERC-20 tokens are added by the user — every fiber chain runs the
+/// same daemon and differs only in where it lives, and every ERC-20 speaks
+/// the same contract surface and differs only in address and decimals.
+struct CoinSpec: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var name: String
+    var ticker: String
+    var kind: CoinKind
+    var nodeUrl: String
+    /// %s is the txid; nil hides the explorer button.
+    var explorerTxUrl: String?
+    var builtIn = false
+    /// ERC-20 only: the token's contract address.
+    var contract: String?
+    /// ERC-20 only: the token's on-chain decimals.
+    var tokenDecimals: Int?
+    /// ETH family: etherscan-style history API base (Blockscout, keyless).
+    var indexerUrl: String?
+    /// User-added coins: the file name of the badge picked at creation
+    /// (CoinIcons); nil falls back to ticker letters.
+    var icon: String?
+    /// The coin's id at coinpaprika, for a USD price; nil when it has none there. Built-ins only.
+    var priceId: String?
+    /// The node addresses requests try, in order; empty until the user names their own.
+    /// `nodeUrl` is always the first of them. Derived from the registry, never stored here.
+    var nodeUrls: [String] = []
+
+    init(
+        id: String, name: String, ticker: String, kind: CoinKind, nodeUrl: String,
+        explorerTxUrl: String? = nil, builtIn: Bool = false, contract: String? = nil,
+        tokenDecimals: Int? = nil, indexerUrl: String? = nil, icon: String? = nil, priceId: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.ticker = ticker
+        self.kind = kind
+        self.nodeUrl = nodeUrl
+        self.explorerTxUrl = explorerTxUrl
+        self.builtIn = builtIn
+        self.contract = contract
+        self.tokenDecimals = tokenDecimals
+        self.indexerUrl = indexerUrl
+        self.icon = icon
+        self.priceId = priceId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, ticker, kind, nodeUrl, explorerTxUrl, builtIn, contract, tokenDecimals, indexerUrl, icon
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        ticker = try c.decode(String.self, forKey: .ticker)
+        kind = try c.decode(CoinKind.self, forKey: .kind)
+        nodeUrl = try c.decode(String.self, forKey: .nodeUrl)
+        explorerTxUrl = try c.decodeIfPresent(String.self, forKey: .explorerTxUrl)
+        builtIn = try c.decodeIfPresent(Bool.self, forKey: .builtIn) ?? false
+        contract = try c.decodeIfPresent(String.self, forKey: .contract)
+        tokenDecimals = try c.decodeIfPresent(Int.self, forKey: .tokenDecimals)
+        indexerUrl = try c.decodeIfPresent(String.self, forKey: .indexerUrl)
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+    }
+
+    /// The addresses a request walks before it gives up: the list, else the one.
+    var tryNodes: [String] { nodeUrls.isEmpty ? [nodeUrl] : nodeUrls }
+
+    /// Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH
+    /// family, whatever fits the app's 64-bit amounts: gwei (10⁻⁹) for the
+    /// native coin because wei overflows 64 bits at ~18 ETH, and a token's own
+    /// decimals capped at nine for the same reason.
+    var exponent: Int {
+        switch kind {
+        case .btc: 8
+        case .eth: 9
+        case .erc20: min(tokenDecimals ?? Self.defaultTokenDecimals, 9)
+        case .skyFiber: 6
+        }
+    }
+
+    /// True for the native coin and every ERC-20 — one account on one chain,
+    /// one address, differing only in which asset is being looked at. A
+    /// wallet for any of them is a wallet for all of them, which is why
+    /// creating one mirrors across the rest (WalletStore.mirrorIntoEthFamily).
+    ///
+    /// Fiber coins are deliberately not a family: they derive alike but each
+    /// is a separate chain with its own ledger, so sharing a wallet between
+    /// two of them would claim a balance that is not there.
+    var isEthFamily: Bool { kind == .eth || kind == .erc20 }
+
+    /// Decimals shown in balances and amount fields.
+    var displayDecimals: Int {
+        switch kind {
+        case .btc: 8
+        case .eth: 6
+        case .erc20: min(exponent, 6)
+        case .skyFiber: 3
+        }
+    }
+
+    /// This coin as it is actually reached, once the user's own addresses are applied. The user's
+    /// nodes come first, in their order, and the shipped address rides behind them as the fallback,
+    /// so a coin is never left with nothing to ask. The Ethereum family also reads its history from
+    /// a separate indexer, which moves on its own and keeps a single address. A blank entry means
+    /// the shipped one.
+    func withNodeOverride(_ overrides: [String: [String]], indexerOverrides: [String: String] = [:]) -> CoinSpec {
+        // Naming the shipped address in the list is just spelling out the fallback.
+        let mine = (overrides[id] ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != nodeUrl }
+        let indexer = indexerUrl.map { shipped in
+            indexerOverrides[id].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? shipped
+        }
+        if mine.isEmpty && indexer == indexerUrl { return self }
+        var ordered: [String] = []
+        for url in mine + [nodeUrl] where !ordered.contains(url) { ordered.append(url) }
+        var copy = self
+        copy.nodeUrl = ordered[0]
+        copy.nodeUrls = ordered
+        copy.indexerUrl = indexer
+        return copy
+    }
+
+    /// Base units as the screens show them.
+    func amountText(_ units: UInt64) -> String {
+        Amounts.format(units, exponent: exponent, minDecimals: displayDecimals)
+    }
+
+    static let sky = CoinSpec(
+        id: "SKY",
+        name: "Skycoin",
+        ticker: "SKY",
+        kind: .skyFiber,
+        // https, like every other endpoint here including Skycoin's own
+        // explorer on the next line. Over plain http the query string of
+        // every balance and history call carries the whole address book in
+        // the clear, which hands anyone on the path the one thing a wallet
+        // most wants kept apart: which addresses belong together.
+        nodeUrl: "https://node.skycoin.com",
+        explorerTxUrl: "https://explorer.skycoin.com/app/transaction/%s",
+        builtIn: true,
+        priceId: "sky-skycoin"
+    )
+    static let btc = CoinSpec(
+        id: "BTC",
+        name: "Bitcoin",
+        ticker: "BTC",
+        kind: .btc,
+        nodeUrl: "https://mempool.space",
+        explorerTxUrl: "https://mempool.space/tx/%s",
+        builtIn: true,
+        priceId: "btc-bitcoin"
+    )
+    static let eth = CoinSpec(
+        id: "ETH",
+        name: "Ethereum",
+        ticker: "ETH",
+        kind: .eth,
+        nodeUrl: ethNode,
+        explorerTxUrl: "\(ethIndexer)/tx/%s",
+        builtIn: true,
+        indexerUrl: ethIndexer,
+        priceId: "eth-ethereum"
+    )
+    static let usdt = CoinSpec(
+        id: "USDT",
+        name: "Tether USD",
+        ticker: "USDT",
+        kind: .erc20,
+        nodeUrl: ethNode,
+        explorerTxUrl: "\(ethIndexer)/tx/%s",
+        builtIn: true,
+        contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        tokenDecimals: 6,
+        indexerUrl: ethIndexer,
+        priceId: "usdt-tether"
+    )
+
+    /// Keyless public endpoints; both are user-replaceable per token.
+    static let ethNode = "https://ethereum-rpc.publicnode.com"
+    static let ethIndexer = "https://eth.blockscout.com"
+    static let defaultTokenDecimals = 18
+}
+
+/// A wallet: one seed, one coin, its derived addresses. Addresses are public
+/// and kept here so opening the app never needs the sealed seed.
+struct WalletMeta: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var coinId: String
+    var name: String
+    var createdAtMs: Int64
+    var receiveAddresses: [String]
+    var changeAddresses: [String] = []
+    /// When this wallet's addresses were last discovered from the chain, or 0
+    /// while that has never succeeded.
+    ///
+    /// A restore asks the node which of the seed's addresses have been used;
+    /// a fresh phrase has nothing to ask about and is scanned by definition.
+    /// When the question cannot be put — the node is slow, the link is bad —
+    /// the wallet is still created, holding only the first address, and the
+    /// coins on the rest would be invisible and unspendable if nothing asked
+    /// again. 0 means the question is still open: refresh asks it again until
+    /// it is answered, and the screen says so meanwhile.
+    var addressScanAtMs: Int64 = 0
+    /// How keys come from the phrase; wallets made before the choice existed are standard.
+    var derivation = Derivation.standard
+
+    init(
+        id: String, coinId: String, name: String, createdAtMs: Int64,
+        receiveAddresses: [String], changeAddresses: [String] = [], addressScanAtMs: Int64 = 0,
+        derivation: Derivation = .standard
+    ) {
+        self.id = id
+        self.coinId = coinId
+        self.name = name
+        self.createdAtMs = createdAtMs
+        self.receiveAddresses = receiveAddresses
+        self.changeAddresses = changeAddresses
+        self.addressScanAtMs = addressScanAtMs
+        self.derivation = derivation
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, coinId, name, createdAtMs, receiveAddresses, changeAddresses, addressScanAtMs, derivation
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        coinId = try c.decode(String.self, forKey: .coinId)
+        name = try c.decode(String.self, forKey: .name)
+        createdAtMs = try c.decode(Int64.self, forKey: .createdAtMs)
+        receiveAddresses = try c.decode([String].self, forKey: .receiveAddresses)
+        changeAddresses = try c.decodeIfPresent([String].self, forKey: .changeAddresses) ?? []
+        addressScanAtMs = try c.decodeIfPresent(Int64.self, forKey: .addressScanAtMs) ?? 0
+        derivation = try c.decodeIfPresent(Derivation.self, forKey: .derivation) ?? .standard
+    }
+
+    /// True while this wallet's address list has never been confirmed
+    /// against the chain.
+    var addressScanPending: Bool { addressScanAtMs <= 0 }
+}
+
+/// Fold a completed address scan into a wallet, and mark the question
+/// closed.
+///
+/// The lists only ever grow. A scan reports how many addresses the CHAIN has
+/// seen; that is not how many the wallet HOLDS, because a user can ask for
+/// further ones locally and may already have handed one out. Taking an
+/// address away because nobody has paid it yet would be the same class of
+/// mistake as never finding it: coins arriving somewhere the wallet no
+/// longer watches.
+func settledAddresses(_ meta: WalletMeta, scanned: AddressBook, nowMs: Int64) -> WalletMeta {
+    var settled = meta
+    if scanned.receive.count >= meta.receiveAddresses.count { settled.receiveAddresses = scanned.receive }
+    if scanned.change.count >= meta.changeAddresses.count { settled.changeAddresses = scanned.change }
+    settled.addressScanAtMs = nowMs
+    return settled
+}
+
+/// One remembered transaction — TxRecord flattened for the cache file.
+struct CachedTx: Codable, Equatable, Identifiable, Sendable {
+    var txid: String
+    var incoming: Bool
+    var amount: UInt64
+    var party: String?
+    var timestamp: Int64
+    var confirmed: Bool
+    var confirmations: Int64
+    var fee: UInt64?
+    /// This wallet's addresses the transaction used, see TxRecord.own.
+    var own: [String] = []
+
+    var id: String { txid }
+
+    init(_ record: TxRecord) {
+        txid = record.txid
+        incoming = record.incoming
+        amount = record.amount
+        party = record.party
+        timestamp = record.timestamp
+        confirmed = record.confirmed
+        confirmations = record.confirmations
+        fee = record.fee
+        own = record.own
+    }
+
+    init(
+        txid: String, incoming: Bool, amount: UInt64, party: String?, timestamp: Int64,
+        confirmed: Bool, confirmations: Int64, fee: UInt64?, own: [String] = []
+    ) {
+        self.txid = txid
+        self.incoming = incoming
+        self.amount = amount
+        self.party = party
+        self.timestamp = timestamp
+        self.confirmed = confirmed
+        self.confirmations = confirmations
+        self.fee = fee
+        self.own = own
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case txid, incoming, amount, party, timestamp, confirmed, confirmations, fee, own
+    }
+
+    /// A cache written before a field existed still reads, with that field at its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        txid = try c.decode(String.self, forKey: .txid)
+        incoming = try c.decode(Bool.self, forKey: .incoming)
+        amount = try c.decode(UInt64.self, forKey: .amount)
+        party = try c.decodeIfPresent(String.self, forKey: .party)
+        timestamp = try c.decode(Int64.self, forKey: .timestamp)
+        confirmed = try c.decode(Bool.self, forKey: .confirmed)
+        confirmations = try c.decode(Int64.self, forKey: .confirmations)
+        fee = try c.decodeIfPresent(UInt64.self, forKey: .fee)
+        own = try c.decodeIfPresent([String].self, forKey: .own) ?? []
+    }
+}
+
+/// The last successful view of a wallet, kept on disk so the tab renders
+/// instantly and honestly when the node is unreachable — the screen marks it
+/// stale rather than blank.
+struct WalletSnapshot: Codable, Equatable, Sendable {
+    var confirmed: UInt64 = 0
+    var predicted: UInt64 = 0
+    var hours: UInt64?
+    var spendableOutputs = 0
+    var txs: [CachedTx] = []
+    /// Confirmed coins held by each single address: the addresses sheet's numbers.
+    var perAddress: [String: UInt64] = [:]
+    var fetchedAtMs: Int64 = 0
+    /// When `txs` was last actually fetched, which can lag `fetchedAtMs`: the
+    /// balance and the history are fetched separately and the history is the
+    /// one that can be too big to arrive (see WalletStore.refresh). 0 when it
+    /// has never landed — "do not claim this list is complete".
+    var historyFetchedAtMs: Int64 = 0
+
+    /// True when the tx list is older than the balance beside it, or never
+    /// arrived.
+    var historyBehind: Bool { historyFetchedAtMs < fetchedAtMs }
+
+    /// The wallet's addresses that have sent coins. A spend puts the address's public key on the
+    /// chain, where a future quantum computer could use it to take what is still there or sent
+    /// there later. Read from the history the wallet already holds; skycoin-web asks the node per
+    /// address for the same.
+    var exposedAddresses: Set<String> { Set(txs.filter { !$0.incoming }.flatMap(\.own)) }
+
+    /// Exposed addresses that still hold coins: the ones worth moving.
+    var exposedWithCoins: Set<String> { exposedAddresses.filter { (perAddress[$0] ?? 0) > 0 } }
+
+    var balance: WalletBalance {
+        WalletBalance(confirmed: confirmed, predicted: predicted, hours: hours, spendableOutputs: spendableOutputs, perAddress: perAddress)
+    }
+}
+
+extension WalletSnapshot {
+    enum CodingKeys: String, CodingKey {
+        case confirmed, predicted, hours, spendableOutputs, txs, perAddress, fetchedAtMs, historyFetchedAtMs
+    }
+
+    /// A cache written before a field existed still reads, with that field at its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            confirmed: try c.decodeIfPresent(UInt64.self, forKey: .confirmed) ?? 0,
+            predicted: try c.decodeIfPresent(UInt64.self, forKey: .predicted) ?? 0,
+            hours: try c.decodeIfPresent(UInt64.self, forKey: .hours),
+            spendableOutputs: try c.decodeIfPresent(Int.self, forKey: .spendableOutputs) ?? 0,
+            txs: try c.decodeIfPresent([CachedTx].self, forKey: .txs) ?? [],
+            perAddress: try c.decodeIfPresent([String: UInt64].self, forKey: .perAddress) ?? [:],
+            fetchedAtMs: try c.decodeIfPresent(Int64.self, forKey: .fetchedAtMs) ?? 0,
+            historyFetchedAtMs: try c.decodeIfPresent(Int64.self, forKey: .historyFetchedAtMs) ?? 0
+        )
+    }
+}
+
+/// Fold one refresh's results into the snapshot that gets cached.
+///
+/// `history` is nil when that fetch failed, which is a normal outcome rather
+/// than an error: the balance is a few hundred bytes and the transaction list
+/// is unbounded, so on a slow link the second can miss while the first lands.
+/// When it misses, the last list we did get is carried forward unchanged and
+/// its timestamp with it — so the snapshot goes on saying, truthfully, how
+/// old that list is, and never passes an empty one off as a fetched one.
+func mergeSnapshot(balance: WalletBalance, history: [TxRecord]?, previous: WalletSnapshot?, nowMs: Int64) -> WalletSnapshot {
+    WalletSnapshot(
+        confirmed: balance.confirmed,
+        predicted: balance.predicted,
+        hours: balance.hours,
+        spendableOutputs: balance.spendableOutputs,
+        txs: history.map { $0.map(CachedTx.init) } ?? previous?.txs ?? [],
+        perAddress: balance.perAddress,
+        fetchedAtMs: nowMs,
+        historyFetchedAtMs: history != nil ? nowMs : previous?.historyFetchedAtMs ?? 0
+    )
+}
+
+/// Milliseconds since 1970, the unit the stored timestamps use.
+func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }

@@ -1,0 +1,11 @@
+{
+  "joined": [
+    {"tokens":["--addr","127.0.0.1:8001","--persist","--persist-db","/var/mobile/Containers/Data/Application/0A1B/Library/Application Support/skywire/local/skychat-history.db","--password-file","/var/mobile/Containers/Data/Application/0A1B/Library/Application Support/skywire/local/skychat-password"],"joined":"--addr 127.0.0.1:8001 --persist --persist-db \"/var/mobile/Containers/Data/Application/0A1B/Library/Application Support/skywire/local/skychat-history.db\" --password-file \"/var/mobile/Containers/Data/Application/0A1B/Library/Application Support/skywire/local/skychat-password\""},
+    {"tokens":["--note","\"hello\"","back\\slash","","it's","tab\there","--label=my visor"],"joined":"--note \"\\\"hello\\\"\" \"back\\\\slash\" \"\" \"it's\" \"tab\there\" \"--label=my visor\""}
+  ],
+  "split": [
+    {"in":"a 'b c' \"d \\\"e\\\"\" f\\g","out":["a","b c","d \"e\"","f\\g"],"err":false},
+    {"in":"--x \"unclosed","out":null,"err":true},
+    {"in":"  spaced   out  ","out":["spaced","out"],"err":false}
+  ]
+}

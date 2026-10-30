@@ -28,6 +28,7 @@ import (
 	"github.com/0magnet/bottle/vnet"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -50,6 +51,21 @@ import (
 
 func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	conf := v.conf.Launcher
+
+	// NewLauncher (below) registers this visor's skynet and dmsg networkers in
+	// appnet's process-wide registry. Pushed first so it runs last, after the
+	// apps have stopped: take them out again when the visor closes. Otherwise
+	// the next visor started in the same process (a restart in place:
+	// pkg/mobilecore, Reload) finds the old ones, and its modules that come up
+	// before its own launcher — dmsg ping, voice, every skynet mirror — bind
+	// their skynet listeners to the old visor's closed router.
+	var ownNetworkers map[appnet.Type]appnet.Networker
+	v.pushCloseStack("launcher.networkers", func() error {
+		for t, n := range ownNetworkers {
+			appnet.RemoveNetworker(t, n)
+		}
+		return nil
+	})
 
 	// Prepare proc manager.
 	procM, err := appserver.NewProcManager(v.MasterLogger(), &v.serviceDisc, v.ebc, v.notifyHub, conf.ServerAddr, v.conf.LocalPath)
@@ -191,10 +207,12 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		}
 	}
 
-	// Prepare launcher.
+	// Prepare launcher. apps is the config's list followed by the entries
+	// synthesized above, which a config update must not drop.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
-		Apps:          apps,
+		Apps:          apps[:len(conf.Apps)],
+		Own:           apps[len(conf.Apps):],
 		ServerAddr:    conf.ServerAddr,
 		BinPath:       conf.BinPath,
 		LocalPath:     v.conf.LocalPath,
@@ -207,6 +225,12 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	if err != nil {
 		err := fmt.Errorf("failed to start launcher: %w", err)
 		return err
+	}
+	ownNetworkers = make(map[appnet.Type]appnet.Networker, 2)
+	for _, t := range []appnet.Type{appnet.TypeSkynet, appnet.TypeDmsg} {
+		if n, err := appnet.ResolveNetworker(t); err == nil {
+			ownNetworkers[t] = n
+		}
 	}
 
 	err = launch.AutoStart(launcher.EnvMap{
@@ -1481,6 +1505,16 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// Store instance on visor for runtime enable/disable via RPC
 	v.hvInstance = hv
+	// Pushed as soon as the account store is open, so a failure further down
+	// still releases users.db. Disable is a no-op on a hypervisor that never
+	// enabled.
+	v.pushCloseStack("hypervisor", func() error {
+		err := hv.Disable()
+		if cerr := hv.users.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+		return err
+	})
 
 	// Start LAN DMSG server if configured
 	if conf.LANDmsgServer != nil && conf.LANDmsgServer.Enable {
@@ -1524,10 +1558,6 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	} else {
 		v.log.Info("Hypervisor configured but not enabled (use 'skywire cli visor hv enable' to start)")
 	}
-
-	v.pushCloseStack("hypervisor", func() error {
-		return hv.Disable()
-	})
 
 	return nil
 }

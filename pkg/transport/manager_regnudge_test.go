@@ -159,10 +159,8 @@ func TestOutboundSaveNudgesReRegister(t *testing.T) {
 
 	// Start the manager's background loops (runReRegisterTransports lives here).
 	// Teardown cancels the context (the loops select on ctx.Done) and closes the
-	// underlying transport to unblock the serving read loop. We deliberately do
-	// NOT call tm.Close(): it waits on the serve WaitGroup while holding tm.mx,
-	// which can wedge a unit test; canceling the context stops every loop and
-	// the leaked goroutines exit with the process.
+	// underlying transport to unblock the serving read loop; that is all this
+	// test needs (Close is covered by TestManagerCloseAfterServe).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()

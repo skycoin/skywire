@@ -481,3 +481,35 @@ func TestMockAPIClient(t *testing.T) {
 	assert.Equal(t, "1.2.3.4", m.LocalPublicIP())
 	require.NoError(t, m.Close())
 }
+
+// A client that never reaches the address resolver stops trying when it is
+// closed, and a bind waiting for it returns. A visor restarted in the same
+// process (the phone core) left both running before.
+func TestCloseBeforeReady(t *testing.T) {
+	var nonces atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		nonces.Add(1)
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	pk, sk := cipher.GenerateKeyPair()
+	api, err := NewHTTP(srv.URL, pk, sk, &http.Client{}, nil, "", "", logging.MustGetLogger("ar-closed"), logging.NewMasterLogger())
+	require.NoError(t, err)
+	c := api.(*httpClient)
+
+	bindErr := make(chan error, 1)
+	go func() { bindErr <- c.BindSTCPR(context.Background(), "1234") }()
+	require.Eventually(t, func() bool { return nonces.Load() >= 2 }, 10*time.Second, 50*time.Millisecond)
+
+	require.NoError(t, c.Close())
+	select {
+	case err := <-bindErr:
+		require.ErrorIs(t, err, ErrClosed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("BindSTCPR still waits for the resolver after Close")
+	}
+	time.Sleep(1500 * time.Millisecond)
+	n := nonces.Load()
+	time.Sleep(3 * time.Second)
+	require.Equal(t, n, nonces.Load(), "the client kept retrying the resolver after Close")
+}

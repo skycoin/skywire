@@ -288,6 +288,35 @@ func TestResetConfig(t *testing.T) {
 	require.Equal(t, "new:1", l.conf.ServerAddr)
 }
 
+// TestResetConfigKeepsTheVisorsOwnApps: a config update (an app's args, its
+// autostart, a deleted entry) rebuilt the app list from the config alone, so
+// the apps the visor adds itself vanished. The mailbox could then not be
+// started again ("app not found") once any app had been changed.
+func TestResetConfigKeepsTheVisorsOwnApps(t *testing.T) {
+	defer appnet.ClearNetworkers()
+	dir := t.TempDir()
+	l, err := NewLauncher(testLogger(), AppLauncherConfig{
+		BinPath:   filepath.Join(dir, "bin"),
+		LocalPath: filepath.Join(dir, "local"),
+		Apps:      []appserver.AppConfig{{Name: "skysocks-client"}, {Name: "skychat"}},
+		Own:       []appserver.AppConfig{{Name: "skymail", AutoStart: true}},
+	}, nil, nil, &appserver.MockProcManager{})
+	require.NoError(t, err)
+	require.Len(t, l.apps, 3)
+
+	l.ResetConfig(AppLauncherConfig{Apps: []appserver.AppConfig{{Name: "skysocks-client", Args: []string{"--reconnect"}}}})
+	require.Len(t, l.apps, 2)
+	require.Equal(t, []string{"--reconnect"}, l.apps["skysocks-client"].Args)
+	require.True(t, l.apps["skymail"].AutoStart, "the visor's own app went with the update")
+	_, ok := l.apps["skychat"]
+	require.False(t, ok, "a configured app the update deleted came back")
+
+	// The config still wins over the visor's own entry of the same name.
+	l.ResetConfig(AppLauncherConfig{Apps: []appserver.AppConfig{{Name: "skymail"}}})
+	require.False(t, l.apps["skymail"].AutoStart)
+	require.Len(t, l.conf.Apps, 1)
+}
+
 func TestAppState(t *testing.T) {
 	t.Run("unknown app", func(t *testing.T) {
 		l := newTestLauncher(t, &appserver.MockProcManager{})

@@ -1,0 +1,42 @@
+# swift test in ios/Packages/WalletCore — 2026-10-02T13:42Z, Apple Swift 6.4 (Xcode 27.0), on d71430e6c + the M5 working tree
+# The live suites (LiveNodeTests, EthLiveTests) skip without SKYWIRE_NET_TESTS=1 (walletcore-live.log);
+# CrossCheckDumpTests skips without WALLET_CROSSCHECK_OUT (crosscheck.txt).
+passed  AmountsTests.testParseAndFormat
+passed  AmountsTests.testParseEdges
+passed  Bip143Tests.testSighashMatches
+passed  Bip143Tests.testSignatureMatchesByteForByte
+passed  Bip143Tests.testSignFillsTheWitnessAndChecksOwnership
+passed  Bip143Tests.testUnsignedSerializationMatches
+passed  Bip143Tests.testWitnessSerializationShape
+passed  Bip39VectorsTests.testEntropyToMnemonicAndSeed
+passed  Bip39VectorsTests.testValidation
+passed  Bip84FixtureTests.testDerivationChainMatchesReference
+passed  BtcAddressTests.testBase58Forms
+passed  BtcAddressTests.testScriptForms
+skipped  CrossCheckDumpTests.testDump
+skipped  EthLiveTests.testNativeBalanceAndHistoryParseFromProduction
+skipped  EthLiveTests.testTokenBalanceAndTransfersParseFromProduction
+passed  EthVectorsTests.testAddressDerivation
+passed  EthVectorsTests.testEip1559SignAndRecover
+passed  EthVectorsTests.testEip155GoldenTransaction
+passed  EthVectorsTests.testEip55Checksums
+passed  EthVectorsTests.testErc20CallData
+passed  EthVectorsTests.testKeccak256Vectors
+passed  EthVectorsTests.testRlpEncoding
+skipped  LiveNodeTests.testBalanceAndHistoryParseFromProduction
+passed  PrimitivesTests.testBase58
+passed  PrimitivesTests.testBech32RoundTrip
+passed  PrimitivesTests.testBigUInt
+passed  PrimitivesTests.testHashCompositions
+passed  PrimitivesTests.testKeccak256AcrossBlocks
+passed  PrimitivesTests.testMultiplyIsSymmetric
+passed  PrimitivesTests.testRipemd160Vectors
+passed  PrimitivesTests.testSecp256k1Refusals
+passed  SkycoinCreateFixtureTests.testCreateMatchesReference
+passed  SkycoinCreateFixtureTests.testSignedTransactionVerifies
+passed  SkycoinCreateFixtureTests.testWalletChainMatches
+passed  SkycoinGoldenTests.testAddressCodecRejectsDamage
+passed  SkycoinGoldenTests.testSeedFile0
+passed  SkycoinGoldenTests.testSeedFile1
+passed  SkycoinGoldenTests.testSeedFile2
+Executed 38 tests, with 4 tests skipped and 0 failures (0 unexpected) in 0.899 (0.904) seconds

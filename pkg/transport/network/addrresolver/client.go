@@ -69,6 +69,8 @@ var (
 	ErrNotReady = errors.New("address resolver is not ready")
 	// ErrNoTransportsFound returned when no transports are found.
 	ErrNoTransportsFound = errors.New("failed to get response data from AR transports endpoint")
+	// ErrClosed is returned by a request made after the client was closed.
+	ErrClosed = errors.New("address resolver client closed")
 	// ErrBindingDisabled is returned by BindSUDPH after DisableBinding.
 	ErrBindingDisabled = errors.New("address resolver registration is disabled")
 )
@@ -373,22 +375,34 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 	// until the next request that the AR observes the source IP for, and the
 	// bind POST body carries the IP independently once SetPublicIP fires.
 	pubIP := c.localPublicIPRaw()
-	httpAuthClient, err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, pubIP, c.mLog)
+	// The retry runs until the resolver answers or the client closes; a visor
+	// restarted in the same process must not leave it running.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-c.closed:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	httpAuthClient, err := httpauthclient.NewClient(ctx, c.remoteHTTPAddr, c.pk, c.sk, httpC, pubIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
 
 		retry := netutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
-		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.localPublicIPRaw(), c.mLog)
+		err := retry.Do(ctx, func() error {
+			httpAuthClient, err = httpauthclient.NewClient(ctx, c.remoteHTTPAddr, c.pk, c.sk, httpC, c.localPublicIPRaw(), c.mLog)
 			return err
 		})
 
 		if err != nil {
-			// This should not happen as retrier is set to try indefinitely.
-			// If address resolver cannot be contacted indefinitely, 'c.ready' will be blocked indefinitely.
-			c.log.WithError(err).Fatal("Permanently failed to connect to address resolver.")
+			// The retrier tries indefinitely, so only a close ends it. c.ready
+			// stays open, and awaitReady returns ErrClosed to every waiter.
+			c.log.WithError(err).Debug("Closed before the address resolver answered.")
+			return
 		}
 	}
 
@@ -486,7 +500,9 @@ func (c *httpClient) fetchPublicUDPAddr(httpC *http.Client) string {
 
 // Get performs a new GET request.
 func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, error) {
-	<-c.ready
+	if err := c.awaitReady(ctx); err != nil {
+		return nil, err
+	}
 
 	addr := c.httpClient.Addr() + path
 
@@ -500,7 +516,9 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 
 // Post performs a POST request.
 func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
-	<-c.ready
+	if err := c.awaitReady(ctx); err != nil {
+		return nil, err
+	}
 
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
@@ -519,7 +537,9 @@ func (c *httpClient) Post(ctx context.Context, path string, payload interface{})
 
 // Delete performs a DELETE request.
 func (c *httpClient) Delete(ctx context.Context, path string) (*http.Response, error) {
-	<-c.ready
+	if err := c.awaitReady(ctx); err != nil {
+		return nil, err
+	}
 	var payload struct{}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
@@ -655,7 +675,9 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 	log := c.log.WithField("func", "httpClient.BindQUIC")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
-		<-c.ready
+		if err := c.awaitReady(ctx); err != nil {
+			return err
+		}
 		log.Debug("Address resolver became ready, binding")
 	}
 
@@ -727,7 +749,9 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash st
 	log := c.log.WithField("func", "httpClient.BindWT")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
-		<-c.ready
+		if err := c.awaitReady(ctx); err != nil {
+			return err
+		}
 		log.Debug("Address resolver became ready, binding")
 	}
 
@@ -796,7 +820,9 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	log := c.log.WithField("func", "httpClient.BindSTCPR")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
-		<-c.ready
+		if err := c.awaitReady(ctx); err != nil {
+			return err
+		}
 		log.Debug("Address resolver became ready, binding")
 	}
 
@@ -933,7 +959,9 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 	c.forgetBound("stcpr")
 	if !c.isReady() {
 		log.Debug("Address resolver is not ready yet, waiting...")
-		<-c.ready
+		if err := c.awaitReady(ctx); err != nil {
+			return err
+		}
 		log.Debug("Address resolver became ready, unbinding")
 	}
 
@@ -1217,6 +1245,19 @@ func (c *httpClient) TransportsType(ctx context.Context, tpType types.Type) (map
 	}
 
 	return results, nil
+}
+
+// awaitReady waits until the client has connected to the address resolver,
+// the client is closed, or ctx ends.
+func (c *httpClient) awaitReady(ctx context.Context) error {
+	select {
+	case <-c.ready:
+		return nil
+	case <-c.closed:
+		return ErrClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (c *httpClient) isReady() bool {

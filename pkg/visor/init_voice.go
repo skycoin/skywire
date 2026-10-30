@@ -23,11 +23,12 @@ import (
 )
 
 // voiceAudioBridged reports whether capture and playback go to the process
-// that started the visor (see pkg/skychat/call.Bridge). That is Android, where
-// nothing else can work: GOOS=android satisfies the `linux` build tag, so the
-// device path opens the PulseAudio backend, finds no server, and degrades to a
-// mute call. The host app owns the only real device on the platform.
-func voiceAudioBridged() bool { return runtime.GOOS == "android" }
+// that started the visor (see pkg/skychat/call.Bridge). That is Android and
+// iOS, where nothing else can work: GOOS=android satisfies the `linux` build
+// tag, so the device path opens the PulseAudio backend, finds no server, and
+// degrades to a mute call, and iOS has no backend at all. The host app owns
+// the only real device on both.
+func voiceAudioBridged() bool { return runtime.GOOS == "android" || runtime.GOOS == "ios" }
 
 // VoiceAudioBridge returns the host-app audio device this visor is using, or
 // nil when it opens a device of its own (or has none). The local API's voice
