@@ -25,7 +25,6 @@ require (
 	github.com/0magnet/metrics v1.44.1-0.20261004194541-261721063b63
 	github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b
 	github.com/0magnet/osnotify v0.0.1-0.20261013221008-334ed955239e
-	github.com/0magnet/pfilter v0.0.15
 	github.com/0magnet/plot-go v0.0.2-0.20261013224559-d646d2eb8b5d
 	github.com/0magnet/progkit v0.0.0-20261024094515-51a7330475eb
 	github.com/0magnet/progterm v0.0.0-20261024094609-2e1f4c86cbec
@@ -41,6 +40,7 @@ require (
 	github.com/0magnet/wisp v0.0.0-20261013221105-1e4a0e54c8bc
 	github.com/0magnet/yamux v0.1.3-0.20261028122158-2a102205992e
 	github.com/ActiveState/termtest/conpty v0.5.0
+	github.com/AudriusButkevicius/pfilter v0.0.12
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5

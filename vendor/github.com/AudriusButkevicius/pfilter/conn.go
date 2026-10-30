@@ -209,6 +209,14 @@ func (r *filteredConn) SetReadBuffer(sz int) error {
 	return errNotSupported
 }
 
+// SetWriteBuffer sets the send buffer size of the shared underlying socket.
+func (r *filteredConn) SetWriteBuffer(sz int) error {
+	if swb, ok := r.source.conn.(interface{ SetWriteBuffer(int) error }); ok {
+		return swb.SetWriteBuffer(sz)
+	}
+	return errNotSupported
+}
+
 func (r *filteredConn) SyscallConn() (syscall.RawConn, error) {
 	if r.source.oobConn != nil {
 		return r.source.oobConn.SyscallConn()
@@ -221,11 +229,22 @@ func (r *filteredConn) SyscallConn() (syscall.RawConn, error) {
 	return nil, errNotSupported
 }
 
+// PacketReceiver is implemented by connections returned by NewConn. It allows
+// consumers to process packets without a goroutine calling ReadFrom.
+type PacketReceiver interface {
+	net.PacketConn
+	SetPacketReceiver(func(b []byte, addr net.Addr, err error))
+}
+
 // SetPacketReceiver makes the filter hand every packet claimed by this
 // connection to fn on its read goroutine, instead of queueing it for
-// ReadFrom. fn must not keep b after it returns. A read error on the
-// underlying connection reaches fn as err, after which no more calls follow.
-// A nil fn removes the receiver and packets queue for ReadFrom again.
+// ReadFrom. Set it before Start to receive all packets this way. fn must not
+// retain b after returning or block the read goroutine; it may close its own
+// connection. A terminal read error reaches fn with a nil buffer.
+//
+// A nil fn restores queueing for subsequent packets. Replacing fn is safe
+// concurrently with reads, but an in-flight call may still use the old fn.
+// Packets already queued remain available through ReadFrom.
 func (r *filteredConn) SetPacketReceiver(fn func(b []byte, addr net.Addr, err error)) {
 	if fn == nil {
 		r.receiver.Store(nil)

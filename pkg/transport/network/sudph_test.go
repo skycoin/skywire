@@ -12,7 +12,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/0magnet/pfilter"
+	"github.com/AudriusButkevicius/pfilter"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
