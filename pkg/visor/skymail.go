@@ -2,8 +2,9 @@
 //
 // The visor's own mailbox (pkg/skymail). It listens for SMTP on port 25
 // over dmsg and skynet, like every dual-listened visor port, and sends
-// by dialing the recipient visor's port 25 directly: no MTA, no queue,
-// no certificate, so it runs as-is in a browser tab. It is on by
+// by dialing the recipient visor's port 25 directly: no MTA and no
+// certificate, so it runs as-is in a browser tab. Mail for a visor that
+// is offline waits in the Outbox and is retried from this visor. It is on by
 // default everywhere; the size and age limits keep an open mailbox from
 // filling the storage it lives in. Enable and every limit are live
 // settings (MailSetSettings), kept in settings.json beside the mail.
@@ -265,6 +266,7 @@ func (v *Visor) startSkymail() error {
 			".dmsg":   &visorDmsgDialer{c: v.dmsgC},
 		},
 		Limits:    limits,
+		Outbox:    skymailOutbox,
 		OnDeliver: v.notifyMail,
 		Log:       h.log,
 	})
@@ -292,6 +294,7 @@ func (v *Visor) startSkymail() error {
 		}
 	})
 	go mb.RunExpiry(ctx)
+	go mb.RunOutbox(ctx)
 
 	h.rt, h.reason = rt, ""
 	lim := mb.Limits()
@@ -388,6 +391,7 @@ func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 	st.Whitelist = rt.mb.Whitelist()
 	st.Limits = rt.mb.Limits()
 	st.Usage, _ = rt.mb.Usage() //nolint:errcheck // a status line, not a decision
+	st.HasOutbox, st.Outbox = rt.mb.HasOutbox(), rt.mb.Queued()
 	if inbox, err := rt.mb.List(skymail.FolderInbox); err == nil {
 		st.Total = len(inbox)
 		for _, m := range inbox {
@@ -519,6 +523,15 @@ func (v *Visor) MailDelete(folder, id string) error {
 		return err
 	}
 	return rt.mb.Delete(folder, id)
+}
+
+// MailRetry implements visorapi.API.
+func (v *Visor) MailRetry(id string) error {
+	rt, err := v.mailbox()
+	if err != nil {
+		return err
+	}
+	return rt.mb.Retry(id)
 }
 
 // MailSetWhitelist implements visorapi.API.

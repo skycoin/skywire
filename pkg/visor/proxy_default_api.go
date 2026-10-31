@@ -1391,6 +1391,10 @@ func (proxyDefaultAPI) MailDelete(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) MailRetry(_ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) MailSetWhitelist(_ []cipher.PubKey) error {
 	return ErrProxyNotSupported
 }

@@ -93,6 +93,7 @@ func TestFullMailboxRefusesUntilRoomIsMade(t *testing.T) {
 	require.Empty(t, send().Recipients[0].Err)
 	full := send()
 	require.Contains(t, full.Recipients[0].Err, "mailbox full")
+	require.True(t, full.Recipients[0].Queued, "452 is temporary")
 	used, err := b.mb.Usage()
 	require.NoError(t, err)
 	require.LessOrEqual(t, used, quota, "the quota holds")

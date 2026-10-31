@@ -101,6 +101,51 @@ func TestMailboxOverRealDmsg(t *testing.T) {
 	require.Contains(t, res.Recipients[0].Err, "not whitelisted")
 }
 
+// TestOutboxDeliversOverRealDmsgOnceTheMailboxIsBack: B cannot take mail,
+// so A keeps it in the Outbox and delivers it over dmsg when B can.
+func TestOutboxDeliversOverRealDmsgOnceTheMailboxIsBack(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
+
+	off, on := false, true
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+	res, err := a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Subject: "queued", Body: "x"})
+	require.NoError(t, err)
+	require.True(t, res.Recipients[0].Queued)
+	st, err := a.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.HasOutbox)
+	require.Equal(t, 1, st.Outbox)
+	out, err := a.MailList(skymail.FolderOutbox)
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	require.Equal(t, []string{bobAt(clients[1].LocalPK())}, out[0].Queue.Pending)
+
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on}))
+	// dmsg refuses a peer for about two seconds after a failed dial.
+	require.Eventually(t, func() bool {
+		require.NoError(t, a.MailRetry(""))
+		inbox, err := b.MailList(skymail.FolderInbox)
+		return err == nil && len(inbox) == 1
+	}, 20*time.Second, time.Second)
+	inbox, err := b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Equal(t, "queued", inbox[0].Subject)
+	require.Equal(t, clients[0].LocalPK().Hex(), inbox[0].PeerPK)
+	require.Eventually(t, func() bool {
+		st, err := a.MailStatus()
+		return err == nil && st.Outbox == 0
+	}, 5*time.Second, 50*time.Millisecond)
+	sent, err := a.MailList(skymail.FolderSent)
+	require.NoError(t, err)
+	require.Len(t, sent, 1)
+}
+
 func TestMailboxYieldsForwardedPort25(t *testing.T) {
 	env := dmsgtest.NewEnv(t, 10*time.Second)
 	require.NoError(t, env.Startup(0, 1, 1, &dmsg.Config{MinSessions: 1}))
@@ -171,8 +216,9 @@ func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, st.Running)
 	require.Equal(t, "disabled", st.Reason)
-	_, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
-	require.Error(t, err, "nothing listens on 25 while it is off")
+	res, err := a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
+	require.NoError(t, err)
+	require.True(t, res.Recipients[0].Queued, "nothing listens on 25 while it is off, so it waits")
 
 	small, age := int64(2048), time.Hour
 	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on, MaxMessageSize: &small, MaxAge: &age}))
@@ -185,7 +231,6 @@ func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	// The send made while it was off leaves dmsg refusing this peer for
 	// about two seconds (error 202), so wait for the answer to come from
 	// the mailbox itself.
-	var res *skymail.SendResult
 	require.Eventually(t, func() bool {
 		res, _ = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: strings.Repeat("z", 4000)}) //nolint:errcheck
 		return res != nil && strings.Contains(res.Recipients[0].Err, "552")
@@ -266,11 +311,17 @@ func TestSkynetAddressNeverFallsBackToDmsg(t *testing.T) {
 	a, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1])
 
 	res, err := a.MailSend(skymail.Outgoing{To: []string{"bob@" + clients[1].LocalPK().DNSLabel() + ".skynet"}, Body: "x"})
-	require.Error(t, err)
+	require.NoError(t, err, "no route yet is a reason to wait, not to give up")
 	require.NotEmpty(t, res.Recipients[0].Err)
+	require.True(t, res.Recipients[0].Queued)
 	inbox, err := b.MailList(skymail.FolderInbox)
 	require.NoError(t, err)
 	require.Empty(t, inbox, "not delivered over dmsg behind the sender's back")
+	require.NoError(t, a.MailRetry(""))
+	time.Sleep(time.Second)
+	inbox, err = b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Empty(t, inbox, "nor on a retry")
 
 	res, err = a.MailSend(skymail.Outgoing{To: []string{bobAt(clients[1].LocalPK())}, Body: "x"})
 	require.NoError(t, err, ".dmsg still reaches it")

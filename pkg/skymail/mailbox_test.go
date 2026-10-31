@@ -109,6 +109,7 @@ func (n *testNet) addVisor(t *testing.T, opts ...func(*Config)) *visor {
 		PK:      pk,
 		PeerPK:  peerOf,
 		Dialers: map[string]skymailbridge.Dialer{".skynet": n.dialerFor(pk)},
+		Outbox:  true,
 	}
 	for _, o := range opts {
 		o(&cfg)
@@ -211,6 +212,8 @@ func TestWhitelistRefusesOtherPKs(t *testing.T) {
 	require.Contains(t, res.Recipients[0].Err, "not whitelisted")
 	sent, _ := a.mb.List(FolderSent) //nolint:errcheck
 	require.Empty(t, sent, "nothing delivered, nothing filed as sent")
+	require.False(t, res.Recipients[0].Queued, "a refusal is final")
+	require.Zero(t, a.mb.Queued())
 
 	_, err = c.mb.Send(context.Background(), Outgoing{To: []string{addr("bob", b.pk)}, Subject: "hi", Body: "x"})
 	require.NoError(t, err)
@@ -288,6 +291,9 @@ func TestSendReportsEachRecipientAndDeliversWhatItCan(t *testing.T) {
 	require.Empty(t, errs[addr("b", b.pk)])
 	require.Empty(t, errs[addr("me", a.pk)], "own PK is filed locally")
 	require.Contains(t, errs[addr("c", c.pk)], "unreachable")
+	for _, r := range res.Recipients {
+		require.Equal(t, r.Rcpt == addr("c", c.pk), r.Queued, "only the unreachable one waits: %s", r.Rcpt)
+	}
 	require.Contains(t, errs["x@example.com"], "not a skywire address")
 	require.Contains(t, errs["d@"+b.pk.DNSLabel()+".dmsg"], "no route")
 
@@ -305,16 +311,6 @@ func TestSendRejectsHeaderInjection(t *testing.T) {
 	require.Error(t, err)
 	_, err = a.mb.Send(context.Background(), Outgoing{From: "me\r\nX-Evil: 1", To: []string{addr("b", b.pk)}, Body: "x"})
 	require.Error(t, err)
-}
-
-func TestSendToAnOfflineVisorFailsNow(t *testing.T) {
-	n := newTestNet()
-	a, b := n.addVisor(t), n.addVisor(t)
-	n.down[b.pk] = true
-	start := time.Now()
-	_, err := a.mb.Send(context.Background(), Outgoing{To: []string{addr("b", b.pk)}, Body: "x"})
-	require.Error(t, err)
-	require.Less(t, time.Since(start), 5*time.Second)
 }
 
 func TestMessageIDsCannotLeaveTheFolder(t *testing.T) {
