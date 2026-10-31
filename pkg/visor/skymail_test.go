@@ -2,6 +2,8 @@ package visor
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/rpc"
 	"path/filepath"
@@ -450,4 +452,58 @@ func TestHelperDeliversOverRealDmsg(t *testing.T) {
 	require.Equal(t, pkA.Hex(), inbox[0].PeerPK)
 	require.Equal(t, pkH.Hex(), inbox[0].RelayPK)
 	require.True(t, inbox[0].FromVerified)
+}
+
+// TestParkedMailOverRealDmsg: A parks mail for B on a dmsg-async server
+// and stops; B, which was never online before, fetches it from the server
+// when it starts, and files it as A's.
+func TestParkedMailOverRealDmsg(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 30*time.Second)
+	require.NoError(t, env.Startup(0, 0, 0, nil))
+	t.Cleanup(env.Shutdown)
+	srv, err := env.NewServerWithConfig(dmsg.ServerConfig{Async: &dmsg.AsyncStoreConfig{}})
+	require.NoError(t, err)
+	cA, err := env.NewClient(&dmsg.Config{MinSessions: 1})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a := mailVisor(t, ctx, cA)
+	pkB, skB := cipher.GenerateKeyPair()
+
+	res, err := a.MailSend(skymail.Outgoing{To: []string{bobAt(pkB)}, Subject: "parked", Body: "x"})
+	require.NoError(t, err)
+	require.True(t, res.Recipients[0].Queued)
+	require.Eventually(t, func() bool {
+		out, err := a.MailList(skymail.FolderOutbox)
+		return err == nil && len(out) == 1 && out[0].Queue.Parked == 1
+	}, 20*time.Second, 100*time.Millisecond, "A parks it")
+	n, _, _, ok := srv.AsyncStats()
+	require.True(t, ok)
+	require.Equal(t, 1, n)
+	a.stopSkymail("gone")
+
+	cB, err := env.NewClientWithKeys(pkB, skB, &dmsg.Config{MinSessions: 1, Async: &dmsg.AsyncClientConfig{FetchInterval: time.Hour}})
+	require.NoError(t, err)
+	b := mailVisor(t, ctx, cB)
+	require.Eventually(t, func() bool {
+		inbox, err := b.MailList(skymail.FolderInbox)
+		return err == nil && len(inbox) == 1
+	}, 20*time.Second, 100*time.Millisecond, "B fetches it when it starts")
+	inbox, err := b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Equal(t, "parked", inbox[0].Subject)
+	require.Equal(t, cA.LocalPK().Hex(), inbox[0].PeerPK)
+	require.Equal(t, srv.LocalPK().Hex(), inbox[0].RelayPK)
+	require.True(t, inbox[0].FromVerified)
+	require.Eventually(t, func() bool { n, _, _, _ := srv.AsyncStats(); return n == 0 }, 5*time.Second, 50*time.Millisecond,
+		"B's ack empties the server")
+}
+
+func TestAllErrorsAre(t *testing.T) {
+	tooBig := fmt.Errorf("s1: %w", dmsg.ErrAsyncTooBig)
+	require.True(t, allErrorsAre(errors.Join(tooBig, fmt.Errorf("s2: %w", dmsg.ErrAsyncTooBig)), dmsg.ErrAsyncTooBig))
+	require.False(t, allErrorsAre(errors.Join(tooBig, errors.New("s2: timeout")), dmsg.ErrAsyncTooBig),
+		"one server that failed otherwise may take it later")
+	require.True(t, allErrorsAre(tooBig, dmsg.ErrAsyncTooBig))
+	require.False(t, allErrorsAre(errors.Join(), dmsg.ErrAsyncTooBig))
 }

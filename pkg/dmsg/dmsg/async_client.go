@@ -45,7 +45,17 @@ func asyncReplicas(n int) int {
 	return n
 }
 
-// startAsync turns fetching on. It runs once, from NewClient.
+// EnableAsync turns fetching on for a client built without Config.Async,
+// as Config.Async would have. Call it before Serve; a second call does
+// nothing.
+func (ce *Client) EnableAsync(conf AsyncClientConfig) {
+	if ce.async != nil {
+		return
+	}
+	ce.startAsync(conf)
+}
+
+// startAsync turns fetching on.
 func (ce *Client) startAsync(conf AsyncClientConfig) {
 	if conf.FetchInterval <= 0 {
 		conf.FetchInterval = AsyncDefaultFetchInterval

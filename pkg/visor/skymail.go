@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skymail"
@@ -325,6 +326,7 @@ func (v *Visor) startSkymail() error {
 			r, _ := v.mailRelayFor(rt)
 			return slices.Contains(r, pk)
 		},
+		Park:      v.parkMail(),
 		OnDeliver: v.notifyMail,
 		Log:       h.log,
 	})
@@ -353,6 +355,14 @@ func (v *Visor) startSkymail() error {
 	})
 	go mb.RunExpiry(ctx)
 	go mb.RunOutbox(ctx)
+	if skymailOffline {
+		// Mail parked on dmsg-async servers while this visor was offline.
+		if err := v.dmsgC.HandleAsync(skymailPort, func(m dmsg.AsyncMessage) error {
+			return mb.DeliverSealed(m.Payload, m.Server)
+		}); err != nil {
+			log.WithError(err).Debug("mailbox: not fetching parked mail")
+		}
+	}
 
 	h.rt, h.reason = rt, ""
 	lim := mb.Limits()
@@ -370,8 +380,46 @@ func (v *Visor) stopSkymail(reason string) {
 	if h.rt != nil {
 		h.rt.stop()
 		h.rt = nil
+		if skymailOffline && v.dmsgC != nil {
+			_ = v.dmsgC.HandleAsync(skymailPort, nil) //nolint:errcheck // only fails when fetching is off
+		}
 	}
 	h.reason = reason
+}
+
+// parkMail leaves sealed mail on port 25 with dmsg-async servers, for the
+// desktop and wasm visors. It says too big only when every server it chose
+// refused the size, so a message one server could still take is retried.
+func (v *Visor) parkMail() func(context.Context, cipher.PubKey, []byte) ([]cipher.PubKey, error) {
+	if !skymailOffline || v.dmsgC == nil {
+		return nil
+	}
+	return func(ctx context.Context, dst cipher.PubKey, env []byte) ([]cipher.PubKey, error) {
+		servers, err := v.dmsgC.Deposit(ctx, dst, skymailPort, env)
+		switch {
+		case err == nil:
+			return servers, nil
+		case errors.Is(err, dmsg.ErrAsyncNoServers):
+			return nil, skymail.ErrNowhereToPark
+		case allErrorsAre(err, dmsg.ErrAsyncTooBig):
+			return nil, skymail.ErrTooBigToPark
+		}
+		return nil, err
+	}
+}
+
+// allErrorsAre reports whether err, and each error it joins, is target.
+func allErrorsAre(err, target error) bool {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs := j.Unwrap()
+		for _, e := range errs {
+			if !allErrorsAre(e, target) {
+				return false
+			}
+		}
+		return len(errs) > 0
+	}
+	return errors.Is(err, target)
 }
 
 // notifyMail announces new mail, under the mailbox's own app name so a
