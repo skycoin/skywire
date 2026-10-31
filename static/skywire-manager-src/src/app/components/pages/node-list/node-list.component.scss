@@ -185,6 +185,15 @@
   top: 2px;
   margin-left: 2px;
   color: var(--sw-yellow);
+
+  // A hypervisor attached to this one; gold stays for the local one.
+  &.attached {
+    color: rgba(var(--sw-fg-rgb), 0.55);
+  }
+}
+
+.attached-hypervisor-text {
+  color: rgba(var(--sw-fg-rgb), 0.6);
 }
 
 .small-column {
