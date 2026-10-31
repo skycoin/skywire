@@ -366,3 +366,21 @@ func (hv *Hypervisor) getRewardAddressExposure() http.HandlerFunc {
 		httputil.WriteJSON(w, r, http.StatusOK, e)
 	})
 }
+
+// getRewardXpubAddresses lists the first addresses ?xpub= derives, which are
+// where its rewards go, so the UI can show them next to the xpub.
+func (hv *Hypervisor) getRewardXpubAddresses() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		xpub := strings.TrimSpace(r.URL.Query().Get("xpub"))
+		if _, isXpub, err := rewardconfig.ValidateRewardAddress(xpub); err != nil || !isXpub {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, errors.New("not an xpub"))
+			return
+		}
+		addrs, err := rewardconfig.RewardAddresses(xpub, 5)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string][]string{"addresses": addrs})
+	}
+}

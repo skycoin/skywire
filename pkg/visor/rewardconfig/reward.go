@@ -45,8 +45,18 @@ var ErrSingleAddress = errors.New("a single skycoin address is no longer accepte
 	"set your wallet's account xpub instead, so each reward goes to a fresh address. " +
 	"In the Skycoin desktop wallet or skycoin-web, copy the wallet's Account xPub")
 
-// ValidateRewardXpub validates a reward address being set, which must be an
-// xpub. Addresses already set are still read with ValidateRewardAddress.
+// ErrNotAccountXpub is returned for an xpub that is not a BIP44 account xpub.
+// Rewards derive m/44'/8000'/0'/0/i from it, so a chain xpub (depth 4) would
+// pay addresses its wallet never shows.
+var ErrNotAccountXpub = errors.New("this xpub is not a wallet's account xpub (depth 3). " +
+	"In the Skycoin desktop wallet or skycoin-web, copy the Account xPub, not the xPub of the External Chain. " +
+	"From the CLI: skywire skycoin cli walletKeyExport WALLET -k xpub --path=0")
+
+// AccountXpubDepth is the depth of a BIP44 account xpub, m/44'/coin'/account'.
+const AccountXpubDepth = 3
+
+// ValidateRewardXpub validates a reward address being set, which must be a
+// BIP44 account xpub. Addresses already set are still read with ValidateRewardAddress.
 func ValidateRewardXpub(addr string) (string, error) {
 	canonical, isXpub, err := ValidateRewardAddress(addr)
 	if err != nil {
@@ -55,25 +65,44 @@ func ValidateRewardXpub(addr string) (string, error) {
 	if !isXpub {
 		return "", ErrSingleAddress
 	}
+	if CheckXpubDepth(canonical) != "" {
+		return "", ErrNotAccountXpub
+	}
 	return canonical, nil
 }
 
-// CheckXpubDepth checks if an xpub key is at the expected BIP44 account level (depth 3).
-// Returns a warning message if the key is at chain level (depth 4), or empty string if OK.
-// This does not prevent setting the reward address, but warns that login verification
-// will not work with a chain-level xpub.
+// CheckXpubDepth returns a message when xpub is not at the BIP44 account level
+// (depth 3), or an empty string if it is. It reports on xpubs set before
+// ValidateRewardXpub rejected other depths.
 func CheckXpubDepth(xpub string) string {
 	pk, err := bip32.DeserializeEncodedPublicKey(xpub)
 	if err != nil {
 		return ""
 	}
-	if pk.Depth == 4 {
-		return "WARNING: This xpub is at chain level (depth 4), not account level (depth 3). " +
-			"The Skycoin web wallet shows the external chain xpub (path 0/0) which cannot " +
-			"derive change chain addresses for login verification. " +
-			"Export the account-level xpub with: skywire skycoin cli walletKeyExport WALLET -k xpub --path=0"
+	if pk.Depth != AccountXpubDepth {
+		return fmt.Sprintf("this xpub is at depth %d, not the account level (depth 3), "+
+			"so rewards would go to addresses its wallet never shows. Set the wallet's Account xPub instead "+
+			"(skywire skycoin cli walletKeyExport WALLET -k xpub --path=0)", pk.Depth)
 	}
 	return ""
+}
+
+// RewardAddresses derives the first n external chain addresses of an account
+// xpub, m/44'/8000'/0'/0/0 onward. Rewards are paid to these, in order, each to
+// an address not used before, so they are what the wallet should list.
+func RewardAddresses(xpub string, n uint32) ([]string, error) {
+	if msg := CheckXpubDepth(xpub); msg != "" {
+		return nil, errors.New(msg)
+	}
+	addrs := make([]string, 0, n)
+	for i := uint32(0); i < n; i++ {
+		a, err := DeriveExternalAddressFromXpub(xpub, i)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, a)
+	}
+	return addrs, nil
 }
 
 // DeriveExternalAddressFromXpub derives a reward address from an account xpub key.

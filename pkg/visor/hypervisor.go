@@ -924,6 +924,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/network-view", hv.getNetworkView())
 				r.Get("/log", hv.getLog())
 				r.Get("/reward-rules", hv.getRewardRules())
+				r.Get("/reward-xpub-addresses", hv.getRewardXpubAddresses())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
