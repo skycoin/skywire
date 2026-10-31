@@ -32,6 +32,17 @@ import { BulkAppActionComponent, BulkAppMode, BulkAppNode } from '../../layout/b
 // Where the compact-rows and apps-column choices are remembered in this browser.
 const compactKey = 'nodeListCompact';
 const appsColumnKey = 'nodeListApps';
+const collapsedSectionsKey = 'nodeListCollapsedHypervisors';
+
+function loadCollapsedSections(): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(collapsedSectionsKey) || '[]');
+
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
 
 function loadFlag(key: string, fallback: boolean): boolean {
   try {
@@ -222,6 +233,14 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   get subSections(): NodeSection[] {
     return this.sections.length > 1 ? this.sections.slice(1) : [];
   }
+
+  /** Sub-sections whose hypervisor has no row on this page, so they keep a panel of their own. */
+  get detachedSections(): NodeSection[] {
+    return this.subSections.filter(s => !this.dataSource.some(n => n.localPk === s.hypervisorPk));
+  }
+
+  // Sub-hypervisors whose visors are folded away under their row.
+  collapsedSections = new Set<string>(loadCollapsedSections());
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
@@ -795,6 +814,27 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   /** A sub-hypervisor section's visors that pass the search box and chip. */
   quickFiltered(nodes: Node[] | undefined): Node[] {
     return (nodes || []).filter(n => this.matchesQuickFilter(n));
+  }
+
+  /** The sub-section a row's visor runs as hypervisor, if any. */
+  sectionOf(pk: string): NodeSection | undefined {
+    return this.subSections.find(s => s.hypervisorPk === pk);
+  }
+
+  /** A sub-hypervisor's visors for nesting under its row, without its own row. */
+  childNodes(section: NodeSection): Node[] {
+    return this.quickFiltered(section.nodes).filter(n => n.localPk !== section.hypervisorPk);
+  }
+
+  toggleSection(pk: string) {
+    if (!this.collapsedSections.delete(pk)) {
+      this.collapsedSections.add(pk);
+    }
+    try {
+      localStorage.setItem(collapsedSectionsKey, JSON.stringify([...this.collapsedSections]));
+    } catch {
+      // The choice then lasts only for this page view.
+    }
   }
 
   setQuickSearch(text: string) {
