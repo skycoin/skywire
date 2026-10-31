@@ -362,3 +362,92 @@ func TestSkynetAddressNeverFallsBackToDmsg(t *testing.T) {
 	require.NoError(t, err, ".dmsg still reaches it")
 	require.Equal(t, "dmsg", res.Recipients[0].Via)
 }
+
+// TestMailHelpersDefaultToTheHypervisorRelation: with no lists set, a
+// visor carries mail for its hypervisors; explicit lists replace that,
+// an empty one turns it off, and both survive in settings.json.
+func TestMailHelpersDefaultToTheHypervisorRelation(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 1, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	v := mailVisor(t, ctx, env.AllClients()[0])
+	hvPK, _ := cipher.GenerateKeyPair()
+	v.conf.Hypervisors = []cipher.PubKey{hvPK}
+
+	st, err := v.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.HelpersDefault)
+	require.Empty(t, st.Helpers, "manages no visors")
+	require.True(t, st.RelayForDefault)
+	require.Equal(t, []cipher.PubKey{hvPK}, st.RelayFor)
+
+	helper, _ := cipher.GenerateKeyPair()
+	none := []cipher.PubKey{}
+	require.NoError(t, v.MailSetSettings(visorapi.MailSettingsUpdate{Helpers: &[]cipher.PubKey{helper}, RelayFor: &none}))
+	st, err = v.MailStatus()
+	require.NoError(t, err)
+	require.False(t, st.HelpersDefault)
+	require.Equal(t, []cipher.PubKey{helper}, st.Helpers)
+	require.False(t, st.RelayForDefault)
+	require.Empty(t, st.RelayFor, "an empty list is none, not the default")
+
+	// What a restart reads.
+	saved, err := loadSkymailSaved(skymailDir(v.conf))
+	require.NoError(t, err)
+	require.Equal(t, []cipher.PubKey{helper}, *saved.Helpers)
+	require.Empty(t, *saved.RelayFor)
+
+	// Over the RPC an empty list must not turn back into "unset".
+	got := visorapi.MailSettingsUpdate{RelayFor: &none, HelpersDefault: true}.Wire().Update()
+	require.NotNil(t, got.RelayFor)
+	require.True(t, got.HelpersDefault)
+
+	require.NoError(t, v.MailSetSettings(visorapi.MailSettingsUpdate{HelpersDefault: true, RelayForDefault: true}))
+	st, err = v.MailStatus()
+	require.NoError(t, err)
+	require.True(t, st.HelpersDefault)
+	require.True(t, st.RelayForDefault)
+	require.Equal(t, []cipher.PubKey{hvPK}, st.RelayFor)
+}
+
+// TestHelperDeliversOverRealDmsg: A hands its queued mail to H, and H
+// delivers it once B can take mail, filed under A with H as the relay.
+func TestHelperDeliversOverRealDmsg(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a, h, b := mailVisor(t, ctx, clients[0]), mailVisor(t, ctx, clients[1]), mailVisor(t, ctx, clients[2])
+	pkA, pkH, pkB := clients[0].LocalPK(), clients[1].LocalPK(), clients[2].LocalPK()
+	require.NoError(t, a.MailSetSettings(visorapi.MailSettingsUpdate{Helpers: &[]cipher.PubKey{pkH}}))
+	require.NoError(t, h.MailSetSettings(visorapi.MailSettingsUpdate{RelayFor: &[]cipher.PubKey{pkA}}))
+	off, on := false, true
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &off}))
+
+	res, err := a.MailSend(skymail.Outgoing{To: []string{bobAt(pkB)}, Subject: "carried", Body: "x"})
+	require.NoError(t, err)
+	require.True(t, res.Recipients[0].Queued)
+	require.Eventually(t, func() bool {
+		out, err := h.MailList(skymail.FolderOutbox)
+		return err == nil && len(out) == 1 && out[0].Queue.CarriedFor == pkA.Hex()
+	}, 20*time.Second, 200*time.Millisecond, "H takes A's mail")
+	out, err := a.MailList(skymail.FolderOutbox)
+	require.NoError(t, err)
+	require.Equal(t, []string{pkH.Hex()}, out[0].Queue.Handed)
+
+	require.NoError(t, b.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &on}))
+	require.Eventually(t, func() bool {
+		require.NoError(t, h.MailRetry(""))
+		inbox, err := b.MailList(skymail.FolderInbox)
+		return err == nil && len(inbox) == 1
+	}, 20*time.Second, time.Second, "H delivers")
+	inbox, err := b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Equal(t, pkA.Hex(), inbox[0].PeerPK)
+	require.Equal(t, pkH.Hex(), inbox[0].RelayPK)
+	require.True(t, inbox[0].FromVerified)
+}

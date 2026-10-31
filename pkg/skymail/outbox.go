@@ -9,6 +9,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,11 @@ type Queued struct {
 	NextAttempt time.Time `json:"next_attempt"`
 	// GiveUp is when the Outbox stops trying. Zero means never.
 	GiveUp time.Time `json:"give_up,omitzero"`
+	// Handed are the helpers that hold a sealed copy to deliver too.
+	Handed []string `json:"handed,omitempty"`
+	// CarriedFor is set on sealed mail this visor delivers for the
+	// visor that signed it. This visor cannot read it.
+	CarriedFor string `json:"carried_for,omitempty"`
 }
 
 // queueRecord is what the Outbox keeps beside a message.
@@ -62,12 +68,32 @@ type queueRecord struct {
 	SentCopy  bool         `json:"sent_copy,omitempty"`
 	Attempts  int          `json:"attempts"`
 	LastError string       `json:"last_error,omitempty"`
+	// Handed are the helpers (hex PKs) that took a sealed copy.
+	Handed []string `json:"handed,omitempty"`
+	// Carried is the hex PK this sealed envelope is carried for.
+	Carried string `json:"carried,omitempty"`
 }
 
 type queueItem struct {
 	rec  queueRecord
-	next time.Time // zero is due now
-	busy bool
+	next time.Time // delivery; zero is due now
+	// handNext is when to offer the message to helpers that lack it.
+	handNext  time.Time
+	handTries int
+	busy      bool
+}
+
+// needsHandoff reports whether a helper in helpers lacks this message.
+func (it *queueItem) needsHandoff(helpers []cipher.PubKey) bool {
+	if it.rec.Carried != "" {
+		return false
+	}
+	for _, h := range helpers {
+		if !slices.Contains(it.rec.Handed, h.Hex()) {
+			return true
+		}
+	}
+	return false
 }
 
 // outbox is the Outbox folder and the delivery state of what is in it.
@@ -144,17 +170,27 @@ func (o *outbox) poke() {
 	}
 }
 
-// due marks the messages to attempt or give up on now as busy and
+// dueAt is when an item next needs the worker: a delivery attempt, a
+// handoff to a helper that lacks it, or giving up.
+func (it *queueItem) dueAt(id string, maxAge time.Duration, helpers []cipher.PubKey) time.Time {
+	at := it.next
+	if it.needsHandoff(helpers) && it.handNext.Before(at) {
+		at = it.handNext
+	}
+	if g := giveUp(id, maxAge); !g.IsZero() && g.Before(at) {
+		at = g
+	}
+	return at
+}
+
+// due marks the messages the worker should take now as busy and
 // returns them.
-func (o *outbox) due(now time.Time, maxAge time.Duration) []string {
+func (o *outbox) due(now time.Time, maxAge time.Duration, helpers []cipher.PubKey) []string {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	var ids []string
 	for id, it := range o.items {
-		if it.busy {
-			continue
-		}
-		if g := giveUp(id, maxAge); !it.next.After(now) || !g.IsZero() && !now.Before(g) {
+		if !it.busy && !it.dueAt(id, maxAge, helpers).After(now) {
 			it.busy = true
 			ids = append(ids, id)
 		}
@@ -162,41 +198,37 @@ func (o *outbox) due(now time.Time, maxAge time.Duration) []string {
 	return ids
 }
 
-// wait is how long until the next message is due, or until one's
-// giveUp passes.
-func (o *outbox) wait(now time.Time, maxAge time.Duration) time.Duration {
+// wait is how long until a message is next due.
+func (o *outbox) wait(now time.Time, maxAge time.Duration, helpers []cipher.PubKey) time.Duration {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	d := idleWait
 	for id, it := range o.items {
-		if it.busy {
-			continue
+		if !it.busy {
+			d = min(d, max(it.dueAt(id, maxAge, helpers).Sub(now), 0))
 		}
-		at := it.next
-		if g := giveUp(id, maxAge); !g.IsZero() && g.Before(at) {
-			at = g
-		}
-		d = min(d, max(at.Sub(now), 0))
 	}
 	return d
 }
 
-func (o *outbox) record(id string) (queueRecord, bool) {
+// snapshot copies an item for an attempt to work on.
+func (o *outbox) snapshot(id string) (queueItem, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	it, ok := o.items[id]
 	if !ok {
-		return queueRecord{}, false
+		return queueItem{}, false
 	}
-	rec := it.rec
-	rec.Pending = append([]string(nil), it.rec.Pending...)
-	rec.Failed = append([]RcptResult(nil), it.rec.Failed...)
-	return rec, true
+	c := *it
+	c.rec.Pending = slices.Clone(it.rec.Pending)
+	c.rec.Failed = slices.Clone(it.rec.Failed)
+	c.rec.Handed = slices.Clone(it.rec.Handed)
+	return c, true
 }
 
-// release ends an attempt. With rec set it keeps the new state, unless
+// release ends an attempt. With st set it keeps the new state, unless
 // the message was deleted while the attempt ran.
-func (o *outbox) release(id string, rec *queueRecord, next time.Time) error {
+func (o *outbox) release(id string, st *queueItem) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	it, ok := o.items[id]
@@ -204,11 +236,11 @@ func (o *outbox) release(id string, rec *queueRecord, next time.Time) error {
 		return nil
 	}
 	it.busy = false
-	if rec == nil {
+	if st == nil {
 		return nil
 	}
-	it.rec, it.next = *rec, next
-	return o.writeRecord(id, *rec)
+	it.rec, it.next, it.handNext, it.handTries = st.rec, st.next, st.handNext, st.handTries
+	return o.writeRecord(id, st.rec)
 }
 
 // drop removes a message and its record. The message goes first: a
@@ -224,9 +256,9 @@ func (o *outbox) drop(id string) error {
 	return err
 }
 
-// wake makes due now every message with a pending recipient at pk, or
-// every message when all is set.
-func (o *outbox) wake(pk cipher.PubKey, all bool) {
+// wake makes due now every message with a pending recipient at pk, and
+// when pk is a helper any handoff to it, or everything when all is set.
+func (o *outbox) wake(pk cipher.PubKey, all, helper bool) {
 	if o == nil {
 		return
 	}
@@ -235,6 +267,10 @@ func (o *outbox) wake(pk cipher.PubKey, all bool) {
 	for _, it := range o.items {
 		if all || pendingAt(it.rec.Pending, pk) {
 			it.next = time.Time{}
+			n++
+		}
+		if all || helper && !slices.Contains(it.rec.Handed, pk.Hex()) {
+			it.handNext = time.Time{}
 			n++
 		}
 	}
@@ -267,11 +303,13 @@ func (o *outbox) info(id string, maxAge time.Duration) *Queued {
 		return nil
 	}
 	return &Queued{
-		Pending:     append([]string(nil), it.rec.Pending...),
+		Pending:     slices.Clone(it.rec.Pending),
 		Attempts:    it.rec.Attempts,
 		LastError:   it.rec.LastError,
 		NextAttempt: it.next,
 		GiveUp:      giveUp(id, maxAge),
+		Handed:      slices.Clone(it.rec.Handed),
+		CarriedFor:  it.rec.Carried,
 	}
 }
 
@@ -287,9 +325,10 @@ func giveUp(id string, maxAge time.Duration) time.Time {
 	return at.Add(maxAge)
 }
 
-// enqueue files msg in the Outbox for the recipients rec names. The
-// record is written first, so a message is never left with no record.
-func (mb *Mailbox) enqueue(msg []byte, rec queueRecord) (string, error) {
+// enqueue files msg in the Outbox for the recipients rec names, to be
+// attempted at next. The record is written first, so a message is never
+// left with no record.
+func (mb *Mailbox) enqueue(msg []byte, rec queueRecord, next time.Time) (string, error) {
 	mb.lim.storeMu.Lock()
 	defer mb.lim.storeMu.Unlock()
 	if err := mb.checkRoom(int64(len(msg))); err != nil {
@@ -309,7 +348,7 @@ func (mb *Mailbox) enqueue(msg []byte, rec queueRecord) (string, error) {
 		_ = os.Remove(o.recordPath(id)) //nolint:errcheck,gosec
 		return "", err
 	}
-	o.items[id] = &queueItem{rec: rec, next: time.Now().Add(retryDelay(rec.Attempts))}
+	o.items[id] = &queueItem{rec: rec, next: next}
 	o.poke()
 	return id, nil
 }
@@ -323,13 +362,13 @@ func (mb *Mailbox) Retry(id string) error {
 		return ErrNoOutbox
 	}
 	if id == "" {
-		mb.out.wake(cipher.PubKey{}, true)
+		mb.out.wake(cipher.PubKey{}, true, false)
 		return nil
 	}
 	mb.out.mu.Lock()
 	it, ok := mb.out.items[id]
 	if ok {
-		it.next = time.Time{}
+		it.next, it.handNext = time.Time{}, time.Time{}
 	}
 	mb.out.mu.Unlock()
 	if !ok {
@@ -367,7 +406,8 @@ func (mb *Mailbox) RunOutbox(ctx context.Context) {
 		case <-timer.C:
 		case <-mb.out.kick:
 		}
-		for _, id := range mb.out.due(time.Now(), mb.Limits().MaxAge) {
+		helpers := mb.helpers()
+		for _, id := range mb.out.due(time.Now(), mb.Limits().MaxAge, helpers) {
 			select {
 			case slots <- struct{}{}:
 			case <-ctx.Done():
@@ -375,19 +415,21 @@ func (mb *Mailbox) RunOutbox(ctx context.Context) {
 			}
 			go func() {
 				defer func() { <-slots; mb.out.poke() }()
-				mb.attempt(ctx, id)
+				mb.attempt(ctx, id, helpers)
 			}()
 		}
-		timer.Reset(mb.out.wait(time.Now(), mb.Limits().MaxAge))
+		timer.Reset(mb.out.wait(time.Now(), mb.Limits().MaxAge, helpers))
 	}
 }
 
-// attempt tries one queued message's pending recipients once.
-func (mb *Mailbox) attempt(ctx context.Context, id string) {
-	rec, ok := mb.out.record(id)
+// attempt delivers one queued message if that is due, then offers it to
+// the helpers that lack a copy if that is due.
+func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubKey) {
+	st, ok := mb.out.snapshot(id)
 	if !ok {
 		return
 	}
+	rec := &st.rec
 	msg, err := mb.out.md.read(id)
 	if err != nil {
 		mb.log.WithError(err).WithField("id", id).Warn("skymail: outbox message unreadable, dropped")
@@ -403,53 +445,64 @@ func (mb *Mailbox) attempt(ctx context.Context, id string) {
 			rec.Failed = append(rec.Failed, RcptResult{Rcpt: r, Err: reason})
 		}
 		rec.Pending = nil
-		mb.finish(id, rec, msg)
+		mb.finish(id, *rec, msg)
 		return
 	}
 
-	actx, cancel := context.WithTimeout(ctx, attemptTimeout)
-	groups, bad := groupRcpts(rec.Pending)
-	results := mb.deliverGroups(actx, rec.From, groups, msg)
-	cancel()
-	if ctx.Err() != nil {
-		// Shutting down is not the recipient's failure.
-		_ = mb.out.release(id, nil, time.Time{}) //nolint:errcheck
-		return
-	}
-
-	rec.Attempts++
-	rec.Failed = append(rec.Failed, bad...)
-	rec.Pending = nil
-	delivered := false
-	for _, gr := range results {
-		for _, r := range gr.g.rcpts {
-			switch {
-			case gr.err == nil:
-				delivered = true
-			case mb.retryable(gr.g, gr.err):
-				rec.Pending = append(rec.Pending, r.Original)
-				rec.LastError = gr.err.Error()
-			default:
-				rec.Failed = append(rec.Failed, RcptResult{Rcpt: r.Original, Err: gr.err.Error()})
+	if now := time.Now(); !st.next.After(now) {
+		require := ""
+		if rec.Carried != "" {
+			// A visor that cannot open it would file the envelope as is.
+			require = SealedExtension
+		}
+		actx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		groups, bad := groupRcpts(rec.Pending)
+		results := mb.deliverGroups(actx, rec.From, groups, msg, require)
+		cancel()
+		if ctx.Err() != nil {
+			// Shutting down is not the recipient's failure.
+			_ = mb.out.release(id, nil) //nolint:errcheck
+			return
+		}
+		rec.Attempts++
+		rec.Failed = append(rec.Failed, bad...)
+		rec.Pending = nil
+		delivered := false
+		for _, gr := range results {
+			for _, r := range gr.g.rcpts {
+				switch {
+				case gr.err == nil:
+					delivered = true
+				case mb.retryable(gr.g, gr.err):
+					rec.Pending = append(rec.Pending, r.Original)
+					rec.LastError = gr.err.Error()
+				default:
+					rec.Failed = append(rec.Failed, RcptResult{Rcpt: r.Original, Err: gr.err.Error()})
+				}
 			}
 		}
-	}
-	if delivered && !rec.SentCopy {
-		if _, err := mb.store(mb.sent, msg, true); err != nil {
-			mb.log.WithError(err).Warn("skymail: keep Sent copy")
+		if delivered && !rec.SentCopy && rec.Carried == "" {
+			if _, err := mb.store(mb.sent, msg, true); err != nil {
+				mb.log.WithError(err).Warn("skymail: keep Sent copy")
+			}
+			rec.SentCopy = true
 		}
-		rec.SentCopy = true
+		if len(rec.Pending) == 0 {
+			mb.finish(id, *rec, msg)
+			return
+		}
+		st.next = time.Now().Add(retryDelay(rec.Attempts))
 	}
-	if len(rec.Pending) == 0 {
-		mb.finish(id, rec, msg)
-		return
+
+	if st.needsHandoff(helpers) && !st.handNext.After(time.Now()) {
+		mb.handOff(ctx, &st, msg, helpers)
 	}
-	next := time.Now().Add(retryDelay(rec.Attempts))
-	if err := mb.out.release(id, &rec, next); err != nil {
+	if err := mb.out.release(id, &st); err != nil {
 		mb.log.WithError(err).WithField("id", id).Warn("skymail: outbox record")
 	}
 	mb.log.WithField("id", id).WithField("pending", len(rec.Pending)).WithField("attempts", rec.Attempts).
-		WithField("next", next.Format(time.RFC3339)).Debug("skymail: still queued: " + rec.LastError)
+		WithField("handed", len(rec.Handed)).WithField("next", st.next.Format(time.RFC3339)).
+		Debug("skymail: still queued: " + rec.LastError)
 }
 
 // finish takes a message out of the Outbox once every recipient got it
@@ -458,7 +511,9 @@ func (mb *Mailbox) finish(id string, rec queueRecord, msg []byte) {
 	if err := mb.out.drop(id); err != nil {
 		mb.log.WithError(err).WithField("id", id).Warn("skymail: clear outbox")
 	}
-	if len(rec.Failed) > 0 {
+	// Mail carried for another visor is not this visor's to bounce: its
+	// sender keeps its own copy and its own retries.
+	if len(rec.Failed) > 0 && rec.Carried == "" {
 		mb.bounce(msg, rec.Failed)
 	}
 	mb.log.WithField("id", id).WithField("failed", len(rec.Failed)).Info("skymail: outbox message done")
