@@ -95,6 +95,10 @@ than through a provider. There is no account to register and no server holding
 the messages; a whitelist decides who can deliver. Mail is a visor app, so it
 opens as the dashboard's Mail tab, as it does on a native visor.
 
+Mail for a visor that is offline waits in the **Outbox**. When this tab is the
+hypervisor of a desktop visor, that visor gets a sealed copy it cannot read and
+delivers it after the tab is closed.
+
 ## identity
 
 Title: identity — the key is the visor

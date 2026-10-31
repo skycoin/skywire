@@ -209,6 +209,9 @@ delivered straight to that visor over dmsg or skynet, so there is no account and
 no mail server.
 An empty whitelist accepts mail from any visor. Once it lists keys, only those
 keys can deliver.
+Mail for a visor that is offline waits in the Outbox and is retried. The visors
+this one manages can carry a sealed copy that they cannot read, and deliver it
+after this visor goes away.
 
 ## terminal
 
