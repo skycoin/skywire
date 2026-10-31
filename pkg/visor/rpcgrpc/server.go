@@ -1256,8 +1256,8 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 		// Two-source backlog:
 		//   inbox    — in-memory ring (~256 messages, every group),
 		//              bounded by groupInboxCap; long disconnects roll past.
-		//   history  — durable bbolt sink (per-group buckets), opt-in via
-		//              the operator's GroupHistoryDB config. nil/empty
+		//   history  — durable bbolt sink (per-group buckets), on unless
+		//              GroupHistoryDB is "off". nil/empty
 		//              when persistence is off.
 		//
 		// Strategy: query both, merge by TimestampNs, dedup against

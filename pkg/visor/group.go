@@ -39,8 +39,8 @@ import (
 var ErrGroupingDisabled = errors.New("grouping: manager not initialized")
 
 // ErrGroupHistoryDisabled is returned by Visor.GroupHistory /
-// GroupHistoryGroups when persistence is off (the default). Enable by
-// setting Skychat.GroupHistoryDB or the equivalent config knob.
+// GroupHistoryGroups when persistence is off, which
+// Skychat.GroupHistoryDB "off" does.
 var ErrGroupHistoryDisabled = errors.New("grouping: history persistence not enabled")
 
 // ErrGroupNotFound is returned for an ID the local store doesn't
@@ -786,7 +786,7 @@ type GroupHistoryFetcher interface {
 }
 
 // GroupHistory returns up to limit most recent persisted messages for
-// the named group. Persistence is opt-in (see init_group.go's history
+// the named group. Persistence is on unless configured off (see init_group.go's history
 // store wiring); when disabled, returns ErrGroupHistoryDisabled.
 // Mirrors GroupPoll's RPC shape but reads from disk instead of the
 // in-memory ring buffer — operators can recover messages across visor
