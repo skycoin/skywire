@@ -49,6 +49,7 @@ interface MailMessage {
   date: string;
   message_id?: string;
   from_verified: boolean;
+  relay_pk?: string;
   text: string;
   from_html?: boolean;
   attachments?: { name: string; content_type: string; size: number }[];
@@ -347,9 +348,11 @@ return {
           this.sendReport = res?.recipients || [];
           const failed = this.sendReport.filter(r => r.error && !r.queued);
           const queued = this.sendReport.filter(r => r.queued);
+          if (queued.length) {
+            this.loadStatus();
+          }
           if (!failed.length && queued.length) {
             this.snackbar.showDone('Queued. This visor keeps trying until the recipient is online.');
-            this.loadStatus();
             this.showFolder('Outbox');
           } else if (!failed.length) {
             this.snackbar.showDone('Sent.');
