@@ -72,7 +72,7 @@
                 <td>{{ m.subject || ('mail.no-subject' | translate) }}</td>
                 @if (folder === 'Outbox') {
                   <td class="small nowrap" [title]="m.queue?.last_error || ''">
-                    @if (m.queue) { {{ m.queue.next_attempt | date: 'short' }} · {{ m.queue.attempts }} {{ 'mail.tries' | translate }} }
+                    @if (m.queue) { {{ m.queue.next_attempt | date: 'short' }} · {{ m.queue.attempts }} {{ (m.queue.attempts === 1 ? 'mail.try' : 'mail.tries') | translate }} }
                   </td>
                 } @else {
                   <td class="small nowrap">{{ m.date | date: 'short' }}</td>
@@ -92,6 +92,9 @@
             <div class="small"><span class="dim">{{ 'mail.from' | translate }}</span> <span class="mono">{{ message.from }}</span>
               @if (message.from_verified) { <span class="ok">✓ {{ 'mail.verified' | translate }}</span> }
             </div>
+            @if (message.relay_pk) {
+              <div class="small"><span class="dim">{{ 'mail.relayed-by' | translate }}</span> <span class="mono">{{ message.relay_pk }}</span></div>
+            }
             <div class="small"><span class="dim">{{ 'mail.to' | translate }}</span> <span class="mono">{{ message.to }}</span></div>
             @if (message.cc) {
               <div class="small"><span class="dim">Cc</span> <span class="mono">{{ message.cc }}</span></div>
