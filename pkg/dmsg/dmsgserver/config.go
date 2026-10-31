@@ -4,8 +4,10 @@ package dmsgserver
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -196,6 +198,58 @@ type Config struct {
 	// their source key and charged to max_relayed_streams; set this only to
 	// make the server relay for peers alone.
 	RejectRelayedRequests bool `json:"reject_relayed_requests,omitempty"`
+
+	// Async turns on dmsg-async (docs/dmsg-async.md): the server holds small
+	// messages for clients that are offline until they fetch them. Absent,
+	// or enable false, leaves it off.
+	Async *AsyncConfig `json:"async,omitempty"`
+}
+
+// AsyncConfig is the dmsg-async section of a server config. A zero limit
+// takes the default from pkg/dmsg/dmsg; a negative one removes the bound,
+// except max_message_size, which stays at most 1 MiB.
+type AsyncConfig struct {
+	Enable bool `json:"enable"`
+	// Dir keeps messages on disk across restarts. A relative path is from
+	// the config file's directory; empty keeps them in memory only.
+	Dir               string `json:"dir,omitempty"`
+	MaxMessageSize    int    `json:"max_message_size,omitempty"`
+	MaxPerRecipient   int    `json:"max_per_recipient,omitempty"`
+	MaxRecipientBytes int64  `json:"max_recipient_bytes,omitempty"`
+	MaxSenderPerHour  int    `json:"max_sender_per_hour,omitempty"`
+	MaxTotalSize      int64  `json:"max_total_size,omitempty"`
+	// TTL is a Go duration such as "72h". A negative one keeps messages
+	// until they are fetched.
+	TTL string `json:"ttl,omitempty"`
+}
+
+// StoreConfig turns the section into the server option. It is nil when
+// dmsg-async is off. base is the config file's directory.
+func (a *AsyncConfig) StoreConfig(base string) (*dmsg.AsyncStoreConfig, error) {
+	if a == nil || !a.Enable {
+		return nil, nil
+	}
+	var ttl time.Duration
+	if a.TTL != "" {
+		d, err := time.ParseDuration(a.TTL)
+		if err != nil {
+			return nil, fmt.Errorf("dmsg-server: async.ttl: %w", err)
+		}
+		ttl = d
+	}
+	dir := a.Dir
+	if dir != "" && !filepath.IsAbs(dir) && base != "" {
+		dir = filepath.Join(base, dir)
+	}
+	return &dmsg.AsyncStoreConfig{
+		Dir:               dir,
+		MaxMessage:        a.MaxMessageSize,
+		MaxPerRecipient:   a.MaxPerRecipient,
+		MaxRecipientBytes: a.MaxRecipientBytes,
+		MaxSenderPerHour:  a.MaxSenderPerHour,
+		MaxTotal:          a.MaxTotalSize,
+		TTL:               ttl,
+	}, nil
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server

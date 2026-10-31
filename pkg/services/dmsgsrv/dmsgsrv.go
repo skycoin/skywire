@@ -225,6 +225,15 @@ func (s *service) Run(ctx context.Context) error {
 		MaxRelayedStreams:     cfg.MaxRelayedStreams,
 		AcceptRelayedRequests: !cfg.RejectRelayedRequests,
 	}
+	base := ""
+	if cfg.Path != "" {
+		base = filepath.Dir(cfg.Path)
+	}
+	asyncConf, err := cfg.Async.StoreConfig(base)
+	if err != nil {
+		return err
+	}
+	srvConf.Async = asyncConf
 
 	deployments := cfg.NormalizedDeployments()
 	if len(deployments) == 0 {
