@@ -170,6 +170,12 @@ Skywire, with attachments and the size and age limits the visor's settings
 define. A visor gets a mailbox whether or not anyone opens this window; the
 window is where you read it.
 
+Mail for a visor that is offline waits in the Outbox and is retried while the
+tab is open. A tab closes, so it can hand that mail to helpers: by default the
+visors it manages as a hypervisor. A helper gets a sealed copy it cannot read
+and delivers it after the tab is gone. See
+[the mailbox guide](guides/skymail-bridge.md#mail-for-a-visor-that-is-offline).
+
 ---
 
 ## 6. settings

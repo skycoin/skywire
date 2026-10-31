@@ -2620,6 +2620,11 @@ func (rc *rpcClient) MailDelete(folder, id string) error {
 	return rc.Call("MailDelete", &MailMessageRequest{Folder: folder, ID: id}, &struct{}{})
 }
 
+// MailRetry calls MailRetry.
+func (rc *rpcClient) MailRetry(id string) error {
+	return rc.Call("MailRetry", &id, &struct{}{})
+}
+
 // MailSetWhitelist calls MailSetWhitelist.
 func (rc *rpcClient) MailSetWhitelist(pks []cipher.PubKey) error {
 	return rc.Call("MailSetWhitelist", &pks, &struct{}{})

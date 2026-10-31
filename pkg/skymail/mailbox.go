@@ -10,6 +10,7 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,11 @@ var Suffixes = []string{".skynet", ".dmsg"}
 // first occurrence is always its own; one a sender forged sits below.
 const PeerHeader = "X-Skymail-Peer"
 
+// RelayHeader names the visor that delivered a sealed envelope for its
+// signer. The mailbox writes it on the line after PeerHeader, and only
+// a header in that place counts.
+const RelayHeader = "X-Skymail-Relay"
+
 // Config is what a Mailbox needs from its host.
 type Config struct {
 	// Dir is the Maildir root. Inbox lives here, Sent in Dir/.Sent.
@@ -44,6 +50,19 @@ type Config struct {
 	Dialers map[string]skymailbridge.Dialer
 	// Limits bound what the mailbox keeps; zero fields take defaults.
 	Limits Limits
+	// Outbox queues mail for a recipient that cannot take it yet and
+	// retries it (RunOutbox). Off, such a send fails at once.
+	Outbox bool
+	// SK, when set, is the secret key of PK. The mailbox then opens
+	// sealed envelopes (sealed.go) that any visor delivers, and files
+	// them under the PK that signed them.
+	SK cipher.SecKey
+	// Helpers, with SK and the Outbox, names the visors that get a
+	// sealed copy of queued mail to deliver too (helpers.go).
+	Helpers func() []cipher.PubKey
+	// RelayFor, with SK and the Outbox, reports whether this mailbox
+	// carries sealed mail that pk hands over for someone else.
+	RelayFor func(pk cipher.PubKey) bool
 	// OnDeliver, when set, is told of each message the network files in the
 	// inbox, once it is stored. It must not block.
 	OnDeliver func(Delivered)
@@ -64,6 +83,8 @@ type Mailbox struct {
 	cfg   Config
 	inbox *maildir
 	sent  *maildir
+	out   *outbox
+	seen  *seenIndex
 	log   logrus.FieldLogger
 
 	wlMu      sync.RWMutex
@@ -88,11 +109,21 @@ func Open(cfg Config) (*Mailbox, error) {
 	if err != nil {
 		return nil, err
 	}
+	var out *outbox
+	if cfg.Outbox {
+		if out, err = openOutbox(cfg.Dir); err != nil {
+			return nil, err
+		}
+	}
 	log := cfg.Log
 	if log == nil {
 		log = logrus.NewEntry(logrus.New())
 	}
-	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, log: log}
+	seen, err := openSeen(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, out: out, seen: seen, log: log}
 	mb.SetLimits(cfg.Limits)
 	if err := mb.loadWhitelist(); err != nil {
 		return nil, err
@@ -215,28 +246,113 @@ type receiver struct{ mb *Mailbox }
 // MaxMessageSize makes the session enforce the mailbox's own limit.
 func (r receiver) MaxMessageSize() int64 { return r.mb.MaxMessageSize() }
 
-func (r receiver) Rcpt(c net.Conn, _, rcpt string, _ []string) error {
+// MaxDataSize lets in a sealed envelope that holds a message of the
+// largest size. Deliver checks what the body holds.
+func (r receiver) MaxDataSize() int64 {
+	if n := r.mb.MaxMessageSize(); r.mb.sealing() && n > 0 {
+		return SealedSize(n)
+	}
+	return r.mb.MaxMessageSize()
+}
+
+// Extensions tells senders this mailbox opens sealed envelopes.
+func (r receiver) Extensions() []string {
+	if r.mb.sealing() {
+		return []string{SealedExtension}
+	}
+	return nil
+}
+
+var errNotWhitelisted = &skymailbridge.Reply{Code: 550, Enhanced: "5.7.1", Text: "sender PK not whitelisted by this mailbox"}
+
+var errOneVisor = &skymailbridge.Reply{Code: 452, Enhanced: "4.5.3", Text: "one recipient visor per message here; send the rest separately"}
+
+func (r receiver) Rcpt(c net.Conn, from, rcpt string, accepted []string) error {
 	peer, ok := r.mb.peerPK(c)
-	if !ok || !r.mb.allowed(peer) {
-		return &skymailbridge.Reply{Code: 550, Enhanced: "5.7.1", Text: "sender PK not whitelisted by this mailbox"}
+	if !ok {
+		return errNotWhitelisted
 	}
 	local, err := r.mb.isLocal(rcpt)
 	if err != nil {
 		return &skymailbridge.Reply{Code: 550, Enhanced: "5.1.3", Text: err.Error()}
 	}
 	if !local {
-		// A mailbox, never a relay.
-		return &skymailbridge.Reply{Code: 550, Enhanced: "5.7.1", Text: rcpt + " is not a mailbox of this visor"}
+		// A mailbox, and a carrier of sealed mail only for the visors it
+		// relays for. An envelope opens for one visor, so a carried
+		// message has one.
+		pk, ok := addressPK(rcpt)
+		if !ok || !r.mb.relays(peer) {
+			return &skymailbridge.Reply{Code: 550, Enhanced: "5.7.1", Text: rcpt + " is not a mailbox of this visor"}
+		}
+		for _, a := range accepted {
+			if apk, _ := addressPK(a); apk != pk {
+				return errOneVisor
+			}
+		}
+		if r.mb.full() {
+			return &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
+		}
+		return nil
+	}
+	for _, a := range accepted {
+		if apk, _ := addressPK(a); apk != r.mb.cfg.PK {
+			return errOneVisor
+		}
+	}
+	if !r.mb.allowed(peer) {
+		// A relay may carry a sealed envelope from a sender this mailbox
+		// takes mail from. Deliver checks the signature.
+		claimed, cok := addressPK(from)
+		if !r.mb.sealing() || !cok || !r.mb.allowed(claimed) {
+			return errNotWhitelisted
+		}
 	}
 	if r.mb.full() {
 		return &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
 	}
+	// The peer just reached us, so mail waiting for it may get through.
+	r.mb.out.wake(peer, false, slices.Contains(r.mb.helpers(), peer))
 	return nil
 }
 
 func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string, error) {
 	peer, _ := r.mb.peerPK(env.Conn)
-	id, err := r.mb.deliverLocal(peer, env.Body)
+	if len(env.Rcpts) > 0 {
+		// Rcpt took only local recipients or only carried ones.
+		if local, err := r.mb.isLocal(env.Rcpts[0]); err == nil && !local {
+			return r.mb.carry(peer, env)
+		}
+	}
+	sender, relay, body := peer, cipher.PubKey{}, env.Body
+	if r.mb.sealing() && IsSealed(body) {
+		msg, signer, err := OpenSealed(body, r.mb.cfg.SK)
+		if err != nil {
+			return "", &skymailbridge.Reply{Code: 554, Enhanced: "5.7.5", Text: err.Error()}
+		}
+		sender, body = signer, msg
+		if peer != signer {
+			relay = peer
+		}
+	}
+	if !r.mb.allowed(sender) {
+		return "", errNotWhitelisted
+	}
+	if limit := r.mb.MaxMessageSize(); limit > 0 && int64(len(body)) > limit {
+		return "", &skymailbridge.Reply{Code: 552, Enhanced: "5.3.4", Text: fmt.Sprintf("message exceeds the limit of %d octets", limit)}
+	}
+	key := seenKey(sender, body)
+	if key != "" && !r.mb.seen.claim(key, time.Now()) {
+		r.mb.log.WithField("from_pk", sender.Hex()).WithField("relay_pk", relay.Hex()).Debug("skymail: repeat dropped")
+		return "Ok: already delivered", nil
+	}
+	id, err := r.mb.deliverLocal(sender, relay, body)
+	if key != "" {
+		if err != nil {
+			r.mb.seen.release(key)
+		} else if kerr := r.mb.seen.keep(key); kerr != nil {
+			r.mb.log.WithError(kerr).Warn("skymail: remember delivered message")
+		}
+	}
 	if errors.Is(err, ErrMailboxFull) {
 		return "", &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
 	}
@@ -244,11 +360,14 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 		r.mb.log.WithError(err).Warn("skymail: store")
 		return "", &skymailbridge.Reply{Code: 451, Enhanced: "4.3.0", Text: "mailbox store failed"}
 	}
-	r.mb.log.WithField("from_pk", peer.Hex()).WithField("id", id).WithField("bytes", len(env.Body)).
-		Info("skymail: delivered")
+	log := r.mb.log.WithField("from_pk", sender.Hex()).WithField("id", id).WithField("bytes", len(body))
+	if !relay.Null() {
+		log = log.WithField("relay_pk", relay.Hex())
+	}
+	log.Info("skymail: delivered")
 	if r.mb.cfg.OnDeliver != nil {
-		d := Delivered{ID: id, PeerPK: peer}
-		if h, err := parseHeader(env.Body); err == nil {
+		d := Delivered{ID: id, PeerPK: sender}
+		if h, err := parseHeader(body); err == nil {
 			d.From, d.Subject = decodeHeader(h.Get("From")), decodeHeader(h.Get("Subject"))
 		}
 		r.mb.cfg.OnDeliver(d)
@@ -264,15 +383,53 @@ func (mb *Mailbox) peerPK(c net.Conn) (cipher.PubKey, bool) {
 }
 
 // deliverLocal files body in the inbox under a trace header naming the
-// PK the transport authenticated: the property a clearnet MTA needs
-// SPF, DKIM and DMARC to approximate.
-func (mb *Mailbox) deliverLocal(peer cipher.PubKey, body []byte) (string, error) {
+// PK the transport or the seal authenticated: the property a clearnet
+// MTA needs SPF, DKIM and DMARC to approximate. A non-null relay is the
+// visor that delivered a sealed envelope for peer.
+func (mb *Mailbox) deliverLocal(peer, relay cipher.PubKey, body []byte) (string, error) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s: %s\r\n", PeerHeader, peer.Hex())
-	fmt.Fprintf(&buf, "Received: from %s by %s with ESMTP (skymail); %s\r\n",
-		peer.DNSLabel()+Suffixes[0], mb.cfg.PK.DNSLabel()+Suffixes[0], time.Now().Format(time.RFC1123Z))
+	from, with := peer, "ESMTP (skymail)"
+	if !relay.Null() {
+		fmt.Fprintf(&buf, "%s: %s\r\n", RelayHeader, relay.Hex())
+		from, with = relay, "ESMTP (skymail sealed)"
+	}
+	fmt.Fprintf(&buf, "Received: from %s by %s with %s; %s\r\n",
+		from.DNSLabel()+Suffixes[0], mb.cfg.PK.DNSLabel()+Suffixes[0], with, time.Now().Format(time.RFC1123Z))
 	buf.Write(body)
 	return mb.store(mb.inbox, buf.Bytes(), false)
+}
+
+func (mb *Mailbox) sealing() bool { return !mb.cfg.SK.Null() }
+
+// relayOf is the RelayHeader the mailbox wrote, read from the line after
+// its PeerHeader, so a header the sender put in the message never counts.
+func relayOf(raw []byte) string {
+	_, rest, ok := bytes.Cut(raw, []byte("\r\n"))
+	if !ok || !bytes.HasPrefix(raw, []byte(PeerHeader+":")) {
+		return ""
+	}
+	line, _, _ := bytes.Cut(rest, []byte("\r\n"))
+	v, ok := bytes.CutPrefix(line, []byte(RelayHeader+": "))
+	if !ok {
+		return ""
+	}
+	var pk cipher.PubKey
+	if pk.Set(string(v)) != nil {
+		return ""
+	}
+	return pk.Hex()
+}
+
+// addressPK is the PK a skywire address names.
+func addressPK(addr string) (cipher.PubKey, bool) {
+	for _, sfx := range Suffixes {
+		pk, _, ok, err := skymailbridge.ParseRecipient(addr, sfx, "a")
+		if err == nil && ok {
+			return pk, true
+		}
+	}
+	return cipher.PubKey{}, false
 }
 
 func (mb *Mailbox) folder(name string) (*maildir, error) {
@@ -281,6 +438,8 @@ func (mb *Mailbox) folder(name string) (*maildir, error) {
 		return mb.inbox, nil
 	case strings.EqualFold(name, FolderSent):
 		return mb.sent, nil
+	case strings.EqualFold(name, FolderOutbox) && mb.out != nil:
+		return mb.out.md, nil
 	}
 	return nil, fmt.Errorf("skymail: no folder %q", name)
 }
@@ -299,6 +458,10 @@ type Summary struct {
 	PeerPK string `json:"peer_pk,omitempty"`
 	// FromVerified is true when the From address names PeerPK itself.
 	FromVerified bool `json:"from_verified"`
+	// RelayPK is the visor that delivered a sealed envelope for PeerPK.
+	RelayPK string `json:"relay_pk,omitempty"`
+	// Queue is where an Outbox message stands.
+	Queue *Queued `json:"queue,omitempty"`
 }
 
 // List returns a folder's messages, newest first.
@@ -312,9 +475,13 @@ func (mb *Mailbox) List(folder string) ([]Summary, error) {
 		return nil, err
 	}
 	name := FolderInbox
-	if md == mb.sent {
+	switch {
+	case md == mb.sent:
 		name = FolderSent
+	case mb.isOutbox(md):
+		name = FolderOutbox
 	}
+	maxAge := mb.Limits().MaxAge
 	out := make([]Summary, 0, len(es))
 	for _, e := range es {
 		s := Summary{ID: e.id, Folder: name, Seen: strings.Contains(e.flags, "S"), Size: e.size}
@@ -326,7 +493,11 @@ func (mb *Mailbox) List(folder string) ([]Summary, error) {
 				}
 				s.PeerPK = h.Get(PeerHeader)
 				s.FromVerified = fromNamesPK(s.From, s.PeerPK)
+				s.RelayPK = relayOf(raw)
 			}
+		}
+		if mb.isOutbox(md) {
+			s.Queue = mb.out.info(e.id, maxAge)
 		}
 		out = append(out, s)
 	}
@@ -351,14 +522,19 @@ func (mb *Mailbox) MarkSeen(folder, id string) error {
 	return md.markSeen(id)
 }
 
-// Delete removes a message.
+// Delete removes a message. In the Outbox that cancels its delivery.
 func (mb *Mailbox) Delete(folder, id string) error {
 	md, err := mb.folder(folder)
 	if err != nil {
 		return err
 	}
+	if mb.isOutbox(md) {
+		return mb.out.drop(id)
+	}
 	return md.remove(id)
 }
+
+func (mb *Mailbox) isOutbox(md *maildir) bool { return mb.out != nil && md == mb.out.md }
 
 func parseHeader(raw []byte) (mail.Header, error) {
 	m, err := mail.ReadMessage(bytes.NewReader(raw))

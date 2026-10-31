@@ -1,8 +1,8 @@
 // Package climail cmd/skywire-cli/commands/mail/mailbox.go c4-vis-cli
 //
-// `skywire cli mail inbox|sent|read|send|rm|whitelist` — the visor's own
-// mailbox (pkg/skymail): mail to <anything>@<base32-pk>.skynet or .dmsg,
-// delivered straight to the recipient visor's port 25.
+// `skywire cli mail inbox|sent|outbox|read|send|retry|rm|whitelist`, the
+// visor's own mailbox (pkg/skymail): mail to <anything>@<base32-pk>.skynet
+// or .dmsg, delivered straight to the recipient visor's port 25.
 package climail
 
 import (
@@ -26,8 +26,10 @@ import (
 
 var (
 	readSent  bool
+	readOut   bool
 	readRaw   bool
 	rmSent    bool
+	rmOut     bool
 	sendSubj  string
 	sendBody  string
 	sendFrom  string
@@ -35,14 +37,17 @@ var (
 	sendReply string
 	sendFiles []string
 	attSent   bool
+	attOutbox bool
 	attOut    string
 )
 
 func init() {
-	RootCmd.AddCommand(inboxCmd, sentCmd, readCmd, sendCmd, rmCmd, whitelistCmd, attachmentCmd)
+	RootCmd.AddCommand(inboxCmd, sentCmd, outboxCmd, readCmd, sendCmd, retryCmd, rmCmd, whitelistCmd, attachmentCmd)
 	readCmd.Flags().BoolVar(&readSent, "sent", false, "read from Sent instead of the inbox")
+	readCmd.Flags().BoolVar(&readOut, "outbox", false, "read from the Outbox instead of the inbox")
 	readCmd.Flags().BoolVar(&readRaw, "raw", false, "print the message exactly as stored")
 	rmCmd.Flags().BoolVar(&rmSent, "sent", false, "remove from Sent instead of the inbox")
+	rmCmd.Flags().BoolVar(&rmOut, "outbox", false, "remove from the Outbox, which cancels its delivery")
 	sendCmd.Flags().StringVarP(&sendSubj, "subject", "s", "", "subject")
 	sendCmd.Flags().StringVarP(&sendBody, "message", "m", "", "body (default: read from stdin)")
 	sendCmd.Flags().StringVar(&sendFrom, "from", "", "local part of your address (default \"mail\")")
@@ -50,6 +55,7 @@ func init() {
 	sendCmd.Flags().StringVar(&sendReply, "in-reply-to", "", "Message-ID this replies to")
 	sendCmd.Flags().StringArrayVar(&sendFiles, "attach", nil, "attach a file (repeatable)")
 	attachmentCmd.Flags().BoolVar(&attSent, "sent", false, "from Sent instead of the inbox")
+	attachmentCmd.Flags().BoolVar(&attOutbox, "outbox", false, "from the Outbox instead of the inbox")
 	attachmentCmd.Flags().StringVarP(&attOut, "output", "o", "", "file to write (default: the attachment's own name; - for stdout)")
 }
 
@@ -61,9 +67,15 @@ func mailClient(cmd *cobra.Command) visorapi.API {
 	return c
 }
 
-func folderOf(sent bool) string {
-	if sent {
+// folderOf picks the folder the --sent and --outbox flags name.
+func folderOf(cmd *cobra.Command, sent, outbox bool) string {
+	switch {
+	case sent && outbox:
+		internal.PrintFatalError(cmd.Flags(), errors.New("--sent and --outbox name different folders"))
+	case sent:
 		return skymail.FolderSent
+	case outbox:
+		return skymail.FolderOutbox
 	}
 	return skymail.FolderInbox
 }
@@ -76,7 +88,8 @@ var inboxCmd = &cobra.Command{
 A "*" marks unread mail. "verified" means the From address names the
 same PK the transport authenticated, so the sender cannot have forged
 it; "PK <hex>" shows who actually delivered mail whose From says
-otherwise.`,
+otherwise. "relayed" marks mail the sender signed and sealed and
+another visor delivered.`,
 	Args: cobra.NoArgs,
 	Run:  func(cmd *cobra.Command, _ []string) { listFolder(cmd, skymail.FolderInbox) },
 }
@@ -86,6 +99,79 @@ var sentCmd = &cobra.Command{
 	Short: "List sent mail, newest first",
 	Args:  cobra.NoArgs,
 	Run:   func(cmd *cobra.Command, _ []string) { listFolder(cmd, skymail.FolderSent) },
+}
+
+var outboxCmd = &cobra.Command{
+	Use:   "outbox",
+	Short: "List mail waiting for a recipient that was offline",
+	Long: `List mail waiting for a recipient that was offline.
+
+The visor retries each message after 1, 5 and 15 minutes and then every
+hour, and at once when the recipient sends mail here. It gives up after
+the mailbox's maximum age and files a bounce in the inbox with the
+original attached. Each message also goes, sealed, to this visor's
+helpers ("helpers" counts them; see mail settings), which deliver it
+while this visor is away. Sealed mail this visor carries for another
+shows as "carrying for <pk>". ` + "`mail retry`" + ` tries again now and ` + "`mail rm --outbox`" + `
+cancels a message.`,
+	Args: cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		msgs, err := mailClient(cmd).MailList(skymail.FolderOutbox)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), msgs, renderOutbox(msgs, time.Now()))
+	},
+}
+
+func renderOutbox(msgs []skymail.Summary, now time.Time) string {
+	if len(msgs) == 0 {
+		return "(empty)\n"
+	}
+	var buf strings.Builder
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\thelpers\tlast error") //nolint:errcheck,gosec
+	for _, m := range msgs {
+		q := m.Queue
+		if q == nil {
+			fmt.Fprintf(w, "%s\t%s\t%s\t-\t-\t-\t-\tnot queued\n", m.ID, m.To, m.Subject) //nolint:errcheck,gosec
+			continue
+		}
+		next := "now"
+		if d := q.NextAttempt.Sub(now); d > 0 {
+			next = "in " + d.Round(time.Second).String()
+		}
+		giveUp := "never"
+		if !q.GiveUp.IsZero() {
+			giveUp = q.GiveUp.Local().Format(time.DateTime)
+		}
+		subject, helpers := m.Subject, fmt.Sprintf("%d", len(q.Handed))
+		if q.CarriedFor != "" {
+			// Sealed for its recipient: no subject to show, and not ours.
+			subject, helpers = "(sealed)", "carrying for "+q.CarriedFor
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck,gosec
+			m.ID, strings.Join(q.Pending, ", "), subject, q.Attempts, next, giveUp, helpers, q.LastError)
+	}
+	_ = w.Flush() //nolint:errcheck,gosec
+	return buf.String()
+}
+
+var retryCmd = &cobra.Command{
+	Use:   "retry [id]",
+	Short: "Try to deliver Outbox mail now",
+	Long:  "Try to deliver one Outbox message now, or all of them with no id.",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		id := ""
+		if len(args) == 1 {
+			id = args[0]
+		}
+		if err := mailClient(cmd).MailRetry(id); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), map[string]any{"retry": id}, "retrying; see `skywire cli mail outbox`\n")
+	},
 }
 
 func listFolder(cmd *cobra.Command, folder string) {
@@ -120,6 +206,9 @@ func renderList(msgs []skymail.Summary, inbox bool) string {
 		} else if m.PeerPK != "" {
 			sender = "PK " + m.PeerPK
 		}
+		if inbox && m.RelayPK != "" {
+			sender += ", relayed"
+		}
 		date := "-"
 		if !m.Date.IsZero() {
 			date = m.Date.Local().Format(time.DateTime)
@@ -136,7 +225,7 @@ var readCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		c := mailClient(cmd)
-		folder := folderOf(readSent)
+		folder := folderOf(cmd, readSent, readOut)
 		if readRaw {
 			raw, err := c.MailRaw(folder, args[0])
 			if err != nil {
@@ -156,11 +245,15 @@ var readCmd = &cobra.Command{
 func renderMessage(m *skymail.Rendered) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From:    %s\n", m.From)
+	by := "delivered by " + m.PeerPK
+	if m.RelayPK != "" {
+		by = "signed by " + m.PeerPK + ", relayed by " + m.RelayPK
+	}
 	switch {
 	case m.Verified:
-		fmt.Fprintf(&b, "         (verified: delivered by %s)\n", m.PeerPK)
+		fmt.Fprintf(&b, "         (verified: %s)\n", by)
 	case m.PeerPK != "":
-		fmt.Fprintf(&b, "         (NOT verified: delivered by %s)\n", m.PeerPK)
+		fmt.Fprintf(&b, "         (NOT verified: %s)\n", by)
 	}
 	fmt.Fprintf(&b, "To:      %s\n", m.To)
 	if m.Cc != "" {
@@ -186,15 +279,17 @@ func renderMessage(m *skymail.Rendered) string {
 
 var sendCmd = &cobra.Command{
 	Use:   "send <to>...",
-	Short: "Send mail now to skywire addresses",
-	Long: `Send mail now to skywire addresses.
+	Short: "Send mail to skywire addresses",
+	Long: `Send mail to skywire addresses.
 
 Recipients are user@<base32-pk>.skynet or .dmsg, or
 user@<host>.<base32-pk>.skynet for a mailbox behind a Postfix bridge.
 ` + "`skywire cli visor pk dnslabel`" + ` gives the base32 form of a PK.
 
-Delivery happens now: a recipient whose visor is offline gets an error
-and nothing is queued. The body is read from stdin unless -m is given.
+Delivery is tried now. Mail for a visor that is offline waits in the
+Outbox (` + "`skywire cli mail outbox`" + `) and is retried from this visor. A
+refusal, such as a whitelist that leaves you out, fails at once. The
+body is read from stdin unless -m is given.
 
 Examples:
   skywire cli mail send bob@<base32-pk>.skynet -s hello -m "hi bob"
@@ -221,7 +316,7 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		out := renderSend(res)
-		if delivered(res) == 0 {
+		if delivered(res) == 0 && res.OutboxID == "" {
 			// Per-recipient reasons are the useful part of a failure.
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("not delivered to any recipient\n%s", out))
 		}
@@ -245,11 +340,17 @@ func renderSend(res *skymail.SendResult) string {
 	}
 	var b strings.Builder
 	for _, r := range res.Recipients {
-		if r.Err == "" {
+		switch {
+		case r.Err == "":
 			fmt.Fprintf(&b, "delivered  %s (via %s)\n", r.Rcpt, r.Via)
-		} else {
+		case r.Queued:
+			fmt.Fprintf(&b, "queued     %s: %s\n", r.Rcpt, r.Err)
+		default:
 			fmt.Fprintf(&b, "FAILED     %s: %s\n", r.Rcpt, r.Err)
 		}
+	}
+	if res.OutboxID != "" {
+		fmt.Fprintf(&b, "(queued as %s in the Outbox; this visor keeps trying)\n", res.OutboxID)
 	}
 	if res.ID == "" && delivered(res) > 0 {
 		b.WriteString("(no copy kept in Sent: the mailbox is full)\n")
@@ -264,7 +365,7 @@ var rmCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		c := mailClient(cmd)
 		for _, id := range args {
-			if err := c.MailDelete(folderOf(rmSent), id); err != nil {
+			if err := c.MailDelete(folderOf(cmd, rmSent, rmOut), id); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("%s: %w", id, err))
 			}
 		}
@@ -380,7 +481,11 @@ func renderMailbox(st *visorapi.MailStatus) string {
 	if n := len(st.Whitelist); n > 0 {
 		wl = fmt.Sprintf("%d whitelisted PK(s)", n)
 	}
-	return fmt.Sprintf("mailbox: %d message(s), %d unread; accepts mail from %s\n  %s\n  %s\n  (any local part works; maildir %s)\n  %s of %s used; mail over %s is refused, mail older than %s is deleted\n",
+	out := fmt.Sprintf("mailbox: %d message(s), %d unread; accepts mail from %s\n  %s\n  %s\n  (any local part works; maildir %s)\n  %s of %s used; mail over %s is refused, mail older than %s is deleted\n",
 		st.Total, st.Unread, wl, st.Address, st.AddressDmsg, st.Dir,
 		skymail.FormatSize(st.Usage), skymail.FormatSize(st.Limits.MaxTotalSize), skymail.FormatSize(st.Limits.MaxMessageSize), skymail.FormatAge(st.Limits.MaxAge))
+	if st.Outbox > 0 {
+		out += fmt.Sprintf("  %d message(s) waiting in the Outbox (skywire cli mail outbox)\n", st.Outbox)
+	}
+	return out
 }

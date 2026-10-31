@@ -58,6 +58,28 @@ func sessionLimit(h Handler) int64 {
 	return dataSizeLimit
 }
 
+// DataLimiter is implemented by a Handler that reads more DATA than the
+// SIZE it advertises, because some bodies wrap a message of that size,
+// and checks what each body holds in Deliver.
+type DataLimiter interface {
+	MaxDataSize() int64
+}
+
+func dataLimit(h Handler, limit int64) int64 {
+	if dl, ok := h.(DataLimiter); ok {
+		if n := dl.MaxDataSize(); n > limit {
+			return min(n, dataSizeLimit)
+		}
+	}
+	return limit
+}
+
+// Extender is implemented by a Handler that offers EHLO keywords of its
+// own.
+type Extender interface {
+	Extensions() []string
+}
+
 // Reply is an SMTP reply a Handler returns as an error to pick the code
 // the session sends.
 type Reply struct {
@@ -128,6 +150,11 @@ func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName str
 func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) {
 	br := bufio.NewReaderSize(c, readLineLimit)
 	limit := sessionLimit(h)
+	dlimit := dataLimit(h, limit)
+	var ext []string
+	if e, ok := h.(Extender); ok {
+		ext = e.Extensions()
+	}
 	tp := textproto.NewWriter(bufio.NewWriter(c))
 
 	if err := tp.PrintfLine("220 %s ESMTP skymail", heloName); err != nil {
@@ -155,7 +182,10 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 		case "EHLO":
 			_ = tp.PrintfLine("250-%s", heloName)   //nolint:errcheck,gosec
 			_ = tp.PrintfLine("250-SIZE %d", limit) //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250 8BITMIME")       //nolint:errcheck,gosec
+			for _, e := range ext {
+				_ = tp.PrintfLine("250-%s", e) //nolint:errcheck,gosec
+			}
+			_ = tp.PrintfLine("250 8BITMIME") //nolint:errcheck,gosec
 		case "MAIL":
 			addr, perr := parseAngleAddr(arg, "FROM")
 			if perr != nil {
@@ -192,9 +222,9 @@ func handleSession(ctx context.Context, c net.Conn, h Handler, heloName string) 
 				continue
 			}
 			_ = tp.PrintfLine("354 end with <CR><LF>.<CR><LF>") //nolint:errcheck,gosec
-			body, derr := readDATA(br, limit)
+			body, derr := readDATA(br, dlimit)
 			if errors.Is(derr, errTooBig) {
-				_ = tp.PrintfLine("552 5.3.4 message exceeds the limit of %d octets", limit) //nolint:errcheck,gosec
+				_ = tp.PrintfLine("552 5.3.4 message exceeds the limit of %d octets", dlimit) //nolint:errcheck,gosec
 				reset()
 				continue
 			}

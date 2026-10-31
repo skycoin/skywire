@@ -14,7 +14,8 @@ type Mail interface {
 	// MailStatus reports whether the mailbox runs, its addresses, and
 	// who may deliver to it.
 	MailStatus() (*MailStatus, error)
-	// MailList lists a folder ("INBOX" or "Sent"), newest first.
+	// MailList lists a folder ("INBOX", "Sent" or "Outbox"), newest
+	// first.
 	MailList(folder string) ([]skymail.Summary, error)
 	// MailRead renders one message and marks it read.
 	MailRead(folder, id string) (*skymail.Rendered, error)
@@ -23,11 +24,14 @@ type Mail interface {
 	// MailAttachment decodes attachment n of a message, numbered as
 	// MailRead lists them.
 	MailAttachment(folder, id string, n int) (*skymail.AttachmentData, error)
-	// MailSend delivers a message now; a recipient whose visor cannot
-	// be reached gets an error in the result, not a queue entry.
+	// MailSend delivers a message now. A recipient whose visor cannot
+	// take it yet is queued in the Outbox and retried.
 	MailSend(msg skymail.Outgoing) (*skymail.SendResult, error)
-	// MailDelete removes one message.
+	// MailDelete removes one message. In the Outbox that cancels it.
 	MailDelete(folder, id string) error
+	// MailRetry makes an Outbox message due now, or every one when id
+	// is empty.
+	MailRetry(id string) error
 	// MailSetWhitelist replaces the PKs allowed to deliver; empty
 	// accepts everyone. Persisted with the mail.
 	MailSetWhitelist(pks []cipher.PubKey) error
@@ -52,6 +56,18 @@ type MailStatus struct {
 	Whitelist   []cipher.PubKey `json:"whitelist"`
 	Unread      int             `json:"unread"`
 	Total       int             `json:"total"`
+	// HasOutbox is false on a visor that sends now or not at all (the
+	// phone apps). Outbox is how many messages wait for a recipient.
+	HasOutbox bool `json:"has_outbox"`
+	Outbox    int  `json:"outbox"`
+	// Helpers get a sealed copy of queued mail to deliver too. By
+	// default they are the visors this one manages as a hypervisor.
+	Helpers        []cipher.PubKey `json:"helpers"`
+	HelpersDefault bool            `json:"helpers_default"`
+	// RelayFor are the visors whose sealed mail this one carries. By
+	// default they are this visor's hypervisors.
+	RelayFor        []cipher.PubKey `json:"relay_for"`
+	RelayForDefault bool            `json:"relay_for_default"`
 }
 
 // MailMessageRequest names one message.
@@ -69,11 +85,17 @@ type MailAttachmentRequest struct {
 
 // MailSettingsUpdate changes the fields that are set; nil leaves one as
 // it is. A zero limit restores its default, a negative one removes it.
+// Helpers and RelayFor replace their list (empty turns it off), and the
+// Default flags go back to the hypervisor-based default.
 type MailSettingsUpdate struct {
-	Enable         *bool          `json:"enable,omitempty"`
-	MaxMessageSize *int64         `json:"max_message_size,omitempty"`
-	MaxTotalSize   *int64         `json:"max_total_size,omitempty"`
-	MaxAge         *time.Duration `json:"max_age,omitempty"`
+	Enable          *bool            `json:"enable,omitempty"`
+	MaxMessageSize  *int64           `json:"max_message_size,omitempty"`
+	MaxTotalSize    *int64           `json:"max_total_size,omitempty"`
+	MaxAge          *time.Duration   `json:"max_age,omitempty"`
+	Helpers         *[]cipher.PubKey `json:"helpers,omitempty"`
+	HelpersDefault  bool             `json:"helpers_default,omitempty"`
+	RelayFor        *[]cipher.PubKey `json:"relay_for,omitempty"`
+	RelayForDefault bool             `json:"relay_for_default,omitempty"`
 }
 
 // MailSettingsWire is MailSettingsUpdate as it crosses the RPC. gob
@@ -82,11 +104,14 @@ type MailSettingsUpdate struct {
 // to the default". The Set flags carry the difference.
 type MailSettingsWire struct {
 	EnableSet, MaxMessageSizeSet, MaxTotalSizeSet, MaxAgeSet bool
+	HelpersSet, HelpersDefault, RelayForSet, RelayForDefault bool
 
 	Enable         bool
 	MaxMessageSize int64
 	MaxTotalSize   int64
 	MaxAge         time.Duration
+	Helpers        []cipher.PubKey
+	RelayFor       []cipher.PubKey
 }
 
 // Wire encodes u for the RPC.
@@ -104,6 +129,13 @@ func (u MailSettingsUpdate) Wire() MailSettingsWire {
 	if u.MaxAge != nil {
 		w.MaxAgeSet, w.MaxAge = true, *u.MaxAge
 	}
+	if u.Helpers != nil {
+		w.HelpersSet, w.Helpers = true, *u.Helpers
+	}
+	if u.RelayFor != nil {
+		w.RelayForSet, w.RelayFor = true, *u.RelayFor
+	}
+	w.HelpersDefault, w.RelayForDefault = u.HelpersDefault, u.RelayForDefault
 	return w
 }
 
@@ -122,5 +154,14 @@ func (w MailSettingsWire) Update() MailSettingsUpdate {
 	if w.MaxAgeSet {
 		u.MaxAge = &w.MaxAge
 	}
+	if w.HelpersSet {
+		h := append([]cipher.PubKey{}, w.Helpers...)
+		u.Helpers = &h
+	}
+	if w.RelayForSet {
+		r := append([]cipher.PubKey{}, w.RelayFor...)
+		u.RelayFor = &r
+	}
+	u.HelpersDefault, u.RelayForDefault = w.HelpersDefault, w.RelayForDefault
 	return u
 }

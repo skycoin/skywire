@@ -40,9 +40,11 @@ skywire cli mail
 - [attachment](attachment/README.md) — Save attachment n of a message
 - [down](down/README.md) — Disable the embedded SMTP bridge
 - [inbox](inbox/README.md) — List the mailbox, newest first
+- [outbox](outbox/README.md) — List mail waiting for a recipient that was offline
 - [read](read/README.md) — Show a message and mark it read
+- [retry](retry/README.md) — Try to deliver Outbox mail now
 - [rm](rm/README.md) — Delete messages
-- [send](send/README.md) — Send mail now to skywire addresses
+- [send](send/README.md) — Send mail to skywire addresses
 - [sent](sent/README.md) — List sent mail, newest first
 - [settings](settings/README.md) — Show or change the mailbox's settings, live
 - [up](up/README.md) — Enable the embedded SMTP bridge

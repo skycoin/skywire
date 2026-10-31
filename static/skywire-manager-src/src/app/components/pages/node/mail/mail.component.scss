@@ -59,6 +59,14 @@
 .mail-msg {
   .dim { margin-right: 6px; }
 
+  .mail-queue {
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-left: 3px solid rgba(var(--sw-shade-rgb), 0.6);
+    background: rgba(var(--sw-shade-rgb), 0.15);
+    border-radius: 4px;
+  }
+
   h3 { margin: 4px 0 8px; }
 
   .mail-body {

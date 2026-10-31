@@ -17,6 +17,7 @@ skywire cli mail attachment <id> <n>
 ## Flags
 
 ```
+      --outbox          from the Outbox instead of the inbox
   -o, --output string   file to write (default: the attachment's own name; - for stdout)
       --sent            from Sent instead of the inbox
 ```
