@@ -13,8 +13,9 @@ skywire cli mail read <id>
 ## Flags
 
 ```
-      --raw    print the message exactly as stored
-      --sent   read from Sent instead of the inbox
+      --outbox   read from the Outbox instead of the inbox
+      --raw      print the message exactly as stored
+      --sent     read from Sent instead of the inbox
 ```
 
 ## Global Flags
