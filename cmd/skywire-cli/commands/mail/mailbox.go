@@ -109,7 +109,10 @@ var outboxCmd = &cobra.Command{
 The visor retries each message after 1, 5 and 15 minutes and then every
 hour, and at once when the recipient sends mail here. It gives up after
 the mailbox's maximum age and files a bounce in the inbox with the
-original attached. ` + "`mail retry`" + ` tries again now and ` + "`mail rm --outbox`" + `
+original attached. Each message also goes, sealed, to this visor's
+helpers ("helpers" counts them; see mail settings), which deliver it
+while this visor is away. Sealed mail this visor carries for another
+shows as "carrying for <pk>". ` + "`mail retry`" + ` tries again now and ` + "`mail rm --outbox`" + `
 cancels a message.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -127,11 +130,11 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 	}
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\tlast error") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\thelpers\tlast error") //nolint:errcheck,gosec
 	for _, m := range msgs {
 		q := m.Queue
 		if q == nil {
-			fmt.Fprintf(w, "%s\t%s\t%s\t-\t-\t-\tnot queued\n", m.ID, m.To, m.Subject) //nolint:errcheck,gosec
+			fmt.Fprintf(w, "%s\t%s\t%s\t-\t-\t-\t-\tnot queued\n", m.ID, m.To, m.Subject) //nolint:errcheck,gosec
 			continue
 		}
 		next := "now"
@@ -142,8 +145,13 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 		if !q.GiveUp.IsZero() {
 			giveUp = q.GiveUp.Local().Format(time.DateTime)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n", //nolint:errcheck,gosec
-			m.ID, strings.Join(q.Pending, ", "), m.Subject, q.Attempts, next, giveUp, q.LastError)
+		subject, helpers := m.Subject, fmt.Sprintf("%d", len(q.Handed))
+		if q.CarriedFor != "" {
+			// Sealed for its recipient: no subject to show, and not ours.
+			subject, helpers = "(sealed)", "carrying for "+q.CarriedFor
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck,gosec
+			m.ID, strings.Join(q.Pending, ", "), subject, q.Attempts, next, giveUp, helpers, q.LastError)
 	}
 	_ = w.Flush() //nolint:errcheck,gosec
 	return buf.String()
