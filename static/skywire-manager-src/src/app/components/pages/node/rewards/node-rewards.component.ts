@@ -83,6 +83,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.formChangesSub = this.rewardForm.get('address')!.valueChanges.pipe(debounceTime(300)).subscribe(value => {
       this.formXpubSub?.unsubscribe();
       this.formXpubSub = this.loadXpubAddresses((value || '').trim(), r => this.formXpubAddresses = r);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
