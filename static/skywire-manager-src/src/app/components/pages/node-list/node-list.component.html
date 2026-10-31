@@ -374,6 +374,7 @@
                    the icon so the rest of the row keeps its
                    click-to-navigate behavior. -->
               @for (node of dataSource; track node.localPk) {
+                @let section = sectionOf(node.localPk);
                 <a
                   [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm', 'compact-row': compact}"
                   class="selectable link-row"
@@ -387,178 +388,33 @@
                   <td class="drag-handle-column" cdkDragHandle [matTooltip]="'nodes.drag-to-reorder' | translate" (click)="$event.stopPropagation(); $event.preventDefault();">
                     <mat-icon class="grey-text drag-handle-icon" [inline]="true">drag_indicator</mat-icon>
                   </td>
-                  <td>
-                    @if (node.isHypervisor) {
-                      <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
-                    }
-                  </td>
-                  <td>
-                    <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
-                  </td>
-                  <td class="label-cell">
-                    {{ node.label }}
-                    @if (node.isStale) {
-                      <div class="stale-caption">{{ lastSeenText(node) }}</div>
-                    }
-                  </td>
-                  <td class="ip-cell">
-                    @if (compact && (node.ip || node.publicIp || node.countryCode)) {
-                      <div style="font-size: 0.85em;" [matTooltip]="[node.ip, node.publicIp].join(' ')">
-                        {{ node.publicIp || node.ip }}@if (node.countryCode) { &middot; {{ node.cityName || node.countryCode }} }
-                      </div>
-                    } @else if (node.ip || node.publicIp || node.countryCode) {
-                      @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
-                        <div style="font-size: 0.85em;">{{ node.ip }}</div>
-                        <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
-                      } @else if (node.publicIp) {
-                        <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
-                      } @else if (node.ip) {
-                        <div style="font-size: 0.85em;">{{ node.ip }}</div>
-                      }
-                      @if (node.countryCode) {
-                        <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
-                      }
-                    }
-                    @if (!node.ip && !node.publicIp && !node.countryCode) {
-                      <span>-</span>
-                    }
-                  </td>
-                  <td>
-                    @if (compact && node.transports && node.transports.length > 0) {
-                      @let ctotals = getTransportTotals(node);
-                      <span class="tp-compact" [matTooltip]="transportBreakdown(node)" matTooltipClass="multiline-tooltip">
-                        {{ node.transports.length }}
-                        @if (ctotals.incoming + ctotals.outgoing > 0) {
-                          <span class="tp-in">{{ ctotals.incoming }}&#8595;</span>
-                          <span class="tp-out">{{ ctotals.outgoing }}&#8593;</span>
-                        }
-                      </span>
-                    } @else if (node.transports && node.transports.length > 0) {
-                      @let totals = getTransportTotals(node);
-                      <div class="tp-counts">
-                        @for (entry of getTransportCounts(node); track entry.type) {
-                          <span class="tp-type">{{ entry.type }}</span>
-                          <span class="tp-count">{{ entry.count }}</span>
-                          <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
-                          <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
-                        }
-                        <span class="tp-type tp-total">Total</span>
-                        <span class="tp-count tp-total">{{ node.transports.length }}</span>
-                        @if (totals.incoming + totals.outgoing > 0) {
-                          <span class="tp-in tp-total" title="incoming">{{ totals.incoming }}&#8595;</span>
-                          <span class="tp-out tp-total" title="outgoing">{{ totals.outgoing }}&#8593;</span>
-                        } @else {
-                          <span class="tp-total"></span><span class="tp-total"></span>
-                        }
-                      </div>
-                    }
-                    @if (node.transports && node.transports.length === 0) {
-                      <span style="font-size: 0.85em;">Total: 0</span>
-                    }
-                    @if (!node.transports) {
-                      <span>-</span>
-                    }
-                  </td>
-                  <td>
-                    @if (compact && getDmsgServerCount(node) > 0) {
-                      <span>{{ getDmsgServerCount(node) }}</span>
-                    } @else if (getDmsgServerCount(node) > 0) {
-                      <div class="dmsg-counts">
-                        @for (entry of getDmsgCounts(node); track entry.type) {
-                          <span class="dmsg-type">{{ entry.type }}</span>
-                          <span class="dmsg-count">{{ entry.count }}</span>
-                        }
-                        <span class="dmsg-type dmsg-total">Total</span>
-                        <span class="dmsg-count dmsg-total">{{ getDmsgServerCount(node) }}</span>
-                      </div>
-                    } @else {
-                      <span>-</span>
-                    }
-                  </td>
-                  <td class="key-cell">
-                    {{ node.localPk }}
-                  </td>
-                  <td>
-                    @if (compact) {
-                      <div style="font-size: 0.85em;" [class.outdated]="isOutdated(node)"
-                        [matTooltip]="(node.version ? node.version + ' · ' : '') + (isOutdated(node) ? ('nodes.quick.outdated-tooltip' | translate) + ' ' : '') + ('nodes.config-label' | translate) + ': ' + (node.configVersion || '-')">
-                        {{ (node.version | versionLabel) || '-' }}
-                      </div>
-                    } @else if (node.version && node.configVersion && node.version === node.configVersion) {
-                      <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
-                    } @else {
-                      <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ 'nodes.visor-version' | translate }}: {{ (node.version | versionLabel) || '-' }}</div>
-                      <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
-                    }
-                  </td>
-                  <td>
-                    @if (compact && getNodeServices(node).length > 0) {
-                      <div style="font-size: 0.85em;">{{ getNodeServices(node).join(', ') }}</div>
-                    } @else if (getNodeServices(node).length > 0) {
-                      @for (service of getNodeServices(node); track service) {
-                        <div style="font-size: 0.85em;">{{ service }}</div>
-                      }
-                    }
-                    @if (getNodeServices(node).length === 0) {
-                      <span>-</span>
-                    }
-                  </td>
-                  @if (showApps) {
-                    <td class="apps-cell">
-                      @for (chip of nodeAppChips(node); track chip.name) {
-                        <span class="app-chip" [class.running]="chip.running">{{ chip.name }}</span>
-                      } @empty {
-                        <span>-</span>
-                      }
-                    </td>
-                  }
-                  <td>
-                    @if (!node.rewardsAddress) {
-                      <span style="color: var(--sw-status-stopped); font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
-                    } @else if (node.rewardEligible === false) {
-                      <mat-icon style="color: rgb(var(--sw-red-alt-rgb)); font-size: 20px;" [matTooltip]="node.rewardIneligibleReason || ('nodes.reward-rejected' | translate)">cancel</mat-icon>
-                    } @else {
-                      <mat-icon style="color: rgb(var(--sw-green-rgb)); font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
-                    }
-                  </td>
-                  <td class="actions">
-                    <button
-                      (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
-                      mat-button
-                      [matTooltip]="'nodes.copy-key' | translate"
-                      class="big-action-button transparent-button"
-                      >
-                      <mat-icon [inline]="true">filter_none</mat-icon>
-                    </button>
-                    <button
-                      (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
-                      mat-button
-                      [matTooltip]="'labeled-element.edit-label' | translate"
-                      class="big-action-button transparent-button"
-                      >
-                      <mat-icon [inline]="true">short_text</mat-icon>
-                    </button>
-                    @if (node.online) {
-                      <button
-                        mat-button
-                        [matTooltip]="'nodes.view-node' | translate"
-                        class="big-action-button transparent-button"
-                        >
-                        <mat-icon [inline]="true">chevron_right</mat-icon>
-                      </button>
-                    }
-                    @if (!node.online) {
-                      <button
-                        (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
-                        mat-button
-                        [matTooltip]="'nodes.delete-node' | translate"
-                        class="big-action-button transparent-button"
-                        >
-                        <mat-icon>close</mat-icon>
-                      </button>
-                    }
-                  </td>
+                  <ng-container *ngTemplateOutlet="rowCells; context: {$implicit: node, section: section, child: false}"></ng-container>
                 </a>
+                <!-- The visors a sub-hypervisor manages, indented under its row. -->
+                @if (section && !collapsedSections.has(section.hypervisorPk)) {
+                  @if (section.subError) {
+                    <tr class="child-row">
+                      <td></td><td></td><td></td><td></td>
+                      <td class="label-cell child-label font-sm" [attr.colspan]="showApps ? 10 : 9">
+                        <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+                        {{ 'nodes.subhypervisor-error' | translate }}: {{ section.subError }}
+                      </td>
+                    </tr>
+                  }
+                  @for (child of childNodes(section); track child.localPk) {
+                    <a
+                      [ngClass]="{'click-effect': child.online, 'non-selectable': !child.online, 'stale-row': child.isStale, 'wasm-visor-row': child.arch === 'wasm', 'compact-row': compact}"
+                      class="selectable link-row child-row"
+                      [routerLink]="child.online ? ['/nodes', child.localPk] : null"
+                      >
+                      <td class="select-column" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSelected(child)">
+                        <mat-checkbox [checked]="selected.has(child.localPk)" (click)="$event.preventDefault()"></mat-checkbox>
+                      </td>
+                      <td class="drag-handle-column"></td>
+                      <ng-container *ngTemplateOutlet="rowCells; context: {$implicit: child, child: true, remote: true}"></ng-container>
+                    </a>
+                  }
+                }
               }
             </table>
           }
@@ -590,83 +446,14 @@
               </td></tr>
               <!-- Values. -->
               @for (node of dataSource; track node.localPk) {
-                <a class="link-row" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
-                  <div class="list-item-container">
-                    <div class="left-part">
-                      @if (node.isHypervisor) {
-                        <div class="list-row">
-                          <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
-                          <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
-                        </div>
-                      }
-                      <div class="list-row">
-                        <span class="title">{{ 'nodes.state' | translate }}</span>:
-                        <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
-                      </div>
-                      <div class="list-row">
-                        <span class="title">{{ 'nodes.label' | translate }}</span>:
-                        {{ node.label }}
-                        @if (node.isStale) {
-                          <span class="stale-caption">&nbsp;({{ lastSeenText(node) }})</span>
-                        }
-                      </div>
-                      @if (!compact && (node.ip || node.publicIp)) {
-                        <div class="list-row">
-                          <span class="title">{{ 'nodes.ip' | translate }}</span>:
-                          @if (node.ip) {
-                            <span>{{ node.ip }}</span>
-                          }
-                          @if (node.ip && node.publicIp) {
-                            <span> / </span>
-                          }
-                          @if (node.publicIp) {
-                            <span>{{ node.publicIp }}</span>
-                          }
-                        </div>
-                      }
-                      @if (node.countryCode) {
-                        <div class="list-row">
-                          <span class="title">{{ 'nodes.location' | translate }}</span>:
-                          @if (node.cityName) {
-                            <span>{{ node.cityName }}, </span>
-                            }@if (node.regionName) {
-                            <span>{{ node.regionName }}, </span>
-                            }{{ node.countryCode }}
-                          </div>
-                        }
-                        @if (!compact) {
-                          <div class="list-row long-content">
-                            <span class="title">{{ 'nodes.key' | translate }}</span>:
-                            {{ node.localPk }}
-                          </div>
-                        }
-                        @if (node.version) {
-                          <div class="list-row">
-                            <span class="title">{{ 'nodes.version' | translate }}</span>:
-                            <span [matTooltip]="node.version">{{ node.version | versionLabel }}</span>
-                          </div>
-                        }
-                        @if (!compact && node.configVersion) {
-                          <div class="list-row">
-                            <span class="title">{{ 'nodes.config-version' | translate }}</span>:
-                            {{ node.configVersion }}
-                          </div>
-                        }
-                      </div>
-                      <div class="margin-part"></div>
-                      <div class="right-part">
-                        <button
-                          (click)="$event.stopPropagation(); $event.preventDefault(); showOptionsDialog(node);"
-                          mat-icon-button
-                          [matTooltip]="'common.options' | translate"
-                          class="transparent-button"
-                          >
-                          <mat-icon>{{ 'add' }}</mat-icon>
-                        </button>
-                      </div>
-                    </div>
-                  </td></tr></a>
+                @let section = sectionOf(node.localPk);
+                <ng-container *ngTemplateOutlet="mobileItem; context: {$implicit: node, section: section, child: false}"></ng-container>
+                @if (section && !collapsedSections.has(section.hypervisorPk)) {
+                  @for (child of childNodes(section); track child.localPk) {
+                    <ng-container *ngTemplateOutlet="mobileItem; context: {$implicit: child, child: true}"></ng-container>
+                  }
                 }
+              }
               </table>
             }
           </div></div>
@@ -695,18 +482,11 @@
           </div>
         }
 
-        <!-- Sub-hypervisor sections. One panel per remote
-             hypervisor this visor knows about, showing the visors
-             that hypervisor reports as directly connected to it
-             (sourced via HVListDirectVisors over RPC). Local
-             section (sections[0]) is rendered by the main table
-             above; subSections covers sections[1..] so operators
-             can see other hypervisors' rosters in the same view.
-             #2780 deduped the local section's visor list so
-             hypervisors with their own sub-section here don't
-             also appear as a plain row above. -->
-        @if (subSections.length > 0) {
-          @for (section of subSections; track section.hypervisorPk) {
+        <!-- Sub-hypervisors with no row on this page (filtered out, on another
+             page, or not managed by this hypervisor) keep a panel of their own.
+             The rest are nested under their row in the list above. -->
+        @if (detachedSections.length > 0) {
+          @for (section of detachedSections; track section.hypervisorPk) {
             <div class="rounded-elevated-box mt-3">
               <div class="box-internal-container full-node-list-margins">
                 <div class="generic-title-container">
@@ -767,156 +547,15 @@
                     </tr>
                     @for (node of quickFiltered(section.nodes); track node.localPk) {
                       <a
-                        [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}"
+                        [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm', 'compact-row': compact}"
                         class="selectable link-row"
                         [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                         >
-                        <!-- Empty drag-handle placeholder; main-table-only
-                             feature, but the column has to exist so the
-                             rest of the row aligns with the main table. -->
                         <td class="select-column" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSelected(node)">
                           <mat-checkbox [checked]="selected.has(node.localPk)" (click)="$event.preventDefault()"></mat-checkbox>
                         </td>
                         <td class="drag-handle-column"></td>
-                        <td>
-                          @if (node.isHypervisor) {
-                            <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
-                          }
-                        </td>
-                        <td>
-                          <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
-                        </td>
-                        <td>
-                          {{ node.label }}
-                          @if (node.isStale) {
-                            <div class="stale-caption">{{ lastSeenText(node) }}</div>
-                          }
-                        </td>
-                        <td>
-                          @if (node.ip || node.publicIp || node.countryCode) {
-                            @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
-                              <div style="font-size: 0.85em;">{{ node.ip }}</div>
-                              <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
-                            } @else if (node.publicIp) {
-                              <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
-                            } @else if (node.ip) {
-                              <div style="font-size: 0.85em;">{{ node.ip }}</div>
-                            }
-                            @if (node.countryCode) {
-                              <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
-                            }
-                          }
-                          @if (!node.ip && !node.publicIp && !node.countryCode) {
-                            <span>-</span>
-                          }
-                        </td>
-                        <td>
-                          @if (node.transports && node.transports.length > 0) {
-                            @let totals = getTransportTotals(node);
-                            <div class="tp-counts">
-                              @for (entry of getTransportCounts(node); track entry.type) {
-                                <span class="tp-type">{{ entry.type }}</span>
-                                <span class="tp-count">{{ entry.count }}</span>
-                                <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
-                                <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
-                              }
-                              <span class="tp-type tp-total">Total</span>
-                              <span class="tp-count tp-total">{{ node.transports.length }}</span>
-                              @if (totals.incoming + totals.outgoing > 0) {
-                                <span class="tp-in tp-total" title="incoming">{{ totals.incoming }}&#8595;</span>
-                                <span class="tp-out tp-total" title="outgoing">{{ totals.outgoing }}&#8593;</span>
-                              } @else {
-                                <span class="tp-total"></span><span class="tp-total"></span>
-                              }
-                            </div>
-                          }
-                          @if (node.transports && node.transports.length === 0) {
-                            <span style="font-size: 0.85em;">Total: 0</span>
-                          }
-                          @if (!node.transports) {
-                            <span>-</span>
-                          }
-                        </td>
-                        <td>
-                          @if (getDmsgServerCount(node) > 0) {
-                            <div class="dmsg-counts">
-                              @for (entry of getDmsgCounts(node); track entry.type) {
-                                <span class="dmsg-type">{{ entry.type }}</span>
-                                <span class="dmsg-count">{{ entry.count }}</span>
-                              }
-                              <span class="dmsg-type dmsg-total">Total</span>
-                              <span class="dmsg-count dmsg-total">{{ getDmsgServerCount(node) }}</span>
-                            </div>
-                          } @else {
-                            <span>-</span>
-                          }
-                        </td>
-                        <td class="key-cell">
-                          {{ node.localPk }}
-                        </td>
-                        <td>
-                          @if (node.version && node.configVersion && node.version === node.configVersion) {
-                            <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
-                          } @else {
-                            <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ 'nodes.visor-version' | translate }}: {{ (node.version | versionLabel) || '-' }}</div>
-                            <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
-                          }
-                        </td>
-                        <td>
-                          @if (getNodeServices(node).length > 0) {
-                            @for (service of getNodeServices(node); track service) {
-                              <div style="font-size: 0.85em;">{{ service }}</div>
-                            }
-                          }
-                          @if (getNodeServices(node).length === 0) {
-                            <span>-</span>
-                          }
-                        </td>
-                        @if (showApps) {
-                          <td class="apps-cell">
-                            @for (chip of nodeAppChips(node); track chip.name) {
-                              <span class="app-chip" [class.running]="chip.running">{{ chip.name }}</span>
-                            } @empty {
-                              <span>-</span>
-                            }
-                          </td>
-                        }
-                        <td>
-                          @if (!node.rewardsAddress) {
-                            <span style="color: var(--sw-status-stopped); font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
-                          } @else if (node.rewardEligible === false) {
-                            <mat-icon style="color: rgb(var(--sw-red-alt-rgb)); font-size: 20px;" [matTooltip]="node.rewardIneligibleReason || ('nodes.reward-rejected' | translate)">cancel</mat-icon>
-                          } @else {
-                            <mat-icon style="color: rgb(var(--sw-green-rgb)); font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
-                          }
-                        </td>
-                        <td class="actions">
-                          <button
-                            (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
-                            mat-button
-                            [matTooltip]="'nodes.copy-key' | translate"
-                            class="big-action-button transparent-button"
-                            >
-                            <mat-icon [inline]="true">filter_none</mat-icon>
-                          </button>
-                          <button
-                            (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
-                            mat-button
-                            [matTooltip]="'labeled-element.edit-label' | translate"
-                            class="big-action-button transparent-button"
-                            >
-                            <mat-icon [inline]="true">short_text</mat-icon>
-                          </button>
-                          @if (node.online) {
-                            <button
-                              mat-button
-                              [matTooltip]="'nodes.view-node' | translate"
-                              class="big-action-button transparent-button"
-                              >
-                              <mat-icon [inline]="true">chevron_right</mat-icon>
-                            </button>
-                          }
-                        </td>
+                        <ng-container *ngTemplateOutlet="rowCells; context: {$implicit: node, remote: true}"></ng-container>
                       </a>
                     }
                   </table>
@@ -925,6 +564,277 @@
             </div>
           }
         }
+
+          <!-- The cells of one visor row, shared by the main list, the visors nested
+               under a sub-hypervisor and the panels of sub-hypervisors not on this page. -->
+          <ng-template #rowCells let-node let-section="section" let-child="child" let-remote="remote">
+            <td>
+              @if (node.isHypervisor) {
+                <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+              }
+            </td>
+            <td>
+              <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+            </td>
+            <td class="label-cell" [class.child-label]="child">
+              @if (section && (section.subError || childNodes(section).length > 0)) {
+                <button class="section-toggle" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSection(section.hypervisorPk)"
+                  [matTooltip]="(collapsedSections.has(section.hypervisorPk) ? 'nodes.show-managed' : 'nodes.hide-managed') | translate">
+                  <mat-icon [inline]="true">{{ collapsedSections.has(section.hypervisorPk) ? 'chevron_right' : 'expand_more' }}</mat-icon>
+                </button>
+              }
+              {{ node.label }}
+              @if (section && (section.subError || childNodes(section).length > 0)) {
+                <span class="managed-count" [matTooltip]="'nodes.managed-count' | translate">{{ childNodes(section).length }}</span>
+              }
+              @if (node.isStale) {
+                <div class="stale-caption">{{ lastSeenText(node) }}</div>
+              }
+            </td>
+            <td class="ip-cell">
+              @if (compact && (node.ip || node.publicIp || node.countryCode)) {
+                <div style="font-size: 0.85em;" [matTooltip]="[node.ip, node.publicIp].join(' ')">
+                  {{ node.publicIp || node.ip }}@if (node.countryCode) { &middot; {{ node.cityName || node.countryCode }} }
+                </div>
+              } @else if (node.ip || node.publicIp || node.countryCode) {
+                @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
+                  <div style="font-size: 0.85em;">{{ node.ip }}</div>
+                  <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
+                } @else if (node.publicIp) {
+                  <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
+                } @else if (node.ip) {
+                  <div style="font-size: 0.85em;">{{ node.ip }}</div>
+                }
+                @if (node.countryCode) {
+                  <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
+                }
+              }
+              @if (!node.ip && !node.publicIp && !node.countryCode) {
+                <span>-</span>
+              }
+            </td>
+            <td>
+              @if (compact && node.transports && node.transports.length > 0) {
+                @let ctotals = getTransportTotals(node);
+                <span class="tp-compact" [matTooltip]="transportBreakdown(node)" matTooltipClass="multiline-tooltip">
+                  {{ node.transports.length }}
+                  @if (ctotals.incoming + ctotals.outgoing > 0) {
+                    <span class="tp-in">{{ ctotals.incoming }}&#8595;</span>
+                    <span class="tp-out">{{ ctotals.outgoing }}&#8593;</span>
+                  }
+                </span>
+              } @else if (node.transports && node.transports.length > 0) {
+                @let totals = getTransportTotals(node);
+                <div class="tp-counts">
+                  @for (entry of getTransportCounts(node); track entry.type) {
+                    <span class="tp-type">{{ entry.type }}</span>
+                    <span class="tp-count">{{ entry.count }}</span>
+                    <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
+                    <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
+                  }
+                  <span class="tp-type tp-total">Total</span>
+                  <span class="tp-count tp-total">{{ node.transports.length }}</span>
+                  @if (totals.incoming + totals.outgoing > 0) {
+                    <span class="tp-in tp-total" title="incoming">{{ totals.incoming }}&#8595;</span>
+                    <span class="tp-out tp-total" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                  } @else {
+                    <span class="tp-total"></span><span class="tp-total"></span>
+                  }
+                </div>
+              }
+              @if (node.transports && node.transports.length === 0) {
+                <span style="font-size: 0.85em;">Total: 0</span>
+              }
+              @if (!node.transports) {
+                <span>-</span>
+              }
+            </td>
+            <td>
+              @if (compact && getDmsgServerCount(node) > 0) {
+                <span>{{ getDmsgServerCount(node) }}</span>
+              } @else if (getDmsgServerCount(node) > 0) {
+                <div class="dmsg-counts">
+                  @for (entry of getDmsgCounts(node); track entry.type) {
+                    <span class="dmsg-type">{{ entry.type }}</span>
+                    <span class="dmsg-count">{{ entry.count }}</span>
+                  }
+                  <span class="dmsg-type dmsg-total">Total</span>
+                  <span class="dmsg-count dmsg-total">{{ getDmsgServerCount(node) }}</span>
+                </div>
+              } @else {
+                <span>-</span>
+              }
+            </td>
+            <td class="key-cell">
+              {{ node.localPk }}
+            </td>
+            <td>
+              @if (compact) {
+                <div style="font-size: 0.85em;" [class.outdated]="isOutdated(node)"
+                  [matTooltip]="(node.version ? node.version + ' · ' : '') + (isOutdated(node) ? ('nodes.quick.outdated-tooltip' | translate) + ' ' : '') + ('nodes.config-label' | translate) + ': ' + (node.configVersion || '-')">
+                  {{ (node.version | versionLabel) || '-' }}
+                </div>
+              } @else if (node.version && node.configVersion && node.version === node.configVersion) {
+                <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ node.version | versionLabel }}</div>
+              } @else {
+                <div style="font-size: 0.85em;" [matTooltip]="node.version">{{ 'nodes.visor-version' | translate }}: {{ (node.version | versionLabel) || '-' }}</div>
+                <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
+              }
+            </td>
+            <td>
+              @if (compact && getNodeServices(node).length > 0) {
+                <div style="font-size: 0.85em;">{{ getNodeServices(node).join(', ') }}</div>
+              } @else if (getNodeServices(node).length > 0) {
+                @for (service of getNodeServices(node); track service) {
+                  <div style="font-size: 0.85em;">{{ service }}</div>
+                }
+              }
+              @if (getNodeServices(node).length === 0) {
+                <span>-</span>
+              }
+            </td>
+            @if (showApps) {
+              <td class="apps-cell">
+                @for (chip of nodeAppChips(node); track chip.name) {
+                  <span class="app-chip" [class.running]="chip.running">{{ chip.name }}</span>
+                } @empty {
+                  <span>-</span>
+                }
+              </td>
+            }
+            <td>
+              @if (!node.rewardsAddress) {
+                <span style="color: var(--sw-status-stopped); font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
+              } @else if (node.rewardEligible === false) {
+                <mat-icon style="color: rgb(var(--sw-red-alt-rgb)); font-size: 20px;" [matTooltip]="node.rewardIneligibleReason || ('nodes.reward-rejected' | translate)">cancel</mat-icon>
+              } @else {
+                <mat-icon style="color: rgb(var(--sw-green-rgb)); font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
+              }
+            </td>
+            <td class="actions">
+              <button
+                (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
+                mat-button
+                [matTooltip]="'nodes.copy-key' | translate"
+                class="big-action-button transparent-button"
+                >
+                <mat-icon [inline]="true">filter_none</mat-icon>
+              </button>
+              <button
+                (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
+                mat-button
+                [matTooltip]="'labeled-element.edit-label' | translate"
+                class="big-action-button transparent-button"
+                >
+                <mat-icon [inline]="true">short_text</mat-icon>
+              </button>
+              @if (node.online) {
+                <button
+                  mat-button
+                  [matTooltip]="'nodes.view-node' | translate"
+                  class="big-action-button transparent-button"
+                  >
+                  <mat-icon [inline]="true">chevron_right</mat-icon>
+                </button>
+              }
+              @if (!node.online && !remote) {
+                <button
+                  (click)="$event.stopPropagation(); $event.preventDefault(); deleteNode(node);"
+                  mat-button
+                  [matTooltip]="'nodes.delete-node' | translate"
+                  class="big-action-button transparent-button"
+                  >
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </td>
+          </ng-template>
+
+          <!-- One visor in the small-screen list, nested ones indented. -->
+          <ng-template #mobileItem let-node let-section="section" let-child="child">
+            <a class="link-row" [class.child-item]="child" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
+              <div class="list-item-container">
+                <div class="left-part">
+                  @if (node.isHypervisor) {
+                    <div class="list-row">
+                      <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
+                      <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
+                    </div>
+                  }
+                  <div class="list-row">
+                    <span class="title">{{ 'nodes.state' | translate }}</span>:
+                    <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
+                  </div>
+                  <div class="list-row">
+                    <span class="title">{{ 'nodes.label' | translate }}</span>:
+                    {{ node.label }}
+                    @if (node.isStale) {
+                      <span class="stale-caption">&nbsp;({{ lastSeenText(node) }})</span>
+                    }
+                    @if (section && (section.subError || childNodes(section).length > 0)) {
+                      <button class="section-toggle" (click)="$event.stopPropagation(); $event.preventDefault(); toggleSection(section.hypervisorPk)">
+                        <mat-icon [inline]="true">{{ collapsedSections.has(section.hypervisorPk) ? 'chevron_right' : 'expand_more' }}</mat-icon>
+                      </button>
+                      <span class="managed-count">{{ childNodes(section).length }}</span>
+                    }
+                  </div>
+                  @if (!compact && (node.ip || node.publicIp)) {
+                    <div class="list-row">
+                      <span class="title">{{ 'nodes.ip' | translate }}</span>:
+                      @if (node.ip) {
+                        <span>{{ node.ip }}</span>
+                      }
+                      @if (node.ip && node.publicIp) {
+                        <span> / </span>
+                      }
+                      @if (node.publicIp) {
+                        <span>{{ node.publicIp }}</span>
+                      }
+                    </div>
+                  }
+                  @if (node.countryCode) {
+                    <div class="list-row">
+                      <span class="title">{{ 'nodes.location' | translate }}</span>:
+                      @if (node.cityName) {
+                        <span>{{ node.cityName }}, </span>
+                        }@if (node.regionName) {
+                        <span>{{ node.regionName }}, </span>
+                        }{{ node.countryCode }}
+                      </div>
+                    }
+                    @if (!compact) {
+                      <div class="list-row long-content">
+                        <span class="title">{{ 'nodes.key' | translate }}</span>:
+                        {{ node.localPk }}
+                      </div>
+                    }
+                    @if (node.version) {
+                      <div class="list-row">
+                        <span class="title">{{ 'nodes.version' | translate }}</span>:
+                        <span [matTooltip]="node.version">{{ node.version | versionLabel }}</span>
+                      </div>
+                    }
+                    @if (!compact && node.configVersion) {
+                      <div class="list-row">
+                        <span class="title">{{ 'nodes.config-version' | translate }}</span>:
+                        {{ node.configVersion }}
+                      </div>
+                    }
+                  </div>
+                  <div class="margin-part"></div>
+                  <div class="right-part">
+                    <button
+                      (click)="$event.stopPropagation(); $event.preventDefault(); showOptionsDialog(node);"
+                      mat-icon-button
+                      [matTooltip]="'common.options' | translate"
+                      class="transparent-button"
+                      >
+                      <mat-icon>{{ 'add' }}</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              </td></tr></a>
+          </ng-template>
       </div>
     </div>
   }

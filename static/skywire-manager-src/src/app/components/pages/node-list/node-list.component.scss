@@ -441,3 +441,48 @@
     background: rgba(var(--sw-green-rgb), 0.15);
   }
 }
+
+// Visors a sub-hypervisor manages, nested under its row. Only the label cell
+// is indented, so every other column stays lined up with the rows above.
+.child-label {
+  position: relative;
+  padding-left: 28px !important;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 50%;
+    width: 12px;
+    border-left: 1px solid rgba(var(--sw-fg-rgb), 0.3);
+    border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.3);
+  }
+}
+
+.section-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 2px;
+  color: inherit;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.managed-count {
+  display: inline-block;
+  font-size: 0.75em;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--sw-fg-rgb), 0.3);
+  color: rgba(var(--sw-fg-rgb), 0.7);
+}
+
+// Small screens: nested visors step in under their hypervisor.
+.child-item {
+  display: block;
+  margin-left: 16px;
+  border-left: 2px solid rgba(var(--sw-fg-rgb), 0.2);
+}

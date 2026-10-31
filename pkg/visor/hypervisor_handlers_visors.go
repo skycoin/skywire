@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -475,6 +476,11 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		},
 		Transports: projectEntryTransports(e),
 	}
+	for _, name := range e.RunningApps {
+		app := &appserver.AppState{Status: appserver.AppStatusRunning}
+		app.Name = name
+		overview.Apps = append(overview.Apps, app)
+	}
 	// Health is partial here — only ServicesHealth carries through
 	// the HVVisorEntry round-trip from the remote hypervisor. That's
 	// enough for nodeStatusClass to choose between dot-green
@@ -520,6 +526,10 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		IsHypervisor:  e.IsLocal,
 		RewardAddress: e.RewardAddress,
 		ConfigVersion: e.ConfigVersion,
+
+		DMSGServers:       e.DMSGServers,
+		PublicAutoconnect: e.PublicAutoconnect,
+		IsPublic:          e.IsPublic,
 	}
 }
 
