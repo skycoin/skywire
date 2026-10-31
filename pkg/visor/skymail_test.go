@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymail"
+	"github.com/skycoin/skywire/pkg/skymailbridge"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -40,7 +41,7 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client) *Visor {
 	v := &Visor{
 		ctx: ctx,
 		conf: &visorconfig.V1{
-			Common:    &visorconfig.Common{PK: c.LocalPK()},
+			Common:    &visorconfig.Common{PK: c.LocalPK(), SK: c.LocalSK()},
 			LocalPath: filepath.Join(t.TempDir(), "local"),
 			Skymail:   &visorconfig.SkymailConfig{Enable: true},
 		},
@@ -144,6 +145,40 @@ func TestOutboxDeliversOverRealDmsgOnceTheMailboxIsBack(t *testing.T) {
 	sent, err := a.MailList(skymail.FolderSent)
 	require.NoError(t, err)
 	require.Len(t, sent, 1)
+}
+
+// TestSealedEnvelopeRelayedOverRealDmsg: C carries mail A sealed for B
+// over a real dmsg stream, and B files it under A with C as the relay.
+func TestSealedEnvelopeRelayedOverRealDmsg(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	clients := env.AllClients()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	b := mailVisor(t, ctx, clients[1])
+	pkA, pkB, pkC := clients[0].LocalPK(), clients[1].LocalPK(), clients[2].LocalPK()
+	require.NoError(t, b.MailSetWhitelist([]cipher.PubKey{pkA}))
+
+	from := "alice@" + pkA.DNSLabel() + ".dmsg"
+	msg := "From: " + from + "\r\nSubject: carried\r\n\r\nsealed for b\r\n"
+	sealed, err := skymail.Seal([]byte(msg), clients[0].LocalSK(), pkB)
+	require.NoError(t, err)
+	err = skymailbridge.Relay(ctx, &visorDmsgDialer{c: clients[2]},
+		skymailbridge.Config{Suffix: ".dmsg", Mode: "b", HeloName: "c", RemotePort: skymailPort},
+		from, []skymailbridge.Recipient{{Original: bobAt(pkB), Forward: bobAt(pkB), PeerPK: pkB}}, sealed, logrus.New())
+	require.NoError(t, err, "C is not whitelisted, but A, who signed it, is")
+
+	inbox, err := b.MailList(skymail.FolderInbox)
+	require.NoError(t, err)
+	require.Len(t, inbox, 1)
+	require.Equal(t, pkA.Hex(), inbox[0].PeerPK)
+	require.Equal(t, pkC.Hex(), inbox[0].RelayPK)
+	require.True(t, inbox[0].FromVerified)
+	m, err := b.MailRead(skymail.FolderInbox, inbox[0].ID)
+	require.NoError(t, err)
+	require.Equal(t, "sealed for b\r\n", m.Text)
+	require.Equal(t, pkC.Hex(), m.RelayPK)
 }
 
 func TestMailboxYieldsForwardedPort25(t *testing.T) {

@@ -499,7 +499,7 @@ func (mb *Mailbox) bounce(orig []byte, failed []RcptResult) {
 	}, "<"+bounceID+"@"+mb.cfg.PK.DNSLabel()+Suffixes[0]+">")
 	// RFC 3834 §5: an automatic response, so no one auto-replies to it.
 	notice = append([]byte("Auto-Submitted: auto-replied\r\n"), notice...)
-	id, err := mb.deliverLocal(mb.cfg.PK, notice)
+	id, err := mb.deliverLocal(mb.cfg.PK, cipher.PubKey{}, notice)
 	if err != nil {
 		mb.log.WithError(err).Warn("skymail: file bounce")
 		return
