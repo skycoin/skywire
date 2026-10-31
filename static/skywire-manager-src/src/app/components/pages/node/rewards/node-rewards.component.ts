@@ -122,12 +122,12 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 
     return this.nodeService.getRewardXpubAddresses(xpub).subscribe({
       next: (r: any) => {
-        set({ xpub, addresses: r?.addresses || [], error: '' });
+        set({ xpub: xpub, addresses: r?.addresses || [], error: '' });
         this.changeDetectorRef.markForCheck();
       },
       error: (err: OperationError) => {
         err = processServiceError(err);
-        set({ xpub, addresses: [], error: err.originalServerErrorMsg || err.translatableErrorMsg });
+        set({ xpub: xpub, addresses: [], error: err.originalServerErrorMsg || err.translatableErrorMsg });
         this.changeDetectorRef.markForCheck();
       },
     });
