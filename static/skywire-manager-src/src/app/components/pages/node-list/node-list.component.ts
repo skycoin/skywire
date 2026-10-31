@@ -816,6 +816,11 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     return (nodes || []).filter(n => this.matchesQuickFilter(n));
   }
 
+  /** Whether a row is the hypervisor serving this UI, which keeps the gold star. */
+  isLocalHypervisor(node: Node): boolean {
+    return this.localHypervisorPk ? node.localPk === this.localHypervisorPk : !!node.isHypervisor;
+  }
+
   /** The sub-section a row's visor runs as hypervisor, if any. */
   sectionOf(pk: string): NodeSection | undefined {
     return this.subSections.find(s => s.hypervisorPk === pk);
