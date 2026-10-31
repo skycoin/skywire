@@ -148,8 +148,17 @@ func (r asyncReply) err() error {
 	return fmt.Errorf("%w: %s", ErrAsyncInternal, r.Error)
 }
 
-// writeAsyncFrame writes a 4-byte big-endian length and b.
+// asyncMaxFrame is the largest frame either side writes: a payload of the
+// largest message a server may hold, which is larger than any control
+// frame.
+const asyncMaxFrame = asyncFetchBatchBytes
+
+// writeAsyncFrame writes a 4-byte big-endian length and b. A frame larger
+// than any reader accepts is refused before anything is written.
 func writeAsyncFrame(w io.Writer, b []byte) error {
+	if len(b) > asyncMaxFrame {
+		return fmt.Errorf("%w: frame of %d bytes over %d", ErrAsyncTooBig, len(b), asyncMaxFrame)
+	}
 	var n [4]byte
 	binary.BigEndian.PutUint32(n[:], uint32(len(b))) //nolint:gosec // bounded by the callers' limits
 	if _, err := w.Write(n[:]); err != nil {

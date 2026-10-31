@@ -227,6 +227,10 @@ func TestAsyncFrames(t *testing.T) {
 	require.ErrorIs(t, err, ErrAsyncBadRequest, "a frame over the limit is refused before it is read")
 
 	buf.Reset()
+	require.ErrorIs(t, writeAsyncFrame(&buf, make([]byte, asyncMaxFrame+1)), ErrAsyncTooBig)
+	require.Zero(t, buf.Len(), "nothing is written for a frame no reader takes")
+
+	buf.Reset()
 	require.NoError(t, writeAsyncFrame(&buf, []byte("{not json")))
 	var op asyncOp
 	require.ErrorIs(t, readAsyncJSON(&buf, &op), ErrAsyncBadRequest)
