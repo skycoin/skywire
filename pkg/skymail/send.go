@@ -110,7 +110,7 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 		pending   []string
 		lastErr   string
 	)
-	for _, gr := range mb.deliverGroups(ctx, from, groups, msg) {
+	for _, gr := range mb.deliverGroups(ctx, from, groups, msg, "") {
 		queue := gr.err != nil && mb.retryable(gr.g, gr.err)
 		for _, r := range gr.g.rcpts {
 			rr := RcptResult{Rcpt: r.Original, Via: gr.via}
@@ -138,7 +138,7 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 	if len(pending) > 0 {
 		id, err := mb.enqueue(msg, queueRecord{
 			From: from, Pending: pending, SentCopy: delivered > 0, Attempts: 1, LastError: lastErr,
-		})
+		}, time.Now().Add(retryDelay(1)))
 		if err != nil {
 			mb.log.WithError(err).Warn("skymail: queue in Outbox")
 			for i := range res.Recipients {
@@ -195,13 +195,14 @@ type groupResult struct {
 	err error
 }
 
-// deliverGroups runs every transaction at once.
-func (mb *Mailbox) deliverGroups(ctx context.Context, from string, groups []*peerGroup, msg []byte) []groupResult {
+// deliverGroups runs every transaction at once. require, when set, is an
+// EHLO keyword each peer must offer.
+func (mb *Mailbox) deliverGroups(ctx context.Context, from string, groups []*peerGroup, msg []byte, require string) []groupResult {
 	results := make([]groupResult, len(groups))
 	var wg sync.WaitGroup
 	for i, g := range groups {
 		wg.Go(func() {
-			via, err := mb.deliverGroup(ctx, from, g, msg)
+			via, err := mb.deliverGroup(ctx, from, g, msg, require)
 			if err != nil {
 				mb.log.WithError(err).WithField("peer", g.pk.Hex()).WithField("via", g.suffix).
 					Warn("skymail: not delivered")
@@ -215,7 +216,7 @@ func (mb *Mailbox) deliverGroups(ctx context.Context, from string, groups []*pee
 
 // deliverGroup delivers one SMTP transaction and names the network that
 // carried it.
-func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, msg []byte) (string, error) {
+func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, msg []byte, require string) (string, error) {
 	if g.pk == mb.cfg.PK {
 		_, err := mb.deliverLocal(mb.cfg.PK, cipher.PubKey{}, msg)
 		return "local", err
@@ -229,6 +230,7 @@ func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, 
 		Mode:       "b",
 		HeloName:   mb.cfg.PK.DNSLabel() + g.suffix,
 		RemotePort: 25,
+		Require:    require,
 	}
 	rd := &recordingDialer{d: dialer, life: ctx}
 	err := skymailbridge.Relay(ctx, rd, cfg, from, g.rcpts, msg, mb.log)

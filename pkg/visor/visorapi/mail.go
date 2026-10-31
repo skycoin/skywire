@@ -60,6 +60,14 @@ type MailStatus struct {
 	// phone apps). Outbox is how many messages wait for a recipient.
 	HasOutbox bool `json:"has_outbox"`
 	Outbox    int  `json:"outbox"`
+	// Helpers get a sealed copy of queued mail to deliver too. By
+	// default they are the visors this one manages as a hypervisor.
+	Helpers        []cipher.PubKey `json:"helpers"`
+	HelpersDefault bool            `json:"helpers_default"`
+	// RelayFor are the visors whose sealed mail this one carries. By
+	// default they are this visor's hypervisors.
+	RelayFor        []cipher.PubKey `json:"relay_for"`
+	RelayForDefault bool            `json:"relay_for_default"`
 }
 
 // MailMessageRequest names one message.
@@ -77,11 +85,17 @@ type MailAttachmentRequest struct {
 
 // MailSettingsUpdate changes the fields that are set; nil leaves one as
 // it is. A zero limit restores its default, a negative one removes it.
+// Helpers and RelayFor replace their list (empty turns it off), and the
+// Default flags go back to the hypervisor-based default.
 type MailSettingsUpdate struct {
-	Enable         *bool          `json:"enable,omitempty"`
-	MaxMessageSize *int64         `json:"max_message_size,omitempty"`
-	MaxTotalSize   *int64         `json:"max_total_size,omitempty"`
-	MaxAge         *time.Duration `json:"max_age,omitempty"`
+	Enable          *bool            `json:"enable,omitempty"`
+	MaxMessageSize  *int64           `json:"max_message_size,omitempty"`
+	MaxTotalSize    *int64           `json:"max_total_size,omitempty"`
+	MaxAge          *time.Duration   `json:"max_age,omitempty"`
+	Helpers         *[]cipher.PubKey `json:"helpers,omitempty"`
+	HelpersDefault  bool             `json:"helpers_default,omitempty"`
+	RelayFor        *[]cipher.PubKey `json:"relay_for,omitempty"`
+	RelayForDefault bool             `json:"relay_for_default,omitempty"`
 }
 
 // MailSettingsWire is MailSettingsUpdate as it crosses the RPC. gob
@@ -90,11 +104,14 @@ type MailSettingsUpdate struct {
 // to the default". The Set flags carry the difference.
 type MailSettingsWire struct {
 	EnableSet, MaxMessageSizeSet, MaxTotalSizeSet, MaxAgeSet bool
+	HelpersSet, HelpersDefault, RelayForSet, RelayForDefault bool
 
 	Enable         bool
 	MaxMessageSize int64
 	MaxTotalSize   int64
 	MaxAge         time.Duration
+	Helpers        []cipher.PubKey
+	RelayFor       []cipher.PubKey
 }
 
 // Wire encodes u for the RPC.
@@ -112,6 +129,13 @@ func (u MailSettingsUpdate) Wire() MailSettingsWire {
 	if u.MaxAge != nil {
 		w.MaxAgeSet, w.MaxAge = true, *u.MaxAge
 	}
+	if u.Helpers != nil {
+		w.HelpersSet, w.Helpers = true, *u.Helpers
+	}
+	if u.RelayFor != nil {
+		w.RelayForSet, w.RelayFor = true, *u.RelayFor
+	}
+	w.HelpersDefault, w.RelayForDefault = u.HelpersDefault, u.RelayForDefault
 	return w
 }
 
@@ -130,5 +154,14 @@ func (w MailSettingsWire) Update() MailSettingsUpdate {
 	if w.MaxAgeSet {
 		u.MaxAge = &w.MaxAge
 	}
+	if w.HelpersSet {
+		h := append([]cipher.PubKey{}, w.Helpers...)
+		u.Helpers = &h
+	}
+	if w.RelayForSet {
+		r := append([]cipher.PubKey{}, w.RelayFor...)
+		u.RelayFor = &r
+	}
+	u.HelpersDefault, u.RelayForDefault = w.HelpersDefault, w.RelayForDefault
 	return u
 }

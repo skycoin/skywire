@@ -19,8 +19,10 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app"
@@ -57,6 +59,9 @@ type skymailRuntime struct {
 	mb     *skymail.Mailbox
 	dir    string
 	cancel context.CancelFunc
+	// relay holds the explicit helper and relay-for lists, nil for the
+	// default. Settings swap it in place.
+	relay atomic.Pointer[skymailRelay]
 
 	lisMu sync.Mutex
 	lis   []net.Listener
@@ -121,6 +126,47 @@ type skymailSaved struct {
 	MaxMessageSize *int64                `json:"max_message_size,omitempty"`
 	MaxTotalSize   *int64                `json:"max_total_size,omitempty"`
 	MaxAge         *visorconfig.Duration `json:"max_age,omitempty"`
+	skymailRelay
+}
+
+// skymailRelay is who carries this visor's queued mail and whose mail it
+// carries. nil is the default, empty is none.
+type skymailRelay struct {
+	Helpers  *[]cipher.PubKey `json:"helpers,omitempty"`
+	RelayFor *[]cipher.PubKey `json:"relay_for,omitempty"`
+}
+
+// mailHelpers is who gets this visor's queued mail: the explicit list,
+// or the visors it manages as a hypervisor, which trust it already.
+func (v *Visor) mailHelpers(rt *skymailRuntime) ([]cipher.PubKey, bool) {
+	if r := rt.relay.Load(); r != nil && r.Helpers != nil {
+		return *r.Helpers, false
+	}
+	return v.managedVisorPKs(), true
+}
+
+// mailRelayFor is whose sealed mail this visor carries: the explicit
+// list, or its hypervisors, which can already do anything on it.
+func (v *Visor) mailRelayFor(rt *skymailRuntime) ([]cipher.PubKey, bool) {
+	if r := rt.relay.Load(); r != nil && r.RelayFor != nil {
+		return *r.RelayFor, false
+	}
+	return v.configuredHypervisors(), true
+}
+
+// managedVisorPKs are the visors connected to this visor's hypervisor.
+func (v *Visor) managedVisorPKs() []cipher.PubKey {
+	hv := v.hvInstance
+	if hv == nil {
+		return nil
+	}
+	hv.mu.RLock()
+	defer hv.mu.RUnlock()
+	out := make([]cipher.PubKey, 0, len(hv.remoteVisors))
+	for pk := range hv.remoteVisors {
+		out = append(out, pk)
+	}
+	return out
 }
 
 func loadSkymailSaved(dir string) (skymailSaved, error) {
@@ -255,6 +301,9 @@ func (v *Visor) startSkymail() error {
 	dir := skymailDir(v.conf)
 	_, limits, _ := skymailEffective(v.conf) //nolint:errcheck // reported at init
 	v.initLock.Unlock()
+	rt := &skymailRuntime{dir: dir}
+	saved, _ := loadSkymailSaved(dir) //nolint:errcheck // reported at init
+	rt.relay.Store(&saved.skymailRelay)
 	mb, err := skymail.Open(skymail.Config{
 		Dir: dir,
 		PK:  v.conf.PK,
@@ -265,9 +314,17 @@ func (v *Visor) startSkymail() error {
 			".skynet": skynetMailDialer{},
 			".dmsg":   &visorDmsgDialer{c: v.dmsgC},
 		},
-		Limits:    limits,
-		Outbox:    skymailOffline,
-		SK:        skymailSK(v.conf.SK),
+		Limits: limits,
+		Outbox: skymailOffline,
+		SK:     skymailSK(v.conf.SK),
+		Helpers: func() []cipher.PubKey {
+			h, _ := v.mailHelpers(rt)
+			return h
+		},
+		RelayFor: func(pk cipher.PubKey) bool {
+			r, _ := v.mailRelayFor(rt)
+			return slices.Contains(r, pk)
+		},
 		OnDeliver: v.notifyMail,
 		Log:       h.log,
 	})
@@ -280,7 +337,7 @@ func (v *Visor) startSkymail() error {
 	}
 
 	ctx, cancel := context.WithCancel(h.ctx)
-	rt := &skymailRuntime{mb: mb, dir: dir, cancel: cancel}
+	rt.mb, rt.cancel = mb, cancel
 	rt.track(lis)
 	log := h.log
 	go func() {
@@ -402,6 +459,10 @@ func (v *Visor) MailStatus() (*visorapi.MailStatus, error) {
 	st.Limits = rt.mb.Limits()
 	st.Usage, _ = rt.mb.Usage() //nolint:errcheck // a status line, not a decision
 	st.HasOutbox, st.Outbox = rt.mb.HasOutbox(), rt.mb.Queued()
+	if st.HasOutbox {
+		st.Helpers, st.HelpersDefault = v.mailHelpers(rt)
+		st.RelayFor, st.RelayForDefault = v.mailRelayFor(rt)
+	}
 	if inbox, err := rt.mb.List(skymail.FolderInbox); err == nil {
 		st.Total = len(inbox)
 		for _, m := range inbox {
@@ -437,6 +498,20 @@ func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 		d := visorconfig.Duration(*u.MaxAge)
 		s.MaxAge = &d
 	}
+	switch {
+	case u.HelpersDefault:
+		s.Helpers = nil
+	case u.Helpers != nil:
+		h := append([]cipher.PubKey{}, *u.Helpers...)
+		s.Helpers = &h
+	}
+	switch {
+	case u.RelayForDefault:
+		s.RelayFor = nil
+	case u.RelayFor != nil:
+		r := append([]cipher.PubKey{}, *u.RelayFor...)
+		s.RelayFor = &r
+	}
 	if err := s.save(dir); err != nil {
 		return fmt.Errorf("save %s: %w", skymailSettingsFile, err)
 	}
@@ -464,6 +539,8 @@ func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	}
 	if rt, err := v.mailbox(); err == nil {
 		rt.mb.SetLimits(limits)
+		rt.relay.Store(&s.skymailRelay)
+		_ = rt.mb.Retry("") //nolint:errcheck // a new helper takes queued mail now
 	}
 	return nil
 }

@@ -192,6 +192,9 @@ func (mb *Mailbox) RunExpiry(ctx context.Context) {
 		} else if n > 0 {
 			mb.log.WithField("removed", n).Info("skymail: expired old mail")
 		}
+		if err := mb.seen.prune(time.Now()); err != nil {
+			mb.log.WithError(err).Warn("skymail: prune delivered-message list")
+		}
 		select {
 		case <-ctx.Done():
 			return
