@@ -225,11 +225,7 @@ func (s *service) Run(ctx context.Context) error {
 		MaxRelayedStreams:     cfg.MaxRelayedStreams,
 		AcceptRelayedRequests: !cfg.RejectRelayedRequests,
 	}
-	base := ""
-	if cfg.Path != "" {
-		base = filepath.Dir(cfg.Path)
-	}
-	asyncConf, err := cfg.Async.StoreConfig(base)
+	asyncConf, err := cfg.Async.StoreConfig(asyncBaseDir(s.cfg.ConfigPath, cfg.Path))
 	if err != nil {
 		return err
 	}
@@ -739,4 +735,17 @@ func healthAddr(local string) (string, error) {
 		return "", fmt.Errorf("dmsg-server: parse local_address port %q: %w", local, err)
 	}
 	return ":" + strconv.Itoa(hp+1), nil
+}
+
+// asyncBaseDir is the directory a relative async dir is taken from: the
+// config_path file's when the block points at one, else the file the
+// config came from, else the working directory.
+func asyncBaseDir(configPath, path string) string {
+	switch {
+	case configPath != "":
+		return filepath.Dir(configPath)
+	case path != "":
+		return filepath.Dir(path)
+	}
+	return ""
 }
