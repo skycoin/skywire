@@ -217,7 +217,7 @@ func (mb *Mailbox) deliverGroups(ctx context.Context, from string, groups []*pee
 // carried it.
 func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, msg []byte) (string, error) {
 	if g.pk == mb.cfg.PK {
-		_, err := mb.deliverLocal(mb.cfg.PK, msg)
+		_, err := mb.deliverLocal(mb.cfg.PK, cipher.PubKey{}, msg)
 		return "local", err
 	}
 	dialer := mb.cfg.Dialers[g.suffix]

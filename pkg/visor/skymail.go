@@ -266,7 +266,8 @@ func (v *Visor) startSkymail() error {
 			".dmsg":   &visorDmsgDialer{c: v.dmsgC},
 		},
 		Limits:    limits,
-		Outbox:    skymailOutbox,
+		Outbox:    skymailOffline,
+		SK:        skymailSK(v.conf.SK),
 		OnDeliver: v.notifyMail,
 		Log:       h.log,
 	})
@@ -345,6 +346,15 @@ func mailSender(from string) string {
 		return a.Address
 	}
 	return local + "@" + domain[:8] + "…" + domain[strings.LastIndex(domain, "."):]
+}
+
+// skymailSK is the key the mailbox opens sealed envelopes with, where
+// that is on.
+func skymailSK(sk cipher.SecKey) cipher.SecKey {
+	if !skymailOffline {
+		return cipher.SecKey{}
+	}
+	return sk
 }
 
 // skynetMailDialer reaches a .skynet address over a skywire route and

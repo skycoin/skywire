@@ -92,6 +92,7 @@ func (d netDialer) Dial(ctx context.Context, peer cipher.PubKey, _ uint16) (net.
 
 type visor struct {
 	pk cipher.PubKey
+	sk cipher.SecKey
 	mb *Mailbox
 }
 
@@ -103,10 +104,11 @@ func newTestNet() *testNet {
 // reachable over .skynet only; .dmsg has no dialer.
 func (n *testNet) addVisor(t *testing.T, opts ...func(*Config)) *visor {
 	t.Helper()
-	pk, _ := cipher.GenerateKeyPair()
+	pk, sk := cipher.GenerateKeyPair()
 	cfg := Config{
 		Dir:     t.TempDir(),
 		PK:      pk,
+		SK:      sk,
 		PeerPK:  peerOf,
 		Dialers: map[string]skymailbridge.Dialer{".skynet": n.dialerFor(pk)},
 		Outbox:  true,
@@ -124,7 +126,7 @@ func (n *testNet) addVisor(t *testing.T, opts ...func(*Config)) *visor {
 	done := make(chan struct{})
 	go func() { _ = mb.Serve(ctx, l); close(done) }() //nolint:errcheck
 	t.Cleanup(func() { cancel(); <-done })
-	return &visor{pk: pk, mb: mb}
+	return &visor{pk: pk, sk: sk, mb: mb}
 }
 
 func addr(local string, pk cipher.PubKey) string {
