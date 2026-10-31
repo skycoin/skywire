@@ -38,6 +38,13 @@ func TestRenderOutbox(t *testing.T) {
 	require.Contains(t, out, "never", "no give-up time")
 	require.Contains(t, out, "dial: offline")
 	require.Equal(t, "(empty)\n", renderOutbox(nil, now))
+
+	out = renderOutbox([]skymail.Summary{{
+		ID:    "2.Mcd.skymail",
+		Queue: &skymail.Queued{Pending: []string{"b@x.dmsg"}, CarriedFor: "02aa", NextAttempt: now},
+	}}, now)
+	require.Contains(t, out, "(sealed)")
+	require.Contains(t, out, "carrying for 02aa")
 }
 
 func TestRenderMessageNamesTheRelay(t *testing.T) {

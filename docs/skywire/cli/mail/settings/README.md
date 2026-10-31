@@ -14,9 +14,16 @@ Keys:
                     a full mailbox refuses mail until some is removed
   max_age           mail older than this is deleted, e.g. 7d or 36h;
                     Outbox mail this old is given up with a bounce
+  helpers           visors that get a sealed copy of queued mail and
+                    deliver it while this one is away, e.g. pk1,pk2;
+                    default: the visors this one manages as hypervisor
+  relay_for         visors whose sealed mail this one carries;
+                    default: this visor's hypervisors
 
 Sizes take B, KiB, MiB, GiB (or KB, MB, GB). "default" restores the
-default (10MiB, 64MiB, 7d); "none" removes the bound.
+default (10MiB, 64MiB, 7d, or the hypervisor relation for the lists);
+"none" removes the bound or empties the list. A helper carries mail
+only for visors in its relay_for, and cannot read what it carries.
 
 Examples:
   skywire cli mail settings
