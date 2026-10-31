@@ -62,7 +62,7 @@ to every subcommand.
 |---|---|---|
 | `mdisc` | list dmsg clients in discovery (freq view) | `--stats`/`-s` = just a count |
 | `mdisc entry <pk>` | fetch one entry (client or server) | resolves RPC→dmsg→HTTP, so dmsg:// url works |
-| `mdisc servers` | dmsg servers by load: `connected~`, `avail-sess` | reads `/all_servers`; `--json` ok |
+| `mdisc servers` | dmsg servers by load: `connected~`, `avail-sess`, and `async` (largest message/TTL when the server holds messages for offline clients, `-` otherwise) | reads `/all_servers`; `--json` ok |
 | `mdisc check` | probe every server's advertised wss front (DNS/TLS/426) | exits nonzero on failure; `--warn-only` to always exit 0; `--timeout`; CI-safe over https `--url` |
 
 `connected~` is inferred: `DefaultMaxSessions(2048) - available_sessions`; a
