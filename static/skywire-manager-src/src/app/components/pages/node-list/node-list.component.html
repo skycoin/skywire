@@ -569,8 +569,10 @@
                under a sub-hypervisor and the panels of sub-hypervisors not on this page. -->
           <ng-template #rowCells let-node let-section="section" let-child="child" let-remote="remote">
             <td>
-              @if (node.isHypervisor) {
+              @if (isLocalHypervisor(node)) {
                 <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+              } @else if (section || node.isHypervisor) {
+                <mat-icon class="hypervisor-icon attached" [inline]="true" [matTooltip]="'nodes.attached-hypervisor-info' | translate">star</mat-icon>
               }
             </td>
             <td>
@@ -755,10 +757,15 @@
             <a class="link-row" [class.child-item]="child" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
               <div class="list-item-container">
                 <div class="left-part">
-                  @if (node.isHypervisor) {
+                  @if (isLocalHypervisor(node)) {
                     <div class="list-row">
                       <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
                       <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
+                    </div>
+                  } @else if (section || node.isHypervisor) {
+                    <div class="list-row">
+                      <mat-icon class="hypervisor-icon attached" [inline]="true">star</mat-icon>&nbsp;
+                      <span class="attached-hypervisor-text title">{{ 'nodes.attached-hypervisor' | translate }}</span>
                     </div>
                   }
                   <div class="list-row">
