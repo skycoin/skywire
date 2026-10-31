@@ -69,10 +69,15 @@
                   {{ folder === 'INBOX' ? m.from : (m.queue?.pending?.join(', ') || m.to) }}
                   @if (m.from_verified && folder === 'INBOX') { <span class="ok" [title]="'mail.verified' | translate">✓</span> }
                 </td>
-                <td>{{ m.subject || ('mail.no-subject' | translate) }}</td>
+                @if (m.queue?.carried_for) {
+                  <td class="dim">{{ 'mail.carried-for' | translate }} <span class="mono">{{ short(m.queue!.carried_for!) }}</span></td>
+                } @else {
+                  <td>{{ m.subject || ('mail.no-subject' | translate) }}</td>
+                }
                 @if (folder === 'Outbox') {
                   <td class="small nowrap" [title]="m.queue?.last_error || ''">
                     @if (m.queue) { {{ m.queue.next_attempt | date: 'short' }} · {{ m.queue.attempts }} {{ (m.queue.attempts === 1 ? 'mail.try' : 'mail.tries') | translate }} }
+                    @if (m.queue?.handed?.length) { · {{ m.queue!.handed!.length }} {{ (m.queue!.handed!.length === 1 ? 'mail.helper-has' : 'mail.helpers-have') | translate }} }
                   </td>
                 } @else {
                   <td class="small nowrap">{{ m.date | date: 'short' }}</td>
@@ -88,18 +93,22 @@
           <div class="loading-row"><mat-spinner [diameter]="16"></mat-spinner></div>
         } @else {
           <div class="mail-msg">
-            <h3>{{ message.subject || ('mail.no-subject' | translate) }}</h3>
-            <div class="small"><span class="dim">{{ 'mail.from' | translate }}</span> <span class="mono">{{ message.from }}</span>
-              @if (message.from_verified) { <span class="ok">✓ {{ 'mail.verified' | translate }}</span> }
-            </div>
-            @if (message.relay_pk) {
-              <div class="small"><span class="dim">{{ 'mail.relayed-by' | translate }}</span> <span class="mono">{{ message.relay_pk }}</span></div>
+            @if (openQueue?.carried_for) {
+              <h3>{{ 'mail.sealed-title' | translate }}</h3>
+            } @else {
+              <h3>{{ message.subject || ('mail.no-subject' | translate) }}</h3>
+              <div class="small"><span class="dim">{{ 'mail.from' | translate }}</span> <span class="mono">{{ message.from }}</span>
+                @if (message.from_verified) { <span class="ok">✓ {{ 'mail.verified' | translate }}</span> }
+              </div>
+              @if (message.relay_pk) {
+                <div class="small"><span class="dim">{{ 'mail.relayed-by' | translate }}</span> <span class="mono">{{ message.relay_pk }}</span></div>
+              }
+              <div class="small"><span class="dim">{{ 'mail.to' | translate }}</span> <span class="mono">{{ message.to }}</span></div>
+              @if (message.cc) {
+                <div class="small"><span class="dim">Cc</span> <span class="mono">{{ message.cc }}</span></div>
+              }
+              <div class="small dim">{{ message.date }}</div>
             }
-            <div class="small"><span class="dim">{{ 'mail.to' | translate }}</span> <span class="mono">{{ message.to }}</span></div>
-            @if (message.cc) {
-              <div class="small"><span class="dim">Cc</span> <span class="mono">{{ message.cc }}</span></div>
-            }
-            <div class="small dim">{{ message.date }}</div>
             @if (folder === 'Outbox' && openQueue) {
               <div class="mail-queue small">
                 <div>{{ 'mail.waiting-for' | translate }} <span class="mono">{{ openQueue.pending.join(', ') }}</span></div>
@@ -107,6 +116,14 @@
                   {{ 'mail.next-try' | translate }} {{ openQueue.next_attempt | date: 'medium' }}
                   @if (openQueue.give_up) { · {{ 'mail.gives-up' | translate }} {{ openQueue.give_up | date: 'medium' }} }
                 </div>
+                @if (openQueue.handed?.length) {
+                  <div class="dim">{{ 'mail.handed-to' | translate }}
+                    @for (h of openQueue.handed; track h) { <span class="mono">{{ short(h) }}</span> }
+                  </div>
+                }
+                @if (openQueue.carried_for) {
+                  <div class="dim">{{ 'mail.carried-note' | translate }} <span class="mono">{{ openQueue.carried_for }}</span></div>
+                }
                 @if (openQueue.last_error) {
                   <div class="mail-error">{{ openQueue.last_error }}</div>
                 }
@@ -115,8 +132,10 @@
             @if (message.from_html) {
               <p class="small dim">{{ 'mail.from-html' | translate }}</p>
             }
-            <pre class="mail-body">{{ message.text }}</pre>
-            @if (message.attachments?.length) {
+            @if (!openQueue?.carried_for) {
+              <pre class="mail-body">{{ message.text }}</pre>
+            }
+            @if (message.attachments?.length && !openQueue?.carried_for) {
               <div class="small">
                 <span class="dim">{{ 'mail.attachments' | translate }}</span>
                 @for (a of message.attachments; track $index) {
@@ -184,6 +203,22 @@
           <div class="mail-bar">
             <button mat-stroked-button (click)="saveWhitelist()">{{ 'mail.save' | translate }}</button>
           </div>
+          @if (status.has_outbox) {
+            <label class="small">{{ 'mail.helpers' | translate }}</label>
+            <textarea class="mono" rows="3" [(ngModel)]="helpersText" [placeholder]="'mail.helpers-default' | translate"></textarea>
+            <p class="small dim">{{ 'mail.now' | translate }}
+              @for (h of status.helpers || []; track h) { <span class="mono">{{ short(h) }}</span> } @empty { {{ 'mail.none' | translate }} }
+            </p>
+            <label class="small">{{ 'mail.relay-for' | translate }}</label>
+            <textarea class="mono" rows="3" [(ngModel)]="relayForText" [placeholder]="'mail.relay-for-default' | translate"></textarea>
+            <p class="small dim">{{ 'mail.now' | translate }}
+              @for (h of status.relay_for || []; track h) { <span class="mono">{{ short(h) }}</span> } @empty { {{ 'mail.none' | translate }} }
+            </p>
+            <p class="small dim">{{ 'mail.helpers-help' | translate }}</p>
+            <div class="mail-bar">
+              <button mat-stroked-button (click)="saveHelpers()">{{ 'mail.save' | translate }}</button>
+            </div>
+          }
         </div>
       }
     </div>
