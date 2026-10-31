@@ -12,9 +12,9 @@ import (
 )
 
 // Parking leaves a sealed copy of queued mail with the dmsg servers that
-// hold messages for offline visors (dmsg-async, docs/dmsg-async.md). The
-// recipient's visor fetches it when it comes online, even if the sender and
-// all its helpers are gone by then. It takes only small mail: a server
+// hold messages for offline visors (dmsg-async, docs/design/dmsg-async.md).
+// The recipient's visor fetches it when it comes online, even if the sender
+// and all its helpers are gone by then. It takes only small mail: a server
 // advertises the largest message it holds, 64 KiB by default, and no
 // server holds mail unless its operator turned dmsg-async on.
 //

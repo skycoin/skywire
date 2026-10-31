@@ -241,11 +241,11 @@ type Server struct {
 	// and can be used as a Kademlia bootstrap peer by visors.
 	DHTBootstrap bool `json:"dht_bootstrap,omitempty"`
 
-	// Async is set when the server holds small messages for clients that are
-	// offline (dmsg-async, docs/dmsg-async.md), with its limits. Nil, and so
-	// absent from the signed JSON, on every server that does not: an older
-	// discovery drops fields it does not know and would then reject the
-	// entry's signature.
+	// Async is set when the server holds small messages for clients that
+	// are offline (dmsg-async, docs/design/dmsg-async.md), with its limits.
+	// Nil, and so absent from the signed JSON, on every server that does
+	// not: an older discovery drops fields it does not know and would then
+	// reject the entry's signature.
 	Async *AsyncInfo `json:"async,omitempty"`
 }
 

@@ -18,8 +18,8 @@ import (
 // dmsg-async lets a client leave a small message on a dmsg server for a
 // client that is offline, and the recipient fetch it later. It is off on
 // every server unless the operator turns it on, and each server that has
-// it on says so, with its limits, in its discovery entry. docs/dmsg-async.md
-// has the design. In short:
+// it on says so, with its limits, in its discovery entry. The design is in
+// docs/design/dmsg-async.md. In short:
 //
 //   - A client opens a stream to the server itself with a signed
 //     StreamRequest whose Async flag is set. The session's Noise channel

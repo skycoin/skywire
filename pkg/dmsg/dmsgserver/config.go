@@ -199,9 +199,9 @@ type Config struct {
 	// make the server relay for peers alone.
 	RejectRelayedRequests bool `json:"reject_relayed_requests,omitempty"`
 
-	// Async turns on dmsg-async (docs/dmsg-async.md): the server holds small
-	// messages for clients that are offline until they fetch them. Absent,
-	// or enable false, leaves it off.
+	// Async turns on dmsg-async (docs/design/dmsg-async.md): the server
+	// holds small messages for clients that are offline until they fetch
+	// them. Absent, or enable false, leaves it off.
 	Async *AsyncConfig `json:"async,omitempty"`
 }
 
