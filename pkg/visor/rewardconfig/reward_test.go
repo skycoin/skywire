@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	coincipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/bip44"
 )
 
@@ -40,8 +41,8 @@ func TestValidateRewardXpub(t *testing.T) {
 	if got, err := ValidateRewardXpub("  " + account + "\n"); err != nil || got != account {
 		t.Fatalf("account xpub: %q, %v", got, err)
 	}
-	if _, err := ValidateRewardXpub(chain); err != nil {
-		t.Fatalf("chain xpub is accepted, with CheckXpubDepth's warning: %v", err)
+	if _, err := ValidateRewardXpub(chain); !errors.Is(err, ErrNotAccountXpub) {
+		t.Fatalf("chain xpub: %v", err)
 	}
 	if CheckXpubDepth(chain) == "" || CheckXpubDepth(account) != "" {
 		t.Fatal("depth warning is for chain xpubs only")
@@ -58,5 +59,39 @@ func TestValidateRewardXpub(t *testing.T) {
 	}
 	if !strings.HasPrefix(account, "xpub") {
 		t.Fatalf("unexpected xpub form %q", account)
+	}
+}
+
+func TestRewardAddresses(t *testing.T) {
+	account, chain := testXpubs(t)
+
+	addrs, err := RewardAddresses(account, 3)
+	if err != nil || len(addrs) != 3 {
+		t.Fatalf("account xpub: %v %v", addrs, err)
+	}
+	coin, err := bip44.NewCoin([]byte("skywire reward xpub test seed 0123456789"), bip44.CoinTypeSkycoin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acct, err := coin.Account(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ext, err := acct.External()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, a := range addrs {
+		k, err := ext.NewPublicChildKey(uint32(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := coincipher.AddressFromPubKey(coincipher.MustNewPubKey(k.Key)).String()
+		if a != want {
+			t.Fatalf("address %d: %s, want %s", i, a, want)
+		}
+	}
+	if _, err := RewardAddresses(chain, 3); err == nil {
+		t.Fatal("chain xpub must not derive reward addresses")
 	}
 }

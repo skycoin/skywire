@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, debounceTime } from 'rxjs/operators';
 
 import { NodeComponent } from '../node.component';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
@@ -20,6 +20,13 @@ interface RewardDay {
   txid?: string;
 }
 
+// The first addresses an xpub derives, or why it derives none.
+interface XpubAddresses {
+  xpub: string;
+  addresses: string[];
+  error: string;
+}
+
 @Component({
   selector: 'app-node-rewards',
   templateUrl: './node-rewards.component.html',
@@ -34,6 +41,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   // Set when the reward address has spent, so its public key is on chain.
   exposure: { spent: boolean; balance: string } | null = null;
   private exposureAddress = '';
+  // Where the rewards of the set xpub, and of an xpub typed in the form, go.
+  xpubAddresses: XpubAddresses | null = null;
+  formXpubAddresses: XpubAddresses | null = null;
 
   history: RewardDay[] = [];
   loading = false;
@@ -53,6 +63,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   private saveRewardsSubscription!: Subscription;
   private rewardRulesSubscription!: Subscription;
   private exposureSub?: Subscription;
+  private xpubSub?: Subscription;
+  private formXpubSub?: Subscription;
+  private formChangesSub?: Subscription;
 
   constructor(
     private http: HttpClient,
@@ -66,6 +79,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   ) {
     this.rewardForm = this.formBuilder.group({
       address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+    });
+    this.formChangesSub = this.rewardForm.get('address')!.valueChanges.pipe(debounceTime(300)).subscribe(value => {
+      this.formXpubSub?.unsubscribe();
+      this.formXpubSub = this.loadXpubAddresses((value || '').trim(), r => this.formXpubAddresses = r);
     });
   }
 
@@ -88,6 +105,32 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.saveRewardsSubscription?.unsubscribe();
     this.rewardRulesSubscription?.unsubscribe();
     this.exposureSub?.unsubscribe();
+    this.xpubSub?.unsubscribe();
+    this.formXpubSub?.unsubscribe();
+    this.formChangesSub?.unsubscribe();
+  }
+
+  // Asks the hypervisor for the first addresses of xpub and passes them to set,
+  // or null when xpub is not an xpub.
+  private loadXpubAddresses(xpub: string, set: (r: XpubAddresses | null) => void): Subscription | undefined {
+    if (!xpub.startsWith('xpub')) {
+      set(null);
+      this.changeDetectorRef.markForCheck();
+
+      return undefined;
+    }
+
+    return this.nodeService.getRewardXpubAddresses(xpub).subscribe({
+      next: (r: any) => {
+        set({ xpub, addresses: r?.addresses || [], error: '' });
+        this.changeDetectorRef.markForCheck();
+      },
+      error: (err: OperationError) => {
+        err = processServiceError(err);
+        set({ xpub, addresses: [], error: err.originalServerErrorMsg || err.translatableErrorMsg });
+        this.changeDetectorRef.markForCheck();
+      },
+    });
   }
 
   // Asks the visor whether the reward address has sent coins before. Only runs when the address changes.
@@ -98,6 +141,8 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.exposureAddress = this.rewardsAddress;
     this.exposure = null;
     this.exposureSub?.unsubscribe();
+    this.xpubSub?.unsubscribe();
+    this.xpubSub = this.loadXpubAddresses(this.rewardsAddress, r => this.xpubAddresses = r);
     if (!this.rewardsAddress || this.rewardsAddressIsXpub) {
       return;
     }

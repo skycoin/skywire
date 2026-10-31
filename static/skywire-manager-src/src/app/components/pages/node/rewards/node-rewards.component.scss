@@ -78,3 +78,24 @@ tr.pending td {
     min-height: 40px;
   }
 }
+
+.xpub-addresses {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+  font-size: 0.875rem;
+
+  .xpub-addresses-info {
+    opacity: 0.8;
+    margin-bottom: 4px;
+  }
+
+  .xpub-address {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    overflow-wrap: anywhere;
+  }
+}

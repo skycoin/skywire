@@ -779,6 +779,13 @@ return {
   }
 
   /**
+   * Gets the first addresses an account xpub derives, which are where its rewards go.
+   */
+  getRewardXpubAddresses(xpub: string) {
+    return this.apiService.get(`reward-xpub-addresses?xpub=${encodeURIComponent(xpub)}`);
+  }
+
+  /**
    * Removes the rewards address of the node.
    */
   deleteRewardsAddress(nodeKey: string) {

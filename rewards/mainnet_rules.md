@@ -338,7 +338,7 @@ The exponent can be adjusted via the `--sat-exp` flag (default 0.5):
 
 Rewards are paid to an account xpub, not a single address. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent. A single skycoin address can no longer be set; one set earlier still works for now.
 
-Use the **account** xpub of a BIP44 wallet (depth 3). In the Skycoin desktop wallet or skycoin-web it is shown for the wallet as "Account xPub", next to the two chain xpubs. A chain xpub (depth 4) is accepted with a warning but cannot be used for login verification.
+Use the **account** xpub of a BIP44 wallet (depth 3). In the Skycoin desktop wallet or skycoin-web it is shown for the wallet as "Account xPub", next to the two chain xpubs. A chain xpub (depth 4) is not accepted, because the addresses derived from it are not ones its wallet shows. `skywire cli reward` and the hypervisor UI list the first addresses of the xpub that is set, which should match the first addresses of the wallet.
 
 Set it from the cli:
 

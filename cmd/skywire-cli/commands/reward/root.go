@@ -169,7 +169,7 @@ func longText() string {
 			if err == nil {
 				isRewarded = true
 				defaultRewardAddress = fmt.Sprintf("%s\n", rwdAdd)
-				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n"
+				return "\n    skycoin reward address set to:\n    " + strings.TrimSpace(rwdAdd) + "\n" + rewardAddressesText(rwdAdd)
 			}
 		}
 	}
@@ -252,7 +252,7 @@ var rewardCmd = &cobra.Command{
 				rwdAdd, err := client.GetRewardAddress()
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
-					internal.PrintOutput(cmd.Flags(), out, out)
+					internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
@@ -264,7 +264,7 @@ var rewardCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error reading file. err=%v", err))
 			}
 			out := fmt.Sprintf("%s\n", dat)
-			internal.PrintOutput(cmd.Flags(), out, out)
+			internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(string(dat)))
 			cmdutil.Exit(0)
 		}
 		//set reward address from first argument
@@ -280,7 +280,7 @@ var rewardCmd = &cobra.Command{
 				rwdAdd, err := client.GetRewardAddress()
 				if err == nil && rwdAdd != "" {
 					out := fmt.Sprintf("%s\n", rwdAdd)
-					internal.PrintOutput(cmd.Flags(), out, out)
+					internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 					warnIfExposed(client, rwdAdd)
 					cmdutil.Exit(0)
 				}
@@ -288,7 +288,7 @@ var rewardCmd = &cobra.Command{
 			// Fallback to file
 			if dat, err := os.ReadFile(output); err == nil { //nolint:gosec
 				out := fmt.Sprintf("%s\n", dat)
-				internal.PrintOutput(cmd.Flags(), out, out)
+				internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(string(dat)))
 				cmdutil.Exit(0)
 			}
 			cmdutil.Println("No reward address set. Use: skywire cli reward <address|xpub>")
@@ -303,9 +303,6 @@ var rewardCmd = &cobra.Command{
 		canonical, err := rewardconfig.ValidateRewardXpub(rewardAddress)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
-		}
-		if warning := rewardconfig.CheckXpubDepth(canonical); warning != "" {
-			cmdutil.Eprintf("\n%s\n\n", warning)
 		}
 
 		// Bulk path: apply this address to multiple visors via the
@@ -347,7 +344,7 @@ var rewardCmd = &cobra.Command{
 			// also write to the local file so -r works without visor running
 			os.WriteFile(output, []byte(rwdAdd), 0600) //nolint:errcheck,gosec
 			out := fmt.Sprintf("Reward address:\n  %s\n", rwdAdd)
-			internal.PrintOutput(cmd.Flags(), out, out)
+			internal.PrintOutput(cmd.Flags(), out, out+rewardAddressesText(rwdAdd))
 			warnIfExposed(client, rwdAdd)
 		} else {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
@@ -424,7 +421,7 @@ func applyBulkRewardAddress(flags *pflag.FlagSet, client visorapi.API, pks []str
 			humanLines = append(humanLines, fmt.Sprintf("  %s  OK    %s", r.PK, r.Set))
 		}
 	}
-	humanOut := strings.Join(humanLines, "\n") + "\n"
+	humanOut := strings.Join(humanLines, "\n") + "\n" + rewardAddressesText(addr)
 	internal.PrintOutput(flags, results, humanOut)
 }
 
@@ -436,7 +433,7 @@ func readRewardFile(cmdFlags *pflag.FlagSet) {
 		internal.PrintFatalError(cmdFlags, fmt.Errorf("Error reading file. err=%v", err))
 	}
 	output := fmt.Sprintf("Reward address file:\n  %s\nreward address:\n  %s\n", output, dat)
-	internal.PrintOutput(cmdFlags, output, output)
+	internal.PrintOutput(cmdFlags, output, output+rewardAddressesText(string(dat)))
 }
 
 // warnIfExposed prints a warning when addr has spent, which put its public key on chain.
@@ -460,4 +457,22 @@ func warnIfExposed(client visorapi.API, addr string) {
 	if w := e.Warning(); w != "" {
 		cmdutil.Eprintf("\n%s\n\n", w)
 	}
+}
+
+// shownRewardAddresses is how many derived addresses are listed under an xpub.
+const shownRewardAddresses = 5
+
+// rewardAddressesText lists the first addresses an xpub derives, so they can be
+// matched against the wallet's own address list. It is empty for a plain address.
+func rewardAddressesText(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if !strings.HasPrefix(addr, "xpub") {
+		return ""
+	}
+	addrs, err := rewardconfig.RewardAddresses(addr, shownRewardAddresses)
+	if err != nil {
+		return fmt.Sprintf("\nWARNING: %v\n", err)
+	}
+	return "\nRewards go to these addresses of the xpub, each day to the next one not used yet.\n" +
+		"They should match the first addresses of your wallet:\n  " + strings.Join(addrs, "\n  ") + "\n  ...\n"
 }
