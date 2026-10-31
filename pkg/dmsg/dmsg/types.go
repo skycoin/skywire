@@ -277,7 +277,11 @@ type StreamRequest struct {
 	// dmsg-servers ignore this flag and return zero geo fields, so the
 	// client must be prepared to fall back to a local lookup when the
 	// response's geo fields are empty.
-	GeoInfo  bool
+	GeoInfo bool
+	// Async, with DstAddr naming the server itself, opens a dmsg-async
+	// exchange with that server (async.go). Older servers ignore it and
+	// refuse the request, as they refuse any request for their own key.
+	Async    bool
 	NoiseMsg []byte
 
 	raw SignedObject `enc:"-"` // back reference.

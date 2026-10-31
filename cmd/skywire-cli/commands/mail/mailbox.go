@@ -110,9 +110,10 @@ The visor retries each message after 1, 5 and 15 minutes and then every
 hour, and at once when the recipient sends mail here. It gives up after
 the mailbox's maximum age and files a bounce in the inbox with the
 original attached. Each message also goes, sealed, to this visor's
-helpers ("helpers" counts them; see mail settings), which deliver it
-while this visor is away. Sealed mail this visor carries for another
-shows as "carrying for <pk>". ` + "`mail retry`" + ` tries again now and ` + "`mail rm --outbox`" + `
+helpers (see mail settings), which deliver it while this visor is away,
+and to the dmsg servers that hold messages for offline visors, where
+the recipient fetches it when it comes online. "copies" counts both.
+Sealed mail this visor carries for another shows as "carrying for <pk>". ` + "`mail retry`" + ` tries again now and ` + "`mail rm --outbox`" + `
 cancels a message.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -130,7 +131,7 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 	}
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\thelpers\tlast error") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\tcopies\tlast error") //nolint:errcheck,gosec
 	for _, m := range msgs {
 		q := m.Queue
 		if q == nil {
@@ -145,7 +146,7 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 		if !q.GiveUp.IsZero() {
 			giveUp = q.GiveUp.Local().Format(time.DateTime)
 		}
-		subject, helpers := m.Subject, fmt.Sprintf("%d", len(q.Handed))
+		subject, helpers := m.Subject, fmt.Sprintf("%d helpers, %d servers", len(q.Handed), q.Parked)
 		if q.CarriedFor != "" {
 			// Sealed for its recipient: no subject to show, and not ours.
 			subject, helpers = "(sealed)", "carrying for "+q.CarriedFor

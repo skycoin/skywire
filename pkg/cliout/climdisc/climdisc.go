@@ -15,4 +15,14 @@ type Server struct {
 	Address           string `json:"address"`
 	Version           string `json:"version"`
 	Registered        int64  `json:"registered"`
+	// Async is set when the server holds messages for clients that are
+	// offline (dmsg-async).
+	Async *Async `json:"async,omitempty"`
+}
+
+// Async is what a dmsg-async server takes: the largest message in bytes
+// and how long it keeps one, in seconds.
+type Async struct {
+	MaxMessage int   `json:"max_message"`
+	TTL        int64 `json:"ttl"`
 }

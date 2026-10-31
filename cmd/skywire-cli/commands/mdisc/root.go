@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/bitfield/script"
 	"github.com/sirupsen/logrus"
@@ -205,14 +206,18 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 		if connected < 0 {
 			connected = 0
 		}
-		serverEntries = append(serverEntries, serverEntry{
+		se := serverEntry{
 			PublicKey:         entry.Static,
 			Connected:         connected,
 			AvailableSessions: avail,
 			Address:           entry.Server.Address,
 			Version:           entry.Version,
 			Registered:        entry.Timestamp,
-		})
+		}
+		if a := entry.Server.Async; a != nil {
+			se.Async = &climdisc.Async{MaxMessage: a.MaxMessage, TTL: a.TTL}
+		}
+		serverEntries = append(serverEntries, se)
 	}
 	// Most-loaded first, like `pv -t` sorts by transport count.
 	sort.Slice(serverEntries, func(i, j int) bool {
@@ -221,11 +226,15 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "public-key\tconnected~\tavail-sess\taddress\tversion\tregistered")
+	_, err := fmt.Fprintln(w, "public-key\tconnected~\tavail-sess\taddress\tversion\tregistered\tasync")
 	internal.Catch(cmdFlags, err)
 	for _, s := range serverEntries {
-		_, err := fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%d\n",
-			s.PublicKey, s.Connected, s.AvailableSessions, s.Address, s.Version, s.Registered)
+		async := "-"
+		if s.Async != nil {
+			async = fmt.Sprintf("%dB/%s", s.Async.MaxMessage, time.Duration(s.Async.TTL)*time.Second)
+		}
+		_, err := fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%d\t%s\n",
+			s.PublicKey, s.Connected, s.AvailableSessions, s.Address, s.Version, s.Registered, async)
 		internal.Catch(cmdFlags, err)
 	}
 	internal.Catch(cmdFlags, w.Flush())

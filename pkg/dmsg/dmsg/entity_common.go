@@ -254,6 +254,12 @@ type EntityCommon struct {
 	// geoLookup is set by Server.SetGeoLookup. Server-side IP-info
 	// stream handler reads it; client entities leave it nil.
 	geoLookup GeoLookupFunc
+
+	// asyncStore holds dmsg-async messages on a server that has it on, and
+	// asyncInfo is what that server advertises. Both are set before the
+	// server serves and are nil on clients and on servers without it.
+	asyncStore *asyncStore
+	asyncInfo  *disc.AsyncInfo
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {
@@ -761,6 +767,7 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
 		entry.Server.AddressV6 = addrV6
 		entry.Server.DHTBootstrap = c.dhtBootstrap
+		entry.Server.Async = c.asyncInfo
 		if c.serverVersion != "" {
 			entry.Version = c.serverVersion
 		}
@@ -803,9 +810,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	wtDelta := entry.Server.AddressWT != advWTAddr || entry.Server.CertHashWT != wtCertHashHex ||
 		entry.Server.CertHashWTNext != wtNextHashHex
 	versionDelta := c.serverVersion != "" && entry.Version != c.serverVersion
+	asyncDelta := !asyncInfoEqual(entry.Server.Async, c.asyncInfo)
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !serverAdded && !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !versionDelta && !due {
+	if _, due := c.updateIsDue(); !serverAdded && !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !versionDelta && !asyncDelta && !due {
 		return nil
 	}
 
@@ -852,6 +860,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	if versionDelta {
 		entry.Version = c.serverVersion
 		log = log.WithField("entry_version", entry.Version)
+	}
+	if asyncDelta {
+		entry.Server.Async = c.asyncInfo
+		log = log.WithField("async", c.asyncInfo != nil)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap

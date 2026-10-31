@@ -28,6 +28,10 @@ type PeerEntry struct {
 
 // ServerConfig configues the Server
 type ServerConfig struct {
+	// Async, when set, turns on dmsg-async: the server holds small messages
+	// for clients that are offline (async.go). Nil leaves it off.
+	Async *AsyncStoreConfig
+
 	MaxSessions    int
 	UpdateInterval time.Duration
 	AuthPassphrase string
@@ -170,6 +174,9 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 		return nil
 	}
 	s.authPassphrase = conf.AuthPassphrase
+	if conf.Async != nil {
+		s.startAsync(*conf.Async)
+	}
 
 	// Initialize peer mesh.
 	s.peers = conf.Peers

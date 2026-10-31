@@ -249,6 +249,11 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// skynet carrier: seeded "skynet://<pk>:70" server entries are dialed as a
 	// skywire route to that visor's dmsg relay (init_dmsg_relay.go).
 	dmsgC.SetSessionDialer(skynetSessionDialer)
+	if skymailOffline {
+		// Fetch what dmsg-async servers hold for this visor while it was
+		// offline. The mailbox handles port 25; the phone apps leave it off.
+		dmsgC.EnableAsync(dmsg.AsyncClientConfig{})
+	}
 	dmsgTr := dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 	// A request for this visor's own key (a service it hosts under
 	// embedded_services, its own log server) is served in-process: dmsg does

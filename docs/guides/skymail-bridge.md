@@ -76,8 +76,19 @@ hypervisor of a desktop visor hands its mail to that visor with no setup.
 A helper takes sealed mail only from the visors in its `relay_for` list,
 and delivers it only to a mailbox that offers `SKYMAIL-SEALED` in EHLO.
 
-The phone apps do not have the Outbox, sealed mail or helpers yet. There,
-a send to an offline visor still fails at once.
+When the deployment's dmsg servers hold messages for offline visors
+(dmsg-async, off unless the operator turns it on), the Outbox also
+**parks** each queued message, sealed for its recipient, with two of
+them. The recipient's visor fetches it when it comes online, even if the
+sender and all its helpers are offline by then, and files it as the
+sender's mail with the server as the relay. Only small mail is parked:
+64 KiB by default, whatever the servers advertise. `mail outbox` counts
+the helpers and servers holding a copy. See
+[the design](../design/dmsg-async.md) for how servers are chosen and what
+they see.
+
+The phone apps do not have the Outbox, sealed mail, helpers or parking
+yet. There, a send to an offline visor still fails at once.
 
 ## Postfix hosts
 

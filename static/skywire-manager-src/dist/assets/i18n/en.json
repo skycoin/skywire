@@ -782,6 +782,10 @@
     "handed-to": "Helpers holding a copy:",
     "now": "Now:",
     "none": "none",
+    "parked-on": "parked on",
+    "server": "server",
+    "servers": "servers",
+    "parked-note": "Dmsg servers holding a copy for the recipient to fetch:",
     "helper-has": "helper has it",
     "helpers-have": "helpers have it",
     "save": "Save"

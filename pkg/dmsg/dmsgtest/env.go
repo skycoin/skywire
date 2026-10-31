@@ -61,7 +61,7 @@ func (env *Env) Startup(entryTimeout time.Duration, servers, clients int, conf *
 	env.d = disc.NewMock(entryTimeout)
 
 	for i := 0; i < servers; i++ {
-		if _, err := env.newServer(ctx, dmsg.DefaultUpdateInterval); err != nil {
+		if _, err := env.newServer(ctx, dmsg.ServerConfig{UpdateInterval: dmsg.DefaultUpdateInterval}); err != nil {
 			return err
 		}
 	}
@@ -88,15 +88,26 @@ func (env *Env) NewServer(updateInterval time.Duration) (*dmsg.Server, error) {
 	env.mx.Lock()
 	defer env.mx.Unlock()
 
-	return env.newServer(ctx, updateInterval)
+	return env.newServer(ctx, dmsg.ServerConfig{UpdateInterval: updateInterval})
 }
 
-func (env *Env) newServer(ctx context.Context, updateInterval time.Duration) (*dmsg.Server, error) {
+// NewServerWithConfig runs a new server with conf, for a test that needs a
+// server option such as Async. A zero MaxSessions takes the env's default.
+func (env *Env) NewServerWithConfig(conf dmsg.ServerConfig) (*dmsg.Server, error) {
+	ctx, cancel := timeoutContext(env.timeout)
+	defer cancel()
+
+	env.mx.Lock()
+	defer env.mx.Unlock()
+
+	return env.newServer(ctx, conf)
+}
+
+func (env *Env) newServer(ctx context.Context, conf dmsg.ServerConfig) (*dmsg.Server, error) {
 	pk, sk := cipher.GenerateKeyPair()
 
-	conf := dmsg.ServerConfig{
-		MaxSessions:    maxSessions,
-		UpdateInterval: updateInterval,
+	if conf.MaxSessions == 0 {
+		conf.MaxSessions = maxSessions
 	}
 	srv := dmsg.NewServer(pk, sk, env.d, &conf, nil)
 	env.s[pk] = srv

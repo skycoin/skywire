@@ -36,6 +36,7 @@ func TestRenderOutbox(t *testing.T) {
 	require.Contains(t, out, "b@x.dmsg")
 	require.Contains(t, out, "in 1m30s")
 	require.Contains(t, out, "never", "no give-up time")
+	require.Contains(t, out, "0 helpers, 0 servers")
 	require.Contains(t, out, "dial: offline")
 	require.Equal(t, "(empty)\n", renderOutbox(nil, now))
 

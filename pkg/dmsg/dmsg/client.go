@@ -131,6 +131,11 @@ type Config struct {
 	// visor sets it.
 	SkipSelfServer bool
 
+	// Async, when set, fetches the dmsg-async messages servers hold for
+	// this client and hands them to the handlers set with HandleAsync.
+	// Nil leaves fetching off; Deposit works either way.
+	Async *AsyncClientConfig
+
 	// SessionDialer dials the byte pipe to a server whose advertised address
 	// names a carrier this client has no native dial for — today the skynet
 	// carrier: a "skynet://<pk>:<port>" address is a dmsg relay run by a visor
@@ -242,6 +247,9 @@ type Client struct {
 	EntityCommon
 	conf   *Config
 	porter *netutil.Porter
+
+	// async fetches dmsg-async messages for this client; nil when off.
+	async *asyncClient
 
 	// traffic counts accepted streams per listening port once a service
 	// turns it on (CountTraffic).
@@ -516,6 +524,9 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 		return nil
 	}
 
+	if conf.Async != nil {
+		c.startAsync(*conf.Async)
+	}
 	return c
 }
 

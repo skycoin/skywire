@@ -32,6 +32,7 @@ interface MailQueue {
   give_up?: string;
   handed?: string[];
   carried_for?: string;
+  parked?: number;
 }
 
 /** One recipient of a send (skymail.RcptResult). */

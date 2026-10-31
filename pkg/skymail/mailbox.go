@@ -63,6 +63,11 @@ type Config struct {
 	// RelayFor, with SK and the Outbox, reports whether this mailbox
 	// carries sealed mail that pk hands over for someone else.
 	RelayFor func(pk cipher.PubKey) bool
+	// Park, with SK and the Outbox, leaves a sealed envelope for dst with
+	// the dmsg servers that hold messages for offline visors, and returns
+	// the ones that took it (parked.go). It returns ErrTooBigToPark or
+	// ErrNowhereToPark to say why none did.
+	Park func(ctx context.Context, dst cipher.PubKey, envelope []byte) ([]cipher.PubKey, error)
 	// OnDeliver, when set, is told of each message the network files in the
 	// inbox, once it is stored. It must not block.
 	OnDeliver func(Delivered)
@@ -334,43 +339,53 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 			relay = peer
 		}
 	}
-	if !r.mb.allowed(sender) {
+	return r.mb.file(sender, relay, body)
+}
+
+// file runs the checks every message from the network gets and files it in
+// the inbox: the sender (the PK the transport or the seal authenticated)
+// must be allowed, the message must fit, and a repeat is answered as
+// delivered without being filed twice. A non-null relay is the visor or
+// dmsg server that carried a sealed envelope for sender. Failures are
+// *skymailbridge.Reply, so SMTP answers them as they are.
+func (mb *Mailbox) file(sender, relay cipher.PubKey, body []byte) (string, error) {
+	if !mb.allowed(sender) {
 		return "", errNotWhitelisted
 	}
-	if limit := r.mb.MaxMessageSize(); limit > 0 && int64(len(body)) > limit {
+	if limit := mb.MaxMessageSize(); limit > 0 && int64(len(body)) > limit {
 		return "", &skymailbridge.Reply{Code: 552, Enhanced: "5.3.4", Text: fmt.Sprintf("message exceeds the limit of %d octets", limit)}
 	}
 	key := seenKey(sender, body)
-	if key != "" && !r.mb.seen.claim(key, time.Now()) {
-		r.mb.log.WithField("from_pk", sender.Hex()).WithField("relay_pk", relay.Hex()).Debug("skymail: repeat dropped")
+	if key != "" && !mb.seen.claim(key, time.Now()) {
+		mb.log.WithField("from_pk", sender.Hex()).WithField("relay_pk", relay.Hex()).Debug("skymail: repeat dropped")
 		return "Ok: already delivered", nil
 	}
-	id, err := r.mb.deliverLocal(sender, relay, body)
+	id, err := mb.deliverLocal(sender, relay, body)
 	if key != "" {
 		if err != nil {
-			r.mb.seen.release(key)
-		} else if kerr := r.mb.seen.keep(key); kerr != nil {
-			r.mb.log.WithError(kerr).Warn("skymail: remember delivered message")
+			mb.seen.release(key)
+		} else if kerr := mb.seen.keep(key); kerr != nil {
+			mb.log.WithError(kerr).Warn("skymail: remember delivered message")
 		}
 	}
 	if errors.Is(err, ErrMailboxFull) {
 		return "", &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
 	}
 	if err != nil {
-		r.mb.log.WithError(err).Warn("skymail: store")
+		mb.log.WithError(err).Warn("skymail: store")
 		return "", &skymailbridge.Reply{Code: 451, Enhanced: "4.3.0", Text: "mailbox store failed"}
 	}
-	log := r.mb.log.WithField("from_pk", sender.Hex()).WithField("id", id).WithField("bytes", len(body))
+	log := mb.log.WithField("from_pk", sender.Hex()).WithField("id", id).WithField("bytes", len(body))
 	if !relay.Null() {
 		log = log.WithField("relay_pk", relay.Hex())
 	}
 	log.Info("skymail: delivered")
-	if r.mb.cfg.OnDeliver != nil {
+	if mb.cfg.OnDeliver != nil {
 		d := Delivered{ID: id, PeerPK: sender}
 		if h, err := parseHeader(body); err == nil {
 			d.From, d.Subject = decodeHeader(h.Get("From")), decodeHeader(h.Get("Subject"))
 		}
-		r.mb.cfg.OnDeliver(d)
+		mb.cfg.OnDeliver(d)
 	}
 	return "Ok: delivered " + id, nil
 }

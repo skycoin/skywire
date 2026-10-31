@@ -8,9 +8,10 @@ The visor retries each message after 1, 5 and 15 minutes and then every
 hour, and at once when the recipient sends mail here. It gives up after
 the mailbox's maximum age and files a bounce in the inbox with the
 original attached. Each message also goes, sealed, to this visor's
-helpers ("helpers" counts them; see mail settings), which deliver it
-while this visor is away. Sealed mail this visor carries for another
-shows as "carrying for <pk>". `mail retry` tries again now and `mail rm --outbox`
+helpers (see mail settings), which deliver it while this visor is away,
+and to the dmsg servers that hold messages for offline visors, where
+the recipient fetches it when it comes online. "copies" counts both.
+Sealed mail this visor carries for another shows as "carrying for <pk>". `mail retry` tries again now and `mail rm --outbox`
 cancels a message.
 
 ## Usage

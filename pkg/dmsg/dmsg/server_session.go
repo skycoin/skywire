@@ -327,6 +327,9 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	if logging.TraceEnabled() {
 		logging.Trace(log, "Read stream request from initiating side.")
 	}
+	if req.Async && req.DstAddr.PK == ss.entity.LocalPK() {
+		return ss.serveAsync(log, yStr, req, relayed)
+	}
 	if req.IPinfo && req.DstAddr.PK == ss.entity.LocalPK() {
 		if logging.TraceEnabled() {
 			logging.Trace(log, "Received IP stream request.")
