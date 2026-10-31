@@ -16,7 +16,7 @@ import (
 // a full mailbox refuses mail until expiry or a delete frees room.
 const (
 	DefaultMaxMessageSize int64 = 10 << 20 // 10 MiB, room for a few phone photos
-	DefaultMaxTotalSize   int64 = 64 << 20 // 64 MiB, Inbox and Sent together
+	DefaultMaxTotalSize   int64 = 64 << 20 // 64 MiB, every folder together
 	DefaultMaxAge               = 7 * 24 * time.Hour
 )
 
@@ -80,7 +80,11 @@ func (mb *Mailbox) MaxMessageSize() int64 {
 // Usage is the bytes held by every folder.
 func (mb *Mailbox) Usage() (int64, error) {
 	var total int64
-	for _, md := range []*maildir{mb.inbox, mb.sent} {
+	mds := []*maildir{mb.inbox, mb.sent}
+	if mb.out != nil {
+		mds = append(mds, mb.out.md)
+	}
+	for _, md := range mds {
 		es, err := md.entries()
 		if err != nil {
 			return 0, err
@@ -96,17 +100,27 @@ func (mb *Mailbox) Usage() (int64, error) {
 func (mb *Mailbox) store(md *maildir, msg []byte, seen bool) (string, error) {
 	mb.lim.storeMu.Lock()
 	defer mb.lim.storeMu.Unlock()
-	l := mb.Limits()
-	if l.MaxTotalSize > 0 {
-		used, err := mb.Usage()
-		if err != nil {
-			return "", err
-		}
-		if used+int64(len(msg)) > l.MaxTotalSize {
-			return "", ErrMailboxFull
-		}
+	if err := mb.checkRoom(int64(len(msg))); err != nil {
+		return "", err
 	}
 	return md.put(msg, seen)
+}
+
+// checkRoom reports ErrMailboxFull when n more bytes would pass the
+// quota. The caller holds storeMu.
+func (mb *Mailbox) checkRoom(n int64) error {
+	l := mb.Limits()
+	if l.MaxTotalSize <= 0 {
+		return nil
+	}
+	used, err := mb.Usage()
+	if err != nil {
+		return err
+	}
+	if used+n > l.MaxTotalSize {
+		return ErrMailboxFull
+	}
+	return nil
 }
 
 // full reports whether the quota has no room left at all.
@@ -123,10 +137,8 @@ func (mb *Mailbox) full() bool {
 // the delivery time in nanoseconds. Files named otherwise (put there by
 // hand) fall back to their modification time.
 func storedAt(e entry) time.Time {
-	if i := strings.IndexByte(e.id, '.'); i > 0 {
-		if n, err := strconv.ParseInt(e.id[:i], 10, 64); err == nil {
-			return time.Unix(0, n)
-		}
+	if t, ok := idTime(e.id); ok {
+		return t
 	}
 	if fi, err := os.Stat(e.path); err == nil {
 		return fi.ModTime()
@@ -134,7 +146,18 @@ func storedAt(e entry) time.Time {
 	return time.Now()
 }
 
-// Expire deletes every message older than MaxAge and reports how many.
+// idTime is the time a newID name begins with.
+func idTime(id string) (time.Time, bool) {
+	if i := strings.IndexByte(id, '.'); i > 0 {
+		if n, err := strconv.ParseInt(id[:i], 10, 64); err == nil {
+			return time.Unix(0, n), true
+		}
+	}
+	return time.Time{}, false
+}
+
+// Expire deletes every Inbox and Sent message older than MaxAge and
+// reports how many. The Outbox gives up on its own, with a bounce.
 func (mb *Mailbox) Expire(now time.Time) (int, error) {
 	l := mb.Limits()
 	if l.MaxAge <= 0 {

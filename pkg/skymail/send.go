@@ -43,12 +43,12 @@ type OutgoingAttachment struct {
 	Data        []byte `json:"data"`
 }
 
-// RcptResult is the outcome for one recipient. Delivery is immediate:
-// a recipient whose visor cannot be reached now gets an error, not a
-// queue entry.
+// RcptResult is the outcome for one recipient. Err says why it was not
+// delivered. With Queued set that is only for now: the Outbox retries.
 type RcptResult struct {
-	Rcpt string `json:"rcpt"`
-	Err  string `json:"error,omitempty"`
+	Rcpt   string `json:"rcpt"`
+	Err    string `json:"error,omitempty"`
+	Queued bool   `json:"queued,omitempty"`
 	// Via is the network that carried it: "skynet", "dmsg", or "local"
 	// for this mailbox's own PK.
 	Via string `json:"via,omitempty"`
@@ -56,7 +56,8 @@ type RcptResult struct {
 
 // SendResult is what Send reports.
 type SendResult struct {
-	ID         string       `json:"id,omitempty"` // the Sent copy, when anything was delivered
+	ID         string       `json:"id,omitempty"`        // the Sent copy, when anything was delivered
+	OutboxID   string       `json:"outbox_id,omitempty"` // the Outbox copy, when anything was queued
 	MessageID  string       `json:"message_id"`
 	Recipients []RcptResult `json:"recipients"`
 }
@@ -71,7 +72,9 @@ type peerGroup struct {
 
 // Send delivers out to every recipient's visor now, over the network
 // its address names, and files a copy in Sent if any delivery worked.
-// Recipients at this mailbox's own PK are filed directly.
+// Recipients at this mailbox's own PK are filed directly. A recipient
+// that cannot take it yet is queued in the Outbox, and Send succeeds
+// when every recipient was either delivered or queued.
 func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) {
 	all := append(append([]string{}, out.To...), out.Cc...)
 	if len(all) == 0 {
@@ -84,12 +87,85 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 			return nil, errors.New("skymail: line break in an address or reference")
 		}
 	}
+	res := &SendResult{}
+	groups, bad := groupRcpts(all)
+	if len(groups) == 0 {
+		res.Recipients = bad
+		return res, errors.New("skymail: no deliverable recipients")
+	}
+
+	from, err := mb.fromAddress(out.From, groups[0].suffix)
+	if err != nil {
+		return nil, err
+	}
+	msgID, err := newID()
+	if err != nil {
+		return nil, err
+	}
+	res.MessageID = "<" + msgID + "@" + mb.cfg.PK.DNSLabel() + groups[0].suffix + ">"
+	msg := compose(from, out, res.MessageID)
+
+	var (
+		delivered int
+		pending   []string
+		lastErr   string
+	)
+	for _, gr := range mb.deliverGroups(ctx, from, groups, msg) {
+		queue := gr.err != nil && mb.retryable(gr.g, gr.err)
+		for _, r := range gr.g.rcpts {
+			rr := RcptResult{Rcpt: r.Original, Via: gr.via}
+			switch {
+			case gr.err == nil:
+				delivered++
+			case queue:
+				rr.Err, rr.Via, rr.Queued = gr.err.Error(), "", true
+				pending = append(pending, r.Original)
+				lastErr = gr.err.Error()
+			default:
+				rr.Err, rr.Via = gr.err.Error(), ""
+			}
+			res.Recipients = append(res.Recipients, rr)
+		}
+	}
+	res.Recipients = append(res.Recipients, bad...)
+	if delivered > 0 {
+		if id, err := mb.store(mb.sent, msg, true); err != nil {
+			mb.log.WithError(err).Warn("skymail: keep Sent copy")
+		} else {
+			res.ID = id
+		}
+	}
+	if len(pending) > 0 {
+		id, err := mb.enqueue(msg, queueRecord{
+			From: from, Pending: pending, SentCopy: delivered > 0, Attempts: 1, LastError: lastErr,
+		})
+		if err != nil {
+			mb.log.WithError(err).Warn("skymail: queue in Outbox")
+			for i := range res.Recipients {
+				if res.Recipients[i].Queued {
+					res.Recipients[i].Queued = false
+					res.Recipients[i].Err += " (not queued: " + err.Error() + ")"
+				}
+			}
+			pending = nil
+		} else {
+			res.OutboxID = id
+		}
+	}
+	if delivered == 0 && len(pending) == 0 {
+		return res, errors.New("skymail: not delivered to any recipient")
+	}
+	return res, nil
+}
+
+// groupRcpts sorts addresses into one SMTP transaction per PK and
+// network, and reports those that are not skywire addresses.
+func groupRcpts(addrs []string) ([]*peerGroup, []RcptResult) {
 	var (
 		groups []*peerGroup
-		res    = &SendResult{}
 		bad    []RcptResult
 	)
-	for _, addr := range all {
+	for _, addr := range addrs {
 		addr = strings.TrimSpace(addr)
 		g, r, err := parseRcpt(addr)
 		if err != nil {
@@ -109,63 +185,32 @@ func (mb *Mailbox) Send(ctx context.Context, out Outgoing) (*SendResult, error) 
 		}
 		found.rcpts = append(found.rcpts, r)
 	}
-	if len(groups) == 0 {
-		res.Recipients = bad
-		return res, errors.New("skymail: no deliverable recipients")
-	}
+	return groups, bad
+}
 
-	from, err := mb.fromAddress(out.From, groups[0].suffix)
-	if err != nil {
-		return nil, err
-	}
-	msgID, err := newID()
-	if err != nil {
-		return nil, err
-	}
-	res.MessageID = "<" + msgID + "@" + mb.cfg.PK.DNSLabel() + groups[0].suffix + ">"
-	msg := compose(from, out, res.MessageID)
+// groupResult is how one transaction went.
+type groupResult struct {
+	g   *peerGroup
+	via string
+	err error
+}
 
-	results := make([][]RcptResult, len(groups))
+// deliverGroups runs every transaction at once.
+func (mb *Mailbox) deliverGroups(ctx context.Context, from string, groups []*peerGroup, msg []byte) []groupResult {
+	results := make([]groupResult, len(groups))
 	var wg sync.WaitGroup
 	for i, g := range groups {
-		wg.Add(1)
-		go func(i int, g *peerGroup) {
-			defer wg.Done()
+		wg.Go(func() {
 			via, err := mb.deliverGroup(ctx, from, g, msg)
 			if err != nil {
 				mb.log.WithError(err).WithField("peer", g.pk.Hex()).WithField("via", g.suffix).
 					Warn("skymail: not delivered")
 			}
-			for _, r := range g.rcpts {
-				rr := RcptResult{Rcpt: r.Original, Via: via}
-				if err != nil {
-					rr.Err, rr.Via = err.Error(), ""
-				}
-				results[i] = append(results[i], rr)
-			}
-		}(i, g)
+			results[i] = groupResult{g: g, via: via, err: err}
+		})
 	}
 	wg.Wait()
-
-	delivered := 0
-	for _, rs := range results {
-		for _, r := range rs {
-			if r.Err == "" {
-				delivered++
-			}
-		}
-		res.Recipients = append(res.Recipients, rs...)
-	}
-	res.Recipients = append(res.Recipients, bad...)
-	if delivered == 0 {
-		return res, errors.New("skymail: not delivered to any recipient")
-	}
-	if id, err := mb.store(mb.sent, msg, true); err != nil {
-		mb.log.WithError(err).Warn("skymail: keep Sent copy")
-	} else {
-		res.ID = id
-	}
-	return res, nil
+	return results
 }
 
 // deliverGroup delivers one SMTP transaction and names the network that
@@ -185,23 +230,30 @@ func (mb *Mailbox) deliverGroup(ctx context.Context, from string, g *peerGroup, 
 		HeloName:   mb.cfg.PK.DNSLabel() + g.suffix,
 		RemotePort: 25,
 	}
-	rd := &recordingDialer{d: dialer}
+	rd := &recordingDialer{d: dialer, life: ctx}
 	err := skymailbridge.Relay(ctx, rd, cfg, from, g.rcpts, msg, mb.log)
+	if rd.stop != nil {
+		rd.stop()
+	}
 	return rd.network, err
 }
 
 // recordingDialer notes the network of the connection it hands out: a
 // .skynet address may have fallen back to dmsg, and the sender wants to
-// know.
+// know. The connection closes when life ends, since Relay bounds only
+// the dial and a peer that stalls mid-session would hold it forever.
 type recordingDialer struct {
 	d       skymailbridge.Dialer
+	life    context.Context
 	network string
+	stop    func() bool
 }
 
 func (r *recordingDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
 	c, err := r.d.Dial(ctx, peer, port)
 	if err == nil {
 		r.network = c.RemoteAddr().Network()
+		r.stop = context.AfterFunc(r.life, func() { _ = c.Close() }) //nolint:errcheck
 	}
 	return c, err
 }

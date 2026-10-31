@@ -44,6 +44,9 @@ type Config struct {
 	Dialers map[string]skymailbridge.Dialer
 	// Limits bound what the mailbox keeps; zero fields take defaults.
 	Limits Limits
+	// Outbox queues mail for a recipient that cannot take it yet and
+	// retries it (RunOutbox). Off, such a send fails at once.
+	Outbox bool
 	// OnDeliver, when set, is told of each message the network files in the
 	// inbox, once it is stored. It must not block.
 	OnDeliver func(Delivered)
@@ -64,6 +67,7 @@ type Mailbox struct {
 	cfg   Config
 	inbox *maildir
 	sent  *maildir
+	out   *outbox
 	log   logrus.FieldLogger
 
 	wlMu      sync.RWMutex
@@ -88,11 +92,17 @@ func Open(cfg Config) (*Mailbox, error) {
 	if err != nil {
 		return nil, err
 	}
+	var out *outbox
+	if cfg.Outbox {
+		if out, err = openOutbox(cfg.Dir); err != nil {
+			return nil, err
+		}
+	}
 	log := cfg.Log
 	if log == nil {
 		log = logrus.NewEntry(logrus.New())
 	}
-	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, log: log}
+	mb := &Mailbox{cfg: cfg, inbox: inbox, sent: sent, out: out, log: log}
 	mb.SetLimits(cfg.Limits)
 	if err := mb.loadWhitelist(); err != nil {
 		return nil, err
@@ -231,6 +241,8 @@ func (r receiver) Rcpt(c net.Conn, _, rcpt string, _ []string) error {
 	if r.mb.full() {
 		return &skymailbridge.Reply{Code: 452, Enhanced: "4.2.2", Text: "mailbox full"}
 	}
+	// The peer just reached us, so mail waiting for it may get through.
+	r.mb.out.wake(peer, false)
 	return nil
 }
 
@@ -281,6 +293,8 @@ func (mb *Mailbox) folder(name string) (*maildir, error) {
 		return mb.inbox, nil
 	case strings.EqualFold(name, FolderSent):
 		return mb.sent, nil
+	case strings.EqualFold(name, FolderOutbox) && mb.out != nil:
+		return mb.out.md, nil
 	}
 	return nil, fmt.Errorf("skymail: no folder %q", name)
 }
@@ -299,6 +313,8 @@ type Summary struct {
 	PeerPK string `json:"peer_pk,omitempty"`
 	// FromVerified is true when the From address names PeerPK itself.
 	FromVerified bool `json:"from_verified"`
+	// Queue is where an Outbox message stands.
+	Queue *Queued `json:"queue,omitempty"`
 }
 
 // List returns a folder's messages, newest first.
@@ -312,9 +328,13 @@ func (mb *Mailbox) List(folder string) ([]Summary, error) {
 		return nil, err
 	}
 	name := FolderInbox
-	if md == mb.sent {
+	switch {
+	case md == mb.sent:
 		name = FolderSent
+	case mb.isOutbox(md):
+		name = FolderOutbox
 	}
+	maxAge := mb.Limits().MaxAge
 	out := make([]Summary, 0, len(es))
 	for _, e := range es {
 		s := Summary{ID: e.id, Folder: name, Seen: strings.Contains(e.flags, "S"), Size: e.size}
@@ -327,6 +347,9 @@ func (mb *Mailbox) List(folder string) ([]Summary, error) {
 				s.PeerPK = h.Get(PeerHeader)
 				s.FromVerified = fromNamesPK(s.From, s.PeerPK)
 			}
+		}
+		if mb.isOutbox(md) {
+			s.Queue = mb.out.info(e.id, maxAge)
 		}
 		out = append(out, s)
 	}
@@ -351,14 +374,19 @@ func (mb *Mailbox) MarkSeen(folder, id string) error {
 	return md.markSeen(id)
 }
 
-// Delete removes a message.
+// Delete removes a message. In the Outbox that cancels its delivery.
 func (mb *Mailbox) Delete(folder, id string) error {
 	md, err := mb.folder(folder)
 	if err != nil {
 		return err
 	}
+	if mb.isOutbox(md) {
+		return mb.out.drop(id)
+	}
 	return md.remove(id)
 }
+
+func (mb *Mailbox) isOutbox(md *maildir) bool { return mb.out != nil && md == mb.out.md }
 
 func parseHeader(raw []byte) (mail.Header, error) {
 	m, err := mail.ReadMessage(bytes.NewReader(raw))

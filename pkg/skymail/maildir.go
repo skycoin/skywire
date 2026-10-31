@@ -27,8 +27,9 @@ import (
 // Folder names. Inbox is the Maildir root; others are Maildir++
 // subfolders ("." + name), which is what Dovecot or mutt would open.
 const (
-	FolderInbox = "INBOX"
-	FolderSent  = "Sent"
+	FolderInbox  = "INBOX"
+	FolderSent   = "Sent"
+	FolderOutbox = "Outbox"
 )
 
 // ErrNotFound is returned for a message id that is not in the folder.
@@ -90,9 +91,14 @@ func (m *maildir) put(msg []byte, seen bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return id, m.putAs(id, msg, seen)
+}
+
+// putAs is put under an id the caller chose with newID.
+func (m *maildir) putAs(id string, msg []byte, seen bool) error {
 	tmp := filepath.Join(m.dir, "tmp", id)
 	if err := os.WriteFile(tmp, msg, 0o600); err != nil {
-		return "", fmt.Errorf("skymail: write: %w", err)
+		return fmt.Errorf("skymail: write: %w", err)
 	}
 	dst := filepath.Join(m.dir, "new", id)
 	if seen {
@@ -100,9 +106,9 @@ func (m *maildir) put(msg []byte, seen bool) (string, error) {
 	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp) //nolint:errcheck,gosec
-		return "", fmt.Errorf("skymail: deliver: %w", err)
+		return fmt.Errorf("skymail: deliver: %w", err)
 	}
-	return id, nil
+	return nil
 }
 
 // entry is one message file as found on disk.

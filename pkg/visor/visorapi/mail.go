@@ -14,7 +14,8 @@ type Mail interface {
 	// MailStatus reports whether the mailbox runs, its addresses, and
 	// who may deliver to it.
 	MailStatus() (*MailStatus, error)
-	// MailList lists a folder ("INBOX" or "Sent"), newest first.
+	// MailList lists a folder ("INBOX", "Sent" or "Outbox"), newest
+	// first.
 	MailList(folder string) ([]skymail.Summary, error)
 	// MailRead renders one message and marks it read.
 	MailRead(folder, id string) (*skymail.Rendered, error)
@@ -23,11 +24,14 @@ type Mail interface {
 	// MailAttachment decodes attachment n of a message, numbered as
 	// MailRead lists them.
 	MailAttachment(folder, id string, n int) (*skymail.AttachmentData, error)
-	// MailSend delivers a message now; a recipient whose visor cannot
-	// be reached gets an error in the result, not a queue entry.
+	// MailSend delivers a message now. A recipient whose visor cannot
+	// take it yet is queued in the Outbox and retried.
 	MailSend(msg skymail.Outgoing) (*skymail.SendResult, error)
-	// MailDelete removes one message.
+	// MailDelete removes one message. In the Outbox that cancels it.
 	MailDelete(folder, id string) error
+	// MailRetry makes an Outbox message due now, or every one when id
+	// is empty.
+	MailRetry(id string) error
 	// MailSetWhitelist replaces the PKs allowed to deliver; empty
 	// accepts everyone. Persisted with the mail.
 	MailSetWhitelist(pks []cipher.PubKey) error
@@ -52,6 +56,10 @@ type MailStatus struct {
 	Whitelist   []cipher.PubKey `json:"whitelist"`
 	Unread      int             `json:"unread"`
 	Total       int             `json:"total"`
+	// HasOutbox is false on a visor that sends now or not at all (the
+	// phone apps). Outbox is how many messages wait for a recipient.
+	HasOutbox bool `json:"has_outbox"`
+	Outbox    int  `json:"outbox"`
 }
 
 // MailMessageRequest names one message.
