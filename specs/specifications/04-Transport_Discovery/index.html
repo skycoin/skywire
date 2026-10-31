@@ -1,0 +1,2154 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Skywire — peer-to-peer encrypted networking">
+      
+      
+      
+        <link rel="canonical" href="https://skycoin.github.io/skywire/specs/specifications/04-Transport_Discovery/">
+      
+      
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Transport Discovery - Skywire</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#transport-discovery" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Skywire" class="md-header__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Skywire
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Transport Discovery
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../guides/" class="md-tabs__link">
+        
+  
+    
+  
+  Guides
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../skywire/" class="md-tabs__link">
+        
+  
+    
+  
+  Command Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../apps-overview/" class="md-tabs__link">
+          
+  
+    
+  
+  Apps
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../packaging/" class="md-tabs__link">
+          
+  
+    
+  
+  Packaging & Updates
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../" class="md-tabs__link">
+        
+  
+    
+  
+  Specs
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../graph/" class="md-tabs__link">
+        
+  
+    
+  
+  Code Graph
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../glossary/" class="md-tabs__link">
+        
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../rewards/" class="md-tabs__link">
+        
+  
+    
+  
+  Rewards
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="https://blog.skycoin.com" class="md-tabs__link">
+        
+  
+    
+  
+  Blog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Skywire" class="md-nav__button md-logo" aria-label="Skywire" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Skywire
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/skycoin/skywire" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    skycoin/skywire
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Guides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skywire/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Apps
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Apps
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../apps-overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../android/user-guide/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Android App
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../pty/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    PTY
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            PTY
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../pty/skywire-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Mode 1 — the visor-hosted pty (skywire cli pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../pty/standalone-pty/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modes 2 &amp; 3 — the standalone pty (skywire app pty)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skychat/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Skychat
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            Skychat
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skychat/skychat-visor/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Visor-hosted skychat (skywire cli skychat)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skychat/standalone-skychat/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Standalone skychat — TCP-direct &amp; CXO
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skynet/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SkyNet
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5">
+            <span class="md-nav__icon md-icon"></span>
+            SkyNet
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skynet/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SkyNet client
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../skysocks/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    SOCKS5 Proxy
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6">
+            <span class="md-nav__icon md-icon"></span>
+            SOCKS5 Proxy
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../skysocks/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    SOCKS5 proxy — client (skysocks-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_7" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../vpn/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    VPN
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_7">
+            <span class="md-nav__icon md-icon"></span>
+            VPN
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../vpn/client/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN client (vpn-client)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../vpn/router/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    VPN router (vpn-router)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../packaging/" class="md-nav__link ">
+              
+  
+  <span class="md-ellipsis">
+    Packaging & Updates
+  </span>
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Packaging & Updates
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../packaging/auto-update/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Auto-Update
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../packaging/aur-packages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    AUR Packages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Specs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../graph/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Code Graph
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../glossary/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Glossary
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../rewards/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Rewards
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://blog.skycoin.com" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Blog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#abstract" class="md-nav__link">
+    <span class="md-ellipsis">
+      Abstract
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#addressing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Addressing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Formats
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      Interfaces
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Interfaces">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#http-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      HTTP API
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HTTP API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#authenticated-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authenticated routes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#public-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public routes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other routes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cxo-feeds" class="md-nav__link">
+    <span class="md-ellipsis">
+      CXO Feeds
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      Behaviour
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Behaviour">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Registration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deregistration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deregistration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entry-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Entry timeout
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#caches" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caches
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transport-data-from-visors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transport data from visors
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security Considerations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      References
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/skycoin/skywire/edit/develop/docs/specs/specifications/04-Transport_Discovery.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="transport-discovery">Transport Discovery<a class="headerlink" href="#transport-discovery" title="Permalink">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Implemented</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Revision</td>
+<td>2026-10-27, skywire c18b044dc</td>
+</tr>
+<tr>
+<td>Code</td>
+<td><code>pkg/deployment/tpd</code>, <code>pkg/services/tpd</code>, <code>pkg/transport</code>, <code>pkg/visor</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="abstract">Abstract<a class="headerlink" href="#abstract" title="Permalink">&para;</a></h2>
+<p>Transport discovery (TPD) is the deployment service that records which
+transports exist between visors. It ingests each visor's own transport list,
+expires entries that are not refreshed, answers queries over HTTP, and
+republishes aggregates as CXO feeds. A visor's transports are also available
+from the visor itself.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permalink">&para;</a></h2>
+<p>Visors report to TPD, and route finders, address resolvers, the reward system
+and visors read from it. The authoritative source for one visor's transports is
+that visor, so a reader that needs them can bypass TPD. See
+<a href="#transport-data-from-visors">Transport data from visors</a>.</p>
+<h2 id="addressing">Addressing<a class="headerlink" href="#addressing" title="Permalink">&para;</a></h2>
+<p>TPD is served over dmsg HTTP at <code>dmsg://&lt;tpd-pk&gt;:80</code>. The key is
+<code>transport_discovery_dmsg</code> in <code>deployment.Services</code>. Its CXO feeds are served on
+the dmsg ports in <a href="#cxo-feeds">Interfaces</a> under the same key.</p>
+<h2 id="data-formats">Data Formats<a class="headerlink" href="#data-formats" title="Permalink">&para;</a></h2>
+<p><code>transport.Entry</code> (<code>pkg/transport/entry.go</code>):</p>
+<table>
+<thead>
+<tr>
+<th>JSON name</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>t_id</code></td>
+<td>UUID</td>
+<td>Transport ID. <code>transport.MakeTransportID</code> derives it from the two edges and the type.</td>
+</tr>
+<tr>
+<td><code>edges</code></td>
+<td>array of two public keys</td>
+<td>Edges in ascending order.</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>string</td>
+<td><code>tptypes.Type</code>: <code>stcpr</code>, <code>sudph</code>, <code>stcp</code>, <code>dmsg</code>, <code>squicr</code>, <code>swsr</code>, <code>swtr</code>, <code>webrtc</code>.</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>string</td>
+<td><code>transport.Label</code>: <code>user</code>, <code>automatic</code>, <code>skycoin</code>, <code>setup</code>, <code>sysfeed</code>.</td>
+</tr>
+<tr>
+<td><code>latency_ms</code></td>
+<td>number</td>
+<td>Round trip time. Omitted when zero.</td>
+</tr>
+<tr>
+<td><code>bandwidth</code></td>
+<td>integer</td>
+<td>Total bytes. Omitted when zero.</td>
+</tr>
+<tr>
+<td><code>throughput_bps</code></td>
+<td>number</td>
+<td>Observed peak goodput. Omitted when zero.</td>
+</tr>
+</tbody>
+</table>
+<p><code>transport.SignedEntry</code> wraps an entry for the legacy registration route:
+<code>entry</code>, <code>signatures</code> (two signatures), <code>registered</code>, <code>latency</code>, <code>bandwidth</code>,
+<code>version</code>. TPD stores only the ID, edges, type, label and update time.</p>
+<p><code>transport.CompactEntry</code> is the form used on visor feeds and in queries:</p>
+<table>
+<thead>
+<tr>
+<th>JSON name</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r</code></td>
+<td>public key</td>
+<td>The edge that is not the reporting visor.</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td>string</td>
+<td>Transport type.</td>
+</tr>
+<tr>
+<td><code>l</code></td>
+<td>string</td>
+<td>Label. Omitted for <code>automatic</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>A reader rebuilds the full entry with <code>transport.EntryFromCompact(reporter, ce)</code>.</p>
+<p><code>store.TransportSummary</code>: <code>total_transports</code>, <code>by_type</code> (map), <code>unique_visors</code>,
+and <code>partial</code> and <code>missing_batches</code> when a read failed. <code>store.VisorSummary</code>:
+<code>pk</code>, <code>on</code>, <code>version</code>, <code>daily</code>, <code>timeline</code>. <code>store.TransportUptimeSummary</code>:
+<code>id</code>, <code>on</code>, <code>type</code>, <code>edge_a</code>, <code>edge_b</code>, <code>daily</code>, <code>timeline</code>. Error bodies are
+<code>{"error": "&lt;text&gt;"}</code> (<code>api.Error</code>).</p>
+<h2 id="interfaces">Interfaces<a class="headerlink" href="#interfaces" title="Permalink">&para;</a></h2>
+<h3 id="http-api">HTTP API<a class="headerlink" href="#http-api" title="Permalink">&para;</a></h3>
+<p>Every route in <code>pkg/deployment/tpd/api/api.go</code>. Routes in the first two groups
+are limited to 30 requests per minute with a burst of 10, per caller. The caller
+is the dmsg peer key, or <code>RemoteAddr</code> when it is not a key. A rejected request
+returns 429. Request bodies are limited to <code>maxBodyBytes</code> (8 MiB) and a larger
+body returns 413. Bodies of 1024 bytes or more (<code>httputil.CompressMinBytes</code>) are
+gzip compressed when the client accepts it.</p>
+<p>Status codes common to the handlers that call <code>writeError</code>: 400 for an invalid
+public key or transport ID or a JSON syntax error, 404 for
+<code>store.ErrTransportNotFound</code>, 409 for <code>store.ErrAlreadyRegistered</code>, 408 for a
+deadline, 413 for a body over the limit, and 500 for anything else.</p>
+<h4 id="authenticated-routes">Authenticated routes<a class="headerlink" href="#authenticated-routes" title="Permalink">&para;</a></h4>
+<p>Authentication is <a href="../02-HTTP_Authorization_Middleware/">02</a>. A dmsg caller is
+identified by its dmsg key.</p>
+<table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Request</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /transports/id:{uuid}</code></td>
+<td></td>
+<td>200 <code>Entry</code>. 400, 404.</td>
+</tr>
+<tr>
+<td><code>GET /transports/edge:{pk}</code></td>
+<td></td>
+<td>200 array of <code>Entry</code>, gzip when accepted. 400. 404 when the visor has no transports.</td>
+</tr>
+<tr>
+<td><code>POST /transports/</code></td>
+<td>array of <code>SignedEntry</code></td>
+<td>201 with the request array. 400, 500.</td>
+</tr>
+<tr>
+<td><code>POST /v3/transports/</code></td>
+<td>array of <code>Entry</code>, header <code>SW-Visor-Version</code></td>
+<td>201 with the accepted entries, an empty array when none.</td>
+</tr>
+<tr>
+<td><code>DELETE /transports/id:{uuid}</code></td>
+<td></td>
+<td>200 with the text <code>transport deleted</code>. 400 when the ID is invalid or the caller is not an edge. 404.</td>
+</tr>
+<tr>
+<td><code>POST /transports/delete-batch</code></td>
+<td>array of ID strings</td>
+<td>200 <code>{"deleted": n, "skipped": n}</code>. A body that is not a JSON array returns 500.</td>
+</tr>
+<tr>
+<td><code>GET /v4/update?version={v}</code></td>
+<td></td>
+<td>200 <code>{"status":"ok"}</code>. Records a visor heartbeat. 500.</td>
+</tr>
+</tbody>
+</table>
+<p>Any other <code>kind:</code> in <code>/transports/{ref}</code> returns 404. In
+<code>POST /v3/transports/</code> an entry is accepted only when the caller is one of its
+edges, and other entries are skipped. Both registration routes record a
+transport heartbeat for each entry and a visor heartbeat for the caller.
+<code>DELETE /transports/id:{uuid}</code> requires the caller to be an edge of the
+transport. <code>POST /transports/delete-batch</code> skips IDs that are invalid, unknown,
+not owned by the caller, or fail to delete.</p>
+<h4 id="public-routes">Public routes<a class="headerlink" href="#public-routes" title="Permalink">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /transports/edges</code></td>
+<td>Body is an array of public key strings. 200 array of <code>Entry</code> for the union of the keys, deduplicated by ID, empty array when none. 400 for a body that is not a JSON array.</td>
+</tr>
+<tr>
+<td><code>GET /v3/transports/edge:{pk}</code></td>
+<td>200 array of <code>Entry</code>, empty array when none. 400.</td>
+</tr>
+<tr>
+<td><code>GET /all-transports</code></td>
+<td>410 <code>{"error": ...}</code>. The list is served on the routing feed.</td>
+</tr>
+<tr>
+<td><code>GET /all-transports/stats?selfTransports=hide</code></td>
+<td>200 <code>TransportSummary</code>. 404 when there are no transports. <code>hide</code> excludes self transports.</td>
+</tr>
+<tr>
+<td><code>GET /all-transports/per-key-stats?selfTransports=hide</code></td>
+<td>200 object mapping a public key to its counts by type and <code>total</code>. 404 when empty.</td>
+</tr>
+<tr>
+<td><code>GET /transports/stats/{edge}</code></td>
+<td>200 <code>{"total": n, "by_type": {...}}</code>. 400. 404 when the visor has none.</td>
+</tr>
+<tr>
+<td><code>DELETE /transports/deregister</code></td>
+<td>Deregistration whitelist only, see <a href="../02-HTTP_Authorization_Middleware/#deregistration-whitelist">02</a>. Body is an array of transport IDs. 403 for an unlisted key or a bad signature. 400 for a bad key, signature or body. 200 when finished.</td>
+</tr>
+<tr>
+<td><code>GET /bandwidth/transport/{id}?period=daily&amp;limit=7</code></td>
+<td>200 bandwidth history. 400, 404.</td>
+</tr>
+<tr>
+<td><code>GET /bandwidth/visor/{pk}?period=daily&amp;limit=7</code></td>
+<td>200 bandwidth history for the visor's transports. 400.</td>
+</tr>
+<tr>
+<td><code>GET /metric</code></td>
+<td>200 network aggregate.</td>
+</tr>
+<tr>
+<td><code>GET /metric/visor/{pks}</code></td>
+<td>200 aggregate for comma separated visors. 400.</td>
+</tr>
+<tr>
+<td><code>GET /metrics</code></td>
+<td>200 per transport metrics.</td>
+</tr>
+<tr>
+<td><code>GET /metrics/{ids}</code></td>
+<td>200 metrics for comma separated transport IDs. 400.</td>
+</tr>
+<tr>
+<td><code>GET /metrics/visor/{pks}</code></td>
+<td>200 per transport metrics for comma separated visors. 400.</td>
+</tr>
+<tr>
+<td><code>GET /uptimes?v={v2,v3}&amp;visors={pk;pk}</code></td>
+<td>200 array of <code>VisorSummary</code>. Without <code>v</code> only <code>pk</code>, <code>on</code> and <code>version</code>. <code>v2</code> adds <code>daily</code>. <code>v3</code> adds <code>timeline</code>.</td>
+</tr>
+<tr>
+<td><code>POST /uptimes</code></td>
+<td>Body <code>{"pks": [...], "v": "v2"}</code>. Same response as <code>GET</code>. 400 for invalid JSON or an unknown <code>v</code>.</td>
+</tr>
+<tr>
+<td><code>GET /uptimes/transports?v=&amp;visors=&amp;tp=&amp;type=&amp;edges=true</code></td>
+<td>200 array of <code>TransportUptimeSummary</code>. <code>visors</code> and <code>tp</code> are semicolon separated. <code>edges=true</code> includes <code>edge_a</code> and <code>edge_b</code>.</td>
+</tr>
+<tr>
+<td><code>POST /uptimes/transports</code></td>
+<td>Body <code>{"pks","ids","type","edges","v"}</code>. Same response. 400 for invalid JSON.</td>
+</tr>
+<tr>
+<td><code>GET /metrics/uptime</code></td>
+<td>200 <code>{"total_transports","online","by_type":{type:{"total","online"}}}</code>.</td>
+</tr>
+<tr>
+<td><code>GET /metrics/uptime/{ids}</code></td>
+<td>200 transport uptime for comma separated IDs. 400.</td>
+</tr>
+<tr>
+<td><code>GET /metrics/uptime/visor/{pks}</code></td>
+<td>200 transport uptime for comma separated visors. 400.</td>
+</tr>
+<tr>
+<td><code>GET /version?on=</code></td>
+<td>200 map from version to count. <code>on</code> is <code>true</code>, <code>false</code>, <code>all</code> or <code>none</code>.</td>
+</tr>
+<tr>
+<td><code>GET /versions?on=&amp;status=true</code></td>
+<td>200 array of <code>{"pk","version","on"}</code>.</td>
+</tr>
+<tr>
+<td><code>GET /versions/{pks}</code></td>
+<td>Same for comma separated keys. An unknown key appears with an empty version. 400.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="other-routes">Other routes<a class="headerlink" href="#other-routes" title="Permalink">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Method and path</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /health</code></td>
+<td>200 <code>httputil.HealthCheckResponse</code> with service name <code>transport-discovery</code>.</td>
+</tr>
+<tr>
+<td><code>GET /security/nonces/{pk}</code></td>
+<td>Nonce recovery, see <a href="../02-HTTP_Authorization_Middleware/">02</a>.</td>
+</tr>
+<tr>
+<td><code>GET /</code></td>
+<td>The charts page. 404 until the charts are running.</td>
+</tr>
+<tr>
+<td><code>GET /graph</code>, <code>/graph/engine.wasm</code>, <code>/graph/engine.js</code></td>
+<td>The transport graph page and its engine. <code>/graph</code> returns 404 until the charts run and 503 while the transport cache is cold.</td>
+</tr>
+<tr>
+<td><code>POST /statuses</code></td>
+<td>410.</td>
+</tr>
+<tr>
+<td><code>GET /uptime/now</code>, <code>/uptime/sessions</code>, <code>/uptime/timeline</code>, <code>/uptime/dates</code></td>
+<td>The service's own uptime record. 503 until a recorder is set.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cxo-feeds">CXO Feeds<a class="headerlink" href="#cxo-feeds" title="Permalink">&para;</a></h3>
+<p>Ports are constants in <code>pkg/skyenv</code>. Layout and cadence are in
+<a href="../31-CXO_Feeds/">31</a>. TPD aggregates two visor feeds and publishes six.</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Identifier</th>
+<th>Direction</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>50</td>
+<td><code>DmsgCXOPort</code></td>
+<td>aggregated from each visor</td>
+<td>Visor telemetry and, as a fallback, the <code>tp-list</code> leaf.</td>
+</tr>
+<tr>
+<td>69</td>
+<td><code>DmsgVisorTPListCXOPort</code></td>
+<td>aggregated from each visor</td>
+<td>The visor's own transport list at <code>tp-list</code>.</td>
+</tr>
+<tr>
+<td>51</td>
+<td><code>DmsgTPDMetricsCXOPort</code></td>
+<td>published</td>
+<td><code>metrics/day/&lt;YYYY-MM-DD&gt;</code>.</td>
+</tr>
+<tr>
+<td>52</td>
+<td><code>DmsgTPDUptimeCXOPort</code></td>
+<td>published</td>
+<td><code>uptimes/days/&lt;n&gt;</code>.</td>
+</tr>
+<tr>
+<td>73</td>
+<td><code>DmsgTPDStatsCXOPort</code></td>
+<td>published</td>
+<td><code>stats/network</code>, <code>stats/versions</code>, <code>stats/daily</code>.</td>
+</tr>
+<tr>
+<td>75</td>
+<td><code>DmsgTPDRoutingCXOPort</code></td>
+<td>published</td>
+<td><code>routing/&lt;pk&gt;</code> and <code>routing/delta/&lt;seq&gt;</code>.</td>
+</tr>
+<tr>
+<td>77</td>
+<td><code>DmsgTPDVisorBWCXOPort</code></td>
+<td>published</td>
+<td><code>visorbw/day/&lt;YYYY-MM-DD&gt;</code>.</td>
+</tr>
+<tr>
+<td>79</td>
+<td><code>DmsgTPDPerKeyCXOPort</code></td>
+<td>published</td>
+<td><code>perkey/stats</code>.</td>
+</tr>
+<tr>
+<td>55</td>
+<td><code>DmsgTPDAllTransportsCXOPort</code></td>
+<td>none</td>
+<td>TPD starts no publisher on this port. Subscribers still map the prefix <code>transports/all/</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="behaviour">Behaviour<a class="headerlink" href="#behaviour" title="Permalink">&para;</a></h2>
+<h3 id="registration">Registration<a class="headerlink" href="#registration" title="Permalink">&para;</a></h3>
+<p>A visor registers its transports by publishing its list, not by calling HTTP.
+When the visor has a CXO publisher for the TPD, the transport manager
+(<code>transport.Manager.publishTPDList</code>) writes the full list as the <code>tp-list</code> leaf.
+It does so every <code>transportReRegisterInterval</code> (90 seconds) and, after a
+deletion debounce of <code>deletionDebounce</code> (5 seconds), after a transport closes.
+A visor without a CXO publisher calls <code>POST /v3/transports/</code> instead and
+removes closed transports with <code>POST /transports/delete-batch</code>.</p>
+<p>The visor announces to TPD (<code>treestore.Publisher.AnnounceTo</code>). TPD's aggregator
+(<code>cxoaggregator</code>) holds the inbound connection and subscribes to the feed whose
+key equals the remote key. TPD applies a <code>tp-list</code> leaf with
+<code>API.ReconcileTransportsFromCXO</code>.</p>
+<ul>
+<li>Only entries of which the reporter is an edge are accepted.</li>
+<li>Every accepted entry is written, or its lifetime extended when unchanged and
+  due, and the reporter's heartbeat is recorded.</li>
+<li>The reporter's stored transports that are absent from the list are
+  deregistered, unless the other edge still lists them.</li>
+<li>When a fetch fails, the aggregator re-applies the last good list with
+  <code>API.RefreshTransportsFromCXO</code>, which deletes nothing.</li>
+</ul>
+<p>The aggregator also reads the legacy leaves <code>transports/list</code>,
+<code>transports/&lt;uuid&gt;/entry</code> and <code>transports/&lt;uuid&gt;/tombstone</code>, the telemetry
+shards <code>transports/telemetry/&lt;sh&gt;</code>, the legacy <code>transports/&lt;uuid&gt;/current</code>, and
+<code>transports/&lt;uuid&gt;/&lt;YYYY-MM-DD&gt;/timeline</code>.</p>
+<h3 id="deregistration">Deregistration<a class="headerlink" href="#deregistration" title="Permalink">&para;</a></h3>
+<p>A transport is removed in four ways.</p>
+<ul>
+<li>The registering visor omits it from its next <code>tp-list</code> leaf.</li>
+<li>The registering visor calls <code>DELETE /transports/id:{uuid}</code> or
+  <code>POST /transports/delete-batch</code>, or an older visor publishes a
+  <code>transports/&lt;uuid&gt;/tombstone</code> leaf.</li>
+<li>A key in the deregistration whitelist calls <code>DELETE /transports/deregister</code>.</li>
+<li>The entry expires.</li>
+</ul>
+<h3 id="entry-timeout">Entry timeout<a class="headerlink" href="#entry-timeout" title="Permalink">&para;</a></h3>
+<p>Each stored entry has a lifetime of the configured <code>EntryTimeout</code>, default
+<code>tpd.DefaultEntryTimeout</code> (5 minutes). Registration and refresh reset it.
+Unchanged entries from the same reporter are refreshed after a third of the
+timeout (<code>API.SetEntryTimeout</code>).</p>
+<h3 id="caches">Caches<a class="headerlink" href="#caches" title="Permalink">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Identifier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>30 seconds</td>
+<td><code>transportsCacheDelay</code>, refresh of the in memory transport list</td>
+</tr>
+<tr>
+<td>5 minutes</td>
+<td><code>uptimesCacheDelay</code>, refresh of the uptime summaries</td>
+</tr>
+<tr>
+<td>1 hour</td>
+<td><code>backupTickerDelay</code>, bandwidth archive and timeline archive</td>
+</tr>
+</tbody>
+</table>
+<h2 id="transport-data-from-visors">Transport data from visors<a class="headerlink" href="#transport-data-from-visors" title="Permalink">&para;</a></h2>
+<p>TPD is not the only source of a visor's transports. Each of the following
+returns the visor's own list.</p>
+<ul>
+<li><strong>CXO feed.</strong> Each visor publishes its list on <code>DmsgVisorTPListCXOPort</code> (69)
+  under its own key (<code>buildTPListPublisher</code>, <code>pkg/visor/init_stats.go</code>). The root
+  has one leaf, <code>tp-list</code>, which is gzip of the JSON
+  <code>{"version": "&lt;build version&gt;", "c": [CompactEntry...]}</code>. TPD aggregates it.
+  Any subscriber on the feed's allowlist can read it. The allowlist is the
+  visor's peer whitelist plus the TPD key (<code>composeFeedAllowlist</code>). If the
+  dedicated publisher fails to start, the visor publishes the same leaf on its
+  telemetry feed at port 50.</li>
+<li><strong>Transport query.</strong> Every visor listens on <code>DmsgTransportQueryPort</code> (68)
+  (<code>router.ServeTransportQueryListener</code>). The service is a gob RPC server
+  (<code>gobrpc</code>) named <code>TransportQueryRPCGateway</code> with the method <code>Query</code>. The
+  request is <code>router.TransportQuery</code> and the reply is
+  <code>router.TransportQueryResponse</code> (<code>target_pk</code> and <code>entries</code> as
+  <code>CompactEntry</code>). The visor answers only when the query's <code>TargetPK</code> is its
+  own key, <code>RSNPK</code> is one of its trusted route setup nodes, and <code>RSNSig</code>
+  verifies over <code>SignablePayload</code>. The route setup node signs the query through
+  the setup RPC <code>SignTransportQuery</code> (<a href="../13-Setup_Node/">13</a>). The reply omits
+  closed transports and transports labelled <code>setup</code>. A stream has a 30 second
+  deadline. The router uses it to build two hop routes without TPD.</li>
+<li><strong>Visor RPC.</strong> <code>DmsgVisorRPCPort</code> (65) serves the visor's net/rpc API,
+  including <code>Transports</code>. Access is limited to the visor's hypervisors and
+  dmsgpty whitelist. The router uses it as a second source for destinations
+  that trust the caller.</li>
+<li><strong>Signed list over HTTP.</strong> The visor's dmsg HTTP service (port 80, package
+  <code>logserver</code>) serves <code>GET /transports</code> only to callers that reached the visor
+  over a skywire transport. It returns 403 to other callers, 503 when the list
+  is unavailable, 304 when <code>If-None-Match</code> equals the current <code>ETag</code>, and
+  otherwise a <code>transport.SignedList</code> (<code>pk</code>, <code>at</code>, <code>entries</code> as <code>CompactEntry</code>,
+  <code>sig</code>). The signature is by the visor key over the owner, the build time and
+  the entries. <code>SignedList.Version</code> names the set and is the <code>ETag</code>. The visor
+  rebuilds the list at most every 5 seconds (<code>transportListTTL</code>) and excludes
+  closed transports and transports labelled <code>setup</code>.</li>
+<li><strong>Local history.</strong> <code>GET /stats/transports</code> and <code>/stats/transports/history</code> on
+  the same HTTP service return the visor's transport records with first seen,
+  last seen and daily rollups. They are limited to the survey whitelist when one
+  is configured.</li>
+</ul>
+<h2 id="security-considerations">Security Considerations<a class="headerlink" href="#security-considerations" title="Permalink">&para;</a></h2>
+<p>Registration is authenticated by the visor key, either the HTTP signature or
+the CXO root signature, and TPD accepts only entries that name the reporter as
+an edge. Entries are not signed by both edges, so a visor can register a
+transport to a peer that does not hold it; the entry expires unless refreshed.
+The public routes carry no authentication and are rate limited per caller. The
+deregistration route is limited to the deregistration whitelist. The transport query
+is authorised by a route setup node signature bound to one target and one
+requester. Visor feeds are limited to the peer whitelist and the TPD.</p>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permalink">&para;</a></h2>
+<ul>
+<li><a href="../02-HTTP_Authorization_Middleware/">02 HTTP Authorization Middleware</a></li>
+<li><a href="../13-Setup_Node/">13 Setup Node</a></li>
+<li><a href="../31-CXO_Feeds/">31 CXO Feeds</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/skycoin/skywire" target="_blank" rel="noopener" title="skycoin/skywire on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8M97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://t.me/skywire" target="_blank" rel="noopener" title="Skywire on Telegram" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M248 8C111.033 8 0 119.033 0 256s111.033 248 248 248 248-111.033 248-248S384.967 8 248 8m114.952 168.66c-3.732 39.215-19.881 134.378-28.1 178.3-3.476 18.584-10.322 24.816-16.948 25.425-14.4 1.326-25.338-9.517-39.287-18.661-21.827-14.308-34.158-23.215-55.346-37.177-24.485-16.135-8.612-25 5.342-39.5 3.652-3.793 67.107-61.51 68.335-66.746.153-.655.3-3.1-1.154-4.384s-3.59-.849-5.135-.5q-3.283.746-104.608 69.142-14.845 10.194-26.894 9.934c-8.855-.191-25.888-5.006-38.551-9.123-15.531-5.048-27.875-7.717-26.8-16.291q.84-6.7 18.45-13.7 108.446-47.248 144.628-62.3c68.872-28.647 83.183-33.623 92.511-33.789 2.052-.034 6.639.474 9.61 2.885a10.45 10.45 0 0 1 3.53 6.716 43.8 43.8 0 0 1 .417 9.769"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="https://blog.skycoin.com" target="_blank" rel="noopener" title="Skycoin blog" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M0 64c0-17.7 14.3-32 32-32 229.8 0 416 186.2 416 416 0 17.7-14.3 32-32 32s-32-14.3-32-32C384 253.6 226.4 96 32 96 14.3 96 0 81.7 0 64m0 352a64 64 0 1 1 128 0 64 64 0 1 1-128 0m32-256c159.1 0 288 128.9 288 288 0 17.7-14.3 32-32 32s-32-14.3-32-32c0-123.7-100.3-224-224-224-17.7 0-32-14.3-32-32s14.3-32 32-32"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+      <div class="md-progress" data-md-component="progress" role="progressbar"></div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.action.edit", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>
