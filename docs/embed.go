@@ -41,7 +41,7 @@ package docs
 import "embed"
 
 //go:embed *.md deploy deployment design guides packaging pty skychat skynet skysocks vpn
-//go:embed examples/*/*.md examples/*/*.star
+//go:embed android/*.md examples/*/*.md examples/*/*.star
 var proseFS embed.FS
 
 // Prose returns the embedded prose tree: hand-written markdown, rooted at
