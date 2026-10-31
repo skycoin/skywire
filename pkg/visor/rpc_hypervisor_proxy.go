@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -89,6 +90,14 @@ func populateEntryFromSummary(entry *visorapi.HVVisorEntry, summary *visorapi.Su
 	// returns — the hypervisors it answers to, which only it knows. Lifting it
 	// onto the entry is what puts it in `hv ls`.
 	entry.Hypervisors = summary.Overview.Hypervisors
+	entry.DMSGServers = summary.DMSGServers
+	entry.PublicAutoconnect = summary.PublicAutoconnect
+	entry.IsPublic = summary.IsPublic
+	for _, a := range summary.Overview.Apps {
+		if a != nil && a.Status == appserver.AppStatusRunning {
+			entry.RunningApps = append(entry.RunningApps, a.Name)
+		}
+	}
 	if summary.Health != nil {
 		entry.ServicesHealth = summary.Health.ServicesHealth
 	}

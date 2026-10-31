@@ -61,6 +61,12 @@ type HVVisorEntry struct {
 	// its peers have set. omitempty so an older visor that does not report
 	// them is absent rather than empty.
 	Hypervisors []cipher.PubKey `json:"hypervisors,omitempty"`
+	// The rest feed the node list's DMSG servers and services columns for
+	// visors behind a sub-hypervisor. RunningApps holds app names only.
+	DMSGServers       []DMSGServerInfo `json:"dmsg_servers,omitempty"`
+	RunningApps       []string         `json:"running_apps,omitempty"`
+	PublicAutoconnect bool             `json:"public_autoconnect,omitempty"`
+	IsPublic          bool             `json:"is_public,omitempty"`
 }
 
 // HVVisorTreeNode is one hypervisor's section in the tree response:
