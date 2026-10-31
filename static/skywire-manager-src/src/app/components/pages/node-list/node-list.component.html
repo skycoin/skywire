@@ -559,6 +559,11 @@
                       </a>
                     }
                   </table>
+                  <table class="responsive-table-translucid d-md-none nowrap" cellspacing="0" cellpadding="0">
+                    @for (node of quickFiltered(section.nodes); track node.localPk) {
+                      <ng-container *ngTemplateOutlet="mobileItem; context: {$implicit: node}"></ng-container>
+                    }
+                  </table>
                 }
               </div>
             </div>
@@ -757,24 +762,19 @@
             <a class="link-row" [class.child-item]="child" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
               <div class="list-item-container">
                 <div class="left-part">
-                  @if (isLocalHypervisor(node)) {
-                    <div class="list-row">
-                      <mat-icon class="hypervisor-icon" [inline]="true">star</mat-icon>&nbsp;
-                      <span class="yellow-clear-text title">{{ 'nodes.hypervisor' | translate }}</span>
-                    </div>
-                  } @else if (section || node.isHypervisor) {
-                    <div class="list-row">
-                      <mat-icon class="hypervisor-icon attached" [inline]="true">star</mat-icon>&nbsp;
-                      <span class="attached-hypervisor-text title">{{ 'nodes.attached-hypervisor' | translate }}</span>
-                    </div>
-                  }
-                  <div class="list-row">
-                    <span class="title">{{ 'nodes.state' | translate }}</span>:
-                    <span [class]="nodeStatusClass(node, false) + ' title'">{{ nodeStatusText(node, false) | translate }}</span>
+                  <!-- Values only: the status dot, full key, label, place, version and
+                       transport count say what they are without field names. -->
+                  <div class="list-row m-key">
+                    <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+                    <span class="m-pk">{{ node.localPk }}</span>
                   </div>
-                  <div class="list-row">
-                    <span class="title">{{ 'nodes.label' | translate }}</span>:
-                    {{ node.label }}
+                  <div class="list-row m-label">
+                    @if (isLocalHypervisor(node)) {
+                      <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+                    } @else if (section || node.isHypervisor) {
+                      <mat-icon class="hypervisor-icon attached" [inline]="true" [matTooltip]="'nodes.attached-hypervisor-info' | translate">star</mat-icon>
+                    }
+                    <span class="title">{{ node.label }}</span>
                     @if (node.isStale) {
                       <span class="stale-caption">&nbsp;({{ lastSeenText(node) }})</span>
                     }
@@ -786,48 +786,34 @@
                     }
                   </div>
                   @if (!compact && (node.ip || node.publicIp)) {
-                    <div class="list-row">
-                      <span class="title">{{ 'nodes.ip' | translate }}</span>:
-                      @if (node.ip) {
-                        <span>{{ node.ip }}</span>
-                      }
-                      @if (node.ip && node.publicIp) {
-                        <span> / </span>
-                      }
-                      @if (node.publicIp) {
-                        <span>{{ node.publicIp }}</span>
-                      }
+                    <div class="list-row m-sub">
+                      {{ node.ip }}@if (node.ip && node.publicIp && node.ip !== node.publicIp) { / {{ node.publicIp }} } @else if (!node.ip) { {{ node.publicIp }} }
                     </div>
                   }
                   @if (node.countryCode) {
-                    <div class="list-row">
-                      <span class="title">{{ 'nodes.location' | translate }}</span>:
-                      @if (node.cityName) {
-                        <span>{{ node.cityName }}, </span>
-                        }@if (node.regionName) {
-                        <span>{{ node.regionName }}, </span>
-                        }{{ node.countryCode }}
-                      </div>
-                    }
-                    @if (!compact) {
-                      <div class="list-row long-content">
-                        <span class="title">{{ 'nodes.key' | translate }}</span>:
-                        {{ node.localPk }}
-                      </div>
-                    }
-                    @if (node.version) {
-                      <div class="list-row">
-                        <span class="title">{{ 'nodes.version' | translate }}</span>:
-                        <span [matTooltip]="node.version">{{ node.version | versionLabel }}</span>
-                      </div>
-                    }
-                    @if (!compact && node.configVersion) {
-                      <div class="list-row">
-                        <span class="title">{{ 'nodes.config-version' | translate }}</span>:
-                        {{ node.configVersion }}
-                      </div>
+                    <div class="list-row m-sub">
+                      {{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}
+                    </div>
+                  }
+                  <div class="list-row m-sub">
+                    <span [class.outdated]="isOutdated(node)" [matTooltip]="node.version">{{ (node.version | versionLabel) || '-' }}</span>
+                    @if (node.transports) {
+                      @let mt = getTransportTotals(node);
+                      <span class="m-tp" [matTooltip]="transportBreakdown(node)" matTooltipClass="multiline-tooltip">
+                        <mat-icon [inline]="true">swap_horiz</mat-icon>{{ node.transports.length }}
+                        @if (mt.incoming + mt.outgoing > 0) {
+                          <span class="tp-in">{{ mt.incoming }}&#8595;</span>
+                          <span class="tp-out">{{ mt.outgoing }}&#8593;</span>
+                        }
+                      </span>
                     }
                   </div>
+                  @if (!compact && node.configVersion && node.configVersion !== node.version) {
+                    <div class="list-row m-sub">
+                      {{ 'nodes.config-label' | translate }}: {{ node.configVersion }}
+                    </div>
+                  }
+                </div>
                   <div class="margin-part"></div>
                   <div class="right-part">
                     <button
