@@ -20,6 +20,24 @@ interface MailSummary {
   size: number;
   peer_pk?: string;
   from_verified: boolean;
+  queue?: MailQueue;
+}
+
+/** Where an Outbox message stands (skymail.Queued). */
+interface MailQueue {
+  pending: string[];
+  attempts: number;
+  last_error?: string;
+  next_attempt: string;
+  give_up?: string;
+}
+
+/** One recipient of a send (skymail.RcptResult). */
+interface SendReport {
+  rcpt: string;
+  error?: string;
+  queued?: boolean;
+  via?: string;
 }
 
 /** One message as rendered for reading (skymail.Rendered). */
@@ -66,10 +84,11 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
   loadingList = false;
   view: 'list' | 'message' | 'compose' | 'settings' = 'list';
   openId = '';
+  openQueue: MailQueue | null = null;
   message: MailMessage | null = null;
   draft: Draft = this.emptyDraft();
   sending = false;
-  sendReport: { rcpt: string; error?: string; via?: string }[] = [];
+  sendReport: SendReport[] = [];
   whitelistText = '';
 
   private nodeSub?: Subscription;
@@ -133,10 +152,11 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
       skip(1),
       switchMap(res => res.pipe(catchError(() => EMPTY))),
     ).subscribe((l: MailSummary[]) => {
-      if (this.view === 'list') {
-        this.list = l || [];
-        this.cdr.markForCheck();
+      this.list = l || [];
+      if (this.view === 'message' && this.folder === 'Outbox') {
+        this.openQueue = this.list.find(m => m.id === this.openId)?.queue || null;
       }
+      this.cdr.markForCheck();
     }));
   }
 
@@ -193,6 +213,7 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
 
   open(m: MailSummary) {
     this.openId = m.id;
+    this.openQueue = m.queue || null;
     this.message = null;
     this.view = 'message';
     this.api.get(`${this.base}/${this.folder}/${encodeURIComponent(m.id)}`).subscribe({
@@ -218,13 +239,50 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
     return `${this.api.apiPrefix}${this.base}/${this.folder}/${encodeURIComponent(this.openId)}/raw`;
   }
 
+  /** Asks the visor to try an Outbox message now, or all of them with no id. */
+  retry(id = '') {
+    this.api.post(`${this.base}/retry`, { id: id }).subscribe({
+      next: () => {
+        this.snackbar.showDone('Trying again now.');
+        // The attempt runs in the background; the list shows how it went.
+        setTimeout(() => {
+          this.refreshOutbox();
+          this.cdr.markForCheck();
+        }, 3000);
+      },
+      error: (err: any) => this.snackbar.showError(this.errText(err)),
+    });
+  }
+
+  private refreshOutbox() {
+    this.loadStatus();
+    this.api.get(`${this.base}/Outbox`).subscribe({
+      next: (l: MailSummary[]) => {
+        if (this.folder !== 'Outbox') {
+          return;
+        }
+        this.list = l || [];
+        if (this.view === 'message') {
+          const m = this.list.find(x => x.id === this.openId);
+          if (!m) {
+            this.snackbar.showDone('Delivered.');
+            this.showFolder('Outbox');
+          }
+          this.openQueue = m?.queue || null;
+        }
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   remove() {
-    if (!confirm('Delete this message?')) {
+    const outbox = this.folder === 'Outbox';
+    if (!confirm(outbox ? 'Stop trying to deliver this message and delete it?' : 'Delete this message?')) {
       return;
     }
     this.api.delete(`${this.base}/${this.folder}/${encodeURIComponent(this.openId)}`).subscribe({
       next: () => {
-        this.snackbar.showDone('Message deleted.');
+        this.snackbar.showDone(outbox ? 'Delivery cancelled.' : 'Message deleted.');
         this.showFolder(this.folder);
         this.loadStatus();
       },
@@ -287,8 +345,13 @@ return {
         next: (res: any) => {
           this.sending = false;
           this.sendReport = res?.recipients || [];
-          const failed = this.sendReport.filter(r => r.error);
-          if (!failed.length) {
+          const failed = this.sendReport.filter(r => r.error && !r.queued);
+          const queued = this.sendReport.filter(r => r.queued);
+          if (!failed.length && queued.length) {
+            this.snackbar.showDone('Queued. This visor keeps trying until the recipient is online.');
+            this.loadStatus();
+            this.showFolder('Outbox');
+          } else if (!failed.length) {
             this.snackbar.showDone('Sent.');
             this.showFolder('Sent');
           }

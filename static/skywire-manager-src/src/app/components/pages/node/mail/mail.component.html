@@ -34,6 +34,11 @@
           {{ 'mail.inbox' | translate }}@if (status?.unread) { ({{ status.unread }}) }
         </button>
         <button mat-stroked-button [class.sel]="view === 'list' && folder === 'Sent'" (click)="showFolder('Sent')">{{ 'mail.sent' | translate }}</button>
+        @if (status?.has_outbox) {
+          <button mat-stroked-button [class.sel]="view === 'list' && folder === 'Outbox'" (click)="showFolder('Outbox')">
+            {{ 'mail.outbox' | translate }}@if (status.outbox) { ({{ status.outbox }}) }
+          </button>
+        }
         <button mat-stroked-button [class.sel]="view === 'compose'" (click)="compose()">{{ 'mail.compose' | translate }}</button>
         <span class="spacer"></span>
         <button mat-stroked-button [class.sel]="view === 'settings'" (click)="view = 'settings'">{{ 'mail.settings' | translate }}</button>
@@ -43,22 +48,35 @@
         @if (loadingList && !list.length) {
           <div class="loading-row"><mat-spinner [diameter]="16"></mat-spinner></div>
         } @else if (!list.length) {
-          <p class="dim">{{ (folder === 'Sent' ? 'mail.empty-sent' : 'mail.empty-inbox') | translate }}</p>
+          <p class="dim">{{ (folder === 'Sent' ? 'mail.empty-sent' : folder === 'Outbox' ? 'mail.empty-outbox' : 'mail.empty-inbox') | translate }}</p>
         } @else {
+          @if (folder === 'Outbox') {
+            <div class="mail-bar">
+              <span class="small dim">{{ 'mail.outbox-help' | translate }}</span>
+              <span class="spacer"></span>
+              <button mat-stroked-button (click)="retry()">{{ 'mail.retry-all' | translate }}</button>
+            </div>
+          }
           <table class="responsive-table-translucid mail-list">
             <tr>
-              <th>{{ (folder === 'Sent' ? 'mail.to' : 'mail.from') | translate }}</th>
+              <th>{{ (folder === 'INBOX' ? 'mail.from' : 'mail.to') | translate }}</th>
               <th>{{ 'mail.subject' | translate }}</th>
-              <th>{{ 'mail.date' | translate }}</th>
+              <th>{{ (folder === 'Outbox' ? 'mail.next-try' : 'mail.date') | translate }}</th>
             </tr>
             @for (m of list; track m.id) {
               <tr class="mail-row" [class.unread]="!m.seen && folder === 'INBOX'" (click)="open(m)">
                 <td class="mono small who">
-                  {{ folder === 'Sent' ? m.to : m.from }}
+                  {{ folder === 'INBOX' ? m.from : (m.queue?.pending?.join(', ') || m.to) }}
                   @if (m.from_verified && folder === 'INBOX') { <span class="ok" [title]="'mail.verified' | translate">✓</span> }
                 </td>
                 <td>{{ m.subject || ('mail.no-subject' | translate) }}</td>
-                <td class="small nowrap">{{ m.date | date: 'short' }}</td>
+                @if (folder === 'Outbox') {
+                  <td class="small nowrap" [title]="m.queue?.last_error || ''">
+                    @if (m.queue) { {{ m.queue.next_attempt | date: 'short' }} · {{ m.queue.attempts }} {{ 'mail.tries' | translate }} }
+                  </td>
+                } @else {
+                  <td class="small nowrap">{{ m.date | date: 'short' }}</td>
+                }
               </tr>
             }
           </table>
@@ -79,6 +97,18 @@
               <div class="small"><span class="dim">Cc</span> <span class="mono">{{ message.cc }}</span></div>
             }
             <div class="small dim">{{ message.date }}</div>
+            @if (folder === 'Outbox' && openQueue) {
+              <div class="mail-queue small">
+                <div>{{ 'mail.waiting-for' | translate }} <span class="mono">{{ openQueue.pending.join(', ') }}</span></div>
+                <div class="dim">{{ 'mail.tries-so-far' | translate }} {{ openQueue.attempts }} ·
+                  {{ 'mail.next-try' | translate }} {{ openQueue.next_attempt | date: 'medium' }}
+                  @if (openQueue.give_up) { · {{ 'mail.gives-up' | translate }} {{ openQueue.give_up | date: 'medium' }} }
+                </div>
+                @if (openQueue.last_error) {
+                  <div class="mail-error">{{ openQueue.last_error }}</div>
+                }
+              </div>
+            }
             @if (message.from_html) {
               <p class="small dim">{{ 'mail.from-html' | translate }}</p>
             }
@@ -92,10 +122,16 @@
               </div>
             }
             <div class="mail-bar">
-              <button mat-stroked-button (click)="reply()">{{ 'mail.reply' | translate }}</button>
+              @if (folder === 'Outbox') {
+                <button mat-stroked-button (click)="retry(openId)">{{ 'mail.retry' | translate }}</button>
+              } @else {
+                <button mat-stroked-button (click)="reply()">{{ 'mail.reply' | translate }}</button>
+              }
               <a mat-stroked-button [href]="rawHref()" download>{{ 'mail.raw' | translate }}</a>
               <span class="spacer"></span>
-              <button mat-stroked-button color="warn" (click)="remove()">{{ 'mail.delete' | translate }}</button>
+              <button mat-stroked-button color="warn" (click)="remove()">
+                {{ (folder === 'Outbox' ? 'mail.cancel-delivery' : 'mail.delete') | translate }}
+              </button>
             </div>
           </div>
         }
@@ -115,7 +151,11 @@
             }
           </div>
           @for (r of sendReport; track r.rcpt) {
-            <div class="small" [class.mail-error]="r.error">{{ r.rcpt }}: {{ r.error || ('mail.delivered-via' | translate) + ' ' + r.via }}</div>
+            @if (r.queued) {
+              <div class="small" [title]="r.error || ''">{{ r.rcpt }}: {{ 'mail.queued' | translate }}</div>
+            } @else {
+              <div class="small" [class.mail-error]="r.error">{{ r.rcpt }}: {{ r.error || ('mail.delivered-via' | translate) + ' ' + r.via }}</div>
+            }
           }
           <div class="mail-bar">
             <button mat-flat-button color="primary" [disabled]="sending" (click)="send()">
