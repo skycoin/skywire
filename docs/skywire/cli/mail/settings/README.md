@@ -10,9 +10,10 @@ baseline they override.
 Keys:
   enable            true|false — run the mailbox
   max_message_size  largest message accepted, e.g. 10MiB
-  max_total_size    room for Inbox and Sent together, e.g. 64MiB;
+  max_total_size    room for every folder together, e.g. 64MiB;
                     a full mailbox refuses mail until some is removed
-  max_age           mail older than this is deleted, e.g. 7d or 36h
+  max_age           mail older than this is deleted, e.g. 7d or 36h;
+                    Outbox mail this old is given up with a bounce
 
 Sizes take B, KiB, MiB, GiB (or KB, MB, GB). "default" restores the
 default (10MiB, 64MiB, 7d); "none" removes the bound.
