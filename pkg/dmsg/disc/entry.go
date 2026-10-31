@@ -240,6 +240,21 @@ type Server struct {
 	// DHTBootstrap indicates this server runs a DHT full node on port 100
 	// and can be used as a Kademlia bootstrap peer by visors.
 	DHTBootstrap bool `json:"dht_bootstrap,omitempty"`
+
+	// Async is set when the server holds small messages for clients that are
+	// offline (dmsg-async, docs/dmsg-async.md), with its limits. Nil, and so
+	// absent from the signed JSON, on every server that does not: an older
+	// discovery drops fields it does not know and would then reject the
+	// entry's signature.
+	Async *AsyncInfo `json:"async,omitempty"`
+}
+
+// AsyncInfo is what a dmsg-async server takes.
+type AsyncInfo struct {
+	// MaxMessage is the largest payload it stores, in bytes.
+	MaxMessage int `json:"max_message"`
+	// TTL is how long it keeps a message nobody fetched, in seconds.
+	TTL int64 `json:"ttl"`
 }
 
 // String implements stringer
@@ -253,6 +268,9 @@ func (s *Server) String() string {
 	}
 	if s.AddressWT != "" {
 		res += fmt.Sprintf("\taddress (webtransport): %s\n", s.AddressWT)
+	}
+	if s.Async != nil {
+		res += fmt.Sprintf("\tasync: messages up to %d bytes, kept %ds\n", s.Async.MaxMessage, s.Async.TTL)
 	}
 	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 
