@@ -350,6 +350,12 @@
     border-radius: 4px;
     padding: 6px 10px;
     font: inherit;
+
+    // A whole line of its own on phones, so the placeholder fits.
+    @media (max-width: 767px) {
+      flex-basis: 100%;
+      max-width: none;
+    }
   }
 
   .fleet-chip {
@@ -494,4 +500,46 @@
   display: block;
   margin-left: 16px;
   border-left: 2px solid rgba(var(--sw-fg-rgb), 0.2);
+}
+
+// Small-screen list: values without field names.
+.m-key {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+
+  > span:first-child {
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .m-pk {
+    font-family: monospace;
+    font-size: 0.75em;
+    white-space: normal;
+    word-break: break-all;
+    opacity: 0.8;
+  }
+}
+
+.m-label .title {
+  font-weight: 600;
+}
+
+.m-sub {
+  font-size: 0.85em;
+  white-space: normal;
+}
+
+.m-tp {
+  margin-left: 10px;
+  white-space: nowrap;
+
+  mat-icon {
+    vertical-align: middle;
+    margin-right: 2px;
+  }
+
+  .tp-in { color: rgb(var(--sw-green-rgb)); margin-left: 4px; }
+  .tp-out { color: rgb(var(--sw-sky-rgb)); margin-left: 2px; }
 }
