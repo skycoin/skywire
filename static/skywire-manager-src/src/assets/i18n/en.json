@@ -228,7 +228,8 @@
         "show-rules": "Reward rules (embedded mainnet_rules.md)",
         "exposed": "This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent to it.",
         "exposed-balance": "It holds {{ balance }} SKY now. Move them to a new address.",
-        "exposed-action": "Set a new address or a BIP44 account xpub as the reward address."
+        "exposed-action": "Set a BIP44 account xpub as the reward address, so each reward goes to a fresh address.",
+        "xpub-addresses": "Rewards go to these addresses of the xpub, each day to the next one not used yet. They should match the first addresses of the wallet:"
       },
       "transports-info": {
         "title": "Transport",

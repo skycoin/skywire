@@ -407,10 +407,10 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 				l := loginPageHeader("Login Error")
 				l += navlinks
 				l += "<h1>Wrong xpub key level</h1>"
-				l += "<p class='error'>The xpub key you provided is at the chain level (depth 4), "
-				l += "not the account level (depth 3) required for login verification.</p>"
-				l += "<p>The Skycoin web wallet shows the <strong>external chain</strong> xpub "
-				l += "(BIP44 path <code>m/44'/8000'/0'/0</code>). The login system needs the "
+				l += "<p class='error'>The xpub key you provided is not at the account level (depth 3), "
+				l += "which login verification and reward payouts need.</p>"
+				l += "<p>In the Skycoin desktop wallet or skycoin-web, copy the <strong>Account xPub</strong>, "
+				l += "not the xPub under External Chain (<code>m/44'/8000'/0'/0</code>). The login system needs the "
 				l += "<strong>account-level</strong> xpub (<code>m/44'/8000'/0'</code>) to derive "
 				l += "change chain addresses for verification.</p>"
 				l += "<h3>How to get the correct xpub</h3>"

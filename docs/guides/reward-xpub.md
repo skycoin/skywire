@@ -39,9 +39,8 @@ Valid xpub key (depth=3, child=2147483648)    <- account xpub, correct
 Valid xpub key (depth=4, child=0)             <- chain xpub, wrong
 ```
 
-Do not set a chain xpub. `skywire cli reward` takes it with only a warning,
-but the payout addresses derived from it are not addresses your wallet shows,
-so you would not see those rewards arrive.
+A chain xpub is refused. The payout addresses derived from it are not
+addresses your wallet shows, so you would not see those rewards arrive.
 
 ## Make the wallet in the web wallet
 
@@ -126,10 +125,16 @@ Check what is set with no argument.
 skywire cli reward
 ```
 
+It prints the xpub and the first five addresses derived from it. Rewards go to
+these in order, each day to the next one not used yet, so they should be the
+first addresses your wallet lists. If they are not, the wrong xpub is set.
+
 In the hypervisor UI, open the visor, find **Rewards** and press
 **Set address** or **Change address**. To set it on several visors at once,
 use **Change rewards address** in the visor list menu. Both fields take the
-account xpub. Leaving the field empty removes the reward address.
+account xpub. The Rewards tab lists the same five addresses under the xpub, and
+under the field while you type one in. Leaving the field empty removes the
+reward address.
 
 On a package install also put it in `/etc/skywire.conf` as `REWARDSKYADDR`, so
 that a config regeneration keeps it. The

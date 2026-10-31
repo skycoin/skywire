@@ -1,5 +1,26 @@
 <!-- Reward address management — first because it gates everything
      else on this tab (no address → no rewards). -->
+<ng-template #xpubList let-x>
+  @if (x.error) {
+    <div class="exposure-warning">
+      <mat-icon [inline]="true">warning</mat-icon>
+      <span>{{ x.error }}</span>
+    </div>
+  } @else {
+    <div class="xpub-addresses">
+      <span class="xpub-addresses-info">{{ 'node.details.rewards-info.xpub-addresses' | translate }}</span>
+      @for (a of x.addresses; track a) {
+        <span class="xpub-address">
+          <app-copy-to-clipboard-text text="{{ a }}"></app-copy-to-clipboard-text>
+          <a [href]="'https://explorer.skycoin.com/app/address/' + a" target="_blank" rel="noreferrer nofollow noopener">
+            <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">open_in_browser</mat-icon>
+          </a>
+        </span>
+      }
+      <span class="xpub-address">…</span>
+    </div>
+  }
+</ng-template>
 <div class="rounded-elevated-box mt-3">
   <div class="box-internal-container overflow">
     <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
@@ -35,12 +56,18 @@
         </span>
       </div>
     }
+    @if (xpubAddresses && rewardsAddressIsXpub) {
+      <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: xpubAddresses }"></ng-container>
+    }
     @if (showRewardForm) {
       <form [formGroup]="rewardForm" (ngSubmit)="submitRewardAddress()" class="inline-form">
         <mat-form-field appearance="outline" class="inline-form-field">
           <mat-label>{{ 'node.details.rewards-info.rewards-address' | translate }}</mat-label>
-          <input matInput formControlName="address" maxlength="112" placeholder="2…">
+          <input matInput formControlName="address" maxlength="112" placeholder="xpub…">
         </mat-form-field>
+        @if (formXpubAddresses && formXpubAddresses.xpub !== rewardsAddress) {
+          <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: formXpubAddresses }"></ng-container>
+        }
         <div class="inline-form-actions">
           <button mat-raised-button color="primary" type="submit" [disabled]="!rewardForm.valid">
             {{ 'common.save' | translate }}
