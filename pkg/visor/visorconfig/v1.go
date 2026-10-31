@@ -131,18 +131,20 @@ type V1 struct {
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
 
+// GroupHistoryOff as Skychat.GroupHistoryDB turns group history off.
+const GroupHistoryOff = "off"
+
 // Skychat carries chat-app-related visor-side configuration. Optional —
-// nil disables all knobs (the visor still runs chat groups in-memory).
+// nil leaves every knob at its default.
 type Skychat struct {
-	// GroupHistoryDB, when non-empty, enables persistent group-message
-	// history at the visor layer. Each inbound group message is mirrored
-	// into a bolt store at this path. The Visor.GroupHistory RPC (and
-	// `skywire cli skychat group history`) read from the same store.
+	// GroupHistoryDB is the bolt store every group message is mirrored
+	// into. The Visor.GroupHistory RPC, the skychat UI and
+	// `skywire cli skychat group history` read from it.
 	//
 	// Path may be absolute (used verbatim) or relative — relative paths
-	// resolve under <LocalPath>/skychat/. Empty (default) disables
-	// persistence: groups remain in-memory-only, bounded by the inbox
-	// ring buffer (~1024 messages).
+	// resolve under <LocalPath>/skychat/. Empty means group-history.db,
+	// and GroupHistoryOff ("off") keeps groups in memory only, bounded by
+	// the inbox ring buffer (~1024 messages).
 	//
 	// Limits track history.DefaultLimits() with a couple of group-
 	// aware overrides (rate-limit disabled, larger per-group cap).
