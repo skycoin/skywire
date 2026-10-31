@@ -70,11 +70,8 @@ func (ms *MockStore) Entry(_ context.Context, staticPubKey cipher.PubKey) (*disc
 		return nil, disc.ErrUnexpected
 	}
 
-	err = entry.VerifySignature()
-	if err != nil {
-		return nil, disc.ErrUnauthorized
-	}
-
+	// No signature check here, as in the redis store: the API verified it on
+	// write and then set Server.ServerType, which the signature does not cover.
 	return &entry, nil
 }
 
