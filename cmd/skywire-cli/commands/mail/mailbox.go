@@ -88,7 +88,8 @@ var inboxCmd = &cobra.Command{
 A "*" marks unread mail. "verified" means the From address names the
 same PK the transport authenticated, so the sender cannot have forged
 it; "PK <hex>" shows who actually delivered mail whose From says
-otherwise.`,
+otherwise. "relayed" marks mail the sender signed and sealed and
+another visor delivered.`,
 	Args: cobra.NoArgs,
 	Run:  func(cmd *cobra.Command, _ []string) { listFolder(cmd, skymail.FolderInbox) },
 }
@@ -197,6 +198,9 @@ func renderList(msgs []skymail.Summary, inbox bool) string {
 		} else if m.PeerPK != "" {
 			sender = "PK " + m.PeerPK
 		}
+		if inbox && m.RelayPK != "" {
+			sender += ", relayed"
+		}
 		date := "-"
 		if !m.Date.IsZero() {
 			date = m.Date.Local().Format(time.DateTime)
@@ -233,11 +237,15 @@ var readCmd = &cobra.Command{
 func renderMessage(m *skymail.Rendered) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From:    %s\n", m.From)
+	by := "delivered by " + m.PeerPK
+	if m.RelayPK != "" {
+		by = "signed by " + m.PeerPK + ", relayed by " + m.RelayPK
+	}
 	switch {
 	case m.Verified:
-		fmt.Fprintf(&b, "         (verified: delivered by %s)\n", m.PeerPK)
+		fmt.Fprintf(&b, "         (verified: %s)\n", by)
 	case m.PeerPK != "":
-		fmt.Fprintf(&b, "         (NOT verified: delivered by %s)\n", m.PeerPK)
+		fmt.Fprintf(&b, "         (NOT verified: %s)\n", by)
 	}
 	fmt.Fprintf(&b, "To:      %s\n", m.To)
 	if m.Cc != "" {

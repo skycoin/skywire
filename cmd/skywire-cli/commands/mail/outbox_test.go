@@ -39,3 +39,10 @@ func TestRenderOutbox(t *testing.T) {
 	require.Contains(t, out, "dial: offline")
 	require.Equal(t, "(empty)\n", renderOutbox(nil, now))
 }
+
+func TestRenderMessageNamesTheRelay(t *testing.T) {
+	out := renderMessage(&skymail.Rendered{From: "a@x.dmsg", PeerPK: "02aa", RelayPK: "03bb", Verified: true})
+	require.Contains(t, out, "(verified: signed by 02aa, relayed by 03bb)")
+	out = renderMessage(&skymail.Rendered{From: "a@x.dmsg", PeerPK: "02aa", Verified: true})
+	require.Contains(t, out, "(verified: delivered by 02aa)")
+}
