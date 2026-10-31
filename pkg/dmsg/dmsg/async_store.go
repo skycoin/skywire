@@ -302,8 +302,7 @@ func (s *asyncStore) write(m *asyncStored) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil { //nolint:gosec // hex PK under the store dir
 		return err
 	}
-	buf := make([]byte, 4, 4+len(head)+len(m.payload))
-	binary.BigEndian.PutUint32(buf, uint32(len(head))) //nolint:gosec // a JSON header is small
+	buf := binary.BigEndian.AppendUint32(nil, uint32(len(head))) //nolint:gosec // a JSON header is small
 	buf = append(append(buf, head...), m.payload...)
 	path := s.path(m.To, m.ID)
 	if err := os.WriteFile(path+".tmp", buf, 0o600); err != nil { //nolint:gosec // hex PK and a server-made id
