@@ -20,6 +20,26 @@ interface MailSummary {
   size: number;
   peer_pk?: string;
   from_verified: boolean;
+  queue?: MailQueue;
+}
+
+/** Where an Outbox message stands (skymail.Queued). */
+interface MailQueue {
+  pending: string[];
+  attempts: number;
+  last_error?: string;
+  next_attempt: string;
+  give_up?: string;
+  handed?: string[];
+  carried_for?: string;
+}
+
+/** One recipient of a send (skymail.RcptResult). */
+interface SendReport {
+  rcpt: string;
+  error?: string;
+  queued?: boolean;
+  via?: string;
 }
 
 /** One message as rendered for reading (skymail.Rendered). */
@@ -31,6 +51,7 @@ interface MailMessage {
   date: string;
   message_id?: string;
   from_verified: boolean;
+  relay_pk?: string;
   text: string;
   from_html?: boolean;
   attachments?: { name: string; content_type: string; size: number }[];
@@ -66,11 +87,14 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
   loadingList = false;
   view: 'list' | 'message' | 'compose' | 'settings' = 'list';
   openId = '';
+  openQueue: MailQueue | null = null;
   message: MailMessage | null = null;
   draft: Draft = this.emptyDraft();
   sending = false;
-  sendReport: { rcpt: string; error?: string; via?: string }[] = [];
+  sendReport: SendReport[] = [];
   whitelistText = '';
+  helpersText = '';
+  relayForText = '';
 
   private nodeSub?: Subscription;
   private followSub?: Subscription;
@@ -86,9 +110,17 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
 
   override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
-      const first = !this.node;
+      // The tab stays mounted when the dashboard moves to another visor,
+      // so a new PK starts the page over rather than keep the last one's.
+      const changed = !!node && node.localPk !== this.node?.localPk;
       this.node = node;
-      if (first && node) {
+      if (changed) {
+        this.status = null;
+        this.list = [];
+        this.folder = 'INBOX';
+        this.view = 'list';
+        this.message = null;
+        this.openQueue = null;
         this.loadStatus();
         this.loadList();
         this.follow();
@@ -133,10 +165,11 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
       skip(1),
       switchMap(res => res.pipe(catchError(() => EMPTY))),
     ).subscribe((l: MailSummary[]) => {
-      if (this.view === 'list') {
-        this.list = l || [];
-        this.cdr.markForCheck();
+      this.list = l || [];
+      if (this.view === 'message' && this.folder === 'Outbox') {
+        this.openQueue = this.list.find(m => m.id === this.openId)?.queue || null;
       }
+      this.cdr.markForCheck();
     }));
   }
 
@@ -144,6 +177,8 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
     this.status = st;
     this.statusError = '';
     this.whitelistText = (st?.whitelist || []).join('\n');
+    this.helpersText = this.listText(st?.helpers, st?.helpers_default);
+    this.relayForText = this.listText(st?.relay_for, st?.relay_for_default);
     this.cdr.markForCheck();
   }
 
@@ -193,6 +228,7 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
 
   open(m: MailSummary) {
     this.openId = m.id;
+    this.openQueue = m.queue || null;
     this.message = null;
     this.view = 'message';
     this.api.get(`${this.base}/${this.folder}/${encodeURIComponent(m.id)}`).subscribe({
@@ -218,13 +254,50 @@ export class MailComponent extends PageBaseComponent implements OnInit, OnDestro
     return `${this.api.apiPrefix}${this.base}/${this.folder}/${encodeURIComponent(this.openId)}/raw`;
   }
 
+  /** Asks the visor to try an Outbox message now, or all of them with no id. */
+  retry(id = '') {
+    this.api.post(`${this.base}/retry`, { id: id }).subscribe({
+      next: () => {
+        this.snackbar.showDone('Trying again now.');
+        // The attempt runs in the background; the list shows how it went.
+        setTimeout(() => {
+          this.refreshOutbox();
+          this.cdr.markForCheck();
+        }, 3000);
+      },
+      error: (err: any) => this.snackbar.showError(this.errText(err)),
+    });
+  }
+
+  private refreshOutbox() {
+    this.loadStatus();
+    this.api.get(`${this.base}/Outbox`).subscribe({
+      next: (l: MailSummary[]) => {
+        if (this.folder !== 'Outbox') {
+          return;
+        }
+        this.list = l || [];
+        if (this.view === 'message') {
+          const m = this.list.find(x => x.id === this.openId);
+          if (!m) {
+            this.snackbar.showDone('Delivered.');
+            this.showFolder('Outbox');
+          }
+          this.openQueue = m?.queue || null;
+        }
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   remove() {
-    if (!confirm('Delete this message?')) {
+    const outbox = this.folder === 'Outbox';
+    if (!confirm(outbox ? 'Stop trying to deliver this message and delete it?' : 'Delete this message?')) {
       return;
     }
     this.api.delete(`${this.base}/${this.folder}/${encodeURIComponent(this.openId)}`).subscribe({
       next: () => {
-        this.snackbar.showDone('Message deleted.');
+        this.snackbar.showDone(outbox ? 'Delivery cancelled.' : 'Message deleted.');
         this.showFolder(this.folder);
         this.loadStatus();
       },
@@ -287,8 +360,15 @@ return {
         next: (res: any) => {
           this.sending = false;
           this.sendReport = res?.recipients || [];
-          const failed = this.sendReport.filter(r => r.error);
-          if (!failed.length) {
+          const failed = this.sendReport.filter(r => r.error && !r.queued);
+          const queued = this.sendReport.filter(r => r.queued);
+          if (queued.length) {
+            this.loadStatus();
+          }
+          if (!failed.length && queued.length) {
+            this.snackbar.showDone('Queued. This visor keeps trying until the recipient is online.');
+            this.showFolder('Outbox');
+          } else if (!failed.length) {
             this.snackbar.showDone('Sent.');
             this.showFolder('Sent');
           }
@@ -327,6 +407,42 @@ return {
       },
       error: (err: any) => this.snackbar.showError(this.errText(err)),
     });
+  }
+
+  /** Empty means the default, "none" an empty list. */
+  private listText(pks: string[] | undefined, def: boolean): string {
+    if (def) {
+      return '';
+    }
+
+    return pks?.length ? pks.join('\n') : 'none';
+  }
+
+  saveHelpers() {
+    const body: any = {};
+    const put = (text: string, key: string) => {
+      const t = text.trim();
+      if (!t) {
+        body[key + '_default'] = true;
+      } else if (t.toLowerCase() === 'none') {
+        body[key] = [];
+      } else {
+        body[key] = t.split(/[\s,]+/).filter(Boolean);
+      }
+    };
+    put(this.helpersText, 'helpers');
+    put(this.relayForText, 'relay_for');
+    this.api.put(`${this.base}/settings`, body).subscribe({
+      next: () => {
+        this.snackbar.showDone('Helpers saved.');
+        this.loadStatus();
+      },
+      error: (err: any) => this.snackbar.showError(this.errText(err)),
+    });
+  }
+
+  short(pk: string): string {
+    return pk && pk.length > 16 ? pk.slice(0, 8) + '…' + pk.slice(-6) : pk;
   }
 
   copy(text: string) {

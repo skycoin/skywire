@@ -64,6 +64,12 @@ func (r *RPC) MailDelete(in *visorapi.MailMessageRequest, _ *struct{}) (err erro
 	return r.visor.MailDelete(in.Folder, in.ID)
 }
 
+// MailRetry makes queued mail due now. See Visor.MailRetry.
+func (r *RPC) MailRetry(id *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "MailRetry", id)(nil, &err)
+	return r.visor.MailRetry(*id)
+}
+
 // MailSetWhitelist replaces the mailbox whitelist. See Visor.MailSetWhitelist.
 func (r *RPC) MailSetWhitelist(in *[]cipher.PubKey, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "MailSetWhitelist", in)(nil, &err)

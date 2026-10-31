@@ -27,6 +27,7 @@ import (
 	"io"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"sort"
 	"strconv"
 	"strings"
@@ -101,6 +102,9 @@ type Config struct {
 	// RemotePort is the peer routing port to dial. Defaults to 25
 	// (matching the SMTP convention) when zero.
 	RemotePort uint16
+	// Require, when set, is an EHLO keyword the peer must offer. Relay
+	// fails with a 554 before MAIL FROM when it does not.
+	Require string
 }
 
 func (c Config) withDefaults() Config {
@@ -336,6 +340,11 @@ func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []
 
 	if err := cl.Hello(cfg.HeloName); err != nil {
 		return fmt.Errorf("HELO: %w", err)
+	}
+	if cfg.Require != "" {
+		if ok, _ := cl.Extension(cfg.Require); !ok {
+			return &textproto.Error{Code: 554, Msg: "peer does not offer " + cfg.Require}
+		}
 	}
 	if err := cl.Mail(from); err != nil {
 		return fmt.Errorf("MAIL FROM: %w", err)

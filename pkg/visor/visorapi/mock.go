@@ -1917,6 +1917,9 @@ func (mc *mockRPCClient) MailSend(skymail.Outgoing) (*skymail.SendResult, error)
 // MailDelete implements API.
 func (mc *mockRPCClient) MailDelete(string, string) error { return nil }
 
+// MailRetry implements API.
+func (mc *mockRPCClient) MailRetry(string) error { return nil }
+
 // MailSetWhitelist implements API.
 func (mc *mockRPCClient) MailSetWhitelist([]cipher.PubKey) error { return nil }
 

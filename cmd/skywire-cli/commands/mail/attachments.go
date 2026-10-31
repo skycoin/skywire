@@ -31,7 +31,7 @@ directory unless -o names another; "-o -" writes it to stdout. With
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("attachment number: %w", err))
 		}
-		a, err := mailClient(cmd).MailAttachment(folderOf(attSent), args[0], n)
+		a, err := mailClient(cmd).MailAttachment(folderOf(cmd, attSent, attOutbox), args[0], n)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}

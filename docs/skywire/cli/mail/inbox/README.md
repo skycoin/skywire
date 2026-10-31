@@ -7,7 +7,8 @@ List the mailbox, newest first.
 A "*" marks unread mail. "verified" means the From address names the
 same PK the transport authenticated, so the sender cannot have forged
 it; "PK <hex>" shows who actually delivered mail whose From says
-otherwise.
+otherwise. "relayed" marks mail the sender signed and sealed and
+another visor delivered.
 
 ## Usage
 

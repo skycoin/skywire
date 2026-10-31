@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 func TestParseSettings(t *testing.T) {
@@ -41,4 +44,24 @@ func TestReadAttachmentsFromFiles(t *testing.T) {
 	require.Equal(t, []byte{0, 1, 2, 255}, att[0].Data)
 	_, err = readAttachments([]string{p + ".missing"})
 	require.Error(t, err)
+}
+
+func TestParseHelperLists(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	u, err := parseSettings([]string{"helpers=" + pk.Hex(), "relay_for=none"})
+	require.NoError(t, err)
+	require.Equal(t, []cipher.PubKey{pk}, *u.Helpers)
+	require.NotNil(t, u.RelayFor)
+	require.Empty(t, *u.RelayFor)
+	u, err = parseSettings([]string{"helpers=default", "relay_for=default"})
+	require.NoError(t, err)
+	require.Nil(t, u.Helpers)
+	require.True(t, u.HelpersDefault)
+	require.True(t, u.RelayForDefault)
+	_, err = parseSettings([]string{"helpers=nope"})
+	require.Error(t, err)
+
+	out := renderSettings(&visorapi.MailStatus{HasOutbox: true, Helpers: []cipher.PubKey{pk}, RelayForDefault: true})
+	require.Contains(t, out, "helpers           "+pk.Hex()+"\n")
+	require.Contains(t, out, "relay_for         none (default: this visor's hypervisors)")
 }

@@ -53,6 +53,7 @@ type Rendered struct {
 	MessageID   string       `json:"message_id,omitempty"`
 	PeerPK      string       `json:"peer_pk,omitempty"`
 	Verified    bool         `json:"from_verified"`
+	RelayPK     string       `json:"relay_pk,omitempty"`
 	Text        string       `json:"text"`
 	FromHTML    bool         `json:"from_html,omitempty"` // Text was reduced from an HTML-only part
 	Attachments []Attachment `json:"attachments,omitempty"`
@@ -103,6 +104,7 @@ func render(raw []byte) (*Rendered, [][]byte, error) {
 		PeerPK:    h.Get(PeerHeader),
 	}
 	r.Verified = fromNamesPK(r.From, r.PeerPK)
+	r.RelayPK = relayOf(raw)
 
 	var (
 		plain, html string

@@ -20,10 +20,12 @@ skywire cli mail attachment <id> 0      # save attachment 0
 skywire cli mail whitelist add <pk>     # empty whitelist = accept anyone
 skywire cli mail settings max_total_size=128MiB max_age=30d
 skywire cli mail settings enable=false  # stop receiving
+skywire cli mail outbox                 # mail waiting for an offline visor
+skywire cli mail retry                  # try the Outbox now
 ```
 
 Because it is open to every PK by default, the mailbox keeps little: a
-message over 10 MiB is refused, a mailbox holding 64 MiB (Inbox and Sent
+message over 10 MiB is refused, a mailbox holding 64 MiB (every folder
 together) refuses mail until some is deleted or expires, and mail older
 than 7 days is deleted. `mail settings` changes any of these live and
 keeps the change in `settings.json` beside the mail (`none` removes a
@@ -35,11 +37,47 @@ sessions may themselves ride skynet) and `.skynet` over a skywire
 route. A `.skynet` delivery that cannot get a route fails rather than
 taking dmsg instead; each delivery reports the network that carried it.
 
-In the browser desk the same actions are the ☰ **mail** app. Sending is
-immediate: a recipient whose visor is offline gets an error, and nothing
-is queued. The mailbox also delivers to a Postfix host set up as below:
+In the browser desk the same actions are the ☰ **mail** app. The mailbox
+also delivers to a Postfix host set up as below:
 `user@<vhost>.<pk>.skynet` reaches `user@<vhost>` there. A native visor
 whose port 25 is already forwarded (`serve add 25`) leaves it to Postfix.
+
+### Mail for a visor that is offline
+
+On the desktop and wasm visors, mail for a visor that cannot take it now
+waits in the **Outbox** instead of failing. That covers an unreachable
+visor and a 4xx reply such as a full mailbox. A refusal (5xx, such as a
+whitelist that leaves you out) still fails at once. The visor retries
+after 1, 5 and 15 minutes and then every hour. It also retries at once
+when it starts and when the recipient sends mail to it. After `max_age`
+it gives up and files a bounce in the inbox with the original attached.
+Deleting a message from the Outbox (`mail rm --outbox <id>`) cancels it.
+
+A visor can also hand its queued mail to **helpers**, its own other
+visors, so the mail still arrives after it goes away (a closed browser
+tab, a laptop asleep). Each helper gets the message as a *sealed
+envelope*: signed by the sender and encrypted for the recipient, so the
+helper cannot read it. The helper keeps it in its own Outbox and delivers
+it the same way. The recipient files it under the signer, still
+*verified*, and notes the visor that relayed it in `X-Skymail-Relay`.
+The sender keeps its own copy and keeps trying too. A mailbox files a
+given sender and Message-ID once, so the second copy is dropped.
+
+```sh
+skywire cli mail settings helpers=<pk>,<pk>   # who carries my mail
+skywire cli mail settings relay_for=<pk>      # whose mail I carry
+skywire cli mail settings helpers=default relay_for=default
+```
+
+With no settings this follows the hypervisor relation. A visor's helpers
+are the visors it manages, and it carries mail for its own hypervisors,
+which can already run anything on it. So a browser-tab visor that is the
+hypervisor of a desktop visor hands its mail to that visor with no setup.
+A helper takes sealed mail only from the visors in its `relay_for` list,
+and delivers it only to a mailbox that offers `SKYMAIL-SEALED` in EHLO.
+
+The phone apps do not have the Outbox, sealed mail or helpers yet. There,
+a send to an offline visor still fails at once.
 
 ## Postfix hosts
 

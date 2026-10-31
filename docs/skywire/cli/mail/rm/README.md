@@ -13,7 +13,8 @@ skywire cli mail rm <id>...
 ## Flags
 
 ```
-      --sent   remove from Sent instead of the inbox
+      --outbox   remove from the Outbox, which cancels its delivery
+      --sent     remove from Sent instead of the inbox
 ```
 
 ## Global Flags
