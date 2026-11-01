@@ -79,6 +79,11 @@ type ProcManager interface {
 	SetContactNamesFn(fn func(appName string) map[string]string)
 	// ContactNames returns the contact book names appName may see, or nil.
 	ContactNames(appName string) map[string]string
+	// SetMailHostFn wires what the visor does for its mailbox app (mail_host.go).
+	// fn decides which app may use it. Nil-safe: unset means no app may.
+	SetMailHostFn(fn func(appName string) MailHost)
+	// MailHost returns the MailHost appName may use, or nil.
+	MailHost(appName string) MailHost
 	// SetAppSettings replaces the live tuning knobs held for an app — the
 	// numeric map and the list map together — and returns the new version. The
 	// set OUTLIVES the app process (the visor persists it); see app_settings.go.
@@ -133,6 +138,10 @@ type procManager struct {
 	// contactNamesFn answers ContactNames. Set once via SetContactNamesFn; nil
 	// is valid (wasm/tests).
 	contactNamesFn func(appName string) map[string]string
+
+	// mailHostFn answers the mail calls. Set once via SetMailHostFn; nil is
+	// valid (wasm/tests).
+	mailHostFn func(appName string) MailHost
 
 	// settings holds the live tuning knobs per app name, pulled by the app on
 	// its own tick. Never nil after NewProcManager.

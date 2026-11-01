@@ -2,7 +2,8 @@
 
 ## The visor's own mailbox (no MTA)
 
-Every visor has a mailbox of its own (`pkg/skymail`), on by default. Mail to
+Every visor has a mailbox of its own, the skymail app
+(`cmd/apps/skymail`, on `pkg/skymail`), on by default. Mail to
 `<anything>@<base32-pk>.skynet` (or `.dmsg`) arrives over SMTP on
 port 25 and is kept verbatim in a Maildir (default `mail/` beside the
 local path, which the browser tab persists to IndexedDB). There is no

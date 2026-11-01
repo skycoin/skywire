@@ -9,6 +9,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -38,6 +39,11 @@ type RPCIngressClient interface {
 	// ContactNames fetches the visor contact book as key hex to name. Empty
 	// when this app may not read it.
 	ContactNames() (map[string]string, error)
+	// MailSeal, MailOpen and MailHostInfo are the mailbox app's calls; the
+	// visor keeps its key and answers them only for that app (mail_host.go).
+	MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error)
+	MailOpen(body []byte) ([]byte, cipher.PubKey, error)
+	MailHostInfo() (MailHostInfo, error)
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and

@@ -63,6 +63,15 @@ func (_m *MockProcManager) SetContactNamesFn(fn func(appName string) map[string]
 // mock.Called, so tests that reach the ingress do not panic.
 func (_m *MockProcManager) ContactNames(string) map[string]string { return nil }
 
+// SetMailHostFn provides a mock function with given fields: fn
+func (_m *MockProcManager) SetMailHostFn(fn func(appName string) MailHost) {
+	_m.Called(fn)
+}
+
+// MailHost serves no app, and is not mock.Called for the reason ContactNames
+// is not.
+func (_m *MockProcManager) MailHost(string) MailHost { return nil }
+
 // The live-settings trio is backed by a REAL store rather than mock.Called:
 // it carries no behaviour worth asserting, and a Called() here would turn
 // every existing MockProcManager test that happens to reach the settings

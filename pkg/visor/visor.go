@@ -485,8 +485,9 @@ type Visor struct {
 	tpdFeed               atomic.Pointer[tpdFeedRef] // the transport-list feed, for tpdFeedHealthy
 	arBindings            arBindingsIndex            // the address resolver's bindings feed, for lookups
 	autoTpCooldown        autoTpCooldown             // automatic transports that failed recently, by peer and type
-	mail                  skymailHost
-	embeddedWisp          *EmbeddedWisp
+	// mailHandler, when set, stands in for the skymail app's control surface.
+	mailHandler  http.Handler
+	embeddedWisp *EmbeddedWisp
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux

@@ -108,7 +108,7 @@ func (n *testNet) addVisor(t *testing.T, opts ...func(*Config)) *visor {
 	cfg := Config{
 		Dir:     t.TempDir(),
 		PK:      pk,
-		SK:      sk,
+		Sealer:  KeySealer(sk),
 		PeerPK:  peerOf,
 		Dialers: map[string]skymailbridge.Dialer{".skynet": n.dialerFor(pk)},
 		Outbox:  true,

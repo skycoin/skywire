@@ -194,7 +194,7 @@ func TestOnlyTheMailboxCanNameARelay(t *testing.T) {
 func TestEHLOOffersSealedOnlyWithAKey(t *testing.T) {
 	n := newTestNet()
 	a, b := n.addVisor(t), n.addVisor(t)
-	c := n.addVisor(t, func(c *Config) { c.SK = cipher.SecKey{} })
+	c := n.addVisor(t, func(c *Config) { c.Sealer = nil })
 
 	ehlo := func(to cipher.PubKey) string {
 		tc, done := rawSession(t, n, a.pk, to)
