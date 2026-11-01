@@ -1297,6 +1297,10 @@
     <string name="chat_cannot_open">无法打开此文件。</string>
     <string name="chat_cannot_play">无法播放此片段。</string>
     <string name="chat_cannot_post">你无法在此群组中发送消息。</string>
+    <string name="chat_cannot_post_banned">你已被此群组封禁。</string>
+    <string name="chat_cannot_post_channel">这是一个频道，只有频道管理员可以发言。</string>
+    <string name="chat_cannot_post_muted">你在此群组中已被限制发言。</string>
+    <string name="chat_cannot_post_read_only">此群组为只读，只有管理员可以发送消息。</string>
     <string name="chat_catalog_open">打开</string>
     <string name="chat_catalog_view">查看</string>
     <string name="chat_catalog_title">此节点发布的其他内容</string>

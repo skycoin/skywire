@@ -116,6 +116,7 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	ok, reason := r.CanPost(member)
 	require.False(t, ok, "a subscriber must not be able to post")
 	require.Contains(t, reason, "channel")
+	require.Equal(t, PostBlockChannel, r.PostBlock(member))
 
 	// Joining is still open — a channel restricts publishing, not reading.
 	require.Equal(t, JoinOpen, r.JoinPolicy())
@@ -126,12 +127,14 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	ok, reason = banned.CanPost(member)
 	require.False(t, ok)
 	require.Contains(t, reason, "banned")
+	require.Equal(t, PostBlockBanned, banned.PostBlock(member))
 
 	mutedAdmin := r
 	mutedAdmin.Muted = []cipher.PubKey{admin}
 	ok, reason = mutedAdmin.CanPost(admin)
 	require.False(t, ok, "an explicit mute applies even to an admin")
 	require.Contains(t, reason, "restricted")
+	require.Equal(t, PostBlockMuted, mutedAdmin.PostBlock(admin))
 }
 
 // The scaling property. Under the group rule an admin follows every

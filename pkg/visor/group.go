@@ -912,6 +912,7 @@ func (v *Visor) toInfoFor(r skychatgroup.Record, mgr *skychatgroup.Manager) viso
 	info := toInfo(r)
 	canPost, reason := r.CanPost(v.conf.PK)
 	info.CanPost, info.CannotPostReason = canPost, reason
+	info.CannotPostCode = r.PostBlock(v.conf.PK)
 	if mgr != nil && r.IsAdmin(v.conf.PK) {
 		if reqs, err := mgr.PendingJoins(r.ID); err == nil {
 			for _, q := range reqs {
