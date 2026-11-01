@@ -20,6 +20,7 @@ internal object SseDispatch {
             "group" -> group(repo, m)
             "group-delete" -> groupDelete(repo, m)
             "group-join-request" -> joinRequest(repo, m)
+            "group-update" -> groupUpdate(repo, m)
             "file-ready" -> fileReady(repo, m)
             "dm-status" -> dmStatus(repo, m)
             "pair" -> dm(repo, m, viaPair = true)
@@ -199,6 +200,14 @@ internal object SseDispatch {
     fun withoutDeleted(list: List<ChatMessage>, nano: String, by: String, me: String): List<ChatMessage> {
         val kept = list.filterNot { it.tsNano == nano && (it.from == by || (it.mine && by == me)) }
         return if (kept.size == list.size) list else kept
+    }
+
+    /** Someone joined, left, was promoted or removed: skychat saw the group's info change. */
+    private fun groupUpdate(repo: ChatRepository, m: SseMessage) {
+        repo.scope.launch {
+            repo.syncGroups()
+            repo.groupChanged.tryEmit(m.groupId)
+        }
     }
 
     private fun joinRequest(repo: ChatRepository, m: SseMessage) {
