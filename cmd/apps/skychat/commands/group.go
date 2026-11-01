@@ -198,8 +198,8 @@ func startGroupPoller(parent context.Context) {
 				continue
 			}
 			for _, m := range msgs {
-				if m.TS.After(since) {
-					since = m.TS
+				if m.Arrived.After(since) {
+					since = m.Arrived
 				}
 				// A delete tombstone hides a message for everyone. It's authored
 				// (signed) by the deleter, so deleted_by is authentic — a reader

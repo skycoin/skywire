@@ -748,7 +748,9 @@ func (v *Visor) GroupUnsend(args visorapi.GroupUnsendArgs) error {
 	return mgr.Unsend(args.ID, args.TS)
 }
 
-// GroupPoll drains messages with TS > since. Mirrors PairPoll.
+// GroupPoll returns the messages that arrived after since. Callers move
+// since to the newest Arrived they got, not the newest TS, or they miss
+// history that a joiner is sent after newer messages.
 func (v *Visor) GroupPoll(since time.Time) ([]visorapi.GroupMessage, error) {
 	v.initLock.RLock()
 	inbox := v.grouping.inbox
@@ -756,7 +758,7 @@ func (v *Visor) GroupPoll(since time.Time) ([]visorapi.GroupMessage, error) {
 	if inbox == nil {
 		return nil, ErrGroupingDisabled
 	}
-	return inbox.snapshotAfter(since), nil
+	return inbox.snapshotArrivedAfter(since), nil
 }
 
 // GroupHistoryFetcher is the read side of the group history store.
@@ -945,7 +947,9 @@ type groupInbox struct {
 	mu  sync.Mutex
 	cap int
 	buf []visorapi.GroupMessage
-	mgr *skychatgroup.Manager
+	// lastArrived is the newest Arrived stamped, so the next is later. Under mu.
+	lastArrived time.Time
+	mgr         *skychatgroup.Manager
 
 	subsMu sync.RWMutex
 	subs   map[*groupSub]struct{}
@@ -1025,10 +1029,19 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 	}
 	g.deliverCount.Add(1)
 	g.mu.Lock()
-	g.buf = append(g.buf, gm)
-	if len(g.buf) > g.cap {
-		drop := len(g.buf) - g.cap
-		g.buf = append(g.buf[:0], g.buf[drop:]...)
+	// A feed that reconnects replays what it holds. A message the ring has
+	// keeps its first arrival, or every replay would reach the pollers again.
+	if !g.holdsLocked(gm) {
+		gm.Arrived = time.Now().UTC()
+		if !gm.Arrived.After(g.lastArrived) {
+			gm.Arrived = g.lastArrived.Add(time.Nanosecond)
+		}
+		g.lastArrived = gm.Arrived
+		g.buf = append(g.buf, gm)
+		if len(g.buf) > g.cap {
+			drop := len(g.buf) - g.cap
+			g.buf = append(g.buf[:0], g.buf[drop:]...)
+		}
 	}
 	mgr := g.mgr
 	g.mu.Unlock()
@@ -1070,6 +1083,30 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 	if mgr != nil {
 		mgr.MarkMessageDelivered(groupID, msg.TS)
 	}
+}
+
+func (g *groupInbox) holdsLocked(gm visorapi.GroupMessage) bool {
+	for i := len(g.buf) - 1; i >= 0; i-- {
+		m := g.buf[i]
+		if m.GroupID == gm.GroupID && m.SenderPK == gm.SenderPK && m.TS.Equal(gm.TS) && m.Text == gm.Text {
+			return true
+		}
+	}
+	return false
+}
+
+// snapshotArrivedAfter is the inbox's messages that arrived after since,
+// whatever their TS, in arrival order.
+func (g *groupInbox) snapshotArrivedAfter(since time.Time) []visorapi.GroupMessage {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]visorapi.GroupMessage, 0, len(g.buf))
+	for _, m := range g.buf {
+		if m.Arrived.After(since) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func (g *groupInbox) snapshotAfter(since time.Time) []visorapi.GroupMessage {
