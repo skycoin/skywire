@@ -14,7 +14,10 @@ internal object SseDispatch {
     private const val ORPHANS = 64
 
     fun handle(repo: ChatRepository, m: SseMessage) {
-        if (m.history != null) return
+        // A replay is history the app loads itself, except a delete: a message
+        // deleted while the app was away leaves no history to say so.
+        val delete = (m.channel == "dm-status" && m.status == "deleted") || m.channel == "group-delete"
+        if (m.history != null && !delete) return
         when (m.channel) {
             "pair-invite" -> pairInvite(repo, m)
             "group" -> group(repo, m)

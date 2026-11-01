@@ -899,6 +899,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	// expects to see names rather than keys.
 	openContactStore(contactStorePath())
 	openPrivacyStore(privacyStorePath())
+	openDeleteOutbox(deleteOutboxPath())
 
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
@@ -978,6 +979,10 @@ func RunSkychat(ctx context.Context, args []string) error {
 		OnReceipt: func(peer, id, kind string) {
 			switch kind {
 			case message.TypeAck:
+				if target, ok := dm.DeletedID(id); ok {
+					deletes.acked(peer, target)
+					return
+				}
 				broadcastDMStatus(id, dmStatusReceived, peer)
 			case message.TypeRead:
 				broadcastDMStatus(id, dmStatusRead, peer)
@@ -1037,6 +1042,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	startPairPoller(ctx)
 	defer stopPairPoller()
 	startGroupPoller(ctx)
+	startDeleteRetries(ctx)
 	defer stopGroupPoller()
 
 	// Wire optional password protection. If passwordFile is empty or
