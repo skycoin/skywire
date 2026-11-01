@@ -233,7 +233,7 @@ fun AddressBlock(address: String, amount: Double, coin: String, qrTitle: String,
             Icon(Icons.Rounded.QrCode2, stringResource(R.string.dex_show_qr), Modifier.size(18.dp))
         }
     }
-    if (qr) PaymentQrDialog(address, amount, coin, qrTitle, qrHint, onCopied) { qr = false }
+    if (qr) PaymentQrDialog(address, amount, coin, qrTitle, qrHint) { qr = false }
 }
 
 /**
@@ -243,12 +243,13 @@ fun AddressBlock(address: String, amount: Double, coin: String, qrTitle: String,
  * codes scan badly.
  */
 @Composable
-fun PaymentQrDialog(address: String, amount: Double, coin: String, title: String, hint: String?, onCopied: (String) -> Unit, onDismiss: () -> Unit) {
+fun PaymentQrDialog(address: String, amount: Double, coin: String, title: String, hint: String?, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val uri = paymentUri(address, amount, coin)
     var withAmount by remember { mutableStateOf(true) }
     val value = if (uri != null && withAmount) uri else address
-    val copied = stringResource(R.string.copied_to_clipboard)
+    // Said in the dialog, not in a snackbar: the dialog is its own window and would cover one.
+    var copied by remember { mutableStateOf(false) }
     val screenHeight = LocalConfiguration.current.screenHeightDp
     val compact = isShortScreen()
     AlertDialog(
@@ -266,19 +267,19 @@ fun PaymentQrDialog(address: String, amount: Double, coin: String, title: String
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         SendExactly(amount, coin)
-                        QrDetails(address, coin, uri, withAmount, hint, onCopied) { withAmount = it }
+                        QrDetails(address, coin, uri, withAmount, hint, copied, onCopied = { copied = true }) { withAmount = it }
                     }
                 }
             } else {
                 Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                     SendExactly(amount, coin)
                     QrImage(value, sizeDp = 220)
-                    QrDetails(address, coin, uri, withAmount, hint, onCopied) { withAmount = it }
+                    QrDetails(address, coin, uri, withAmount, hint, copied, onCopied = { copied = true }) { withAmount = it }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.dex_close)) } },
-        dismissButton = { TextButton(onClick = { copyText(context, address); onCopied(copied) }) { Text(stringResource(R.string.dex_copy_address)) } },
+        dismissButton = { TextButton(onClick = { copyText(context, address); copied = true }) { Text(stringResource(R.string.dex_copy_address)) } },
     )
 }
 
@@ -291,9 +292,8 @@ private fun SendExactly(amount: Double, coin: String) {
 
 /** The link switch, the address in full, and how to use the code. */
 @Composable
-private fun QrDetails(address: String, coin: String, uri: String?, withAmount: Boolean, hint: String?, onCopied: (String) -> Unit, onWithAmount: (Boolean) -> Unit) {
+private fun QrDetails(address: String, coin: String, uri: String?, withAmount: Boolean, hint: String?, copied: Boolean, onCopied: () -> Unit, onWithAmount: (Boolean) -> Unit) {
     val context = LocalContext.current
-    val copied = stringResource(R.string.copied_to_clipboard)
     if (uri != null) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -303,6 +303,14 @@ private fun QrDetails(address: String, coin: String, uri: String?, withAmount: B
     }
     Spacer(Modifier.height(8.dp))
     Text(address, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+    if (copied) {
+        Text(
+            stringResource(R.string.copied_to_clipboard),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
     Spacer(Modifier.height(8.dp))
     val base = if (uri != null && withAmount) stringResource(R.string.dex_qr_hint_link, coin) else stringResource(R.string.dex_qr_hint_plain)
     Text(
@@ -311,7 +319,7 @@ private fun QrDetails(address: String, coin: String, uri: String?, withAmount: B
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     if (uri != null && withAmount) {
-        TextButton(onClick = { copyText(context, uri); onCopied(copied) }) { Text(stringResource(R.string.dex_copy_link)) }
+        TextButton(onClick = { copyText(context, uri); onCopied() }) { Text(stringResource(R.string.dex_copy_link)) }
     }
 }
 
