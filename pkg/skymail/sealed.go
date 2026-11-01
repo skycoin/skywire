@@ -200,3 +200,24 @@ func OpenSealed(body []byte, sk cipher.SecKey) ([]byte, cipher.PubKey, error) {
 	}
 	return msg, signer, nil
 }
+
+// Sealer seals and opens envelopes as the mailbox's owner. The owner's
+// secret key stays with whoever implements it, which for the skymail app
+// is the visor.
+type Sealer interface {
+	Seal(msg []byte, rcpt cipher.PubKey) ([]byte, error)
+	Open(body []byte) ([]byte, cipher.PubKey, error)
+}
+
+// KeySealer is a Sealer that holds the secret key itself.
+type KeySealer cipher.SecKey
+
+// Seal implements Sealer.
+func (k KeySealer) Seal(msg []byte, rcpt cipher.PubKey) ([]byte, error) {
+	return Seal(msg, cipher.SecKey(k), rcpt)
+}
+
+// Open implements Sealer.
+func (k KeySealer) Open(body []byte) ([]byte, cipher.PubKey, error) {
+	return OpenSealed(body, cipher.SecKey(k))
+}

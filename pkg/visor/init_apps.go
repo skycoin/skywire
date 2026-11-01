@@ -41,6 +41,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -84,6 +85,9 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// Skychat reads the contact book so a contact named there shows by name
 	// where the operator has not set a skychat nickname. No other app may.
 	procM.SetContactNamesFn(v.appContactNames)
+
+	// The mailbox app seals and opens mail with the visor's key, which stays here.
+	procM.SetMailHostFn(v.appMailHost)
 
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775
@@ -140,9 +144,13 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// The mailbox, on by default. Its enable lives in the mailbox's own
 	// settings.json, so a live `cli mail` change survives a restart.
 	if _, ok := launcher.GetApp(skymailApp); ok && !appsContains(apps, skymailApp) {
-		enabled, _, _ := skymailEffective(v.conf) //nolint:errcheck // reported by initSkymail
+		enabled, _, err := skymailEffective(v.conf)
+		if err != nil {
+			v.log.WithError(err).Warn("mailbox: unreadable " + skymail.SettingsFile + "; using the config")
+		}
 		apps = append(apps, appserver.AppConfig{
 			Name:          skymailApp,
+			Args:          skymailArgs(v.conf),
 			AutoStart:     enabled,
 			LauncherMode:  string(appcommon.RunModeInternal),
 			RestartPolicy: string(appcommon.RestartOnFailure),

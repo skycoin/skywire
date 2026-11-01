@@ -20,9 +20,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -170,6 +172,15 @@ func (e *EmbeddedSkymailBridge) serve(ctx context.Context, lis net.Listener) {
 // to the peer via the visor's shared dmsg client. No second
 // discovery connection, no second identity — the bridge reuses the
 // visor's running session, same way embedded_dmsgweb does.
+// skynetMailDialer reaches a .skynet address over a skywire route and
+// nothing else: the suffix is the sender's choice of network, so a failed
+// route is reported, not quietly replaced with dmsg.
+type skynetMailDialer struct{}
+
+func (skynetMailDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
+	return appnet.DialContext(ctx, appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(port)})
+}
+
 type visorDmsgDialer struct{ c *dmsg.Client }
 
 func (d *visorDmsgDialer) Dial(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {

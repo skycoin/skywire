@@ -78,7 +78,7 @@ func (mb *Mailbox) handTo(ctx context.Context, helper cipher.PubKey, rec queueRe
 			// A helper that is itself the recipient is not away.
 			continue
 		}
-		env, err := Seal(msg, mb.cfg.SK, g.pk)
+		env, err := mb.cfg.Sealer.Seal(msg, g.pk)
 		if err != nil {
 			return err
 		}

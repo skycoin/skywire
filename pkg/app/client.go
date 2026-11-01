@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/proxystatus"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -194,6 +195,23 @@ func (c *Client) ContactNames() (map[string]string, error) {
 		return nil, nil
 	}
 	return c.rpcC.ContactNames()
+}
+
+// MailSeal asks the visor to seal msg for rcpt with its key. Only the mailbox
+// app may.
+func (c *Client) MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error) {
+	return c.rpcC.MailSeal(msg, rcpt)
+}
+
+// MailOpen asks the visor to open an envelope sealed to it. Only the mailbox
+// app may.
+func (c *Client) MailOpen(body []byte) ([]byte, cipher.PubKey, error) {
+	return c.rpcC.MailOpen(body)
+}
+
+// MailHostInfo reports the visor state the mailbox app follows.
+func (c *Client) MailHostInfo() (appserver.MailHostInfo, error) {
+	return c.rpcC.MailHostInfo()
 }
 
 // SetStatusOrLog sets the detailed status and logs the error if any.

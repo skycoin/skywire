@@ -157,7 +157,7 @@ func TestCarriedMailIsOnlySealedMailForTheNamedVisor(t *testing.T) {
 }
 
 func TestCarriedMailWaitsForARecipientThatOpensIt(t *testing.T) {
-	hn := newHelperNet(t, func(c *Config) { c.SK = cipher.SecKey{} })
+	hn := newHelperNet(t, func(c *Config) { c.Sealer = nil })
 	startOutbox(t, hn.a)
 	startOutbox(t, hn.h)
 	_, err := hn.a.mb.Send(context.Background(), Outgoing{To: []string{addr("bob", hn.b.pk)}, Body: "x"})

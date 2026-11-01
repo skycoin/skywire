@@ -53,14 +53,14 @@ type Config struct {
 	// Outbox queues mail for a recipient that cannot take it yet and
 	// retries it (RunOutbox). Off, such a send fails at once.
 	Outbox bool
-	// SK, when set, is the secret key of PK. The mailbox then opens
-	// sealed envelopes (sealed.go) that any visor delivers, and files
+	// Sealer, when set, seals and opens envelopes as PK. The mailbox then
+	// opens sealed envelopes (sealed.go) that any visor delivers, and files
 	// them under the PK that signed them.
-	SK cipher.SecKey
-	// Helpers, with SK and the Outbox, names the visors that get a
+	Sealer Sealer
+	// Helpers, with Sealer and the Outbox, names the visors that get a
 	// sealed copy of queued mail to deliver too (helpers.go).
 	Helpers func() []cipher.PubKey
-	// RelayFor, with SK and the Outbox, reports whether this mailbox
+	// RelayFor, with Sealer and the Outbox, reports whether this mailbox
 	// carries sealed mail that pk hands over for someone else.
 	RelayFor func(pk cipher.PubKey) bool
 	// OnDeliver, when set, is told of each message the network files in the
@@ -325,7 +325,7 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 	}
 	sender, relay, body := peer, cipher.PubKey{}, env.Body
 	if r.mb.sealing() && IsSealed(body) {
-		msg, signer, err := OpenSealed(body, r.mb.cfg.SK)
+		msg, signer, err := r.mb.cfg.Sealer.Open(body)
 		if err != nil {
 			return "", &skymailbridge.Reply{Code: 554, Enhanced: "5.7.5", Text: err.Error()}
 		}
@@ -400,7 +400,7 @@ func (mb *Mailbox) deliverLocal(peer, relay cipher.PubKey, body []byte) (string,
 	return mb.store(mb.inbox, buf.Bytes(), false)
 }
 
-func (mb *Mailbox) sealing() bool { return !mb.cfg.SK.Null() }
+func (mb *Mailbox) sealing() bool { return mb.cfg.Sealer != nil }
 
 // relayOf is the RelayHeader the mailbox wrote, read from the line after
 // its PeerHeader, so a header the sender put in the message never counts.

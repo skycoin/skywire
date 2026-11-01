@@ -114,6 +114,36 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 			return rpcReply, rpcRcvr.LocalServices(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".MailHostInfo", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(MailHostInfo)
+			return rpcReply, rpcRcvr.MailHostInfo(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailOpen", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]byte)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(MailOpenResp)
+			return rpcReply, rpcRcvr.MailOpen(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".MailSeal", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(MailSealReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]byte)
+			return rpcReply, rpcRcvr.MailSeal(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".NoteMuxEvent", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(NoteMuxEventReq)
 		if err := rpcDec.Decode(rpcArg); err != nil {

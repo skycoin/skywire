@@ -9,6 +9,8 @@ import (
 
 	appnet "github.com/skycoin/skywire/pkg/app/appnet"
 
+	cipher "github.com/skycoin/skywire/pkg/cipher"
+
 	proxystatus "github.com/skycoin/skywire/pkg/proxystatus"
 
 	routing "github.com/skycoin/skywire/pkg/routing"
@@ -528,4 +530,45 @@ func NewMockRPCIngressClient(t interface {
 	t.Cleanup(func() { mock.AssertExpectations(t) })
 
 	return mock
+}
+
+// MailSeal provides a mock function with given fields: msg, rcpt
+func (_m *MockRPCIngressClient) MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error) {
+	ret := _m.Called(msg, rcpt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MailSeal")
+	}
+
+	var r0 []byte
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]byte)
+	}
+	return r0, ret.Error(1)
+}
+
+// MailOpen provides a mock function with given fields: body
+func (_m *MockRPCIngressClient) MailOpen(body []byte) ([]byte, cipher.PubKey, error) {
+	ret := _m.Called(body)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MailOpen")
+	}
+
+	var r0 []byte
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]byte)
+	}
+	return r0, ret.Get(1).(cipher.PubKey), ret.Error(2)
+}
+
+// MailHostInfo provides a mock function with no fields
+func (_m *MockRPCIngressClient) MailHostInfo() (MailHostInfo, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for MailHostInfo")
+	}
+
+	return ret.Get(0).(MailHostInfo), ret.Error(1)
 }

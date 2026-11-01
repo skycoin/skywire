@@ -24,6 +24,7 @@ import (
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
 	sdns "github.com/skycoin/skywire/cmd/apps/skydns/commands"
+	sm "github.com/skycoin/skywire/cmd/apps/skymail/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
@@ -56,7 +57,7 @@ var appsCmd = &cobra.Command{
 }
 
 func init() {
-	appsCmd.AddCommand(sc.RootCmd, sdns.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
+	appsCmd.AddCommand(sc.RootCmd, sm.RootCmd, sdns.RootCmd, ssc.RootCmd, vpnc.RootCmd, xc.RootCmd)
 	RootCmd.AddCommand(visor.RootCmd, cliconfig.RootCmd, appsCmd)
 	// visor.RootCmd computes its Use from os.Args[0]; pin the mounted name —
 	// the same post-mount rename cmd/skywire/commands does.
