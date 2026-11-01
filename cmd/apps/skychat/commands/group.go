@@ -166,6 +166,8 @@ func startGroupPoller(parent context.Context) {
 		// surfaced once, rather than re-notifying on every poll for a
 		// request that is simply still waiting.
 		pendingSeen := map[string]int{}
+		// printSeen is each group's last groupPrint, for scanGroupChanges.
+		printSeen := map[string]string{}
 		var sinceJoinScan int
 		ticker := time.NewTicker(pairPollInterval)
 		defer ticker.Stop()
@@ -181,7 +183,7 @@ func startGroupPoller(parent context.Context) {
 			// pure overhead for a signal that can afford to be seconds late.
 			if sinceJoinScan++; sinceJoinScan >= joinScanEveryNPolls {
 				sinceJoinScan = 0
-				scanPendingJoins(pendingSeen)
+				scanGroups(pendingSeen, printSeen)
 			}
 			var msgs []visorapi.GroupMessage
 			err := pairRPCCall("GroupPoll", func(c visorapi.API) error {
@@ -287,6 +289,51 @@ func isGroupMetaInputError(err error) bool {
 // approving a request would notice.
 const joinScanEveryNPolls = 10
 
+// scanGroups lists the groups once for scanPendingJoins and scanGroupChanges.
+func scanGroups(pending map[string]int, prints map[string]string) {
+	var groups []visorapi.GroupInfo
+	if err := pairRPCCall("GroupList", func(c visorapi.API) error {
+		out, e := c.GroupList()
+		groups = out
+		return e
+	}); err != nil {
+		return
+	}
+	scanPendingJoins(groups, pending)
+	scanGroupChanges(groups, prints)
+}
+
+// groupPrint is what a client draws of a group outside its messages: the
+// roster, the roles and whether this visor may post.
+func groupPrint(g visorapi.GroupInfo) string {
+	b, _ := json.Marshal([]any{g.Name, g.Status, g.ReadOnly, g.CanPost, g.CannotPostCode, g.Members, g.Admins, g.Muted, g.Banned}) //nolint:errcheck
+	return string(b)
+}
+
+// scanGroupChanges sends a live "group-update" event for each group whose
+// groupPrint changed since the last scan, so a client refetches /group
+// instead of showing a joiner, a promotion or a removal minutes late.
+func scanGroupChanges(groups []visorapi.GroupInfo, prints map[string]string) {
+	live := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		live[g.ID] = true
+		p := groupPrint(g)
+		old, had := prints[g.ID]
+		prints[g.ID] = p
+		if !had || old == p {
+			continue
+		}
+		if body, err := json.Marshal(map[string]any{"channel": "group-update", "group_id": g.ID}); err == nil {
+			hub.broadcastLive(string(body))
+		}
+	}
+	for id := range prints {
+		if !live[id] {
+			delete(prints, id)
+		}
+	}
+}
+
 // scanPendingJoins looks for newly-arrived join requests and surfaces
 // them as an SSE control event plus a host-OS notification.
 //
@@ -297,15 +344,7 @@ const joinScanEveryNPolls = 10
 //
 // A group that disappears from the list is dropped from seen so a
 // rejoin later starts clean rather than comparing against a stale count.
-func scanPendingJoins(seen map[string]int) {
-	var groups []visorapi.GroupInfo
-	if err := pairRPCCall("GroupList", func(c visorapi.API) error {
-		out, e := c.GroupList()
-		groups = out
-		return e
-	}); err != nil {
-		return
-	}
+func scanPendingJoins(groups []visorapi.GroupInfo, seen map[string]int) {
 	live := make(map[string]bool, len(groups))
 	for _, g := range groups {
 		live[g.ID] = true
