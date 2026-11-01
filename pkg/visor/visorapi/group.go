@@ -231,6 +231,10 @@ type GroupMessage struct {
 	SenderPK cipher.PubKey `json:"sender_pk"`
 	Text     string        `json:"text"`
 	TS       time.Time     `json:"ts"`
+	// Arrived is when this visor's inbox took the message, strictly
+	// increasing, and GroupPoll's cursor. A backfilled message arrives
+	// late with an old TS, which a TS cursor would skip.
+	Arrived time.Time `json:"arrived,omitempty"`
 }
 
 // GroupCreateArgs is the RPC input for GroupCreate.
