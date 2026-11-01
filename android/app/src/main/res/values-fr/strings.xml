@@ -350,6 +350,7 @@
     <string name="chat_clear_selection">Annuler la sélection</string>
     <string name="chat_confirm_delete_selected">Supprimer pour moi les messages sélectionnés ?\n\nCette action est irréversible.</string>
     <string name="chat_delete_selected">Supprimer la sélection</string>
+    <string name="chat_get_file">Récupérer le fichier</string>
     <string name="chat_page_lang">fr</string>
     <string name="chat_selected_count">%1$d sélectionnés</string>
     <string name="chat_starting">Démarrage de SkyChat…</string>

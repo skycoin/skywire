@@ -295,15 +295,34 @@ func TestIsGroupMember_FalseCases(t *testing.T) {
 
 // --- acceptInbound ----------------------------------------------------------
 
-func TestAcceptInbound_DeclinesUnestablishedPeer(t *testing.T) {
+func TestAcceptInbound_HoldsAnUnestablishedPeersFile(t *testing.T) {
 	withXferEnv(t)
 	withCleanDownloads(t)
 	from, _ := cipher.GenerateKeyPair()
 
 	w, ok := acceptInbound(from, xfer.Offer{ID: "ai-decline-1", Name: "x.txt", Size: 3})
-	if ok || w != nil {
-		t.Errorf("acceptInbound from a peer we've never talked to = (%v, %v), want (nil, false)", w, ok)
+	if ok || w != xfer.Held {
+		t.Errorf("acceptInbound from a peer we've never talked to = (%v, %v), want (xfer.Held, false)", w, ok)
 	}
+}
+
+// An accepted peer is known without a chat conn open, so its file is taken.
+func TestAcceptInbound_AcceptsAnAcceptedPeerWithoutAConn(t *testing.T) {
+	withXferEnv(t)
+	withCleanDownloads(t)
+	withPrivacyStore(t)
+	from, _ := cipher.GenerateKeyPair()
+	if err := privacyStore.SetApproval(true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := privacyStore.Accept(from.Hex()); err != nil {
+		t.Fatal(err)
+	}
+	w, ok := acceptInbound(from, xfer.Offer{ID: "ai-accepted-1", Name: "x.txt", Size: 3})
+	if !ok || w == nil {
+		t.Fatalf("acceptInbound from an accepted peer = (%v, %v), want a handle and true", w, ok)
+	}
+	_ = w.Close() //nolint:errcheck
 }
 
 func TestAcceptInbound_AcceptsEstablishedPeer(t *testing.T) {
@@ -340,8 +359,8 @@ func TestAcceptInbound_AcceptsRequestedFileFromStranger(t *testing.T) {
 	from, _ := cipher.GenerateKeyPair()
 
 	offer := xfer.Offer{ID: "ai-req-1", Name: "backfilled.png", Size: 9}
-	if w, ok := acceptInbound(from, offer); ok || w != nil {
-		t.Fatal("precondition: an unrequested file from a stranger must be declined")
+	if w, ok := acceptInbound(from, offer); ok || w != xfer.Held {
+		t.Fatal("precondition: an unrequested file from a stranger must be held, not taken")
 	}
 
 	markFileRequested(offer.ID, from)
@@ -833,13 +852,31 @@ func TestSendFileID_EndToEnd(t *testing.T) {
 // unestablished peer declines, and the sender must report that rather than
 // claiming success.
 func TestSendFileID_DeclinedByPeer(t *testing.T) {
+	sendFileToPolicy(t, true)
+}
+
+// A receiver that holds the file (a first contact) reports it sent.
+func TestSendFileID_HeldByPeerIsSent(t *testing.T) {
+	sendFileToPolicy(t, false)
+}
+
+// sendFileToPolicy sends to a receiver running acceptInbound, with the sender
+// blocked there or merely unknown to it.
+func sendFileToPolicy(t *testing.T, blocked bool) {
+	t.Helper()
 	withXferEnv(t)
 	withCleanDownloads(t)
+	withPrivacyStore(t)
 
 	senderPK, _ := cipher.GenerateKeyPair()
 	recvPK, _ := cipher.GenerateKeyPair()
-	// NOTE: no establishPeer → acceptInbound declines.
+	// NOTE: no establishPeer → acceptInbound does not take the file.
 	chatCtrl = nil
+	if blocked {
+		if err := privacyStore.SetBlocked(senderPK.Hex(), true); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	lis := newMemXferListener(senderPK)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -879,10 +916,12 @@ func TestSendFileID_DeclinedByPeer(t *testing.T) {
 
 	src := writeTempFile(t, "rejected.txt", "nope")
 	_, err := sendFileID(ctx, recvPK, "", src, "e2e-decline-1", "rejected.txt", false)
-	if err == nil {
+	switch {
+	case !blocked && err != nil:
+		t.Fatalf("sendFileID to a peer that holds the file = %v, want it sent", err)
+	case blocked && err == nil:
 		t.Fatal("sendFileID to a declining peer should return an error")
-	}
-	if !strings.Contains(err.Error(), "rejected") {
+	case blocked && !strings.Contains(err.Error(), "rejected"):
 		t.Errorf("err = %v, want it to mention the peer rejected the transfer", err)
 	}
 	select {

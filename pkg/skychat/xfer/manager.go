@@ -3,6 +3,7 @@ package xfer
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -143,7 +144,12 @@ func (m *Manager) SendFile(ctx context.Context, peer cipher.PubKey, offer Offer,
 
 	rc, err := Send(ctx, conn, offer, r)
 	if m.cfg.OnDone != nil {
-		m.cfg.OnDone(Outgoing, peer, offer, err)
+		// A decline delivered nothing, unless the receiver held a reference.
+		done := err
+		if done == nil && !rc.OK && rc.Err != HeldReason {
+			done = fmt.Errorf("%w: %s", errDeclined, rc.Err)
+		}
+		m.cfg.OnDone(Outgoing, peer, offer, done)
 	}
 	return rc, err
 }

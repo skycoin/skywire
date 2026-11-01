@@ -113,13 +113,22 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	case offer.Group != "":
 		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
-		accept = isEstablishedPeer(from) && verdict == privacy.Allow
+		// Someone accepted or named is known whether or not a chat conn is open.
+		known := isEstablishedPeer(from) || privacyStore.Accepted(from.Hex()) || (contactStore != nil && contactStore.Name(from.Hex()) != "")
+		accept = known && verdict == privacy.Allow
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
 	// haven't otherwise established a chat with — we asked for it. This is also
 	// the only door a channel's files come through.
 	if !accept && isRequestedFile(offer.ID, from) {
 		accept = true
+	}
+	if !accept && offer.Group == "" {
+		// Not taken, but not lost either: a first contact's voice note, or a
+		// sender still waiting as a request, is shown and can be asked for.
+		appLog("skychat: holding file %q from %s until it is asked for", offer.Name, from)
+		holdInbound(from, offer, verdict == privacy.Request)
+		return xfer.Held, false
 	}
 	if !accept {
 		appLog("skychat: declining unrequested file %q from %s", offer.Name, from)
@@ -137,6 +146,34 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 		return nil, false
 	}
 	return &namedFile{File: f, path: dst}, true
+}
+
+// fileStatusHeld marks a 1:1 file the receiver did not take but keeps a
+// reference to, so the user can ask its sender for it (/request-file).
+const fileStatusHeld = "held"
+
+// holdInbound shows and stores a file that was offered but not taken, as a
+// message naming it and its sender, so it arrives like a text would: in the
+// conversation, or in the sender's request while they wait to be accepted.
+func holdInbound(from cipher.PubKey, offer xfer.Offer, request bool) {
+	peer := from.Hex()
+	text := fmt.Sprintf("📎 %s (%s)", offer.Name, humanSize(offer.Size))
+	if hub != nil {
+		hub.publishEvent(chatEvent{
+			ID: offer.ID, TS: time.Now().UTC(), Channel: channelDM, Dir: "in", From: peer, Text: text,
+			FileID: offer.ID, FileName: offer.Name, FileSize: offer.Size, FileStatus: fileStatusHeld, Request: request,
+		})
+	}
+	persistMessage(history.Message{
+		Peer: peer, From: peer, Text: text, Timestamp: time.Now().UTC(), ID: offer.ID,
+		FileID: offer.ID, FileName: offer.Name, FileSize: offer.Size, FileStatus: fileStatusHeld,
+	})
+	desc := notifPreview("📎 " + fileKindLabel(offer.Name, offer.MIME) + ": " + offer.Name)
+	if request {
+		notifyOSInboundThread(peer, peer, "Message request", displayName(peer)+": "+desc)
+	} else {
+		notifyOSInboundThread(peer, peer, displayName(peer), desc)
+	}
 }
 
 // namedFile carries the save path alongside the handle so onDone can report it.
@@ -468,7 +505,7 @@ func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name s
 		}
 		return offer.ID, err
 	}
-	if !rc.OK {
+	if !rc.OK && rc.Err != xfer.HeldReason {
 		return offer.ID, fmt.Errorf("peer rejected transfer: %s", rc.Err)
 	}
 	return offer.ID, nil

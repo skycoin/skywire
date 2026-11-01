@@ -307,6 +307,7 @@
     <string name="chat_clear_selection">取消选择</string>
     <string name="chat_confirm_delete_selected">要仅为我删除所选消息吗？\n\n此操作无法撤销。</string>
     <string name="chat_delete_selected">删除所选</string>
+    <string name="chat_get_file">获取文件</string>
     <string name="chat_page_lang">zh</string>
     <string name="chat_selected_count">已选择 %1$d 条</string>
     <string name="chat_starting">正在启动 SkyChat…</string>
