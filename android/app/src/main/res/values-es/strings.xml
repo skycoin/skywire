@@ -348,7 +348,11 @@
     <string name="transport_sudph_hint">UDP directo con perforación de NAT. Necesita un NAT que lo permita, y muchos operadores no lo hacen.</string>
 
     <!-- SkyChat (embedded web UI) -->
+    <string name="chat_clear_selection">Cancelar selección</string>
+    <string name="chat_confirm_delete_selected">¿Eliminar para mí los mensajes seleccionados?\n\nNo se puede deshacer.</string>
+    <string name="chat_delete_selected">Eliminar seleccionados</string>
     <string name="chat_page_lang">es</string>
+    <string name="chat_selected_count">%1$d seleccionados</string>
     <string name="chat_starting">Iniciando SkyChat…</string>
     <string name="chat_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
     <string name="chat_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>

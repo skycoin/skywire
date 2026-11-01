@@ -95,6 +95,7 @@ fun MessageRow(
     highlighted: Boolean,
     onTap: () -> Unit,
     onQuote: (ReplyRef) -> Unit,
+    onLongPress: () -> Unit = onTap,
 ) {
     val repo = vm.repo
     val mine = m.mine
@@ -104,7 +105,7 @@ fun MessageRow(
         Modifier
             .fillMaxWidth()
             .background(rowBg)
-            .combinedClickable(onClick = onTap, onLongClick = onTap)
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .padding(horizontal = 10.dp, vertical = 2.dp),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
