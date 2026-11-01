@@ -753,6 +753,7 @@ Examples:
 * [skywire-specs/specifications/27-Transport_Level_Ping.md](skywire-specs/specifications/27-Transport_Level_Ping.md) — Transport-Level Ping
 * [skywire-specs/specifications/28-Cascading_Route_Setup.md](skywire-specs/specifications/28-Cascading_Route_Setup.md) — Cascading Route Setup
 * [skywire-specs/specifications/29-Address_Resolver_Privacy.md](skywire-specs/specifications/29-Address_Resolver_Privacy.md) — Address Resolver Privacy Controls
+* [skywire-specs/specifications/34-Skymail.md](skywire-specs/specifications/34-Skymail.md) — Skymail
 * [skywire-specs/transports/DMSG.md](skywire-specs/transports/DMSG.md) — DMSG Transport
 * [skywire-specs/transports/STCP.md](skywire-specs/transports/STCP.md) — STCP - Skywire TCP (Direct)
 * [skywire-specs/transports/STCPR.md](skywire-specs/transports/STCPR.md) — STCPR - Skywire TCP with Address Resolver

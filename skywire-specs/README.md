@@ -28,6 +28,7 @@ and wording rules are in [CONVENTIONS.md](CONVENTIONS.md).
 - [Public Visors](specifications/24-Public_Visors.md)
 - [Public Autoconnect](specifications/25-Public_Autoconnect.md)
 - [Address Resolver Privacy](specifications/29-Address_Resolver_Privacy.md)
+- [Skymail](specifications/34-Skymail.md)
 
 ## Deployment services
 
