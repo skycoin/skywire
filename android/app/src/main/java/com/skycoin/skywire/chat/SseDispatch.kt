@@ -24,6 +24,7 @@ internal object SseDispatch {
             "group-delete" -> groupDelete(repo, m)
             "group-join-request" -> joinRequest(repo, m)
             "group-update" -> groupUpdate(repo, m)
+            "group-notice" -> groupNotice(repo, m)
             "file-ready" -> fileReady(repo, m)
             "dm-status" -> dmStatus(repo, m)
             "pair" -> dm(repo, m, viaPair = true)
@@ -211,6 +212,25 @@ internal object SseDispatch {
             repo.syncGroups()
             repo.groupChanged.tryEmit(m.groupId)
         }
+    }
+
+    /**
+     * A change to a group's roster, roles or rules, as a gray line in its thread.
+     * Mutes and bans are for admins and the member concerned, and who comes and
+     * goes in a channel is for its admins.
+     */
+    private fun groupNotice(repo: ChatRepository, m: SseMessage) {
+        val g = repo.groupInfo(m.groupId) ?: return
+        val me = repo.myPk.value
+        val pk = m.peer.lowercase()
+        val admin = g.admins.any { it.equals(me, ignoreCase = true) }
+        val shown = when (m.event) {
+            "joined", "left" -> !g.isChannel || admin
+            "muted", "unmuted", "banned", "unbanned" -> admin || pk == me
+            "admin_added", "admin_removed", "read_only_on", "read_only_off" -> true
+            else -> false
+        }
+        if (shown) repo.appendMessage(m.groupId, ChatMessage(from = pk, notice = m.event))
     }
 
     private fun joinRequest(repo: ChatRepository, m: SseMessage) {

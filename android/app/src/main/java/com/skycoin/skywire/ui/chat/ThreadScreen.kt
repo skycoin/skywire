@@ -432,7 +432,7 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
                     items(rows, key = { it.id }) { row ->
                         when (row) {
                             is Row2.Day -> DayDivider(row.day)
-                            is Row2.Msg -> MessageRow(
+                            is Row2.Msg -> if (row.m.notice.isNotEmpty()) NoticeRow(noticeText(row.m.notice, noticeName(vm, row.m.from))) else MessageRow(
                                 vm = vm,
                                 key = key,
                                 m = row.m,
@@ -528,6 +528,38 @@ private fun buildRows(messages: List<ChatMessage>): List<Row2> {
         if (prev != day && placed.add("day-$day")) out += Row2.Day(day)
     }
     return out
+}
+
+/** A group notice: a change to who is in the group, their roles or its rules. */
+@Composable
+private fun NoticeRow(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun noticeName(vm: ChatViewModel, pk: String): String =
+    if (pk.equals(vm.repo.myPk.value, ignoreCase = true)) stringResource(R.string.chat_you) else vm.repo.displayName(pk)
+
+/** What a group notice says, about the member named [name] where it is about one. */
+@Composable
+fun noticeText(kind: String, name: String): String = when (kind) {
+    "joined" -> stringResource(R.string.chat_notice_joined, name)
+    "left" -> stringResource(R.string.chat_notice_left, name)
+    "admin_added" -> stringResource(R.string.chat_notice_admin_added, name)
+    "admin_removed" -> stringResource(R.string.chat_notice_admin_removed, name)
+    "muted" -> stringResource(R.string.chat_notice_muted, name)
+    "unmuted" -> stringResource(R.string.chat_notice_unmuted, name)
+    "banned" -> stringResource(R.string.chat_notice_banned, name)
+    "unbanned" -> stringResource(R.string.chat_notice_unbanned, name)
+    "read_only_on" -> stringResource(R.string.chat_notice_read_only_on)
+    "read_only_off" -> stringResource(R.string.chat_notice_read_only_off)
+    else -> ""
 }
 
 @Composable

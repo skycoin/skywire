@@ -559,6 +559,7 @@ fun groupSubtitle(g: GroupInfo, me: String): String {
 /** `↑ `/`↓ ` and the shown text, the way list rows preview (index.html updatePreview). */
 @Composable
 fun previewText(m: ChatMessage, own: Boolean, group: Boolean = false, sender: String = ""): String {
+    if (m.notice.isNotEmpty()) return noticeText(m.notice, sender)
     val f = m.file
     val text = when {
         f == null -> shownText(m.text)
