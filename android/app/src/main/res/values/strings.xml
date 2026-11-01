@@ -307,6 +307,7 @@
     <string name="chat_clear_selection">Clear selection</string>
     <string name="chat_confirm_delete_selected">Delete the selected messages for me?\n\nThis cannot be undone.</string>
     <string name="chat_delete_selected">Delete selected</string>
+    <string name="chat_get_file">Get file</string>
     <string name="chat_page_lang"></string>
     <string name="chat_selected_count">%1$d selected</string>
     <string name="chat_starting">Starting SkyChat…</string>

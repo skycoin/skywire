@@ -352,6 +352,7 @@
     <string name="chat_clear_selection">Cancelar selección</string>
     <string name="chat_confirm_delete_selected">¿Eliminar para mí los mensajes seleccionados?\n\nNo se puede deshacer.</string>
     <string name="chat_delete_selected">Eliminar seleccionados</string>
+    <string name="chat_get_file">Obtener archivo</string>
     <string name="chat_page_lang">es</string>
     <string name="chat_selected_count">%1$d seleccionados</string>
     <string name="chat_starting">Iniciando SkyChat…</string>
