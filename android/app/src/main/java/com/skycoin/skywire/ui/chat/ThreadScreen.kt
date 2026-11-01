@@ -160,6 +160,8 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     val saved = key == SAVED_KEY
     val group = groups.firstOrNull { it.id == key }
     val isGroup = !saved && repo.isGroupKey(key)
+    // Fresh roles and rules on open, for the header and the message box.
+    LaunchedEffect(key) { if (isGroup) repo.syncGroups() }
     val title = when {
         saved -> stringResource(R.string.chat_saved_messages)
         group != null -> group.name.ifEmpty { group.id }
