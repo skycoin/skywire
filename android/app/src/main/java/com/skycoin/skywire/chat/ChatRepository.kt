@@ -354,6 +354,7 @@ class ChatRepository private constructor(internal val app: Context) {
         LinkWatch.watch(this, key?.takeIf { isPk(it) })
         if (key == null) return
         markRead(key)
+        com.skycoin.skywire.core.NotificationBridge.clearChat(app, key)
         when {
             key == SAVED_KEY -> Unit
             isPk(key) -> scope.launch { loadDmHistory(key); sendReadReceipts(key) }
