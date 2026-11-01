@@ -80,14 +80,12 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 }
 
 // configuredHypervisors returns a copy of the visor's configured hypervisor PKs.
-// Unlocked read of v.conf.Hypervisors, matching the codebase's config-update
-// convention (UpdateMinHops etc. mutate under v1.mu; readers don't lock — the
-// writes are rare operator actions).
+// It locks because the mailbox app reads it while an operator may change it.
 func (v *Visor) configuredHypervisors() []cipher.PubKey {
 	if v.conf == nil {
 		return nil
 	}
-	return append([]cipher.PubKey(nil), v.conf.Hypervisors...)
+	return v.conf.GetHypervisors()
 }
 
 // addPK returns pks with pk appended if not already present.
