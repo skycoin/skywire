@@ -438,6 +438,15 @@
     <string name="settings_export_prompt">Export the Skywire config</string>
     <string name="settings_export_done">Config exported.</string>
     <string name="settings_export_unwritable">The chosen file could not be opened for writing.</string>
+    <string name="settings_backup">Back up with groups</string>
+    <string name="settings_backup_title">Back up with groups?</string>
+    <string name="settings_backup_warning">The backup holds this visor’s secret key in plain text, with the channels and groups it created or joined. Restoring it on a new phone brings them back. Anyone who reads it can run as this visor, so keep it where only you can reach it.\n\nSkywire disconnects while it copies, then reconnects.</string>
+    <string name="settings_backup_prompt">Back up Skywire</string>
+    <string name="settings_backup_done">Backup saved.</string>
+    <string name="settings_backup_unreadable">This file is not a Skywire backup.</string>
+    <string name="settings_restore">Restore a backup</string>
+    <string name="settings_restore_extra">The backup is for %1$s. Its channels and groups come back with it.</string>
+    <string name="settings_restore_done">Backup restored.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">App lock</string>

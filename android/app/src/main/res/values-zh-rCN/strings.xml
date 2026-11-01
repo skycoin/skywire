@@ -434,6 +434,15 @@
     <string name="settings_export_prompt">导出 Skywire 配置</string>
     <string name="settings_export_done">配置已导出。</string>
     <string name="settings_export_unwritable">无法打开所选文件进行写入。</string>
+    <string name="settings_backup">连同群组备份</string>
+    <string name="settings_backup_title">连同群组一起备份？</string>
+    <string name="settings_backup_warning">备份以明文包含本节点的私钥，以及它创建或加入的频道和群组。在新手机上恢复后，它们会一起回来。任何人读到它，都能以本节点的身份运行，请存放在只有你能访问的地方。\n\n复制期间 Skywire 会断开连接，完成后重新连接。</string>
+    <string name="settings_backup_prompt">备份 Skywire</string>
+    <string name="settings_backup_done">备份已保存。</string>
+    <string name="settings_backup_unreadable">此文件不是 Skywire 备份。</string>
+    <string name="settings_restore">恢复备份</string>
+    <string name="settings_restore_extra">此备份属于 %1$s。其频道和群组会一起恢复。</string>
+    <string name="settings_restore_done">备份已恢复。</string>
 
     <!-- 设置 — 应用锁 -->
     <string name="settings_app_lock">应用锁</string>
