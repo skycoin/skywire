@@ -991,6 +991,7 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 				reason = "last_inbound lag"
 			}
 			if lag <= subscriberStaleThreshold {
+				m.promoteIfRecovered(r)
 				continue
 			}
 			m.log.WithField("id", r.ID).
@@ -1041,6 +1042,7 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 			legacySubStale = lag > subscriberStaleThreshold
 		}
 		if len(stalePeers) == 0 && !legacySubStale {
+			m.promoteIfRecovered(r)
 			continue
 		}
 		// Per-peer path: tryReconnectPeers consults peerReconnectShouldAttempt
@@ -1072,6 +1074,20 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 			m.tryReconnectLegacySub(ctx, sess, r.ID)
 		}
 	}
+}
+
+// promoteIfRecovered marks a pending group active once its subscribers are
+// fresh again. The subscriber's own watchdog can recover without this loop.
+func (m *Manager) promoteIfRecovered(r Record) {
+	if r.Status != StatusPending {
+		return
+	}
+	if err := m.store.SetStatus(r.ID, StatusActive); err != nil {
+		m.log.WithError(err).WithField("id", r.ID).
+			Warn("group: reconnect: SetStatus active failed")
+		return
+	}
+	m.log.WithField("id", r.ID).Info("group: reconnect: subscribers fresh, group active")
 }
 
 // tryReconnect runs one Connect attempt under reconnectAttemptTimeout.
