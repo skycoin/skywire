@@ -81,6 +81,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
@@ -480,6 +481,22 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).padding(16.dp),
                 )
             } else {
+                // Admins can post, but should see what everyone else is told.
+                val rule = when {
+                    group == null -> null
+                    group.isChannel -> R.string.chat_cannot_post_channel
+                    group.readOnly -> R.string.chat_cannot_post_read_only
+                    else -> null
+                }
+                rule?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
                 Composer(vm, key)
             }
         }
