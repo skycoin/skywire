@@ -66,8 +66,9 @@ func TestMailHostServesOnlySkymail(t *testing.T) {
 }
 
 // mailVisor is a visor whose skymail app runs on c, the way the launcher
-// would run it, with the visor's MailHost as its key and peers.
-func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client) *Visor {
+// would run it, with the visor's MailHost as its key and peers. hvs are its
+// hypervisors, set before the mailbox starts reading them.
+func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client, hvs ...cipher.PubKey) *Visor {
 	t.Helper()
 	v := &Visor{
 		ctx: ctx,
@@ -79,6 +80,7 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client) *Visor {
 		forwardedPorts: NewForwardedPorts(""),
 		initLock:       new(sync.RWMutex),
 	}
+	v.conf.Hypervisors = hvs
 	host := v.appMailHost(skymailApp)
 	svc, err := skymail.StartService(ctx, skymail.ServiceConfig{
 		Host: skymail.Host{
@@ -230,9 +232,8 @@ func TestMailSendRPCCarriesTheReasons(t *testing.T) {
 // survives a restart too.
 func TestMailSettingsApplyLiveAndPersist(t *testing.T) {
 	clients, ctx := mailEnv(t, 1)
-	b := mailVisor(t, ctx, clients[0])
 	hv, _ := cipher.GenerateKeyPair()
-	b.conf.Hypervisors = []cipher.PubKey{hv}
+	b := mailVisor(t, ctx, clients[0], hv)
 
 	st, err := b.MailStatus()
 	require.NoError(t, err)
@@ -298,4 +299,23 @@ func TestMailSettingsOverRPC(t *testing.T) {
 	enabled, _, err := skymailEffective(b.conf)
 	require.NoError(t, err)
 	require.False(t, enabled, "false over RPC turns it off")
+}
+
+// TestConfiguredHypervisorsWhileUpdated: the mailbox app reads the
+// hypervisor list while an operator adds or removes one.
+func TestConfiguredHypervisorsWhileUpdated(t *testing.T) {
+	v := &Visor{conf: &visorconfig.V1{Common: &visorconfig.Common{}}}
+	hv, _ := cipher.GenerateKeyPair()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			_ = v.configuredHypervisors()
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		_ = v.conf.UpdateHypervisors([]cipher.PubKey{hv}) //nolint:errcheck // no file to flush to
+	}
+	<-done
+	require.Equal(t, []cipher.PubKey{hv}, v.configuredHypervisors())
 }

@@ -985,6 +985,14 @@ func (v1 *V1) UpdateHypervisors(pks []cipher.PubKey) error {
 	return v1.flush(v1)
 }
 
+// GetHypervisors returns a copy of the configured hypervisor PKs, read under
+// the lock UpdateHypervisors writes them with.
+func (v1 *V1) GetHypervisors() []cipher.PubKey {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return append([]cipher.PubKey(nil), v1.Hypervisors...)
+}
+
 // GetPersistentTransports gets persistent_transports from config
 func (v1 *V1) GetPersistentTransports() ([]tspec.PersistentTransports, error) {
 	v1.mu.Lock()
