@@ -481,6 +481,15 @@
     <string name="settings_export_prompt">Exporter la configuration Skywire</string>
     <string name="settings_export_done">Configuration exportée.</string>
     <string name="settings_export_unwritable">Le fichier choisi n’a pas pu être ouvert en écriture.</string>
+    <string name="settings_backup">Sauvegarder avec les groupes</string>
+    <string name="settings_backup_title">Sauvegarder avec les groupes ?</string>
+    <string name="settings_backup_warning">La sauvegarde contient la clé secrète de ce visor en clair, avec les chaînes et groupes qu’il a créés ou rejoints. La restaurer sur un nouveau téléphone les ramène. Toute personne qui la lit peut fonctionner comme ce visor, gardez-la donc là où vous seul y avez accès.\n\nSkywire se déconnecte pendant la copie, puis se reconnecte.</string>
+    <string name="settings_backup_prompt">Sauvegarder Skywire</string>
+    <string name="settings_backup_done">Sauvegarde enregistrée.</string>
+    <string name="settings_backup_unreadable">Ce fichier n’est pas une sauvegarde Skywire.</string>
+    <string name="settings_restore">Restaurer une sauvegarde</string>
+    <string name="settings_restore_extra">La sauvegarde est celle de %1$s. Ses chaînes et groupes reviennent avec elle.</string>
+    <string name="settings_restore_done">Sauvegarde restaurée.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">Verrouillage de l’application</string>
