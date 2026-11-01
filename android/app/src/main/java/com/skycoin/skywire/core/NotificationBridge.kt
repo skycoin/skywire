@@ -216,6 +216,15 @@ internal class NotificationBridge(context: Context) {
     )
 
     companion object {
+        /**
+         * Takes down a conversation's notification once the user has it open in
+         * the app, so it does not wait for a tap to say what was already read.
+         */
+        fun clearChat(context: Context, thread: String) {
+            val notifications = NotificationManagerCompat.from(context)
+            for (t in setOf(thread, thread.lowercase())) notifications.cancel("$SKYCHAT:$t", TAGGED_ID)
+        }
+
         private const val TAG = "SkywireNotify"
         private const val SKYCHAT = "skychat"
         private const val SKYMAIL = "skymail"
