@@ -303,6 +303,7 @@
     <!-- SkyChat -->
     <!-- The embedded SkyDEX page's language code. Empty here means English; each
          translation names its own, so "System" shows the page in the app's language. -->
+    <string name="chat_cannot_post_removed">An admin removed you from this group.</string>
     <string name="chat_clear_selection">Clear selection</string>
     <string name="chat_confirm_delete_selected">Delete the selected messages for me?\n\nThis cannot be undone.</string>
     <string name="chat_delete_selected">Delete selected</string>
@@ -1194,6 +1195,7 @@
     <string name="help_mail_body">SkyMail is e-mail between visors. Your visor keeps a mailbox at an address made from its public key, and mail is carried over Skywire, encrypted, with the sender’s key proved by the network rather than by a mail server.\n\nIt does not reach ordinary e-mail, and a visor that is offline cannot be written to: mail goes out at once and nothing retries. Use the .dmsg address from a phone; a .skynet address needs a route, which a phone rarely has.\n\nMail is kept on this phone, up to the size and age limits in the mailbox settings.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Attachment</string>
+    <string name="chat_state_removed">removed</string>
     <string name="chat_you">You</string>
     <string name="chat_note_failed">Failed: %1$s</string>
     <string name="chat_note_group_send_failed">Group send failed: %1$s</string>

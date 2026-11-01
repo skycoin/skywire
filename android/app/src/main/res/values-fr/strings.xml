@@ -346,6 +346,7 @@
     <string name="transport_sudph_hint">UDP direct avec trou de NAT. Exige un NAT qui l’autorise — beaucoup d’opérateurs non.</string>
 
     <!-- SkyChat (embedded web UI) -->
+    <string name="chat_cannot_post_removed">Un administrateur vous a retiré de ce groupe.</string>
     <string name="chat_clear_selection">Annuler la sélection</string>
     <string name="chat_confirm_delete_selected">Supprimer pour moi les messages sélectionnés ?\n\nCette action est irréversible.</string>
     <string name="chat_delete_selected">Supprimer la sélection</string>
@@ -1234,6 +1235,7 @@
     <string name="help_mail_body">SkyMail est du courrier entre visors. Votre visor tient une boîte aux lettres à une adresse formée depuis sa clé publique, et le courrier voyage sur Skywire, chiffré, la clé de l’expéditeur étant prouvée par le réseau plutôt que par un serveur de messagerie.\n\nIl n’atteint pas le courrier électronique ordinaire, et un visor hors ligne ne peut pas recevoir de courrier : le courrier part immédiatement et rien ne réessaie. Utilisez l’adresse .dmsg depuis un téléphone ; une adresse .skynet exige une route, qu’un téléphone a rarement.\n\nLe courrier est gardé sur ce téléphone, dans les limites de taille et d’âge des réglages de la boîte aux lettres.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Pièce jointe</string>
+    <string name="chat_state_removed">retiré</string>
     <string name="chat_you">Vous</string>
     <string name="chat_note_failed">Échec : %1$s</string>
     <string name="chat_note_group_send_failed">Échec de l’envoi au groupe : %1$s</string>

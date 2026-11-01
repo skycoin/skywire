@@ -384,6 +384,9 @@ type Session struct {
 	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
 	// manager can persist the converged Record. See SetRosterChangeHandler.
 	onRosterChange func(members, admins []cipher.PubKey)
+	// onRemoved is invoked when an admin removes this visor from the group.
+	// See SetRemovedHandler.
+	onRemoved func()
 	// onModChange is invoked with a snapshot of the converged moderation
 	// state after applyModLeaf mutates it, so the manager can persist it.
 	// Parallel to onRosterChange. See SetModChangeHandler.

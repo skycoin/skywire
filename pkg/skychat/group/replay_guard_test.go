@@ -436,3 +436,27 @@ func TestMergeWatermarksKeepsLatest(t *testing.T) {
 		t.Errorf("empty merge should stay nil, got %v", got)
 	}
 }
+
+// TestRemovalOfSelfEndsTheMembership: an admin removing this visor reaches
+// the manager once, while a removal from before it joined, or of someone
+// else, does not.
+func TestRemovalOfSelfEndsTheMembership(t *testing.T) {
+	s, adminSK, _ := guardSession(t)
+	gid := s.cfg.Record.ID
+	joined := time.Now().UTC().Add(-time.Hour)
+	s.cfg.Record.JoinedAt = joined
+	removed := 0
+	s.SetRemovedHandler(func() { removed++ })
+
+	s.applyRosterLeaf(signedRoster(t, gid, RosterOpRemove, s.cfg.MyPK, adminSK, joined.Add(-time.Hour)))
+	other, _ := cipher.GenerateKeyPair()
+	s.applyRosterLeaf(signedRoster(t, gid, RosterOpRemove, other, adminSK, time.Now().UTC()))
+	if removed != 0 {
+		t.Fatalf("removed handler ran %d times for a historical or someone else's removal", removed)
+	}
+
+	s.applyRosterLeaf(signedRoster(t, gid, RosterOpRemove, s.cfg.MyPK, adminSK, time.Now().UTC()))
+	if removed != 1 {
+		t.Fatalf("removed handler ran %d times, want 1 for a current removal of this visor", removed)
+	}
+}

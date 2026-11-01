@@ -129,6 +129,13 @@ func TestChannel_OnlyAdminsMayPost(t *testing.T) {
 	require.Contains(t, reason, "banned")
 	require.Equal(t, PostBlockBanned, banned.PostBlock(member))
 
+	removed := r
+	removed.Status = StatusRemoved
+	ok, reason = removed.CanPost(member)
+	require.False(t, ok, "a removed member must not be able to post")
+	require.Equal(t, PostBlockRemoved, removed.PostBlock(member))
+	require.Contains(t, reason, "removed")
+
 	mutedAdmin := r
 	mutedAdmin.Muted = []cipher.PubKey{admin}
 	ok, reason = mutedAdmin.CanPost(admin)

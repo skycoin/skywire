@@ -649,6 +649,7 @@ private fun MessageSheet(vm: ChatViewModel, key: String, m: ChatMessage, group: 
 /** The visor's reason a group refuses this phone's posts, in the app's language (pkg/skychat/group PostBlock*). */
 internal fun cannotPostRes(code: String): Int? = when (code) {
     "banned" -> R.string.chat_cannot_post_banned
+    "removed" -> R.string.chat_cannot_post_removed
     "muted" -> R.string.chat_cannot_post_muted
     "channel" -> R.string.chat_cannot_post_channel
     "read_only" -> R.string.chat_cannot_post_read_only

@@ -1640,6 +1640,8 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// Persist reconciled roster changes back to the store so group info/list
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
+	// Off this session's receive pump: ending the membership closes the session.
+	sess.SetRemovedHandler(func() { go func() { _ = m.terminate(r.ID, StatusRemoved) }() }) //nolint:errcheck
 	sess.SetModChangeHandler(m.persistModeration(r.ID))
 	// Key rotations converge through the same gossip channel, and the
 	// converged key MUST survive a restart — see persistKeys.

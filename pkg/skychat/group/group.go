@@ -208,13 +208,17 @@ const (
 	// so the UI can explain why the group vanished instead of
 	// silently dropping it.
 	StatusBanned Status = "banned"
+
+	// StatusRemoved — member side: an admin removed this visor from the
+	// group. Terminal like a ban, but a new invite can bring it back.
+	StatusRemoved Status = "removed"
 )
 
 // IsTerminal reports whether a status means "this group is over for
 // us" — no session should be opened and no reconnect attempted. Used
 // by Resume and by the browser-facing list filter.
 func (s Status) IsTerminal() bool {
-	return s == StatusLeft || s == StatusRevoked || s == StatusDenied || s == StatusBanned
+	return s == StatusLeft || s == StatusRevoked || s == StatusDenied || s == StatusBanned || s == StatusRemoved
 }
 
 // Role distinguishes the operator's relationship to this group.
@@ -683,6 +687,7 @@ func (r Record) MuteEffectiveFrom(pk cipher.PubKey) time.Time {
 // reason in its own language instead of CanPost's English.
 const (
 	PostBlockBanned   = "banned"
+	PostBlockRemoved  = "removed"
 	PostBlockMuted    = "muted"
 	PostBlockChannel  = "channel"
 	PostBlockReadOnly = "read_only"
@@ -690,6 +695,7 @@ const (
 
 var postBlockReasons = map[string]string{
 	PostBlockBanned:   "you are banned from this group",
+	PostBlockRemoved:  "an admin removed you from this group",
 	PostBlockMuted:    "you are restricted from sending messages in this group",
 	PostBlockChannel:  "this is a channel — only admins can post",
 	PostBlockReadOnly: "this group is read-only — only admins can send messages",
@@ -715,6 +721,8 @@ func (r Record) PostBlock(pk cipher.PubKey) string {
 	switch {
 	case r.IsBanned(pk):
 		return PostBlockBanned
+	case r.Status == StatusRemoved:
+		return PostBlockRemoved
 	case r.IsMuted(pk):
 		return PostBlockMuted
 	case r.IsChannel() && !r.IsAdmin(pk):

@@ -303,6 +303,7 @@
     <string name="transport_sudph_hint">带打洞的 UDP 直连。需要 NAT 允许打洞——很多运营商并不允许。</string>
 
     <!-- SkyChat -->
+    <string name="chat_cannot_post_removed">管理员已将你移出此群组。</string>
     <string name="chat_clear_selection">取消选择</string>
     <string name="chat_confirm_delete_selected">要仅为我删除所选消息吗？\n\n此操作无法撤销。</string>
     <string name="chat_delete_selected">删除所选</string>
@@ -1141,6 +1142,7 @@
     <string name="help_mail_body">SkyMail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">附件</string>
+    <string name="chat_state_removed">已被移出</string>
     <string name="chat_you">你</string>
     <string name="chat_note_failed">失败：%1$s</string>
     <string name="chat_note_group_send_failed">群组消息发送失败：%1$s</string>
