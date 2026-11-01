@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.chat
 
 import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -173,6 +174,10 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
     var qr by remember { mutableStateOf<QrSpec?>(null) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     var sheetFor by remember { mutableStateOf<ChatMessage?>(null) }
+    // Message keys picked by a long press; while any are, a tap picks too.
+    var selected by remember(key) { mutableStateOf(emptySet<String>()) }
+    val toggle = { m: ChatMessage -> selected = if (m.key in selected) selected - m.key else selected + m.key }
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
     var highlight by remember { mutableStateOf<String?>(null) }
 
     val rows = remember(messages) { buildRows(messages) }
@@ -230,7 +235,28 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        topBar = {
+        topBar = topBar@{
+            if (selected.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Rounded.Close, stringResource(R.string.chat_clear_selection)) }
+                    Text(
+                        stringResource(R.string.chat_selected_count, selected.size),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    )
+                    IconButton(onClick = {
+                        confirm = context.getString(R.string.chat_confirm_delete_selected) to {
+                            messages.filter { it.key in selected }.forEach { repo.deleteForMe(key, it) }
+                            selected = emptySet()
+                        }
+                    }) { Icon(Icons.Rounded.Delete, stringResource(R.string.chat_delete_selected), tint = MaterialTheme.colorScheme.error) }
+                }
+                return@topBar
+            }
             Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -410,8 +436,9 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
                                 key = key,
                                 m = row.m,
                                 group = isGroup,
-                                highlighted = highlight == row.m.key,
-                                onTap = { sheetFor = row.m },
+                                highlighted = highlight == row.m.key || row.m.key in selected,
+                                onTap = { if (selected.isNotEmpty()) toggle(row.m) else sheetFor = row.m },
+                                onLongPress = { toggle(row.m) },
                                 onQuote = { r -> parseTime(r.ts)?.let { scrollToTs(it) } },
                             )
                         }
