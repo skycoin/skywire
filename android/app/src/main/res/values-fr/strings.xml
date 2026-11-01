@@ -351,6 +351,16 @@
     <string name="chat_confirm_delete_selected">Supprimer pour moi les messages sélectionnés ?\n\nCette action est irréversible.</string>
     <string name="chat_delete_selected">Supprimer la sélection</string>
     <string name="chat_get_file">Récupérer le fichier</string>
+    <string name="chat_notice_admin_added">Administrateur ajouté : %1$s</string>
+    <string name="chat_notice_admin_removed">Administrateur retiré : %1$s</string>
+    <string name="chat_notice_banned">Banni : %1$s</string>
+    <string name="chat_notice_joined">Nouveau membre : %1$s</string>
+    <string name="chat_notice_left">N’est plus membre : %1$s</string>
+    <string name="chat_notice_muted">Publication restreinte : %1$s</string>
+    <string name="chat_notice_read_only_off">Tout le monde peut de nouveau envoyer des messages.</string>
+    <string name="chat_notice_read_only_on">Seuls les administrateurs peuvent désormais envoyer des messages.</string>
+    <string name="chat_notice_unbanned">Bannissement levé : %1$s</string>
+    <string name="chat_notice_unmuted">Publication rétablie : %1$s</string>
     <string name="chat_page_lang">fr</string>
     <string name="chat_selected_count">%1$d sélectionnés</string>
     <string name="chat_starting">Démarrage de SkyChat…</string>

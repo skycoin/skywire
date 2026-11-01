@@ -308,6 +308,16 @@
     <string name="chat_confirm_delete_selected">要仅为我删除所选消息吗？\n\n此操作无法撤销。</string>
     <string name="chat_delete_selected">删除所选</string>
     <string name="chat_get_file">获取文件</string>
+    <string name="chat_notice_admin_added">新管理员：%1$s</string>
+    <string name="chat_notice_admin_removed">取消管理员：%1$s</string>
+    <string name="chat_notice_banned">已封禁：%1$s</string>
+    <string name="chat_notice_joined">新成员：%1$s</string>
+    <string name="chat_notice_left">不再是成员：%1$s</string>
+    <string name="chat_notice_muted">已限制发言：%1$s</string>
+    <string name="chat_notice_read_only_off">所有人都可以再次发送消息。</string>
+    <string name="chat_notice_read_only_on">现在只有管理员可以发送消息。</string>
+    <string name="chat_notice_unbanned">已解除封禁：%1$s</string>
+    <string name="chat_notice_unmuted">已恢复发言：%1$s</string>
     <string name="chat_page_lang">zh</string>
     <string name="chat_selected_count">已选择 %1$d 条</string>
     <string name="chat_starting">正在启动 SkyChat…</string>

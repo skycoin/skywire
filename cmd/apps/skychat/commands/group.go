@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -166,8 +167,8 @@ func startGroupPoller(parent context.Context) {
 		// surfaced once, rather than re-notifying on every poll for a
 		// request that is simply still waiting.
 		pendingSeen := map[string]int{}
-		// printSeen is each group's last groupPrint, for scanGroupChanges.
-		printSeen := map[string]string{}
+		// groupSeen is each group as the last scan saw it, for scanGroupChanges.
+		groupSeen := map[string]visorapi.GroupInfo{}
 		var sinceJoinScan int
 		ticker := time.NewTicker(pairPollInterval)
 		defer ticker.Stop()
@@ -183,7 +184,7 @@ func startGroupPoller(parent context.Context) {
 			// pure overhead for a signal that can afford to be seconds late.
 			if sinceJoinScan++; sinceJoinScan >= joinScanEveryNPolls {
 				sinceJoinScan = 0
-				scanGroups(pendingSeen, printSeen)
+				scanGroups(pendingSeen, groupSeen)
 			}
 			var msgs []visorapi.GroupMessage
 			err := pairRPCCall("GroupPoll", func(c visorapi.API) error {
@@ -290,7 +291,7 @@ func isGroupMetaInputError(err error) bool {
 const joinScanEveryNPolls = 10
 
 // scanGroups lists the groups once for scanPendingJoins and scanGroupChanges.
-func scanGroups(pending map[string]int, prints map[string]string) {
+func scanGroups(pending map[string]int, seen map[string]visorapi.GroupInfo) {
 	var groups []visorapi.GroupInfo
 	if err := pairRPCCall("GroupList", func(c visorapi.API) error {
 		out, e := c.GroupList()
@@ -300,7 +301,7 @@ func scanGroups(pending map[string]int, prints map[string]string) {
 		return
 	}
 	scanPendingJoins(groups, pending)
-	scanGroupChanges(groups, prints)
+	scanGroupChanges(groups, seen)
 }
 
 // groupPrint is what a client draws of a group outside its messages: the
@@ -312,26 +313,93 @@ func groupPrint(g visorapi.GroupInfo) string {
 
 // scanGroupChanges sends a live "group-update" event for each group whose
 // groupPrint changed since the last scan, so a client refetches /group
-// instead of showing a joiner, a promotion or a removal minutes late.
-func scanGroupChanges(groups []visorapi.GroupInfo, prints map[string]string) {
+// instead of showing a joiner, a promotion or a removal minutes late. Each
+// change a member is told about also goes out as a "group-notice".
+func scanGroupChanges(groups []visorapi.GroupInfo, seen map[string]visorapi.GroupInfo) {
 	live := make(map[string]bool, len(groups))
 	for _, g := range groups {
 		live[g.ID] = true
-		p := groupPrint(g)
-		old, had := prints[g.ID]
-		prints[g.ID] = p
-		if !had || old == p {
+		old, had := seen[g.ID]
+		seen[g.ID] = g
+		if !had || groupPrint(old) == groupPrint(g) {
 			continue
 		}
 		if body, err := json.Marshal(map[string]any{"channel": "group-update", "group_id": g.ID}); err == nil {
 			hub.broadcastLive(string(body))
 		}
-	}
-	for id := range prints {
-		if !live[id] {
-			delete(prints, id)
+		for _, n := range groupNotices(old, g) {
+			if body, err := json.Marshal(map[string]any{"channel": "group-notice", "group_id": g.ID, "event": n.kind, "peer": n.peer}); err == nil {
+				hub.broadcastLive(string(body))
+			}
 		}
 	}
+	for id := range seen {
+		if !live[id] {
+			delete(seen, id)
+		}
+	}
+}
+
+// groupNotice is one change to a group's roster, roles or rules. peer is the
+// member it is about, empty for a change to the group itself.
+type groupNotice struct {
+	kind string
+	peer string
+}
+
+// groupNotices lists what changed between two sights of a group, in a stable
+// order. A ban or a departure also takes the seat, the admin role and any mute,
+// and is said once, as the ban or the departure.
+func groupNotices(old, now visorapi.GroupInfo) []groupNotice {
+	members, wasMember := pkSet(now.Members), pkSet(old.Members)
+	admins, wasAdmin := pkSet(now.Admins), pkSet(old.Admins)
+	muted, wasMuted := pkSet(now.Muted), pkSet(old.Muted)
+	banned, wasBanned := pkSet(now.Banned), pkSet(old.Banned)
+	var out []groupNotice
+	say := func(kind string, pks []string, keep func(string) bool) {
+		for _, pk := range pks {
+			if keep == nil || keep(pk) {
+				out = append(out, groupNotice{kind, pk})
+			}
+		}
+	}
+	member := func(pk string) bool { return members[pk] }
+	say("joined", newIn(wasMember, members), nil)
+	say("left", newIn(members, wasMember), func(pk string) bool { return !banned[pk] })
+	say("admin_added", newIn(wasAdmin, admins), nil)
+	say("admin_removed", newIn(admins, wasAdmin), member)
+	say("muted", newIn(wasMuted, muted), nil)
+	say("unmuted", newIn(muted, wasMuted), member)
+	say("banned", newIn(wasBanned, banned), nil)
+	say("unbanned", newIn(banned, wasBanned), nil)
+	if old.ReadOnly != now.ReadOnly {
+		kind := "read_only_off"
+		if now.ReadOnly {
+			kind = "read_only_on"
+		}
+		out = append(out, groupNotice{kind, ""})
+	}
+	return out
+}
+
+func pkSet(pks []cipher.PubKey) map[string]bool {
+	m := make(map[string]bool, len(pks))
+	for _, pk := range pks {
+		m[pk.Hex()] = true
+	}
+	return m
+}
+
+// newIn is the keys of after that are not in before, sorted.
+func newIn(before, after map[string]bool) []string {
+	var out []string
+	for pk := range after {
+		if !before[pk] {
+			out = append(out, pk)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // scanPendingJoins looks for newly-arrived join requests and surfaces
