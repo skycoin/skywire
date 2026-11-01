@@ -117,8 +117,8 @@ func (hv *Hypervisor) postGroupSend() http.HandlerFunc {
 }
 
 // getGroupMessages → GET /skychat/groups/messages?group_id=&since_ms= :
-// snapshot the in-memory inbox for messages newer than since_ms (cursor
-// poll — non-destructive), filtered to group_id when provided.
+// snapshot the in-memory inbox for messages that arrived after since_ms
+// (cursor poll — non-destructive), filtered to group_id when provided.
 func (hv *Hypervisor) getGroupMessages() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var since time.Time

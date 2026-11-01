@@ -258,8 +258,8 @@ func runGroupPollLoop(ctx context.Context, inCh chan<- groupTUIMsg, errCh chan<-
 			continue
 		}
 		for _, msg := range msgs {
-			if msg.TS.After(since) {
-				since = msg.TS
+			if msg.Arrived.After(since) {
+				since = msg.Arrived
 			}
 			select {
 			case <-ctx.Done():

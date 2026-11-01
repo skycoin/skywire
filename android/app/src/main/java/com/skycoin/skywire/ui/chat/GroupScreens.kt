@@ -150,6 +150,9 @@ fun GroupSettingsScreen(vm: ChatViewModel, gid: String, onBack: () -> Unit) {
     val g = groups.firstOrNull { it.id == gid }
     var requests by remember { mutableStateOf<List<JoinRequest>?>(null) }
     var rotating by remember { mutableStateOf(false) }
+    // The roster and roles as the visor has them now: a change may have come
+    // while the app was not listening, and the cached list would show it late.
+    LaunchedEffect(gid) { repo.syncGroups() }
     if (g == null) {
         Scaffold(topBar = { SkyTopBar(title = stringResource(R.string.chat_group_settings), onBack = onBack) }) { padding ->
             Column(Modifier.padding(padding)) { Hint(R.string.chat_group_gone) }

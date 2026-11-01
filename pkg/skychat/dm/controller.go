@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -444,6 +445,12 @@ func (c *Controller) readConn(conn *message.Conn) {
 		// as a chat line).
 		if id := deleteID(payload); id != "" && c.cfg.OnDelete != nil {
 			c.cfg.OnDelete(peer.Hex(), id)
+			// Tell the deleter it landed, so it stops resending.
+			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: DeleteAckID(id)}).Marshal(); mErr == nil {
+				if wErr := conn.WriteFrame(b); wErr != nil {
+					c.log("skychat/dm: delete ack to %s failed: %v", peer.Hex(), wErr)
+				}
+			}
 		}
 		text, ackID, replyTo, msgID := c.decodeInbound(payload)
 		if ackID != "" {
@@ -885,6 +892,20 @@ func receiptKind(payload []byte) (kind, id string) {
 		return env.Type, env.ID
 	}
 	return "", ""
+}
+
+// deleteAckPrefix marks a chat-ack that answers a chat-delete. A chat-ack
+// rather than a new type, because a peer predating it shows an unknown type
+// as text, while an ack for an id it never sent is ignored.
+const deleteAckPrefix = "delete:"
+
+// DeleteAckID is the chat-ack id that confirms the delete of message id.
+func DeleteAckID(id string) string { return deleteAckPrefix + id }
+
+// DeletedID reports the message a chat-ack id confirms the delete of.
+func DeletedID(ackID string) (string, bool) {
+	id, ok := strings.CutPrefix(ackID, deleteAckPrefix)
+	return id, ok && id != ""
 }
 
 // deleteID reports the target id of an inbound chat-delete frame, or "".

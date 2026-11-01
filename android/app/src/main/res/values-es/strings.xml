@@ -348,7 +348,23 @@
     <string name="transport_sudph_hint">UDP directo con perforación de NAT. Necesita un NAT que lo permita, y muchos operadores no lo hacen.</string>
 
     <!-- SkyChat (embedded web UI) -->
+    <string name="chat_cannot_post_removed">Un administrador te ha quitado de este grupo.</string>
+    <string name="chat_clear_selection">Cancelar selección</string>
+    <string name="chat_confirm_delete_selected">¿Eliminar para mí los mensajes seleccionados?\n\nNo se puede deshacer.</string>
+    <string name="chat_delete_selected">Eliminar seleccionados</string>
+    <string name="chat_get_file">Obtener archivo</string>
+    <string name="chat_notice_admin_added">Administrador añadido: %1$s</string>
+    <string name="chat_notice_admin_removed">Administrador quitado: %1$s</string>
+    <string name="chat_notice_banned">Expulsado: %1$s</string>
+    <string name="chat_notice_joined">Nuevo miembro: %1$s</string>
+    <string name="chat_notice_left">Ya no es miembro: %1$s</string>
+    <string name="chat_notice_muted">Publicación restringida: %1$s</string>
+    <string name="chat_notice_read_only_off">Todos pueden volver a enviar mensajes.</string>
+    <string name="chat_notice_read_only_on">Ahora solo los administradores pueden enviar mensajes.</string>
+    <string name="chat_notice_unbanned">Expulsión retirada: %1$s</string>
+    <string name="chat_notice_unmuted">Publicación restablecida: %1$s</string>
     <string name="chat_page_lang">es</string>
+    <string name="chat_selected_count">%1$d seleccionados</string>
     <string name="chat_starting">Iniciando SkyChat…</string>
     <string name="chat_core_starting">Esperando a que arranque el núcleo de Skywire…</string>
     <string name="chat_core_offline">El núcleo de Skywire no está en marcha. Inícialo desde la pestaña Inicio.</string>
@@ -478,6 +494,15 @@
     <string name="settings_export_prompt">Exportar la configuración de Skywire</string>
     <string name="settings_export_done">Configuración exportada.</string>
     <string name="settings_export_unwritable">El archivo elegido no se pudo abrir para escritura.</string>
+    <string name="settings_backup">Copia con grupos</string>
+    <string name="settings_backup_title">¿Hacer una copia con grupos?</string>
+    <string name="settings_backup_warning">La copia contiene la clave secreta de este visor en texto plano, junto con los canales y grupos que creó o a los que se unió. Al restaurarla en un teléfono nuevo vuelven con ella. Cualquiera que la lea puede funcionar como este visor, así que guárdala donde solo tú tengas acceso.\n\nSkywire se desconecta mientras copia y después vuelve a conectarse.</string>
+    <string name="settings_backup_prompt">Copia de seguridad de Skywire</string>
+    <string name="settings_backup_done">Copia guardada.</string>
+    <string name="settings_backup_unreadable">Este archivo no es una copia de Skywire.</string>
+    <string name="settings_restore">Restaurar una copia</string>
+    <string name="settings_restore_extra">La copia es de %1$s. Sus canales y grupos vuelven con ella.</string>
+    <string name="settings_restore_done">Copia restaurada.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">Bloqueo de la app</string>
@@ -1232,6 +1257,7 @@
     <string name="help_mail_body">SkyMail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Adjunto</string>
+    <string name="chat_state_removed">retirado</string>
     <string name="chat_you">Tú</string>
     <string name="chat_note_failed">Error: %1$s</string>
     <string name="chat_note_group_send_failed">No se pudo enviar al grupo: %1$s</string>
@@ -1392,6 +1418,10 @@
     <string name="chat_cannot_open">No se pudo abrir este archivo.</string>
     <string name="chat_cannot_play">No se puede reproducir este clip.</string>
     <string name="chat_cannot_post">No puedes enviar mensajes en este grupo.</string>
+    <string name="chat_cannot_post_banned">Has sido expulsado de este grupo.</string>
+    <string name="chat_cannot_post_channel">Esto es un canal. Solo sus administradores pueden publicar.</string>
+    <string name="chat_cannot_post_muted">Tienes restringido el envío de mensajes en este grupo.</string>
+    <string name="chat_cannot_post_read_only">Este grupo es de solo lectura. Solo los administradores pueden enviar mensajes.</string>
     <string name="chat_catalog_open">abrir</string>
     <string name="chat_catalog_view">ver</string>
     <string name="chat_catalog_title">También publicado por este nodo</string>

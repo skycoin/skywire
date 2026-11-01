@@ -571,6 +571,38 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --- backup ---
+
+    /** Write the config and the group state to [uri], with the core stopped while it copies. */
+    fun backup(uri: Uri) = identityAction(R.string.settings_backup_done) {
+        val app = getApplication<Application>()
+        withContext(Dispatchers.IO) { app.contentResolver.openOutputStream(uri, "wt") }
+            ?.use { config.writeBackup(it) }
+            ?: error(app.getString(R.string.settings_export_unwritable))
+        ""
+    }
+
+    /** The public key the backup at [uri] restores, for the confirmation, or null when it is none. */
+    suspend fun backupPublicKey(uri: Uri): String? {
+        val app = getApplication<Application>()
+        val sk = withContext(Dispatchers.IO) {
+            runCatching { app.contentResolver.openInputStream(uri)?.use(config::backupSecretKey) }.getOrNull()
+        }
+        if (sk == null) {
+            report(app.getString(R.string.settings_backup_unreadable))
+            return null
+        }
+        return publicKeyOf(sk)
+    }
+
+    /** Install the backup at [uri]: its identity, then its channels and groups. */
+    fun restoreBackup(uri: Uri) = identityAction(R.string.settings_restore_done) {
+        val app = getApplication<Application>()
+        withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri) }
+            ?.use { config.restoreBackup(it).getOrThrow() }
+            ?: error(app.getString(R.string.settings_backup_unreadable))
+    }
+
     // --- preferences ---
 
     /**

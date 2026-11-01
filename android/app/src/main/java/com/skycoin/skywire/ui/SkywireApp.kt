@@ -5,6 +5,11 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -76,7 +82,9 @@ import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.navigation.TAB_ORDER
+import com.skycoin.skywire.ui.navigation.TAB_SLIDE_MS
 import com.skycoin.skywire.ui.navigation.tabOnSubPage
+import com.skycoin.skywire.ui.navigation.tabStep
 import com.skycoin.skywire.ui.navigation.tabSwipe
 import com.skycoin.skywire.ui.navigation.tabSwipeHeld
 import com.skycoin.skywire.ui.components.isShortScreen
@@ -200,13 +208,15 @@ fun SkywireApp() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.HOME,
-                // consumeWindowInsets so a destination can still ask for the
-                // insets it needs — the chat composer's imePadding would otherwise
-                // count the navigation bar twice, once here and once in the
-                // keyboard inset it is measured from.
+                // Tab to tab slides the way a swipe moves; anything else keeps NavHost's default fade.
+                enterTransition = { tabStep()?.let { step -> slideInHorizontally(tween(TAB_SLIDE_MS)) { it * step } } ?: fadeIn(tween(700)) },
+                exitTransition = { tabStep()?.let { step -> slideOutHorizontally(tween(TAB_SLIDE_MS)) { -it * step } } ?: fadeOut(tween(700)) },
+                // The window never pans (adjustResize in the manifest), so every screen
+                // ends at the keyboard here, less the bottom bar consumed above.
                 modifier = Modifier
                     .padding(innerPadding)
                     .consumeWindowInsets(innerPadding)
+                    .imePadding()
                     .tabSwipe(enabled = currentRoute in TAB_ORDER && !tabSwipeHeld.value) { next ->
                         val at = TAB_ORDER.indexOf(currentRoute)
                         when (val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)) {

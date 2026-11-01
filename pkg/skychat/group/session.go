@@ -384,6 +384,9 @@ type Session struct {
 	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
 	// manager can persist the converged Record. See SetRosterChangeHandler.
 	onRosterChange func(members, admins []cipher.PubKey)
+	// onRemoved is invoked when an admin removes this visor from the group.
+	// See SetRemovedHandler.
+	onRemoved func()
 	// onModChange is invoked with a snapshot of the converged moderation
 	// state after applyModLeaf mutates it, so the manager can persist it.
 	// Parallel to onRosterChange. See SetModChangeHandler.
@@ -400,7 +403,9 @@ type Session struct {
 	// admission authority (e.g. the native-TCP standalone path, which
 	// has no Manager) and every request is refused.
 	onJoinRequest JoinRequestHandler
-	log           *logging.Logger
+	// onLeave removes a member that asked to leave. See SetLeaveHandler.
+	onLeave LeaveHandler
+	log     *logging.Logger
 
 	// lastInboundNs is the unified liveness signal for this session,
 	// in unix-nanoseconds. Set on every observable inbound event —
@@ -2249,6 +2254,10 @@ func (s *Session) handleRelay(c net.Conn) {
 	var probe relayFrameProbe
 	if err := json.Unmarshal(payload, &probe); err == nil && probe.Kind == frameKindJoinRequest {
 		s.handleJoinRequest(c, payload)
+		return
+	}
+	if probe.Kind == frameKindLeave {
+		s.handleLeave(c, payload)
 		return
 	}
 	// Chat submission is the owner's job. Member sessions bind this port

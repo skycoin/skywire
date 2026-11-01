@@ -108,6 +108,9 @@ func TestCanPostPrecedence(t *testing.T) {
 		if ok, why := base.CanPost(member); !ok {
 			t.Errorf("member blocked: %s", why)
 		}
+		if got := base.PostBlock(member); got != "" {
+			t.Errorf("PostBlock = %q for a member who may post", got)
+		}
 	})
 
 	t.Run("read-only stops members but not admins", func(t *testing.T) {
@@ -115,6 +118,9 @@ func TestCanPostPrecedence(t *testing.T) {
 		r.ReadOnly = true
 		if ok, _ := r.CanPost(member); ok {
 			t.Error("member could post in a read-only group")
+		}
+		if got := r.PostBlock(member); got != PostBlockReadOnly {
+			t.Errorf("PostBlock = %q, want %q", got, PostBlockReadOnly)
 		}
 		if ok, why := r.CanPost(admin); !ok {
 			t.Errorf("admin blocked by read-only they control: %s", why)

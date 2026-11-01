@@ -92,7 +92,7 @@ func (v *Visor) VoiceDecline(callID string) error {
 }
 
 // VoiceSetBlocked replaces the callers whose calls never ring here: they hear
-// an ordinary ring that goes unanswered. See call.Manager.SetBlocked.
+// a short ring and then a decline. See call.Manager.SetBlocked.
 func (v *Visor) VoiceSetBlocked(peers []cipher.PubKey) error {
 	if v.voice == nil {
 		return ErrVoiceDisabled

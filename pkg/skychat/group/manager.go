@@ -71,6 +71,8 @@ type Manager struct {
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
+	// leaving cancels the leave each group is still announcing. Under mu.
+	leaving map[string]context.CancelFunc
 
 	// heartbeatInterval is the owner-emit cadence forwarded to every
 	// new owner-role Session via openLocked. Zero disables.
@@ -198,6 +200,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		log:                log,
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
+		leaving:            make(map[string]context.CancelFunc),
 		heartbeatInterval:  cfg.HeartbeatInterval,
 		peerFanout:         cfg.PeerFanout,
 		joinBucket:         newJoinBucket(cfg.JoinBurst, cfg.JoinRefill),
@@ -338,7 +341,58 @@ func (m *Manager) Join(inv Invite) (Record, error) {
 // Leave (member) or Delete (owner): both tear down the session and
 // move the record to a terminal status. Idempotent on a missing or
 // already-terminal record.
-func (m *Manager) Leave(id string) error { return m.terminate(id, StatusLeft) }
+//
+// Leave also asks an admin to take this visor off the roster, in the
+// background, so the others stop listing it.
+func (m *Manager) Leave(id string) error {
+	if r, ok, err := m.store.Get(id); err == nil && ok && !r.Status.IsTerminal() && !r.IsFounder(m.myPK) {
+		ctx, cancel := context.WithTimeout(context.Background(), leaveAnnounceTimeout)
+		m.mu.Lock()
+		m.leaving[id] = cancel
+		m.mu.Unlock()
+		go func() {
+			defer cancel()
+			if err := AnnounceLeave(ctx, m.dmsgC, r.ID, r.AdmissionTargets(m.myPK), r.Port); err != nil {
+				m.log.WithError(err).WithField("id", r.ID).Info("group: leave: no admin took this visor off the roster")
+			}
+		}()
+	}
+	return m.terminate(id, StatusLeft)
+}
+
+// leaveAnnounceTimeout bounds how long a leave keeps asking admins.
+const leaveAnnounceTimeout = time.Minute
+
+// stopLeaving cancels a leave id is still announcing, so a quick rejoin
+// is not undone by it.
+func (m *Manager) stopLeaving(id string) {
+	m.mu.Lock()
+	cancel := m.leaving[id]
+	delete(m.leaving, id)
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// leaveHandler takes a member that asked to leave off the roster, when
+// this visor is an admin. A key that is no member any more is already off.
+func (m *Manager) leaveHandler(id string) LeaveHandler {
+	return func(pk cipher.PubKey) bool {
+		r, ok, err := m.store.Get(id)
+		if err != nil || !ok || !r.IsAdmin(m.myPK) || r.IsFounder(pk) {
+			return false
+		}
+		if !containsPK(r.Members, pk) {
+			return true
+		}
+		if _, err := m.RemoveMember(id, pk); err != nil {
+			m.log.WithError(err).WithField("id", id).Debug("group: leave: remove failed")
+			return false
+		}
+		return true
+	}
+}
 
 // Delete tears down an admin-side group and marks it revoked. Only
 // visors that IsAdmin on the record may delete; non-admin members
@@ -1640,6 +1694,8 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// Persist reconciled roster changes back to the store so group info/list
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
+	// Off this session's receive pump: ending the membership closes the session.
+	sess.SetRemovedHandler(func() { go func() { _ = m.terminate(r.ID, StatusRemoved) }() }) //nolint:errcheck
 	sess.SetModChangeHandler(m.persistModeration(r.ID))
 	// Key rotations converge through the same gossip channel, and the
 	// converged key MUST survive a restart — see persistKeys.
@@ -1661,6 +1717,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// admin authority against the live record, and installing it uniformly
 	// means a member promoted to admin can act without reopening.
 	sess.SetJoinRequestHandler(m.admissionHandler(r.ID))
+	sess.SetLeaveHandler(m.leaveHandler(r.ID))
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()

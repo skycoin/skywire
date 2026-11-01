@@ -84,6 +84,18 @@ type DialFunc func(ctx context.Context, peer cipher.PubKey, port uint16) (net.Co
 // false declines the transfer (the sender gets a Receipt with OK=false).
 type AcceptFunc func(from cipher.PubKey, offer Offer) (dst io.WriteCloser, ok bool)
 
+// HeldReason is the decline of a receiver that kept a reference to the file
+// and will ask for the bytes when it wants them, so for the sender it is sent.
+const HeldReason = "held"
+
+// Held, returned by an AcceptFunc with ok false, declines with HeldReason.
+var Held io.WriteCloser = held{}
+
+type held struct{}
+
+func (held) Write([]byte) (int, error) { return 0, errors.New("xfer: a held transfer has no body") }
+func (held) Close() error              { return nil }
+
 // MaxOfferSize caps an Offer/Trailer/Receipt control frame. The DATA is not
 // bounded by this — only offer.Size bounds it, and the AcceptFunc is free to
 // reject an over-large Size before a single byte is read.
@@ -278,7 +290,11 @@ func Receive(ctx context.Context, from cipher.PubKey, conn net.Conn, accept Acce
 
 	dst, ok := accept(from, offer)
 	if !ok {
-		_ = sendAccept(conn, false, "declined") //nolint:errcheck
+		reason := "declined"
+		if dst == Held {
+			reason = HeldReason
+		}
+		_ = sendAccept(conn, false, reason) //nolint:errcheck
 		return offer, errDeclined
 	}
 	if err := sendAccept(conn, true, ""); err != nil {

@@ -809,6 +809,7 @@ func (m *Manager) requestJoin(inv Invite, note string, askAgain bool) (Record, e
 	if inv.OwnerPK == m.myPK {
 		return Record{}, errors.New("group: RequestJoin: refusing to join own group")
 	}
+	m.stopLeaving(inv.ID)
 	if existing, ok, err := m.store.Get(inv.ID); err == nil && ok && existing.Status == StatusActive {
 		return existing, nil // already in — idempotent
 	}

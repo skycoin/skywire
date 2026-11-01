@@ -344,8 +344,18 @@ func (m *Manager) isBlocked(pk cipher.PubKey) bool {
 	return m.blocked[pk]
 }
 
-// ringUnseen answers a blocked caller the way an unanswered call is answered:
-// it rings for them, without our tone, and ends as "no answer". Nothing rings here.
+// A blocked caller hears a short ring, then the decline a person pressing
+// decline sends, so the call ends promptly and the block reads as a refusal.
+var blockedRingMin, blockedRingMax = 3 * time.Second, 8 * time.Second
+
+func blockedRing() time.Duration {
+	var b [8]byte
+	_, _ = rand.Read(b[:]) //nolint:errcheck
+	return blockedRingMin + time.Duration(binary.BigEndian.Uint64(b[:])%uint64(blockedRingMax-blockedRingMin+1))
+}
+
+// ringUnseen rings a blocked caller for blockedRing, without our tone, and
+// then declines. Nothing rings here.
 func (m *Manager) ringUnseen(inv Sig, conn net.Conn) {
 	w := watchRing(conn)
 	var ringSent <-chan struct{}
@@ -353,13 +363,13 @@ func (m *Manager) ringUnseen(inv Sig, conn net.Conn) {
 		ringSent = m.sendRinging(w, Sig{Type: SigRinging, CallID: inv.CallID, FromPK: m.cfg.LocalPK})
 	}
 	m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).Info("voice: call from a blocked peer, not ringing")
-	timeout := time.NewTimer(ringTimeout)
+	timeout := time.NewTimer(blockedRing())
 	defer timeout.Stop()
 	select {
 	case <-w.gone:
 	case <-timeout.C:
 		if announced(ringSent) {
-			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
+			_ = writeSig(w, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "declined"}) //nolint:errcheck
 		}
 	}
 	_ = w.Close() //nolint:errcheck

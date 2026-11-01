@@ -303,7 +303,23 @@
     <!-- SkyChat -->
     <!-- The embedded SkyDEX page's language code. Empty here means English; each
          translation names its own, so "System" shows the page in the app's language. -->
+    <string name="chat_cannot_post_removed">An admin removed you from this group.</string>
+    <string name="chat_clear_selection">Clear selection</string>
+    <string name="chat_confirm_delete_selected">Delete the selected messages for me?\n\nThis cannot be undone.</string>
+    <string name="chat_delete_selected">Delete selected</string>
+    <string name="chat_get_file">Get file</string>
+    <string name="chat_notice_admin_added">Admin added: %1$s</string>
+    <string name="chat_notice_admin_removed">Admin removed: %1$s</string>
+    <string name="chat_notice_banned">Banned: %1$s</string>
+    <string name="chat_notice_joined">New member: %1$s</string>
+    <string name="chat_notice_left">No longer a member: %1$s</string>
+    <string name="chat_notice_muted">Posting restricted: %1$s</string>
+    <string name="chat_notice_read_only_off">Everyone can send messages again.</string>
+    <string name="chat_notice_read_only_on">Only admins can send messages now.</string>
+    <string name="chat_notice_unbanned">Ban lifted: %1$s</string>
+    <string name="chat_notice_unmuted">Posting restored: %1$s</string>
     <string name="chat_page_lang"></string>
+    <string name="chat_selected_count">%1$d selected</string>
     <string name="chat_starting">Starting SkyChat…</string>
     <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
@@ -433,6 +449,15 @@
     <string name="settings_export_prompt">Export the Skywire config</string>
     <string name="settings_export_done">Config exported.</string>
     <string name="settings_export_unwritable">The chosen file could not be opened for writing.</string>
+    <string name="settings_backup">Back up with groups</string>
+    <string name="settings_backup_title">Back up with groups?</string>
+    <string name="settings_backup_warning">The backup holds this visor’s secret key in plain text, with the channels and groups it created or joined. Restoring it on a new phone brings them back. Anyone who reads it can run as this visor, so keep it where only you can reach it.\n\nSkywire disconnects while it copies, then reconnects.</string>
+    <string name="settings_backup_prompt">Back up Skywire</string>
+    <string name="settings_backup_done">Backup saved.</string>
+    <string name="settings_backup_unreadable">This file is not a Skywire backup.</string>
+    <string name="settings_restore">Restore a backup</string>
+    <string name="settings_restore_extra">The backup is for %1$s. Its channels and groups come back with it.</string>
+    <string name="settings_restore_done">Backup restored.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">App lock</string>
@@ -1190,6 +1215,7 @@
     <string name="help_mail_body">SkyMail is e-mail between visors. Your visor keeps a mailbox at an address made from its public key, and mail is carried over Skywire, encrypted, with the sender’s key proved by the network rather than by a mail server.\n\nIt does not reach ordinary e-mail, and a visor that is offline cannot be written to: mail goes out at once and nothing retries. Use the .dmsg address from a phone; a .skynet address needs a route, which a phone rarely has.\n\nMail is kept on this phone, up to the size and age limits in the mailbox settings.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Attachment</string>
+    <string name="chat_state_removed">removed</string>
     <string name="chat_you">You</string>
     <string name="chat_note_failed">Failed: %1$s</string>
     <string name="chat_note_group_send_failed">Group send failed: %1$s</string>
@@ -1350,6 +1376,10 @@
     <string name="chat_cannot_open">Could not open this file.</string>
     <string name="chat_cannot_play">Cannot play this clip.</string>
     <string name="chat_cannot_post">You cannot send messages in this group.</string>
+    <string name="chat_cannot_post_banned">You are banned from this group.</string>
+    <string name="chat_cannot_post_channel">This is a channel. Only its admins can post.</string>
+    <string name="chat_cannot_post_muted">You are restricted from sending messages in this group.</string>
+    <string name="chat_cannot_post_read_only">This group is read-only. Only admins can send messages.</string>
     <string name="chat_catalog_open">open</string>
     <string name="chat_catalog_view">view</string>
     <string name="chat_catalog_title">Also published by this visor</string>
