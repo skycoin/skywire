@@ -66,7 +66,7 @@ func (v *Visor) GroupCreate(args visorapi.GroupCreateArgs) (visorapi.GroupInfo, 
 	if err != nil {
 		return visorapi.GroupInfo{}, "", err
 	}
-	return toInfo(r), link, nil
+	return v.toInfoFor(r, mgr), link, nil
 }
 
 // GroupJoin accepts an invite link OR a short skychat:// group address,
@@ -101,7 +101,7 @@ func (v *Visor) GroupJoin(args visorapi.GroupJoinArgs) (visorapi.GroupInfo, erro
 		if err != nil {
 			return visorapi.GroupInfo{}, err
 		}
-		return toInfo(r), nil
+		return v.toInfoFor(r, mgr), nil
 	}
 	addr, err := skychataddr.Parse(raw)
 	if err != nil {
@@ -116,7 +116,7 @@ func (v *Visor) GroupJoin(args visorapi.GroupJoinArgs) (visorapi.GroupInfo, erro
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	return toInfo(r), nil
+	return v.toInfoFor(r, mgr), nil
 }
 
 // groupJoinByAddressBudget caps a join driven from a short address: one
@@ -236,7 +236,7 @@ func (v *Visor) GroupAskAgain(id string) (visorapi.GroupInfo, error) {
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	return toInfo(r), nil
+	return v.toInfoFor(r, mgr), nil
 }
 
 // GroupList returns every persisted group on this visor. The
@@ -405,7 +405,7 @@ func (v *Visor) GroupAddMember(id string, pk cipher.PubKey) (visorapi.GroupInfo,
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	return toInfo(r), nil
+	return v.toInfoFor(r, mgr), nil
 }
 
 func toJoinRequest(r skychatgroup.JoinRequest) visorapi.GroupJoinRequest {
@@ -674,7 +674,7 @@ func (v *Visor) GroupPromoteAdmin(id string, pk cipher.PubKey) (visorapi.GroupIn
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	return toInfo(r), nil
+	return v.toInfoFor(r, mgr), nil
 }
 
 // GroupDemoteAdmin removes pk from the group's explicit Admins set.
@@ -690,7 +690,7 @@ func (v *Visor) GroupDemoteAdmin(id string, pk cipher.PubKey) (visorapi.GroupInf
 	if err != nil {
 		return visorapi.GroupInfo{}, err
 	}
-	return toInfo(r), nil
+	return v.toInfoFor(r, mgr), nil
 }
 
 // GroupSend publishes a message into the named group's feed.
@@ -906,8 +906,8 @@ func toInfo(r skychatgroup.Record) visorapi.GroupInfo {
 
 // toInfoFor is toInfo plus the fields that depend on who is asking:
 // whether this visor may post, and how many requests await its
-// decision. Split out because toInfo is called from paths that have no
-// manager handy (and don't need either answer).
+// decision. Every answer to a client goes through it, because a client
+// reads the zero CanPost of a bare toInfo as "may not post".
 func (v *Visor) toInfoFor(r skychatgroup.Record, mgr *skychatgroup.Manager) visorapi.GroupInfo {
 	info := toInfo(r)
 	canPost, reason := r.CanPost(v.conf.PK)
