@@ -499,12 +499,16 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
 private fun buildRows(messages: List<ChatMessage>): List<Row2> {
     val zone = ZoneId.systemDefault()
     val out = ArrayList<Row2>(messages.size + 8)
+    // The list keys its rows, and a key used twice crashes it. A message can
+    // arrive twice, by a replayed feed or by history and the live stream racing.
+    val placed = HashSet<String>()
     for (i in messages.indices.reversed()) {
         val m = messages[i]
+        if (!placed.add(m.key)) continue
         out += Row2.Msg(m)
         val day = Instant.ofEpochMilli(m.ts).atZone(zone).toLocalDate()
         val prev = messages.getOrNull(i - 1)?.let { Instant.ofEpochMilli(it.ts).atZone(zone).toLocalDate() }
-        if (prev != day) out += Row2.Day(day)
+        if (prev != day && placed.add("day-$day")) out += Row2.Day(day)
     }
     return out
 }
