@@ -1350,6 +1350,10 @@
     <string name="chat_cannot_open">Could not open this file.</string>
     <string name="chat_cannot_play">Cannot play this clip.</string>
     <string name="chat_cannot_post">You cannot send messages in this group.</string>
+    <string name="chat_cannot_post_banned">You are banned from this group.</string>
+    <string name="chat_cannot_post_channel">This is a channel. Only its admins can post.</string>
+    <string name="chat_cannot_post_muted">You are restricted from sending messages in this group.</string>
+    <string name="chat_cannot_post_read_only">This group is read-only. Only admins can send messages.</string>
     <string name="chat_catalog_open">open</string>
     <string name="chat_catalog_view">view</string>
     <string name="chat_catalog_title">Also published by this visor</string>

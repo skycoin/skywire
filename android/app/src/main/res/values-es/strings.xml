@@ -1392,6 +1392,10 @@
     <string name="chat_cannot_open">No se pudo abrir este archivo.</string>
     <string name="chat_cannot_play">No se puede reproducir este clip.</string>
     <string name="chat_cannot_post">No puedes enviar mensajes en este grupo.</string>
+    <string name="chat_cannot_post_banned">Has sido expulsado de este grupo.</string>
+    <string name="chat_cannot_post_channel">Esto es un canal. Solo sus administradores pueden publicar.</string>
+    <string name="chat_cannot_post_muted">Tienes restringido el envío de mensajes en este grupo.</string>
+    <string name="chat_cannot_post_read_only">Este grupo es de solo lectura. Solo los administradores pueden enviar mensajes.</string>
     <string name="chat_catalog_open">abrir</string>
     <string name="chat_catalog_view">ver</string>
     <string name="chat_catalog_title">También publicado por este nodo</string>

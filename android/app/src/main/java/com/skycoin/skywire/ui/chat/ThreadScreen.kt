@@ -446,7 +446,8 @@ fun ThreadScreen(vm: ChatViewModel, key: String, onBack: () -> Unit) {
             }
             if (group != null && !group.postable) {
                 Text(
-                    group.cannotPostReason.ifEmpty { stringResource(R.string.chat_cannot_post) },
+                    cannotPostRes(group.cannotPostCode)?.let { stringResource(it) }
+                        ?: group.cannotPostReason.ifEmpty { stringResource(R.string.chat_cannot_post) },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).padding(16.dp),
@@ -616,4 +617,13 @@ private fun MessageSheet(vm: ChatViewModel, key: String, m: ChatMessage, group: 
             action(Icons.Rounded.DeleteForever, R.string.chat_delete_for_all, danger = true) { repo.deleteForEveryone(key, m) }
         }
     }
+}
+
+/** The visor's reason a group refuses this phone's posts, in the app's language (pkg/skychat/group PostBlock*). */
+internal fun cannotPostRes(code: String): Int? = when (code) {
+    "banned" -> R.string.chat_cannot_post_banned
+    "muted" -> R.string.chat_cannot_post_muted
+    "channel" -> R.string.chat_cannot_post_channel
+    "read_only" -> R.string.chat_cannot_post_read_only
+    else -> null
 }

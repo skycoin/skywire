@@ -1390,6 +1390,10 @@
     <string name="chat_cannot_open">Impossible d’ouvrir ce fichier.</string>
     <string name="chat_cannot_play">Impossible de lire ce clip.</string>
     <string name="chat_cannot_post">Vous ne pouvez pas envoyer de messages dans ce groupe.</string>
+    <string name="chat_cannot_post_banned">Vous êtes banni de ce groupe.</string>
+    <string name="chat_cannot_post_channel">Ceci est une chaîne. Seuls ses administrateurs peuvent publier.</string>
+    <string name="chat_cannot_post_muted">Vous êtes restreint dans ce groupe et ne pouvez pas y envoyer de messages.</string>
+    <string name="chat_cannot_post_read_only">Ce groupe est en lecture seule. Seuls les administrateurs peuvent envoyer des messages.</string>
     <string name="chat_catalog_open">ouvrir</string>
     <string name="chat_catalog_view">voir</string>
     <string name="chat_catalog_title">Également publié par ce visor</string>

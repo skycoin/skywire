@@ -70,6 +70,7 @@ data class GroupInfo(
     @SerialName("read_only") val readOnly: Boolean = false,
     @SerialName("can_post") val canPost: Boolean? = null,
     @SerialName("cannot_post_reason") val cannotPostReason: String = "",
+    @SerialName("cannot_post_code") val cannotPostCode: String = "",
     @SerialName("pending_joins") val pendingJoins: Int = 0,
     val avatar: String = "",
     val listed: Boolean = false,

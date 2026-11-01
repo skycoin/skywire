@@ -679,27 +679,50 @@ func (r Record) MuteEffectiveFrom(pk cipher.PubKey) time.Time {
 	return r.MutedSince[pk.Hex()]
 }
 
+// Why PostBlock says pk may not post. Stable, so a client can show the
+// reason in its own language instead of CanPost's English.
+const (
+	PostBlockBanned   = "banned"
+	PostBlockMuted    = "muted"
+	PostBlockChannel  = "channel"
+	PostBlockReadOnly = "read_only"
+)
+
+var postBlockReasons = map[string]string{
+	PostBlockBanned:   "you are banned from this group",
+	PostBlockMuted:    "you are restricted from sending messages in this group",
+	PostBlockChannel:  "this is a channel — only admins can post",
+	PostBlockReadOnly: "this group is read-only — only admins can send messages",
+}
+
 // CanPost reports whether pk may publish a chat message into this
 // group right now, and if not, a short operator-facing reason. The
 // reason is surfaced verbatim in the UI's disabled-composer state and
 // in the error returned to a send attempt, so it's phrased for a human.
+func (r Record) CanPost(pk cipher.PubKey) (bool, string) {
+	block := r.PostBlock(pk)
+	return block == "", postBlockReasons[block]
+}
+
+// PostBlock is the PostBlock code for why pk may not post right now,
+// or "" when it may.
 //
 // Admins are exempt from ReadOnly (they're the ones who set it) but
 // NOT from an explicit mute: muting an admin is unusual, but if an
 // admin did it deliberately, silently ignoring it would be worse than
 // honoring it. Banned outranks everything.
-func (r Record) CanPost(pk cipher.PubKey) (bool, string) {
+func (r Record) PostBlock(pk cipher.PubKey) string {
 	switch {
 	case r.IsBanned(pk):
-		return false, "you are banned from this group"
+		return PostBlockBanned
 	case r.IsMuted(pk):
-		return false, "you are restricted from sending messages in this group"
+		return PostBlockMuted
 	case r.IsChannel() && !r.IsAdmin(pk):
-		return false, "this is a channel — only admins can post"
+		return PostBlockChannel
 	case r.ReadOnly && !r.IsAdmin(pk):
-		return false, "this group is read-only — only admins can send messages"
+		return PostBlockReadOnly
 	default:
-		return true, ""
+		return ""
 	}
 }
 
