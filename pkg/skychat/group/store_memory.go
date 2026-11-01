@@ -7,21 +7,21 @@
 // group ID so value semantics — independent copies on read, legacy-Admins
 // normalization — match the bbolt path exactly.
 //
-// Ephemeral: a browser visor's group records reset on tab reload. That's fine
-// for the federated model — every member is authoritative only for its own
-// feed, so anything this visor published is retained by the peers that
-// subscribed to it, and on reload it re-subscribes and history-replays. A
-// durable variant can hydrate this map from + flush it to IndexedDB behind the
-// identical API (in-memory stays the synchronous working set; IndexedDB is the
-// async persistence tier — IndexedDB, not localStorage, for the quota headroom
-// and native binary storage).
+// With a path, every change rewrites the whole set to that JSON file and
+// OpenStore reads it back, so a member keeps its groups across a tab reload.
+// The page's filesystem snapshot persists the file, provided it is not a
+// *.db file and not under local/ (pkg/wasmhv/browseui/exec-worker.js).
 
 // Package group cmd/apps/skychat/group/store_memory.go c4-app-chat
 package group
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -47,22 +47,82 @@ type Store struct {
 	// migrated exists for signature parity with the bbolt store; nothing
 	// survives a tab reload here, so it is always zero.
 	migrated int
+	// path is the JSON file the set is saved to. Empty keeps it in memory.
+	path string
 }
 
-// OpenStore returns an in-memory store. path is accepted for signature parity
-// with the bbolt store but ignored — there is no filesystem in js/wasm. sk
-// derives the same at-rest sealing key the native store uses.
+// storeFile is the saved form. Values are the same JSON bytes the maps hold,
+// group keys still sealed.
+type storeFile struct {
+	Groups       map[string]json.RawMessage `json:"groups"`
+	JoinRequests map[string]json.RawMessage `json:"join_requests"`
+}
+
+// OpenStore returns a store loaded from the JSON file at path, if there is
+// one. An empty path keeps the store in memory only. sk derives the same
+// at-rest sealing key the native store uses.
 func OpenStore(path string, sk cipher.SecKey) (*Store, error) {
-	_ = path
 	sealer, err := newRecordSealer(sk)
 	if err != nil {
 		return nil, err
 	}
-	return &Store{
+	s := &Store{
 		kvs:      make(map[string][]byte),
 		joinReqs: make(map[string][]byte),
 		sealer:   sealer,
-	}, nil
+		path:     path,
+	}
+	if path == "" {
+		return s, nil
+	}
+	raw, err := os.ReadFile(path) //nolint:gosec
+	if errors.Is(err, fs.ErrNotExist) {
+		return s, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("group: read %s: %w", path, err)
+	}
+	var f storeFile
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return nil, fmt.Errorf("group: decode %s: %w", path, err)
+	}
+	for k, v := range f.Groups {
+		s.kvs[k] = v
+	}
+	for k, v := range f.JoinRequests {
+		s.joinReqs[k] = v
+	}
+	return s, nil
+}
+
+// save writes the whole set to s.path through a temp file and a rename, so a
+// snapshot never sees half a file. The caller holds s.mu.
+func (s *Store) save() error {
+	if s.path == "" {
+		return nil
+	}
+	f := storeFile{
+		Groups:       make(map[string]json.RawMessage, len(s.kvs)),
+		JoinRequests: make(map[string]json.RawMessage, len(s.joinReqs)),
+	}
+	for k, v := range s.kvs {
+		f.Groups[k] = v
+	}
+	for k, v := range s.joinReqs {
+		f.JoinRequests[k] = v
+	}
+	body, err := json.Marshal(f)
+	if err != nil {
+		return fmt.Errorf("group: encode store: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return fmt.Errorf("group: mkdir parent: %w", err)
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return fmt.Errorf("group: write store: %w", err)
+	}
+	return os.Rename(tmp, s.path)
 }
 
 // MigratedRecords mirrors the bbolt store's accessor. Always zero: an
@@ -104,7 +164,7 @@ func (s *Store) Put(r Record) error {
 		return fmt.Errorf("group: marshal record: %w", err)
 	}
 	s.kvs[r.ID] = body
-	return nil
+	return s.save()
 }
 
 // Get returns the record for id and a boolean indicating presence.
@@ -158,7 +218,7 @@ func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.kvs, id)
-	return nil
+	return s.save()
 }
 
 // SetStatus updates only the Status field of an existing record.
@@ -205,7 +265,7 @@ func (s *Store) PutJoinRequest(req JoinRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.joinReqs[joinReqKey(req.GroupID, req.PK)] = body
-	return nil
+	return s.save()
 }
 
 // GetJoinRequest returns the request for (groupID, pk) if one exists.
@@ -257,7 +317,7 @@ func (s *Store) DeleteJoinRequests(groupID string) error {
 			delete(s.joinReqs, k)
 		}
 	}
-	return nil
+	return s.save()
 }
 
 // update is the shared read-modify-write helper. Returns an error if no record
@@ -280,5 +340,5 @@ func (s *Store) update(id string, fn func(*Record)) error {
 		return err
 	}
 	s.kvs[id] = body
-	return nil
+	return s.save()
 }

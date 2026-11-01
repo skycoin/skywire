@@ -11,6 +11,7 @@ package visor
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -50,6 +51,16 @@ const groupInboxCap = 1024
 // names none, relative to <LocalPath>/skychat.
 const defaultGroupHistoryDB = "group-history.db"
 
+// groupStorePath is where the group records live. The wasm visor keeps them
+// in skychat/groups.json beside the local path, as it does mail and contacts,
+// because the page never persists local/ or a *.db file.
+func groupStorePath(localPath string) string {
+	if runtime.GOOS == "js" {
+		return filepath.Join(filepath.Dir(filepath.Clean(localPath)), "skychat", "groups.json")
+	}
+	return filepath.Join(localPath, "skychat", "groups.db")
+}
+
 // initGrouping brings up the per-visor chat-group feed manager. Best
 // effort: a failure here logs and disables group chat for this run
 // rather than failing visor startup. Group RPC handlers return
@@ -60,7 +71,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "skychat")
-	storePath := filepath.Join(dataDir, "groups.db")
+	storePath := groupStorePath(v.conf.LocalPath)
 
 	// The visor SK derives the key that seals each group's AES key inside
 	// groups.db. Without it the store refuses to open rather than writing
