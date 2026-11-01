@@ -8,6 +8,9 @@ import android.os.Environment
 import android.util.Base64
 import androidx.core.net.toUri
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.core.MailContacts
+import com.skycoin.skywire.core.SkymailAddress
 import com.skycoin.skywire.core.VoiceCalls
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
@@ -167,11 +170,44 @@ fun ChatRepository.declineInvite(pk: String) {
 
 // --- contacts ---
 
-fun ChatRepository.removeContact(pk: String) {
+/** [share] false is SkyMail removing it from the visor's book, which is done already. */
+fun ChatRepository.removeContact(pk: String, share: Boolean = true) {
     store.update { s -> s.copy(contacts = s.contacts - pk) }
-    setName(pk, "")
+    setName(pk, "", share = false)
     scope.launch { runCatching { api.accept(pk, accepted = false) } }
+    if (!share) return
+    unshareContact(pk)
     note(R.string.chat_note_contact_removed)
+}
+
+/** Puts a named SkyChat contact in the visor's book, so SkyMail and the dashboard list it too. */
+internal fun ChatRepository.shareContact(pk: String) {
+    val name = names.value[pk].orEmpty()
+    val address = SkymailAddress.of(pk) ?: return
+    if (name.isEmpty()) return
+    scope.launch {
+        runCatching {
+            val visor = VisorApi.get(app)
+            val book = visor.contacts()
+            if (book.any { c -> c.name == name && c.keys.any { it.equals(pk, true) } }) return@runCatching
+            visor.contactPut(MailContacts.saved(book, name, address))
+        }
+    }
+}
+
+/** Takes [pk] off the visor's book, and a contact it leaves with no key or mailbox. */
+private fun ChatRepository.unshareContact(pk: String) {
+    fun mine(key: String) = key.equals(pk, true)
+    fun mineMail(mail: String) = SkymailAddress.pkOfAddress(mail)?.let(::mine) == true
+    scope.launch {
+        runCatching {
+            val visor = VisorApi.get(app)
+            visor.contacts().filter { c -> c.keys.any(::mine) || c.mail.any(::mineMail) }.forEach { c ->
+                val rest = c.copy(keys = c.keys.filterNot(::mine), mail = c.mail.filterNot(::mineMail))
+                if (rest.keys.isEmpty() && rest.mail.isEmpty()) visor.contactDelete(c.uid) else visor.contactPut(rest)
+            }
+        }
+    }
 }
 
 /** A peer's published profile, or null when it cannot be had. `unreachable` is told apart. */

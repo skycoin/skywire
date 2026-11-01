@@ -683,20 +683,23 @@ class ChatRepository private constructor(internal val app: Context) {
 
     fun isContact(pk: String): Boolean = pk.lowercase() in store.state.value.contacts
 
-    fun addContact(pk: String, name: String? = null, avatar: ByteArray? = null): Boolean {
+    /** [share] false is SkyMail adding from the visor's book, which already holds the contact. */
+    fun addContact(pk: String, name: String? = null, avatar: ByteArray? = null, share: Boolean = true): Boolean {
         val p = pk.lowercase()
         if (!isPk(p)) return false
-        if (!name.isNullOrBlank() && names.value[p].isNullOrEmpty()) setName(p, name)
+        if (!name.isNullOrBlank() && names.value[p].isNullOrEmpty()) setName(p, name, share = false)
         if (avatar != null && !store.hasAvatar(p)) store.setAvatar(p, avatar)
         if (p !in store.state.value.contacts) store.update { s -> s.copy(contacts = s.contacts + p) }
+        if (share) shareContact(p)
         return true
     }
 
-    fun setName(pk: String, name: String) {
+    fun setName(pk: String, name: String, share: Boolean = true) {
         val p = pk.lowercase()
         val clean = name.trim().replace(Regex("\\s+"), " ").take(NAME_MAX)
         names.update { if (clean.isEmpty()) it - p else it + (p to clean) }
         scope.launch { runCatching { api.setContactName(p, clean) } }
+        if (share && p in store.state.value.contacts) shareContact(p)
     }
 
     companion object {

@@ -20,6 +20,7 @@ import com.skycoin.skywire.api.MailStatus
 import com.skycoin.skywire.api.MailSummary
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.chat.ChatRepository
+import com.skycoin.skywire.chat.removeContact
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
@@ -415,11 +416,22 @@ class MailViewModel(app: Application) : AndroidViewModel(app) {
         if (name.isBlank()) return
         changeContacts(string(R.string.mail_contact_saved)) {
             api.contactPut(MailContacts.saved(api.contacts(), name, clean, uid, replacing))
+            // SkyChat lists the person too, under the same name.
+            SkymailAddress.pkOfAddress(clean)?.let { pk ->
+                val chat = ChatRepository.get(getApplication())
+                chat.setName(pk, name, share = false)
+                chat.addContact(pk, share = false)
+            }
         }
     }
 
-    /** Removes the whole contact from the book, not only its mail addresses. */
-    fun deleteContact(uid: String) = changeContacts(null) { api.contactDelete(uid) }
+    /** Removes the whole contact from the book, not only its mail addresses, and from SkyChat. */
+    fun deleteContact(uid: String) = changeContacts(null) {
+        val keys = mutable.value.contacts.firstOrNull { it.uid == uid }?.addresses.orEmpty().mapNotNull(SkymailAddress::pkOfAddress)
+        api.contactDelete(uid)
+        val chat = ChatRepository.get(getApplication())
+        keys.forEach { chat.removeContact(it.lowercase(), share = false) }
+    }
 
     private suspend fun loadContacts() {
         runCatching { api.contacts() }
