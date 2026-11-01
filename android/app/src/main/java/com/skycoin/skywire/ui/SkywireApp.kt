@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -200,13 +201,12 @@ fun SkywireApp() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.HOME,
-                // consumeWindowInsets so a destination can still ask for the
-                // insets it needs — the chat composer's imePadding would otherwise
-                // count the navigation bar twice, once here and once in the
-                // keyboard inset it is measured from.
+                // The window never pans (adjustResize in the manifest), so every screen
+                // ends at the keyboard here, less the bottom bar consumed above.
                 modifier = Modifier
                     .padding(innerPadding)
                     .consumeWindowInsets(innerPadding)
+                    .imePadding()
                     .tabSwipe(enabled = currentRoute in TAB_ORDER && !tabSwipeHeld.value) { next ->
                         val at = TAB_ORDER.indexOf(currentRoute)
                         when (val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)) {

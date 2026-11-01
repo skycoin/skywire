@@ -1,6 +1,5 @@
 package com.skycoin.skywire.ui.chat
 
-import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,15 +99,6 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         DeepLinks.chatLinkHandled(link)
     }
 
-    // The composer rides the keyboard through imePadding; a panned window
-    // would move it twice and push the header off screen.
-    DisposableEffect(context) {
-        val window = context.activity()?.window
-        val previous = window?.attributes?.softInputMode
-        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        onDispose { previous?.let { window.setSoftInputMode(it) } }
-    }
-
     BackHandler(enabled = pages.size > 1) { viewModel.pop() }
     // Inside a conversation, horizontal drags belong to the chat (slide to cancel, seek bars).
     HoldTabSwipe(pages.size > 1)
@@ -188,10 +178,4 @@ private fun ChatStatus(conn: ChatConn, onRetry: () -> Unit) {
             FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
         }
     }
-}
-
-private tailrec fun android.content.Context.activity(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
-    is android.content.ContextWrapper -> baseContext.activity()
-    else -> null
 }
