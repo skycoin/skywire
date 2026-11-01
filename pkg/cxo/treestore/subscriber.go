@@ -564,6 +564,17 @@ func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Dur
 			err = s.ConnectTCP(ctx, *addrPtr)
 		} else {
 			target = pkPtr.Hex()[:8]
+			// An earlier kick re-used the cached conn and the fill still broke,
+			// so that conn delivers Roots but not objects. Dial a fresh one.
+			if streak := s.fillBreakStreak.Load(); kicked && streak >= 2 {
+				if d := s.cxoNode.DMSG(); d != nil {
+					d.Drop(*pkPtr)
+					if s.log != nil {
+						s.log.WithField("publisher", target).WithField("break_streak", streak).
+							Info("treestore: reconnect-watchdog dropped the publisher conn after repeated fill breaks")
+					}
+				}
+			}
 			err = s.Connect(ctx, *pkPtr)
 		}
 		cancel()
