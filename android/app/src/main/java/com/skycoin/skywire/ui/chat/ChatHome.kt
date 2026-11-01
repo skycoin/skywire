@@ -549,6 +549,7 @@ fun groupSubtitle(g: GroupInfo, me: String): String {
         g.status == "awaiting_approval" -> parts += stringResource(R.string.chat_state_waiting)
         g.status == "denied" -> parts += stringResource(R.string.chat_state_declined)
         g.status == "banned" -> parts += stringResource(R.string.chat_state_banned)
+        g.status == "removed" -> parts += stringResource(R.string.chat_state_removed)
         g.readOnly -> parts += stringResource(R.string.chat_state_read_only)
         g.canPost == false -> parts += stringResource(R.string.chat_state_restricted)
     }

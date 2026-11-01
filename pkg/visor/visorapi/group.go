@@ -93,8 +93,8 @@ type GroupInfo struct {
 	// (banned > muted > read-only).
 	CanPost          bool   `json:"can_post"`
 	CannotPostReason string `json:"cannot_post_reason,omitempty"`
-	// CannotPostCode is the reason as a stable code (banned, muted, channel,
-	// read_only), for a client that shows it in the user's language.
+	// CannotPostCode is the reason as a stable code (banned, removed, muted,
+	// channel, read_only), for a client that shows it in the user's language.
 	CannotPostCode string `json:"cannot_post_code,omitempty"`
 
 	// PendingJoins is the number of join requests awaiting an admin

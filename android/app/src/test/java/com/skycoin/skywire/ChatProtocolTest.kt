@@ -151,7 +151,7 @@ class ChatProtocolTest {
         val info = json.decodeFromString<GroupInfo>("""{"can_post":false,"cannot_post_reason":"this is a channel — only admins can post","cannot_post_code":"channel"}""")
         assertEquals("channel", info.cannotPostCode)
         // The codes pkg/skychat/group PostBlock returns.
-        val codes = listOf("banned", "muted", "channel", "read_only")
+        val codes = listOf("banned", "removed", "muted", "channel", "read_only")
         val res = codes.map { cannotPostRes(it) }
         assertTrue(res.none { it == null })
         assertEquals(codes.size, res.toSet().size)

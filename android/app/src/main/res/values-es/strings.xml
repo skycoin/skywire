@@ -348,6 +348,7 @@
     <string name="transport_sudph_hint">UDP directo con perforación de NAT. Necesita un NAT que lo permita, y muchos operadores no lo hacen.</string>
 
     <!-- SkyChat (embedded web UI) -->
+    <string name="chat_cannot_post_removed">Un administrador te ha quitado de este grupo.</string>
     <string name="chat_clear_selection">Cancelar selección</string>
     <string name="chat_confirm_delete_selected">¿Eliminar para mí los mensajes seleccionados?\n\nNo se puede deshacer.</string>
     <string name="chat_delete_selected">Eliminar seleccionados</string>
@@ -1236,6 +1237,7 @@
     <string name="help_mail_body">SkyMail es correo electrónico entre nodos. Tu nodo tiene un buzón en una dirección hecha con su clave pública, y el correo viaja por Skywire, cifrado, con la clave del remitente probada por la red y no por un servidor de correo.\n\nNo llega al correo electrónico común, y no se puede escribir a un nodo desconectado: el correo sale en el acto y nada lo reintenta. Usa la dirección .dmsg desde un teléfono; una dirección .skynet necesita una ruta, que un teléfono rara vez tiene.\n\nEl correo se guarda en este teléfono, dentro de los límites de tamaño y antigüedad de los ajustes del buzón.</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">Adjunto</string>
+    <string name="chat_state_removed">retirado</string>
     <string name="chat_you">Tú</string>
     <string name="chat_note_failed">Error: %1$s</string>
     <string name="chat_note_group_send_failed">No se pudo enviar al grupo: %1$s</string>
