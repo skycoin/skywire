@@ -361,3 +361,9 @@ func (h *Host) dropExpiredRegs(now time.Time) {
 		h.saveRegs()
 	}
 }
+
+// Record returns pk's registered record while it is valid and accepted.
+func (h *Host) Record(pk cipher.PubKey) (Record, bool) {
+	reg, ok := h.active(pk, time.Now())
+	return reg.Record, ok
+}

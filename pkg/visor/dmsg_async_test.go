@@ -132,12 +132,7 @@ func TestDmsgAsyncHostSendsToItsVisor(t *testing.T) {
 	}})
 	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hostC.LocalPK())
 	require.NoError(t, rcpt.DmsgAsyncSync())
-	st, err := rcpt.DmsgAsyncStatus()
-	require.NoError(t, err)
-
-	host.async.mu.Lock()
-	host.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
-	host.async.mu.Unlock()
+	// No cache and no discovery: the host knows the record from the registration.
 	res, err := host.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcptC.LocalPK(), Port: 1, Payload: []byte("from your hypervisor")})
 	require.NoError(t, err)
 	require.Equal(t, hostC.LocalPK(), res.Host)

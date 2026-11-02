@@ -382,13 +382,19 @@ func (v *Visor) AsyncHandle(port uint16, h dmsgasync.Handler) {
 	v.async.handlers[port] = h
 }
 
-// asyncRecordFor finds to's inbox record: a recent one from the cache, else
-// dmsg discovery.
+// asyncRecordFor finds to's inbox record: its registration on this visor's own
+// host, else a recent one from the cache, else dmsg discovery.
 func (v *Visor) asyncRecordFor(ctx context.Context, to cipher.PubKey) (dmsgasync.Record, error) {
 	a := &v.async
 	a.mu.Lock()
 	c, ok := a.cache[to]
+	host := a.host
 	a.mu.Unlock()
+	if host != nil {
+		if rec, ok := host.Record(to); ok {
+			return rec, nil
+		}
+	}
 	if ok && time.Since(c.at) < asyncRecordCacheTTL && c.rec.Verify(time.Now()) == nil {
 		return c.rec, nil
 	}
