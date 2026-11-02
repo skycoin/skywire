@@ -51,7 +51,13 @@ addresses your wallet shows, so you would not see those rewards arrive.
    skywire skycoin web --wallet-dir ~/skycoin-reward-wallet
    ```
 
-   The Skycoin desktop wallet works the same way.
+   The page exists only while this command runs, so keep the terminal open
+   until you have copied the xpub. It is not the hypervisor UI, which is on
+   port 8000.
+
+   The Wallet page of the hypervisor UI cannot make this wallet yet. It keeps
+   its wallets in the browser, and there it always makes a deterministic
+   wallet, even when BIP44 is selected, so it never shows an xpub.
 
 2. Choose **New**, give the wallet a name, and set **Wallet type** to
    **BIP44 (HD Wallet)**. Write the seed down on paper and type it into
