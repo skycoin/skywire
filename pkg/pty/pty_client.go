@@ -113,6 +113,12 @@ func (*PtyClient) rpcMethod(m string) string {
 // call returns io.ErrClosedPipe as soon as the client closes, while the RPC
 // client may still decode a late reply into reply. Callers read reply only on nil.
 func (sc *PtyClient) call(method string, args, reply any) error {
+	// A call after close never starts, or a quick reply could win the select below.
+	select {
+	case <-sc.done:
+		return io.ErrClosedPipe
+	default:
+	}
 	call := sc.rpcC.Go(sc.rpcMethod(method), args, reply, nil)
 	select {
 	case <-sc.done:
