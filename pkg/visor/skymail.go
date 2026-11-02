@@ -389,3 +389,37 @@ func (v *Visor) MailRetry(id string) error {
 func (v *Visor) MailSetWhitelist(pks []cipher.PubKey) error {
 	return v.mailCall(func(c skymail.Control) error { return c.SetWhitelist(pks) })
 }
+
+func (h mailHost) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	res, err := h.v.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: rcpt, Port: skymail.Port, Payload: env, Ref: ref})
+	if err != nil {
+		return cipher.PubKey{}, err
+	}
+	return res.Host, nil
+}
+
+func (h mailHost) MailUnpark() ([]appserver.ParkedMail, error) {
+	msgs, err := h.v.asyncPeek([]uint16{skymail.Port})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]appserver.ParkedMail, len(msgs))
+	for i, m := range msgs {
+		out[i] = appserver.ParkedMail{ID: m.ID, Host: m.Host, From: m.From, Body: m.Payload}
+	}
+	return out, nil
+}
+
+func (h mailHost) MailAck(refs []appserver.ParkedRef) error {
+	byHost := map[cipher.PubKey][]string{}
+	for _, r := range refs {
+		byHost[r.Host] = append(byHost[r.Host], r.ID)
+	}
+	var errs []error
+	for host, ids := range byHost {
+		if err := h.v.asyncAck(host, ids); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}

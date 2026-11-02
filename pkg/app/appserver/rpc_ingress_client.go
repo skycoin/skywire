@@ -44,6 +44,9 @@ type RPCIngressClient interface {
 	MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error)
 	MailOpen(body []byte) ([]byte, cipher.PubKey, error)
 	MailHostInfo() (MailHostInfo, error)
+	MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error)
+	MailUnpark() ([]ParkedMail, error)
+	MailAck(refs []ParkedRef) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and

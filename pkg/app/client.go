@@ -214,6 +214,22 @@ func (c *Client) MailHostInfo() (appserver.MailHostInfo, error) {
 	return c.rpcC.MailHostInfo()
 }
 
+// MailPark asks the visor to park a sealed envelope for an offline recipient
+// on its dmsg-async inbox hosts. Only the mailbox app may.
+func (c *Client) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	return c.rpcC.MailPark(rcpt, env, ref)
+}
+
+// MailUnpark returns the mail parked for this visor, without removing it.
+func (c *Client) MailUnpark() ([]appserver.ParkedMail, error) {
+	return c.rpcC.MailUnpark()
+}
+
+// MailAck removes parked mail the mailbox took.
+func (c *Client) MailAck(refs []appserver.ParkedRef) error {
+	return c.rpcC.MailAck(refs)
+}
+
 // SetStatusOrLog sets the detailed status and logs the error if any.
 // Status transitions are best-effort — the app keeps running even if
 // the visor can't be notified, so callers don't have to handle the

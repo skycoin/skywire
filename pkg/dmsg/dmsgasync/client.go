@@ -148,29 +148,47 @@ func Fetch(ctx context.Context, dial Dialer, host cipher.PubKey, ports []uint16,
 	}
 }
 
-func fetchBatch(ctx context.Context, dial Dialer, host cipher.PubKey, ports []uint16, handle Handler) (int, bool, error) {
+// List returns one batch of what waits for the dialer on host for ports,
+// oldest first, without removing it, and whether more wait. Ack removes what
+// the caller took.
+func List(ctx context.Context, dial Dialer, host cipher.PubKey, ports []uint16) ([]Message, bool, error) {
 	conn, rep, err := do(ctx, dial, host, request{Op: OpFetch, Ports: ports})
 	if err != nil {
-		return 0, false, err
+		return nil, false, err
 	}
+	defer conn.Close() //nolint:errcheck
 	if err := rep.err(); err != nil {
-		_ = conn.Close() //nolint:errcheck
-		return 0, false, err
+		return nil, false, err
 	}
 	msgs := make([]Message, 0, len(rep.Messages))
 	for _, hd := range rep.Messages {
 		payload, err := readFrame(conn, fetchBatchBytes)
 		if err != nil {
-			_ = conn.Close() //nolint:errcheck
-			return 0, false, err
+			return nil, false, err
 		}
 		if len(payload) != hd.Size {
-			_ = conn.Close() //nolint:errcheck
-			return 0, false, ErrBadRequest
+			return nil, false, ErrBadRequest
 		}
 		msgs = append(msgs, Message{Header: hd, Payload: payload, Host: host})
 	}
-	_ = conn.Close() //nolint:errcheck
+	return msgs, rep.More, nil
+}
+
+// Ack removes the dialer's messages that ids name from host and reports how
+// many it removed.
+func Ack(ctx context.Context, dial Dialer, host cipher.PubKey, ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	rep, err := once(ctx, dial, host, request{Op: OpAck, IDs: ids})
+	return rep.Deleted, err
+}
+
+func fetchBatch(ctx context.Context, dial Dialer, host cipher.PubKey, ports []uint16, handle Handler) (int, bool, error) {
+	msgs, more, err := List(ctx, dial, host, ports)
+	if err != nil {
+		return 0, false, err
+	}
 	var acks []string
 	for _, m := range msgs {
 		if handle(m) == nil {
@@ -178,10 +196,10 @@ func fetchBatch(ctx context.Context, dial Dialer, host cipher.PubKey, ports []ui
 		}
 	}
 	if len(acks) == 0 {
-		return 0, rep.More, nil
+		return 0, more, nil
 	}
-	if _, err := once(ctx, dial, host, request{Op: OpAck, IDs: acks}); err != nil {
+	if _, err := Ack(ctx, dial, host, acks); err != nil {
 		return len(acks), false, err
 	}
-	return len(acks), rep.More, nil
+	return len(acks), more, nil
 }

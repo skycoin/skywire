@@ -37,7 +37,9 @@ type Host struct {
 	Sealer Sealer
 	// Peers are the visors this one manages as a hypervisor and its own
 	// hypervisors, the default helpers and relay-for lists.
-	Peers     func() (managed, hypervisors []cipher.PubKey)
+	Peers func() (managed, hypervisors []cipher.PubKey)
+	// Parker reaches the visor's dmsg-async inbox. Nil turns parking off.
+	Parker    Parker
 	OnDeliver func(Delivered)
 	Log       logrus.FieldLogger
 }
@@ -91,6 +93,7 @@ func StartService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	}
 	if cfg.Sealer != nil && cfg.Outbox {
 		mbCfg.Sealer = cfg.Sealer
+		mbCfg.Parker = cfg.Parker
 		mbCfg.Helpers = s.Helpers
 		mbCfg.RelayFor = func(pk cipher.PubKey) bool {
 			r, _ := s.RelayFor()
@@ -111,9 +114,10 @@ func StartService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	} else {
 		s.serve(ctx, NetSkynet, l)
 	}
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.mb.RunExpiry(ctx) }()
 	go func() { defer s.wg.Done(); s.mb.RunOutbox(ctx) }()
+	go func() { defer s.wg.Done(); s.mb.RunParked(ctx) }()
 	lim := s.mb.Limits()
 	cfg.Log.WithField("address", s.mb.Address("", Suffixes[0])).WithField("dir", cfg.Dir).
 		WithField("max_total_size", lim.MaxTotalSize).WithField("max_age", lim.MaxAge).
