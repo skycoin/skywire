@@ -1,0 +1,26 @@
+# Long-running: serve the standalone wasm-visor over HTTP, behind a reverse proxy.
+#
+# `skywire cli hv serve` builds the keyless self-contained page once at startup from
+# THIS binary's embedded wasm-visor + HV UI, then serves it. Because the page reflects
+# the running binary, "update the served version" == "restart this service after the
+# binary updates" — see the companion .path unit (or have your auto-updater restart it).
+#
+# Binds to localhost only; Caddy reverse-proxies it on the public subdomain. Adjust the
+# skywire path / port if needed.
+
+[Unit]
+Description=Serve the standalone wasm-visor (skywire cli hv serve)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/skywire cli hv serve --addr 127.0.0.1:7999
+Restart=on-failure
+RestartSec=2
+# Hardening (it's a static page server with no secrets/state):
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

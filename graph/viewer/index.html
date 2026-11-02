@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codebase Memory — Graph</title>
+    <script type="module" crossorigin src="assets/index-COugY7lX.js"></script>
+    <link rel="stylesheet" crossorigin href="assets/index-D27RSPSK.css">
+    <script>
+      // Added by scripts/graph-snapshot.sh — see ATTRIBUTION.
+      try {
+        if (!localStorage.getItem('cbm-display')) {
+          localStorage.setItem('cbm-display', '{"edgeBrightness":0.3,"nodeGlow":0.3,"bloom":0.2}');
+        }
+      } catch (e) {}
+      if (!new URLSearchParams(location.search).get('project')) {
+        location.replace('?tab=graph&project=skywire' + location.hash);
+      }
+    </script>
+  </head>
+  <body class="bg-[#0a0a10] text-[#e4e4ed] min-h-screen">
+    <div id="root"></div>
+  </body>
+</html>
