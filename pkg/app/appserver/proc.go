@@ -48,7 +48,7 @@ type Proc struct {
 	// cmd is the external app's OS process (*exec.Cmd on native builds). Typed
 	// `any` so os/exec stays out of the TinyGo graph; nil for in-process apps.
 	cmd       any
-	isRunning int32
+	isRunning atomic.Int32
 	waitMx    sync.Mutex
 	waitErr   error
 
@@ -203,7 +203,7 @@ func (p *Proc) AwaitConn() bool {
 
 // Start starts the application.
 func (p *Proc) Start() error {
-	if !atomic.CompareAndSwapInt32(&p.isRunning, 0, 1) {
+	if !p.isRunning.CompareAndSwap(0, 1) {
 		return errProcAlreadyRunning
 	}
 
@@ -395,7 +395,7 @@ func (p *Proc) startInProcess() error {
 
 // Stop stops the application.
 func (p *Proc) Stop() error {
-	if atomic.LoadInt32(&p.isRunning) == 0 {
+	if p.isRunning.Load() == 0 {
 		return errProcNotStarted
 	}
 
@@ -426,7 +426,7 @@ func (p *Proc) Stop() error {
 
 // Wait waits for the application cmd to exit.
 func (p *Proc) Wait() error {
-	if atomic.LoadInt32(&p.isRunning) != 1 {
+	if p.isRunning.Load() != 1 {
 		return errProcNotStarted
 	}
 
@@ -439,7 +439,7 @@ func (p *Proc) Wait() error {
 
 // IsRunning checks whether application cmd is running.
 func (p *Proc) IsRunning() bool {
-	return atomic.LoadInt32(&p.isRunning) == 1
+	return p.isRunning.Load() == 1
 }
 
 // SetDetailedStatus sets proc's detailed status.

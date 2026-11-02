@@ -37,7 +37,7 @@ type SkywireNetworker struct {
 	log       logrus.FieldLogger
 	r         router.Router
 	porter    *netutil.Porter
-	isServing int32
+	isServing atomic.Int32
 
 	// appDirectMux carries direct-transport app dials (route ID 0).
 	// When non-nil, Dial tries it first before falling back to
@@ -49,7 +49,7 @@ type SkywireNetworker struct {
 	// appDirectAccepting is set on the first SetAppDirectMux call so
 	// repeated calls (or late mux replacement) don't spawn duplicate
 	// accept goroutines.
-	appDirectAccepting int32
+	appDirectAccepting atomic.Int32
 }
 
 // directDialHandshakeTimeout bounds how long we'll wait for the
@@ -373,7 +373,7 @@ func (r *SkywireNetworker) SetAppDirectMux(mux *transport.VStreamMux) {
 	if mux == nil {
 		return
 	}
-	if !atomic.CompareAndSwapInt32(&r.appDirectAccepting, 0, 1) {
+	if !r.appDirectAccepting.CompareAndSwap(0, 1) {
 		return
 	}
 	go r.serveDirectMux(mux)
@@ -587,7 +587,7 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 	lis.freePort = freePort
 	lis.freePortMx.Unlock()
 
-	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
+	if r.isServing.CompareAndSwap(0, 1) {
 		go func() {
 			// serveRouteGroup only ever returns a non-nil error.
 			if err := r.serveRouteGroup(ctx); !errors.Is(err, net.ErrClosed) {

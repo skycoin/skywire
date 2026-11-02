@@ -1,7 +1,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/transport"
@@ -46,7 +45,7 @@ func TestFECStripeCap(t *testing.T) {
 		t.Fatalf("all legs block-full: got (%d,%v), want (0,false)", alt, ok)
 	}
 	// Advancing to the next block resets the per-leg counts → room again.
-	atomic.StoreUint32(&m.writeSeq, fecDefaultKDefault) // block 1
+	m.writeSeq.Store(fecDefaultKDefault) // block 1
 	if alt, ok := m.fecStripeReassign(tps, 0); ok || alt != 0 {
 		t.Fatalf("new block: got (%d,%v), want (0,false)", alt, ok)
 	}

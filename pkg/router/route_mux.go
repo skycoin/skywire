@@ -189,8 +189,8 @@ type routeMux struct {
 	logger *logging.Logger
 
 	// Sequence numbering for outgoing packets
-	writeSeq uint32 // atomic: next outgoing sequence number
-	tpIndex  uint32 // atomic: round-robin fallback index for transport selection
+	writeSeq atomic.Uint32 // atomic: next outgoing sequence number
+	tpIndex  atomic.Uint32 // atomic: round-robin fallback index for transport selection
 
 	// ctrlSeq numbers the IN-BAND leg control frames (mux_control_frame.go),
 	// which ride the reserved top band of the sequence space and so must not
@@ -206,9 +206,9 @@ type routeMux struct {
 	// duplicate report from the receiver widens it (we retransmitted too eagerly),
 	// clean acks decay it back toward the static baseline. All atomic.
 	lastSendNano    atomic.Int64
-	tlpProbeCount   int32
+	tlpProbeCount   atomic.Int32
 	rackFactorMilli atomic.Int64
-	lastAckedContig uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
+	lastAckedContig atomic.Uint32 // atomic: highest SACK lastContiguous seen (ack-progress edge for TLP reset)
 	// ackDelayMilli is an EWMA (×1000) of the measured send→ack delay of
 	// never-retransmitted frames (fed by retxBuf.onAckDelay). Under load it is
 	// the queue, not the wire, that dominates feedback delay: a saturated leg

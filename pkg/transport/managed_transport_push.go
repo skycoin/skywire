@@ -70,7 +70,7 @@ func (mt *ManagedTransport) Start(readCh chan<- routing.Packet, onEnd func()) {
 	mt.wg.Add(1)
 	mt.lastRecvNanos.Store(time.Now().UnixNano())
 	mt.log.WithField("tp_id", mt.Entry.ID).WithField("remote_pk", mt.rPK).
-		WithField("tp_index", atomic.AddInt32(&mTpCount, 1)).Debug("Serving without a read goroutine.")
+		WithField("tp_index", mTpCount.Add(1)).Debug("Serving without a read goroutine.")
 
 	ps := &pushState{mt: mt, readCh: readCh, onEnd: onEnd}
 	mt.transportMx.Lock()
@@ -110,7 +110,7 @@ func (ps *pushState) finish() {
 	}
 	mt := ps.mt
 	mt.recordLog()
-	mt.log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).Debug("Stopped serving.")
+	mt.log.WithField("remaining_tps", mTpCount.Add(-1)).Debug("Stopped serving.")
 	mt.wg.Done()
 	if ps.onEnd != nil {
 		ps.onEnd()

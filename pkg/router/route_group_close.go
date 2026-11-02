@@ -4,7 +4,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
@@ -66,7 +65,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 
 	if closeInitiator {
 		// will wait for close response from all the transports
-		atomic.StoreInt32(&rg.closeDonePending, int32(len(tps))) //nolint:gosec
+		rg.closeDonePending.Store(int32(len(tps))) //nolint:gosec
 		rg.closeDone()
 	}
 
@@ -89,7 +88,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		}
 	} else if closeInitiator {
 		// Not waiting, so nothing else will mark the close done.
-		atomic.StoreInt32(&rg.closeDonePending, 0)
+		rg.closeDonePending.Store(0)
 		rg.signalCloseDone()
 	}
 
@@ -136,7 +135,7 @@ func (rg *RouteGroup) handleClosePacket(code routing.CloseCode) error {
 		// this route group initiated close loop and got response
 		rg.logger.Debugf("Handling response close packet with code %d", code)
 
-		if atomic.AddInt32(&rg.closeDonePending, -1) <= 0 {
+		if rg.closeDonePending.Add(-1) <= 0 {
 			rg.signalCloseDone()
 		}
 		return nil
@@ -197,14 +196,14 @@ func (rg *RouteGroup) waitForCloseRouteGroup(waitTimeout time.Duration) error {
 		return nil
 	case <-time.After(waitTimeout):
 		// Force-complete: zero the counter and signal the channel.
-		atomic.StoreInt32(&rg.closeDonePending, 0)
+		rg.closeDonePending.Store(0)
 		rg.signalCloseDone()
 		return fmt.Errorf("close route group timed out after %v", waitTimeout)
 	}
 }
 
 func (rg *RouteGroup) isCloseInitiator() bool {
-	return atomic.LoadInt32(&rg.closeInitiated) == 1
+	return rg.closeInitiated.Load() == 1
 }
 
 func (rg *RouteGroup) setRemoteClosed() {

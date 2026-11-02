@@ -12,7 +12,6 @@ package router
 import (
 	"io"
 	"net"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -214,10 +213,10 @@ func TestDatagramRouteGroupIsAlive(t *testing.T) {
 	assert.True(t, dg.IsAlive(), "fresh group should be alive")
 
 	// Simulate accumulated write failures.
-	atomic.StoreInt32(&dg.consecutiveWriteFailures, maxConsecutiveWriteFailures)
+	dg.consecutiveWriteFailures.Store(maxConsecutiveWriteFailures)
 	assert.False(t, dg.IsAlive(), "group with maxed-out failures should not be alive")
 
-	atomic.StoreInt32(&dg.consecutiveWriteFailures, 0)
+	dg.consecutiveWriteFailures.Store(0)
 	require.NoError(t, dg.Close())
 	assert.False(t, dg.IsAlive(), "closed group should not be alive")
 }

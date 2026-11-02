@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -158,7 +157,7 @@ func (rg *RouteGroup) recoverySnapshot(legs []MuxLeg) *MuxRecovery {
 		TLPProbes:          m.tlpProbes.Load(),
 		SACKsRecv:          m.sacksRecv.Load(),
 		LastSACKRecvMsAgo:  msSinceNano(&m.lastSACKRecvNano),
-		LastSACKRecvContig: atomic.LoadUint32(&m.lastAckedContig),
+		LastSACKRecvContig: m.lastAckedContig.Load(),
 		ReorderNextSeq:     m.reorderNextSeq(),
 		ReorderPending:     m.reorderPending(),
 		ReorderDrops:       m.reorderDrops.Load(),

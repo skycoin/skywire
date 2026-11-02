@@ -113,13 +113,13 @@ type pingTreeCandidate struct {
 // RunDone emission. All fields are int32 for direct proto field copy.
 type pingTreeTotals struct {
 	mu              sync.Mutex
-	discovered      int32
-	pinged          int32
-	succeeded       int32
-	failed          int32
-	skippedCached   int32
+	discovered      atomic.Int32
+	pinged          atomic.Int32
+	succeeded       atomic.Int32
+	failed          atomic.Int32
+	skippedCached   atomic.Int32
 	peakInFlight    int32
-	currentInFlight int32 // tracked via atomic, snapshot to peak under mu
+	currentInFlight atomic.Int32 // tracked via atomic, snapshot to peak under mu
 }
 
 // levelStats accumulates per-BFS-level counters consumed by
@@ -128,13 +128,13 @@ type pingTreeTotals struct {
 // that level's results (was previously zero-filled because the
 // per-level breakdown wasn't being tracked anywhere).
 type levelStats struct {
-	succeeded     int32
-	failed        int32
-	skippedCached int32
+	succeeded     atomic.Int32
+	failed        atomic.Int32
+	skippedCached atomic.Int32
 }
 
 func (t *pingTreeTotals) bumpInFlight(delta int32) {
-	cur := atomic.AddInt32(&t.currentInFlight, delta)
+	cur := t.currentInFlight.Add(delta)
 	if delta > 0 {
 		t.mu.Lock()
 		if cur > t.peakInFlight {
@@ -231,7 +231,7 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 	emitStatus("discovering_level_1", 0, 0, "")
 	level1 := candidatesFromAdjacency(adjacency, localPKHex, localPKHex, 1, visited)
 	for _, c := range level1 {
-		atomic.AddInt32(&totals.discovered, 1)
+		totals.discovered.Add(1)
 		emit(&PingTreeEvent_Discovered{
 			Discovered: candidateToDiscovered(c),
 		})
@@ -256,8 +256,8 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 					LatencySource: "skipped",
 				},
 			})
-			atomic.AddInt32(&totals.skippedCached, 1)
-			atomic.AddInt32(&level1Stats.skippedCached, 1)
+			totals.skippedCached.Add(1)
+			level1Stats.skippedCached.Add(1)
 		}
 	}
 	level1Done := levelDoneFor(level1, 1, level1Stats)
@@ -299,7 +299,7 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 			var levelN []pingTreeCandidate
 			for parentPK := range parents {
 				for _, c := range candidatesFromAdjacency(adjacency, parentPK, parentPK, level, visited) {
-					atomic.AddInt32(&totals.discovered, 1)
+					totals.discovered.Add(1)
 					levelN = append(levelN, c)
 					emit(&PingTreeEvent_Discovered{Discovered: candidateToDiscovered(c)})
 				}
@@ -329,8 +329,8 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 							LatencySource: "skipped",
 						},
 					})
-					atomic.AddInt32(&totals.skippedCached, 1)
-					atomic.AddInt32(&levelNStats.skippedCached, 1)
+					totals.skippedCached.Add(1)
+					levelNStats.skippedCached.Add(1)
 				}
 			}
 			emit(&PingTreeEvent_LevelDone{LevelDone: levelDoneFor(levelN, level, levelNStats)})
@@ -346,11 +346,11 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 FINALIZE:
 	emit(&PingTreeEvent_RunDone{
 		RunDone: &PingTreeRunDone{
-			TotalDiscovered:    atomic.LoadInt32(&totals.discovered),
-			TotalPinged:        atomic.LoadInt32(&totals.pinged),
-			TotalSucceeded:     atomic.LoadInt32(&totals.succeeded),
-			TotalFailed:        atomic.LoadInt32(&totals.failed),
-			TotalSkippedCached: atomic.LoadInt32(&totals.skippedCached),
+			TotalDiscovered:    totals.discovered.Load(),
+			TotalPinged:        totals.pinged.Load(),
+			TotalSucceeded:     totals.succeeded.Load(),
+			TotalFailed:        totals.failed.Load(),
+			TotalSkippedCached: totals.skippedCached.Load(),
 			WallTimeNs:         time.Since(runStart).Nanoseconds(),
 			PeakInFlight:       totals.peakInFlight,
 			TerminationReason:  terminationReason,
@@ -416,8 +416,9 @@ func (s *PingServer) pingTreePingLevel(
 	var wg sync.WaitGroup
 	stats := &levelStats{}
 
-	var pending = int32(len(candidates)) //nolint:gosec // candidate count is bounded by BFS frontier, fits int32
-	emitStatus("pinging_level_"+itoa(level), 0, pending, "")
+	var pending atomic.Int32
+	pending.Store(int32(len(candidates))) //nolint:gosec // candidate count is bounded by BFS frontier, fits int32
+	emitStatus("pinging_level_"+itoa(level), 0, pending.Load(), "")
 
 	for _, c := range candidates {
 		if ctx.Err() != nil {
@@ -430,13 +431,13 @@ func (s *PingServer) pingTreePingLevel(
 		if level == 1 && cfg.UseTransportLatency {
 			if result, hit := s.tryTransportLatencyFastPath(c); hit {
 				emit(&PingTreeEvent_PingResult{PingResult: result})
-				atomic.AddInt32(&totals.skippedCached, 1)
-				atomic.AddInt32(&stats.skippedCached, 1)
-				atomic.AddInt32(&pending, -1)
+				totals.skippedCached.Add(1)
+				stats.skippedCached.Add(1)
+				pending.Add(-1)
 				emitStatus(
 					"pinging_level_"+itoa(level),
-					atomic.LoadInt32(&totals.currentInFlight),
-					atomic.LoadInt32(&pending),
+					totals.currentInFlight.Load(),
+					pending.Load(),
 					"",
 				)
 				continue
@@ -445,7 +446,7 @@ func (s *PingServer) pingTreePingLevel(
 
 		sem <- struct{}{}
 		wg.Add(1)
-		atomic.AddInt32(&pending, -1)
+		pending.Add(-1)
 		totals.bumpInFlight(1)
 		go func(cand pingTreeCandidate) {
 			defer func() {
@@ -457,21 +458,21 @@ func (s *PingServer) pingTreePingLevel(
 				// or panic on — this send to a now-closed channel.
 				emitStatus(
 					"pinging_level_"+itoa(level),
-					atomic.LoadInt32(&totals.currentInFlight),
-					atomic.LoadInt32(&pending),
+					totals.currentInFlight.Load(),
+					pending.Load(),
 					"",
 				)
 				wg.Done()
 			}()
 			result := s.pingOneTransport(ctx, cfg, cand)
 			emit(&PingTreeEvent_PingResult{PingResult: result})
-			atomic.AddInt32(&totals.pinged, 1)
+			totals.pinged.Add(1)
 			if result.Failed {
-				atomic.AddInt32(&totals.failed, 1)
-				atomic.AddInt32(&stats.failed, 1)
+				totals.failed.Add(1)
+				stats.failed.Add(1)
 			} else {
-				atomic.AddInt32(&totals.succeeded, 1)
-				atomic.AddInt32(&stats.succeeded, 1)
+				totals.succeeded.Add(1)
+				stats.succeeded.Add(1)
 			}
 		}(c)
 	}
@@ -779,9 +780,9 @@ func levelDoneFor(candidates []pingTreeCandidate, level int, stats *levelStats) 
 		Attempted: int32(len(candidates)), //nolint:gosec // candidate count fits int32
 	}
 	if stats != nil {
-		ev.Succeeded = atomic.LoadInt32(&stats.succeeded)
-		ev.Failed = atomic.LoadInt32(&stats.failed)
-		ev.SkippedCached = atomic.LoadInt32(&stats.skippedCached)
+		ev.Succeeded = stats.succeeded.Load()
+		ev.Failed = stats.failed.Load()
+		ev.SkippedCached = stats.skippedCached.Load()
 	}
 	return ev
 }

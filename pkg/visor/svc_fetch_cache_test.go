@@ -12,16 +12,16 @@ import (
 
 func TestSvcFetchCache_ServesFreshWithoutAsking(t *testing.T) {
 	var c svcFetchCache
-	var calls int32
-	fetch := func() ([]byte, error) { atomic.AddInt32(&calls, 1); return []byte("list"), nil }
+	var calls atomic.Int32
+	fetch := func() ([]byte, error) { calls.Add(1); return []byte("list"), nil }
 	for i := 0; i < 3; i++ {
 		body, err := c.get(context.Background(), "sd /api/services?type=vpn", fetch)
 		if err != nil || string(body) != "list" {
 			t.Fatalf("get #%d = %q, %v", i, body, err)
 		}
 	}
-	if calls != 1 {
-		t.Fatalf("service discovery was asked %d times for one fresh list", calls)
+	if calls.Load() != 1 {
+		t.Fatalf("service discovery was asked %d times for one fresh list", calls.Load())
 	}
 }
 
@@ -55,10 +55,10 @@ func TestSvcFetchCache_StaleBeatsAnError(t *testing.T) {
 
 func TestSvcFetchCache_OneFetchAtATime(t *testing.T) {
 	var c svcFetchCache
-	var calls int32
+	var calls atomic.Int32
 	release := make(chan struct{})
 	//nolint:unparam // matches the fetcher signature svcFetchCache takes; this one never fails
-	fetch := func() ([]byte, error) { atomic.AddInt32(&calls, 1); <-release; return []byte("list"), nil }
+	fetch := func() ([]byte, error) { calls.Add(1); <-release; return []byte("list"), nil }
 	var wg sync.WaitGroup
 	results := make([]string, 5)
 	for i := range results {
@@ -74,8 +74,8 @@ func TestSvcFetchCache_OneFetchAtATime(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // let every caller queue behind the first
 	close(release)
 	wg.Wait()
-	if calls != 1 {
-		t.Fatalf("%d fetches ran for five concurrent callers, want 1", calls)
+	if calls.Load() != 1 {
+		t.Fatalf("%d fetches ran for five concurrent callers, want 1", calls.Load())
 	}
 	for i, r := range results {
 		if r != "list" {

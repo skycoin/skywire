@@ -2,7 +2,6 @@
 package router
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -111,9 +110,9 @@ func (m *routeMux) onSACKReceived(lastContig uint32, words []uint64, dsackSeq ui
 	}
 	// Ack progress: the contiguous frontier moved, so the tail is advancing —
 	// clear the probe budget so a later stall is treated as a fresh event.
-	if prev := atomic.LoadUint32(&m.lastAckedContig); lastContig > prev {
-		atomic.StoreUint32(&m.lastAckedContig, lastContig)
-		atomic.StoreInt32(&m.tlpProbeCount, 0)
+	if prev := m.lastAckedContig.Load(); lastContig > prev {
+		m.lastAckedContig.Store(lastContig)
+		m.tlpProbeCount.Store(0)
 	}
 	if hasDSACK {
 		// The duplicate proves the ORIGINAL arrived after we had already
@@ -175,7 +174,7 @@ func (m *routeMux) tlpProbeSeq(now time.Time) (uint32, bool) {
 	if !ok {
 		return 0, false // nothing outstanding — no tail to probe
 	}
-	if int(atomic.LoadInt32(&m.tlpProbeCount)) >= m.knInt(routersettings.TLPMaxProbes) {
+	if int(m.tlpProbeCount.Load()) >= m.knInt(routersettings.TLPMaxProbes) {
 		return 0, false // budget spent; defer to reactive SACK / retx aging
 	}
 	last := m.lastSendNano.Load()
@@ -185,7 +184,7 @@ func (m *routeMux) tlpProbeSeq(now time.Time) (uint32, bool) {
 	if now.Sub(time.Unix(0, last)) < m.ptoInterval() {
 		return 0, false // not idle long enough
 	}
-	atomic.AddInt32(&m.tlpProbeCount, 1)
+	m.tlpProbeCount.Add(1)
 	return tail, true
 }
 

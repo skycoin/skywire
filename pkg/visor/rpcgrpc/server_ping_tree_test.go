@@ -248,8 +248,8 @@ func TestPingTreeTotalsBumpInFlight(t *testing.T) {
 	if tot.peakInFlight != 3 {
 		t.Errorf("peak = %d, want 3 (max of 1,2,3,2,3,2,1,0)", tot.peakInFlight)
 	}
-	if tot.currentInFlight != 0 {
-		t.Errorf("current = %d, want 0 (balanced bumps)", tot.currentInFlight)
+	if tot.currentInFlight.Load() != 0 {
+		t.Errorf("current = %d, want 0 (balanced bumps)", tot.currentInFlight.Load())
 	}
 }
 

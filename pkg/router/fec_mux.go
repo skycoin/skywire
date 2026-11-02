@@ -27,7 +27,6 @@ package router
 import (
 	"encoding/binary"
 	"sync"
-	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -429,7 +428,7 @@ func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int)
 	if !m.fecStripeActive() || idx < 0 || idx >= len(tps) {
 		return idx, false
 	}
-	block := atomic.LoadUint32(&m.writeSeq) / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
+	block := m.writeSeq.Load() / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
 	m.fecStripeMu.Lock()
 	defer m.fecStripeMu.Unlock()
 	m.fecStripeSyncLocked(block)
@@ -463,7 +462,7 @@ func (m *routeMux) fecStripeUse(idx int) {
 	if !m.fecStripeActive() || idx < 0 {
 		return
 	}
-	block := atomic.LoadUint32(&m.writeSeq) / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
+	block := m.writeSeq.Load() / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
 	m.fecStripeMu.Lock()
 	m.fecStripeSyncLocked(block)
 	m.fecStripeUsed[idx]++

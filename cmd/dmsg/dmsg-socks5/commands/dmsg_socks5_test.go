@@ -29,11 +29,11 @@ const testDmsgPort = uint16(1081)
 // listener really opens a dmsg stream per accepted connection.
 type countingDialer struct {
 	*dmsg.Client
-	dials int64
+	dials atomic.Int64
 }
 
 func (d *countingDialer) DialStream(ctx context.Context, addr dmsg.Addr) (*dmsg.Stream, error) {
-	atomic.AddInt64(&d.dials, 1)
+	d.dials.Add(1)
 	return d.Client.DialStream(ctx, addr)
 }
 
@@ -42,9 +42,9 @@ func (d *countingDialer) DialStream(ctx context.Context, addr dmsg.Addr) (*dmsg.
 // and not over a plain net dialer on the client host.
 type countingListener struct {
 	net.Listener
-	read    int64
-	written int64
-	accepts int64
+	read    atomic.Int64
+	written atomic.Int64
+	accepts atomic.Int64
 }
 
 func (l *countingListener) Accept() (net.Conn, error) {
@@ -52,7 +52,7 @@ func (l *countingListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	atomic.AddInt64(&l.accepts, 1)
+	l.accepts.Add(1)
 	return &countingConn{Conn: c, l: l}, nil
 }
 
@@ -63,13 +63,13 @@ type countingConn struct {
 
 func (c *countingConn) Read(b []byte) (int, error) {
 	n, err := c.Conn.Read(b)
-	atomic.AddInt64(&c.l.read, int64(n))
+	c.l.read.Add(int64(n))
 	return n, err
 }
 
 func (c *countingConn) Write(b []byte) (int, error) {
 	n, err := c.Conn.Write(b)
-	atomic.AddInt64(&c.l.written, int64(n))
+	c.l.written.Add(int64(n))
 	return n, err
 }
 
@@ -140,9 +140,9 @@ func socks5HTTPClient(t *testing.T, proxyAddr string) *http.Client {
 // the target server sees the request, a dmsg stream was dialed for it, and the
 // handshake plus payload bytes were counted crossing that stream.
 func TestSocks5ClientCarriesTrafficOverDmsg(t *testing.T) {
-	var hits int64
+	var hits atomic.Int64
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt64(&hits, 1)
+		hits.Add(1)
 		fmt.Fprint(w, "over-dmsg") //nolint:errcheck,gosec
 	}))
 	defer target.Close()
@@ -157,15 +157,15 @@ func TestSocks5ClientCarriesTrafficOverDmsg(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, "over-dmsg", string(body))
-	require.EqualValues(t, 1, atomic.LoadInt64(&hits))
+	require.EqualValues(t, 1, hits.Load())
 
 	// One local TCP connection => one dmsg stream, and the SOCKS5 session
 	// really crossed it.
-	require.EqualValues(t, 1, atomic.LoadInt64(&d.dials), "client did not dial a dmsg stream")
-	require.EqualValues(t, 1, atomic.LoadInt64(&l.accepts), "server end accepted no dmsg stream")
-	require.Greater(t, atomic.LoadInt64(&l.read), int64(len("GET / HTTP/1.1")),
+	require.EqualValues(t, 1, d.dials.Load(), "client did not dial a dmsg stream")
+	require.EqualValues(t, 1, l.accepts.Load(), "server end accepted no dmsg stream")
+	require.Greater(t, l.read.Load(), int64(len("GET / HTTP/1.1")),
 		"no SOCKS5 request bytes crossed the dmsg stream")
-	require.Greater(t, atomic.LoadInt64(&l.written), int64(len("over-dmsg")),
+	require.Greater(t, l.written.Load(), int64(len("over-dmsg")),
 		"no response bytes crossed the dmsg stream")
 }
 

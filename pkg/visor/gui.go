@@ -45,7 +45,7 @@ var (
 )
 
 var (
-	guiStopped int32
+	guiStopped atomic.Int32
 )
 
 var (
@@ -114,7 +114,7 @@ func readSysTrayIcon() (contents []byte, err error) {
 
 // Stop stops visor and quits GUI app.
 func Stop() {
-	if !atomic.CompareAndSwapInt32(&guiStopped, 0, 1) {
+	if !guiStopped.CompareAndSwap(0, 1) {
 		return
 	}
 	stopVisor()

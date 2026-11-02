@@ -10,7 +10,7 @@ import (
 // VictoriaMetricsIntGaugeWrapper wraps Victoria Metrics int gauge encapsulating all the
 // needed logic to control the value.
 type VictoriaMetricsIntGaugeWrapper struct {
-	val   int64
+	val   atomic.Int64
 	gauge *metrics.Gauge
 }
 
@@ -27,20 +27,20 @@ func NewVictoriaMetricsIntGauge(name string) *VictoriaMetricsIntGaugeWrapper {
 
 // Inc increments gauge value.
 func (w *VictoriaMetricsIntGaugeWrapper) Inc() {
-	atomic.AddInt64(&w.val, 1)
+	w.val.Add(1)
 }
 
 // Dec decrements gauge value.
 func (w *VictoriaMetricsIntGaugeWrapper) Dec() {
-	atomic.AddInt64(&w.val, -1)
+	w.val.Add(-1)
 }
 
 // Set sets gauge value.
 func (w *VictoriaMetricsIntGaugeWrapper) Set(val int64) {
-	atomic.StoreInt64(&w.val, val)
+	w.val.Store(val)
 }
 
 // Val gets gauge value.
 func (w *VictoriaMetricsIntGaugeWrapper) Val() int64 {
-	return atomic.LoadInt64(&w.val)
+	return w.val.Load()
 }

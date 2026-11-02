@@ -313,7 +313,7 @@ func TestProcManager_StopRunning(t *testing.T) {
 		log:     logging.MustGetLogger("proc-test"),
 		appName: "app",
 	}
-	p.isRunning = 1
+	p.isRunning.Store(1)
 	m.mx.Lock()
 	m.procs["app"] = p
 	m.mx.Unlock()
@@ -329,7 +329,7 @@ func TestProcManager_Wait(t *testing.T) {
 	defer func() { _ = m.Close() }() //nolint
 
 	p := &Proc{}
-	p.isRunning = 1 // Wait requires running; waitMx is unlocked so it returns immediately
+	p.isRunning.Store(1) // Wait requires running; waitMx is unlocked so it returns immediately
 	m.mx.Lock()
 	m.procs["app"] = p
 	m.mx.Unlock()
@@ -361,7 +361,7 @@ func TestProcManager_RegisterDuplicateRunning(t *testing.T) {
 	defer func() { _ = m.Close() }() //nolint
 
 	running := &Proc{connCh: make(chan struct{}, 1), disc: mockUpdater{}, log: logging.MustGetLogger("proc-test")}
-	running.isRunning = 1
+	running.isRunning.Store(1)
 	m.mx.Lock()
 	m.procs["app"] = running
 	m.mx.Unlock()

@@ -60,9 +60,9 @@ type HTTPError struct {
 // visors. Sharing one counter + one reqMu per (addr, PK) serializes a process's
 // requests to a server so it never races its own nonce.
 type nonceState struct {
-	nonce       uint64     // shared counter; 64-bit-aligned as the first field
-	reqMu       sync.Mutex // serializes all Do() calls sharing this (addr, PK)
-	initMu      sync.Mutex // guards one-time initial nonce fetch
+	nonce       atomic.Uint64 // shared counter
+	reqMu       sync.Mutex    // serializes all Do() calls sharing this (addr, PK)
+	initMu      sync.Mutex    // guards one-time initial nonce fetch
 	initialized bool
 }
 
@@ -128,7 +128,7 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 		if err != nil {
 			return nil, err
 		}
-		atomic.StoreUint64(&c.state.nonce, uint64(nonce))
+		c.state.nonce.Store(uint64(nonce))
 		c.state.initialized = true
 	}
 
@@ -231,7 +231,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 // SetNonce sets client current nonce to given nonce
 func (c *Client) SetNonce(n Nonce) {
-	atomic.StoreUint64(&c.state.nonce, uint64(n))
+	c.state.nonce.Store(uint64(n))
 }
 
 // Addr returns sanitized address of the client
@@ -262,12 +262,12 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 }
 
 func (c *Client) getCurrentNonce() Nonce {
-	return Nonce(atomic.LoadUint64(&c.state.nonce))
+	return Nonce(c.state.nonce.Load())
 }
 
 // IncrementNonce increments client's current nonce.
 func (c *Client) IncrementNonce() {
-	atomic.AddUint64(&c.state.nonce, 1)
+	c.state.nonce.Add(1)
 }
 
 // isNonceValid checks if `res` contains an invalid nonce error.

@@ -250,7 +250,9 @@ func TestLevelDoneFor(t *testing.T) {
 	cands := []pingTreeCandidate{{remotePK: "a"}, {remotePK: "b"}, {remotePK: "c"}}
 
 	t.Run("with stats", func(t *testing.T) {
-		stats := &levelStats{succeeded: 2, failed: 1, skippedCached: 0}
+		stats := &levelStats{}
+		stats.succeeded.Store(2)
+		stats.failed.Store(1)
 		ev := levelDoneFor(cands, 2, stats)
 		if ev.Level != 2 || ev.Attempted != 3 || ev.Succeeded != 2 || ev.Failed != 1 {
 			t.Errorf("levelDoneFor = %+v", ev)

@@ -48,9 +48,9 @@ func roundtrip(t *testing.T, c net.Conn, msg string) {
 
 // A working mux far-end reuses ONE route group across many OpenStream calls.
 func TestPool_ReusesRouteGroup(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
@@ -65,15 +65,15 @@ func TestPool_ReusesRouteGroup(t *testing.T) {
 		roundtrip(t, s, "ping")
 		require.NoError(t, s.Close())
 	}
-	require.EqualValues(t, 1, atomic.LoadInt32(&dials), "should dial the route once and reuse it")
+	require.EqualValues(t, 1, dials.Load(), "should dial the route once and reuse it")
 }
 
 // A far-end that isn't serving the mux port → ErrNoMux, then negative-cached (no
 // re-dial) so the caller falls back cheaply.
 func TestPool_NoMuxFallbackAndNegativeCache(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		_ = b.Close() //nolint:errcheck // no yamux server → session dies immediately
 		return a, nil
@@ -87,15 +87,15 @@ func TestPool_NoMuxFallbackAndNegativeCache(t *testing.T) {
 	// Second call is served from the negative cache — no second dial.
 	_, err = p.OpenStream(context.Background(), key, dial)
 	require.ErrorIs(t, err, ErrNoMux)
-	require.EqualValues(t, 1, atomic.LoadInt32(&dials), "no-mux destination must be negative-cached")
+	require.EqualValues(t, 1, dials.Load(), "no-mux destination must be negative-cached")
 }
 
 // After the idle TTL with no open streams, the held route group is reclaimed and
 // the next OpenStream re-dials.
 func TestPool_IdleReap(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
@@ -118,14 +118,14 @@ func TestPool_IdleReap(t *testing.T) {
 
 	_, err = p.OpenStream(context.Background(), key, dial)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, atomic.LoadInt32(&dials), "should re-dial after idle reap")
+	require.EqualValues(t, 2, dials.Load(), "should re-dial after idle reap")
 }
 
 // Release eagerly drops the held route group so the next call re-dials.
 func TestPool_Release(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
@@ -141,15 +141,15 @@ func TestPool_Release(t *testing.T) {
 	p.Release(key)
 	_, err = p.OpenStream(context.Background(), key, dial)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, atomic.LoadInt32(&dials), "Release should force a re-dial")
+	require.EqualValues(t, 2, dials.Load(), "Release should force a re-dial")
 }
 
 // Distinct route keys to the same destination (e.g. a plain <pk>.skynet fetch vs an
 // explicit <hop>.<pk>.skynet source route) hold independent warm route groups.
 func TestPool_DistinctKeysIndependent(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
@@ -167,5 +167,5 @@ func TestPool_DistinctKeysIndependent(t *testing.T) {
 		roundtrip(t, s, "x")
 		require.NoError(t, s.Close())
 	}
-	require.EqualValues(t, 2, atomic.LoadInt32(&dials), "each distinct key dials once and reuses")
+	require.EqualValues(t, 2, dials.Load(), "each distinct key dials once and reuses")
 }

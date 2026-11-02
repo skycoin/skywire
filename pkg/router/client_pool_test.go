@@ -18,13 +18,13 @@ import (
 // countingDialer hands out a fresh in-memory conn per Dial and counts dials,
 // so a test can distinguish "reused a pooled connection" from "dialed fresh".
 type countingDialer struct {
-	dials int32
+	dials atomic.Int32
 	mu    sync.Mutex
 	conns []net.Conn // kept so the pipe peers aren't GC'd mid-test
 }
 
 func (d *countingDialer) Dial(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
-	atomic.AddInt32(&d.dials, 1)
+	d.dials.Add(1)
 	ours, theirs := net.Pipe()
 	// MakePooledMap dials several PKs concurrently, so guard the slice append.
 	d.mu.Lock()
@@ -34,7 +34,7 @@ func (d *countingDialer) Dial(_ context.Context, _ cipher.PubKey, _ uint16) (net
 }
 func (d *countingDialer) Probe(_ context.Context, _ cipher.PubKey, _ uint16) bool { return true }
 func (d *countingDialer) Type() string                                            { return string(types.DMSG) }
-func (d *countingDialer) count() int32                                            { return atomic.LoadInt32(&d.dials) }
+func (d *countingDialer) count() int32                                            { return d.dials.Load() }
 
 // TestClientPool_Get_DiscardsStalePooledConn is the regression test for the
 // setup-node id-reservation failures: Client.call() arms the stream read

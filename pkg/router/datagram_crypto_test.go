@@ -277,17 +277,17 @@ func TestDatagramCipherConcurrentSealOpenSafe(t *testing.T) {
 		close(sealed)
 	}()
 
-	var opened uint64
+	var opened atomic.Uint64
 	go func() {
 		defer wg.Done()
 		for s := range sealed {
 			_, err := in.Open(1, s)
 			if err == nil {
-				atomic.AddUint64(&opened, 1)
+				opened.Add(1)
 			}
 		}
 	}()
 
 	wg.Wait()
-	assert.Equal(t, uint64(N), atomic.LoadUint64(&opened), "all N seals should round-trip")
+	assert.Equal(t, uint64(N), opened.Load(), "all N seals should round-trip")
 }

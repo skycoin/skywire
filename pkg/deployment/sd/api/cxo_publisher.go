@@ -108,7 +108,7 @@ type ServicesCXOPublisher struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 
-	dropped uint64 // atomic; incremented on queue overflow
+	dropped atomic.Uint64 // atomic; incremented on queue overflow
 
 	// state is the live per-type service set: service type -> service PK ->
 	// that service's full JSON servicedisc.Service. Owned exclusively by
@@ -186,7 +186,7 @@ func (p *ServicesCXOPublisher) submit(fn func()) {
 	select {
 	case p.events <- fn:
 	default:
-		dropped := atomic.AddUint64(&p.dropped, 1)
+		dropped := p.dropped.Add(1)
 		// Log on the first drop and every power-of-two thereafter
 		// (1, 2, 4, 8 …) so a runaway backlog is visible but a
 		// transient bump doesn't spam the log.
@@ -210,7 +210,7 @@ func (p *ServicesCXOPublisher) Dropped() uint64 {
 	if p == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&p.dropped)
+	return p.dropped.Load()
 }
 
 // Close stops the worker goroutine and the underlying publisher.

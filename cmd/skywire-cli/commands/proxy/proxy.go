@@ -1887,10 +1887,9 @@ Results show which proxies are reachable and their response latency.`,
 			}()
 
 			var wg sync.WaitGroup
-			var completed int32
-			var mu sync.Mutex
-			var rpcMu sync.Mutex // Serializes RPC calls to prevent overwhelming visor
-			var aborted int32    // Set to 1 if we should abort due to RPC failure
+			var completed atomic.Int32
+			var rpcMu sync.Mutex     // Serializes RPC calls to prevent overwhelming visor
+			var aborted atomic.Int32 // Set to 1 if we should abort due to RPC failure
 
 			// Wrapper to allow reconnection during test
 			type rpcClientWrapper struct {
@@ -1932,7 +1931,7 @@ Results show which proxies are reachable and their response latency.`,
 
 			for i, p := range proxiesToTest {
 				// Check if we should abort
-				if atomic.LoadInt32(&aborted) == 1 {
+				if aborted.Load() == 1 {
 					break
 				}
 
@@ -1946,7 +1945,7 @@ Results show which proxies are reachable and their response latency.`,
 					defer wg.Done()
 
 					// Check if aborted
-					if atomic.LoadInt32(&aborted) == 1 {
+					if aborted.Load() == 1 {
 						return
 					}
 
@@ -1999,7 +1998,7 @@ Results show which proxies are reachable and their response latency.`,
 							result.Error = testResult.err.Error()
 							// Abort if still connection error after retry
 							if testResult.err == errRPCConnectionLost {
-								atomic.StoreInt32(&aborted, 1)
+								aborted.Store(1)
 							}
 						} else {
 							result.Success = true
@@ -2015,10 +2014,7 @@ Results show which proxies are reachable and their response latency.`,
 					results[idx] = result
 
 					// Update progress
-					mu.Lock()
-					completed++
-					current := completed
-					mu.Unlock()
+					current := completed.Add(1)
 
 					// Show progress
 					showProgress := testVerbose || testBatchSize <= 5 || current%10 == 0 || current == int32(total)
@@ -2054,9 +2050,9 @@ Results show which proxies are reachable and their response latency.`,
 
 			wg.Wait()
 
-			if atomic.LoadInt32(&aborted) == 1 {
+			if aborted.Load() == 1 {
 				cmdutil.Printf("\nTest aborted: RPC connection to visor was lost\n")
-				cmdutil.Printf("Showing partial results (%d completed)...\n", atomic.LoadInt32(&completed))
+				cmdutil.Printf("Showing partial results (%d completed)...\n", completed.Load())
 			}
 		}
 
