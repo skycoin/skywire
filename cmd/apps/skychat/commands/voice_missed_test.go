@@ -3,6 +3,8 @@ package commands
 import (
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // logged is one call the watcher decided to record.
@@ -18,8 +20,12 @@ func poll(seen map[string]*callWatch, incoming, active []string) []logged {
 }
 
 func pollAt(seen map[string]*callWatch, incoming, active []string, now time.Time) []logged {
+	return pollDialAt(seen, incoming, active, nil, now)
+}
+
+func pollDialAt(seen map[string]*callWatch, incoming, active []string, dialing []visorapi.VoiceDialingInfo, now time.Time) []logged {
 	var out []logged
-	resolveCalls(seen, incoming, active, now, func(peer, outcome string, d time.Duration) {
+	resolveCalls(seen, incoming, active, dialing, now, func(peer, outcome string, d time.Duration) {
 		out = append(out, logged{peer, outcome, d})
 	})
 	return out
@@ -194,5 +200,70 @@ func TestParseCallRecordRejectsOrdinaryMessages(t *testing.T) {
 		if _, ok := parseCallRecord(text); ok {
 			t.Fatalf("parseCallRecord(%q) accepted a message that is not a call record", text)
 		}
+	}
+}
+
+// dial is the visor's dialing list holding one call, c1 to bob.
+func dial(state string) []visorapi.VoiceDialingInfo {
+	return []visorapi.VoiceDialingInfo{{CallID: "c1", Peer: bob, State: state}}
+}
+
+// A call we placed that rang out is logged once as unanswered, even though
+// the visor keeps it listed with its outcome for a few seconds after.
+func TestUnansweredOutgoingCallIsLogged(t *testing.T) {
+	seen := map[string]*callWatch{}
+	now := time.Now()
+
+	if got := pollDialAt(seen, nil, nil, dial("ringing"), now); len(got) != 0 {
+		t.Fatalf("recorded %v while the call was still ringing", got)
+	}
+	got := pollDialAt(seen, nil, nil, dial("no_answer"), now)
+	if len(got) != 1 || got[0].peer != bob || got[0].outcome != callUnanswered || got[0].duration != 0 {
+		t.Fatalf("recorded %v, want one %s to %s", got, callUnanswered, bob)
+	}
+	if again := pollDialAt(seen, nil, nil, dial("no_answer"), now); len(again) != 0 {
+		t.Fatalf("recorded %v again while the outcome lingered", again)
+	}
+	pollDialAt(seen, nil, nil, nil, now)
+	if len(seen) != 0 {
+		t.Fatalf("watcher still holds %d calls after the outcome expired", len(seen))
+	}
+}
+
+// Hanging up during the ring drops the call from the list with no outcome.
+func TestCancelledOutgoingCallIsLoggedUnanswered(t *testing.T) {
+	seen := map[string]*callWatch{}
+	pollDialAt(seen, nil, nil, dial("connecting"), time.Now())
+	got := pollDialAt(seen, nil, nil, nil, time.Now())
+	if len(got) != 1 || got[0].outcome != callUnanswered {
+		t.Fatalf("recorded %v, want one %s", got, callUnanswered)
+	}
+}
+
+// Answered: dialing, then active, then gone is an outgoing call with a length.
+func TestAnsweredOutgoingCallFromTheDialingList(t *testing.T) {
+	seen := map[string]*callWatch{}
+	start := time.Now()
+	pollDialAt(seen, nil, nil, dial("ringing"), start)
+	pollDialAt(seen, nil, []string{"c1"}, nil, start)
+	got := pollDialAt(seen, nil, nil, nil, start.Add(time.Minute))
+	if len(got) != 1 || got[0].outcome != callOutgoing || got[0].duration != time.Minute {
+		t.Fatalf("recorded %v, want one %s of 1m", got, callOutgoing)
+	}
+}
+
+// A dialing list that could not be read must not end a ringing call.
+func TestUnreadableDialingListKeepsTheCallRinging(t *testing.T) {
+	seen := map[string]*callWatch{}
+	pollDialAt(seen, nil, nil, dial("ringing"), time.Now())
+	if got := pollDialAt(seen, nil, nil, stillDialing(seen), time.Now()); len(got) != 0 {
+		t.Fatalf("recorded %v on a failed poll", got)
+	}
+}
+
+func TestUnansweredRecordRoundTrips(t *testing.T) {
+	rec, ok := parseCallRecord(callRecordText(callUnanswered, 0))
+	if !ok || rec.Outcome != callUnanswered || rec.Direction != "out" {
+		t.Fatalf("parsed %+v (ok=%v), want an outgoing %s", rec, ok, callUnanswered)
 	}
 }
