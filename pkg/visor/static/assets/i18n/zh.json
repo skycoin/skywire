@@ -790,6 +790,8 @@
     "none": "无",
     "helper-has": "个协助节点持有",
     "helpers-have": "个协助节点持有",
+    "parked": "已寄存",
+    "parked-for": "已寄存在以下节点的收件主机上：",
     "save": "保存"
   },
   "web-proxy": {

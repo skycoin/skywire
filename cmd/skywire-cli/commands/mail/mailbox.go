@@ -130,11 +130,11 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 	}
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\thelpers\tlast error") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "id\tto\tsubject\ttries\tnext\tgives up\thelpers\tparked\tlast error") //nolint:errcheck,gosec
 	for _, m := range msgs {
 		q := m.Queue
 		if q == nil {
-			fmt.Fprintf(w, "%s\t%s\t%s\t-\t-\t-\t-\tnot queued\n", m.ID, m.To, m.Subject) //nolint:errcheck,gosec
+			fmt.Fprintf(w, "%s\t%s\t%s\t-\t-\t-\t-\t-\tnot queued\n", m.ID, m.To, m.Subject) //nolint:errcheck,gosec
 			continue
 		}
 		next := "now"
@@ -150,8 +150,12 @@ func renderOutbox(msgs []skymail.Summary, now time.Time) string {
 			// Sealed for its recipient: no subject to show, and not ours.
 			subject, helpers = "(sealed)", "carrying for "+q.CarriedFor
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck,gosec
-			m.ID, strings.Join(q.Pending, ", "), subject, q.Attempts, next, giveUp, helpers, q.LastError)
+		parked := "-"
+		if len(q.Parked) > 0 {
+			parked = fmt.Sprintf("%d", len(q.Parked))
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck,gosec
+			m.ID, strings.Join(q.Pending, ", "), subject, q.Attempts, next, giveUp, helpers, parked, q.LastError)
 	}
 	_ = w.Flush() //nolint:errcheck,gosec
 	return buf.String()

@@ -31,6 +31,7 @@ interface MailQueue {
   next_attempt: string;
   give_up?: string;
   handed?: string[];
+  parked?: string[];
   carried_for?: string;
 }
 

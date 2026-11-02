@@ -31,12 +31,15 @@ func TestRenderOutbox(t *testing.T) {
 		Queue: &skymail.Queued{
 			Pending: []string{"b@x.dmsg"}, Attempts: 3, LastError: "dial: offline",
 			NextAttempt: now.Add(90 * time.Second),
+			Parked:      []string{"02bb"},
 		},
 	}}, now)
 	require.Contains(t, out, "b@x.dmsg")
 	require.Contains(t, out, "in 1m30s")
 	require.Contains(t, out, "never", "no give-up time")
 	require.Contains(t, out, "dial: offline")
+	require.Contains(t, out, "parked")
+	require.Regexp(t, `in 1m30s\s+never\s+0\s+1\s+dial: offline`, out, "one recipient visor parked")
 	require.Equal(t, "(empty)\n", renderOutbox(nil, now))
 
 	out = renderOutbox([]skymail.Summary{{

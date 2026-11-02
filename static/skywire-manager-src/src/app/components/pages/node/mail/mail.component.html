@@ -78,6 +78,7 @@
                   <td class="small nowrap" [title]="m.queue?.last_error || ''">
                     @if (m.queue) { {{ m.queue.next_attempt | date: 'short' }} · {{ m.queue.attempts }} {{ (m.queue.attempts === 1 ? 'mail.try' : 'mail.tries') | translate }} }
                     @if (m.queue?.handed?.length) { · {{ m.queue!.handed!.length }} {{ (m.queue!.handed!.length === 1 ? 'mail.helper-has' : 'mail.helpers-have') | translate }} }
+                    @if (m.queue?.parked?.length) { · {{ 'mail.parked' | translate }} }
                   </td>
                 } @else {
                   <td class="small nowrap">{{ m.date | date: 'short' }}</td>
@@ -119,6 +120,11 @@
                 @if (openQueue.handed?.length) {
                   <div class="dim">{{ 'mail.handed-to' | translate }}
                     @for (h of openQueue.handed; track h) { <span class="mono">{{ short(h) }}</span> }
+                  </div>
+                }
+                @if (openQueue.parked?.length) {
+                  <div class="dim">{{ 'mail.parked-for' | translate }}
+                    @for (p of openQueue.parked; track p) { <span class="mono">{{ p }}</span> }
                   </div>
                 }
                 @if (openQueue.carried_for) {
