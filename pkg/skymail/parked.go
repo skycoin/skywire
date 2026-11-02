@@ -38,7 +38,7 @@ type Parked struct {
 }
 
 // unparkInterval is how often parked mail is fetched while online.
-const unparkInterval = 10 * time.Minute
+const unparkInterval = 2 * time.Minute
 
 // parkRef names one Outbox message for one recipient visor, so a retried
 // park is stored once.
