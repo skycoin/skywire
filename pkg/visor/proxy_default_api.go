@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -1456,3 +1457,17 @@ func (proxyDefaultAPI) ContactsImport(_ []byte) (int, error) {
 func (proxyDefaultAPI) ContactsExport() ([]byte, error) {
 	return nil, ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) DmsgAsyncStatus() (*visorapi.DmsgAsyncStatus, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncSend(visorapi.DmsgAsyncSendRequest) (*visorapi.DmsgAsyncSendResult, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgAsyncSync() error { return ErrProxyNotSupported }

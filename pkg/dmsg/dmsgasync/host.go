@@ -33,8 +33,8 @@ type HostConfig struct {
 	// Dir holds the disk store and the registrations. Required for StoreDisk.
 	Dir    string
 	Limits Limits
-	// Accepts reports whether this host agrees to hold for a key. A host
-	// never holds for a key it does not accept, whatever its record says.
+	// Accepts reports whether this host agrees to hold for a key. It is
+	// asked when the key registers, and a key it refuses cannot register.
 	Accepts func(cipher.PubKey) bool
 	Log     *logging.Logger
 }
@@ -237,12 +237,14 @@ func (h *Host) record(pk cipher.PubKey, now time.Time) reply {
 	return reply{OK: true, Record: &rec}
 }
 
-// active returns pk's registration if it is still valid and still accepted.
+// active returns pk's registration while it is unexpired. Accepts is checked
+// at registration only: a managed visor that goes offline is exactly the
+// key the host must keep holding for.
 func (h *Host) active(pk cipher.PubKey, now time.Time) (registration, bool) {
 	h.mu.RLock()
 	reg, ok := h.regs[pk]
 	h.mu.RUnlock()
-	if !ok || !now.Before(reg.Record.Expires) || !h.cfg.Accepts(pk) {
+	if !ok || !now.Before(reg.Record.Expires) {
 		return registration{}, false
 	}
 	return reg, true
@@ -360,4 +362,10 @@ func (h *Host) dropExpiredRegs(now time.Time) {
 	if n > 0 {
 		h.saveRegs()
 	}
+}
+
+// Record returns pk's registered record while it is unexpired.
+func (h *Host) Record(pk cipher.PubKey) (Record, bool) {
+	reg, ok := h.active(pk, time.Now())
+	return reg.Record, ok
 }

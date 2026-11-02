@@ -208,3 +208,25 @@ func TestHost_DepositAnyFallsThrough(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, hpk, got, "an unreachable first host is skipped")
 }
+
+// A key accepted when it registered keeps its messages held after the host
+// stops listing it, as a managed visor does when it goes offline.
+func TestHost_HoldsAfterAcceptsChanges(t *testing.T) {
+	ctx := context.Background()
+	rcpt := newParty()
+	connected := true
+	hpk := pk()
+	h, err := NewHost(HostConfig{PK: hpk, Store: StoreMemory, Accepts: func(k cipher.PubKey) bool { return connected && k == rcpt.pk }})
+	require.NoError(t, err)
+	hosts := map[cipher.PubKey]*Host{hpk: h}
+	rec, err := NewRecord(rcpt.pk, rcpt.sk, []cipher.PubKey{hpk}, 0, 1, time.Hour)
+	require.NoError(t, err)
+	require.NoError(t, Register(ctx, pipeDialer(rcpt.pk, hosts), hpk, rec, Policy{}))
+
+	connected = false
+	_, err = Deposit(ctx, pipeDialer(pk(), hosts), hpk, rcpt.pk, 25, "", []byte("while offline"))
+	require.NoError(t, err)
+	_, ok := h.Record(rcpt.pk)
+	require.True(t, ok)
+	require.ErrorIs(t, Register(ctx, pipeDialer(rcpt.pk, hosts), hpk, rec, Policy{}), ErrNotHosted, "a new registration is still checked")
+}

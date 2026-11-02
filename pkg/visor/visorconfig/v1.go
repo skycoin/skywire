@@ -35,6 +35,7 @@ type V1 struct {
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
+	DmsgAsync     *DmsgAsyncConfig     `json:"dmsg_async,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
 	Transport     *Transport           `json:"transport"`
@@ -638,6 +639,46 @@ type SkymailConfig struct {
 	MaxMessageSize int64    `json:"max_message_size,omitempty"`
 	MaxTotalSize   int64    `json:"max_total_size,omitempty"`
 	MaxAge         Duration `json:"max_age,omitempty"`
+}
+
+// DmsgAsyncConfig configures dmsg-async, store and forward for offline keys
+// (pkg/dmsg/dmsgasync, docs/design/dmsg-async.md).
+type DmsgAsyncConfig struct {
+	Host  DmsgAsyncHostConfig  `json:"host,omitzero"`
+	Inbox DmsgAsyncInboxConfig `json:"inbox,omitzero"`
+}
+
+// DmsgAsyncHostConfig makes this visor an inbox host for other keys.
+type DmsgAsyncHostConfig struct {
+	// Enable starts the host. Unset, it is on for a hypervisor, which then
+	// holds for the visors it manages.
+	Enable *bool `json:"enable,omitempty"`
+	// Store is "disk" (the default) or "memory".
+	Store string `json:"store,omitempty"`
+	// Dir holds the disk store. Default: "dmsg-async" beside the local path.
+	Dir string `json:"dir,omitempty"`
+	// Hosted are further keys the host holds for, beyond its own and the
+	// visors it manages.
+	Hosted []cipher.PubKey `json:"hosted,omitempty"`
+	// Limits. 0 means the default.
+	MaxMessage        int      `json:"max_message,omitempty"`
+	MaxPerRecipient   int      `json:"max_per_recipient,omitempty"`
+	MaxRecipientBytes int64    `json:"max_recipient_bytes,omitempty"`
+	MaxTotalSize      int64    `json:"max_total_size,omitempty"`
+	TTL               Duration `json:"ttl,omitempty"`
+}
+
+// DmsgAsyncInboxConfig names where this visor's own messages wait while it is
+// offline.
+type DmsgAsyncInboxConfig struct {
+	// Hosts are this visor's inbox hosts. Unset, they are its hypervisors.
+	Hosts []cipher.PubKey `json:"hosts,omitempty"`
+	// Disable turns the inbox off even when hosts are known.
+	Disable bool `json:"disable,omitempty"`
+	// Publish posts the inbox record to dmsg discovery. Unset means on.
+	Publish *bool `json:"publish,omitempty"`
+	// Allow lists the senders that may deposit. Empty allows every key.
+	Allow []cipher.PubKey `json:"allow,omitempty"`
 }
 
 // Transport defines a transport config.

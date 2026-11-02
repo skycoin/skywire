@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
@@ -459,6 +460,46 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new([]*transport.Entry)
 			return rpcReply, rpcRcvr.DiscoverTransportsByPK(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSend", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.DmsgAsyncSendRequest)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncSendResult)
+			return rpcReply, rpcRcvr.DmsgAsyncSend(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncStatus)
+			return rpcReply, rpcRcvr.DmsgAsyncStatus(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSync", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DmsgAsyncSync(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncTake", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]uint16)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]dmsgasync.Message)
+			return rpcReply, rpcRcvr.DmsgAsyncTake(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".DmsgBandwidthTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

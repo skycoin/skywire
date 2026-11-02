@@ -237,6 +237,9 @@ type Visor struct {
 	// contacts is the address book, opened on first use.
 	contacts contactBook
 
+	// async is dmsg-async: the inbox host and this visor's own inbox.
+	async asyncState
+
 	// visorCharts samples this visor's load and traffic for /status/visor.
 	visorCharts atomic.Pointer[visorCharts]
 
