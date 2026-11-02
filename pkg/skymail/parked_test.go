@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -188,7 +189,10 @@ func TestParkBeforeAHangingAttempt(t *testing.T) {
 	stop = startOutbox(t, a)
 	waitFor(t, "A parks it while the attempt hangs", func() bool { return store.count(b.pk) == 1 })
 	stop()
-	require.Equal(t, []string{b.pk.Hex()}, queueOf(t, a)[0].Queue.Parked, "a shutdown mid attempt keeps the park")
+	// RunOutbox does not wait for an attempt that its end cancels.
+	waitFor(t, "a shutdown mid attempt keeps the park", func() bool {
+		return slices.Equal(queueOf(t, a)[0].Queue.Parked, []string{b.pk.Hex()})
+	})
 }
 
 // A park that fails waits for its retry delay instead of looping.
