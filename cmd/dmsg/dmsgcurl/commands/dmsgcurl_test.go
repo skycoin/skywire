@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -137,7 +138,7 @@ func TestParseOutputFile(t *testing.T) {
 		require.NoError(t, os.WriteFile(regular, []byte("x"), 0o600))
 		_, err := parseOutputFile(filepath.Join(regular, "child"), false)
 		require.Error(t, err)
-		require.False(t, os.IsNotExist(err))
+		require.False(t, errors.Is(err, fs.ErrNotExist))
 	})
 }
 

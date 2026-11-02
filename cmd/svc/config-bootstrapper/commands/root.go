@@ -4,8 +4,10 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -200,7 +202,7 @@ HTTP Endpoints:
 func readConfig(log *logging.Logger, confPath string) (config api.Config) {
 	f, err := os.Open(confPath) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.WithField("filepath", confPath).
 				Info("Config file not found, using embedded defaults.")
 			return api.Config{}

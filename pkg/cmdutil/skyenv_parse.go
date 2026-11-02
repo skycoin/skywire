@@ -35,6 +35,8 @@ package cmdutil
 
 import (
 	"bufio"
+	"errors"
+	"io/fs"
 	"os"
 	"strings"
 )
@@ -83,7 +85,7 @@ func ParseSkyenvFile(path string) (*SkyenvFile, error) {
 func (f *SkyenvFile) merge(path string) error {
 	fh, err := os.Open(path) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err

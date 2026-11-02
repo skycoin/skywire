@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -77,7 +78,7 @@ func OpenStore(path string) (*Store, error) {
 
 	raw, err := os.ReadFile(path) //nolint:gosec // operator-configured app path
 	switch {
-	case os.IsNotExist(err):
+	case errors.Is(err, fs.ErrNotExist):
 		return s, nil
 	case err != nil:
 		return nil, fmt.Errorf("skychat contacts: read %s: %w", path, err)

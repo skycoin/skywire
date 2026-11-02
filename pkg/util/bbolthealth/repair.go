@@ -14,7 +14,9 @@
 package bbolthealth
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"time"
 
@@ -59,7 +61,7 @@ import (
 // and re-scan after to detect a new entry — RepairIfCorrupt itself
 // does no logging (no logger dependency).
 func RepairIfCorrupt(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("bbolthealth: stat %s: %w", path, err)

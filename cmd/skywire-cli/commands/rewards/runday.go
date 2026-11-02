@@ -15,8 +15,10 @@ package clirewards
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"os"
@@ -304,12 +306,12 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		return nil, fmt.Errorf("parse date: %w", err)
 	}
 
-	if _, err := os.Stat(opts.HwSurveyPath); os.IsNotExist(err) {
+	if _, err := os.Stat(opts.HwSurveyPath); errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("survey path does not exist: %s", opts.HwSurveyPath)
 	}
 
 	utfilePath := filepath.Join(opts.HistDir, opts.Date+"_ut.txt")
-	if _, err := os.Stat(utfilePath); os.IsNotExist(err) {
+	if _, err := os.Stat(utfilePath); errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("ut file not found: %s", utfilePath)
 	}
 

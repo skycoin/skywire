@@ -4,6 +4,7 @@ package skymail
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -173,7 +174,7 @@ func (mb *Mailbox) Expire(now time.Time) (int, error) {
 			if now.Sub(storedAt(e)) <= l.MaxAge {
 				continue
 			}
-			if err := os.Remove(e.path); err != nil && !os.IsNotExist(err) {
+			if err := os.Remove(e.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return n, err
 			}
 			n++

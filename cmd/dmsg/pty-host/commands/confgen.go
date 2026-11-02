@@ -2,7 +2,9 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -41,7 +43,7 @@ var confgenCmd = &cobra.Command{
 
 		if _, err := os.Stat(confPath); err == nil {
 			return fmt.Errorf("config file %s already exists", confPath)
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("failed to check if config file exists: %w", err)
 		}
 

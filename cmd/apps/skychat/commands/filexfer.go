@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"io/fs"
 	"mime"
 	"net"
 	"net/http"
@@ -852,7 +853,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		// before sealing existed.
 		http.ServeFile(w, r, full) //nolint:gosec
 		return
-	case os.IsNotExist(err):
+	case errors.Is(err, fs.ErrNotExist):
 		http.NotFound(w, r)
 		return
 	default:

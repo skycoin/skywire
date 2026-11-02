@@ -6,6 +6,8 @@
 package commands
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -29,7 +31,7 @@ func ensureSkyenvFile(path string, pkgEnv bool) (created bool, err error) {
 	}
 	if _, serr := os.Stat(path); serr == nil {
 		return false, nil
-	} else if !os.IsNotExist(serr) {
+	} else if !errors.Is(serr, fs.ErrNotExist) {
 		return false, serr
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {

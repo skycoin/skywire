@@ -1502,7 +1502,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 
 	// Pre-create or fix permissions on the log file to make it readable
 	// This is important when running as root in a directory not owned by root
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+	if _, err := os.Stat(logFile); errors.Is(err, fs.ErrNotExist) {
 		// Create new file with readable permissions
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0644) //nolint:gosec
 		if err == nil {

@@ -19,6 +19,8 @@ package commands
 
 import (
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
@@ -48,7 +50,7 @@ func loadSkychatPassword(path string) error {
 	}
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err

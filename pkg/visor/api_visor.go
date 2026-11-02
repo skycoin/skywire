@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -547,7 +548,7 @@ func (v *Visor) GetRewardAddress() (string, error) {
 	path := v.conf.LocalPath + "/" + skyenv.RewardFile
 	rConfig, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to read reward file: %v", err)

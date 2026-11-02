@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -400,7 +401,7 @@ func (h *Host) serveSink(_ context.Context, log logrus.FieldLogger, conn net.Con
 			log.WithError(cerr).Debug("dmsgscp: file close error.")
 		}
 		if !success {
-			if rerr := os.Remove(safePath); rerr != nil && !os.IsNotExist(rerr) {
+			if rerr := os.Remove(safePath); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 				log.WithError(rerr).Debug("dmsgscp: failed to remove partial upload.")
 			}
 		}

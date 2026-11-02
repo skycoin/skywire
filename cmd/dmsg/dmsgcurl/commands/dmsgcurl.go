@@ -348,7 +348,7 @@ func closeResponseBody(resp *http.Response) {
 func parseOutputFile(output string, replace bool) (*os.File, error) {
 	_, statErr := os.Stat(output)
 	if statErr != nil {
-		if os.IsNotExist(statErr) {
+		if errors.Is(statErr, fs.ErrNotExist) {
 			if err := os.MkdirAll(filepath.Dir(output), fs.ModePerm); err != nil {
 				return nil, err
 			}

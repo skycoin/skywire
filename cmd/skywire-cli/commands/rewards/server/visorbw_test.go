@@ -2,6 +2,8 @@ package clirewardsserver
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,6 +69,6 @@ func TestWriteSettledVisorBW(t *testing.T) {
 	require.True(t, haveVisorBW(filepath.Join(dir, "2026-09-30_bandwidth.json")))
 	for _, d := range []string{"2026-09-29", "2026-09-28"} {
 		_, err := os.Stat(filepath.Join(dir, d+"_bandwidth.json"))
-		require.True(t, os.IsNotExist(err), "%s: an empty day, or one of another version, is never written", d)
+		require.True(t, errors.Is(err, fs.ErrNotExist), "%s: an empty day, or one of another version, is never written", d)
 	}
 }

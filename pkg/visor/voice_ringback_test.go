@@ -3,6 +3,8 @@ package visor
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -35,7 +37,7 @@ func TestRingbackSurvivesRestart(t *testing.T) {
 		t.Fatalf("clear: %v", err)
 	}
 	for _, name := range []string{voiceRingbackFile, voiceRingbackFile + voiceRingbackMimeExt} {
-		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("%s left behind after clearing: %v", name, err)
 		}
 	}

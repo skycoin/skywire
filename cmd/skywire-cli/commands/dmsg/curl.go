@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -478,7 +479,7 @@ func prepareOutputFile(path string, replace bool) (*os.File, error) {
 		}
 		return os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0644) //nolint:gosec
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return os.Create(path) //nolint:gosec
 	}
 	return nil, err

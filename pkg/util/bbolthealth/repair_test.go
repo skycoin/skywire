@@ -1,7 +1,9 @@
 package bbolthealth
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +19,7 @@ func TestRepairIfCorrupt_NoFile(t *testing.T) {
 		t.Fatalf("non-existent path should be a no-op, got: %v", err)
 	}
 	// And the file still shouldn't exist after.
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("non-existent path should remain absent; stat err=%v", err)
 	}
 }
@@ -73,7 +75,7 @@ func TestRepairIfCorrupt_GarbageFileMovedAside(t *testing.T) {
 	}
 
 	// Original path should now be absent (moved aside).
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("expected garbage file to be moved away; stat err=%v", err)
 	}
 
@@ -132,7 +134,7 @@ func TestRepairIfCorrupt_RecoversFromOpenPanic(t *testing.T) {
 	if err := RepairIfCorrupt(path); err != nil {
 		t.Fatalf("repair: %v", err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("corrupt file should be moved aside; stat err=%v", err)
 	}
 }
@@ -224,7 +226,7 @@ func TestRepairIfCorrupt_SyncWalkCatchesPageCorruption(t *testing.T) {
 	if err := RepairIfCorrupt(path); err != nil {
 		t.Fatalf("RepairIfCorrupt returned error: %v", err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("corrupt file should have been moved aside; still present (err=%v)", err)
 	}
 	entries, readErr := os.ReadDir(dir)
