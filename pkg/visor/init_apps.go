@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mathrand "math/rand"
+	mathrand "math/rand/v2"
 	"mime"
 	"net"
 	"net/url"

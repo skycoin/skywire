@@ -14,7 +14,7 @@ package emu
 import (
 	"container/heap"
 	"errors"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,7 +113,7 @@ func newLink(cfg LinkConfig, dst *inbox) *link {
 	}
 	l := &link{
 		cfg:    cfg,
-		rnd:    rand.New(rand.NewSource(cfg.Seed)), //nolint:gosec // G404: emulation, not cryptography
+		rnd:    rand.New(rand.NewPCG(uint64(cfg.Seed), 0)), //nolint:gosec // G404: emulation, not cryptography
 		dst:    dst,
 		wake:   make(chan struct{}, 1),
 		closed: make(chan struct{}),
@@ -269,7 +269,7 @@ func (l *link) jitter(window time.Duration) time.Duration {
 	}
 	l.rndMu.Lock()
 	defer l.rndMu.Unlock()
-	return time.Duration(l.rnd.Int63n(int64(2*window))) - window
+	return time.Duration(l.rnd.Int64N(int64(2*window))) - window
 }
 
 func (l *link) close() {

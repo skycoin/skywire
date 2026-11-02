@@ -3,7 +3,7 @@ package transport
 import (
 	"bytes"
 	crand "crypto/rand"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"runtime"
 	"sync"
@@ -49,7 +49,7 @@ func (p *pushMem) ReadPlain(_ []byte, emit func([]byte)) (int, error) {
 		p.mu.Unlock()
 		return 0, err
 	}
-	n := min(len(p.data), 1+rand.Intn(p.maxRead)) //nolint:gosec
+	n := min(len(p.data), 1+rand.IntN(p.maxRead)) //nolint:gosec
 	chunk := append([]byte(nil), p.data[:n]...)
 	p.data = p.data[n:]
 	p.mu.Unlock()
@@ -128,7 +128,7 @@ func dataPackets(t *testing.T, n int) ([]routing.Packet, []byte) {
 	var pkts []routing.Packet
 	var stream []byte
 	for i := 0; i < n; i++ {
-		payload := make([]byte, rand.Intn(2000)) //nolint:gosec
+		payload := make([]byte, rand.IntN(2000)) //nolint:gosec
 		_, _ = crand.Read(payload)
 		p, err := routing.MakeDataPacket(routing.RouteID(i+1), payload)
 		if err != nil {
@@ -165,7 +165,7 @@ func TestPushDeliversInOrder(t *testing.T) {
 
 	want, stream := dataPackets(t, 1000)
 	for rest := stream; len(rest) > 0; {
-		n := min(1+rand.Intn(5000), len(rest)) //nolint:gosec
+		n := min(1+rand.IntN(5000), len(rest)) //nolint:gosec
 		pm.feed(rest[:n])
 		rest = rest[n:]
 	}

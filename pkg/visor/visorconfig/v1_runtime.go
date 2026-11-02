@@ -17,7 +17,7 @@ package visorconfig
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"strings"
 
@@ -275,7 +275,7 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	for {
 		minn := 10
 		maxx := 99
-		randomNumber = rand.Intn(maxx-minn+1) + minn             //nolint: gosec
+		randomNumber = rand.IntN(maxx-minn+1) + minn             //nolint: gosec
 		if _, ok := busyPorts[routing.Port(randomNumber)]; !ok { //nolint: gosec
 			break
 		}
