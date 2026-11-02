@@ -42,7 +42,42 @@ Valid xpub key (depth=4, child=0)             <- chain xpub, wrong
 A chain xpub is refused. The payout addresses derived from it are not
 addresses your wallet shows, so you would not see those rewards arrive.
 
+## Make the wallet on the Wallet page
+
+The Wallet page of the hypervisor UI makes the wallet in your browser. This
+needs a visor newer than v1.3.104.
+
+1. Open `http://127.0.0.1:8000/#/wallet`. Choose **New** and give the wallet
+   a name. **Wallet type** is already **BIP44 (HD Wallet)**. Write the seed
+   down on paper and type it into **Confirm seed**. Set a **Password**, which
+   encrypts the seed in this browser. Leave **Seed passphrase** empty unless
+   you will keep it with the seed, because the wallet cannot be restored
+   without it. Press **Create**.
+
+   ![create a BIP44 wallet, seed hidden](https://github.com/skycoin/skywire/raw/develop/docs/img/reward-xpub/dashboard-01-create.png)
+
+2. Open the wallet in the list and type the seed once more to confirm you
+   wrote it down. The wallet shows **Account 0** with its external and change
+   chains.
+
+   ![the new wallet](https://github.com/skycoin/skywire/raw/develop/docs/img/reward-xpub/dashboard-02-wallet.png)
+
+3. Press **Show xPub Keys** and copy the key under
+   **Account xPub (m/44'/coin'/0') derives both chains**. The five addresses
+   under it are the first ones rewards go to.
+
+   ![the account xpub](https://github.com/skycoin/skywire/raw/develop/docs/img/reward-xpub/dashboard-03-xpub.png)
+
+The wallet lives in this browser's storage. The xpub and the addresses show
+without the password, and sending asks for it. Each time the page opens it
+looks on the blockchain for addresses of the account that were paid, up to
+20 unused ones past the last used one, so rewards sent to addresses it never
+showed appear with their balance. In another browser choose **Load**, type
+the seed, pick **BIP44 (HD Wallet)** and the same seed passphrase.
+
 ## Make the wallet in the web wallet
+
+This is the same wallet kept in a wallet directory instead of the browser.
 
 1. Start the web wallet with a wallet directory of its own, then open
    `http://127.0.0.1:8001` in a browser.
@@ -54,10 +89,6 @@ addresses your wallet shows, so you would not see those rewards arrive.
    The page exists only while this command runs, so keep the terminal open
    until you have copied the xpub. It is not the hypervisor UI, which is on
    port 8000.
-
-   The Wallet page of the hypervisor UI cannot make this wallet yet. It keeps
-   its wallets in the browser, and there it always makes a deterministic
-   wallet, even when BIP44 is selected, so it never shows an xpub.
 
 2. Choose **New**, give the wallet a name, and set **Wallet type** to
    **BIP44 (HD Wallet)**. Write the seed down on paper and type it into
