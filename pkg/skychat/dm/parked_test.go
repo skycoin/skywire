@@ -256,3 +256,81 @@ func TestController_UnackedSendIsParked(t *testing.T) {
 		t.Errorf("inbox holds %d for B, want 2", box.count(pkB))
 	}
 }
+
+// A raw control frame is parked when no network delivers it or the peer does
+// not ack it, and the peer's PreHandleFrame gets it when it fetches. A frame
+// the peer acks is not parked.
+func TestController_SendRawAcked(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB, pkC := mustPK(t), mustPK(t), mustPK(t)
+	box := newInbox(t)
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}, Parker: inboxParker{box, pkA}})
+	if err := ctrlA.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlA.Close() }) //nolint:errcheck
+	frame := []byte(`{"type":"pair-invite","id":"i1"}`)
+	const wait = 100 * time.Millisecond
+
+	parked, err := ctrlA.SendRawAcked(context.Background(), pkB, frame, "i1", wait)
+	if err != nil || !parked {
+		t.Fatalf("unreachable: parked=%v err=%v", parked, err)
+	}
+	parked, err = ctrlA.SendRawAcked(context.Background(), pkB, frame, "i1", wait)
+	if err != nil || !parked || box.count(pkB) != 1 {
+		t.Fatalf("a repeat: parked=%v err=%v held=%d, want stored once", parked, err, box.count(pkB))
+	}
+
+	var got []string
+	ctrlB := New(Config{
+		Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {},
+		Parker: inboxParker{box, pkB},
+		PreHandleFrame: func(peer cipher.PubKey, payload []byte) bool {
+			got = append(got, peer.Hex()+" "+string(payload))
+			return true
+		},
+	})
+	if n := ctrlB.Unpark(context.Background()); n != 0 {
+		t.Errorf("a control frame surfaced as %d chat lines", n)
+	}
+	if len(got) != 1 || got[0] != pkA.Hex()+" "+string(frame) {
+		t.Errorf("PreHandleFrame got %q", got)
+	}
+	if box.count(pkB) != 0 {
+		t.Error("taken frame left on the host")
+	}
+
+	// B is up but never acks, as when its app is down behind a live route.
+	if err := ctrlB.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlB.Close() }) //nolint:errcheck
+	parked, err = ctrlA.SendRawAcked(context.Background(), pkB, []byte(`{"id":"i2"}`), "i2", wait)
+	if err != nil || !parked || box.count(pkB) != 1 {
+		t.Errorf("unacked: parked=%v err=%v held=%d", parked, err, box.count(pkB))
+	}
+
+	// C acks what it takes.
+	var ctrlC *Controller
+	ctrlC = New(Config{
+		Client: &memClient{hub, pkC}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {},
+		PreHandleFrame: func(peer cipher.PubKey, _ []byte) bool {
+			ack, _ := (message.Envelope{Type: message.TypeAck, ID: "i3"}).Marshal() //nolint:errcheck
+			go ctrlC.SendRaw(context.Background(), peer, ack)                       //nolint:errcheck
+			return true
+		},
+	})
+	if err := ctrlC.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlC.Close() }) //nolint:errcheck
+	parked, err = ctrlA.SendRawAcked(context.Background(), pkC, []byte(`{"id":"i3"}`), "i3", 2*time.Second)
+	if err != nil || parked || box.count(pkC) != 0 {
+		t.Errorf("acked: parked=%v err=%v held=%d, want delivered", parked, err, box.count(pkC))
+	}
+
+	noPark := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	if parked, err := noPark.SendRawAcked(context.Background(), mustPK(t), frame, "i1", wait); err == nil || parked {
+		t.Errorf("without a parker: parked=%v err=%v, want the send error", parked, err)
+	}
+}

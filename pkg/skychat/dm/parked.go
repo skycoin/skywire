@@ -186,3 +186,32 @@ func (c *Controller) seen(peer cipher.PubKey, frame []byte) bool {
 	}
 	return false
 }
+
+// SendRawAcked sends payload like SendRaw and, with a Parker set, waits up to
+// wait for the peer's chat-ack naming id. A write to a peer whose app is down
+// can succeed, so with no ack it parks the frame for pk, and the peer's
+// controller offers it to PreHandleFrame when it fetches. It reports whether
+// the frame was parked.
+func (c *Controller) SendRawAcked(ctx context.Context, pk cipher.PubKey, payload []byte, id string, wait time.Duration) (bool, error) {
+	if c.cfg.Parker == nil || id == "" {
+		return false, c.SendRaw(ctx, pk, payload)
+	}
+	acked, unreg := c.registerAck(id)
+	defer unreg()
+	err := c.SendRaw(ctx, pk, payload)
+	if err == nil {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-acked:
+			return false, nil
+		case <-t.C:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
+	if _, ok := c.park(ctx, pk, payload, id); ok {
+		return true, nil
+	}
+	return false, err
+}
