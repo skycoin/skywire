@@ -34,16 +34,14 @@ func TestClaimFirstHop_ParallelDialsCannotShareAFirstHop(t *testing.T) {
 	)
 	start := make(chan struct{})
 	for range dials {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
 			if _, ok := r.claimFirstHop(exit, rPort, path); ok {
 				mu.Lock()
 				won++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

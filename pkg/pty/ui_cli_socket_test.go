@@ -58,8 +58,7 @@ func TestUIOverCLISocket(t *testing.T) {
 	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 1, &dmsg.Config{MinSessions: 1}))
 	t.Cleanup(env.Shutdown)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	sock := serveCLI(ctx, t, env.AllClients()[0])
 
 	srv := httptest.NewServer(NewUI(NetUIDialer("unix", sock), DefaultUIConfig()).Handler(nil))
@@ -124,8 +123,7 @@ func TestUIReattachesAfterDrop(t *testing.T) {
 	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 1, &dmsg.Config{MinSessions: 1}))
 	t.Cleanup(env.Shutdown)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	sock := serveCLI(ctx, t, env.AllClients()[0])
 	srv := httptest.NewServer(NewUI(NetUIDialer("unix", sock), DefaultUIConfig()).Handler(nil))
 	defer srv.Close()
@@ -170,8 +168,7 @@ func TestUIKeepsKeyOrder(t *testing.T) {
 	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 1, &dmsg.Config{MinSessions: 1}))
 	t.Cleanup(env.Shutdown)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	sock := serveCLI(ctx, t, env.AllClients()[0])
 	srv := httptest.NewServer(NewUI(NetUIDialer("unix", sock), DefaultUIConfig()).Handler(nil))
 	defer srv.Close()

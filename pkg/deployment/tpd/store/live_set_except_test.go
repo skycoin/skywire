@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -25,8 +24,7 @@ func ids(es []*transport.Entry) map[uuid.UUID]bool {
 // not found only when the edge has nothing.
 func TestGetTransportsByEdgeExcept(t *testing.T) {
 	s := newTestRedisStore(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	a, _ := cipher.GenerateKeyPair()
 	lonely, _ := cipher.GenerateKeyPair()
 	var signed []*transport.SignedEntry

@@ -665,8 +665,7 @@ func TestStreamRouteGroupMuxInfoDelivers(t *testing.T) {
 	client, cleanup := newTestServer(t, fv)
 	defer cleanup()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	stream, err := client.StreamRouteGroupMuxInfo(ctx, &StreamRouteGroupMuxInfoRequest{
 		AppName:          "skysocks-client",
@@ -710,8 +709,7 @@ func TestStreamRouteGroupMuxInfoEmpty(t *testing.T) {
 	client, cleanup := newTestServer(t, newFakeVisor()) // default returns nil, nil
 	defer cleanup()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	stream, err := client.StreamRouteGroupMuxInfo(ctx, &StreamRouteGroupMuxInfoRequest{AppName: "vpn-client"})
 	if err != nil {

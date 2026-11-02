@@ -322,8 +322,7 @@ func voiceMyRingbackHandler() http.HandlerFunc {
 		case http.MethodPut:
 			data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRingbackUpload))
 			if err != nil {
-				var tooBig *http.MaxBytesError
-				if errors.As(err, &tooBig) {
+				if errors.As(err, new(*http.MaxBytesError)) {
 					http.Error(w, "ringback tone too large (the limit is 1 MB)", http.StatusRequestEntityTooLarge)
 					return
 				}

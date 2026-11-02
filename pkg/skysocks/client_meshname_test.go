@@ -6,7 +6,6 @@
 package skysocks
 
 import (
-	"context"
 	"io"
 	"net"
 	"testing"
@@ -153,8 +152,7 @@ func TestMeshNameServedWhileDisconnected(t *testing.T) {
 	addr := lis.Addr().String()
 
 	res := newFakeResolver()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go ServeDisconnected(ctx, lis, nil, res.resolvers())
 	waitDial(t, addr)
 
@@ -186,8 +184,7 @@ func TestDisconnectedClearnetStillGetsTheInterstitialWithResolvers(t *testing.T)
 	addr := lis.Addr().String()
 
 	res := newFakeResolver()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go ServeDisconnected(ctx, lis, nil, res.resolvers())
 	waitDial(t, addr)
 

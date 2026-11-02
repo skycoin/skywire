@@ -272,17 +272,13 @@ func TestNotifyHub_ConcurrentPublishSubscribeCancel(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				h.Publish(appserver.NotifyReq{App: "skychat", Title: "x"})
 			}
-		}()
+		})
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				ch, cancel := h.Subscribe(1)
 				select {
@@ -291,7 +287,7 @@ func TestNotifyHub_ConcurrentPublishSubscribeCancel(t *testing.T) {
 				}
 				cancel()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

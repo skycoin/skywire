@@ -605,8 +605,7 @@ func (mb *Mailbox) retryable(g *peerGroup, err error) bool {
 	if mb.out == nil || g.pk == mb.cfg.PK || mb.cfg.Dialers[g.suffix] == nil {
 		return false
 	}
-	var te *textproto.Error
-	if errors.As(err, &te) {
+	if te, ok := errors.AsType[*textproto.Error](err); ok {
 		return te.Code >= 400 && te.Code < 500
 	}
 	return true

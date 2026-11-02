@@ -57,8 +57,7 @@ func TestCollectCharts(t *testing.T) {
 }
 
 func TestChartsPageOnRoot(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
 	require.NoError(t, err)
 	api := New(nil, newTestStore(t), nonces, false, tpdiscmetrics.NewEmpty(), "", "")
@@ -108,8 +107,7 @@ func TestVisorBWTable(t *testing.T) {
 }
 
 func TestGraphPage(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
 	require.NoError(t, err)
 	mock := newTestStore(t)
@@ -181,8 +179,7 @@ func TestServerRoles(t *testing.T) {
 // A host's board serves the graph and its engine beside TPD's section,
 // as the visor's status page does.
 func TestBoardServesGraph(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	nonces, err := httpauth.NewNonceStore(ctx, storeconfig.Config{Type: storeconfig.Memory}, "")
 	require.NoError(t, err)
 	mock := newTestStore(t)

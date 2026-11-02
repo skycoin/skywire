@@ -234,8 +234,7 @@ func TestManagerSendFile(t *testing.T) {
 		Accept:  func(_ cipher.PubKey, _ Offer) (io.WriteCloser, bool) { return nopWriteCloser{&got}, true },
 		OnDone:  func(dir Direction, _ cipher.PubKey, _ Offer, err error) { done <- err },
 	})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go recvMgr.Serve(ctx, lis)
 
 	sendMgr := NewManager(Config{LocalPK: sendPK, Dial: dial, Port: 64})

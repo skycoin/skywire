@@ -164,13 +164,11 @@ func (p *presenceStore) sweep(ctx context.Context) {
 	jobs := make(chan cipher.PubKey)
 	var wg sync.WaitGroup
 	for range presenceWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for pk := range jobs {
 				p.record(pk, p.probe(pk))
 			}
-		}()
+		})
 	}
 	for _, pk := range pks {
 		select {

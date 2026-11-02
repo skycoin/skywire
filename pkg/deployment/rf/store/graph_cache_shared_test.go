@@ -23,8 +23,7 @@ func TestGraphCacheSharesCoHostedTPD(t *testing.T) {
 	if url == "" {
 		t.Skip("SKYWIRE_TEST_REDIS unset; no redis to test against")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	log := logging.MustGetLogger("test")
 	tpd, err := tpdstore.New(ctx, storeconfig.Config{Type: storeconfig.Redis, URL: url}, time.Minute, log)
 	require.NoError(t, err)
@@ -54,8 +53,7 @@ func TestGraphCacheSharesCoHostedTPD(t *testing.T) {
 
 // The same with an in-memory TPD store, as a deployment without redis runs.
 func TestGraphCacheSharesCoHostedMemoryTPD(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	log := logging.MustGetLogger("test")
 	mem := storeconfig.Config{Type: storeconfig.Memory}
 	tpd, err := tpdstore.New(ctx, mem, time.Minute, log)

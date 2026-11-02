@@ -1896,24 +1896,20 @@ func serveStandalone(h http.Handler, bindAddr string) {
 
 	wg := new(sync.WaitGroup)
 	// Start serving
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		cmdutil.Printf("listening on http://%s\n", bindAddr)
 		srv := &http.Server{Addr: bindAddr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 		if err := srv.ListenAndServe(); err != nil {
 			log.WithError(err).Error("HTTP listener stopped")
 		}
-		wg.Done()
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		log.WithField("dmsg_addr", lis.Addr().String()).Info("Serving...")
 		if err := serve.Serve(lis); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Serve: %v", err)
 		}
-		wg.Done()
-	}()
+	})
 
 	// Graceful shutdown handler
 	go func() {

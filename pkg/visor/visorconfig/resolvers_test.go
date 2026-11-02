@@ -102,8 +102,7 @@ func TestParseResolverSpecs_OrderAndNames(t *testing.T) {
 	}
 }
 
-func boolPtr(b bool) *bool { return &b }
-
+//go:fix inline
 func TestValidateResolvers(t *testing.T) {
 	base := func(rs ...ResolverConfig) *V1 {
 		return &V1{
@@ -260,9 +259,9 @@ func TestResolverConfigRoundTrip(t *testing.T) {
 	want := ResolverConfig{
 		Name: "lan", Kind: ResolverKindDmsg, Enable: true, SecretKey: &sk,
 		ProxyPort: 4447, ProxyAddr: "0.0.0.0", DomainSuffix: ".dmsg",
-		UpstreamSOCKS: "127.0.0.1:1080", Chain: boolPtr(false), Alias: "gw",
+		UpstreamSOCKS: "127.0.0.1:1080", Chain: new(false), Alias: "gw",
 		UpstreamRules: []proxyroute.Rule{{Suffix: "example.com", Upstream: "127.0.0.1:1081"}},
-		SelfLoopback:  boolPtr(false), SelfLoopbackAuthenticated: boolPtr(false),
+		SelfLoopback:  new(false), SelfLoopbackAuthenticated: new(false),
 		TLSMITM: true, TLSPort: 443, TLSCAPath: "/ca.pem", TLSCAKeyPath: "/ca.key",
 	}
 	b, err := json.Marshal(want)

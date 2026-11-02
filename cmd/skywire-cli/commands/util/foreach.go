@@ -284,8 +284,7 @@ func runOne(parent context.Context, target string, idx int, template string) for
 			return r
 		}
 		// exec.ExitError carries the child's exit code.
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			r.ExitCode = ee.ExitCode()
 		} else {
 			r.ExitCode = -1

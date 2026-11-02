@@ -29,8 +29,7 @@ func (s *stubDiscovery) GetAllTransports(context.Context) ([]*Entry, error) {
 
 func TestDeferredDiscoveryClientFailsFastUntilConnected(t *testing.T) {
 	log := logging.MustGetLogger("deferred-disc-test")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	var attempts atomic.Int32
 	stub := &stubDiscovery{}
@@ -60,8 +59,7 @@ func TestDeferredDiscoveryClientFailsFastUntilConnected(t *testing.T) {
 
 func TestDeferredDiscoveryClientBeforeConnect(t *testing.T) {
 	log := logging.MustGetLogger("deferred-disc-test")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	blocked := make(chan struct{})
 	d := NewDeferredDiscoveryClient(ctx, log, time.Hour, func(context.Context) (DiscoveryClient, error) {

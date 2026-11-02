@@ -198,8 +198,7 @@ func (rc *rpcClient) noteCallCompleted(err error) {
 		rc.consecTimeouts.Store(0)
 		return
 	}
-	var srvErr rpc.ServerError
-	if errors.As(err, &srvErr) {
+	if _, ok := errors.AsType[rpc.ServerError](err); ok {
 		rc.consecTimeouts.Store(0)
 	}
 }

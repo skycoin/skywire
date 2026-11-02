@@ -147,7 +147,7 @@ var byteSlices sync.Map // reflect.Type -> bool
 // slice field to point into it. Strings and arrays are always copied out.
 func decode(val []byte, obj any) (uint64, error) {
 	t := reflect.TypeOf(obj)
-	if t == nil || t.Kind() != reflect.Ptr {
+	if t == nil || t.Kind() != reflect.Pointer {
 		return encoder.DeserializeRaw(val, obj)
 	}
 	t = t.Elem()
@@ -172,7 +172,7 @@ func hasByteSlice(t reflect.Type, seen map[reflect.Type]bool) bool {
 			return true
 		}
 		return hasByteSlice(t.Elem(), seen)
-	case reflect.Array, reflect.Ptr:
+	case reflect.Array, reflect.Pointer:
 		return hasByteSlice(t.Elem(), seen)
 	case reflect.Map:
 		return hasByteSlice(t.Key(), seen) || hasByteSlice(t.Elem(), seen)

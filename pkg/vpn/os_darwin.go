@@ -66,8 +66,7 @@ func (c *Client) ChangeRoute(ipCIDR, gateway string) error {
 // AddRoute adds route to `ipCIDR` through the `gateway` to the OS routing table.
 func (c *Client) AddRoute(ipCIDR, gateway string) error {
 	if err := c.modifyRoutingTable("add", ipCIDR, gateway); err != nil {
-		var e *osutil.ErrorWithStderr
-		if errors.As(err, &e) {
+		if e, ok := errors.AsType[*osutil.ErrorWithStderr](err); ok {
 			if strings.Contains(string(e.Stderr), "File exists") {
 				return nil
 			}

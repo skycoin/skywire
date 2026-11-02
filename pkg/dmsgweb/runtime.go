@@ -275,13 +275,11 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	// SOCKS5 tunnel — no intermediate HTTP bridge. Browser HTTP
 	// bytes flow straight through the DMSG stream.
 	if len(cfg.ResolveAddr) == 0 && cfg.ProxyPort != 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := serveSOCKS5Direct(ctx, log, dmsgC, cfg); err != nil && !errors.Is(err, context.Canceled) {
 				errCh <- err
 			}
-		}()
+		})
 	}
 
 	// --- Fixed-mapping mode (--resolve) ---

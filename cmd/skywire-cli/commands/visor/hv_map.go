@@ -190,9 +190,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 		if !v.Online {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			client := local
@@ -208,7 +206,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 				defer client.Close() //nolint:errcheck
 			}
 			v.fill(client)
-		}()
+		})
 	}
 	wg.Wait()
 	return m

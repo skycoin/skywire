@@ -114,8 +114,7 @@ func TestDialPacketContextPassesContext(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	addr := Addr{Net: TypeSkynet, PubKey: pk, Port: 1234}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	_, err := DialPacketContext(ctx, addr)
 	require.NoError(t, err)

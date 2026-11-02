@@ -129,13 +129,11 @@ func (s *Service) serve(ctx context.Context, network string, l net.Listener) {
 	s.lisMu.Lock()
 	s.lis = append(s.lis, l)
 	s.lisMu.Unlock()
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		if err := s.mb.Serve(ctx, l); err != nil && !errors.Is(err, net.ErrClosed) {
 			s.cfg.Log.WithError(err).WithField("network", network).Warn("skymail: listener stopped")
 		}
-	}()
+	})
 }
 
 // Close stops serving and waits for the mailbox's loops, keeping its mail.

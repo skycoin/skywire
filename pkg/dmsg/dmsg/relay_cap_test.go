@@ -45,15 +45,13 @@ func TestRelaySlotCap(t *testing.T) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for range 64 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if c2.tryAcquireRelaySlot(peer()) {
 				mu.Lock()
 				granted++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	require.Equal(t, int64(8), granted, "exactly cap slots granted, no overshoot")

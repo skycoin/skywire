@@ -295,8 +295,7 @@ func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote ciphe
 		return nil, &relayDialError{dst: remote, direct: direct, skipped: true}
 	}
 	conn, err := d.dialViaRelay(ctx, remote, port)
-	var rerr *relayDialError
-	if errors.As(err, &rerr) {
+	if rerr, ok := errors.AsType[*relayDialError](err); ok {
 		rerr.direct = direct
 	}
 	return conn, err

@@ -136,11 +136,9 @@ func TestGCDoesNotDeadlockOnStuckClose(t *testing.T) {
 	rg, conn := createTestRouteGroupWithBlockingTransport(t)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		rg.Close() //nolint:errcheck,gosec
-	}()
+	})
 
 	// Wait for write to actually block
 	<-conn.writeCh

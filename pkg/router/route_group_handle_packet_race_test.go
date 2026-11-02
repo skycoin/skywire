@@ -57,9 +57,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range N {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() {
 				// Test-level recover so a panic in handleDataPacket
 				// (i.e. the fix being absent) fails the test
@@ -71,7 +69,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 			if err := rg.handleDataPacket(pkt); err == nil {
 				sentOK.Add(1)
 			}
-		}()
+		})
 	}
 
 	// Run remote-initiated close concurrently with the senders.

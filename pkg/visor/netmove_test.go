@@ -63,8 +63,7 @@ func TestNetworkMovedCoalesces(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() { defer wg.Done(); v.networkMoved("burst") }()
+		wg.Go(func() { ; v.networkMoved("burst") })
 	}
 	wg.Wait()
 	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 }, time.Second, time.Millisecond)
@@ -147,8 +146,7 @@ func TestWatcherFiresOnFingerprintChange(t *testing.T) {
 	v.netMove.refresh = func(r string) { got.Store(r) }
 	v.setNetworkIntervals(5*time.Millisecond, -1)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go v.watchNetwork(ctx)
 
 	time.Sleep(30 * time.Millisecond)

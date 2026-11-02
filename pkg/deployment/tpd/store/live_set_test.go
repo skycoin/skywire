@@ -17,8 +17,7 @@ import (
 // lapse — and the index sets are pruned of what lapsed.
 func TestLiveSetFollowsWrites(t *testing.T) {
 	s := newTestRedisStore(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	seeded := &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}

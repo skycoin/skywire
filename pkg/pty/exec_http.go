@@ -576,8 +576,7 @@ func classifyExecResult(runCtx context.Context, runErr error) (exitCode int, tim
 	if runErr == nil {
 		return 0, false, ""
 	}
-	var ee *exec.ExitError
-	if errors.As(runErr, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](runErr); ok {
 		return ee.ExitCode(), false, ""
 	}
 	// A spawn failure — command not found, not executable. The exit code is

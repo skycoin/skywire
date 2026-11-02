@@ -167,15 +167,13 @@ func (env *Env) NewClientWithKeys(pk cipher.PubKey, sk cipher.SecKey, conf *dmsg
 func (env *Env) newClientWithKeys(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey, conf *dmsg.Config) (*dmsg.Client, error) {
 	c := dmsg.NewClient(pk, sk, env.d, conf)
 	env.c[pk] = c
-	env.cWg.Add(1)
 
-	go func() { //nolint:gosec
+	env.cWg.Go(func() { //nolint:gosec
 		c.Serve(context.Background())
 		env.mx.Lock()
 		delete(env.c, pk)
 		env.mx.Unlock()
-		env.cWg.Done()
-	}()
+	})
 
 	select {
 	case <-ctx.Done():

@@ -230,23 +230,19 @@ var RootCmd = &cobra.Command{
 			return fmt.Errorf("failed to serve CLI: %w", err)
 		}
 		log.WithField("addr", cliL.Addr()).Info("Listening for CLI connections.")
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			log.WithError(host.ServeCLI(ctx, cliL)).
 				Info("Stopped serving CLI.")
-			wg.Done()
-		}()
+		})
 
 		// Dmsg-overlay listener — only when dmsg is enabled.
 		if dmsgC != nil {
 			log.WithField("port", conf.DmsgPort).
 				Info("Listening for dmsg streams.")
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				log.WithError(host.ListenAndServe(ctx, conf.DmsgPort)).
 					Info("Stopped serving dmsgpty-host.")
-				wg.Done()
-			}()
+			})
 		}
 
 		// Optional direct-TCP entry point (XK-noise + whitelist

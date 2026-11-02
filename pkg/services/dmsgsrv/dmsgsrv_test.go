@@ -195,8 +195,7 @@ func newTestService(t *testing.T) (*service, []dmsgserver.Deployment, []cipher.P
 
 func TestBuildTransitDmsg(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	dmsgC, dClient, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
@@ -210,8 +209,7 @@ func TestBuildTransitDmsg(t *testing.T) {
 
 func TestNewDmsgOnly(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dmsgC, _, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
 

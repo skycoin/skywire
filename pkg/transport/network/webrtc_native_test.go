@@ -101,11 +101,9 @@ func TestWebRTCCarrier_LargePayload(t *testing.T) {
 	got := make([]byte, total)
 	var rErr error
 	var rwg sync.WaitGroup
-	rwg.Add(1)
-	go func() {
-		defer rwg.Done()
+	rwg.Go(func() {
 		rErr = readFull(bConn, got)
-	}()
+	})
 
 	// Write in <=dcReadBuf chunks (a single SCTP message must fit the reader's buf).
 	for off := 0; off < total; off += 64 * 1024 {

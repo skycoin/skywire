@@ -264,11 +264,9 @@ func runIperfSender(ctx context.Context, conn net.Conn, duration, interval time.
 	printerCtx, stopPrinter := context.WithCancel(ctx)
 	defer stopPrinter()
 	if interval > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runSamplePrinter(printerCtx, &sent, interval, start, "send")
-		}()
+		})
 	}
 
 	// Set a write deadline at the test end so the loop can't hang
@@ -310,11 +308,9 @@ func runIperfReceiver(ctx context.Context, conn net.Conn, interval time.Duration
 	printerCtx, stopPrinter := context.WithCancel(ctx)
 	defer stopPrinter()
 	if interval > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runSamplePrinter(printerCtx, &rcvd, interval, start, "recv")
-		}()
+		})
 	}
 
 	for {

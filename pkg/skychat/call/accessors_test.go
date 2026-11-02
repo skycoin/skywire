@@ -10,7 +10,6 @@
 package call
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -101,8 +100,7 @@ func TestSigTypeName(t *testing.T) {
 // so both the Signaler and the voice Manager must be able to take an extra
 // listener once Serve is already running. A nil listener is a no-op.
 func TestAddListener_LateBinding(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	pk, _ := cipher.GenerateKeyPair()
 	sig := NewSignaler(pk, 1, nil, nil)

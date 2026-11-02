@@ -86,8 +86,7 @@ func TestUpdateClientEntryLoop_RetriesAfterFailedPublish(t *testing.T) {
 	_, due := c.updateIsDue()
 	require.False(t, due, "test setup: the retry must race a not-due timer")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	done := make(chan struct{})
 	defer close(done)
 
@@ -145,8 +144,7 @@ func TestUpdateClientEntryLoop_RetriesFailedFirstPublish(t *testing.T) {
 	c.init(pk, sk, dc, logging.MustGetLogger("test"), time.Hour)
 	c.sessions[srvPK] = &SessionCommon{rPK: srvPK}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	done := make(chan struct{})
 	defer close(done)
 

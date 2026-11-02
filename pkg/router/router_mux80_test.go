@@ -214,12 +214,10 @@ func TestMuxSetup_ConcurrentLegsNoCollapse(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Registration races the aux arrivals.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(15 * time.Millisecond)
 		r.registerPrimary(rg, desc)
-	}()
+	})
 
 	// Aux legs arrive from parallel goroutines, straddling the registration.
 	for i := range nAux {

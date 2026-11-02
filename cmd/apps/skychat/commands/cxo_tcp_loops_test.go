@@ -297,8 +297,7 @@ func TestStartCXOTCP_SubscribesAndSurfacesPeerMessages(t *testing.T) {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if err := startCXOTCP(ctx); err != nil {
 		t.Fatalf("startCXOTCP: %v", err)
 	}
@@ -389,8 +388,7 @@ func TestStartCXOGroup_OpensSessionAndRoutesSends(t *testing.T) {
 		"tcp://" + peerPK.Hex() + "@127.0.0.1:" + "65001", // never dialed successfully; that's fine
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if err := startCXOTCP(ctx); err != nil {
 		t.Fatalf("startCXOTCP → startCXOGroup: %v", err)
 	}

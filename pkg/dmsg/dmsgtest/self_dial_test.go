@@ -68,12 +68,10 @@ func TestSelfDial(t *testing.T) {
 		// dialer -> acceptor
 		dataD2A := cipher.RandByte(size)
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, werr := dialStream.Write(dataD2A)
 			assert.NoError(t, werr)
-		}()
+		})
 		recvD2A := make([]byte, size)
 		_, err = io.ReadFull(acceptStream, recvD2A)
 		require.NoError(t, err)
@@ -82,12 +80,10 @@ func TestSelfDial(t *testing.T) {
 
 		// acceptor -> dialer
 		dataA2D := cipher.RandByte(size)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, werr := acceptStream.Write(dataA2D)
 			assert.NoError(t, werr)
-		}()
+		})
 		recvA2D := make([]byte, size)
 		_, err = io.ReadFull(dialStream, recvA2D)
 		require.NoError(t, err)

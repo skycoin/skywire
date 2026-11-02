@@ -162,8 +162,7 @@ func (g *LocalPtyGateway) Exec(req *CommandExecReq, resp *CommandExecResult) err
 		return nil
 	}
 	// exec.ExitError gives a real exit code; other errors leave -1.
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		resp.ExitCode = ee.ExitCode()
 		return nil
 	}

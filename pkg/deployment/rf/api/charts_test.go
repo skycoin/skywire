@@ -125,8 +125,7 @@ func TestRouteRequestsAreCountedAndCharted(t *testing.T) {
 	require.Equal(t, uint64(1), got.perPair[1], "one route found for the pair")
 
 	require.Equal(t, http.StatusNotFound, do(t, api, http.MethodGet, "/", nil).Code)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	api.StartCharts(ctx, charts.NewMemoryStore(), nil, logrus.New())
 	rec := do(t, api, http.MethodGet, "/", nil)
 	require.Equal(t, http.StatusOK, rec.Code)

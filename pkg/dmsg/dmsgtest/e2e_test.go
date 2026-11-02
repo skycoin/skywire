@@ -84,12 +84,10 @@ func TestBidirectionalStreams(t *testing.T) {
 			dataAtoB := cipher.RandByte(p.size)
 			var wg sync.WaitGroup
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, wErr := connA.Write(dataAtoB)
 				assert.NoError(t, wErr)
-			}()
+			})
 
 			recvAtoB := make([]byte, p.size)
 			_, err = io.ReadFull(streamB, recvAtoB)
@@ -100,12 +98,10 @@ func TestBidirectionalStreams(t *testing.T) {
 			// Test B -> A
 			dataBtoA := cipher.RandByte(p.size)
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, wErr := streamB.Write(dataBtoA)
 				assert.NoError(t, wErr)
-			}()
+			})
 
 			recvBtoA := make([]byte, p.size)
 			_, err = io.ReadFull(connA, recvBtoA)
@@ -166,12 +162,10 @@ func TestMultiServerStreams(t *testing.T) {
 	dataAB := cipher.RandByte(512)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamAB.Write(dataAB)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvAB := make([]byte, 512)
 	_, err = io.ReadFull(connBA, recvAB)
@@ -182,12 +176,10 @@ func TestMultiServerStreams(t *testing.T) {
 	// Verify data flows on B->C stream.
 	dataBC := cipher.RandByte(512)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamBC.Write(dataBC)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvBC := make([]byte, 512)
 	_, err = io.ReadFull(connCB, recvBC)
@@ -206,12 +198,10 @@ func TestMultiServerStreams(t *testing.T) {
 
 	dataAB2 := cipher.RandByte(256)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := streamAB2.Write(dataAB2)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recvAB2 := make([]byte, 256)
 	_, err = io.ReadFull(connBA2, recvAB2)
@@ -270,9 +260,7 @@ func TestConcurrentStreams(t *testing.T) {
 
 	for i := range numStreams {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Retry dials — on slow CI runners, concurrent handshakes
 			// can transiently fail with "cannot connect to delegated server".
 			var s *dmsg.Stream
@@ -289,7 +277,7 @@ func TestConcurrentStreams(t *testing.T) {
 				return
 			}
 			results[i] = streamResult{idx: i, stream: s, sent: cipher.RandByte(payloadSize)}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -306,12 +294,10 @@ func TestConcurrentStreams(t *testing.T) {
 	for i := range numStreams {
 		require.NoError(t, results[i].err, "stream %d dial failed", i)
 		i := i
-		sendWg.Add(1)
-		go func() {
-			defer sendWg.Done()
+		sendWg.Go(func() {
 			_, wErr := results[i].stream.Write(results[i].sent)
 			assert.NoError(t, wErr, "stream %d write failed", i)
-		}()
+		})
 	}
 
 	// Read from each accepted stream. Since we do not know which accepted stream
@@ -320,14 +306,12 @@ func TestConcurrentStreams(t *testing.T) {
 	var recvWg sync.WaitGroup
 	for i := range numStreams {
 		i := i
-		recvWg.Add(1)
-		go func() {
-			defer recvWg.Done()
+		recvWg.Go(func() {
 			buf := make([]byte, payloadSize)
 			_, rErr := io.ReadFull(accepted[i], buf)
 			assert.NoError(t, rErr, "stream %d read failed", i)
 			recvData[i] = buf
-		}()
+		})
 	}
 
 	sendWg.Wait()
@@ -391,12 +375,10 @@ func TestSessionReconnect(t *testing.T) {
 	data1 := cipher.RandByte(64)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := stream1.Write(data1)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv1 := make([]byte, 64)
 	_, err = io.ReadFull(conn1, recv1)
@@ -428,12 +410,10 @@ func TestSessionReconnect(t *testing.T) {
 
 	data2 := cipher.RandByte(64)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, wErr := stream2.Write(data2)
 		assert.NoError(t, wErr)
-	}()
+	})
 
 	recv2 := make([]byte, 64)
 	_, err = io.ReadFull(conn2, recv2)

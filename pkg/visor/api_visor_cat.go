@@ -510,9 +510,7 @@ func acceptCatRemote(ctx context.Context, wl pty.Whitelist, dmsgLis, skyLis net.
 		if lis == nil {
 			return
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				conn, err := lis.Accept()
 				if err != nil {
@@ -543,7 +541,7 @@ func acceptCatRemote(ctx context.Context, wl pty.Whitelist, dmsgLis, skyLis net.
 				}
 				return
 			}
-		}()
+		})
 	}
 	spawn(dmsgLis)
 	spawn(skyLis)

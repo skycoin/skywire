@@ -109,11 +109,9 @@ func TestConcurrentWritesDoNotInterleave(t *testing.T) {
 	require.NoError(t, err)
 	var wg sync.WaitGroup
 	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			require.NoError(t, mt.WritePacket(context.Background(), pkt))
-		}()
+		})
 	}
 	wg.Wait()
 	require.Equal(t, int32(32), conn.writes.Load())

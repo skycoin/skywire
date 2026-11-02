@@ -233,8 +233,7 @@ func TestAckRoundTrip(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error from ReadAck, got nil")
 		}
-		var fe *FatalError
-		if !errors.As(err, &fe) {
+		if !errors.As(err, new(*FatalError)) {
 			t.Errorf("err = %v, want *FatalError", err)
 		}
 		if string(line) != "no such file" {

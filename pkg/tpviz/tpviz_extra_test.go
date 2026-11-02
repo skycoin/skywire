@@ -311,8 +311,7 @@ func TestRefreshIPGroupsCache_BadSurveyDir(t *testing.T) {
 
 // ---- embedded visor refresh ------------------------------------------------
 
-func u64(v uint64) *uint64 { return &v }
-
+//go:fix inline
 func TestRefreshVisorData_Transports(t *testing.T) {
 	id1 := uuid.New()
 	fv := &fakeVisorAPI{
@@ -323,7 +322,7 @@ func TestRefreshVisorData_Transports(t *testing.T) {
 					ID:    id1,
 					Type:  "stcpr",
 					Label: "skycoin",
-					Log:   &transport.LogEntry{SentBytes: u64(100), RecvBytes: u64(200)},
+					Log:   &transport.LogEntry{SentBytes: new(uint64(100)), RecvBytes: new(uint64(200))},
 				},
 				{ID: uuid.New(), Type: "dmsg"}, // nil Log
 			},
@@ -345,7 +344,7 @@ func TestRefreshVisorData_Transports(t *testing.T) {
 	require.Equal(t, uint64(0), c1.TotalSentDelta)
 
 	// Bump bandwidth and refresh again -> deltas computed against snapshot.
-	fv.overview.Transports[0].Log = &transport.LogEntry{SentBytes: u64(150), RecvBytes: u64(260)}
+	fv.overview.Transports[0].Log = &transport.LogEntry{SentBytes: new(uint64(150)), RecvBytes: new(uint64(260))}
 	s.refreshVisorData()
 	s.visorMu.RLock()
 	c2 := s.visorCache

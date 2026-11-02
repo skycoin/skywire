@@ -1,7 +1,6 @@
 package svcmode
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -154,8 +153,7 @@ func TestStartValidation(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

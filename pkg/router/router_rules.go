@@ -278,9 +278,7 @@ func (r *router) CloseRouteGroupsForApp(appName string) int {
 		// The faithful-UDP sibling's lifetime is coupled to the reliable
 		// route (#2607), same as the rules-GC reap path.
 		r.closeDatagramSibling(v.desc)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			var err error
 			if v.nrg != nil {
 				err = v.nrg.Close()
@@ -293,7 +291,7 @@ func (r *router) CloseRouteGroupsForApp(appName string) int {
 					WithField("rt_desc", v.desc.String()).
 					Debug("Failed to close the stopped app's route group.")
 			}
-		}()
+		})
 	}
 	go func() {
 		wg.Wait()
