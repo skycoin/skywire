@@ -2,7 +2,9 @@
 package pathutil
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -17,7 +19,7 @@ const (
 
 // EnsureDir attempts to create given directory.
 func EnsureDir(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return os.MkdirAll(path, userRWXGroupRX)
 	}
 

@@ -37,7 +37,9 @@ package commands
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -72,7 +74,7 @@ func loadUIPassword(path string) error {
 	}
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err

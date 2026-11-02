@@ -3,6 +3,8 @@
 package commands
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,7 +35,7 @@ func TestSyncDeploymentDropIn(t *testing.T) {
 	if changed, err := syncDeploymentDropIn(""); err != nil || !changed {
 		t.Fatalf("remove: changed=%v err=%v", changed, err)
 	}
-	if _, err := os.Stat(deploymentDropIn); !os.IsNotExist(err) {
+	if _, err := os.Stat(deploymentDropIn); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("drop-in still there: %v", err)
 	}
 	if changed, err := syncDeploymentDropIn(""); err != nil || changed {

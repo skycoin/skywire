@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"testing"
 	"time"
@@ -184,7 +184,7 @@ func continuousRandomWrite(t *testing.T, conn net.Conn) {
 			close(errCh)
 		}()
 		for {
-			b := cipher.RandByte(rand.Intn(maxLen)) // nolint:gosec
+			b := cipher.RandByte(rand.IntN(maxLen)) // nolint:gosec
 			if _, err := conn.Write(b); err != nil {
 				return
 			}

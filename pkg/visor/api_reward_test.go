@@ -2,6 +2,8 @@ package visor
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,7 +33,7 @@ func TestDeleteRewardAddress(t *testing.T) {
 	if err := v.DeleteRewardAddress(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("reward.txt still there: %v", err)
 	}
 	if got, err := v.GetRewardAddress(); err != nil || got != "" {

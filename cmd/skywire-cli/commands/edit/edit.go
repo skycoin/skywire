@@ -2,7 +2,9 @@
 package cliedit
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -26,7 +28,7 @@ var RootCmd = &cobra.Command{
 		if len(args) == 1 {
 			filename = args[0]
 			data, err := os.ReadFile(filename) //nolint:gosec
-			if err != nil && !os.IsNotExist(err) {
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				cmdutil.Eprintf("edit: %v\n", err)
 				cmdutil.Exit(1)
 			}

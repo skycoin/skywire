@@ -15,6 +15,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -95,7 +97,7 @@ func TestResolveUploadOrPath_MultipartUpload(t *testing.T) {
 	}
 	// cleanup removes the temp file.
 	cleanup()
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("cleanup should remove the temp upload, stat err=%v", err)
 	}
 }

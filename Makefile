@@ -181,7 +181,8 @@ check-browseui: ## Fail if an embedded browser script does not load and define i
 			catch (e) { console.error('$$path threw at load: ' + e.message); process.exit(1); } \
 			if (typeof globalThis['$$sym'] !== 'function' && typeof globalThis['$$sym'] !== 'object') { \
 				console.error('$$path loaded but did not define $$sym'); process.exit(1); \
-			}" || exit 1; \
+			} \
+			process.exit(0);" || exit 1; \
 		echo "  ok  $$path defines $$sym"; \
 	done
 	@# The identity vault is a device-theft defence; assert its properties, not

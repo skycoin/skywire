@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -141,7 +142,7 @@ func (c *Client) Download(remotePath, localPath string) error {
 	cleanup := func(success bool) error {
 		closeErr := f.Close()
 		if !success {
-			if rerr := os.Remove(localPath); rerr != nil && !os.IsNotExist(rerr) {
+			if rerr := os.Remove(localPath); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 				return fmt.Errorf("close=%v, remove=%w", closeErr, rerr)
 			}
 		}

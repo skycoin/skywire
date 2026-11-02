@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -62,7 +63,7 @@ func (v *Visor) SkychatPasswordIsSet() (bool, error) {
 	path := v.skychatPasswordPath()
 	st, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, err
@@ -123,7 +124,7 @@ func (v *Visor) ClearSkychatPassword(oldPassword string) error {
 	// path is filepath.Join(v.conf.LocalPath, "skychat-password") —
 	// visor-controlled, not user input. The G703 path-traversal flag
 	// is a false positive in this context.
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) { //nolint:gosec
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) { //nolint:gosec
 		return err
 	}
 	// Re-launch skychat with --password-file = "" so it knows the
@@ -346,7 +347,7 @@ type skychatPasswordRecord struct {
 func readSkychatPassword(path string) (*skychatPasswordRecord, error) {
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err

@@ -4,6 +4,8 @@ package hostbridge
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -116,7 +118,7 @@ func Unpair(pairFile string) error {
 	if pairFile == "" {
 		return nil
 	}
-	if err := os.Remove(pairFile); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(pairFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	return nil

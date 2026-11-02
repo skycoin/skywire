@@ -4,8 +4,10 @@ package clirewards
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"os/exec"
@@ -804,7 +806,7 @@ Architectures:
 			return
 		}
 		_, err = os.Stat(hwSurveyPath)
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.Fatal("the path to the surveys does not exist\n", err, "\nfetch the surveys with:\n$ skywire-cli log")
 		}
 
@@ -821,7 +823,7 @@ Architectures:
 		}
 
 		_, err = os.Stat(utfile)
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			log.Fatal("uptime tracker data file not found\n", err, "\nfetch the uptime tracker data with:\n$ skywire-cli ut > ut.txt")
 		}
 
@@ -1346,7 +1348,7 @@ func resolveRewardAddress(addr, date string) string {
 
 func mustExist(path string) {
 	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		log.Fatal("the path to the file does not exist: ", path, "\n", err)
 	}
 	if err != nil {

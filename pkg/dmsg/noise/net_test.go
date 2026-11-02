@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"sync"
 	"testing"
@@ -225,10 +225,8 @@ func TestConn(t *testing.T) {
 			require.Equal(t, writeB, readB)
 		}
 
-		r := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint
-
 		for i := 0; i < 10; i++ {
-			n := r.Intn(10000000) // nolint:gosec
+			n := rand.IntN(10000000) // nolint:gosec
 			t.Run(fmt.Sprintf("%dBytes", n), func(t *testing.T) {
 				do(t, n)
 			})

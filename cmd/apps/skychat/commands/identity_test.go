@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +26,7 @@ func TestIdentityStatePath(t *testing.T) {
 	if first != want {
 		t.Fatalf("scoped: %s, want %s", first, want)
 	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+	if _, err := os.Stat(legacy); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("legacy file still there after adoption")
 	}
 	if b, err := os.ReadFile(want); err != nil || string(b) != `{"a":"b"}` { //nolint:gosec
@@ -33,7 +35,7 @@ func TestIdentityStatePath(t *testing.T) {
 
 	// A second identity starts clean: nothing left to adopt.
 	second := identityStatePath(dir, "03bb", "skychat-contacts.json")
-	if _, err := os.Stat(second); !os.IsNotExist(err) {
+	if _, err := os.Stat(second); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("second identity adopted something")
 	}
 	if _, err := os.Stat(want); err != nil {

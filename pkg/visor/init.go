@@ -16,7 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 
 	"github.com/skycoin/skywire/pkg/cipher"

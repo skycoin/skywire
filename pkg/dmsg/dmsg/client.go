@@ -3,12 +3,10 @@ package dmsg
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"sort"
 	"strconv"
@@ -727,7 +725,6 @@ serve:
 		// starting clients still don't stampede the same server. A missing/zero
 		// AvailableSessions falls back to weight 1 (uniform), matching the old
 		// behavior for discoveries that don't populate the field.
-		seedRng := rand.New(rand.NewSource(cryptoSeed())) //nolint:gosec // G404: seed is from crypto/rand; math/rand is fine for weighting
 		type weightedEntry struct {
 			entry *disc.Entry
 			key   float64
@@ -738,7 +735,7 @@ serve:
 			if entry.Server != nil && entry.Server.AvailableSessions > 0 {
 				w = float64(entry.Server.AvailableSessions)
 			}
-			u := seedRng.Float64()
+			u := rand.Float64() //nolint:gosec // weighting, not cryptography; v2 seeds it per process
 			if u <= 0 {
 				u = math.SmallestNonzeroFloat64
 			}
@@ -957,17 +954,6 @@ func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*dis
 		return err
 	})
 	return entries, err
-}
-
-// cryptoSeed returns a math/rand seed sourced from crypto/rand, falling back to
-// the wall clock if the CSPRNG read fails. Used to seed the per-client server
-// ordering so simultaneously starting clients pick independent orders.
-func cryptoSeed() int64 {
-	var seed int64
-	if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
-		seed = time.Now().UnixNano()
-	}
-	return seed
 }
 
 // Close closes the dmsg client entity and waits for background goroutines to finish.

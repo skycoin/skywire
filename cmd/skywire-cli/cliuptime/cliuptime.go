@@ -22,7 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -210,7 +210,7 @@ and --per-day modes; --hours ignores them.`,
 				if seed == 0 {
 					seed = time.Now().UnixNano()
 				}
-				rng := rand.New(rand.NewSource(seed)) //nolint:gosec // not a security boundary
+				rng := rand.New(rand.NewPCG(uint64(seed), 0)) //nolint:gosec // not a security boundary
 				rng.Shuffle(len(filtered), func(i, j int) {
 					filtered[i], filtered[j] = filtered[j], filtered[i]
 				})

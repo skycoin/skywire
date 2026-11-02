@@ -787,13 +787,13 @@ func sftpToErrno(err error) syscall.Errno {
 	if errno, ok := err.(syscall.Errno); ok {
 		return errno
 	}
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return syscall.ENOENT
 	}
-	if os.IsPermission(err) {
+	if errors.Is(err, os.ErrPermission) {
 		return syscall.EACCES
 	}
-	if os.IsExist(err) {
+	if errors.Is(err, os.ErrExist) {
 		return syscall.EEXIST
 	}
 	// sftp.ErrSshFxNoSuchFile / similar are unwrapped via os.Is* above

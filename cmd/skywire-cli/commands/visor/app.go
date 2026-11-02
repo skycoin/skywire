@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -669,7 +670,7 @@ func ensureDir(path *string) error {
 	if *path, err = filepath.Abs(*path); err != nil {
 		return fmt.Errorf("failed to expand path: %s", err)
 	}
-	if _, err := os.Stat(*path); !os.IsNotExist(err) {
+	if _, err := os.Stat(*path); !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err := os.MkdirAll(*path, 0750); err != nil {

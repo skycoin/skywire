@@ -26,12 +26,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/textproto"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -61,7 +62,7 @@ func LoadOrCreateMITMCA(dir string) (*x509.Certificate, skynetca.LeafMinter, err
 
 	cert, key, err := skynetca.LoadCA(certPath, keyPath)
 	if err != nil {
-		if !os.IsNotExist(errCause(err)) {
+		if !errors.Is(errCause(err), fs.ErrNotExist) {
 			// A present-but-unreadable CA is a real error — do not silently mint a
 			// second root over it.
 			return nil, nil, fmt.Errorf("load MITM CA: %w", err)
