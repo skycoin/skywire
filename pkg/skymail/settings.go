@@ -70,7 +70,8 @@ func LoadSettings(dir string) (Settings, error) {
 	if err != nil {
 		return s, err
 	}
-	return s, json.Unmarshal(raw, &s)
+	err = json.Unmarshal(raw, &s)
+	return s, err
 }
 
 // Save writes s to dir's SettingsFile in one step.

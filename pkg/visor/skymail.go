@@ -328,42 +328,47 @@ func (v *Visor) mailCall(f func(skymail.Control) error) error {
 
 // MailList implements visorapi.API.
 func (v *Visor) MailList(folder string) (list []skymail.Summary, err error) {
-	return list, v.mailCall(func(c skymail.Control) error {
+	err = v.mailCall(func(c skymail.Control) error {
 		list, err = c.List(folder)
 		return err
 	})
+	return list, err
 }
 
 // MailRead implements visorapi.API.
 func (v *Visor) MailRead(folder, id string) (m *skymail.Rendered, err error) {
-	return m, v.mailCall(func(c skymail.Control) error {
+	err = v.mailCall(func(c skymail.Control) error {
 		m, err = c.Read(folder, id)
 		return err
 	})
+	return m, err
 }
 
 // MailRaw implements visorapi.API.
 func (v *Visor) MailRaw(folder, id string) (raw []byte, err error) {
-	return raw, v.mailCall(func(c skymail.Control) error {
+	err = v.mailCall(func(c skymail.Control) error {
 		raw, err = c.Raw(folder, id)
 		return err
 	})
+	return raw, err
 }
 
 // MailAttachment implements visorapi.API.
 func (v *Visor) MailAttachment(folder, id string, n int) (a *skymail.AttachmentData, err error) {
-	return a, v.mailCall(func(c skymail.Control) error {
+	err = v.mailCall(func(c skymail.Control) error {
 		a, err = c.Attachment(folder, id, n)
 		return err
 	})
+	return a, err
 }
 
 // MailSend implements visorapi.API.
 func (v *Visor) MailSend(msg skymail.Outgoing) (res *skymail.SendResult, err error) {
-	return res, v.mailCall(func(c skymail.Control) error {
+	err = v.mailCall(func(c skymail.Control) error {
 		res, err = c.Send(msg)
 		return err
 	})
+	return res, err
 }
 
 // MailDelete implements visorapi.API.
