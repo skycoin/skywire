@@ -1,10 +1,11 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -55,7 +56,9 @@ func (s *hvStatus) sections() []charts.Section {
 	for pk := range apis {
 		keys = append(keys, pk)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].Hex() < keys[j].Hex() })
+	slices.SortFunc(keys, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	if self != nil {
 		keys = append([]cipher.PubKey{s.hv.c.PK}, keys...)
 		apis[s.hv.c.PK] = self

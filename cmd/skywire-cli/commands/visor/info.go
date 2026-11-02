@@ -10,7 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -282,7 +282,7 @@ var portsCmd = &cobra.Command{
 		for portName := range ports {
 			portsName = append(portsName, portName)
 		}
-		sort.Strings(portsName)
+		slices.Sort(portsName)
 
 		for _, portName := range portsName {
 			msg += fmt.Sprintf("| %-21s | %-7s | %7s |\n", portName, ports[portName].Type, ports[portName].Port)
@@ -817,7 +817,7 @@ func buildSummaryMessageWithData(rpcClient visorapi.API) (string, *visorapi.Summ
 		for tpType := range tpCounts {
 			types = append(types, tpType)
 		}
-		sort.Strings(types)
+		slices.Sort(types)
 		parts := make([]string, 0, len(types))
 		for _, tpType := range types {
 			parts = append(parts, fmt.Sprintf("%s: %d", strings.ToUpper(tpType), tpCounts[tpType]))

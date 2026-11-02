@@ -47,11 +47,12 @@
 package group
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -552,11 +553,11 @@ func (r JoinRequest) IsPending() bool { return r.Status == JoinStatusPending }
 // iterates by key, the js map iterates arbitrarily) so an admin's queue
 // reads the same on every platform.
 func sortJoinRequests(reqs []JoinRequest) {
-	sort.Slice(reqs, func(i, j int) bool {
-		if !reqs[i].AskedAt.Equal(reqs[j].AskedAt) {
-			return reqs[i].AskedAt.After(reqs[j].AskedAt)
-		}
-		return reqs[i].PK.Hex() < reqs[j].PK.Hex()
+	slices.SortFunc(reqs, func(a, b JoinRequest) int {
+		return cmp.Or(
+			b.AskedAt.Compare(a.AskedAt),
+			cmp.Compare(a.PK.Hex(), b.PK.Hex()),
+		)
 	})
 }
 

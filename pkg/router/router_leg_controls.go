@@ -20,7 +20,7 @@ package router
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -166,7 +166,7 @@ func (r *router) SetMuxExplicitWeights(desc routing.RouteDescriptor, weights map
 		total += v
 	}
 	if len(unknown) > 0 {
-		sort.Strings(unknown)
+		slices.Sort(unknown)
 		return MuxWeightsView{}, fmt.Errorf("transport(s) %v are not legs of this route group", unknown)
 	}
 	if total <= 0 {

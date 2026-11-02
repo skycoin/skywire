@@ -2,11 +2,12 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -248,7 +249,9 @@ func (v *Visor) hostBridgeSave() {
 		for _, f := range hb.forwards {
 			cfg.Forwards = append(cfg.Forwards, visorconfig.HostBridgeForwardConfig{Host: f.host, Local: f.local})
 		}
-		sort.Slice(cfg.Forwards, func(i, j int) bool { return cfg.Forwards[i].Host < cfg.Forwards[j].Host })
+		slices.SortFunc(cfg.Forwards, func(a, b visorconfig.HostBridgeForwardConfig) int {
+			return cmp.Compare(a.Host, b.Host)
+		})
 	}
 	hb.mu.Unlock()
 	if err := v.conf.UpdateHostBridge(cfg); err != nil {
@@ -278,7 +281,9 @@ func (v *Visor) HostBridgeStatus() (visorapi.HostBridgeStatus, error) {
 	for _, f := range hb.forwards {
 		st.Forwards = append(st.Forwards, f.status())
 	}
-	sort.Slice(st.Forwards, func(i, j int) bool { return st.Forwards[i].Host < st.Forwards[j].Host })
+	slices.SortFunc(st.Forwards, func(a, b visorapi.HostBridgeForward) int {
+		return cmp.Compare(a.Host, b.Host)
+	})
 	return st, nil
 }
 

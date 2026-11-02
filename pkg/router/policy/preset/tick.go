@@ -9,7 +9,8 @@
 package preset
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"sync/atomic"
 )
@@ -344,7 +345,7 @@ func (e *Engine) tickLatencyAdaptive(legs []LegInfo) RotationAction {
 		return RotationAction{}
 	}
 
-	sort.Float64s(smoothed)
+	slices.Sort(smoothed)
 	median := medianSorted(smoothed)
 
 	if median > 0 && worstSmoothed >= 1.5*median {
@@ -996,7 +997,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	}
 	activeMedian := 0.0
 	if len(activeSm) > 0 {
-		sort.Float64s(activeSm)
+		slices.Sort(activeSm)
 		activeMedian = medianSorted(activeSm)
 	}
 	// Active-set MEDIAN recv-rate — the throughput yardstick a leg is judged a
@@ -1004,7 +1005,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// leg has no peer to be an outlier of).
 	activeMedianRate := 0.0
 	if len(activeRates) >= 2 {
-		sort.Float64s(activeRates)
+		slices.Sort(activeRates)
 		activeMedianRate = medianSorted(activeRates)
 	}
 	groupLoaded := rawTotal > 0
@@ -1203,7 +1204,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			}
 			stby = append(stby, stbyLeg{l.Index, lat})
 		}
-		sort.Slice(stby, func(i, j int) bool { return stby[i].lat > stby[j].lat })
+		slices.SortFunc(stby, func(a, b stbyLeg) int {
+			return cmp.Compare(b.lat, a.lat)
+		})
 		surplus := standbyCount - adaptStandbyMax
 		if surplus > len(stby) {
 			surplus = len(stby)
@@ -1319,7 +1322,9 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 			}
 			act = append(act, actLeg{l.Index, lat})
 		}
-		sort.Slice(act, func(i, j int) bool { return act[i].lat > act[j].lat })
+		slices.SortFunc(act, func(a, b actLeg) int {
+			return cmp.Compare(b.lat, a.lat)
+		})
 		surplus := aliveCount - parkFloor
 		if room := adaptStandbyMax - standbyCount; surplus > room {
 			surplus = room

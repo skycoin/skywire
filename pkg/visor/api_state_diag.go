@@ -8,9 +8,10 @@
 package visor
 
 import (
+	"cmp"
 	"runtime"
 	"runtime/metrics"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -70,7 +71,9 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 			})
 			return true
 		})
-		sort.Slice(d.Transports, func(i, j int) bool { return d.Transports[i].ID.String() < d.Transports[j].ID.String() })
+		slices.SortFunc(d.Transports, func(a, b visorapi.DiagTransport) int {
+			return cmp.Compare(a.ID.String(), b.ID.String())
+		})
 	}
 
 	if rs, ok := v.router.(interface {
@@ -126,12 +129,16 @@ func (v *Visor) DiagSnapshot() *visorapi.DiagSnapshot {
 				PingFails: s.PingFails(),
 			})
 		}
-		sort.Slice(dd.Sessions, func(i, j int) bool { return dd.Sessions[i].PK.String() < dd.Sessions[j].PK.String() })
+		slices.SortFunc(dd.Sessions, func(a, b visorapi.DiagDmsgSession) int {
+			return cmp.Compare(a.PK.String(), b.PK.String())
+		})
 		dd.RelayNominees = sortedPKs(v.dmsgC.RelayPeers())
 		for pk, n := range v.dmsgC.RelaySessionStreams() {
 			dd.RelayingFor = append(dd.RelayingFor, visorapi.DiagRelayClient{PK: pk, Streams: n})
 		}
-		sort.Slice(dd.RelayingFor, func(i, j int) bool { return dd.RelayingFor[i].PK.String() < dd.RelayingFor[j].PK.String() })
+		slices.SortFunc(dd.RelayingFor, func(a, b visorapi.DiagRelayClient) int {
+			return cmp.Compare(a.PK.String(), b.PK.String())
+		})
 		dd.RelayBackoff = relayTimers(v.dmsgC.RelayBackoffs())
 		dd.RelayDialSkip = relayTimers(v.dmsgC.RelayDialSkips())
 		dd.OverSkynet = v.dmsgSkynet.snapshot()
@@ -151,6 +158,8 @@ func relayTimers(m map[cipher.PubKey]time.Time) []visorapi.DiagRelayTimer {
 	for pk, until := range m {
 		out = append(out, visorapi.DiagRelayTimer{PK: pk, RemainingS: until.Sub(now).Seconds()})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].PK.String() < out[j].PK.String() })
+	slices.SortFunc(out, func(a, b visorapi.DiagRelayTimer) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
+	})
 	return out
 }

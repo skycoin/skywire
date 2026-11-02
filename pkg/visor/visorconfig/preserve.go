@@ -64,7 +64,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -298,7 +298,7 @@ func writeMergedObject(buf *bytes.Buffer, val json.RawMessage, res map[string]an
 			leftover = append(leftover, key)
 		}
 	}
-	sort.Strings(leftover)
+	slices.Sort(leftover)
 	for _, key := range leftover {
 		if !first {
 			buf.WriteByte(',')

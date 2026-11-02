@@ -8,7 +8,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/metrics"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -257,7 +257,7 @@ func (s *ServiceStats) Collect(v map[string]float64) {
 		v[prefixHTTPOut+k] = n
 	}
 	if len(s.timings) > 0 {
-		sort.Float64s(s.timings)
+		slices.Sort(s.timings)
 		v[keyHTTPP50] = s.timings[len(s.timings)/2]
 		v[keyHTTPP95] = s.timings[len(s.timings)*95/100]
 	}

@@ -3,7 +3,7 @@ package services
 
 import (
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -67,7 +67,7 @@ func TestFlagsBindSameSetEverywhere(t *testing.T) {
 		f.Bind(fs, d)
 		var out []string
 		fs.VisitAll(func(fl *pflag.Flag) { out = append(out, fl.Name+"/"+fl.Shorthand) })
-		sort.Strings(out)
+		slices.Sort(out)
 		return out
 	}
 	a := names(FlagDefaults{Gen: "tpd", Addr: ":9091", Tag: "transport_discovery", EntryTimeout: time.Minute})

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -395,7 +395,7 @@ func pickBottleneckDemotions(legs []bottleneckLeg) []int {
 			demote = append(demote, m.idx)
 		}
 	}
-	sort.Ints(demote)
+	slices.Sort(demote)
 	return demote
 }
 

@@ -2,11 +2,12 @@
 package clitp
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -230,8 +231,8 @@ var treeCmd = &cobra.Command{
 			}
 			sortedEdges = append(sortedEdges, edgeWithCount{pk: pk, count: count})
 		}
-		sort.Slice(sortedEdges, func(i, j int) bool {
-			return sortedEdges[i].count > sortedEdges[j].count
+		slices.SortFunc(sortedEdges, func(a, b edgeWithCount) int {
+			return cmp.Compare(b.count, a.count)
 		})
 
 		// Stats mode

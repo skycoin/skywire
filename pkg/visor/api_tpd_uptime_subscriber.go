@@ -14,11 +14,12 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -149,7 +150,9 @@ func readUptimeWindow(mgr uptimeCXOSubMgr, path string) ([]byte, time.Time, bool
 // marshalSummaries sorts by PK (stable output so repeated reads and cache files
 // don't churn) and marshals the v3 `[]store.VisorSummary` body.
 func marshalSummaries(summaries []store.VisorSummary) ([]byte, bool) {
-	sort.Slice(summaries, func(i, j int) bool { return summaries[i].PK.Hex() < summaries[j].PK.Hex() })
+	slices.SortFunc(summaries, func(a, b store.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 	out, err := json.Marshal(summaries)
 	if err != nil {
 		return nil, false

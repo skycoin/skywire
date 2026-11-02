@@ -21,7 +21,6 @@ import (
 	"hash/fnv"
 	"net"
 	"slices"
-	"sort"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
@@ -58,7 +57,7 @@ func buildSites(bindings map[string]*arfeed.PeerBindings) siteMap {
 	for ip := range byIP {
 		ips = append(ips, ip)
 	}
-	sort.Strings(ips)
+	slices.Sort(ips)
 	for _, ip := range ips {
 		pks := byIP[ip]
 		slices.SortFunc(pks, func(a, b cipher.PubKey) int { return bytes.Compare(a[:], b[:]) })

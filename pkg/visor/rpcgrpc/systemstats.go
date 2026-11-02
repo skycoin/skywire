@@ -4,9 +4,10 @@
 package rpcgrpc
 
 import (
+	"cmp"
 	"context"
 	"runtime"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -320,8 +321,8 @@ func (c *SystemStatsCollector) collectProcesses(ctx context.Context, limit int) 
 	}
 
 	// Sort by CPU usage (descending)
-	sort.Slice(procList, func(i, j int) bool {
-		return procList[i].cpuPercent > procList[j].cpuPercent
+	slices.SortFunc(procList, func(a, b procInfo) int {
+		return cmp.Compare(b.cpuPercent, a.cpuPercent)
 	})
 
 	// Limit results

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"path"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,7 +99,7 @@ func TestEveryProseLinkResolves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk prose: %v", err)
 	}
-	sort.Strings(broken)
+	slices.Sort(broken)
 	for _, b := range broken {
 		t.Errorf("dead link: %s", b)
 	}

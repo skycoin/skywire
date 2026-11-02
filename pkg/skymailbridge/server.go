@@ -28,7 +28,7 @@ import (
 	"net"
 	"net/smtp"
 	"net/textproto"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -157,7 +157,7 @@ func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log
 	for s := range dialers {
 		suffixes = append(suffixes, s)
 	}
-	sort.Strings(suffixes)
+	slices.Sort(suffixes)
 	h := &relayHandler{dialers: dialers, suffixes: suffixes, cfg: cfg, log: orDefaultLog(log)}
 	return ServeHandler(ctx, lis, h, cfg.HeloName, log)
 }

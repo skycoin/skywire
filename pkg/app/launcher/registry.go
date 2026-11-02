@@ -3,7 +3,7 @@ package launcher
 
 import (
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -53,7 +53,7 @@ func RegisteredApps() []string {
 		names = append(names, name)
 	}
 	appRegistryMu.Unlock()
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

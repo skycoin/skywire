@@ -21,7 +21,7 @@ package rpcgrpc
 import (
 	"context"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -674,7 +674,7 @@ func aggregatePingSamples(samples []float64) (avg, p50, p99, jitter int64) {
 	// the ping itself did.
 	sorted := make([]float64, len(samples))
 	copy(sorted, samples)
-	sort.Float64s(sorted)
+	slices.Sort(sorted)
 	p50 = int64(sorted[len(sorted)/2])
 	// p99 over a tiny sample is effectively max; that's the right
 	// behavior — synth's directive cares about tail latency.

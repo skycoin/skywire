@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -168,7 +168,9 @@ func (m *Manager) cacheToneLocked(peer cipher.PubKey, t *tone) {
 	for pk := range m.tones {
 		peers = append(peers, pk)
 	}
-	sort.Slice(peers, func(i, j int) bool { return m.tones[peers[i]].used.Before(m.tones[peers[j]].used) })
+	slices.SortFunc(peers, func(a, b cipher.PubKey) int {
+		return m.tones[a].used.Compare(m.tones[b].used)
+	})
 	for _, pk := range peers[:len(peers)-toneCacheSize] {
 		delete(m.tones, pk)
 	}

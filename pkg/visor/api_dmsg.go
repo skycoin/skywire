@@ -4,6 +4,7 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -738,7 +739,9 @@ func dmsgClientServerSessions(c *dmsg.Client) ([]cipher.PubKey, []visorapi.DmsgS
 			Streams:  s.NumStreams(),
 		})
 	}
-	sort.Slice(sessions, func(i, j int) bool { return sessions[i].PK.String() < sessions[j].PK.String() })
+	slices.SortFunc(sessions, func(a, b visorapi.DmsgServerSession) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
+	})
 	pks := make([]cipher.PubKey, len(sessions))
 	for i, s := range sessions {
 		pks[i] = s.PK
@@ -901,7 +904,9 @@ func (v *Visor) isDmsgServiceKey(pk cipher.PubKey) bool {
 }
 
 func sortedPKs(pks []cipher.PubKey) []cipher.PubKey {
-	sort.Slice(pks, func(i, j int) bool { return pks[i].String() < pks[j].String() })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.String(), b.String())
+	})
 	return pks
 }
 

@@ -2,7 +2,7 @@ package commands
 
 import (
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,7 +38,9 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hits := append(searchDirect(q), searchGroups(q)...)
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].TS.After(hits[j].TS) })
+	slices.SortStableFunc(hits, func(a, b searchHit) int {
+		return b.TS.Compare(a.TS)
+	})
 	if len(hits) > searchLimit {
 		hits = hits[:searchLimit]
 	}

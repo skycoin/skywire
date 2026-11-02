@@ -27,12 +27,13 @@ package transport
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"net"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -832,11 +833,11 @@ func (m *VStreamMux) StreamInfo(appName string) []VStreamInfo {
 			ReadBufCap: vstreamReadBuf,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].AppName != out[j].AppName {
-			return out[i].AppName < out[j].AppName
-		}
-		return out[i].StreamID < out[j].StreamID
+	slices.SortFunc(out, func(a, b VStreamInfo) int {
+		return cmp.Or(
+			cmp.Compare(a.AppName, b.AppName),
+			cmp.Compare(a.StreamID, b.StreamID),
+		)
 	})
 	return out
 }

@@ -10,7 +10,8 @@
 package treeprobe
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 )
 
 // CellKey identifies one (level, parent_pk, remote_pk) tuple.
@@ -107,14 +108,12 @@ func (a *Aggregator) Cells() []*Cell {
 	for _, c := range a.cells {
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Key.Level != out[j].Key.Level {
-			return out[i].Key.Level < out[j].Key.Level
-		}
-		if out[i].Key.ParentPK != out[j].Key.ParentPK {
-			return out[i].Key.ParentPK < out[j].Key.ParentPK
-		}
-		return out[i].Key.RemotePK < out[j].Key.RemotePK
+	slices.SortFunc(out, func(a, b *Cell) int {
+		return cmp.Or(
+			cmp.Compare(a.Key.Level, b.Key.Level),
+			cmp.Compare(a.Key.ParentPK, b.Key.ParentPK),
+			cmp.Compare(a.Key.RemotePK, b.Key.RemotePK),
+		)
 	})
 	return out
 }
@@ -125,7 +124,9 @@ func (a *Aggregator) Levels() []*LevelDone {
 	for _, l := range a.levels {
 		out = append(out, l)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Level < out[j].Level })
+	slices.SortFunc(out, func(a, b *LevelDone) int {
+		return cmp.Compare(a.Level, b.Level)
+	})
 	return out
 }
 

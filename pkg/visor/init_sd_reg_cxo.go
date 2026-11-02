@@ -39,7 +39,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -206,7 +206,7 @@ func encodeSDEntries(entries map[string]servicedisc.Service) ([]byte, error) {
 	for k := range entries {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	out := make([]servicedisc.Service, 0, len(keys))
 	for _, k := range keys {
 		out = append(out, entries[k])

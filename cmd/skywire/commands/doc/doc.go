@@ -29,6 +29,7 @@ package doc
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -37,7 +38,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -400,7 +401,9 @@ func visibleChildren(cmd *cobra.Command) []*cobra.Command {
 		}
 		out = append(out, c)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
+	slices.SortFunc(out, func(a, b *cobra.Command) int {
+		return cmp.Compare(a.Name(), b.Name())
+	})
 	return out
 }
 

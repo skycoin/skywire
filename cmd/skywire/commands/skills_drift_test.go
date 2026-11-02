@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +45,7 @@ func TestSkillsMatchCommandTree(t *testing.T) {
 			problems = append(problems, checkSkillSegment(skill, seg)...)
 		}
 	}
-	sort.Strings(problems)
+	slices.Sort(problems)
 	for _, p := range problems {
 		t.Error(p)
 	}

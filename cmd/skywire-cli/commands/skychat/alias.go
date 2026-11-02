@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -260,7 +260,7 @@ var aliasLsCmd = &cobra.Command{
 		for n := range s.entries {
 			names = append(names, n)
 		}
-		sort.Strings(names)
+		slices.Sort(names)
 		for _, n := range names {
 			fmt.Fprintf(out, "%-20s %s\n", n, s.entries[n]) //nolint:errcheck
 		}

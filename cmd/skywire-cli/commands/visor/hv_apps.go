@@ -4,7 +4,6 @@ package clivisor
 import (
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -250,8 +249,8 @@ func hvVisorAppsOf(client visorapi.API, pk cipher.PubKey) hvVisorApps {
 			row.Stopped = append(row.Stopped, a.Name)
 		}
 	}
-	sort.Strings(row.Running)
-	sort.Strings(row.Stopped)
+	slices.Sort(row.Running)
+	slices.Sort(row.Stopped)
 	return row
 }
 

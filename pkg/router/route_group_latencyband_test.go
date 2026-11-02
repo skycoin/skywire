@@ -1,7 +1,7 @@
 package router
 
 import (
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func idsOf(v []int) []int { sort.Ints(v); return v }
+func idsOf(v []int) []int { slices.Sort(v); return v }
 
 func TestPartitionLatencyBand(t *testing.T) {
 	tests := []struct {

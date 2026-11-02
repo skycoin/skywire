@@ -2,7 +2,8 @@
 package dmsg
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -62,6 +63,8 @@ func (ce *Client) Traffic() []PortTraffic {
 		out = append(out, PortTraffic{Port: p, Streams: pt.streams.Load(), In: pt.in.Load(), Out: pt.out.Load()})
 	}
 	ce.traffic.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b PortTraffic) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }

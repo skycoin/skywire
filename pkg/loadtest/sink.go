@@ -22,7 +22,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -804,7 +804,9 @@ func uploadSweep(keep string) int {
 		live++
 	}
 	if len(sealed) > uploadSealedMemo {
-		sort.Slice(sealed, func(i, j int) bool { return sealed[i].last.Before(sealed[j].last) })
+		slices.SortFunc(sealed, func(a, b sealedSession) int {
+			return a.last.Compare(b.last)
+		})
 		for _, e := range sealed[:len(sealed)-uploadSealedMemo] {
 			if e.id == keep {
 				continue

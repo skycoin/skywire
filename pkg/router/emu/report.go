@@ -2,8 +2,9 @@
 package emu
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -95,7 +96,9 @@ func (s Summary) Table() string {
 	fmt.Fprintf(&b, "  %-4s %-18s %10s %10s %10s %6s %6s %8s\n",
 		"leg", "name", "sent", "recv", "payload", "share", "retx", "state")
 	legs := append([]LegShare(nil), s.Legs...)
-	sort.Slice(legs, func(i, j int) bool { return legs[i].Index < legs[j].Index })
+	slices.SortFunc(legs, func(a, b LegShare) int {
+		return cmp.Compare(a.Index, b.Index)
+	})
 	for _, l := range legs {
 		state := "active"
 		switch {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -422,7 +422,7 @@ func (m *muxBwTUIModel) renderRttBlock() string {
 		// Running approximation; Done will replace with the
 		// authoritative server-computed distribution.
 		sorted := append([]float64(nil), values...)
-		sort.Float64s(sorted)
+		slices.Sort(sorted)
 		p50 = sorted[len(sorted)/2]
 		p99 = sorted[(len(sorted)*99)/100]
 		var sum float64

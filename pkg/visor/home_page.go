@@ -8,8 +8,9 @@
 package visor
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -64,7 +65,9 @@ func (v *Visor) meshVisors() []cipher.PubKey {
 	for pk := range bound {
 		list = append(list, pk)
 	}
-	sort.Slice(list, func(i, j int) bool { return list[i].DNSLabel() < list[j].DNSLabel() })
+	slices.SortFunc(list, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.DNSLabel(), b.DNSLabel())
+	})
 	c.list, c.at = list, time.Now()
 	return list
 }

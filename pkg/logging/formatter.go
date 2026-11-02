@@ -4,7 +4,7 @@ package logging
 import (
 	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -253,7 +253,7 @@ func (f *TextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	// Nothing to order below two keys, and the overwhelming majority of
 	// entries carry just the module key plus a field or two.
 	if !f.DisableSorting && len(keys) > 1 {
-		sort.Strings(keys)
+		slices.Sort(keys)
 	}
 	if entry.Buffer != nil {
 		b = entry.Buffer

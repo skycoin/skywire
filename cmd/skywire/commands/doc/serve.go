@@ -25,6 +25,7 @@ package doc
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"fmt"
 	"html"
 	"io"
@@ -32,7 +33,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -306,13 +307,13 @@ func proseIndex() []byte {
 	// Alphabetical, which files the three status buckets among the directory
 	// sections. No bucket is privileged: the top level is labeled sections like
 	// any other rather than an unlabeled run.
-	sort.Strings(sections)
+	slices.Sort(sections)
 	var b strings.Builder
 	b.WriteString("<h1>prose</h1>")
 	for _, sec := range sections {
 		names := bySection[sec]
-		sort.Slice(names, func(i, j int) bool {
-			return strings.ToLower(proseTitle(fsys, names[i])) < strings.ToLower(proseTitle(fsys, names[j]))
+		slices.SortFunc(names, func(a, b string) int {
+			return cmp.Compare(strings.ToLower(proseTitle(fsys, a)), strings.ToLower(proseTitle(fsys, b)))
 		})
 		if sec != "" {
 			fmt.Fprintf(&b, "<h2>%s</h2>", html.EscapeString(sec))
@@ -419,11 +420,10 @@ func proseDirIndex(dir string) []byte {
 	if len(files) == 0 && len(subdirs) == 0 {
 		return nil
 	}
-	sort.Slice(files, func(i, j int) bool {
-		return strings.ToLower(proseTitle(fsys, path.Join(dir, files[i]))) <
-			strings.ToLower(proseTitle(fsys, path.Join(dir, files[j])))
+	slices.SortFunc(files, func(a, b string) int {
+		return cmp.Compare(strings.ToLower(proseTitle(fsys, path.Join(dir, a))), strings.ToLower(proseTitle(fsys, path.Join(dir, b))))
 	})
-	sort.Strings(subdirs)
+	slices.Sort(subdirs)
 	var b strings.Builder
 	fmt.Fprintf(&b, "<h1>%s</h1><ul>", html.EscapeString(dir))
 	for _, d := range subdirs {

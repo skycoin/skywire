@@ -15,7 +15,7 @@ package contacts
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/emersion/go-vcard"
@@ -150,7 +150,7 @@ func (c Contact) normalized() (Contact, error) {
 	} else {
 		c.UID = uuid.NewString()
 	}
-	sort.Strings(c.Groups)
+	slices.Sort(c.Groups)
 	return c, nil
 }
 

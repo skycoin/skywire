@@ -22,7 +22,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"net"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -294,7 +294,7 @@ func (b *reachBook) noteDecl(pk cipher.PubKey, d arfeed.ReachDecl) {
 
 func normalizeDecl(d arfeed.ReachDecl) arfeed.ReachDecl {
 	acc := append([]string(nil), d.Accepts...)
-	sort.Strings(acc)
+	slices.Sort(acc)
 	d.Accepts = acc
 	if len(d.Inbound) > 0 {
 		g := int64(arfeed.InboundGranularity / time.Second)
@@ -393,9 +393,9 @@ func (p *peerReach) record(now time.Time) *arfeed.Reach {
 			r.Closed = append(r.Closed, t)
 		}
 	}
-	sort.Strings(r.Bound)
-	sort.Strings(r.Open)
-	sort.Strings(r.Closed)
+	slices.Sort(r.Bound)
+	slices.Sort(r.Open)
+	slices.Sort(r.Closed)
 	return r
 }
 

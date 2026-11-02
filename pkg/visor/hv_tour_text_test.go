@@ -4,7 +4,7 @@ package visor
 import (
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -31,7 +31,7 @@ func TestHVTourTextMatchesWiring(t *testing.T) {
 		wired = append(wired, m[1])
 	}
 	require.NotEmpty(t, ids)
-	sort.Strings(ids)
-	sort.Strings(wired)
+	slices.Sort(ids)
+	slices.Sort(wired)
 	require.Equal(t, wired, ids, "the ## ids in hv-tour.md and the wiring in hv-tour.js differ")
 }

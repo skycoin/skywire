@@ -70,7 +70,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -335,7 +335,9 @@ func encodeServicesBatch(svcs map[cipher.PubKey][]byte) []byte {
 	for pk := range svcs {
 		pks = append(pks, pk)
 	}
-	sort.Slice(pks, func(i, j int) bool { return bytes.Compare(pks[i][:], pks[j][:]) < 0 })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int {
+		return bytes.Compare(a[:], b[:])
+	})
 	payload := make([]byte, 0, 2+len(pks)*256)
 	payload = append(payload, '[')
 	for i, pk := range pks {

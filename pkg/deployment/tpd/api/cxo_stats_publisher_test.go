@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -259,7 +259,7 @@ func TestStatsPublisherWritesOnlyFixedPaths(t *testing.T) {
 	for p := range seen {
 		paths = append(paths, p)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 	want := []string{StatsPathNetwork, StatsPathVersions}
 	if len(paths) != len(want) || paths[0] != want[0] || paths[1] != want[1] {
 		t.Fatalf("published paths = %v, want exactly %v", paths, want)

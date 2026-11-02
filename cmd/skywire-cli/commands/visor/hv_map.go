@@ -2,12 +2,13 @@
 package clivisor
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +76,9 @@ branch lists the published keys none of them embeds.`,
 			_ = pk.Set(a) //nolint:errcheck // checked above
 			order[pk] = i
 		}
-		sort.SliceStable(m.Visors, func(i, j int) bool { return order[m.Visors[i].PK] < order[m.Visors[j].PK] })
+		slices.SortStableFunc(m.Visors, func(a, b mapVisor) int {
+			return cmp.Compare(order[a.PK], order[b.PK])
+		})
 		roles := map[cipher.PubKey]string{}
 		switch hvMapEnv {
 		case "prod":
@@ -311,9 +314,11 @@ func (m *hvMap) applyRoles(roles map[cipher.PubKey]string) {
 			m.Unplaced = append(m.Unplaced, mapKey{PK: pk, Role: r})
 		}
 	}
-	sort.Slice(m.Unplaced, func(i, j int) bool {
-		a, b := m.Unplaced[i], m.Unplaced[j]
-		return a.Role < b.Role || a.Role == b.Role && a.PK.Hex() < b.PK.Hex()
+	slices.SortFunc(m.Unplaced, func(a, b mapKey) int {
+		return cmp.Or(
+			cmp.Compare(a.Role, b.Role),
+			cmp.Compare(a.PK.Hex(), b.PK.Hex()),
+		)
 	})
 }
 

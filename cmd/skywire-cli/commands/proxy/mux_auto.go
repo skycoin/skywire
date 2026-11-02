@@ -19,10 +19,11 @@
 package skysocksc
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -224,7 +225,9 @@ func computePrune(rg muxRouteGroupInfo, p autoPreset) []prunedLeg {
 		}
 		measured = append(measured, aux{id, l.LatencyMS})
 	}
-	sort.Slice(measured, func(i, j int) bool { return measured[i].lat < measured[j].lat })
+	slices.SortFunc(measured, func(a, b aux) int {
+		return cmp.Compare(a.lat, b.lat)
+	})
 
 	keepAux := p.keep - 1
 	if keepAux < 0 {

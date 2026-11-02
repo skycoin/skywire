@@ -32,6 +32,7 @@
 package group
 
 import (
+	"cmp"
 	"context"
 	cryptoRand "crypto/rand"
 	"encoding/binary"
@@ -40,6 +41,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1285,7 +1287,9 @@ func (s *Session) PeerPKs() []cipher.PubKey {
 	// Sort by hex form for determinism; cipher.PubKey doesn't have a
 	// natural ordering otherwise. The ~5 byte allocations per call are
 	// trivial vs. the reconnect machinery's work.
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 
@@ -1730,7 +1734,9 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 		return nil
 	}
 	sorted := append([]cipher.PubKey(nil), candidates...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Hex() < sorted[j].Hex() })
+	slices.SortFunc(sorted, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	if k >= len(sorted) {
 		return sorted
 	}
@@ -2725,8 +2731,8 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	if len(out) == 0 {
 		return
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].msg.TS.Before(out[j].msg.TS)
+	slices.SortFunc(out, func(a, b decoded) int {
+		return a.msg.TS.Compare(b.msg.TS)
 	})
 	start := 0
 	if len(out) > cap {

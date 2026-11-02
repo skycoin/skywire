@@ -3,6 +3,7 @@ package skysocks
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha1" //nolint:gosec // RFC6455 mandates SHA-1 for the WebSocket accept key
 	"crypto/x509"
 	"encoding/base64"
@@ -13,7 +14,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3473,7 +3474,9 @@ func (c *Client) streamSnapshot() []proxystatus.Stream {
 			RecvRateBps: m.downRate,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b proxystatus.Stream) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	return out
 }
 

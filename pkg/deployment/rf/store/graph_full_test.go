@@ -2,7 +2,7 @@ package store
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +19,7 @@ func routeSig(rs []routing.Route) []string {
 		}
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

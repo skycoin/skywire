@@ -14,7 +14,7 @@ package visor
 import (
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -113,8 +113,8 @@ func (v *Visor) PairList() ([]visorapi.PairInfo, error) {
 		}
 		out = append(out, info)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].EstablishedAt.Before(out[j].EstablishedAt)
+	slices.SortFunc(out, func(a, b visorapi.PairInfo) int {
+		return a.EstablishedAt.Compare(b.EstablishedAt)
 	})
 	return out, nil
 }

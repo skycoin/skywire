@@ -2,7 +2,7 @@ package deskhost
 
 import (
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
@@ -89,7 +89,7 @@ func TestSettingsEdits(t *testing.T) {
 	for _, c := range changes {
 		keys = append(keys, c.Key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	if want := []string{"LOGLVL", "PROXYSERVER", "ROUTESETUPPKS", "SKYCHAT", "VPNROUTERSSID"}; !reflect.DeepEqual(keys, want) {
 		t.Fatalf("changes = %v, want %v", keys, want)
 	}

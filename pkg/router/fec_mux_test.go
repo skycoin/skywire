@@ -3,7 +3,7 @@ package router
 import (
 	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -221,7 +221,7 @@ func TestFECMuxHoLRemoval(t *testing.T) {
 	// mux/FEC: block decodable when ANY K of the K+R symbols have arrived → the
 	// K-th smallest arrival time across data+repair.
 	allArr := append(append([]float64{}, dataArrival...), repairArrival...)
-	sort.Float64s(allArr)
+	slices.Sort(allArr)
 	withFEC := allArr[k-1] // K-th earliest (0-indexed k-1)
 
 	// single good leg: K frames sequentially on one fast leg.

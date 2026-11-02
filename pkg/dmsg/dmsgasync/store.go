@@ -2,6 +2,7 @@
 package dmsgasync
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -174,7 +174,9 @@ func (s *store) fetch(to cipher.PubKey, ports []uint16) ([]Message, bool, error)
 		}
 	}
 	s.mu.Unlock()
-	sort.Slice(msgs, func(i, j int) bool { return msgs[i].ID < msgs[j].ID })
+	slices.SortFunc(msgs, func(a, b *stored) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	var (
 		out   []Message
 		bytes int

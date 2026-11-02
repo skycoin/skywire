@@ -4,12 +4,13 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -200,8 +201,8 @@ func (v *Visor) dmsgServerHealth(httpClient *http.Client) []visorapi.ServiceHeal
 	if err != nil || len(servers) == 0 {
 		return nil
 	}
-	sort.Slice(servers, func(i, j int) bool {
-		return servers[i].PK.String() < servers[j].PK.String()
+	slices.SortFunc(servers, func(a, b visorapi.DMSGServerInfo) int {
+		return cmp.Compare(a.PK.String(), b.PK.String())
 	})
 
 	// Map each server PK to its public ip:port from the dmsg-discovery
@@ -578,7 +579,9 @@ func (v *Visor) ManagedVisors() []cipher.PubKey {
 	for _, conn := range v.remoteVisors {
 		out = append(out, conn.Addr.PK)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 
@@ -591,7 +594,9 @@ func (v *Visor) ConfiguredHypervisors() []cipher.PubKey {
 	}
 	out := make([]cipher.PubKey, 0, len(v.conf.Hypervisors))
 	out = append(out, v.conf.Hypervisors...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }
 

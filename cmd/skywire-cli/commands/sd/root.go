@@ -3,12 +3,13 @@ package clisd
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -342,8 +343,8 @@ emits the combined rows as machine-readable output.`,
 		}
 
 		// Sort by total transport count (descending)
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Total > entries[j].Total
+		slices.SortFunc(entries, func(a, b networkEntry) int {
+			return cmp.Compare(b.Total, a.Total)
 		})
 
 		// Output

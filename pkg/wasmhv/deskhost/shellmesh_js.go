@@ -42,7 +42,7 @@ package deskhost
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"syscall/js"
@@ -265,7 +265,7 @@ func runAliases(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, _ 
 	if len(names) == 0 {
 		return none()
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, name := range names {
 		_, _ = fmt.Fprintf(hc.Stdout, "%-8s %s\n", name, res.Get(name).String()) //nolint:errcheck
 	}

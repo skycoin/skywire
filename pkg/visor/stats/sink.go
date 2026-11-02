@@ -35,7 +35,7 @@ package stats
 import (
 	"bytes"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -140,8 +140,8 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time, 
 	}
 	sigs := make(map[uint8][32]byte, len(byShard))
 	for sh, es := range byShard {
-		sort.Slice(es, func(i, j int) bool {
-			return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0
+		slices.SortFunc(es, func(a, b telemetrywire.Entry) int {
+			return bytes.Compare(a.ID[:], b.ID[:])
 		})
 		sink.Put(telemetrywire.LeafPath(sh), telemetrywire.EncodeShard(sh, es))
 		sigs[sh] = shardSig(es)

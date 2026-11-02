@@ -36,12 +36,13 @@
 package group
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -189,7 +190,9 @@ func (m *Manager) Catalog() ([]CatalogEntry, bool, error) {
 			Port: r.Port, PoWBits: r.JoinPoWRequired(),
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ID > out[j].ID })
+	slices.SortStableFunc(out, func(a, b CatalogEntry) int {
+		return cmp.Compare(b.ID, a.ID)
+	})
 	truncated := len(out) > maxCatalogEntries
 	if truncated {
 		out = out[:maxCatalogEntries]

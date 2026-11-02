@@ -20,10 +20,11 @@
 package appnet
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -125,7 +126,9 @@ func LocalServices(pk cipher.PubKey) []LocalService {
 		}
 	}
 	localServicesMx.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b LocalService) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 

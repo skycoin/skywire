@@ -10,7 +10,7 @@ package cxoaggregate
 
 import (
 	"hash/fnv"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -76,7 +76,7 @@ func FeedConsumerServices() []string {
 	for s := range consumers.m {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -185,7 +185,7 @@ func sumLeaves(m map[string][]byte) uint64 {
 	for n := range m {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	f := fnv.New64a()
 	for _, n := range names {
 		f.Write([]byte(n))    //nolint:errcheck,gosec

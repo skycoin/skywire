@@ -34,6 +34,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,6 +42,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -564,7 +566,9 @@ func estimate(fs []factor, level map[string][]int, byRun map[string][]float64) [
 		}
 		out = append(out, e)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return math.Abs(out[i].value) > math.Abs(out[j].value) })
+	slices.SortStableFunc(out, func(a, b effect) int {
+		return cmp.Compare(math.Abs(b.value), math.Abs(a.value))
+	})
 	return out
 }
 
@@ -575,7 +579,7 @@ func cellsOf(m map[string]map[string][]float64) []string {
 	for c := range m {
 		out = append(out, c)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -646,7 +650,9 @@ func runAnalyze(args []string) error {
 	for n := range best {
 		named = append(named, n)
 	}
-	sort.Slice(named, func(i, j int) bool { return best[named[i]] > best[named[j]] })
+	slices.SortFunc(named, func(a, b string) int {
+		return cmp.Compare(best[b], best[a])
+	})
 	fmt.Println()
 	switch {
 	case len(named) == 0:

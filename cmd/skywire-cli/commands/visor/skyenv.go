@@ -3,7 +3,7 @@ package clivisor
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -99,7 +99,7 @@ func formatSkyenv(st visorapi.SkyenvState) string {
 		fmt.Fprintf(tw, "--%s\t%s\t%s\n", f.Name, f.EnvKey, val) //nolint:errcheck
 	}
 	_ = tw.Flush() //nolint:errcheck
-	sort.Strings(set)
+	slices.Sort(set)
 	fmt.Fprintf(&b, "\nset in the file: %s\n", strings.Join(set, " "))
 	return b.String()
 }

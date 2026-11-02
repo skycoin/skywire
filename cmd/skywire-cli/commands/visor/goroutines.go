@@ -17,6 +17,7 @@
 package clivisor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -335,8 +336,8 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 	for name, bk := range stateBuckets {
 		stateRows = append(stateRows, stateRow{name, bk})
 	}
-	sort.Slice(stateRows, func(i, j int) bool {
-		return stateRows[i].bk.count > stateRows[j].bk.count
+	slices.SortFunc(stateRows, func(a, b stateRow) int {
+		return cmp.Compare(b.bk.count, a.bk.count)
 	})
 	b.WriteString("\nby state:\n")
 	for _, r := range stateRows {
@@ -362,7 +363,9 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 	for name, c := range topBuckets {
 		topRows = append(topRows, topRow{name, c})
 	}
-	sort.Slice(topRows, func(i, j int) bool { return topRows[i].count > topRows[j].count })
+	slices.SortFunc(topRows, func(a, b topRow) int {
+		return cmp.Compare(b.count, a.count)
+	})
 	limit := topN
 	if limit <= 0 || limit > len(topRows) {
 		limit = len(topRows)
@@ -438,7 +441,9 @@ func lockSummary(grs []goroutine) string {
 		for k, v := range bk {
 			rows = append(rows, row{k, v})
 		}
-		sort.Slice(rows, func(i, j int) bool { return rows[i].b.count > rows[j].b.count })
+		slices.SortFunc(rows, func(x, y row) int {
+			return cmp.Compare(y.b.count, x.b.count)
+		})
 		fmt.Fprintf(&b, "  %s:\n", label)
 		for _, r := range rows {
 			age := ""

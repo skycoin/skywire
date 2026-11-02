@@ -35,8 +35,9 @@
 package router
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,9 +162,8 @@ func deriveTransportLookups(entries []*transport.Entry) (
 	}
 	for edge := range byEdge {
 		es := byEdge[edge]
-		sort.SliceStable(es, func(i, j int) bool {
-			return tptypes.TypePreference(es[i].Type) <
-				tptypes.TypePreference(es[j].Type)
+		slices.SortStableFunc(es, func(a, b *transport.Entry) int {
+			return cmp.Compare(tptypes.TypePreference(a.Type), tptypes.TypePreference(b.Type))
 		})
 	}
 	return byEdge, latencyByID, typeByID, throughputByID

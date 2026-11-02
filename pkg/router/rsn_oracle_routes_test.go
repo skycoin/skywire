@@ -1,7 +1,7 @@
 package router
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -29,7 +29,7 @@ func intermediatesOf(legs []twoHopLeg) []string {
 	for _, l := range legs {
 		out = append(out, l.Intermediate.String())
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -61,7 +61,7 @@ func TestComputeDisjoint2HopRoutes_Intersection(t *testing.T) {
 	}
 	got := intermediatesOf(legs)
 	want := []string{i1.String(), i2.String()}
-	sort.Strings(want)
+	slices.Sort(want)
 	if len(got) != len(want) {
 		t.Fatalf("intermediates = %v, want %v", got, want)
 	}

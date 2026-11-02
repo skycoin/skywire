@@ -28,10 +28,12 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -257,7 +259,9 @@ func joinTransportMetricParts(mgr metricsSnapshot, base string) ([]byte, time.Ti
 	}
 	// Walk iterates a map, so order is arbitrary; the zero-padded part index
 	// makes a lexical sort the publication order.
-	sort.Slice(parts, func(i, j int) bool { return parts[i].path < parts[j].path })
+	slices.SortFunc(parts, func(a, b part) int {
+		return cmp.Compare(a.path, b.path)
+	})
 
 	bodies := make([][]byte, len(parts))
 	for i, p := range parts {

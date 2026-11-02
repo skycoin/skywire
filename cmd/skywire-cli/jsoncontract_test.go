@@ -20,7 +20,7 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -253,7 +253,7 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 			unexpected = append(unexpected, f)
 		}
 	}
-	sort.Strings(unexpected)
+	slices.Sort(unexpected)
 	if len(unexpected) > 0 {
 		t.Errorf("%d file(s) %s.\nFix: %s.\n  %s",
 			len(unexpected), problem, fix, strings.Join(unexpected, "\n  "))
@@ -264,7 +264,7 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 			stale = append(stale, k)
 		}
 	}
-	sort.Strings(stale)
+	slices.Sort(stale)
 	if len(stale) > 0 {
 		t.Errorf("%d allowlist entr(ies) no longer apply — delete them:\n  %s",
 			len(stale), strings.Join(stale, "\n  "))

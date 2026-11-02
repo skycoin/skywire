@@ -3,6 +3,7 @@ package logserver
 
 import (
 	"bufio"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -969,7 +970,7 @@ func (api *API) sitesFor(req *http.Request) []string {
 	for s := range seen {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -1095,7 +1096,9 @@ func (api *API) vhostList() []*Vhost {
 			out = append(out, v)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b *Vhost) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

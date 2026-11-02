@@ -3,7 +3,7 @@ package clidmsg
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
@@ -121,7 +121,7 @@ func printConnectAllResult(cmd *cobra.Command, result *visorapi.DmsgConnectAllRe
 	for k := range result.Failed {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, k := range keys {
 		short := k
 		if len(short) > 16 {

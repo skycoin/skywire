@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -257,7 +257,7 @@ func formatNetworkUptime(nu uptimestats.NetworkUptime) string {
 		for k := range nu.ByType {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			b := nu.ByType[k]
 			typePct := 0.0

@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/spf13/pflag"
@@ -65,7 +65,7 @@ func TestRegisteredAppsSorted(t *testing.T) {
 	RegisterApp("zz-catalog-test", nil)
 	RegisterApp("aa-catalog-test", nil)
 	names := RegisteredApps()
-	if !sort.StringsAreSorted(names) {
+	if !slices.IsSorted(names) {
 		t.Fatalf("names not sorted: %v", names)
 	}
 	var a, z bool

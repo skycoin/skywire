@@ -2,7 +2,8 @@
 package visor
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -53,7 +54,9 @@ func buildAppCatalog(registered []string, states []*appserver.AppState) []visora
 	for _, e := range entries {
 		out = append(out, *e)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b visorapi.CatalogEntry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

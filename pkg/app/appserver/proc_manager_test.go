@@ -2,7 +2,7 @@
 package appserver
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,7 +56,7 @@ func TestProcManager_Range(t *testing.T) {
 
 	m.Range(next)
 
-	sort.Strings(gotAppNames)
+	slices.Sort(gotAppNames)
 	require.Equal(t, gotAppNames, appNames)
 }
 

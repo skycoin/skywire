@@ -34,9 +34,10 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/bitfield/script"
@@ -92,7 +93,9 @@ func gatherArchStats() archStats {
 	}
 	// Biggest first: the disc is drawn clockwise from twelve o'clock and
 	// a reader follows it in that order.
-	sort.SliceStable(items, func(i, j int) bool { return items[i].Count > items[j].Count })
+	slices.SortStableFunc(items, func(a, b PieChartItem) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
 	a.Items = items
 	a.Src = fmt.Sprintf("source: operator surveys (node-info.json go_arch), %d visors — "+
 		"NOT the TPD visor count; TPD carries no architecture field", a.Total)

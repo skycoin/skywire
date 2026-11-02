@@ -2,10 +2,11 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -133,8 +134,12 @@ func TestGetAvailableServers(t *testing.T) {
 				err = json.NewDecoder(rr.Body).Decode(&resEntries)
 				require.NoError(t, err)
 
-				sort.Slice(entries, func(i, j int) bool { return entries[i].Static.String() > entries[j].Static.String() })
-				sort.Slice(resEntries, func(i, j int) bool { return resEntries[i].Static.String() > resEntries[j].Static.String() })
+				slices.SortFunc(entries, func(a, b *disc.Entry) int {
+					return cmp.Compare(b.Static.String(), a.Static.String())
+				})
+				slices.SortFunc(resEntries, func(a, b *disc.Entry) int {
+					return cmp.Compare(b.Static.String(), a.Static.String())
+				})
 				require.EqualValues(t, entries, resEntries)
 			} else {
 				var resMessage disc.HTTPMessage

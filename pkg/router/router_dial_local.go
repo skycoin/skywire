@@ -2,6 +2,7 @@
 package router
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -212,9 +213,8 @@ func (r *router) directRoute(src, dst cipher.PubKey) (fwd, rev []routing.Hop, ok
 	if len(cands) == 0 {
 		return nil, nil, false
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		return tptypes.TypePreference(tptypes.Type(cands[i].tpType)) <
-			tptypes.TypePreference(tptypes.Type(cands[j].tpType))
+	slices.SortStableFunc(cands, func(a, b cand) int {
+		return cmp.Compare(tptypes.TypePreference(tptypes.Type(a.tpType)), tptypes.TypePreference(tptypes.Type(b.tpType)))
 	})
 	id := cands[0].id
 	return []routing.Hop{{TpID: id, From: src, To: dst}}, []routing.Hop{{TpID: id, From: dst, To: src}}, true
@@ -252,9 +252,8 @@ func (r *router) directRoutes(src, dst cipher.PubKey) [][]routing.Hop {
 	if len(cands) == 0 {
 		return nil
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		return tptypes.TypePreference(tptypes.Type(cands[i].tpType)) <
-			tptypes.TypePreference(tptypes.Type(cands[j].tpType))
+	slices.SortStableFunc(cands, func(a, b cand) int {
+		return cmp.Compare(tptypes.TypePreference(tptypes.Type(a.tpType)), tptypes.TypePreference(tptypes.Type(b.tpType)))
 	})
 	out := make([][]routing.Hop, 0, len(cands))
 	for _, c := range cands {

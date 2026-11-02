@@ -3,7 +3,8 @@
 package dmsg
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"time"
 	"weak"
@@ -102,7 +103,9 @@ func StreamCensus() []StreamCensusRow {
 	for _, r := range rows {
 		out = append(out, *r)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	slices.SortFunc(out, func(a, b StreamCensusRow) int {
+		return cmp.Compare(b.Count, a.Count)
+	})
 	return out
 }
 

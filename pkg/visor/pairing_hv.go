@@ -15,7 +15,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -115,7 +115,9 @@ func (p *hvPairing) list() []visorapi.PendingHypervisor {
 		out = append(out, *e)
 	}
 	p.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	slices.SortFunc(out, func(a, b visorapi.PendingHypervisor) int {
+		return b.LastSeen.Compare(a.LastSeen)
+	})
 	return out
 }
 

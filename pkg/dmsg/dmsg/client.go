@@ -2,13 +2,14 @@
 package dmsg
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"net"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -741,7 +742,9 @@ serve:
 			}
 			weighted[i] = weightedEntry{entry: entry, key: math.Pow(u, 1.0/w)}
 		}
-		sort.SliceStable(weighted, func(i, j int) bool { return weighted[i].key > weighted[j].key })
+		slices.SortStableFunc(weighted, func(a, b weightedEntry) int {
+			return cmp.Compare(b.key, a.key)
+		})
 		for i := range weighted {
 			entries[i] = weighted[i].entry
 		}

@@ -33,7 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -274,7 +274,7 @@ func EncodeReachBucket(peers map[cipher.PubKey]*Reach) ([]byte, error) {
 		pks = append(pks, h)
 		idx[h] = r
 	}
-	sort.Strings(pks)
+	slices.Sort(pks)
 	payload := make([]byte, 0, 16+len(pks)*128)
 	payload = append(payload, '{')
 	for i, h := range pks {

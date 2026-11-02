@@ -24,8 +24,9 @@
 package visorconfig
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -465,7 +466,9 @@ func ParseResolverSpecs(csv string) ([]ResolverConfig, error) {
 	// regen of the same skywire.conf produces a byte-identical config. Sort
 	// BEFORE naming, or the generated r0/r1 names would not match the order
 	// they end up in and would shuffle between regens.
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ProxyPort < out[j].ProxyPort })
+	slices.SortStableFunc(out, func(a, b ResolverConfig) int {
+		return cmp.Compare(a.ProxyPort, b.ProxyPort)
+	})
 	NormalizeResolvers(out)
 	return out, nil
 }

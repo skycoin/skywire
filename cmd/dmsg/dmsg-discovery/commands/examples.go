@@ -2,9 +2,10 @@
 package commands
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/tidwall/pretty"
 
@@ -50,8 +51,8 @@ func generateExamples() string {
 	if len(dmsg.Prod.DmsgServers) > 0 {
 		sorted := make([]disc.Entry, len(dmsg.Prod.DmsgServers))
 		copy(sorted, dmsg.Prod.DmsgServers)
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].Static.Hex() < sorted[j].Static.Hex()
+		slices.SortFunc(sorted, func(a, b disc.Entry) int {
+			return cmp.Compare(a.Static.Hex(), b.Static.Hex())
 		})
 		limit := 2
 		if len(sorted) < limit {

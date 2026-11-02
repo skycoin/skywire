@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -376,7 +376,7 @@ func parsePortSpec(spec string) ([]uint16, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("--ports parsed to empty list")
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out, nil
 }
 

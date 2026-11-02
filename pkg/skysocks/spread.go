@@ -24,8 +24,9 @@
 package skysocks
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -405,7 +406,9 @@ func (p *spreadPlanner) shares() []spreadShare {
 		out = append(out, spreadShare{sess: s, port: p.c.tunnelPort(s), bytes: p.bytes[s]})
 	}
 	p.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].bytes > out[j].bytes })
+	slices.SortFunc(out, func(a, b spreadShare) int {
+		return cmp.Compare(b.bytes, a.bytes)
+	})
 	return out
 }
 
@@ -565,7 +568,7 @@ func medianMeasured(capsBps []float64) float64 {
 	if len(seen) == 0 {
 		return 0
 	}
-	sort.Float64s(seen)
+	slices.Sort(seen)
 	if n := len(seen); n%2 == 1 {
 		return seen[n/2]
 	}
@@ -644,7 +647,9 @@ func spreadBurst(capsBps []float64, n int) []int {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool { return weights[order[a]] < weights[order[b]] })
+	slices.SortStableFunc(order, func(x, y int) int {
+		return cmp.Compare(weights[x], weights[y])
+	})
 	out := make([]int, 0, n)
 	for _, lane := range order {
 		for j := 0; j < counts[lane]; j++ {
@@ -677,11 +682,11 @@ func seatsByRemainder(weights []float64, total float64, n int) []int {
 		seated += counts[i]
 		rems = append(rems, rem{i: i, frac: q - float64(counts[i]), w: w})
 	}
-	sort.SliceStable(rems, func(a, b int) bool {
-		if rems[a].frac != rems[b].frac {
-			return rems[a].frac > rems[b].frac
-		}
-		return rems[a].w > rems[b].w
+	slices.SortStableFunc(rems, func(x, y rem) int {
+		return cmp.Or(
+			cmp.Compare(y.frac, x.frac),
+			cmp.Compare(y.w, x.w),
+		)
 	})
 	for j := 0; seated < n && j < len(rems); j++ {
 		counts[rems[j].i]++

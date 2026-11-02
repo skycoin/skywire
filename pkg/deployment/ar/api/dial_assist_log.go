@@ -29,7 +29,8 @@ package api
 
 import (
 	"bytes"
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -121,11 +122,11 @@ func topPeers(counts map[cipher.PubKey]int, n int) []string {
 	for pk, c := range counts {
 		entries = append(entries, entry{pk: pk, n: c})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].n != entries[j].n {
-			return entries[i].n > entries[j].n
-		}
-		return bytes.Compare(entries[i].pk[:], entries[j].pk[:]) < 0
+	slices.SortFunc(entries, func(a, b entry) int {
+		return cmp.Or(
+			cmp.Compare(b.n, a.n),
+			bytes.Compare(a.pk[:], b.pk[:]),
+		)
 	})
 	if len(entries) > n {
 		entries = entries[:n]

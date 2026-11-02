@@ -14,8 +14,9 @@
 package logserver
 
 import (
+	"cmp"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -296,7 +297,9 @@ func historyFromRecord(rec *stats.TransportRecord, since, until time.Time) stats
 	}
 	// Daily is already in append order (oldest → newest) but sort
 	// defensively so consumers can rely on the contract.
-	sort.Slice(out.Daily, func(i, j int) bool { return out.Daily[i].Date < out.Daily[j].Date })
+	slices.SortFunc(out.Daily, func(a, b stats.DailyRollup) int {
+		return cmp.Compare(a.Date, b.Date)
+	})
 	return out
 }
 

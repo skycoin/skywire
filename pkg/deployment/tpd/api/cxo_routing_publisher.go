@@ -19,6 +19,7 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"math"
@@ -275,7 +276,9 @@ func (r *RoutingCXOPublisher) changedShards(lists map[string][]allTransportsWire
 		}
 		ops = append(ops, treestore.PutOp{Path: path, Value: body})
 	}
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	slices.SortFunc(ops, func(a, b treestore.PutOp) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 	return ops, nil
 }
 

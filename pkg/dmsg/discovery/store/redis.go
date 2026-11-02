@@ -2,9 +2,10 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -278,8 +279,8 @@ func (r *redisStore) AvailableServers(ctx context.Context, maxCount int) ([]*dis
 		entries = append(entries, entry)
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Server.AvailableSessions > entries[j].Server.AvailableSessions
+	slices.SortFunc(entries, func(a, b *disc.Entry) int {
+		return cmp.Compare(b.Server.AvailableSessions, a.Server.AvailableSessions)
 	})
 
 	return entries, nil
