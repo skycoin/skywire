@@ -48,6 +48,7 @@ type API interface {
 	Transports
 	Mail
 	Contacts
+	DmsgAsync
 }
 
 // Node is the visor itself: status, lifecycle, configuration, rewards and

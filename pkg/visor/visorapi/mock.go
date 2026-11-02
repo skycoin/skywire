@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -1995,3 +1996,17 @@ func (mc *mockRPCClient) NetworkSet(_ NetworkSettings) error {
 func (mc *mockRPCClient) NetworkEvent(_ NetworkEvent) error {
 	return nil
 }
+
+// DmsgAsyncStatus implements API.
+func (mc *mockRPCClient) DmsgAsyncStatus() (*DmsgAsyncStatus, error) { return &DmsgAsyncStatus{}, nil }
+
+// DmsgAsyncSend implements API.
+func (mc *mockRPCClient) DmsgAsyncSend(DmsgAsyncSendRequest) (*DmsgAsyncSendResult, error) {
+	return &DmsgAsyncSendResult{}, nil
+}
+
+// DmsgAsyncTake implements API.
+func (mc *mockRPCClient) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) { return nil, nil }
+
+// DmsgAsyncSync implements API.
+func (mc *mockRPCClient) DmsgAsyncSync() error { return nil }

@@ -150,7 +150,8 @@ type modules struct {
 	pairingMod vinit.Module
 	// Chat-group feed manager (D1 owner-centric CXO feeds with
 	// multi-PK allowlist).
-	groupingMod vinit.Module
+	groupingMod  vinit.Module
+	dmsgAsyncMod vinit.Module
 	// Skychat 1:1 voice-call manager (dmsg+skynet signaling, RTP media).
 	voiceMod vinit.Module
 	// coinNodesMod forwards + advertises configured fibercoin nodes
@@ -305,6 +306,8 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// shape as pairingMod, same dmsgC dependency, separate bbolt
 	// store. See init_group.go.
 	m.groupingMod = maker("grouping", initGrouping, &m.dmsgC)
+	// dmsg-async: inbox host and this visor's own inbox. See dmsg_async.go.
+	m.dmsgAsyncMod = maker("dmsg_async", initDmsgAsync, &m.dmsgC)
 	// Skychat 1:1 voice: signaling + RTP media over dmsg/skynet. Depends on
 	// dmsgC. See init_voice.go.
 	m.voiceMod = maker("voice", initVoice, &m.dmsgC)
@@ -331,7 +334,7 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// transport). See init_sd_reg_cxo.go.
 	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC, &m.statsMod)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
-		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices, &m.netWatch)
+		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices, &m.netWatch)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -2738,4 +2739,30 @@ func (rc *rpcClient) NetworkEvent(ev NetworkEvent) error {
 		ev.MeteredText = strconv.FormatBool(*ev.Metered)
 	}
 	return rc.Call("NetworkEvent", &ev, &struct{}{})
+}
+
+// DmsgAsyncStatus calls DmsgAsyncStatus.
+func (rc *rpcClient) DmsgAsyncStatus() (*DmsgAsyncStatus, error) {
+	var out DmsgAsyncStatus
+	err := rc.Call("DmsgAsyncStatus", &struct{}{}, &out)
+	return &out, err
+}
+
+// DmsgAsyncSend calls DmsgAsyncSend.
+func (rc *rpcClient) DmsgAsyncSend(req DmsgAsyncSendRequest) (*DmsgAsyncSendResult, error) {
+	var out DmsgAsyncSendResult
+	err := rc.Call("DmsgAsyncSend", &req, &out)
+	return &out, err
+}
+
+// DmsgAsyncTake calls DmsgAsyncTake.
+func (rc *rpcClient) DmsgAsyncTake(ports []uint16) ([]dmsgasync.Message, error) {
+	var out []dmsgasync.Message
+	err := rc.Call("DmsgAsyncTake", &ports, &out)
+	return out, err
+}
+
+// DmsgAsyncSync calls DmsgAsyncSync.
+func (rc *rpcClient) DmsgAsyncSync() error {
+	return rc.Call("DmsgAsyncSync", &struct{}{}, &struct{}{})
 }
