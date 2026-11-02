@@ -147,7 +147,7 @@ func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 	c.mu.Unlock()
 
 	never := make(chan struct{})
-	c.watchAck(pk, conn, never, nil, c.cfg.StaleAckWindow)
+	c.watchAck(pk, conn, nil, "", never, nil, c.cfg.StaleAckWindow)
 
 	if c.HasConn(pk) {
 		t.Error("a conn whose ack never came back should be evicted after the window")
@@ -176,7 +176,7 @@ func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 	c.mu.Unlock()
 
 	never := make(chan struct{})
-	c.watchAck(pk, oldConn, never, nil, c.cfg.StaleAckWindow) // watching the OLD conn
+	c.watchAck(pk, oldConn, nil, "", never, nil, c.cfg.StaleAckWindow) // watching the OLD conn
 
 	c.mu.Lock()
 	got := c.conns[pk]
@@ -202,7 +202,7 @@ func TestController_WatchAckKeepsAckedConn(t *testing.T) {
 	acked <- struct{}{}
 	unregistered := false
 	start := time.Now()
-	c.watchAck(pk, conn, acked, func() { unregistered = true }, c.cfg.StaleAckWindow)
+	c.watchAck(pk, conn, nil, "", acked, func() { unregistered = true }, c.cfg.StaleAckWindow)
 
 	if took := time.Since(start); took > time.Second {
 		t.Errorf("watchAck returned after %v — an ack should release it at once", took)

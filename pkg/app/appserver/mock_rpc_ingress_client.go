@@ -590,3 +590,21 @@ func (_m *MockRPCIngressClient) MailUnpark() ([]ParkedMail, error) {
 func (_m *MockRPCIngressClient) MailAck(refs []ParkedRef) error {
 	return _m.Called(refs).Error(0)
 }
+
+// ChatPark provides a mock function
+func (_m *MockRPCIngressClient) ChatPark(rcpt cipher.PubKey, msg []byte, ref string) (cipher.PubKey, error) {
+	ret := _m.Called(rcpt, msg, ref)
+	return ret.Get(0).(cipher.PubKey), ret.Error(1)
+}
+
+// ChatUnpark provides a mock function
+func (_m *MockRPCIngressClient) ChatUnpark() ([]ParkedChat, error) {
+	ret := _m.Called()
+	out, _ := ret.Get(0).([]ParkedChat) //nolint:errcheck
+	return out, ret.Error(1)
+}
+
+// ChatAck provides a mock function
+func (_m *MockRPCIngressClient) ChatAck(refs []ParkedRef) error {
+	return _m.Called(refs).Error(0)
+}

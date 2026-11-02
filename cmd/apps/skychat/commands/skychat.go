@@ -952,6 +952,12 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if appCl != nil {
 		dmClient = appCl
 	}
+	// A message no network delivers is parked on the contact's dmsg-async
+	// inbox through the visor, which also fetches what waits for this one.
+	var parker dm.Parker
+	if appCl != nil && !standalone {
+		parker = appChatParker{appCl}
+	}
 	chatCtrl = dm.New(dm.Config{
 		Client:    dmClient,
 		Store:     historyStore,
@@ -992,12 +998,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 			broadcastDMStatus(id, dmStatusDeleted, peer)
 		},
 		StaleAckWindow: staleAckWindow,
+		Parker:         parker,
 		Log:            func(f string, a ...any) { appLog(f, a...) },
 	})
 	if len(nets) > 0 && !standalone && appCl != nil {
 		if err := chatCtrl.Start(ctx); err != nil {
 			appLog("skychat: dm controller start: %v", err)
 		}
+		go chatCtrl.RunParked(ctx)
 	}
 	// TCP-direct entry point — independent of useSkynet/useDmsg.
 	// Operator opts in via --tcp-listen / --tcp-peer; nil-effect
@@ -1330,6 +1338,16 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		res, sErr := chatCtrl.Send(ctx, pk, netType, data.Message, opt)
 		if sErr != nil {
 			http.Error(w, sErr.Error(), http.StatusBadRequest)
+			return
+		}
+		if res.Parked {
+			// No network reached the peer. The message waits on its inbox
+			// host and the peer acks it when it comes back.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"ok": true, "parked": true, "id": res.ID, "host": res.ParkHost.Hex(),
+			})
 			return
 		}
 		if data.WaitMS > 0 {
@@ -1771,6 +1789,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"outbound_fail_count":     st.OutboundFails,
 		"outbound_retry_count":    st.OutboundRetry,
 		"outbound_fallback_count": st.OutboundFallbk,
+		"outbound_parked_count":   st.OutboundParked,
+		"inbound_parked_count":    st.InboundParked,
 		"sse_drop_count":          sseDrops,
 		"last_rx_ts":              rxStr,
 		"last_send_ts":            sendStr,

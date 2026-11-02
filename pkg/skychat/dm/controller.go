@@ -91,6 +91,10 @@ type SendResult struct {
 	Acked   bool          // true if a WaitAck send received its ack in time
 	Elapsed time.Duration // time from write to ack (only meaningful when Acked)
 	Network appnet.Type   // the network the message actually went out on (may differ via fallback)
+	// Parked is set when no network reached the peer and the message was
+	// left on its dmsg-async inbox host ParkHost instead.
+	Parked   bool
+	ParkHost cipher.PubKey
 }
 
 // Config configures a Controller.
@@ -138,6 +142,9 @@ type Config struct {
 	// only to keep a default send byte-identical on the wire for pre-envelope
 	// peers; inbound bare text is always accepted regardless.
 	RawText bool
+	// Parker, if set, leaves a message no network delivers on the peer's
+	// dmsg-async inbox, and RunParked files what waits for this visor.
+	Parker Parker
 	// Log is an optional structured logger sink.
 	Log func(format string, args ...any)
 }
@@ -175,6 +182,8 @@ type Stats struct {
 	OutboundFails  int64 // sends that failed even after retry + fallback
 	OutboundRetry  int64 // stale-cached-conn writes rescued by a redial+retry
 	OutboundFallbk int64 // sends rescued by the alternate network
+	OutboundParked int64 // sends left on the peer's dmsg-async inbox
+	InboundParked  int64 // parked messages filed
 	LastRxAt       time.Time
 	LastTxAt       time.Time
 }
@@ -422,43 +431,50 @@ func (c *Controller) readConn(conn *message.Conn) {
 			c.bump(func(s *Stats) { s.InboundDrops++ })
 			return
 		}
-		if c.cfg.PreHandleFrame != nil && c.cfg.PreHandleFrame(peer, payload) {
-			continue
-		}
-		// A receipt (chat-ack / chat-read) is about a message WE sent: report
-		// it and let decodeInbound consume it. Checked before decoding so the
-		// app sees acks too, not only reads.
-		if kind, id := receiptKind(payload); kind != "" && c.cfg.OnReceipt != nil {
-			c.cfg.OnReceipt(peer.Hex(), id, kind)
-		}
-		// A chat-delete asks us to tombstone a message the peer sent us. Reported
-		// then consumed (decodeInbound returns empty for it, so it never surfaces
-		// as a chat line).
-		if id := deleteID(payload); id != "" && c.cfg.OnDelete != nil {
-			c.cfg.OnDelete(peer.Hex(), id)
-		}
-		text, ackID, replyTo, msgID := c.decodeInbound(payload)
-		if ackID != "" {
-			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
-				if wErr := conn.WriteFrame(b); wErr != nil {
-					c.log("skychat/dm: ack to %s failed: %v", peer.Hex(), wErr)
-				}
+		c.handleFrame(peer, string(raddr.Net), payload, time.Now().UTC(), conn.WriteFrame)
+	}
+}
+
+// handleFrame takes one inbound frame from peer, received at `at`, and
+// reports whether it surfaced as a chat line. ack sends a chat-ack back.
+func (c *Controller) handleFrame(peer cipher.PubKey, network string, payload []byte, at time.Time, ack func([]byte) error) bool {
+	if c.cfg.PreHandleFrame != nil && c.cfg.PreHandleFrame(peer, payload) {
+		return false
+	}
+	// A receipt (chat-ack / chat-read) is about a message WE sent: report
+	// it and let decodeInbound consume it. Checked before decoding so the
+	// app sees acks too, not only reads.
+	if kind, id := receiptKind(payload); kind != "" && c.cfg.OnReceipt != nil {
+		c.cfg.OnReceipt(peer.Hex(), id, kind)
+	}
+	// A chat-delete asks us to tombstone a message the peer sent us. Reported
+	// then consumed (decodeInbound returns empty for it, so it never surfaces
+	// as a chat line).
+	if id := deleteID(payload); id != "" && c.cfg.OnDelete != nil {
+		c.cfg.OnDelete(peer.Hex(), id)
+	}
+	text, ackID, replyTo, msgID := c.decodeInbound(payload)
+	if ackID != "" {
+		if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
+			if wErr := ack(b); wErr != nil {
+				c.log("skychat/dm: ack to %s failed: %v", peer.Hex(), wErr)
 			}
 		}
-		if text == "" {
-			continue // ack-only / empty — nothing to surface
-		}
-		peerHex := peer.Hex()
-		c.bump(func(s *Stats) { s.InboundMsgs++; s.LastRxAt = time.Now().UTC() })
-		c.persist(history.Message{
-			Peer: peerHex, From: peerHex, Outgoing: false,
-			Text: text, Timestamp: time.Now().UTC(), ID: msgID, ReplyTo: replyTo,
-		})
-		c.emit(Event{
-			ID: msgID, Dir: "in", Peer: peerHex, Network: string(raddr.Net),
-			Text: text, ReplyTo: replyTo, TS: time.Now().UTC(),
-		})
 	}
+	if text == "" {
+		return false // ack-only / empty — nothing to surface
+	}
+	peerHex := peer.Hex()
+	c.bump(func(s *Stats) { s.InboundMsgs++; s.LastRxAt = time.Now().UTC() })
+	c.persist(history.Message{
+		Peer: peerHex, From: peerHex, Outgoing: false,
+		Text: text, Timestamp: at, ID: msgID, ReplyTo: replyTo,
+	})
+	c.emit(Event{
+		ID: msgID, Dir: "in", Peer: peerHex, Network: network,
+		Text: text, ReplyTo: replyTo, TS: at,
+	})
+	return true
 }
 
 // Send delivers text to pk over net. It mirrors the native send path: build the
@@ -535,7 +551,9 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		var err error
 		conn, err = c.dialAndCache(ctx, pk, addr)
 		if err != nil {
-			return res, fmt.Errorf("dial %s over %s: %w", short(pk.Hex()), netType, err)
+			err = fmt.Errorf("dial %s over %s: %w", short(pk.Hex()), netType, err)
+			err = c.parkSend(ctx, pk, wire, text, opt.ReplyTo, &res, err)
+			return res, err
 		}
 	}
 
@@ -569,6 +587,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		}
 		if err != nil {
 			c.bump(func(s *Stats) { s.OutboundFails++ })
+			err = c.parkSend(ctx, pk, wire, text, opt.ReplyTo, &res, err)
 			return res, err
 		}
 	}
@@ -592,14 +611,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		go c.warmNetwork(pk, appnet.TypeSkynet) //nolint
 	}
 
-	c.persist(history.Message{
-		Peer: pk.Hex(), Outgoing: true, Text: text,
-		Timestamp: time.Now().UTC(), ID: ackID, ReplyTo: opt.ReplyTo,
-	})
-	c.emit(Event{
-		ID: ackID, Dir: "out", Peer: pk.Hex(), Network: string(res.Network),
-		Text: text, ReplyTo: opt.ReplyTo, TS: time.Now().UTC(),
-	})
+	c.recordOut(pk, text, ackID, opt.ReplyTo, res.Network)
 
 	switch {
 	case opt.WaitAck > 0 && ackCh != nil:
@@ -610,6 +622,9 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 			res.Acked = true
 			res.Elapsed = time.Since(writeStart)
 		case <-timer.C:
+			// A write into a dead conn succeeds, so no ack is how an offline
+			// peer shows. Park the message for it.
+			res.ParkHost, res.Parked = c.park(ctx, pk, wire, res.ID)
 		case <-ctx.Done():
 			return res, ctx.Err()
 		}
@@ -619,7 +634,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		// never lands, so no ack comes back; evicting it means the next send
 		// redials instead of writing into the void again.
 		handedOff = true
-		go c.watchAck(pk, conn, ackCh, unreg, c.cfg.StaleAckWindow)
+		go c.watchAck(pk, conn, wire, res.ID, ackCh, unreg, c.cfg.StaleAckWindow) //nolint:gosec // outlives the request by design
 	}
 	return res, nil
 }
@@ -628,7 +643,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 // chat-ack and, if none arrives within window, evicts the conn the message was
 // written to. A live peer acks in well under a second, so on a healthy conn
 // this returns via ackCh and leaves the cache untouched.
-func (c *Controller) watchAck(pk cipher.PubKey, conn *message.Conn, ackCh <-chan struct{}, unreg func(), window time.Duration) {
+func (c *Controller) watchAck(pk cipher.PubKey, conn *message.Conn, wire []byte, id string, ackCh <-chan struct{}, unreg func(), window time.Duration) {
 	if unreg != nil {
 		defer unreg()
 	}
@@ -640,6 +655,9 @@ func (c *Controller) watchAck(pk cipher.PubKey, conn *message.Conn, ackCh <-chan
 	case <-timer.C:
 		c.evict(pk, conn)
 		c.log("skychat/dm: no receipt from %s within %v — dropped stale conn; next send will redial", short(pk.Hex()), window)
+		ctx, cancel := context.WithTimeout(context.Background(), parkedAckTimeout)
+		c.park(ctx, pk, wire, id)
+		cancel()
 	case <-c.done:
 		// Controller shutting down.
 	}
