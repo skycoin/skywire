@@ -65,6 +65,16 @@ type asyncState struct {
 	handlers   map[uint16]dmsgasync.Handler
 	cache      map[cipher.PubKey]cachedRecord
 	kick       chan struct{}
+	// ctx is the visor's. The host and the inbox loop each run under a
+	// child of it, so a settings change can restart either.
+	ctx  context.Context
+	conf visorconfig.DmsgAsyncConfig
+	// settingsMu serializes settings changes.
+	settingsMu sync.Mutex
+	hostL      net.Listener
+	hostStop   context.CancelFunc
+	inboxStop  context.CancelFunc
+	inboxDone  chan struct{}
 }
 
 type cachedRecord struct {
@@ -101,29 +111,46 @@ func (v *Visor) asyncDial(ctx context.Context, pk cipher.PubKey, port uint16) (n
 }
 
 // asyncHosts are the inbox hosts: configured, else this visor's hypervisors.
-func asyncHosts(conf *visorconfig.V1) []cipher.PubKey {
-	var hosts []cipher.PubKey
-	if conf.DmsgAsync != nil && len(conf.DmsgAsync.Inbox.Hosts) > 0 {
-		hosts = conf.DmsgAsync.Inbox.Hosts
-	} else {
-		hosts = conf.GetHypervisors()
+func asyncHosts(conf visorconfig.DmsgAsyncConfig, v1 *visorconfig.V1) []cipher.PubKey {
+	hosts := conf.Inbox.Hosts
+	if len(hosts) == 0 {
+		hosts = v1.GetHypervisors()
 	}
 	out := make([]cipher.PubKey, 0, len(hosts))
 	for _, h := range hosts {
-		if h != conf.PK && !h.Null() && !slices.Contains(out, h) && len(out) < dmsgasync.MaxRecordHosts {
+		if h != v1.PK && !h.Null() && !slices.Contains(out, h) && len(out) < dmsgasync.MaxRecordHosts {
 			out = append(out, h)
 		}
 	}
 	return out
 }
 
+// asyncHostOn reports whether conf runs the host: on for a hypervisor unless
+// set.
+func asyncHostOn(conf visorconfig.DmsgAsyncConfig, v1 *visorconfig.V1) bool {
+	if conf.Host.Enable != nil {
+		return *conf.Host.Enable
+	}
+	return v1.Hypervisor != nil
+}
+
+// asyncConfig is the config's dmsg_async section with the settings file over
+// it.
+func (v *Visor) asyncConfig() (visorconfig.DmsgAsyncConfig, asyncSettings) {
+	var base visorconfig.DmsgAsyncConfig
+	if v.conf.DmsgAsync != nil {
+		base = *v.conf.DmsgAsync
+	}
+	s, err := loadAsyncSettings(asyncDir(v.conf))
+	if err != nil && v.async.log != nil {
+		v.async.log.WithError(err).Warn("dmsg-async: unreadable settings, using the config")
+	}
+	return s.over(base), s
+}
+
 func initDmsgAsync(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.dmsgC == nil {
 		return nil
-	}
-	conf := v.conf.DmsgAsync
-	if conf == nil {
-		conf = &visorconfig.DmsgAsyncConfig{}
 	}
 	a := &v.async
 	a.mu.Lock()
@@ -133,34 +160,40 @@ func initDmsgAsync(ctx context.Context, v *Visor, log *logging.Logger) error {
 	a.regErr = map[cipher.PubKey]string{}
 	a.kick = make(chan struct{}, 1)
 	a.log = log
+	a.ctx = ctx
 	a.mu.Unlock()
-
-	hostOn := v.conf.Hypervisor != nil
-	if conf.Host.Enable != nil {
-		hostOn = *conf.Host.Enable
-	}
-	if hostOn {
-		if err := v.startAsyncHost(ctx, conf.Host, log); err != nil {
-			log.WithError(err).Warn("dmsg-async: host not started")
-		}
-	}
-
-	hosts := asyncHosts(v.conf)
-	if conf.Inbox.Disable || len(hosts) == 0 {
+	v.pushCloseStack("dmsg_async", func() error {
+		v.asyncStopInbox()
+		v.asyncStopHost()
 		return nil
-	}
-	a.mu.Lock()
-	a.inbox = true
-	a.hosts = hosts
-	a.publish = conf.Inbox.Publish == nil || *conf.Inbox.Publish
-	a.basePolicy = dmsgasync.Policy{Allow: conf.Inbox.Allow}
-	a.policy = a.basePolicy
-	a.mu.Unlock()
-	go v.asyncInboxLoop(ctx, log)
+	})
+	conf, _ := v.asyncConfig()
+	v.asyncApply(conf, true, true)
 	return nil
 }
 
-func (v *Visor) startAsyncHost(ctx context.Context, conf visorconfig.DmsgAsyncHostConfig, log *logging.Logger) error {
+// asyncApply runs conf, restarting the host and the inbox as asked.
+func (v *Visor) asyncApply(conf visorconfig.DmsgAsyncConfig, host, inbox bool) {
+	a := &v.async
+	a.mu.Lock()
+	a.conf = conf
+	log := a.log
+	a.mu.Unlock()
+	if host {
+		v.asyncStopHost()
+		if asyncHostOn(conf, v.conf) {
+			if err := v.startAsyncHost(conf.Host, log); err != nil {
+				log.WithError(err).Warn("dmsg-async: host not started")
+			}
+		}
+	}
+	if inbox {
+		v.asyncStopInbox()
+		v.asyncStartInbox(conf, log)
+	}
+}
+
+func (v *Visor) startAsyncHost(conf visorconfig.DmsgAsyncHostConfig, log *logging.Logger) error {
 	store := conf.Store
 	if store == "" {
 		store = dmsgasync.StoreDisk
@@ -189,18 +222,71 @@ func (v *Visor) startAsyncHost(ctx context.Context, conf visorconfig.DmsgAsyncHo
 	if err != nil {
 		return fmt.Errorf("listen on dmsg port %d: %w", dmsgasync.Port, err)
 	}
-	v.pushCloseStack("dmsg_async.host", l.Close)
+	a := &v.async
+	a.mu.Lock()
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.host, a.store, a.hostL, a.hostStop = h, store, l, cancel
+	a.mu.Unlock()
 	go func() {
-		if err := h.Serve(ctx, l); err != nil {
+		if err := h.Serve(ctx, l); err != nil && ctx.Err() == nil {
 			log.WithError(err).Debug("dmsg-async: host stopped")
 		}
 	}()
-	v.async.mu.Lock()
-	v.async.host = h
-	v.async.store = store
-	v.async.mu.Unlock()
 	log.WithField("store", store).Info("dmsg-async: inbox host running")
 	return nil
+}
+
+// asyncStopHost stops the host. What it holds stays on disk for the next one.
+func (v *Visor) asyncStopHost() {
+	a := &v.async
+	a.mu.Lock()
+	l, stop := a.hostL, a.hostStop
+	a.host, a.hostL, a.hostStop = nil, nil, nil
+	a.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
+	if l != nil {
+		_ = l.Close() //nolint:errcheck
+	}
+}
+
+func (v *Visor) asyncStartInbox(conf visorconfig.DmsgAsyncConfig, log *logging.Logger) {
+	hosts := asyncHosts(conf, v.conf)
+	a := &v.async
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.inbox = !conf.Inbox.Disable && len(hosts) > 0
+	if !a.inbox {
+		a.hosts = nil
+		return
+	}
+	a.hosts = hosts
+	a.publish = conf.Inbox.Publish == nil || *conf.Inbox.Publish
+	a.basePolicy = dmsgasync.Policy{Allow: conf.Inbox.Allow}
+	a.policy = a.basePolicy
+	// A new record names the new hosts and is published again.
+	a.record = nil
+	ctx, cancel := context.WithCancel(a.ctx)
+	done := make(chan struct{})
+	a.inboxStop, a.inboxDone = cancel, done
+	go func() {
+		defer close(done)
+		v.asyncInboxLoop(ctx, log)
+	}()
+}
+
+// asyncStopInbox stops the inbox loop and waits for it.
+func (v *Visor) asyncStopInbox() {
+	a := &v.async
+	a.mu.Lock()
+	stop, done := a.inboxStop, a.inboxDone
+	a.inboxStop, a.inboxDone, a.inbox = nil, nil, false
+	a.mu.Unlock()
+	if stop != nil {
+		stop()
+		<-done
+	}
 }
 
 func (v *Visor) asyncInboxLoop(ctx context.Context, log *logging.Logger) {

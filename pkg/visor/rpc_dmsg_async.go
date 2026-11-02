@@ -41,3 +41,19 @@ func (r *RPC) DmsgAsyncSync(_ *struct{}, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgAsyncSync", nil)(nil, &err)
 	return r.visor.DmsgAsyncSync()
 }
+
+// DmsgAsyncSettings reports the effective settings. See Visor.DmsgAsyncSettings.
+func (r *RPC) DmsgAsyncSettings(_ *struct{}, out *visorapi.DmsgAsyncSettings) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgAsyncSettings", nil)(out, &err)
+	s, err := r.visor.DmsgAsyncSettings()
+	if s != nil {
+		*out = *s
+	}
+	return err
+}
+
+// DmsgAsyncSetSettings changes settings live. See Visor.DmsgAsyncSetSettings.
+func (r *RPC) DmsgAsyncSetSettings(kv *map[string]string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgAsyncSetSettings", kv)(nil, &err)
+	return r.visor.DmsgAsyncSetSettings(*kv)
+}

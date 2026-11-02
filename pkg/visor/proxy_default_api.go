@@ -1471,3 +1471,11 @@ func (proxyDefaultAPI) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) {
 }
 
 func (proxyDefaultAPI) DmsgAsyncSync() error { return ErrProxyNotSupported }
+
+// DmsgAsyncSettings implements visorapi.API.
+func (proxyDefaultAPI) DmsgAsyncSettings() (*visorapi.DmsgAsyncSettings, error) {
+	return nil, ErrProxyNotSupported
+}
+
+// DmsgAsyncSetSettings implements visorapi.API.
+func (proxyDefaultAPI) DmsgAsyncSetSettings(map[string]string) error { return ErrProxyNotSupported }

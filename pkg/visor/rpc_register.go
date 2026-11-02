@@ -472,6 +472,26 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.DmsgAsyncSend(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSetSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(map[string]string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.DmsgAsyncSetSettings(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".DmsgAsyncSettings", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(visorapi.DmsgAsyncSettings)
+			return rpcReply, rpcRcvr.DmsgAsyncSettings(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".DmsgAsyncStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {

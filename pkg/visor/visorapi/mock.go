@@ -2000,3 +2000,11 @@ func (mc *mockRPCClient) DmsgAsyncTake([]uint16) ([]dmsgasync.Message, error) { 
 
 // DmsgAsyncSync implements API.
 func (mc *mockRPCClient) DmsgAsyncSync() error { return nil }
+
+// DmsgAsyncSettings implements API.
+func (mc *mockRPCClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
+	return &DmsgAsyncSettings{}, nil
+}
+
+// DmsgAsyncSetSettings implements API.
+func (mc *mockRPCClient) DmsgAsyncSetSettings(map[string]string) error { return nil }

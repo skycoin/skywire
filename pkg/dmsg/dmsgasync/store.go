@@ -28,7 +28,8 @@ type Limits struct {
 	TTL               time.Duration `json:"ttl,omitempty"`
 }
 
-func (l Limits) withDefaults() Limits {
+// WithDefaults returns l with each zero field at its default.
+func (l Limits) WithDefaults() Limits {
 	if l.MaxMessage <= 0 {
 		l.MaxMessage = DefaultMaxMessage
 	}
@@ -72,7 +73,7 @@ type store struct {
 
 func newStore(lim Limits, dir string, now time.Time) (*store, error) {
 	s := &store{
-		lim:    lim.withDefaults(),
+		lim:    lim.WithDefaults(),
 		dir:    dir,
 		byRcpt: map[cipher.PubKey]map[string]*stored{},
 		bytes:  map[cipher.PubKey]int64{},
