@@ -1194,6 +1194,9 @@ func mergeExistingApps(log *logging.Logger) {
 			if name == skyenv.SkycoinWebName && skycoinWebElectrum != "" {
 				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--btc-electrum-url", skycoinWebElectrum)
 			}
+			if name == skyenv.SkychatName && skychatAddr != skyenv.SkychatAddr {
+				conf.Launcher.Apps[i].Args = setFlag(prev.Args, "--addr", skychatAddr)
+			}
 		}
 		// The same for skydns: its CA and autostart come from skywire.conf when set.
 		if name == skyenv.SkyDNSName {
