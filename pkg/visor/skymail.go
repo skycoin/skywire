@@ -303,6 +303,10 @@ func (v *Visor) MailSetSettings(u visorapi.MailSettingsUpdate) error {
 	v.initLock.Lock()
 	enable, _, _ := skymailEffectiveIn(v.conf, dir) //nolint:errcheck // just written
 	v.initLock.Unlock()
+	// The launcher's autostart is what app lists and the hypervisor show.
+	if v.appL != nil {
+		v.appL.SetAppAutoStart(skymailApp, enable)
+	}
 	if !enable {
 		if v.mailAppRunning() {
 			return v.StopApp(skymailApp)

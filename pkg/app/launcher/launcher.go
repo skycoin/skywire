@@ -77,6 +77,20 @@ func (l *AppLauncher) ResetConfig(conf AppLauncherConfig) {
 	l.conf.ServerAddr = conf.ServerAddr
 }
 
+// SetAppAutoStart changes one app's autostart in place, so the apps the visor
+// adds at runtime stay listed. It reports whether the launcher has the app.
+func (l *AppLauncher) SetAppAutoStart(name string, autoStart bool) bool {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	ac, ok := l.apps[name]
+	if !ok {
+		return false
+	}
+	ac.AutoStart = autoStart
+	l.apps[name] = ac
+	return true
+}
+
 // NewLauncher creates a new launcher.
 func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
 	launcher := &AppLauncher{
