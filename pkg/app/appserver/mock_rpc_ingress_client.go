@@ -572,3 +572,21 @@ func (_m *MockRPCIngressClient) MailHostInfo() (MailHostInfo, error) {
 
 	return ret.Get(0).(MailHostInfo), ret.Error(1)
 }
+
+// MailPark provides a mock function
+func (_m *MockRPCIngressClient) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	ret := _m.Called(rcpt, env, ref)
+	return ret.Get(0).(cipher.PubKey), ret.Error(1)
+}
+
+// MailUnpark provides a mock function
+func (_m *MockRPCIngressClient) MailUnpark() ([]ParkedMail, error) {
+	ret := _m.Called()
+	out, _ := ret.Get(0).([]ParkedMail) //nolint:errcheck
+	return out, ret.Error(1)
+}
+
+// MailAck provides a mock function
+func (_m *MockRPCIngressClient) MailAck(refs []ParkedRef) error {
+	return _m.Called(refs).Error(0)
+}

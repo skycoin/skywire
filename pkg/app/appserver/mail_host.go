@@ -13,6 +13,13 @@ type MailHost interface {
 	MailSeal(msg []byte, rcpt cipher.PubKey) ([]byte, error)
 	MailOpen(body []byte) ([]byte, cipher.PubKey, error)
 	MailHostInfo() MailHostInfo
+	// MailPark leaves env, sealed for rcpt, on rcpt's dmsg-async inbox hosts
+	// and returns the host that took it. ref names the message across retries.
+	MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error)
+	// MailUnpark returns the mail parked for this visor, without removing it.
+	MailUnpark() ([]ParkedMail, error)
+	// MailAck removes parked mail the mailbox took.
+	MailAck(refs []ParkedRef) error
 }
 
 // MailHostInfo is the visor state a mailbox app follows.
@@ -126,4 +133,77 @@ func (c *rpcIngressClient) MailHostInfo() (MailHostInfo, error) {
 	var resp MailHostInfo
 	err := c.rpc.Call(c.formatMethod("MailHostInfo"), &struct{}{}, &resp)
 	return resp, err
+}
+
+// ParkedMail is a sealed envelope that waited for this visor on an inbox
+// host. From is the key that deposited it.
+type ParkedMail struct {
+	ID   string
+	Host cipher.PubKey
+	From cipher.PubKey
+	Body []byte
+}
+
+// ParkedRef names one parked message.
+type ParkedRef struct {
+	Host cipher.PubKey
+	ID   string
+}
+
+// MailParkReq asks the visor to park Env for Rcpt.
+type MailParkReq struct {
+	Rcpt cipher.PubKey
+	Env  []byte
+	Ref  string
+}
+
+// MailPark parks a sealed envelope for an offline recipient.
+func (r *RPCIngressGateway) MailPark(req *MailParkReq, resp *cipher.PubKey) (err error) {
+	defer rpcutil.LogCall(r.log, "MailPark", nil)(nil, &err)
+	h, err := r.mailHost()
+	if err != nil {
+		return err
+	}
+	*resp, err = h.MailPark(req.Rcpt, req.Env, req.Ref)
+	return err
+}
+
+// MailUnpark returns the mail parked for the visor.
+func (r *RPCIngressGateway) MailUnpark(_ *struct{}, resp *[]ParkedMail) (err error) {
+	defer rpcutil.LogCall(r.log, "MailUnpark", nil)(nil, &err)
+	h, err := r.mailHost()
+	if err != nil {
+		return err
+	}
+	*resp, err = h.MailUnpark()
+	return err
+}
+
+// MailAck removes parked mail the mailbox took.
+func (r *RPCIngressGateway) MailAck(refs *[]ParkedRef, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "MailAck", nil)(nil, &err)
+	h, err := r.mailHost()
+	if err != nil {
+		return err
+	}
+	return h.MailAck(*refs)
+}
+
+// MailPark asks the visor to park env for rcpt.
+func (c *rpcIngressClient) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	var resp cipher.PubKey
+	err := c.rpc.Call(c.formatMethod("MailPark"), &MailParkReq{Rcpt: rcpt, Env: env, Ref: ref}, &resp)
+	return resp, err
+}
+
+// MailUnpark asks the visor for the mail parked for it.
+func (c *rpcIngressClient) MailUnpark() ([]ParkedMail, error) {
+	var resp []ParkedMail
+	err := c.rpc.Call(c.formatMethod("MailUnpark"), &struct{}{}, &resp)
+	return resp, err
+}
+
+// MailAck asks the visor to remove parked mail.
+func (c *rpcIngressClient) MailAck(refs []ParkedRef) error {
+	return c.rpc.Call(c.formatMethod("MailAck"), &refs, &struct{}{})
 }

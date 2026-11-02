@@ -58,6 +58,8 @@ type Queued struct {
 	// CarriedFor is set on sealed mail this visor delivers for the
 	// visor that signed it. This visor cannot read it.
 	CarriedFor string `json:"carried_for,omitempty"`
+	// Parked are the recipient visors whose inbox hosts hold a sealed copy.
+	Parked []string `json:"parked,omitempty"`
 }
 
 // queueRecord is what the Outbox keeps beside a message.
@@ -72,6 +74,9 @@ type queueRecord struct {
 	Handed []string `json:"handed,omitempty"`
 	// Carried is the hex PK this sealed envelope is carried for.
 	Carried string `json:"carried,omitempty"`
+	// Parked are the recipient visors (hex PKs) whose inbox hosts hold a
+	// sealed copy.
+	Parked []string `json:"parked,omitempty"`
 }
 
 type queueItem struct {
@@ -80,7 +85,26 @@ type queueItem struct {
 	// handNext is when to offer the message to helpers that lack it.
 	handNext  time.Time
 	handTries int
+	// parkNext is when to park the message for recipients whose inbox hosts
+	// lack it.
+	parkNext  time.Time
+	parkTries int
 	busy      bool
+}
+
+// needsPark reports whether a recipient visor still to reach lacks a parked
+// copy. Parking starts once the first delivery attempt has failed.
+func (it *queueItem) needsPark() bool {
+	if it.rec.Carried != "" || it.rec.Attempts == 0 {
+		return false
+	}
+	groups, _ := groupRcpts(it.rec.Pending)
+	for _, g := range groups {
+		if !slices.Contains(it.rec.Parked, g.pk.Hex()) {
+			return true
+		}
+	}
+	return false
 }
 
 // needsHandoff reports whether a helper in helpers lacks this message.
@@ -101,6 +125,8 @@ type outbox struct {
 	md   *maildir
 	dir  string
 	kick chan struct{}
+	// parking is set when the mailbox can park mail (parked.go).
+	parking bool
 
 	mu    sync.Mutex
 	items map[string]*queueItem
@@ -171,9 +197,12 @@ func (o *outbox) poke() {
 }
 
 // dueAt is when an item next needs the worker: a delivery attempt, a
-// handoff to a helper that lacks it, or giving up.
-func (it *queueItem) dueAt(id string, maxAge time.Duration, helpers []cipher.PubKey) time.Time {
+// handoff to a helper that lacks it, parking it, or giving up.
+func (it *queueItem) dueAt(id string, maxAge time.Duration, helpers []cipher.PubKey, parking bool) time.Time {
 	at := it.next
+	if parking && it.needsPark() && it.parkNext.Before(at) {
+		at = it.parkNext
+	}
 	if it.needsHandoff(helpers) && it.handNext.Before(at) {
 		at = it.handNext
 	}
@@ -190,7 +219,7 @@ func (o *outbox) due(now time.Time, maxAge time.Duration, helpers []cipher.PubKe
 	defer o.mu.Unlock()
 	var ids []string
 	for id, it := range o.items {
-		if !it.busy && !it.dueAt(id, maxAge, helpers).After(now) {
+		if !it.busy && !it.dueAt(id, maxAge, helpers, o.parking).After(now) {
 			it.busy = true
 			ids = append(ids, id)
 		}
@@ -205,7 +234,7 @@ func (o *outbox) wait(now time.Time, maxAge time.Duration, helpers []cipher.PubK
 	d := idleWait
 	for id, it := range o.items {
 		if !it.busy {
-			d = min(d, max(it.dueAt(id, maxAge, helpers).Sub(now), 0))
+			d = min(d, max(it.dueAt(id, maxAge, helpers, o.parking).Sub(now), 0))
 		}
 	}
 	return d
@@ -240,6 +269,7 @@ func (o *outbox) release(id string, st *queueItem) error {
 		return nil
 	}
 	it.rec, it.next, it.handNext, it.handTries = st.rec, st.next, st.handNext, st.handTries
+	it.parkNext, it.parkTries = st.parkNext, st.parkTries
 	return o.writeRecord(id, st.rec)
 }
 
@@ -310,6 +340,7 @@ func (o *outbox) info(id string, maxAge time.Duration) *Queued {
 		GiveUp:      giveUp(id, maxAge),
 		Handed:      slices.Clone(it.rec.Handed),
 		CarriedFor:  it.rec.Carried,
+		Parked:      slices.Clone(it.rec.Parked),
 	}
 }
 
@@ -449,6 +480,8 @@ func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubK
 		return
 	}
 
+	// Park before a delivery attempt that may hang until attemptTimeout.
+	mb.parkIfDue(ctx, id, &st, msg)
 	if now := time.Now(); !st.next.After(now) {
 		require := ""
 		if rec.Carried != "" {
@@ -460,8 +493,8 @@ func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubK
 		results := mb.deliverGroups(actx, rec.From, groups, msg, require)
 		cancel()
 		if ctx.Err() != nil {
-			// Shutting down is not the recipient's failure.
-			_ = mb.out.release(id, nil) //nolint:errcheck
+			// Shutting down is not the recipient's failure. Keep what parking did.
+			_ = mb.out.release(id, &st) //nolint:errcheck
 			return
 		}
 		rec.Attempts++
@@ -497,6 +530,7 @@ func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubK
 	if st.needsHandoff(helpers) && !st.handNext.After(time.Now()) {
 		mb.handOff(ctx, &st, msg, helpers)
 	}
+	mb.parkIfDue(ctx, id, &st, msg)
 	if err := mb.out.release(id, &st); err != nil {
 		mb.log.WithError(err).WithField("id", id).Warn("skymail: outbox record")
 	}

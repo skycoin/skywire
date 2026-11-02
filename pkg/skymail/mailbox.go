@@ -60,6 +60,10 @@ type Config struct {
 	// Helpers, with Sealer and the Outbox, names the visors that get a
 	// sealed copy of queued mail to deliver too (helpers.go).
 	Helpers func() []cipher.PubKey
+	// Parker, with Sealer and the Outbox, parks queued mail on the recipient's
+	// dmsg-async inbox hosts and fetches the mail parked for this visor
+	// (parked.go).
+	Parker Parker
 	// RelayFor, with Sealer and the Outbox, reports whether this mailbox
 	// carries sealed mail that pk hands over for someone else.
 	RelayFor func(pk cipher.PubKey) bool
@@ -114,6 +118,7 @@ func Open(cfg Config) (*Mailbox, error) {
 		if out, err = openOutbox(cfg.Dir); err != nil {
 			return nil, err
 		}
+		out.parking = cfg.Parker != nil && cfg.Sealer != nil
 	}
 	log := cfg.Log
 	if log == nil {
@@ -323,7 +328,20 @@ func (r receiver) Deliver(_ context.Context, env skymailbridge.Envelope) (string
 			return r.mb.carry(peer, env)
 		}
 	}
-	sender, relay, body := peer, cipher.PubKey{}, env.Body
+	return r.mb.file(peer, env.Body, false)
+}
+
+// file applies the delivery checks to body from peer and stores it in the
+// inbox. A sealed body is opened and its signer becomes the sender, with peer
+// as the relay when they differ. With sealedOnly, a body that is not sealed
+// is refused. The error is a *skymailbridge.Reply whose code says whether a
+// later try could succeed.
+func (mb *Mailbox) file(peer cipher.PubKey, body []byte, sealedOnly bool) (string, error) {
+	r := receiver{mb}
+	sender, relay := peer, cipher.PubKey{}
+	if sealedOnly && (!r.mb.sealing() || !IsSealed(body)) {
+		return "", &skymailbridge.Reply{Code: 554, Enhanced: "5.6.0", Text: "not a sealed envelope"}
+	}
 	if r.mb.sealing() && IsSealed(body) {
 		msg, signer, err := r.mb.cfg.Sealer.Open(body)
 		if err != nil {

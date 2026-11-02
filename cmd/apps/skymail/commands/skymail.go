@@ -162,6 +162,7 @@ func run(ctx context.Context, o options) error {
 	}
 	if offline {
 		host.Sealer = appSealer{appCl}
+		host.Parker = appParker{appCl}
 	}
 	svc, err := skymail.StartService(ctx, skymail.ServiceConfig{
 		Host: host, Dir: o.dir, Base: limits, Outbox: offline,
@@ -257,4 +258,31 @@ func (s appSealer) Seal(msg []byte, rcpt cipher.PubKey) ([]byte, error) {
 
 func (s appSealer) Open(body []byte) ([]byte, cipher.PubKey, error) {
 	return s.cl.MailOpen(body)
+}
+
+// appParker parks and fetches mail through the visor's dmsg-async inbox.
+type appParker struct{ cl *app.Client }
+
+func (p appParker) Park(_ context.Context, rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {
+	return p.cl.MailPark(rcpt, env, ref)
+}
+
+func (p appParker) Unpark(context.Context) ([]skymail.Parked, error) {
+	list, err := p.cl.MailUnpark()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]skymail.Parked, len(list))
+	for i, m := range list {
+		out[i] = skymail.Parked{ID: m.ID, Host: m.Host, From: m.From, Body: m.Body}
+	}
+	return out, nil
+}
+
+func (p appParker) Ack(_ context.Context, done []skymail.Parked) error {
+	refs := make([]appserver.ParkedRef, len(done))
+	for i, d := range done {
+		refs[i] = appserver.ParkedRef{Host: d.Host, ID: d.ID}
+	}
+	return p.cl.MailAck(refs)
 }

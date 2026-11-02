@@ -524,3 +524,40 @@ func (v *Visor) DmsgAsyncStatus() (*visorapi.DmsgAsyncStatus, error) {
 	st.Inbox = in
 	return st, nil
 }
+
+// asyncPeek lists what waits for this visor on ports on every inbox host,
+// without removing it.
+func (v *Visor) asyncPeek(ports []uint16) ([]dmsgasync.Message, error) {
+	a := &v.async
+	a.mu.Lock()
+	inbox := a.inbox
+	hosts := append([]cipher.PubKey(nil), a.hosts...)
+	a.mu.Unlock()
+	if !inbox {
+		return nil, ErrDmsgAsyncOff
+	}
+	var out []dmsgasync.Message
+	var errs []error
+	for _, h := range hosts {
+		ctx, cancel := context.WithTimeout(context.Background(), asyncOpTimeout)
+		msgs, _, err := dmsgasync.List(ctx, v.asyncDial, h, ports)
+		cancel()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", h, err))
+			continue
+		}
+		out = append(out, msgs...)
+	}
+	if len(out) == 0 && len(errs) == len(hosts) && len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return out, nil
+}
+
+// asyncAck removes this visor's messages ids from host.
+func (v *Visor) asyncAck(host cipher.PubKey, ids []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), asyncOpTimeout)
+	defer cancel()
+	_, err := dmsgasync.Ack(ctx, v.asyncDial, host, ids)
+	return err
+}

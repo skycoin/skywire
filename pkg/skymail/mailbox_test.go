@@ -63,6 +63,7 @@ type testNet struct {
 	mu   sync.Mutex
 	lis  map[cipher.PubKey]*chanListener
 	down map[cipher.PubKey]bool
+	hang map[cipher.PubKey]bool
 }
 
 // dialerFor returns the dialer visor `from` uses.
@@ -77,9 +78,14 @@ func (d netDialer) Dial(ctx context.Context, peer cipher.PubKey, _ uint16) (net.
 	d.n.mu.Lock()
 	l, ok := d.n.lis[peer]
 	down := d.n.down[peer]
+	hang := d.n.hang[peer]
 	d.n.mu.Unlock()
 	if !ok || down {
 		return nil, errors.New("peer unreachable")
+	}
+	if hang {
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 	client, server := net.Pipe()
 	select {
@@ -97,7 +103,7 @@ type visor struct {
 }
 
 func newTestNet() *testNet {
-	return &testNet{lis: map[cipher.PubKey]*chanListener{}, down: map[cipher.PubKey]bool{}}
+	return &testNet{lis: map[cipher.PubKey]*chanListener{}, down: map[cipher.PubKey]bool{}, hang: map[cipher.PubKey]bool{}}
 }
 
 // addVisor opens a mailbox for a fresh PK and serves it. It is

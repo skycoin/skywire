@@ -26,6 +26,16 @@ func (h fakeMailHost) MailHostInfo() MailHostInfo {
 	return MailHostInfo{Hypervisors: []cipher.PubKey{h.pk}, PortServed: true}
 }
 
+func (h fakeMailHost) MailPark(rcpt cipher.PubKey, _ []byte, _ string) (cipher.PubKey, error) {
+	return rcpt, nil
+}
+
+func (h fakeMailHost) MailUnpark() ([]ParkedMail, error) {
+	return []ParkedMail{{ID: "1", Host: h.pk, From: h.pk, Body: []byte("env")}}, nil
+}
+
+func (h fakeMailHost) MailAck([]ParkedRef) error { return nil }
+
 // TestMailHostGateway checks the mail calls reach the visor's MailHost only
 // for the app it serves them to.
 func TestMailHostGateway(t *testing.T) {
@@ -56,6 +66,17 @@ func TestMailHostGateway(t *testing.T) {
 	require.Equal(t, pk, opened.Signer)
 	empty := []byte{}
 	require.Error(t, mail.MailOpen(&empty, &opened), "the host's error comes back")
+
+	var host cipher.PubKey
+	require.NoError(t, mail.MailPark(&MailParkReq{Rcpt: pk, Env: []byte("env"), Ref: "r"}, &host))
+	require.Equal(t, pk, host)
+	var parked []ParkedMail
+	require.NoError(t, mail.MailUnpark(&struct{}{}, &parked))
+	require.Len(t, parked, 1)
+	refs := []ParkedRef{{Host: pk, ID: "1"}}
+	require.NoError(t, mail.MailAck(&refs, &struct{}{}))
+	require.ErrorIs(t, chat.MailUnpark(&struct{}{}, &parked), ErrNoMailHost, "another app may not take the visor's parked mail")
+	require.ErrorIs(t, chat.MailPark(&MailParkReq{Rcpt: pk}, &host), ErrNoMailHost)
 
 	require.ErrorIs(t, chat.MailOpen(&body, &opened), ErrNoMailHost, "another app may not open the visor's mail")
 	require.ErrorIs(t, chat.MailSeal(&MailSealReq{Msg: []byte("m")}, &sealed), ErrNoMailHost)
