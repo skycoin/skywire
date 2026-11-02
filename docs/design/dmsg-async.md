@@ -193,8 +193,9 @@ may ask for. A recipient's `max_message` above the host's own is refused.
 
 ## Recipient behaviour
 
-- R fetches from each host at start, whenever it opens a new dmsg session to
-  a host, every 10 minutes while online, and when a consumer asks.
+- R's consumers fetch from each host when they start and every 2 minutes
+  while online. The visor fetches the ports it handles itself every 10
+  minutes and when asked.
 - R re-registers with each host whenever its record or policy changes and at
   least once a day, so a host that lost its state recovers.
 - A host is usually the recipient's own visor, so it is often online when R

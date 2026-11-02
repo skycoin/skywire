@@ -288,7 +288,7 @@ first delivery attempt fails, and runs before any later attempt. A failed
 park is retried after the delays below. The ref is the first 16 bytes of
 `sha256(id + "/" + the recipient's 33 key bytes)` as hex.
 
-A mailbox fetches the mail parked for it when it starts and every 10
+A mailbox fetches the mail parked for it when it starts and every 2
 minutes, and files each envelope through the delivery checks with the host
 as the relay. Mail filed or refused with a 5xx answer is removed from the
 host. Mail refused with a 4xx answer, such as into a full mailbox, stays

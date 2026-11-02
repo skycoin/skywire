@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                            |
 |----------|------------------------------------------------------------------------|
-| Revision | 2026-11-02, skywire 4ac16bbc9                                          |
+| Revision | 2026-11-02, skywire ead04869c                                          |
 | Code     | `pkg/dmsg/dmsgasync`, `pkg/dmsg/discovery/api/inbox.go`, `pkg/visor/dmsg_async.go`, `pkg/visor/skychat_async.go`, `pkg/app/appserver/chat_host.go` |
 
 ## Abstract
@@ -77,6 +77,7 @@ than 30 days and one hour ahead.
 | `allow` | list of hex public keys | senders that may deposit, empty for every key |
 | `deny` | list of hex public keys | senders that may never deposit |
 | `max_per_sender` | int | messages one sender may have waiting, 0 for 20 |
+| `port_allow` | object of port to list of hex public keys | on each named port, only the listed senders that `allow` and `deny` let through may deposit |
 
 ### Request
 
@@ -151,7 +152,8 @@ operation and allows it 60 seconds.
   held for it.
 - **record** returns the registered record for `pk` while it has not expired.
   Any key may ask.
-- **deposit** checks the request against R's registration and policy, then
+- **deposit** checks the request against R's registration and its policy for
+  the port, then
   replies `ok` with no id. The sender then writes one payload frame of exactly
   `size` bytes, and the host replies with the id. A deposit with the same
   sender and `ref` as a message still held returns that message's id and
@@ -205,7 +207,10 @@ with `seq` set to the current Unix nanoseconds and `expires` 30 days ahead,
 and registers it with each. When some refuse, R signs a second record naming
 only the hosts that accepted, with `seq` one higher, and registers that, so a
 record never names a host that refused. R's policy allows the keys in
-`dmsg_async.inbox.allow`, or every key when it is empty.
+`dmsg_async.inbox.allow`, or every key when it is empty. When the mailbox has
+a whitelist, the policy narrows port 25 to it. R registers again whenever its
+policy changes, which a visor checks every cycle and at once when the
+whitelist is set through it.
 
 R publishes its record to dmsg discovery when its hosts change and once a
 day, unless `dmsg_async.inbox.publish` is false. R registers again once a
@@ -261,6 +266,7 @@ already in the conversation's history is only removed.
 | Record lifetime | 30 days | `dmsgasync.MaxRecordLifetime` |
 | Visor cycle | 10 minutes | `visor.asyncCycle` |
 | Skychat fetch | 2 minutes | `dm.unparkInterval` |
+| Skymail fetch | 2 minutes | `skymail.unparkInterval` |
 
 A host's limits come from `dmsg_async.host` and take the defaults for a zero
 value.
