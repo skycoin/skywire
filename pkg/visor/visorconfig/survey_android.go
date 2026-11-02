@@ -12,11 +12,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/zcalusic/sysinfo"
+	"golang.org/x/sys/unix"
 )
 
 // AndroidDeviceEnv names the environment variable the Android app passes the
@@ -73,10 +73,10 @@ func SystemSurvey() (Survey, error) {
 	si.Product = sysinfo.Product{Name: d.Model, Vendor: d.Manufacturer, Version: d.Device}
 	si.Board = sysinfo.Board{Name: d.Board, Vendor: d.Brand, Version: d.Hardware}
 	if si.Kernel.Release == "" {
-		var u syscall.Utsname
-		if syscall.Uname(&u) == nil {
-			si.Kernel.Release = utsString(u.Release[:])
-			si.Kernel.Version = utsString(u.Version[:])
+		var u unix.Utsname
+		if unix.Uname(&u) == nil {
+			si.Kernel.Release = unix.ByteSliceToString(u.Release[:])
+			si.Kernel.Version = unix.ByteSliceToString(u.Version[:])
 		}
 	}
 	if d.SocModel != "" {
@@ -158,20 +158,9 @@ func dataStorageGB() uint {
 	if err != nil {
 		return 0
 	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(dir, &st); err != nil {
+	var st unix.Statfs_t
+	if err := unix.Statfs(dir, &st); err != nil {
 		return 0
 	}
 	return uint(st.Blocks * uint64(st.Bsize) / 1e9) //nolint:gosec // a block size is never negative
-}
-
-func utsString(b []int8) string {
-	s := make([]byte, 0, len(b))
-	for _, c := range b {
-		if c == 0 {
-			break
-		}
-		s = append(s, byte(c)) //nolint:gosec // utsname holds bytes
-	}
-	return string(s)
 }
