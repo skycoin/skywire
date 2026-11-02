@@ -459,15 +459,23 @@ return {
 
       return;
     }
+    // Events replayed on connect carry their own time and direction. Reading
+    // them keeps the backlog from showing as all incoming, all stamped now.
+    const out = data.dir === 'out' || data.sender === 'self';
+    const sentAt = typeof data.ts === 'number' ? data.ts : Date.parse(data.ts || '');
     const msg: ChatMessage = {
-      peer: data.sender || data.from || '',
-      direction: 'in',
+      peer: out ? (data.to || data.peer || data.from || '') : (data.sender || data.from || ''),
+      direction: out ? 'out' : 'in',
       text: typeof data.message === 'string' ? data.message : (data.text || ''),
-      ts: Date.now(),
+      ts: sentAt > 0 ? sentAt : Date.now(),
       id: data.id || '',
       replyTo: data.reply_to_id || '',
     };
     if (!msg.peer || !msg.text) {
+ return;
+}
+    // Our own send is already on screen from the /message reply.
+    if (out && msg.id && this.msgById.has(msg.id)) {
  return;
 }
     this.captureScroll();
@@ -479,7 +487,7 @@ return {
     this.cdr.markForCheck();
     // The bubble is now on screen — send a read receipt so the sender's tick
     // advances to 'read'. Best-effort; the wasm path has no /read-receipt proxy.
-    if (msg.id && msg.peer && !this.wasmChat) {
+    if (!out && msg.id && msg.peer && !this.wasmChat) {
       this.sendReadReceipt(msg.peer, msg.id);
     }
   }
