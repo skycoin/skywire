@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -47,7 +47,7 @@ type Host struct {
 	wl      Whitelist
 	rootDir string
 
-	connN int32
+	connN atomic.Int32
 }
 
 // NewHost creates a new dmsgscp Host with the given dmsg client,
@@ -121,25 +121,25 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 		log.WithError(lis.Close()).Debug("dmsgscp listener closed.")
 	}()
 
+	var backoff netutil.AcceptBackoff
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			log := log.WithError(err)
-			// Same temporary-error treatment as pty.
-			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
-				log.Warn("dmsgscp: temporary accept error, continuing...")
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
 			if errors.Is(err, io.ErrClosedPipe) ||
 				errors.Is(err, dmsg.ErrEntityClosed) ||
 				errors.Is(err, net.ErrClosed) {
 				log.Debug("dmsgscp: cleanly stopped serving.")
 				return nil
 			}
+			if backoff.Retry(err) {
+				log.Warn("dmsgscp: temporary accept error, continuing...")
+				continue
+			}
 			log.Error("dmsgscp: permanent accept error.")
 			return err
 		}
+		backoff.Reset()
 
 		rPK, ok := remoteAddrToPK(conn.RemoteAddr())
 		if !ok {
@@ -162,11 +162,11 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 			continue
 		}
 
-		slog = slog.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
+		slog = slog.WithField("conn_id", h.connN.Add(1))
 		slog.Debug("dmsgscp: stream accepted.")
 		go func(s net.Conn, l logrus.FieldLogger) {
 			h.serve(ctx, l, s)
-			atomic.AddInt32(&h.connN, -1)
+			h.connN.Add(-1)
 		}(conn, slog)
 	}
 }

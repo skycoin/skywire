@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -118,11 +119,11 @@ func (rw *ReadWriter) Read(p []byte) (int, error) {
 
 // processReadError processes error before returning.
 // * Ensure error implements net.Error
-// * If error is non-temporary, save error in state so further reads will fail.
+// * If error is not a timeout, save error in state so further reads will fail.
 // A timeout is never saved: net.Conn lets a read follow a reset deadline.
 func (rw *ReadWriter) processReadError(err error) error {
 	if nErr, ok := err.(net.Error); ok {
-		if !nErr.Timeout() && !nErr.Temporary() { //nolint
+		if !nErr.Timeout() {
 			rw.rErr = err
 		}
 		return err
@@ -173,7 +174,7 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 
 			// if error is permanent, we record it in the internal state so no
 			// further writes occurs
-			if !isTemp(err) {
+			if !isTimeout(err) {
 				rw.wErr = err
 			}
 
@@ -354,11 +355,11 @@ func ReadRawFrame(r *bufio.Reader) (p []byte, err error) {
 	return out, nil
 }
 
-func isTemp(err error) bool {
-	if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint
-		return true
-	}
-	return false
+// isTimeout reports a deadline error. A write that timed out before any
+// byte of the frame went out leaves the stream intact, so it may be retried.
+func isTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // Unread returns a copy of the bytes the handshake reader has buffered past

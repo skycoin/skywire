@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // Host represents the main instance of pty.
@@ -33,8 +34,8 @@ type Host struct {
 	dialer StreamDialer
 	wl     Whitelist
 
-	cliN  int32
-	connN int32
+	cliN  atomic.Int32
+	connN atomic.Int32
 
 	// sessions tracks persistent detach/reattach pty sessions. Always
 	// allocated; only used when persistSessions is set. See
@@ -205,31 +206,28 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 
 	mux := cliEndpoints(h)
 
+	var backoff netutil.AcceptBackoff
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			// TODO (ersonp): Temporary has been depricaited but there is no replacement for it
-			// since ServeCLI is based on Serve of `net/http.Server` https://github.com/golang/go/blob/ab9d31da9e088a271e656120a3d99cd3b1103ab6/src/net/http/server.go#L3047-L3059
-			// and it is still using Temporary we should keep an eye on it and make changes when it's changed there.
-			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
-			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
-				log.Warn("Failed to accept CLI connection with temporary error, continuing...")
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
 			if err == io.ErrClosedPipe || errors.Is(err, net.ErrClosed) {
 				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
-			log.Error("Failed to accept CLI connection with permanent error.")
+			if backoff.Retry(err) {
+				log.WithError(err).Warn("Failed to accept CLI connection with temporary error, continuing...")
+				continue
+			}
+			log.WithError(err).Error("Failed to accept CLI connection with permanent error.")
 			return err
 		}
+		backoff.Reset()
 
-		log := log.WithField("cli_id", atomic.AddInt32(&h.cliN, 1))
+		log := log.WithField("cli_id", h.cliN.Add(1))
 		log.Debug("CLI connection accepted.")
 		go func() {
 			h.serveConn(ctx, log, &mux, conn)
-			atomic.AddInt32(&h.cliN, -1)
+			h.cliN.Add(-1)
 		}()
 	}
 }
@@ -259,27 +257,24 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 			Debug("Serve() ended.")
 	}()
 
+	var backoff netutil.AcceptBackoff
 	for {
 		stream, err := lis.AcceptStream()
 		if err != nil {
 			log := log.WithError(err)
-			// TODO (ersonp): Temporary has been depricaited but there is no replacement for it
-			// since ListenAndServe is based on Serve of `net/http.Server` https://github.com/golang/go/blob/ab9d31da9e088a271e656120a3d99cd3b1103ab6/src/net/http/server.go#L3047-L3059
-			// and it is still using Temporary we should keep an eye on it and make changes when it's changed there.
-			// This is the main comment for reference https://github.com/golang/go/issues/45729#issuecomment-1104607098
-			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
-				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
 			if err == io.ErrClosedPipe || err == dmsg.ErrEntityClosed ||
 				errors.Is(err, net.ErrClosed) {
 				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
+			if backoff.Retry(err) {
+				log.Warn("Failed to accept dmsg.Stream with temporary error, continuing...")
+				continue
+			}
 			log.Error("Failed to accept dmsg.Stream with permanent error.")
 			return err
 		}
+		backoff.Reset()
 
 		rPK := stream.RawRemoteAddr().PK
 		log := log.WithField("remote_pk", rPK.String())
@@ -296,13 +291,13 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 			continue
 		}
 
-		log = log.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
+		log = log.WithField("conn_id", h.connN.Add(1))
 		log.Debug("dmsg.Stream accepted.")
 		log = stream.Logger().WithField("dmsgpty", "stream")
 		connCtx := withRemotePK(ctx, rPK)
 		go func() {
 			h.serveConn(connCtx, log, &mux, stream)
-			atomic.AddInt32(&h.connN, -1)
+			h.connN.Add(-1)
 		}()
 	}
 }
@@ -350,22 +345,23 @@ func (h *Host) ListenAndServeNet(ctx context.Context, lis net.Listener, extractP
 		log.WithError(lis.Close()).Debug("ListenAndServeNet() ended.")
 	}()
 
+	var backoff netutil.AcceptBackoff
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			log := log.WithError(err)
-			if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint:staticcheck
-				log.Warn("Failed to accept net.Conn with temporary error, continuing...")
-				time.Sleep(50 * time.Millisecond)
-				continue
-			}
 			if err == io.ErrClosedPipe || errors.Is(err, net.ErrClosed) {
 				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
+			if backoff.Retry(err) {
+				log.Warn("Failed to accept net.Conn with temporary error, continuing...")
+				continue
+			}
 			log.Error("Failed to accept net.Conn with permanent error.")
 			return err
 		}
+		backoff.Reset()
 
 		var rPK cipher.PubKey
 		var ok bool
@@ -388,12 +384,12 @@ func (h *Host) ListenAndServeNet(ctx context.Context, lis net.Listener, extractP
 			continue
 		}
 
-		logC = logC.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
+		logC = logC.WithField("conn_id", h.connN.Add(1))
 		logC.Debug("net.Conn accepted.")
 		connCtx := withRemotePK(ctx, rPK)
 		go func() {
 			h.serveConn(connCtx, logC, &mux, conn)
-			atomic.AddInt32(&h.connN, -1)
+			h.connN.Add(-1)
 		}()
 	}
 }

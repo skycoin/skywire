@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -36,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // tcpHandshakeTimeout bounds the XK noise handshake on each accepted
@@ -83,6 +83,7 @@ func (h *Host) ListenAndServeTCP(ctx context.Context, addr string, localPK ciphe
 	}()
 
 	mux := dmsgEndpoints(h)
+	var backoff netutil.AcceptBackoff
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
@@ -90,14 +91,14 @@ func (h *Host) ListenAndServeTCP(ctx context.Context, addr string, localPK ciphe
 				log.Debug("dmsgpty-tcp: cleanly stopped serving.")
 				return nil
 			}
-			if ne, ok := err.(net.Error); ok && ne.Temporary() { //nolint:staticcheck // Temporary is the canonical accept-error pattern
+			if backoff.Retry(err) {
 				log.WithError(err).Warn("dmsgpty-tcp: temporary accept error, continuing...")
-				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			log.WithError(err).Error("dmsgpty-tcp: permanent accept error.")
 			return err
 		}
+		backoff.Reset()
 		go h.handleTCPConn(ctx, log, &mux, conn, localPK, localSK)
 	}
 }
@@ -207,8 +208,8 @@ func (h *Host) serveTCPConn(
 		return
 	}
 
-	log = log.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
-	defer atomic.AddInt32(&h.connN, -1)
+	log = log.WithField("conn_id", h.connN.Add(1))
+	defer h.connN.Add(-1)
 	log.Debug("dmsgpty-tcp: stream accepted.")
 
 	nc := &noiseNetConn{Conn: conn, rw: rw, rPK: rPK}
