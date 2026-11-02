@@ -514,21 +514,17 @@ func (v *Visor) GoroutineDump() (string, error) {
 	}
 }
 
-// SetRewardAddress implements API. The durable store is <local_path>/reward.txt,
-// not skywire-config.json — the in-memory conf field below is never flushed, and
-// reward.txt sits outside the generated json, so the address survives both a
-// restart and a config regen. REWARDSKYADDR in skywire.conf sets it at gen time.
+// SetRewardAddress implements API. The address goes to <local_path>/reward.txt
+// and, when autoconfig manages the config, to REWARDSKYADDR in skywire.conf.
+// The regen on each restart or update takes it from there, and the config
+// value wins over reward.txt.
 func (v *Visor) SetRewardAddress(p string) (string, error) {
 	p, err := rewardconfig.ValidateRewardXpub(p)
 	if err != nil {
 		return "", err
 	}
-	// In-memory only, so the running visor reports the new address; not flushed.
-	v.conf.RewardAddress = p
-	// The durable write: reward.txt is what survey/reward reporting reads.
-	path := v.conf.LocalPath + "/" + skyenv.RewardFile
-	if err := os.WriteFile(path, []byte(p), 0600); err != nil {
-		return p, fmt.Errorf("failed to write config to file. err=%v", err)
+	if err := v.storeRewardAddress(p); err != nil {
+		return p, err
 	}
 	// Refresh the survey in the background. Setting the reward address must
 	// not block on survey generation — the address is already persisted above,
@@ -566,9 +562,22 @@ func (v *Visor) DeleteRewardAddress() error {
 		return fmt.Errorf("error deleting file. err=%v", err)
 	}
 	v.conf.RewardAddress = ""
+	v.mirrorChanges()
 	v.survey.mu.Lock()
 	v.survey.data = visorconfig.Survey{}
 	v.survey.mu.Unlock()
+	return nil
+}
+
+// storeRewardAddress sets the address in memory, writes reward.txt and saves
+// it to skywire.conf so the next autoconfig keeps it.
+func (v *Visor) storeRewardAddress(p string) error {
+	v.conf.RewardAddress = p
+	path := v.conf.LocalPath + "/" + skyenv.RewardFile
+	if err := os.WriteFile(path, []byte(p), 0600); err != nil {
+		return fmt.Errorf("failed to write config to file. err=%v", err)
+	}
+	v.mirrorChanges()
 	return nil
 }
 
