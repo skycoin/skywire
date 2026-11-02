@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"strconv"
@@ -37,23 +38,23 @@ type Client struct {
 	cfg         ClientConfig
 	appCl       *app.Client
 	directIPSMu sync.Mutex
-	directIPs   []net.IP // every IP with a direct route installed
+	directIPs   []netip.Addr // every IP with a direct route installed
 	// pinned are the IPs the visor named at start (services, the sessions
 	// and transports up then): their routes stay for the client's life.
 	// refs counts the live dial events per IP, so the route of an IP two
 	// transports share survives one of them closing.
-	pinned map[string]bool
-	refs   map[string]int
+	pinned map[netip.Addr]bool
+	refs   map[netip.Addr]int
 	// addDirect and delDirect install and remove one route; tests swap
 	// them to leave the OS routing table alone.
-	addDirect, delDirect func(net.IP) error
-	defaultGateway       net.IP
+	addDirect, delDirect func(netip.Addr) error
+	defaultGateway       netip.Addr
 	// gatewayFn looks the default gateway up again after a network move.
-	gatewayFn func() (net.IP, error)
+	gatewayFn func() (netip.Addr, error)
 	closeC    chan struct{}
 	closeOnce sync.Once
 
-	prevTUNGateway   net.IP
+	prevTUNGateway   netip.Addr
 	prevTUNGatewayMu sync.Mutex
 
 	suidMu sync.Mutex //nolint:unused
@@ -80,7 +81,7 @@ type Client struct {
 
 // NewClient creates VPN client instance.
 func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
-	var directIPs []net.IP
+	var directIPs []netip.Addr
 	// A browser visor's netstack has no routes for anything to go around.
 	if runtime.GOOS != "js" || cfg.Host {
 		var err error
@@ -114,7 +115,7 @@ func NewClient(cfg ClientConfig, appCl *app.Client) (*Client, error) {
 
 // directIPsFromEnv is every IP the visor named for the tunnel to route
 // around: its services, dmsg servers and transports.
-func directIPsFromEnv() ([]net.IP, error) {
+func directIPsFromEnv() ([]netip.Addr, error) {
 	dmsgDiscIP, err := dmsgDiscIPFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("error getting Dmsg discovery IP: %w", err)
@@ -150,14 +151,14 @@ func directIPsFromEnv() ([]net.IP, error) {
 		return nil, fmt.Errorf("error getting TP remote IPs: %w", err)
 	}
 
-	requiredDirectIPs := []net.IP{dmsgDiscIP, tpDiscIP, rfIP}
-	directIPs := make([]net.IP, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities)+len(tpRemoteIPs))
+	requiredDirectIPs := []netip.Addr{dmsgDiscIP, tpDiscIP, rfIP}
+	directIPs := make([]netip.Addr, 0, len(requiredDirectIPs)+len(dmsgSrvAddrs)+len(stcpEntities)+len(tpRemoteIPs))
 	directIPs = append(directIPs, requiredDirectIPs...)
 	directIPs = append(directIPs, dmsgSrvAddrs...)
 	directIPs = append(directIPs, stcpEntities...)
 	directIPs = append(directIPs, tpRemoteIPs...)
 
-	if arIP != nil {
+	if arIP.IsValid() {
 		directIPs = append(directIPs, arIP)
 	}
 	return directIPs, nil
@@ -202,11 +203,11 @@ func (c *Client) Serve() error {
 	defer func() {
 		if c.cfg.Killswitch {
 			c.prevTUNGatewayMu.Lock()
-			if len(c.prevTUNGateway) > 0 {
+			if c.prevTUNGateway.IsValid() {
 				fmt.Printf("Routing traffic directly, previous TUN gateway: %s\n", c.prevTUNGateway.String())
 				c.routeTrafficDirectly(c.prevTUNGateway)
 			}
-			c.prevTUNGateway = nil
+			c.prevTUNGateway = netip.Addr{}
 			c.prevTUNGatewayMu.Unlock()
 		}
 
@@ -293,11 +294,11 @@ func (c *Client) Close() {
 // initDirectRoutes pins the start-time IPs and wires the route
 // operations.
 func (c *Client) initDirectRoutes() {
-	c.pinned = make(map[string]bool, len(c.directIPs))
+	c.pinned = make(map[netip.Addr]bool, len(c.directIPs))
 	for _, ip := range c.directIPs {
-		c.pinned[ip.String()] = true
+		c.pinned[ip] = true
 	}
-	c.refs = make(map[string]int)
+	c.refs = make(map[netip.Addr]int)
 	if c.addDirect == nil {
 		c.addDirect = c.setupDirectRoute
 	}
@@ -308,13 +309,14 @@ func (c *Client) initDirectRoutes() {
 
 // AddDirectRoute counts one more user of a direct route to ip — packets
 // to it go directly, ignoring the VPN — installing it on the first.
-func (c *Client) AddDirectRoute(ip net.IP) error {
+func (c *Client) AddDirectRoute(ip netip.Addr) error {
+	ip = ip.Unmap()
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 
-	c.refs[ip.String()]++
+	c.refs[ip]++
 	for _, storedIP := range c.directIPs {
-		if ip.Equal(storedIP) {
+		if ip == storedIP {
 			return nil
 		}
 	}
@@ -324,20 +326,20 @@ func (c *Client) AddDirectRoute(ip net.IP) error {
 
 // RemoveDirectRoute counts one user fewer, removing the route when none
 // is left — unless the visor named the IP at start, whose route stays.
-func (c *Client) RemoveDirectRoute(ip net.IP) error {
+func (c *Client) RemoveDirectRoute(ip netip.Addr) error {
+	ip = ip.Unmap()
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 
-	key := ip.String()
-	if c.refs[key] > 0 {
-		c.refs[key]--
+	if c.refs[ip] > 0 {
+		c.refs[ip]--
 	}
-	if c.refs[key] > 0 || c.pinned[key] {
+	if c.refs[ip] > 0 || c.pinned[ip] {
 		return nil
 	}
-	delete(c.refs, key)
+	delete(c.refs, ip)
 	for i, storedIP := range c.directIPs {
-		if ip.Equal(storedIP) {
+		if ip == storedIP {
 			c.directIPs = append(c.directIPs[:i], c.directIPs[i+1:]...)
 			return c.delDirect(ip)
 		}
@@ -401,7 +403,7 @@ func (c *Client) closeTUN() error {
 	return c.tun.Close()
 }
 
-func (c *Client) setupTUN(tunIP, tunGateway net.IP) error {
+func (c *Client) setupTUN(tunIP, tunGateway netip.Addr) error {
 	c.tunMu.Lock()
 	defer c.tunMu.Unlock()
 
@@ -457,7 +459,7 @@ func (c *Client) serveConn(conn net.Conn) error {
 	isNewRoute := true
 	if c.cfg.Killswitch {
 		c.prevTUNGatewayMu.Lock()
-		if len(c.prevTUNGateway) > 0 {
+		if c.prevTUNGateway.IsValid() {
 			isNewRoute = false
 		}
 		c.prevTUNGateway = tunGateway
@@ -573,7 +575,7 @@ func (c *Client) dialServeConn() error {
 	return nil
 }
 
-func (c *Client) routeTrafficThroughTUN(tunGateway net.IP, isNewRoute bool) error {
+func (c *Client) routeTrafficThroughTUN(tunGateway netip.Addr, isNewRoute bool) error {
 	// route all traffic through TUN gateway
 	if isNewRoute {
 		if err := c.AddRoute(ipv4FirstHalfAddr, tunGateway.String()); err != nil {
@@ -594,7 +596,7 @@ func (c *Client) routeTrafficThroughTUN(tunGateway net.IP, isNewRoute bool) erro
 	return nil
 }
 
-func (c *Client) routeTrafficDirectly(tunGateway net.IP) {
+func (c *Client) routeTrafficDirectly(tunGateway netip.Addr) {
 	fmt.Println("Routing all traffic through default network gateway")
 
 	// remove main route
@@ -619,7 +621,7 @@ func (c *Client) setupDirectRoutes() error {
 	return nil
 }
 
-func (c *Client) setupDirectRoute(ip net.IP) error {
+func (c *Client) setupDirectRoute(ip netip.Addr) error {
 	if !ip.IsLoopback() {
 		fmt.Printf("Adding direct route to %s, via %s\n", ip.String(), c.defaultGateway.String())
 		if err := c.AddRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
@@ -630,7 +632,7 @@ func (c *Client) setupDirectRoute(ip net.IP) error {
 	return nil
 }
 
-func (c *Client) removeDirectRoute(ip net.IP) error {
+func (c *Client) removeDirectRoute(ip netip.Addr) error {
 	if !ip.IsLoopback() {
 		fmt.Printf("Removing direct route to %s\n", ip.String())
 		if err := c.DeleteRoute(ip.String()+directRouteNetmaskCIDR, c.defaultGateway.String()); err != nil {
@@ -653,11 +655,11 @@ func (c *Client) removeDirectRoutes() {
 	}
 }
 
-func dmsgDiscIPFromEnv() (net.IP, error) {
+func dmsgDiscIPFromEnv() (netip.Addr, error) {
 	return optionalIPFromEnv(DmsgDiscAddrEnvKey)
 }
 
-func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
+func dmsgSrvAddrsFromEnv() ([]netip.Addr, error) {
 	dmsgSrvCountStr := os.Getenv(DmsgAddrsCountEnvKey)
 	if dmsgSrvCountStr == "" {
 		return nil, errors.New("dmsg servers count is not provided")
@@ -667,7 +669,7 @@ func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
 		return nil, fmt.Errorf("invalid Dmsg servers count: %s: %w", dmsgSrvCountStr, err)
 	}
 
-	dmsgSrvAddrs := make([]net.IP, 0, dmsgSrvCount)
+	dmsgSrvAddrs := make([]netip.Addr, 0, dmsgSrvCount)
 	for i := 0; i < dmsgSrvCount; i++ {
 		dmsgSrvAddr, err := ipFromEnv(DmsgAddrEnvPrefix + strconv.Itoa(i))
 		if err != nil {
@@ -680,20 +682,20 @@ func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
 	return dmsgSrvAddrs, nil
 }
 
-func tpDiscIPFromEnv() (net.IP, error) {
+func tpDiscIPFromEnv() (netip.Addr, error) {
 	return optionalIPFromEnv(TPDiscAddrEnvKey)
 }
 
-func addressResolverIPFromEnv() (net.IP, error) {
+func addressResolverIPFromEnv() (netip.Addr, error) {
 	return optionalIPFromEnv(AddressResolverAddrEnvKey)
 }
 
-func rfIPFromEnv() (net.IP, error) {
+func rfIPFromEnv() (netip.Addr, error) {
 	return optionalIPFromEnv(RFAddrEnvKey)
 }
 
-func tpRemoteIPsFromEnv() ([]net.IP, error) {
-	var ips []net.IP
+func tpRemoteIPsFromEnv() ([]netip.Addr, error) {
+	var ips []netip.Addr
 	ipsLenStr := os.Getenv(TPRemoteIPsLenEnvKey)
 	if ipsLenStr == "" {
 		return nil, nil
@@ -704,7 +706,7 @@ func tpRemoteIPsFromEnv() ([]net.IP, error) {
 		return nil, fmt.Errorf("invalid TPs remote IPs len: %s: %w", ipsLenStr, err)
 	}
 
-	ips = make([]net.IP, 0, ipsLen)
+	ips = make([]netip.Addr, 0, ipsLen)
 	for i := 0; i < ipsLen; i++ {
 		key := TPRemoteIPsEnvPrefix + strconv.Itoa(i)
 
@@ -724,8 +726,8 @@ func tpRemoteIPsFromEnv() ([]net.IP, error) {
 	return ips, nil
 }
 
-func stcpEntitiesFromEnv() ([]net.IP, error) {
-	var stcpEntities []net.IP
+func stcpEntitiesFromEnv() ([]netip.Addr, error) {
+	var stcpEntities []netip.Addr
 	stcpTableLenStr := os.Getenv(STCPTableLenEnvKey)
 	if stcpTableLenStr != "" {
 		stcpTableLen, err := strconv.Atoi(stcpTableLenStr)
@@ -733,7 +735,7 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 			return nil, fmt.Errorf("invalid Skywire-TCP table len: %s: %w", stcpTableLenStr, err)
 		}
 
-		stcpEntities = make([]net.IP, 0, stcpTableLen)
+		stcpEntities = make([]netip.Addr, 0, stcpTableLen)
 		for i := 0; i < stcpTableLen; i++ {
 			stcpKey := os.Getenv(STCPKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
@@ -752,22 +754,28 @@ func stcpEntitiesFromEnv() ([]net.IP, error) {
 	return stcpEntities, nil
 }
 
-func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error) {
-	unavailableIPs, err := netutil.LocalNetworkInterfaceIPs()
+func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway netip.Addr, err error) {
+	localIPs, err := netutil.LocalNetworkInterfaceIPs()
 	if err != nil {
 		if c.appCl != nil {
-			return nil, nil, fmt.Errorf("error getting unavailable private IPs: %w", err)
+			return netip.Addr{}, netip.Addr{}, fmt.Errorf("error getting unavailable private IPs: %w", err)
 		}
 		// Embedded client (NewClientEmbedded — the browser): there are no host
 		// NICs to protect from the server's address allocation, and js has no
 		// interface enumeration to consult. An empty set is the truth.
-		unavailableIPs = nil
+		localIPs = nil
+	}
+	unavailableIPs := make([]netip.Addr, 0, len(localIPs)+1)
+	for _, ip := range localIPs {
+		if a, ok := netip.AddrFromSlice(ip); ok {
+			unavailableIPs = append(unavailableIPs, a.Unmap())
+		}
 	}
 
 	// Only a real gateway address belongs in the reserve list: the embedded
 	// client (browser) has none, and a nil/unspecified IP in the hello makes
 	// the server's ipGen.Reserve fail the whole handshake as malformed.
-	if gw := c.gateway(); len(gw) > 0 && !gw.IsUnspecified() {
+	if gw := c.gateway(); gw.IsValid() && !gw.IsUnspecified() {
 		unavailableIPs = append(unavailableIPs, gw)
 	}
 
@@ -780,7 +788,7 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 	fmt.Printf("Sending client hello: %v\n", cHello)
 
 	if err := WriteJSONWithTimeout(conn, &cHello, handshakeTimeout); err != nil {
-		return nil, nil, fmt.Errorf("error sending client hello: %w", err)
+		return netip.Addr{}, netip.Addr{}, fmt.Errorf("error sending client hello: %w", err)
 	}
 
 	var sHello ServerHello
@@ -791,13 +799,13 @@ func (c *Client) shakeHands(conn net.Conn) (TUNIP, TUNGateway net.IP, err error)
 				Err: err.Error(),
 			}
 		}
-		return nil, nil, err
+		return netip.Addr{}, netip.Addr{}, err
 	}
 
 	fmt.Printf("Got server hello: %v", sHello)
 
 	if sHello.Status != HandshakeStatusOK {
-		return nil, nil, sHello.Status.getError()
+		return netip.Addr{}, netip.Addr{}, sHello.Status.getError()
 	}
 
 	return sHello.TUNIP, sHello.TUNGateway, nil
@@ -877,13 +885,13 @@ func (c *Client) resetConnDuration() {
 	c.setConnectionDuration()
 }
 
-func ipFromEnv(key string) (net.IP, error) {
+func ipFromEnv(key string) (netip.Addr, error) {
 	ip, ok, err := IPFromEnv(key)
 	if err != nil {
-		return nil, fmt.Errorf("error getting IP from %s: %w", key, err)
+		return netip.Addr{}, fmt.Errorf("error getting IP from %s: %w", key, err)
 	}
 	if !ok {
-		return nil, fmt.Errorf("env arg %s is not provided", key)
+		return netip.Addr{}, fmt.Errorf("env arg %s is not provided", key)
 	}
 
 	return ip, nil
@@ -896,33 +904,29 @@ func ipFromEnv(key string) (net.IP, error) {
 // are themselves the direct routes — so their own IP is neither configured nor
 // required. A dmsg:// address (no IP) likewise yields a nil IP. Callers filter
 // out nil IPs. A genuine resolution failure (e.g. bad DNS) is still returned.
-func optionalIPFromEnv(key string) (net.IP, error) {
+func optionalIPFromEnv(key string) (netip.Addr, error) {
 	ip, _, err := IPFromEnv(key)
 	if err != nil {
-		return nil, fmt.Errorf("error getting IP from %s: %w", key, err)
+		return netip.Addr{}, fmt.Errorf("error getting IP from %s: %w", key, err)
 	}
 	return ip, nil
 }
 
-func filterOutEqualIPs(ips []net.IP) []net.IP {
-	ipsSet := make(map[string]struct{})
-	var filteredIPs []net.IP
+func filterOutEqualIPs(ips []netip.Addr) []netip.Addr {
+	seen := make(map[netip.Addr]bool, len(ips))
+	var filtered []netip.Addr
 	for _, ip := range ips {
-		if ip != nil {
-			ipStr := ip.String()
-
-			if _, ok := ipsSet[ipStr]; !ok {
-				filteredIPs = append(filteredIPs, ip)
-				ipsSet[ip.String()] = struct{}{}
-			}
+		ip = ip.Unmap()
+		if ip.IsValid() && !seen[ip] {
+			seen[ip] = true
+			filtered = append(filtered, ip)
 		}
 	}
-
-	return filteredIPs
+	return filtered
 }
 
 // gateway is the default gateway the direct routes go through.
-func (c *Client) gateway() net.IP {
+func (c *Client) gateway() netip.Addr {
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
 	return c.defaultGateway
@@ -933,20 +937,20 @@ func (c *Client) gateway() net.IP {
 // old gateway are removed first, and one the kernel already dropped with
 // its interface is not an error. It returns the gateway in use afterwards
 // and whether it changed.
-func (c *Client) RepinDirectRoutes() (net.IP, bool, error) {
+func (c *Client) RepinDirectRoutes() (netip.Addr, bool, error) {
 	if c.gatewayFn == nil {
-		return nil, false, errors.New("no default gateway lookup")
+		return netip.Addr{}, false, errors.New("no default gateway lookup")
 	}
 	gw, err := c.gatewayFn()
 	if err != nil {
-		return nil, false, fmt.Errorf("error getting default network gateway: %w", err)
+		return netip.Addr{}, false, fmt.Errorf("error getting default network gateway: %w", err)
 	}
-	if len(gw) == 0 || gw.IsUnspecified() {
-		return nil, false, errors.New("no default gateway")
+	if !gw.IsValid() || gw.IsUnspecified() {
+		return netip.Addr{}, false, errors.New("no default gateway")
 	}
 	c.directIPSMu.Lock()
 	defer c.directIPSMu.Unlock()
-	if gw.Equal(c.defaultGateway) {
+	if gw == c.defaultGateway {
 		return gw, false, nil
 	}
 	for _, ip := range c.directIPs {

@@ -1,19 +1,19 @@
 package vpn
 
 import (
-	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestFetchIPv4Octets(t *testing.T) {
-	octets, err := fetchIPv4Octets(net.ParseIP("192.168.1.2"))
+	octets, err := fetchIPv4Octets(netip.MustParseAddr("192.168.1.2"))
 	require.NoError(t, err)
 	require.Equal(t, [4]uint8{192, 168, 1, 2}, octets)
 
 	// An IPv6 address has no v4 form → error.
-	_, err = fetchIPv4Octets(net.ParseIP("::1"))
+	_, err = fetchIPv4Octets(netip.MustParseAddr("::1"))
 	require.Error(t, err)
 }
 
@@ -24,10 +24,11 @@ func TestIPGeneratorNext(t *testing.T) {
 	for range 20 {
 		ip, err := g.Next()
 		require.NoError(t, err)
-		require.NotNil(t, ip.To4(), "must be IPv4")
+		require.True(t, ip.Is4(), "must be IPv4")
+		first := ip.As4()[0]
 
 		// Must fall in one of the configured private ranges.
-		require.True(t, ip[12] == 192 || ip[12] == 172 || ip[12] == 10, "unexpected first octet: %v", ip)
+		require.True(t, first == 192 || first == 172 || first == 10, "unexpected first octet: %v", ip)
 
 		key := ip.String()
 		_, dup := seen[key]
@@ -38,10 +39,10 @@ func TestIPGeneratorNext(t *testing.T) {
 
 func TestIPGeneratorReserve(t *testing.T) {
 	g := NewIPGenerator()
-	require.NoError(t, g.Reserve(net.ParseIP("10.1.2.3")))
+	require.NoError(t, g.Reserve(netip.MustParseAddr("10.1.2.3")))
 
 	// Reserving a non-IPv4 address fails.
-	require.Error(t, g.Reserve(net.ParseIP("fe80::1")))
+	require.Error(t, g.Reserve(netip.MustParseAddr("fe80::1")))
 }
 
 func TestSubnetIPIncrementer(t *testing.T) {
@@ -49,9 +50,9 @@ func TestSubnetIPIncrementer(t *testing.T) {
 
 	ip1, err := inc.next()
 	require.NoError(t, err)
-	require.NotNil(t, ip1.To4())
-	require.EqualValues(t, 192, ip1[12])
-	require.EqualValues(t, 168, ip1[13])
+	require.True(t, ip1.Is4())
+	require.EqualValues(t, 192, ip1.As4()[0])
+	require.EqualValues(t, 168, ip1.As4()[1])
 
 	ip2, err := inc.next()
 	require.NoError(t, err)

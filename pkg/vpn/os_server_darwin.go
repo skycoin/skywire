@@ -7,7 +7,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -170,10 +170,10 @@ func SetIPTablesForwardAcceptPolicy() error { return nil }
 // BlockIPToLocalNetwork would isolate a secure-mode client from the LAN. Not yet
 // implemented on macOS — return an error rather than silently failing open, so a
 // Secure server never runs unprotected.
-func BlockIPToLocalNetwork(_, _ net.IP) error {
+func BlockIPToLocalNetwork(_, _ netip.Addr) error {
 	return errors.New("vpn-server secure mode (per-client LAN isolation) is not yet implemented on macOS")
 }
 
 // AllowIPToLocalNetwork is the cleanup counterpart to BlockIPToLocalNetwork; a
 // no-op on macOS since nothing was blocked.
-func AllowIPToLocalNetwork(_, _ net.IP) error { return nil }
+func AllowIPToLocalNetwork(_, _ netip.Addr) error { return nil }

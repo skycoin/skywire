@@ -6,7 +6,7 @@ package vpn
 
 import (
 	"errors"
-	"net"
+	"net/netip"
 
 	"github.com/skycoin/skywire/pkg/skydns"
 )
@@ -45,8 +45,8 @@ same intentions expressed the only way Android allows:
 // every route call below ignores its gateway argument. NewClient requires one,
 // so it gets the unspecified address rather than a value that would imply the
 // phone's real gateway had been discovered.
-func DefaultNetworkGateway() (net.IP, error) {
-	return net.IPv4zero, nil
+func DefaultNetworkGateway() (netip.Addr, error) {
+	return netip.IPv4Unspecified(), nil
 }
 
 // setupClientSysPrivileges is a no-op: an Android app is never privileged, and

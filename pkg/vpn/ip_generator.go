@@ -3,7 +3,7 @@ package vpn
 
 import (
 	"errors"
-	"net"
+	"net/netip"
 	"sync"
 )
 
@@ -27,7 +27,7 @@ func NewIPGenerator() *IPGenerator {
 }
 
 // Reserve reserves `ip` so it will be excluded from the IP generation.
-func (g *IPGenerator) Reserve(ip net.IP) error {
+func (g *IPGenerator) Reserve(ip netip.Addr) error {
 	octets, err := fetchIPv4Octets(ip)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (g *IPGenerator) Reserve(ip net.IP) error {
 }
 
 // Next gets next available IP.
-func (g *IPGenerator) Next() (net.IP, error) {
+func (g *IPGenerator) Next() (netip.Addr, error) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
@@ -61,14 +61,14 @@ func (g *IPGenerator) Next() (net.IP, error) {
 		return ip, nil
 	}
 
-	return nil, errors.New("no free IPs left")
+	return netip.Addr{}, errors.New("no free IPs left")
 }
 
-func fetchIPv4Octets(ip net.IP) ([4]uint8, error) {
-	ip = ip.To4()
-	if ip == nil {
+func fetchIPv4Octets(ip netip.Addr) ([4]uint8, error) {
+	ip = ip.Unmap()
+	if !ip.Is4() {
 		return [4]uint8{}, errors.New("address is not of v4")
 	}
 
-	return [4]uint8{ip[0], ip[1], ip[2], ip[3]}, nil
+	return ip.As4(), nil
 }

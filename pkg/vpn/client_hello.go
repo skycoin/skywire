@@ -2,10 +2,10 @@
 package vpn
 
 import (
-	"net"
+	"net/netip"
 )
 
 // ClientHello is a message sent by client during the Client/Server handshake.
 type ClientHello struct {
-	UnavailablePrivateIPs []net.IP `json:"unavailable_private_ips"`
+	UnavailablePrivateIPs []netip.Addr `json:"unavailable_private_ips"`
 }
