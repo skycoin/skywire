@@ -648,3 +648,26 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	}
 	return timelines
 }
+
+func inboxKey(pk cipher.PubKey) string { return "inbox:" + pk.Hex() }
+
+// SetInbox implements InboxStore.
+func (r *redisStore) SetInbox(ctx context.Context, pk cipher.PubKey, record []byte, ttl time.Duration) error {
+	if err := r.client.Set(ctx, inboxKey(pk), record, ttl).Err(); err != nil {
+		log.WithError(err).Error("Failed to set inbox record in redis")
+		return disc.ErrUnexpected
+	}
+	return nil
+}
+
+// Inbox implements InboxStore.
+func (r *redisStore) Inbox(ctx context.Context, pk cipher.PubKey) ([]byte, error) {
+	b, err := r.client.Get(ctx, inboxKey(pk)).Bytes()
+	if err == redis.Nil {
+		return nil, disc.ErrKeyNotFound
+	}
+	if err != nil {
+		return nil, disc.ErrUnexpected
+	}
+	return b, nil
+}

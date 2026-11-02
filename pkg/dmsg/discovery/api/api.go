@@ -185,6 +185,8 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 	}
 	r.Use(httputil.SetLoggerMiddleware(log))
 
+	r.Get("/dmsg-discovery/inbox/{pk}", api.getInbox())
+	r.Post("/dmsg-discovery/inbox/{pk}", api.setInbox())
 	r.Get("/dmsg-discovery/entry/{pk}", api.getEntry())
 	r.Post("/dmsg-discovery/entry/", api.setEntry())
 	r.Post("/dmsg-discovery/entry/{pk}", api.setEntry())
