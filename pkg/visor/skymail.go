@@ -410,14 +410,17 @@ func (h mailHost) MailUnpark() ([]appserver.ParkedMail, error) {
 	return out, nil
 }
 
-func (h mailHost) MailAck(refs []appserver.ParkedRef) error {
+func (h mailHost) MailAck(refs []appserver.ParkedRef) error { return h.v.ackParked(refs) }
+
+// ackParked removes parked messages from the hosts that hold them.
+func (v *Visor) ackParked(refs []appserver.ParkedRef) error {
 	byHost := map[cipher.PubKey][]string{}
 	for _, r := range refs {
 		byHost[r.Host] = append(byHost[r.Host], r.ID)
 	}
 	var errs []error
 	for host, ids := range byHost {
-		if err := h.v.asyncAck(host, ids); err != nil {
+		if err := v.asyncAck(host, ids); err != nil {
 			errs = append(errs, err)
 		}
 	}

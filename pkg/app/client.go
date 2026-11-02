@@ -489,3 +489,20 @@ func (c *Client) AppSettings(applied, opsApplied uint64) (map[string]int64, map[
 	}
 	return resp.Values, resp.Text, resp.Ops, resp.Version, nil
 }
+
+// ChatPark asks the visor to seal msg for rcpt and park it on rcpt's
+// dmsg-async inbox hosts. Only the skychat app may.
+func (c *Client) ChatPark(rcpt cipher.PubKey, msg []byte, ref string) (cipher.PubKey, error) {
+	return c.rpcC.ChatPark(rcpt, msg, ref)
+}
+
+// ChatUnpark returns the opened messages parked for this visor, without
+// removing them.
+func (c *Client) ChatUnpark() ([]appserver.ParkedChat, error) {
+	return c.rpcC.ChatUnpark()
+}
+
+// ChatAck removes parked messages the skychat app took.
+func (c *Client) ChatAck(refs []appserver.ParkedRef) error {
+	return c.rpcC.ChatAck(refs)
+}

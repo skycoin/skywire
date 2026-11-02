@@ -72,6 +72,15 @@ func (_m *MockProcManager) SetMailHostFn(fn func(appName string) MailHost) {
 // is not.
 func (_m *MockProcManager) MailHost(string) MailHost { return nil }
 
+// SetChatHostFn provides a mock function with given fields: fn
+func (_m *MockProcManager) SetChatHostFn(fn func(appName string) ChatHost) {
+	_m.Called(fn)
+}
+
+// ChatHost serves no app, and is not mock.Called for the reason ContactNames
+// is not.
+func (_m *MockProcManager) ChatHost(string) ChatHost { return nil }
+
 // The live-settings trio is backed by a REAL store rather than mock.Called:
 // it carries no behaviour worth asserting, and a Called() here would turn
 // every existing MockProcManager test that happens to reach the settings

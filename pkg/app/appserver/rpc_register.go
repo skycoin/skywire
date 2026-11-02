@@ -35,6 +35,36 @@ func registerIngressRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPCIngressG
 			return rpcReply, rpcRcvr.AppSettings(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".ChatAck", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new([]ParkedRef)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.ChatAck(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatPark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(ChatParkReq)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(cipher.PubKey)
+			return rpcReply, rpcRcvr.ChatPark(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".ChatUnpark", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]ParkedChat)
+			return rpcReply, rpcRcvr.ChatUnpark(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".CloseConn", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(uint16)
 		if err := rpcDec.Decode(rpcArg); err != nil {

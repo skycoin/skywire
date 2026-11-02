@@ -257,6 +257,10 @@ Outcomes (--wait > 0):
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+		if ack != nil && ack.Parked {
+			internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("%s is offline. Message parked on inbox host %s (id=%s)\n", pk.String(), ack.Host, ack.ID))
+			return
+		}
 		if sendWait > 0 {
 			if ack != nil && ack.Acked {
 				internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Acked by %s in %dms (id=%s)\n", pk.String(), ack.MS, ack.ID))
@@ -494,6 +498,10 @@ type AckResponse struct {
 	ID     string `json:"id,omitempty"`
 	MS     int64  `json:"ms,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	// Parked is set when no network reached the peer and the message waits
+	// on its dmsg-async inbox host Host.
+	Parked bool   `json:"parked,omitempty"`
+	Host   string `json:"host,omitempty"`
 }
 
 // postMessage POSTs the message payload to the skychat app's HTTP
@@ -540,6 +548,13 @@ func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*A
 		return &AckResponse{Acked: false, Reason: "timeout"}, nil
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if resp.StatusCode == http.StatusAccepted {
+			var ack AckResponse
+			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+				return nil, fmt.Errorf("decode parked reply: %w", err)
+			}
+			return &ack, nil
+		}
 		if wait > 0 {
 			var ack AckResponse
 			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {

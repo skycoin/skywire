@@ -90,6 +90,9 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// The mailbox app seals and opens mail with the visor's key, which stays here.
 	procM.SetMailHostFn(v.appMailHost)
 
+	// Skychat parks 1:1 messages for offline contacts, sealed with the visor's key.
+	procM.SetChatHostFn(v.appChatHost)
+
 	// Synthesize Internal-app entries for visor subsystems that
 	// have moved into the launcher's lifecycle per RFC #2775
 	// (operator config wins — appsContains skips synthesis when

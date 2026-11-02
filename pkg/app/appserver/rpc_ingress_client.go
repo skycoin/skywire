@@ -47,6 +47,10 @@ type RPCIngressClient interface {
 	MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error)
 	MailUnpark() ([]ParkedMail, error)
 	MailAck(refs []ParkedRef) error
+	// ChatPark, ChatUnpark and ChatAck are the skychat app's calls (chat_host.go).
+	ChatPark(rcpt cipher.PubKey, msg []byte, ref string) (cipher.PubKey, error)
+	ChatUnpark() ([]ParkedChat, error)
+	ChatAck(refs []ParkedRef) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial req.Addr with the per-call
 	// options req carries — mux route counts, min-hops (symmetric and
