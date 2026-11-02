@@ -14,7 +14,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"strconv"
 )
 
@@ -22,8 +22,8 @@ var errNoTUNOnJS = errors.New("vpn: no TUN device on js/wasm — the VPN server 
 
 // DefaultNetworkGateway has no routing table to read; the unspecified
 // address keeps NewClient constructible (mirrors the Android build).
-func DefaultNetworkGateway() (net.IP, error) {
-	return net.IPv4zero, nil
+func DefaultNetworkGateway() (netip.Addr, error) {
+	return netip.IPv4Unspecified(), nil
 }
 
 // setupClientSysPrivileges is a no-op: there are no OS privileges in wasm.

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sync/atomic"
 	"testing"
@@ -77,7 +78,7 @@ type shareRig struct {
 }
 
 var (
-	shareTunnelIP = net.IPv4(10, 8, 0, 4)
+	shareTunnelIP = netip.AddrFrom4([4]byte{10, 8, 0, 4})
 	shareRemoteIP = [4]byte{1, 2, 3, 4}
 )
 
@@ -248,8 +249,7 @@ func TestShareDemuxKeepsKernelTraffic(t *testing.T) {
 	require.NoError(t, err)
 
 	demux := shareDemux{tun: rig.kernel, sess: rig.sess}
-	var ip [4]byte
-	copy(ip[:], shareTunnelIP.To4())
+	ip := shareTunnelIP.As4()
 	_, err = demux.Write(ipv4Packet(ip, 6, 40000, 0))
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rig.kernel.n.Load())

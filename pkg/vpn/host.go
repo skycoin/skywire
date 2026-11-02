@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -62,16 +63,16 @@ func hostTUN() (TUNDevice, error) {
 	return h.TUN(ctx)
 }
 
-func hostGateway() (net.IP, error) {
+func hostGateway() (netip.Addr, error) {
 	s, err := hostNetCall("gateway")
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
-	ip := net.ParseIP(s)
-	if ip == nil {
-		return nil, errors.New("vpn: bad host gateway " + s)
+	ip, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Addr{}, errors.New("vpn: bad host gateway " + s)
 	}
-	return ip, nil
+	return ip.Unmap(), nil
 }
 
 // deadTUN reports a host TUN whose bridge session ended, which the next
@@ -83,21 +84,25 @@ func deadTUN(t TUNDevice) bool {
 
 // lookupIP resolves on the host when a host network is installed. A
 // browser has no resolver of its own, and the host's is the one it uses.
-func lookupIP(name string) ([]net.IP, error) {
+func lookupIP(name string) ([]netip.Addr, error) {
 	hostMu.Lock()
 	h := hostNet
 	hostMu.Unlock()
 	if h == nil {
-		return net.LookupIP(name)
+		ips, err := net.DefaultResolver.LookupNetIP(context.Background(), "ip", name)
+		for i := range ips {
+			ips[i] = ips[i].Unmap()
+		}
+		return ips, err
 	}
 	s, err := hostNetCall("resolve", name)
 	if err != nil {
 		return nil, err
 	}
-	var ips []net.IP
+	var ips []netip.Addr
 	for _, f := range strings.Fields(s) {
-		if ip := net.ParseIP(f); ip != nil {
-			ips = append(ips, ip)
+		if ip, err := netip.ParseAddr(f); err == nil {
+			ips = append(ips, ip.Unmap())
 		}
 	}
 	return ips, nil

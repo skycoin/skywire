@@ -7,7 +7,7 @@ package vpn
 import (
 	"bytes"
 	"fmt"
-	"net"
+	"net/netip"
 	"time"
 
 	"github.com/syndtr/gocapability/capability"
@@ -22,10 +22,10 @@ const (
 )
 
 // DefaultNetworkGateway fetches system's default network gateway.
-func DefaultNetworkGateway() (net.IP, error) {
+func DefaultNetworkGateway() (netip.Addr, error) {
 	outBytes, err := osutil.RunWithResult("sh", "-c", defaultNetworkGatewayCMD)
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 
 	outBytes = bytes.TrimRight(outBytes, "\n")
@@ -38,13 +38,12 @@ func DefaultNetworkGateway() (net.IP, error) {
 			continue
 		}
 
-		ip := net.ParseIP(string(l))
-		if ip != nil {
-			return ip, nil
+		if ip, err := netip.ParseAddr(string(l)); err == nil && ip.Unmap().Is4() {
+			return ip.Unmap(), nil
 		}
 	}
 
-	return nil, errCouldFindDefaultNetworkGateway
+	return netip.Addr{}, errCouldFindDefaultNetworkGateway
 }
 
 func setupClientSysPrivileges() (int, error) {

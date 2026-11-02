@@ -7,7 +7,7 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
@@ -116,10 +116,10 @@ func SetIPTablesForwardAcceptPolicy() error { return nil }
 // BlockIPToLocalNetwork would isolate a secure-mode client from the LAN. Not yet
 // implemented on Windows — fail closed rather than silently leave the client
 // able to reach the server's LAN.
-func BlockIPToLocalNetwork(_, _ net.IP) error {
+func BlockIPToLocalNetwork(_, _ netip.Addr) error {
 	return errors.New("vpn-server secure mode (per-client LAN isolation) is not yet implemented on Windows")
 }
 
 // AllowIPToLocalNetwork is the cleanup counterpart to BlockIPToLocalNetwork; a
 // no-op on Windows since nothing was blocked.
-func AllowIPToLocalNetwork(_, _ net.IP) error { return nil }
+func AllowIPToLocalNetwork(_, _ netip.Addr) error { return nil }

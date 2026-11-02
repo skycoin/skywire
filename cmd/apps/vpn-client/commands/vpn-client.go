@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -144,7 +144,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		minHops = envInt("VPNMINHOPS")
 	}
 
-	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
+	var directIPsCh, nonDirectIPsCh = make(chan netip.Addr, 100), make(chan netip.Addr, 100)
 	// done channel signals event callbacks to stop sending to IP channels
 	done := make(chan struct{})
 	defer close(done)
@@ -168,22 +168,22 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	defer appCl.Close()
 	logger := appCl.Log()
 
-	parseIP := func(addr string) net.IP {
+	parseIP := func(addr string) netip.Addr {
 		ip, ok, err := vpn.ParseIP(addr)
 		if err != nil {
 			logger.WithError(err).WithField("addr", addr).Warn("Failed to parse IP")
-			return nil
+			return netip.Addr{}
 		}
 		if !ok {
 			logger.WithField("addr", addr).Warn("Failed to parse IP")
-			return nil
+			return netip.Addr{}
 		}
 
 		return ip
 	}
 
 	eventSub.OnTCPDial(func(data appevent.TCPDialData) {
-		if ip := parseIP(data.RemoteAddr); ip != nil {
+		if ip := parseIP(data.RemoteAddr); ip.IsValid() {
 			select {
 			case directIPsCh <- ip:
 			case <-done:
@@ -192,7 +192,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	})
 
 	eventSub.OnTCPClose(func(data appevent.TCPCloseData) {
-		if ip := parseIP(data.RemoteAddr); ip != nil {
+		if ip := parseIP(data.RemoteAddr); ip.IsValid() {
 			select {
 			case nonDirectIPsCh <- ip:
 			case <-done:
@@ -244,7 +244,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	var dnsAddress string
 	if dnsAddr != "" {
 		dnsIP := parseIP(dnsAddr)
-		if dnsIP == nil {
+		if !dnsIP.IsValid() {
 			logger.Warn("Invalid DNS Address value. VPN will use current machine DNS.")
 			dnsAddress = ""
 		} else {
