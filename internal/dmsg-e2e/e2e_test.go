@@ -356,10 +356,3 @@ func TestHTTPServerOverDmsg(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, output, "hello", "/echo should echo the query parameter")
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

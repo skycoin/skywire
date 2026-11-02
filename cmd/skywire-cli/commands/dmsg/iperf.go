@@ -515,10 +515,7 @@ func runIperfRTT(ctx context.Context, conn net.Conn, duration time.Duration, rat
 	}()
 
 	// Sender: pace probes at `rate` per second.
-	gap := time.Second / time.Duration(rate)
-	if gap < time.Microsecond {
-		gap = time.Microsecond
-	}
+	gap := max(time.Second/time.Duration(rate), time.Microsecond)
 	t := time.NewTicker(gap)
 	defer t.Stop()
 	wireBuf := make([]byte, rttProbeSize)

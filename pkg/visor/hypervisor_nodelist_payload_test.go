@@ -27,7 +27,7 @@ func TestTransportSummaryMarshalJSONKeepsSetIdentifiers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var got map[string]interface{}
+	var got map[string]any
 	require.NoError(t, json.Unmarshal(b, &got))
 	require.Equal(t, id.String(), got["id"])
 	require.Equal(t, pk.Hex(), got["local_pk"])

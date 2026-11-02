@@ -22,7 +22,7 @@ func LeafByName(pack registry.Pack, n *treestore.TreeNode, name string) ([]byte,
 	if err != nil {
 		return nil, false
 	}
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry treestore.TreeEntry
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue
@@ -131,7 +131,7 @@ func ChildByName(pack registry.Pack, n *treestore.TreeNode, name string) (leaf [
 	if err != nil {
 		return nil, nil, false
 	}
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry treestore.TreeEntry
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue // this child's index object wasn't fetched; skip it

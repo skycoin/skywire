@@ -50,13 +50,13 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 		return 127
 	}
 
-	jsArgs := make([]interface{}, len(args))
+	jsArgs := make([]any, len(args))
 	for i, a := range args {
 		jsArgs[i] = a
 	}
 
 	sink := func(w func(p []byte) (int, error)) js.Func {
-		return js.FuncOf(func(_ js.Value, cbArgs []js.Value) interface{} {
+		return js.FuncOf(func(_ js.Value, cbArgs []js.Value) any {
 			buf := cbArgs[0]
 			b := make([]byte, buf.Get("length").Int())
 			js.CopyBytesToGo(b, buf)
@@ -71,7 +71,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 
 	done := make(chan int, 1)
 	var thenF, catchF js.Func
-	thenF = js.FuncOf(func(_ js.Value, cbArgs []js.Value) interface{} {
+	thenF = js.FuncOf(func(_ js.Value, cbArgs []js.Value) any {
 		code := 0
 		if len(cbArgs) > 0 && cbArgs[0].Type() == js.TypeNumber {
 			code = cbArgs[0].Int()
@@ -79,7 +79,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 		done <- code
 		return nil
 	})
-	catchF = js.FuncOf(func(_ js.Value, cbArgs []js.Value) interface{} {
+	catchF = js.FuncOf(func(_ js.Value, cbArgs []js.Value) any {
 		msg := "unknown error"
 		if len(cbArgs) > 0 {
 			msg = js.Global().Call("String", cbArgs[0]).String()
@@ -96,7 +96,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	defer thenF.Release()
 	defer catchF.Release()
 
-	hooks := js.ValueOf(map[string]interface{}{})
+	hooks := js.ValueOf(map[string]any{})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
 	// The command starts where the shell is, on the same tree.
@@ -107,7 +107,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	// with { interrupt }, before the command starts.
 	interruptCh := make(chan js.Value, 1)
 	var child js.Value // the process handle: stdin and resize, for a terminal
-	instF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+	instF := js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) > 0 && a[0].Truthy() {
 			child = a[0]
 			if f := a[0].Get("interrupt"); f.Type() == js.TypeFunction {
@@ -139,7 +139,7 @@ func runSkywireWasm(ctx context.Context, s *shell.Shell, hc *interp.HandlerConte
 	// Terminal identity for the command instance: the help styling (the
 	// coloredcobra colors, the Matrix rain backdrop) decides by TERM/COLUMNS
 	// under js — isatty can't answer through a pipe, so the host says.
-	env := map[string]interface{}{}
+	env := map[string]any{}
 	if s != nil && s.Size != nil {
 		if cols, rows := s.Size(); cols > 0 {
 			env["COLUMNS"] = fmt.Sprintf("%d", cols)
@@ -190,7 +190,7 @@ func onTerminal(s *shell.Shell, hc *interp.HandlerContext) *terminal {
 	cols, rows := s.Size()
 	t.opts.Set("cols", cols)
 	t.opts.Set("rows", rows)
-	t.onRaw = js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+	t.onRaw = js.FuncOf(func(_ js.Value, a []js.Value) any {
 		on := len(a) > 0 && a[0].Truthy()
 		t.raw.Store(on)
 		if s.RawMode != nil {

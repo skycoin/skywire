@@ -255,7 +255,7 @@ func splitArraySlice(
 		err      error
 	)
 
-	for i := 0; i < ln; i++ {
+	for i := range ln {
 
 		if shift > len(val) {
 			err = fmt.Errorf("unexpected end of encoded  array or slice "+

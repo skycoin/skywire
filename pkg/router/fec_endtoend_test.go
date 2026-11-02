@@ -114,7 +114,7 @@ func fecE2ESetup(t *testing.T, fec bool, legLatencies []time.Duration) (*RouteGr
 	rgB := NewRouteGroup(DefaultRouteGroupConfig(), rtB, descB, l)
 	rgB.mux = newRouteMux(l.PackageLogger("muxB"), true)
 	rgB.mux.growLegs(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		rgB.mux.markLegReady(i)
 	}
 	if fec {
@@ -140,7 +140,7 @@ func fecE2ESetup(t *testing.T, fec bool, legLatencies []time.Duration) (*RouteGr
 	mts := make([]*transport.ManagedTransport, 0, n)
 	fwds := make([]routing.Rule, 0, n)
 	rvss := make([]routing.Rule, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tpID := uuid.New()
 		fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(i+1), routing.RouteID(i+100), tpID, pkB, pkA, 1, 2) //nolint:gosec
 		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(i+100), pkA, pkB, 2, 1)                             //nolint:gosec
@@ -228,7 +228,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 
 		payload := make([]byte, frameSize)
 		start := time.Now()
-		for i := 0; i < nFrames; i++ {
+		for i := range nFrames {
 			for j := range payload {
 				payload[j] = byte(i)
 			}
@@ -242,7 +242,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 			seenMu.Lock()
 			var missing []int
 			var dups []int
-			for i := 0; i < nFrames; i++ {
+			for i := range nFrames {
 				c := seen[byte(i)]
 				if c == 0 {
 					missing = append(missing, i)
@@ -272,7 +272,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 	best := func(fec bool, lats []time.Duration) (time.Duration, []int64) {
 		var bt time.Duration
 		var bl []int64
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			el, legs := run(fec, lats)
 			if i == 0 || el < bt {
 				bt, bl = el, legs
@@ -288,7 +288,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 	var noFEC, withFEC, singleT time.Duration
 	var noLegs, fecLegs []int64
 	shapeOK := false
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		noFEC, noLegs = best(false, hetero)
 		withFEC, fecLegs = best(true, hetero)
 		singleT, _ = best(false, single)

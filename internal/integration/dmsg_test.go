@@ -68,7 +68,7 @@ func TestDmsgServerHealth(t *testing.T) {
 		jsonOnly = stdout[:idx+1]
 	}
 
-	var health map[string]interface{}
+	var health map[string]any
 	require.NoError(t, json.Unmarshal([]byte(jsonOnly), &health),
 		"Response should be valid JSON; got: %s", jsonOnly)
 	require.Contains(t, health, "service_name", "Health should contain service_name")
@@ -162,7 +162,7 @@ func TestDmsgCurl(t *testing.T) {
 	require.NotEmpty(t, stdout, "dmsg curl should return response body")
 
 	// The /health endpoint returns JSON with health info. Validate structure.
-	var health map[string]interface{}
+	var health map[string]any
 	require.NoError(t, json.Unmarshal([]byte(stdout), &health),
 		"Response should be valid JSON; got: %s", stdout)
 	t.Logf("Health response from visor-a over DMSG: %s", truncate(stdout, 200))
@@ -287,7 +287,7 @@ func TestDmsgDirect(t *testing.T) {
 	stdout := result.Stdout()
 	require.NotEmpty(t, stdout, "Response should not be empty")
 
-	var health map[string]interface{}
+	var health map[string]any
 	require.NoError(t, json.Unmarshal([]byte(stdout), &health),
 		"Response should be valid JSON; got: %s", stdout)
 	t.Logf("Health response via direct dmsg client: %s", truncate(stdout, 200))

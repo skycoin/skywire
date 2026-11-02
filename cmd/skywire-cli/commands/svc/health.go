@@ -149,8 +149,8 @@ var healthCmd = &cobra.Command{
 // For dmsg:// URLs the host is the PK (optionally with :port).
 // For http:// URLs there's no PK to extract, so returns "".
 func extractPK(rawURL string) string {
-	if strings.HasPrefix(rawURL, "dmsg://") {
-		host := strings.TrimPrefix(rawURL, "dmsg://")
+	if after, ok := strings.CutPrefix(rawURL, "dmsg://"); ok {
+		host := after
 		// Strip path
 		if i := strings.Index(host, "/"); i >= 0 {
 			host = host[:i]
@@ -235,9 +235,9 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []visorapi.ServiceHealthEntry 
 				return
 			}
 
-			var health map[string]interface{}
+			var health map[string]any
 			if json.Unmarshal(body, &health) == nil {
-				if bi, ok := health["build_info"].(map[string]interface{}); ok {
+				if bi, ok := health["build_info"].(map[string]any); ok {
 					if v, ok := bi["version"].(string); ok {
 						entry.Version = v
 					}
@@ -310,9 +310,9 @@ func queryServiceViaServer(cmd *cobra.Command) visorapi.ServiceHealthEntry {
 	defer resp.Body.Close() //nolint:errcheck
 
 	body, rerr := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	var health map[string]interface{}
+	var health map[string]any
 	if rerr == nil && json.Unmarshal(body, &health) == nil {
-		if bi, ok := health["build_info"].(map[string]interface{}); ok {
+		if bi, ok := health["build_info"].(map[string]any); ok {
 			if v, ok := bi["version"].(string); ok {
 				entry.Version = v
 			}
@@ -333,7 +333,7 @@ func queryServiceViaServer(cmd *cobra.Command) visorapi.ServiceHealthEntry {
 
 func splitCarriers(s string) []string {
 	var out []string
-	for _, c := range strings.Split(s, ",") {
+	for c := range strings.SplitSeq(s, ",") {
 		if c = strings.TrimSpace(c); c != "" {
 			out = append(out, c)
 		}
@@ -397,10 +397,7 @@ func fetchLiveServerEntry(ctx context.Context, srvPK cipher.PubKey, log *logging
 	myPK, mySK := cipher.GenerateKeyPair()
 	conf := dmsg.DefaultConfig()
 	// Connect to several seeds to raise the odds one co-hosts the disc client.
-	conf.MinSessions = len(seeds)
-	if conf.MinSessions > 5 {
-		conf.MinSessions = 5
-	}
+	conf.MinSessions = min(len(seeds), 5)
 	// Include discPK so GetAllEntries mints a synthetic entry delegating the
 	// seed servers — otherwise dmsg can't route the all_servers request to it.
 	dClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{myPK, discPK}, seeds), log)
@@ -542,7 +539,7 @@ func probeServerCarriers(cmd *cobra.Command) {
 		results = append(results, probeOneCarrier(ctx, srvPK, entry, c, log))
 	}
 	if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
-		internal.PrintOutput(cmd.Flags(), map[string]interface{}{"server": srvPK.Hex(), "carriers": results}, "")
+		internal.PrintOutput(cmd.Flags(), map[string]any{"server": srvPK.Hex(), "carriers": results}, "")
 		return
 	}
 	cmdutil.Printf("dmsg server %s — direct per-carrier reachability:\n", srvPK.Hex()[:8])

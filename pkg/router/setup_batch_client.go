@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -137,10 +138,7 @@ func (b *setupBatcher) dial(
 	req routing.BidirectionalRoute,
 	send batchSender,
 ) (routing.EdgeRules, cipher.PubKey, error) {
-	maxRoutes := SetupBatchMax()
-	if maxRoutes > routing.MaxBatchRoutes {
-		maxRoutes = routing.MaxBatchRoutes
-	}
+	maxRoutes := min(SetupBatchMax(), routing.MaxBatchRoutes)
 	if maxRoutes <= 1 {
 		return routing.EdgeRules{}, cipher.PubKey{}, errBatchUnsupported
 	}
@@ -343,10 +341,5 @@ func sendBatchOverSetupClient(
 
 // hasCap reports whether the advertised capability list carries name.
 func hasCap(caps []string, name string) bool {
-	for _, c := range caps {
-		if c == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(caps, name)
 }

@@ -209,7 +209,7 @@ func TestKeepAlive_WedgeSurvives(t *testing.T) {
 	// Several wedge cycles: pause ~4 intervals (stalls multiple probes) then a
 	// clear window during which the late pong flows and refreshes liveness. Each
 	// pause is shorter than the hard-dead window, so a correct loop survives.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		gate.pause()
 		time.Sleep(sessionHardDeadWindow * 3 / 4)
 		gate.resume()

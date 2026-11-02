@@ -21,17 +21,17 @@ var (
 func pageDictionaries(t *testing.T, page string) map[string]map[string]string {
 	t.Helper()
 	const open = `<script type="application/json" id="i18nData">`
-	at := strings.Index(page, open)
-	if at < 0 {
+	_, after, ok := strings.Cut(page, open)
+	if !ok {
 		t.Fatal("index.html has no i18nData block")
 	}
-	body := page[at+len(open):]
-	end := strings.Index(body, "</script>")
-	if end < 0 {
+	body := after
+	before0, _, ok0 := strings.Cut(body, "</script>")
+	if !ok0 {
 		t.Fatal("i18nData block is not closed")
 	}
 	var dicts map[string]map[string]string
-	if err := json.Unmarshal([]byte(body[:end]), &dicts); err != nil {
+	if err := json.Unmarshal([]byte(before0), &dicts); err != nil {
 		t.Fatalf("i18nData is not valid JSON: %v", err)
 	}
 	return dicts

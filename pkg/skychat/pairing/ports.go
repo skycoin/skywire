@@ -83,7 +83,7 @@ func pairPort(a, b cipher.PubKey, reserved map[uint16]struct{}) (uint16, error) 
 	raw := binary.BigEndian.Uint32(sum[:4])
 	candidate := PortBase + uint16(raw%uint32(PortSpan))
 
-	for offset := uint16(0); offset < PortSpan; offset++ {
+	for offset := range PortSpan {
 		port := PortBase + ((candidate-PortBase)+offset)%PortSpan
 		if _, isReserved := reserved[port]; !isReserved {
 			return port, nil

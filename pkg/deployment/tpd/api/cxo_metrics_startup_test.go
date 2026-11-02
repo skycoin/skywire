@@ -42,7 +42,7 @@ func TestMetricsStartupPublishesSavedAndRebuiltDays(t *testing.T) {
 		}
 		saved[d] = savedDay(t, []store.TransportMetric{{ID: "saved-" + d, Type: "stcpr"}})
 	}
-	fake := &windowFake{leafFake: leafFake{saved: saved}, metrics: metrics}
+	fake := &windowFake{saved: saved, metrics: metrics}
 
 	_, sk := cipher.GenerateKeyPair()
 	pub, err := treestore.NewWithTCP("127.0.0.1:0", sk, treestore.PubConfig{InMemoryDB: true, BatchWindow: 5 * time.Millisecond, DropPublishedLeaves: true})

@@ -67,8 +67,8 @@ func (f *Frame) Values(key string, missingZero bool) []float64 {
 
 // Latest is key's value in the newest sample that carries it.
 func (f *Frame) Latest(key string) (float64, bool) {
-	for i := len(f.rows) - 1; i >= 0; i-- {
-		if v, ok := f.rows[i][key]; ok {
+	for _, v := range slices.Backward(f.rows) {
+		if v, ok := v[key]; ok {
 			return v, true
 		}
 	}

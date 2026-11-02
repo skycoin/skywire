@@ -15,7 +15,7 @@ func TestGF256Field(t *testing.T) {
 		}
 	}
 	// multiply by 0 is 0; multiply by 1 is identity.
-	for a := 0; a < 256; a++ {
+	for a := range 256 {
 		if gfMul(byte(a), 0) != 0 || gfMul(0, byte(a)) != 0 {
 			t.Fatalf("a=%d: mul by 0 != 0", a)
 		}
@@ -126,10 +126,10 @@ func TestFECErasureBeyondRFails(t *testing.T) {
 	}
 	recv := make([][]byte, 6)
 	present := make([]bool, 6)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		recv[i], present[i] = data[i], true
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		recv[4+i], present[4+i] = repair[i], true
 	}
 	// erase 3 (> r=2)
@@ -152,7 +152,7 @@ func TestFECSystematicFastPath(t *testing.T) {
 	}
 	recv := make([][]byte, 8)
 	present := make([]bool, 8)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		recv[i], present[i] = data[i], true
 	}
 	// repair symbols all missing — data still fully present
@@ -169,7 +169,7 @@ func TestFECSystematicFastPath(t *testing.T) {
 // TestFECFuzz: random data + random erasure patterns of size <= r always recover.
 func TestFECFuzz(t *testing.T) {
 	rng := rand.New(rand.NewSource(12345)) //nolint:gosec // fixed seed: the fuzz loop must replay identically on failure
-	for iter := 0; iter < 400; iter++ {
+	for iter := range 400 {
 		k := 1 + rng.Intn(12)
 		r := rng.Intn(6)
 		symLen := 1 + rng.Intn(64)

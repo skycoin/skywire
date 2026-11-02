@@ -159,7 +159,7 @@ func TestKeyRotationDuePolicy(t *testing.T) {
 	t.Run("jitter holds an admin back inside the window", func(t *testing.T) {
 		// Find a PK whose jitter is non-trivial, then check it is not
 		// yet due at exactly DefaultKeyMaxAge.
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			cand, _ := cipher.GenerateKeyPair()
 			if rotationJitter(cand) < time.Hour {
 				continue

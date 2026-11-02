@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -131,9 +132,7 @@ func (f *bootReportFile) add(fields logrus.Fields, now time.Time) error {
 		return nil
 	}
 	line := make(map[string]any, len(fields)+1)
-	for k, v := range fields {
-		line[k] = v
-	}
+	maps.Copy(line, fields)
 	line["time"] = now.UTC().Format(time.RFC3339)
 	b, err := json.Marshal(line)
 	if err != nil {

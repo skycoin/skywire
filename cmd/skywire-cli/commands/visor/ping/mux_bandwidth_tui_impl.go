@@ -534,10 +534,7 @@ func sparkline(values []float64, width int) string {
 
 	var sb strings.Builder
 	for _, v := range window {
-		idx := int(v / maxV * float64(len(sparkRunes)-1))
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(int(v/maxV*float64(len(sparkRunes)-1)), 0)
 		if idx >= len(sparkRunes) {
 			idx = len(sparkRunes) - 1
 		}

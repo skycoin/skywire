@@ -125,7 +125,7 @@ func TestFramedConn_WriteFrameDeadline_DeadlineResetForNextCaller(t *testing.T) 
 	const maxWrites = 64
 	var lastErr error
 	var lastWasTimeout bool
-	for i := 0; i < maxWrites; i++ {
+	for range maxWrites {
 		err := c.WriteFrameDeadline(largePayload, 50*time.Millisecond)
 		if err != nil {
 			lastErr = err

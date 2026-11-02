@@ -1384,7 +1384,7 @@ Results show which proxies are reachable and their response latency.`,
 			defer cancel()
 
 			ready := false
-			for i := 0; i < 20; i++ {
+			for range 20 {
 				select {
 				case <-ctx.Done():
 					restore.fatal(fmt.Errorf("timeout waiting for proxy to start"))

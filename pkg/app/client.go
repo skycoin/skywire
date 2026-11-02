@@ -434,7 +434,7 @@ func (c *Client) Close() {
 	)
 
 	// Fill listeners and connections.
-	c.lm.DoRange(func(_ uint16, v interface{}) bool {
+	c.lm.DoRange(func(_ uint16, v any) bool {
 		lis, err := idmanager.AssertListener(v)
 		if err != nil {
 			c.log.Error(err)
@@ -443,7 +443,7 @@ func (c *Client) Close() {
 		listeners = append(listeners, lis)
 		return true
 	})
-	c.cm.DoRange(func(_ uint16, v interface{}) bool {
+	c.cm.DoRange(func(_ uint16, v any) bool {
 		conn, err := idmanager.AssertConn(v)
 		if err != nil {
 			c.log.Error(err)

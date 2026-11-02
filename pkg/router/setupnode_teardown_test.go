@@ -46,7 +46,7 @@ func (g *delRulesRecorder) DelRules(routeIDs []routing.RouteID, ok *bool) error 
 
 func newRecorderReserver(t *testing.T, n int) (IDReserver, RulesMap, map[cipher.PubKey]*delRulesRecorder) {
 	pks := randPKs(n)
-	gateways := make(map[cipher.PubKey]interface{}, len(pks))
+	gateways := make(map[cipher.PubKey]any, len(pks))
 	recorders := make(map[cipher.PubKey]*delRulesRecorder, len(pks))
 	for _, pk := range pks {
 		g := &delRulesRecorder{}

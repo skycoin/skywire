@@ -50,7 +50,7 @@ func TestMarshalEntriesMatchesJSON(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, string(want), string(got))
 	}
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		es := randEntries(r, r.Intn(20))
 		want, err := json.Marshal(es)
 		require.NoError(t, err)

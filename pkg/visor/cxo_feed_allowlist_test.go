@@ -1,6 +1,7 @@
 package visor
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -9,12 +10,7 @@ import (
 
 // contains reports whether pks includes pk.
 func contains(pks []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, p := range pks {
-		if p == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(pks, pk)
 }
 
 // TestComposeFeedAllowlist_StatsIncludesTPDAndPeers verifies the composed

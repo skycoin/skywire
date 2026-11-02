@@ -37,7 +37,7 @@ func runPlan(capsBps []float64, chunks int, p spreadPolicy) []int64 {
 // their transports imply.
 func runPlanWithPriors(capsBps, priorBps []float64, chunks int, p spreadPolicy) []int64 {
 	carried := make([]int64, len(capsBps))
-	for i := 0; i < chunks; i++ {
+	for range chunks {
 		idx := spreadChoose(capsBps, priorBps, carried, 0, p)
 		if idx < 0 {
 			break
@@ -204,7 +204,7 @@ func spreadEndgameDuplicatesTheTailChunksOnly(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	var sessions []*yamux.Session
 	stamps := map[*yamux.Session]*tunnelMeter{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		s, done := newTestSession(t)
 		defer done() //nolint:gocritic // one deferred close per session is the point
 		sessions = append(sessions, s)
@@ -379,7 +379,7 @@ func newSpreadTestClient(t *testing.T, backendAddr string, tunnels, standby int,
 	for i := 1; i < tunnels; i++ {
 		require.NoError(t, client.AddTunnel(pair()))
 	}
-	for i := 0; i < standby; i++ {
+	for range standby {
 		require.NoError(t, client.AddStandbyTunnel(pair()))
 	}
 	client.SetRangeSplit(true, conc, chunk)
@@ -390,7 +390,7 @@ func newSpreadTestClient(t *testing.T, backendAddr string, tunnels, standby int,
 	proxyAddr := probe.Addr().String()
 	probe.Close()                                        //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(proxyAddr) }() //nolint:errcheck
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if cc, err := net.Dial("tcp", proxyAddr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break
@@ -516,7 +516,7 @@ func TestChunkAdmissionScalesWithActiveTunnels(t *testing.T) {
 	spreadOff(t)
 	sessions := make([]*yamux.Session, 0, 3)
 	meters := map[*yamux.Session]*tunnelMeter{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		s, closeS := newTestSession(t)
 		defer closeS() //nolint:revive // the sessions must outlive the loop
 		sessions = append(sessions, s)
@@ -714,7 +714,7 @@ func TestSpreadPickAndReservationAreOneCriticalSection(t *testing.T) {
 	picked := make([]*yamux.Session, chunks)
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for i := 0; i < chunks; i++ {
+	for i := range chunks {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -777,7 +777,7 @@ func TestSpreadUnchargesAFailedOpen(t *testing.T) {
 	t.Cleanup(func() { skysettings.Reset() })
 	sessions := make([]*yamux.Session, 0, 2)
 	meters := map[*yamux.Session]*tunnelMeter{}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		s, closeS := newGoAwaySession(t)
 		defer closeS() //nolint:revive // the sessions must outlive the loop
 		sessions = append(sessions, s)
@@ -803,7 +803,7 @@ func TestSpreadUnchargesAFailedOpen(t *testing.T) {
 	pl.uncharge(s, planChunk)
 	require.Zero(t, pl.topShare(), "the reservation goes back")
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		_, _, err := c.openChunkStreamFor(chunkPlacement{pl: pl}, planChunk, pickSibling)
 		require.Errorf(t, err, "open %d: the peer has gone away", i)
 	}

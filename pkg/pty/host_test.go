@@ -389,7 +389,7 @@ func checkWhitelist(t *testing.T, wlCli *WhitelistClient, initN, rounds int) {
 	require.Len(t, pks, initN)
 
 	newPKS := make([]cipher.PubKey, rounds)
-	for i := 0; i < rounds; i++ {
+	for i := range rounds {
 		pk, _ := cipher.GenerateKeyPair()
 		require.NoError(t, wlCli.WhitelistAdd(pk), i)
 		newPKS[i] = pk

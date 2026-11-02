@@ -16,9 +16,9 @@ func TestReachCounts(t *testing.T) {
 	b, fp := newTestBook(t, map[string]bool{"203.0.113.7:7777": true})
 	open, _ := cipher.GenerateKeyPair()
 	closed, _ := cipher.GenerateKeyPair()
-	b.noteBind(types.STCPR, open, addrresolver.VisorData{RemoteAddr: "203.0.113.7", LocalAddresses: addrresolver.LocalAddresses{Port: "7777"}})
+	b.noteBind(types.STCPR, open, addrresolver.VisorData{RemoteAddr: "203.0.113.7", Port: "7777"})
 	waitProbe(t, fp)
-	b.noteBind(types.STCPR, closed, addrresolver.VisorData{RemoteAddr: "203.0.113.8", LocalAddresses: addrresolver.LocalAddresses{Port: "7777"}})
+	b.noteBind(types.STCPR, closed, addrresolver.VisorData{RemoteAddr: "203.0.113.8", Port: "7777"})
 	waitProbe(t, fp)
 	b.setLive(closed, true)
 	eventually(t, func() bool {

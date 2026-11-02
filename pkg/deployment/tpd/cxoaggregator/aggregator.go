@@ -978,7 +978,7 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 	if err != nil {
 		return
 	}
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry treestore.TreeEntry
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue
@@ -1242,7 +1242,7 @@ func parseTelemetryShardPath(path string) (uint8, bool) {
 		return 0, false
 	}
 	var sh uint8
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		c := rest[i]
 		var d uint8
 		switch {

@@ -42,7 +42,7 @@ func TestTransportEventsRecordOpenAndCloseReason(t *testing.T) {
 
 func TestTransportEventRingIsBoundedAndOrdered(t *testing.T) {
 	var r tpEventRing
-	for i := 0; i < TransportEventRingSize+10; i++ {
+	for i := range TransportEventRingSize + 10 {
 		r.add(TransportEvent{Reason: fmt.Sprint(i)})
 	}
 	got := r.snapshot()
@@ -65,7 +65,7 @@ func TestLastCloseSurvivesOpenFlood(t *testing.T) {
 	tm.InjectTransportForTest(mt)
 	mt.closeWith("read: connection reset by peer")
 
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		other := NewManagedTransportForTest(nil)
 		other.rPK = remote
 		other.Entry = Entry{ID: uuid.New(), Type: types.STCPR}
@@ -94,11 +94,11 @@ func TestLastCloseMapIsBoundedAndKeepsRepeatClosesInPlace(t *testing.T) {
 	var c tpLastCloseMap
 	first := uuid.New()
 	c.add(TransportEvent{ID: first, Event: "close", Reason: "first"})
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		c.add(TransportEvent{ID: first, Event: "close", Reason: fmt.Sprintf("flap %d", i)})
 	}
 	ids := make([]uuid.UUID, 0, TransportLastCloseMax)
-	for i := 0; i < TransportLastCloseMax-1; i++ {
+	for i := range TransportLastCloseMax - 1 {
 		id := uuid.New()
 		ids = append(ids, id)
 		c.add(TransportEvent{ID: id, Event: "close", Reason: fmt.Sprint(i)})

@@ -108,7 +108,7 @@ func NewRotatingWebTransportCert() (*RotatingWebTransportCert, error) {
 	r := &RotatingWebTransportCert{done: make(chan struct{})}
 	// Two rotations: the first fills next, the second promotes it to current
 	// and makes a new next.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := r.Rotate(); err != nil {
 			return nil, err
 		}

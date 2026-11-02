@@ -349,8 +349,8 @@ func renderDailyTable(daily []tpdDailyPoint, header string, cell func(tpdDailyPo
 	var sb strings.Builder
 	sb.WriteString("<details style='margin:8px 0;'><summary style='cursor:pointer;color:#3399FF;'>daily values</summary><pre>")
 	fmt.Fprintf(&sb, "%-12s %s\n", "Date", header)
-	for i := len(daily) - 1; i >= 0; i-- {
-		fmt.Fprintf(&sb, "%-12s %s\n", daily[i].Date, cell(daily[i]))
+	for _, d := range slices.Backward(daily) {
+		fmt.Fprintf(&sb, "%-12s %s\n", d.Date, cell(d))
 	}
 	sb.WriteString("</pre></details>")
 	return sb.String()

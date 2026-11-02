@@ -33,7 +33,7 @@ const (
 
 // framePool reuses frame buffers to reduce allocations in the hot path.
 var framePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		b := make([]byte, maxFrameSize)
 		return &b
 	},
@@ -152,10 +152,7 @@ func (rw *ReadWriter) Write(p []byte) (n int, err error) {
 	defer framePool.Put(bp)
 	for len(p) > 0 {
 		// Enforce max frame size.
-		wn := len(p)
-		if len(p) > maxPayloadSize {
-			wn = maxPayloadSize
-		}
+		wn := min(len(p), maxPayloadSize)
 
 		// Encrypt into the frame after its 2 byte length prefix.
 		frame := rw.ns.encryptAppend((*bp)[:prefixSize], p[:wn])

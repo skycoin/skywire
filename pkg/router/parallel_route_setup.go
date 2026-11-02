@@ -33,6 +33,7 @@ package router
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -279,12 +280,8 @@ func (r *router) fetchCandidateRoutes(
 		}
 		if err == nil {
 			paths = make(map[routing.PathEdges][][]routing.Hop, 2)
-			for kk, v := range fwdPaths {
-				paths[kk] = v
-			}
-			for kk, v := range revPaths {
-				paths[kk] = v
-			}
+			maps.Copy(paths, fwdPaths)
+			maps.Copy(paths, revPaths)
 		}
 	}
 	if err != nil {
@@ -351,7 +348,7 @@ func (r *router) fetchCandidateRoutes(
 	// route group to race.
 	n := len(fwdRanked)
 	out := make([]routing.BidirectionalRoute, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		rev := revRanked[i%len(revRanked)]
 		out = append(out, routing.BidirectionalRoute{
 			Desc:      desc,

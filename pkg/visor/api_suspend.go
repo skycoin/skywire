@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 )
@@ -55,8 +56,8 @@ func (v *Visor) Suspend() error {
 	v.initLock.RLock()
 	stack := append([]closer(nil), v.closeStack...)
 	v.initLock.RUnlock()
-	for i := len(stack) - 1; i >= 0; i-- {
-		cl := stack[i]
+	for _, cl := range slices.Backward(stack) {
+
 		if suspendKeepSrc[cl.src] {
 			continue
 		}

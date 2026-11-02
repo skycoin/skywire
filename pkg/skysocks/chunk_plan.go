@@ -103,10 +103,7 @@ func evenChunkSize(remaining, target int64) int64 {
 	if remaining <= 0 || target <= 0 {
 		return target
 	}
-	n := (remaining + target - 1) / target
-	if n < 1 {
-		n = 1
-	}
+	n := max((remaining+target-1)/target, 1)
 	return (remaining + n - 1) / n
 }
 

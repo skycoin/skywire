@@ -64,7 +64,7 @@ func FormatBitmap(bm []byte) string {
 		return strings.Repeat(".", SlotsPerDay)
 	}
 	out := make([]byte, SlotsPerDay)
-	for i := 0; i < SlotsPerDay; i++ {
+	for i := range SlotsPerDay {
 		if GetSlot(bm, i) {
 			out[i] = '#'
 		} else {

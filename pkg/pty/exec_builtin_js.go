@@ -27,7 +27,7 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	}
 
 	sink := func(w io.Writer) js.Func {
-		return js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+		return js.FuncOf(func(_ js.Value, a []js.Value) any {
 			b := make([]byte, a[0].Get("length").Int())
 			js.CopyBytesToGo(b, a[0])
 			_, _ = w.Write(b) //nolint:errcheck
@@ -39,7 +39,7 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	defer errF.Release()
 
 	stdin := req.Stdin
-	inF := js.FuncOf(func(_ js.Value, _ []js.Value) interface{} {
+	inF := js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		if len(stdin) == 0 {
 			return js.Null()
 		}
@@ -51,7 +51,7 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	defer inF.Release()
 
 	interrupt := make(chan js.Value, 1)
-	instF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+	instF := js.FuncOf(func(_ js.Value, a []js.Value) any {
 		if len(a) > 0 && a[0].Truthy() {
 			if f := a[0].Get("interrupt"); f.Type() == js.TypeFunction {
 				select {
@@ -65,7 +65,7 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	defer instF.Release()
 
 	done := make(chan int, 1)
-	thenF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+	thenF := js.FuncOf(func(_ js.Value, a []js.Value) any {
 		c := 0
 		if len(a) > 0 && a[0].Type() == js.TypeNumber {
 			c = a[0].Int()
@@ -73,7 +73,7 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 		done <- c
 		return nil
 	})
-	catchF := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+	catchF := js.FuncOf(func(_ js.Value, a []js.Value) any {
 		msg := "unknown error"
 		if len(a) > 0 {
 			msg = js.Global().Call("String", a[0]).String()
@@ -90,17 +90,17 @@ func execBuiltin(ctx context.Context, req *CommandExecReq, stdout, stderr io.Wri
 	defer thenF.Release()
 	defer catchF.Release()
 
-	env := map[string]interface{}{}
+	env := map[string]any{}
 	for _, kv := range req.Env {
 		if k, v, ok := strings.Cut(kv, "="); ok {
 			env[k] = v
 		}
 	}
-	args := make([]interface{}, len(req.Arg))
+	args := make([]any, len(req.Arg))
 	for i, a := range req.Arg {
 		args[i] = a
 	}
-	hooks := js.ValueOf(map[string]interface{}{"env": env})
+	hooks := js.ValueOf(map[string]any{"env": env})
 	hooks.Set("stdout", outF)
 	hooks.Set("stderr", errF)
 	hooks.Set("stdin", inF)

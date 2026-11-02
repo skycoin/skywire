@@ -20,14 +20,14 @@ type RegisterFunc func(s *rpc.Server, name string) error
 // registered handler fails in gob and never reaches the method.
 type probe struct{ RPCTestProbe int }
 
-var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
+var typeOfError = reflect.TypeFor[error]()
 
 // Methods returns the names of the methods net/rpc registers for rcvr.
 func Methods(rcvr any) []string {
 	var names []string
 	t := reflect.TypeOf(rcvr)
-	for i := 0; i < t.NumMethod(); i++ {
-		m := t.Method(i)
+	for m := range t.Methods() {
+		m := m
 		mt := m.Type
 		if !m.IsExported() || mt.NumIn() != 3 || mt.NumOut() != 1 || mt.Out(0) != typeOfError {
 			continue

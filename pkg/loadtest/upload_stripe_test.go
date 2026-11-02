@@ -69,10 +69,7 @@ type upSlowWriter struct {
 func (s upSlowWriter) Write(p []byte) (int, error) {
 	written := 0
 	for written < len(p) {
-		end := written + s.chunk
-		if end > len(p) {
-			end = len(p)
-		}
+		end := min(written+s.chunk, len(p))
 		n, err := s.w.Write(p[written:end])
 		written += n
 		if err != nil {
@@ -273,7 +270,7 @@ func upProxy(t *testing.T, conns []net.Conn) string {
 	addr := probe.Addr().String()
 	probe.Close()                                   //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(addr) }() //nolint:errcheck
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if cc, err := net.Dial("tcp", addr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break

@@ -28,7 +28,7 @@ func TestHubRelayNominees(t *testing.T) {
 	cache := NewDmsgServersCache(filepath.Join(t.TempDir(), "dmsg_servers.json"))
 
 	var hubs []cipher.PubKey
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		pk, _ := cipher.GenerateKeyPair()
 		hubs = append(hubs, pk)
 		require.NoError(t, cache.Set(hubEntry(pk)))

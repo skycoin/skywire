@@ -3,6 +3,7 @@ package visor
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
@@ -33,9 +34,7 @@ func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
 func (hv *Hypervisor) proxiedVisorConn(pk cipher.PubKey) (Conn, bool) {
 	hv.mu.RLock()
 	remotes := make(map[cipher.PubKey]Conn, len(hv.remoteVisors))
-	for hk, hc := range hv.remoteVisors {
-		remotes[hk] = hc
-	}
+	maps.Copy(remotes, hv.remoteVisors)
 	hv.mu.RUnlock()
 
 	for _, hyperConn := range remotes {

@@ -36,7 +36,7 @@ import (
 // peers state) and a logger.
 type hostEnv struct {
 	provider policy.Provider
-	logger   func(format string, args ...interface{})
+	logger   func(format string, args ...any)
 	source   string
 }
 

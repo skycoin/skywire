@@ -15,7 +15,7 @@ const reset = "\x1b[0m"
 
 // sgr colors each line of the text and restores the color after a nested
 // reset, as pterm does, so a colored span inside another keeps the outer one.
-func sgr(code string, a ...interface{}) string {
+func sgr(code string, a ...any) string {
 	start := "\x1b[" + code + "m"
 	lines := strings.Split(fmt.Sprint(a...), "\n")
 	for i, line := range lines {
@@ -29,22 +29,22 @@ func sgr(code string, a ...interface{}) string {
 
 // Sprint-style color functions.
 var (
-	Red     = func(a ...interface{}) string { return sgr("31", a...) }
-	Green   = func(a ...interface{}) string { return sgr("32", a...) }
-	Blue    = func(a ...interface{}) string { return sgr("34", a...) }
-	Cyan    = func(a ...interface{}) string { return sgr("36", a...) }
-	Magenta = func(a ...interface{}) string { return sgr("35", a...) }
-	Yellow  = func(a ...interface{}) string { return sgr("33", a...) }
-	White   = func(a ...interface{}) string { return sgr("37", a...) }
-	Black   = func(a ...interface{}) string { return sgr("30", a...) }
-	gray    = func(a ...interface{}) string { return sgr("90", a...) }
+	Red     = func(a ...any) string { return sgr("31", a...) }
+	Green   = func(a ...any) string { return sgr("32", a...) }
+	Blue    = func(a ...any) string { return sgr("34", a...) }
+	Cyan    = func(a ...any) string { return sgr("36", a...) }
+	Magenta = func(a ...any) string { return sgr("35", a...) }
+	Yellow  = func(a ...any) string { return sgr("33", a...) }
+	White   = func(a ...any) string { return sgr("37", a...) }
+	Black   = func(a ...any) string { return sgr("30", a...) }
+	gray    = func(a ...any) string { return sgr("90", a...) }
 )
 
 // Style is a background style; its Sprint wraps arguments in the SGR code.
 type Style struct{ code string }
 
 // Sprint renders the arguments under the style.
-func (s Style) Sprint(a ...interface{}) string { return sgr(s.code, a...) }
+func (s Style) Sprint(a ...any) string { return sgr(s.code, a...) }
 
 // Background styles.
 var (
@@ -54,7 +54,7 @@ var (
 )
 
 // Println prints the arguments and a newline.
-func Println(a ...interface{}) { cmdutil.Print(fmt.Sprint(a...) + "\n") }
+func Println(a ...any) { cmdutil.Print(fmt.Sprint(a...) + "\n") }
 
 // TreeNode is one node of a renderable tree.
 type TreeNode struct {

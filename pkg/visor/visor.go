@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1157,7 +1158,7 @@ func runBrowser(httpAddr string, enableTLS bool) {
 
 func isHvRunning(addr string, retries int) bool {
 	url := addr + "/api/ping"
-	for i := 0; i < retries; i++ {
+	for range retries {
 		time.Sleep(500 * time.Millisecond)
 		resp, err := http.Get(url) // nolint: gosec
 		if err != nil {
@@ -1214,8 +1215,7 @@ func (v *Visor) Close() error {
 	closeStack := append([]closer(nil), v.closeStack...)
 	v.initLock.RUnlock()
 
-	for i := len(closeStack) - 1; i >= 0; i-- {
-		cl := closeStack[i]
+	for i, cl := range slices.Backward(closeStack) {
 
 		start := time.Now()
 		errCh := make(chan error, 1)

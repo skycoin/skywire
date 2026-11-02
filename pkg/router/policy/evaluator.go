@@ -66,7 +66,7 @@ type Evaluator struct {
 	failureMode FailureMode
 	clock       Clock
 	provider    Provider
-	logger      func(format string, args ...interface{})
+	logger      func(format string, args ...any)
 
 	// globals holds the result of executing the script's
 	// top-level statements once. The decide_route function lives
@@ -110,7 +110,7 @@ func WithProvider(p Provider) Option {
 
 // WithLogger injects a log function. Default is a no-op; callers
 // who want failures surfaced wire in their package logger.
-func WithLogger(f func(format string, args ...interface{})) Option {
+func WithLogger(f func(format string, args ...any)) Option {
 	return func(e *Evaluator) { e.logger = f }
 }
 
@@ -130,7 +130,7 @@ func NewEvaluator(name, src string, opts ...Option) (*Evaluator, error) {
 		failureMode: FailureFallback,
 		clock:       systemClock{},
 		provider:    NopProvider(),
-		logger:      func(string, ...interface{}) {},
+		logger:      func(string, ...any) {},
 	}
 	for _, opt := range opts {
 		opt(e)

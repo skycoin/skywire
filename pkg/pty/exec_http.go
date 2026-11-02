@@ -246,10 +246,7 @@ func (sw execStreamWriter) Write(p []byte) (int, error) {
 	// os/exec hands us whatever the pipe returned, which can exceed one
 	// frame. Chunk rather than reject: the caller cannot control the size.
 	for off := 0; off < len(p); {
-		end := off + execStreamMaxFrame
-		if end > len(p) {
-			end = len(p)
-		}
+		end := min(off+execStreamMaxFrame, len(p))
 		if err := writeExecFrame(sw.w, sw.tag, p[off:end]); err != nil {
 			if sw.gone != nil {
 				sw.gone()

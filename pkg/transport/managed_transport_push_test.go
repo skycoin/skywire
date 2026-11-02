@@ -127,7 +127,7 @@ func dataPackets(t *testing.T, n int) ([]routing.Packet, []byte) {
 	t.Helper()
 	var pkts []routing.Packet
 	var stream []byte
-	for i := 0; i < n; i++ {
+	for i := range n {
 		payload := make([]byte, rand.IntN(2000)) //nolint:gosec
 		_, _ = crand.Read(payload)
 		p, err := routing.MakeDataPacket(routing.RouteID(i+1), payload)
@@ -255,7 +255,7 @@ func TestPushNoGoroutinePerTransport(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	before := runtime.NumGoroutine()
 	var mts []*ManagedTransport
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		mt, pm := newPushedMT(t, readCh, nil)
 		mts = append(mts, mt)
 		_, s := dataPackets(t, 1)

@@ -52,7 +52,7 @@ func TestPingOnceWithEcho_DoesNotSerializeAcrossRouteIndexes(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	start := time.Now()
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
 			//nolint:errcheck // intentionally discarded — this test asserts on wall-clock concurrency, not per-call success

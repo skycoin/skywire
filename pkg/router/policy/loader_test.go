@@ -108,7 +108,7 @@ func TestLoader_Watch_HotReload(t *testing.T) {
 	}
 	defer l.Close() //nolint:errcheck
 
-	if err := l.Watch(func(format string, args ...interface{}) {
+	if err := l.Watch(func(format string, args ...any) {
 		// Count "reloaded" log entries — they indicate a
 		// successful reload completed.
 		for _, s := range []string{format} {
@@ -167,7 +167,7 @@ func TestLoader_Watch_BadReloadKeepsPrevious(t *testing.T) {
 	defer l.Close() //nolint:errcheck
 
 	var logErrors atomic.Int32
-	if err := l.Watch(func(format string, args ...interface{}) {
+	if err := l.Watch(func(format string, args ...any) {
 		if len(format) >= 13 && format[:13] == "policy %s: re" {
 			logErrors.Add(1)
 		}

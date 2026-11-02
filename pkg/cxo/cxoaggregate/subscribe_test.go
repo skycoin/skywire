@@ -40,7 +40,7 @@ func TestAnnouncingVisorsAreSubscribedOnConnect(t *testing.T) {
 	t.Cleanup(func() { _ = core.Close() }) //nolint:errcheck
 
 	var want []cipher.PubKey
-	for i := 0; i < visors; i++ {
+	for range visors {
 		pk, sk := cipher.GenerateKeyPair()
 		c, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
 		require.NoError(t, err)

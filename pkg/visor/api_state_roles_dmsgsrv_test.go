@@ -50,7 +50,7 @@ func TestDmsgServerSessionsReportsConnectedClients(t *testing.T) {
 	// Two clients on the same server: the count must be the server's, not a
 	// per-client guess.
 	var pks []cipher.PubKey
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		cPK, cSK := cipher.GenerateKeyPair()
 		pks = append(pks, cPK)
 		c := dmsg.NewClient(cPK, cSK, dc, &dmsg.Config{MinSessions: 1})

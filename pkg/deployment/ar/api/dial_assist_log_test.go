@@ -35,7 +35,7 @@ func TestDialAssistFailuresCollapsesWindow(t *testing.T) {
 
 	// 1000 failures spread over 59s across two peers: nothing emitted yet.
 	summaries := 0
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		pk := pkA
 		if i%4 == 0 {
 			pk = pkB
@@ -70,7 +70,7 @@ func TestDialAssistFailuresTopPeersBounded(t *testing.T) {
 	start := time.Now()
 
 	pks := testPKs(t, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		pk := pks[i]
 		// Peer i gets i+1 records, so the ranking is deterministic.
 		for j := 0; j <= i; j++ {
@@ -93,12 +93,12 @@ func TestDialAssistFailuresConcurrent(t *testing.T) {
 	pks := testPKs(t, 16)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
 			pk := pks[n]
-			for j := 0; j < 200; j++ {
+			for range 200 {
 				d.record(time.Now(), pk)
 			}
 		}(i)

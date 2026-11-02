@@ -189,7 +189,7 @@ Examples:
 
 		if serveWhitelist != "" {
 			var wl []cipher.PubKey
-			for _, pkStr := range strings.Split(serveWhitelist, ",") {
+			for pkStr := range strings.SplitSeq(serveWhitelist, ",") {
 				pkStr = strings.TrimSpace(pkStr)
 				if pkStr == "" {
 					continue
@@ -290,7 +290,7 @@ Examples:
 			fp.Whitelist = nil
 		default:
 			var wl []cipher.PubKey
-			for _, pkStr := range strings.Split(spec, ",") {
+			for pkStr := range strings.SplitSeq(spec, ",") {
 				pkStr = strings.TrimSpace(pkStr)
 				if pkStr == "" {
 					continue

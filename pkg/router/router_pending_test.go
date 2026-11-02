@@ -39,7 +39,7 @@ func TestPendingPackets_Bounds(t *testing.T) {
 	// Per-descriptor cap rejects beyond maxPendingPerDesc.
 	p := newPendingPackets()
 	desc := testPendingDesc(1, 2)
-	for i := 0; i < maxPendingPerDesc; i++ {
+	for range maxPendingPerDesc {
 		require.True(t, p.park(desc, pkt, now))
 	}
 	require.False(t, p.park(desc, pkt, now), "per-desc cap should reject")

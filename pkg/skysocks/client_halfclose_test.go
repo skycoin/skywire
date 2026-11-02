@@ -90,7 +90,7 @@ func spliceNoFIN(t *testing.T, pieces int, gap time.Duration, finish func(net.Co
 		if _, err := io.ReadFull(exitSide, make([]byte, len("REQUEST"))); err != nil {
 			return
 		}
-		for i := 0; i < pieces; i++ {
+		for range pieces {
 			time.Sleep(gap)
 			if _, err := exitSide.Write([]byte("piece.")); err != nil {
 				return

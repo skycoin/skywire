@@ -3,6 +3,7 @@ package node
 
 import (
 	"container/list"
+	"slices"
 	"sync"
 	"time"
 
@@ -838,13 +839,8 @@ func (k knownRoots) buildConnsList(seq uint64) (l *list.List) {
 
 	for c, known := range k {
 
-		for _, ks := range known {
-
-			if ks == seq {
-				l.PushBack(c)
-				break
-			}
-
+		if slices.Contains(known, seq) {
+			l.PushBack(c)
 		}
 	}
 

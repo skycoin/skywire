@@ -127,7 +127,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		// - client1 sends "/index.html" requests.
 		// - client2 sends "/echo" requests.
 		// - client3 sends "/hash" requests.
-		for i := 0; i < nReqs; i++ {
+		for i := range nReqs {
 			go func() {
 				client1Results <- requestHTTP(&httpC1, http.MethodGet, "http://"+addr+endpointHTML, nil)
 			}()
@@ -144,7 +144,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		// Assert: ensure we get expected behavior from both the http client and server perspectives.
 		// Use a deadline to prevent hanging if a DMSG session fails.
 		deadline := time.After(60 * time.Second)
-		for i := 0; i < nReqs; i++ {
+		for i := range nReqs {
 			select {
 			case r := <-server0Results:
 				r.Assert(t, i)
@@ -176,7 +176,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 func startDmsgEnv(t *testing.T, nSrvs, maxSessions int) disc.APIClient {
 	dc := disc.NewMock(0)
 
-	for i := 0; i < nSrvs; i++ {
+	for i := range nSrvs {
 		pk, sk := cipher.GenerateKeyPair()
 
 		conf := dmsg.ServerConfig{

@@ -34,7 +34,7 @@ type Loader struct {
 
 	watcher   *fsnotify.Watcher
 	stopWatch context.CancelFunc
-	logger    func(format string, args ...interface{})
+	logger    func(format string, args ...any)
 }
 
 // NewLoader parses raw as either a "@/path/to/policy.wasm" file
@@ -56,7 +56,7 @@ func NewLoader(raw string, opts ...Option) (*Loader, error) {
 		source: p,
 		path:   p,
 		opts:   opts,
-		logger: func(string, ...interface{}) {},
+		logger: func(string, ...any) {},
 	}
 	if err := l.reload(); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func NewLoaderBytes(name string, wasmBytes []byte, opts ...Option) (*Loader, err
 	if err != nil {
 		return nil, err
 	}
-	l := &Loader{source: name, opts: opts, logger: func(string, ...interface{}) {}}
+	l := &Loader{source: name, opts: opts, logger: func(string, ...any) {}}
 	l.current.Store(eval)
 	return l, nil
 }
@@ -99,7 +99,7 @@ func (l *Loader) reload() error {
 
 // Watch starts a goroutine that reloads the module when the
 // file changes. No-op for in-memory loaders.
-func (l *Loader) Watch(logger func(format string, args ...interface{})) error {
+func (l *Loader) Watch(logger func(format string, args ...any)) error {
 	if l.path == "" {
 		return nil
 	}

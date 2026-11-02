@@ -131,10 +131,10 @@ func archPieDisc(items []PieChartItem, total int) ([]string, []int) {
 	cx := float64(archPieCols-1) / 2
 	cy := float64(archPieRows-1) / 2
 	rows := make([]string, 0, archPieRows)
-	for r := 0; r < archPieRows; r++ {
+	for r := range archPieRows {
 		var line strings.Builder
 		lastColor := ""
-		for c := 0; c < archPieCols; c++ {
+		for c := range archPieCols {
 			x := (float64(c) - cx) / cx
 			y := (float64(r) - cy) / cy
 			if x*x+y*y > 1.0 {
@@ -203,11 +203,8 @@ func renderArchPanelANSI(a archStats) string {
 
 	var b strings.Builder
 	b.WriteString(tuiRule(title+" — share of surveyed visors", width))
-	rows := len(disc)
-	if len(legend) > rows {
-		rows = len(legend)
-	}
-	for i := 0; i < rows; i++ {
+	rows := max(len(legend), len(disc))
+	for i := range rows {
 		left := strings.Repeat(" ", archPieCols)
 		if i < len(disc) {
 			left = disc[i]

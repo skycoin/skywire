@@ -78,10 +78,7 @@ func (d *streamDigest) addLocked(conn network.Transport, p []byte) {
 	}
 	for len(p) > 0 {
 		toNext := CheckpointBase - d.n%CheckpointBase
-		k := uint64(len(p))
-		if k > toNext {
-			k = toNext
-		}
+		k := min(uint64(len(p)), toNext)
 		_, _ = d.h.Write(p[:k]) //nolint:errcheck // xxhash never fails
 		d.n += k
 		p = p[k:]

@@ -16,6 +16,7 @@ package router
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -143,7 +144,7 @@ func driveShape(t *testing.T, rigs []*emuRig, spec, want string) int {
 	require.NoError(t, routersettings.SetApp(shapeEmuApp, routersettings.MuxShape.Name(), spec))
 	now := time.Now()
 	moves := 0
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		active, pool := shapeSession0(rigs)
 		before := shapeOf(rigs)
 		poolArbiterRound(active, pool, now, nil)
@@ -225,10 +226,8 @@ func TestEmuShapeRoundTripsBackTo2x2(t *testing.T) {
 func rigForTp(t *testing.T, rigs []*emuRig, tp uuid.UUID) *emuRig {
 	t.Helper()
 	for _, r := range rigs {
-		for _, id := range r.ids {
-			if id == tp {
-				return r
-			}
+		if slices.Contains(r.ids, tp) {
+			return r
 		}
 	}
 	t.Fatalf("no rig holds transport %s", tp)

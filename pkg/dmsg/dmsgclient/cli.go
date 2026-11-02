@@ -171,7 +171,7 @@ func StartDmsgDirectWithServers(ctx context.Context, dlog *logging.Logger, pk ci
 		dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 		var resp *http.Response
 		maxRetries := 5
-		for i := 0; i < maxRetries; i++ {
+		for i := range maxRetries {
 			resp, err = dmsgHTTP.Get(dmsgDiscAddr + "/health")
 			if err == nil {
 				resp.Body.Close() //nolint

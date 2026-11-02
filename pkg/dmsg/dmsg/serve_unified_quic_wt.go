@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -83,10 +84,8 @@ func (s *Server) ServeUnifiedQUIC(udpConn net.PacketConn, advertisedUDPAddr, adv
 				// supplies the actual per-handshake cert + verification.
 				NextProtos: []string{skyquic.DmsgNextProto, skyquic.NextProto, skyquic.WebTransportNextProto},
 				GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
-					for _, p := range h.SupportedProtos {
-						if p == skyquic.WebTransportNextProto { // "h3" → WebTransport
-							return wtTLS, nil
-						}
+					if slices.Contains(h.SupportedProtos, skyquic.WebTransportNextProto) { // "h3" → WebTransport
+						return wtTLS, nil
 					}
 					return identTLS, nil // skywire ALPN → native dmsg-QUIC (mutual TLS)
 				},

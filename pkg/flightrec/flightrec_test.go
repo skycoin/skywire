@@ -23,7 +23,7 @@ func TestFlightRecorder(t *testing.T) {
 
 	busy := make(chan struct{})
 	go func() {
-		for i := 0; i < 1e6; i++ {
+		for range int(1e6) {
 			_ = make([]byte, 64) //nolint:staticcheck // trace events to record
 		}
 		close(busy)
@@ -49,7 +49,7 @@ func TestFlightRecorder(t *testing.T) {
 
 func TestPruneKeepsTheNewest(t *testing.T) {
 	d := t.TempDir()
-	for i := 0; i < keepSnapshots+3; i++ {
+	for i := range keepSnapshots + 3 {
 		name := filepath.Join(d, "flightrec-2026010"+string(rune('0'+i))+"T000000Z-x.trace")
 		require.NoError(t, os.WriteFile(name, []byte("x"), 0o600))
 	}

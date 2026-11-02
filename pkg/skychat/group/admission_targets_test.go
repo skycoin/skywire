@@ -132,7 +132,7 @@ func TestInviteAdmins(t *testing.T) {
 	// Room is left for the founder, which the joiner adds back at the head
 	// from OwnerPK.
 	many := Record{OwnerPK: founder}
-	for i := 0; i < maxAdmissionTargets+3; i++ {
+	for i := range maxAdmissionTargets + 3 {
 		many.Admins = append(many.Admins, pkN(byte(i)))
 	}
 	if got := inviteAdmins(many, founder); len(got) != maxAdmissionTargets-1 {

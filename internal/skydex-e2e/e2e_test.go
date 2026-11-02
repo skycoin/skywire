@@ -287,7 +287,7 @@ func waitReady(t *testing.T, c *dmsg.Client) {
 func dialMarket(t *testing.T, c *dmsg.Client, marketPK cipher.PubKey) *market.Conn {
 	t.Helper()
 	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := range 10 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		raw, err := c.Dial(ctx, dmsg.Addr{PK: marketPK, Port: marketPort})
 		cancel()

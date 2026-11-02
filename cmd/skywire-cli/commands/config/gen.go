@@ -1800,7 +1800,7 @@ func configureWSPeers(log *logging.Logger) {
 	if strings.TrimSpace(wsPeers) == "" {
 		return
 	}
-	for _, spec := range strings.Split(wsPeers, ",") {
+	for spec := range strings.SplitSeq(wsPeers, ",") {
 		spec = strings.TrimSpace(spec)
 		if spec == "" {
 			continue
@@ -1835,8 +1835,8 @@ func configureHypervisor(log *logging.Logger) {
 	// Manipulate Hypervisor PKs
 	conf.Hypervisors = make([]cipher.PubKey, 0)
 	if hypervisorPKs != "" {
-		keys := strings.Split(hypervisorPKs, ",")
-		for _, key := range keys {
+		keys := strings.SplitSeq(hypervisorPKs, ",")
+		for key := range keys {
 			if key != "" {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
@@ -1902,8 +1902,8 @@ func configureHypervisor(log *logging.Logger) {
 	// Manipulate dmsgpty whitelist PKs
 	conf.Pty.Whitelist = make([]cipher.PubKey, 0)
 	if dmsgptyWlPKs != "" {
-		keys := strings.Split(dmsgptyWlPKs, ",")
-		for _, key := range keys {
+		keys := strings.SplitSeq(dmsgptyWlPKs, ",")
+		for key := range keys {
 			if key != "" {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
@@ -2132,7 +2132,7 @@ func parseDaemonInstance(raw string) (string, string, error) {
 // tokens. scriptExecArray's bash-array expansion lands here.
 func splitCSV(s string) []string {
 	out := []string{}
-	for _, t := range strings.Split(s, ",") {
+	for t := range strings.SplitSeq(s, ",") {
 		t = strings.TrimSpace(t)
 		if t != "" {
 			out = append(out, t)
@@ -2221,7 +2221,7 @@ func skycoinWebFlags(external bool) (flags []string) {
 		// wallet's defaultCoinNode; here as an http URL the proxy resolves).
 		nodeURLs = "http://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1.dmsg:6420"
 	}
-	for _, u := range strings.Split(nodeURLs, ",") {
+	for u := range strings.SplitSeq(nodeURLs, ",") {
 		if u = strings.TrimSpace(u); u != "" {
 			flags = append(flags, "--node-url", u)
 		}
@@ -2580,13 +2580,7 @@ func configureApps(log *logging.Logger) {
 				// reconnect in-process (serving the status page during the gap)
 				// instead of exiting on total collapse and paying a full proc
 				// restart + re-dial per RestartOnFailure cycle.
-				hasReconnect := false
-				for _, a := range conf.Launcher.Apps[i].Args {
-					if a == "--reconnect" {
-						hasReconnect = true
-						break
-					}
-				}
+				hasReconnect := slices.Contains(conf.Launcher.Apps[i].Args, "--reconnect")
 				if !hasReconnect {
 					conf.Launcher.Apps[i].Args = append(conf.Launcher.Apps[i].Args, "--reconnect")
 				}

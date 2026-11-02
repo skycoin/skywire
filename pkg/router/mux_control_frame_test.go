@@ -87,7 +87,7 @@ func TestMuxControlFrameRoundTrip(t *testing.T) {
 func TestMuxControlFrameSequencesAreDistinct(t *testing.T) {
 	send, _ := ctrlTestMux(t, true)
 	seen := make(map[uint32]bool)
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		pkt, err := send.wrapControl(routing.RouteID(1), routing.EncodeLegControlFrame(
 			routing.LegControlKindRehome, uint64(i), 1, 2, 0))
 		require.NoError(t, err)

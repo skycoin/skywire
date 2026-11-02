@@ -44,7 +44,7 @@ func TestDialStream_FailureFreesEphemeralPort(t *testing.T) {
 	b, _ := newClient("dialfail-b")
 
 	before := a.PorterCount()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		_, err := aSes.DialStream(ctx, Addr{PK: b.LocalPK(), Port: 999})
 		cancel()

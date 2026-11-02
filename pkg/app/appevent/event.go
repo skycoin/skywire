@@ -13,7 +13,7 @@ type Event struct {
 }
 
 // NewEvent creates a new Event.
-func NewEvent(t string, v interface{}) *Event {
+func NewEvent(t string, v any) *Event {
 	data, err := json.Marshal(v)
 	if err != nil {
 		panic(err) // should never happen
@@ -22,7 +22,7 @@ func NewEvent(t string, v interface{}) *Event {
 }
 
 // Unmarshal unmarshals the event data to a given object.
-func (e *Event) Unmarshal(v interface{}) {
+func (e *Event) Unmarshal(v any) {
 	if err := json.Unmarshal(e.Data, v); err != nil {
 		panic(err) // should never happen
 	}

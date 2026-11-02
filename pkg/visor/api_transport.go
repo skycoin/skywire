@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -340,12 +341,7 @@ func (v *Visor) Transports(typeFilters []string, pks []cipher.PubKey, logs bool)
 
 	typeIncluded := func(tType types.Type) bool {
 		if typeFilters != nil {
-			for _, ft := range typeFilters {
-				if string(tType) == ft {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(typeFilters, string(tType))
 		}
 		return true
 	}

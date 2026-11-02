@@ -33,7 +33,7 @@ func TestRedisStore(t *testing.T) {
 func testStore(t *testing.T, st Store) {
 	ctx := context.Background()
 	base := time.Date(2026, 10, 6, 10, 0, 0, 0, time.UTC)
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		require.NoError(t, st.Add(ctx, Sample{At: base.Add(time.Duration(i) * Interval), V: map[string]float64{"a": float64(i)}}))
 	}
 	// A repeated timestamp replaces the sample rather than adding a second.

@@ -109,7 +109,7 @@ func frontierMissingSeqs(lastContiguous uint32, words []uint64, max int) []uint3
 	}
 	var out []uint32
 	for w, word := range words {
-		for i := uint32(0); i < 64; i++ {
+		for i := range uint32(64) {
 			if word&(1<<i) != 0 {
 				return out // first received seq ends the contiguous frontier run
 			}

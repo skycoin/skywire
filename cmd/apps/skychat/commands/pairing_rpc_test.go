@@ -22,7 +22,7 @@ func init() {
 	// nil until RunSkychat wires it up. Install a no-op so the tests
 	// can drive the retry path without RunSkychat.
 	if appLog == nil {
-		appLog = func(string, ...interface{}) {}
+		appLog = func(string, ...any) {}
 	}
 }
 

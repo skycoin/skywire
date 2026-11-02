@@ -139,7 +139,7 @@ func TestPoolFill_StopsAtCeiling(t *testing.T) {
 	})
 
 	// Two dials take the pool from 1 held to the ceiling of 3.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		c.maybePoolFill()
 		waitFill(t, c)
 	}
@@ -151,7 +151,7 @@ func TestPoolFill_StopsAtCeiling(t *testing.T) {
 
 	// The next tick observes the ceiling, settles, and DOES NOT dial again —
 	// however many ticks follow.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		c.maybePoolFill()
 		waitFill(t, c)
 	}
@@ -176,7 +176,7 @@ func TestPoolFill_StopsAtExhaustionAndDoesNotRedial(t *testing.T) {
 			": all 4 candidate route(s) leave over a first hop a sibling route group already holds")
 	})
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		c.maybePoolFill()
 		waitFill(t, c)
 	}
@@ -214,7 +214,7 @@ func TestPoolFill_RetriesFailuresInBoundedRounds(t *testing.T) {
 	drainRound := func() {
 		// More ticks than a round can use: the extra ones must be swallowed by
 		// the backoff, not spent on dials.
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			c.maybePoolFill()
 			waitFill(t, c)
 		}
@@ -337,7 +337,7 @@ func TestPoolFill_DisabledByZero(t *testing.T) {
 		dials.Add(1)
 		return nil, nil
 	})
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		c.maybePoolFill()
 		waitFill(t, c)
 	}

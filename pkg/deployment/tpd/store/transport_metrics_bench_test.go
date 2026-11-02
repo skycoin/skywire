@@ -22,10 +22,10 @@ func BenchmarkGetAllTransportMetrics(b *testing.B) {
 		pks[i], _ = cipher.GenerateKeyPair()
 	}
 	seed := s.client.Pipeline()
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		id := uuid.New().String()
 		a, c := pks[i%len(pks)], pks[(i*7+1)%len(pks)]
-		for d := 0; d < 3; d++ {
+		for d := range 3 {
 			seed.HSet(ctx, s.bandwidthDailyKey(id, time.Now().UTC().AddDate(0, 0, -d)), a.Hex()+":sent", "700", c.Hex()+":recv", "300")
 		}
 		seed.Set(ctx, s.bandwidthEdgesKey(id), a.Hex()+","+c.Hex()+",stcpr", 0)

@@ -44,18 +44,18 @@ GET /health
 POST /routes
   Request:  %s
   Response: %s`,
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80",
 			"dmsg_servers": []string{pk2},
 		}),
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"edges": [][]string{{pk1, pk2}},
 			"opts":  map[string]int{"min_hops": 0, "max_hops": 3},
 		}),
-		cmdutil.ExampleJSON(map[string]interface{}{
-			pk1 + "-" + pk2: [][]map[string]interface{}{{
+		cmdutil.ExampleJSON(map[string]any{
+			pk1 + "-" + pk2: [][]map[string]any{{
 				{"t_id": tpID, "from": pk1, "to": pk2},
 			}},
 		}),

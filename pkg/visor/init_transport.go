@@ -1204,10 +1204,7 @@ func reconcileTPDWithRetry(ctx context.Context, v *Visor, log *logging.Logger) {
 		if err := reconcileTPD(ctx, v, log); err != nil {
 			// Calculate exponential backoff: 10s, 20s, 40s, 80s, 160s, capped at 5min
 			//nolint:gosec
-			backoff := time.Duration(10*(1<<uint(attempt-1))) * time.Second
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
+			backoff := min(time.Duration(10*(1<<uint(attempt-1)))*time.Second, maxBackoff)
 
 			log.WithError(err).Warnf("TPD reconciliation failed (attempt %d), retrying in %v", attempt, backoff)
 
@@ -1253,7 +1250,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Query TPD with retry logic
 	var entries []*transport.Entry
 	var err error
-	for retries := 0; retries < 3; retries++ {
+	for retries := range 3 {
 		entries, err = v.DiscoverTransportsByPK(v.conf.PK)
 		if err == nil {
 			break
@@ -1352,7 +1349,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Infof("Removing %d stale transports from TPD (batch)", len(staleIDs))
 
 		var tpdC transport.DiscoveryClient
-		for retries := 0; retries < 3; retries++ {
+		for retries := range 3 {
 			tpdC, err = connectToTpDisc(ctx, v, log)
 			if err == nil {
 				break
@@ -1369,7 +1366,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		var deleted int
 		var deleteErr error
-		for retries := 0; retries < 3; retries++ {
+		for retries := range 3 {
 			deleted, deleteErr = tpdC.DeleteTransports(ctx, staleIDs)
 			if deleteErr == nil {
 				log.Infof("Removed %d/%d stale transports from TPD", deleted, len(staleIDs))

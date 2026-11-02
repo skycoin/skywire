@@ -64,7 +64,7 @@ var (
 	addr     string
 	portless bool
 	appCl    *app.Client
-	appLog   func(format string, args ...interface{}) // App logger function
+	appLog   func(format string, args ...any) // App logger function
 	// chatLog is the package-level logrus logger every code path can
 	// reach without going through appCl. In visor-launched mode it
 	// proxies through appCl.Log(); in --standalone mode appCl is nil
@@ -421,7 +421,7 @@ func (h *sseHub) forgetMessage(pk, id string) {
 // legacySSENamesMessage reports whether a legacy /sse entry is the message id:
 // its own id, or for a file the transfer id.
 func legacySSENamesMessage(entry, id string) bool {
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal([]byte(entry), &m); err != nil {
 		return false
 	}
@@ -435,7 +435,7 @@ func legacySSENamesMessage(entry, id string) bool {
 // (channel="pair") sent by them, or this side's own outbound mirror to them.
 // Group and status envelopes carry other channel keys and stay.
 func legacySSENamesPeer(entry, pk string) bool {
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal([]byte(entry), &m); err != nil {
 		return false
 	}
@@ -606,7 +606,7 @@ func (h *sseHub) publishEvent(ev chatEvent) {
 // inline. file_url, present only on received ("in") files, is the ready-made
 // download path under /files/ so the UI needn't reconstruct the saved name.
 func renderLegacySSE(ev chatEvent) string {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"sender":  ev.From,
 		"message": ev.Text,
 		"network": ev.Transport,
@@ -716,7 +716,7 @@ func parseEventChannels(csv string) map[string]bool {
 	}
 	set := make(map[string]bool)
 	onlyAll := true
-	for _, tok := range strings.Split(csv, ",") {
+	for tok := range strings.SplitSeq(csv, ",") {
 		switch strings.ToLower(strings.TrimSpace(tok)) {
 		case "", "all":
 			for c := range defaultEventChannels() {
@@ -875,14 +875,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 			TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
 		})
 		chatLog = standaloneLog.WithField("_module", "skychat-standalone")
-		appLog = func(format string, args ...interface{}) {
+		appLog = func(format string, args ...any) {
 			chatLog.Infof(format, args...)
 		}
 	} else {
 		appCl = app.NewClient(nil)
 		defer appCl.Close()
 		chatLog = appCl.Log()
-		appLog = func(format string, args ...interface{}) {
+		appLog = func(format string, args ...any) {
 			appCl.Log().Infof(format, args...)
 		}
 	}
@@ -992,7 +992,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 			broadcastDMStatus(id, dmStatusDeleted, peer)
 		},
 		StaleAckWindow: staleAckWindow,
-		Log:            func(f string, a ...interface{}) { appLog(f, a...) },
+		Log:            func(f string, a ...any) { appLog(f, a...) },
 	})
 	if len(nets) > 0 && !standalone && appCl != nil {
 		if err := chatCtrl.Start(ctx); err != nil {
@@ -1335,12 +1335,12 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		if data.WaitMS > 0 {
 			w.Header().Set("Content-Type", "application/json")
 			if res.Acked {
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 					"acked": true, "id": res.ID, "ms": res.Elapsed.Milliseconds(),
 				})
 			} else {
 				w.WriteHeader(http.StatusGatewayTimeout)
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 					"acked": false, "id": res.ID, "reason": "timeout", "ms": opt.WaitAck.Milliseconds(),
 				})
 			}
@@ -1352,7 +1352,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// moved into the controller with the conn cache — RequestAck arms
 			// it, bounded by the StaleAckWindow passed at construction.
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"ok": true,
 				"id": res.ID,
 			})
@@ -1755,7 +1755,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		sendStr = st.LastTxAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"visor_pk":                visorPK,
 		"sse_subscribers":         subscriberCount,
 		"active_peer_conns":       connCount,
@@ -1884,10 +1884,7 @@ func collectGroupHealth() ([]groupHealth, string) {
 			SubDropCount:    g.SubDropCount,
 		}
 		if !g.LastMessageAt.IsZero() {
-			lag := int64(now.Sub(g.LastMessageAt).Seconds())
-			if lag < 0 {
-				lag = 0
-			}
+			lag := max(int64(now.Sub(g.LastMessageAt).Seconds()), 0)
 			gh.LagSeconds = &lag
 		}
 		out = append(out, gh)
@@ -2012,7 +2009,7 @@ func loadWhitelist(path string) (map[string]bool, error) {
 		return nil, err
 	}
 	wl := make(map[string]bool)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

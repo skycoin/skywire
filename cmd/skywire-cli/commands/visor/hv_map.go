@@ -539,7 +539,7 @@ func appWhitelist(name string, args []string) string {
 		return "N/A"
 	}
 	n := 0
-	for _, k := range strings.Split(argValue(args, "whitelist"), ",") {
+	for k := range strings.SplitSeq(argValue(args, "whitelist"), ",") {
 		if strings.TrimSpace(k) != "" {
 			n++
 		}

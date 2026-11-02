@@ -87,7 +87,7 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 			tputKeys = append(tputKeys, s.throughputKey(u.ID))
 		}
 	}
-	var peaks []interface{}
+	var peaks []any
 	if len(tputKeys) > 0 {
 		var err error
 		if peaks, err = s.client.MGet(ctx, tputKeys...).Result(); err != nil {
@@ -160,7 +160,7 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 	for gi, g := range groups {
 		date := g.day.Format(MetricsDateFormat)
 		keys := []string{s.visorAllKey(), s.visorBandwidthDailyKey(g.reporter, g.day), s.netDailyKey(date), s.netDailySinceKey()}
-		args := []interface{}{g.reporter, now.Unix(), bandwidthPrevTTLSeconds, historyTTLSeconds,
+		args := []any{g.reporter, now.Unix(), bandwidthPrevTTLSeconds, historyTTLSeconds,
 			int64((400 * 24 * time.Hour) / time.Second), date, s.bandwidthDailyTTLFor()}
 		for _, i := range g.rows {
 			u := updates[i]
@@ -174,7 +174,7 @@ func (s *redisStore) applyTelemetry(ctx context.Context, updates []TelemetryUpda
 		rows := latRows[date]
 		for len(rows) > 0 {
 			n := min(len(rows), maxScriptRows)
-			args := []interface{}{historyTTLSeconds}
+			args := []any{historyTTLSeconds}
 			for _, i := range rows[:n] {
 				u := updates[i]
 				args = append(args, u.ID.String(), strconv.FormatFloat(u.LatAvg, 'f', -1, 64), typeOrUnknown(u.Type))

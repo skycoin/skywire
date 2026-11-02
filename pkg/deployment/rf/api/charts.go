@@ -171,10 +171,7 @@ func (c *rfCharts) collectSetupNodes(ctx context.Context, v map[string]float64) 
 			v[chartSNFail+string(reason)] += float64(n - prev.FailuresByReason[reason])
 		}
 		for hops, n := range s.RouteLengthHist {
-			b := hops
-			if b > maxCountedHops {
-				b = maxCountedHops
-			}
+			b := min(hops, maxCountedHops)
 			v[chartSNHops+strconv.Itoa(b)] += float64(n - prev.RouteLengthHist[hops])
 		}
 	}

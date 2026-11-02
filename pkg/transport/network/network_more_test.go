@@ -549,10 +549,8 @@ func TestDialVisor_SamePublicIP(t *testing.T) {
 	ar.On("LocalPublicIP").Return("9.9.9.9")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
 		RemoteAddr: "9.9.9.9:5",
-		LocalAddresses: addrresolver.LocalAddresses{
-			Port:      "5",
-			Addresses: []string{"192.168.0.5"},
-		},
+		Port:       "5",
+		Addresses:  []string{"192.168.0.5"},
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)
@@ -568,9 +566,9 @@ func TestDialVisor_DualStackHappyEyeballs(t *testing.T) {
 	ar := &addrresolver.MockAPIClient{}
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
-		RemoteAddr:     "1.2.3.4",
-		RemoteAddrV6:   "2001:db8::1",
-		LocalAddresses: addrresolver.LocalAddresses{Port: "5"},
+		RemoteAddr:   "1.2.3.4",
+		RemoteAddrV6: "2001:db8::1",
+		Port:         "5",
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)
@@ -587,8 +585,8 @@ func TestDialVisor_V4Only(t *testing.T) {
 	ar := &addrresolver.MockAPIClient{}
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
-		RemoteAddr:     "1.2.3.4",
-		LocalAddresses: addrresolver.LocalAddresses{Port: "5"},
+		RemoteAddr: "1.2.3.4",
+		Port:       "5",
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)
@@ -604,8 +602,8 @@ func TestDialVisor_V6Only(t *testing.T) {
 	ar := &addrresolver.MockAPIClient{}
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
-		RemoteAddrV6:   "2001:db8::1",
-		LocalAddresses: addrresolver.LocalAddresses{Port: "5"},
+		RemoteAddrV6: "2001:db8::1",
+		Port:         "5",
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)
@@ -621,7 +619,7 @@ func TestDialVisor_NeitherAddr(t *testing.T) {
 	ar := &addrresolver.MockAPIClient{}
 	ar.On("LocalPublicIP").Return("")
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
-		LocalAddresses: addrresolver.LocalAddresses{Port: "5"},
+		Port: "5",
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)
@@ -684,10 +682,8 @@ func TestDialVisor_LANFailsFallsBackToPublic(t *testing.T) {
 	ar.On("Resolve", mock.Anything, mock.Anything, remote).Return(addrresolver.VisorData{
 		RemoteAddr: "1.2.3.4",
 		IsLocal:    true,
-		LocalAddresses: addrresolver.LocalAddresses{
-			Port:      "5",
-			Addresses: []string{"192.168.1.2"},
-		},
+		Port:       "5",
+		Addresses:  []string{"192.168.1.2"},
 	}, nil)
 
 	c := newTestResolvedClient(types.STCPR, lPK, ar)

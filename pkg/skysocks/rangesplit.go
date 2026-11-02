@@ -328,10 +328,7 @@ func (c *Client) rangeSplitInner(conn, stream net.Conn) (host string, clientPref
 	//    configured chunk size (see chunk_plan.go). chunk0 keeps the probe size —
 	//    it was requested before the total was known — so it is the only chunk
 	//    the plan cannot size.
-	chunk0Len := c.probeChunkBytes()
-	if total < chunk0Len {
-		chunk0Len = total
-	}
+	chunk0Len := min(total, c.probeChunkBytes())
 	// The object's spread ledger. It is kept whatever the knobs say — the
 	// `shares=` line below is the client's own account of what each tunnel
 	// carried — and it STEERS the chunks only once a spread knob is set.
@@ -632,10 +629,7 @@ func (c *Client) chunkAdmission(pl *spreadPlanner) int {
 	if active < 2 {
 		return conc
 	}
-	per := setChunkTunnelConcurrency()
-	if per < 1 {
-		per = 1
-	}
+	per := max(setChunkTunnelConcurrency(), 1)
 	return per * active
 }
 

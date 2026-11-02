@@ -26,28 +26,28 @@ func (c *Client) Close() {
 }
 
 // LogInfo logs an info message through the visor's logging system.
-func (c *Client) LogInfo(format string, args ...interface{}) {
+func (c *Client) LogInfo(format string, args ...any) {
 	if c.Client != nil {
 		c.Client.Log().Infof(format, args...)
 	}
 }
 
 // LogError logs an error message through the visor's logging system.
-func (c *Client) LogError(format string, args ...interface{}) {
+func (c *Client) LogError(format string, args ...any) {
 	if c.Client != nil {
 		c.Client.Log().Errorf(format, args...)
 	}
 }
 
 // LogWarn logs a warning message through the visor's logging system.
-func (c *Client) LogWarn(format string, args ...interface{}) {
+func (c *Client) LogWarn(format string, args ...any) {
 	if c.Client != nil {
 		c.Client.Log().Warnf(format, args...)
 	}
 }
 
 // LogDebug logs a debug message through the visor's logging system.
-func (c *Client) LogDebug(format string, args ...interface{}) {
+func (c *Client) LogDebug(format string, args ...any) {
 	if c.Client != nil {
 		c.Client.Log().Debugf(format, args...)
 	}

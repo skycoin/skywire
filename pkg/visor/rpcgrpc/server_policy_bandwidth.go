@@ -35,6 +35,7 @@ package rpcgrpc
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ const muxBwStandbyKeepalive = 3 * time.Second
 // the compiled WASM bundle when the name is a bundle preset, else falls through
 // to the Starlark preset registry; a "@*.wasm" path loads a WASM module; any
 // other value (@*.star / inline) loads the Starlark backend.
-func loadMuxBwPolicyEngine(raw string, logger func(string, ...interface{})) (policy.Engine, error) {
+func loadMuxBwPolicyEngine(raw string, logger func(string, ...any)) (policy.Engine, error) {
 	prov := policy.NopProvider()
 	if name, ok := strings.CutPrefix(raw, "preset:"); ok {
 		if wasmpresets.Has(name) {
@@ -152,9 +153,7 @@ func (c *muxBwController) routingContext() policy.RoutingContext {
 	// flag wins over the handler-derived mux_routes / min_hops entries. Nil map
 	// (the baseline / no --override) is a no-op, so every preset keeps its
 	// built-in defaults.
-	for k, v := range c.cfg.CliOverrides {
-		overrides[k] = v
-	}
+	maps.Copy(overrides, c.cfg.CliOverrides)
 	return policy.RoutingContext{
 		App:          c.cfg.PolicyApp,
 		PeerPK:       c.cfg.TargetPK.Hex(),
@@ -173,13 +172,7 @@ func (c *muxBwController) decideAtDial(ctx context.Context) {
 		c.s.log.Debugf("policy-bw: decide_route failed (%v); keeping operator flags", err)
 		return
 	}
-	mux := spec.Mux
-	if spec.ForwardMux > mux {
-		mux = spec.ForwardMux
-	}
-	if spec.ReverseMux > mux {
-		mux = spec.ReverseMux
-	}
+	mux := max(spec.ReverseMux, max(spec.ForwardMux, spec.Mux))
 	if mux > 0 {
 		c.cfg.Routes = mux
 	}

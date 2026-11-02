@@ -41,7 +41,7 @@ func TestDeliverCountSurvivesRingOverflow(t *testing.T) {
 	in := newGroupInbox(2)
 	pk, _ := cipher.GenerateKeyPair()
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: time.Now().UTC()})
 	}
 	if got := in.deliverCount.Load(); got != 5 {
@@ -63,7 +63,7 @@ func TestDeliverCountSurvivesSubDrop(t *testing.T) {
 	defer in.unsubscribe(sub)
 
 	pk, _ := cipher.GenerateKeyPair()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		in.deliver("g", pk, skychatgroup.Message{Text: "x", TS: time.Now().UTC()})
 	}
 

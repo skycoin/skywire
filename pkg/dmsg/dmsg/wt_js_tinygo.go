@@ -63,14 +63,14 @@ func awaitJS(p js.Value) (js.Value, error) {
 	ch := make(chan struct{})
 	var res js.Value
 	var rejErr error
-	onOK := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onOK := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
 			res = args[0]
 		}
 		close(ch)
 		return nil
 	})
-	onErr := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onErr := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		msg := "promise rejected"
 		if len(args) > 0 {
 			msg = jsReason(args[0])

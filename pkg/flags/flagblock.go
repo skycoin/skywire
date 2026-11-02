@@ -241,7 +241,7 @@ func writeRow(b *strings.Builder, r row, descCol, descWidth int) {
 // a URL or a path, and breaking those makes them unusable.
 func wrapWords(s string, width int) []string {
 	var out []string
-	for _, para := range strings.Split(s, "\n") {
+	for para := range strings.SplitSeq(s, "\n") {
 		words := strings.Fields(para)
 		if len(words) == 0 {
 			continue
@@ -335,7 +335,7 @@ func longestWord(rows []row) int {
 	n := 0
 	for _, r := range rows {
 		for _, s := range append([]string{r.usage}, r.extras...) {
-			for _, w := range strings.Fields(s) {
+			for w := range strings.FieldsSeq(s) {
 				n = max(n, len(w))
 			}
 		}

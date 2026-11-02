@@ -58,11 +58,11 @@ func TestMakeMap(t *testing.T) {
 			okayR.On("ReserveKeys", mock.Anything).Return([]routing.RouteID{}, nil)
 
 			// Arrange: serve router gateways (via single mock router)
-			for i := 0; i < successes; i++ {
+			for range successes {
 				addr := serveRouterRPC(t, okayR)
 				dialer.Add(addr, nil)
 			}
-			for i := 0; i < fails; i++ {
+			for range fails {
 				addr := serveRouterRPC(t, okayR)
 				duration := time.Second
 				dialer.Add(addr, &duration)

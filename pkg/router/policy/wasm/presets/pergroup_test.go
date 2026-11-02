@@ -38,7 +38,7 @@ func TestTickPerRouteGroup_Wazero(t *testing.T) {
 	// per group it swaps the primary out after adaptHysteresis ticks. Group B:
 	// healthy. Under one shared Engine, B's ticks reset A's bad-primary streak
 	// and the swap never comes.
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		steps = append(steps, step{ctxA, pair("a0", 3000, "a1", 40)}, step{ctxB, pair("b0", 40, "b1", 45)})
 	}
 

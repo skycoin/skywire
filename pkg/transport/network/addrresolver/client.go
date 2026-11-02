@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -499,7 +500,7 @@ func (c *httpClient) Get(ctx context.Context, path string) (*http.Response, erro
 }
 
 // Post performs a POST request.
-func (c *httpClient) Post(ctx context.Context, path string, payload interface{}) (*http.Response, error) {
+func (c *httpClient) Post(ctx context.Context, path string, payload any) (*http.Response, error) {
 	<-c.ready
 
 	body := bytes.NewBuffer(nil)
@@ -671,13 +672,7 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 		if host, _, err := net.SplitHostPort(publicIP); err == nil {
 			publicIP = host
 		}
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}
@@ -743,13 +738,7 @@ func (c *httpClient) BindWT(ctx context.Context, port, certHash, nextCertHash st
 		if host, _, err := net.SplitHostPort(publicIP); err == nil {
 			publicIP = host
 		}
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}
@@ -823,13 +812,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 			publicIP = host
 		}
 		// Add public IP if not already in the list
-		found := false
-		for _, addr := range addresses {
-			if addr == publicIP {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(addresses, publicIP)
 		if !found {
 			addresses = append(addresses, publicIP)
 		}

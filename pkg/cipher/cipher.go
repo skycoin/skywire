@@ -336,7 +336,7 @@ func (p PubKeys) String() string {
 // Set implements pflag.Value for PubKeys.
 func (p *PubKeys) Set(list string) error {
 	*p = PubKeys{}
-	for _, s := range strings.Split(list, ",") {
+	for s := range strings.SplitSeq(list, ",") {
 		var pk PubKey
 		if err := pk.Set(strings.TrimSpace(s)); err != nil {
 			return err

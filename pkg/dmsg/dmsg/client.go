@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand/v2"
 	"net"
@@ -1153,12 +1154,7 @@ func (ce *Client) serveWait() {
 }
 
 func hasPK(pks []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, oldPK := range pks {
-		if oldPK == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(pks, pk)
 }
 
 // Per-destination dial-failure backoff bounds (see Client.dialFail).
@@ -1839,13 +1835,11 @@ func (ce *Client) reapOrphanPorts() {
 	// Snapshot the live session set.
 	live := make(map[cipher.PubKey]*SessionCommon)
 	ce.sessionsMx.Lock()
-	for pk, sc := range ce.sessions {
-		live[pk] = sc
-	}
+	maps.Copy(live, ce.sessions)
 	ce.sessionsMx.Unlock()
 
 	var toFree []*Stream
-	ce.porter.RangePortValues(func(_ uint16, v interface{}) bool {
+	ce.porter.RangePortValues(func(_ uint16, v any) bool {
 		s, ok := v.(*Stream)
 		if !ok || s == nil || s.ses == nil || s.ses.SessionCommon == nil {
 			return true

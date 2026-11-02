@@ -39,6 +39,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -126,9 +127,7 @@ func (l *shapeLedger) read(key shapeSession) (map[string]uint64, *MuxShapeMove) 
 		return nil, nil
 	}
 	counts := make(map[string]uint64, len(e.counts))
-	for k, v := range e.counts {
-		counts[k] = v
-	}
+	maps.Copy(counts, e.counts)
 	last := e.last
 	return counts, &last
 }

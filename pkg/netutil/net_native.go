@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/wlynxg/anet"
@@ -111,10 +112,8 @@ func HasPublicIP() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for _, IP := range localIPs {
-		if IsPublicIP(IP) {
-			return true, nil
-		}
+	if slices.ContainsFunc(localIPs, IsPublicIP) {
+		return true, nil
 	}
 	return false, nil
 }

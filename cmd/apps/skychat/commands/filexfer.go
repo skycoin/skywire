@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -482,12 +483,7 @@ func isGroupMember(groupID string, pk cipher.PubKey) bool {
 	if cxoGroupSess == nil || groupID == "" || groupID != cxoGroup {
 		return false
 	}
-	for _, p := range cxoGroupSess.PeerPKs() {
-		if p == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(cxoGroupSess.PeerPKs(), pk)
 }
 
 // isChannelGroup reports whether groupID is a broadcast channel.

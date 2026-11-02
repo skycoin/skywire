@@ -8,6 +8,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -272,11 +273,11 @@ func singlePathReserveCount(hops []routing.Hop) map[cipher.PubKey]uint8 {
 // e.g. reverse path [C->B, B->A] becomes [A->B, B->C].
 func reverseHopsFromSource(hops []routing.Hop) []routing.Hop {
 	out := make([]routing.Hop, 0, len(hops))
-	for i := len(hops) - 1; i >= 0; i-- {
+	for _, hop := range slices.Backward(hops) {
 		out = append(out, routing.Hop{
-			From: hops[i].To,
-			To:   hops[i].From,
-			TpID: hops[i].TpID,
+			From: hop.To,
+			To:   hop.From,
+			TpID: hop.TpID,
 		})
 	}
 	return out
@@ -313,15 +314,15 @@ func buildReserveWithCounts(cb *CascadeBuilder, hops []routing.Hop, counts map[c
 
 	// Build nested from last to first.
 	var innerPayload []byte
-	for i := len(targets) - 1; i >= 0; i-- {
+	for i, target := range slices.Backward(targets) {
 		nonce++
-		reserveN := counts[targets[i].pk]
+		reserveN := counts[target.pk]
 		if reserveN == 0 {
 			reserveN = 1
 		}
 
 		var relayID [16]byte
-		copy(relayID[:], targets[i].relayTpID[:])
+		copy(relayID[:], target.relayTpID[:])
 
 		msg := &routing.CascadeSetup{
 			Phase:     routing.CascadePhaseReserve,
@@ -333,7 +334,7 @@ func buildReserveWithCounts(cb *CascadeBuilder, hops []routing.Hop, counts map[c
 		}
 		copy(msg.RelayTpID[:], relayID[:])
 
-		if err := msg.Sign(targets[i].pk, cb.rsnSK); err != nil {
+		if err := msg.Sign(target.pk, cb.rsnSK); err != nil {
 			return 0, nil, fmt.Errorf("sign hop %d: %w", i, err)
 		}
 		data, err := msg.Marshal()
@@ -452,8 +453,8 @@ func collectRulesPerPK(fwdRules, revRules, interRules RulesMap, initEdge, respEd
 // cascadePKFromAddr extracts the PK from a "pk:port" address string.
 func cascadePKFromAddr(addr string) cipher.PubKey {
 	pkStr := addr
-	if idx := strings.Index(addr, ":"); idx >= 0 {
-		pkStr = addr[:idx]
+	if before, _, ok := strings.Cut(addr, ":"); ok {
+		pkStr = before
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(pkStr); err != nil {

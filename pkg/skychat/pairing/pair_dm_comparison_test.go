@@ -124,7 +124,7 @@ func newDMRig(t *testing.T) *dmRig {
 
 	connectWithRetry := func(p *Pair) error {
 		var lastErr error
-		for attempt := 0; attempt < 10; attempt++ {
+		for attempt := range 10 {
 			if err := p.Connect(context.Background()); err == nil {
 				return nil
 			} else {
@@ -170,7 +170,7 @@ func TestPairDM_MultiMessageAtLeastOnceDelivery(t *testing.T) {
 
 	const N = 10
 	sent := make(map[string]bool, N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		body := "msg-" + strconv.Itoa(i)
 		require.NoError(t, rig.pairA.Send(body))
 		sent[body] = true
@@ -220,13 +220,13 @@ func TestPairDM_BidiConcurrent(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		for i := 0; i < N; i++ {
+		for i := range N {
 			_ = rig.pairA.Send(fmt.Sprintf("A-%d", i)) //nolint:errcheck
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < N; i++ {
+		for i := range N {
 			_ = rig.pairB.Send(fmt.Sprintf("B-%d", i)) //nolint:errcheck
 		}
 	}()

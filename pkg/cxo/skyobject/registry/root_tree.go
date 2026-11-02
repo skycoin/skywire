@@ -195,7 +195,7 @@ func rootTreeReferences(
 	return it
 }
 
-func rootTreeValue(sch Schema, val interface{}) (it gotree.Tree) {
+func rootTreeValue(sch Schema, val any) (it gotree.Tree) {
 
 	var name string
 

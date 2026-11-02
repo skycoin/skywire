@@ -94,7 +94,7 @@ func TestSelectOTIAS_FansOut(t *testing.T) {
 
 	counts := map[int]int{}
 	payload := make([]byte, 1400)
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		counts[ts.SelectForPayload(payload)]++
 	}
 	assert.Greater(t, counts[0], 0, "fast leg carries the head of the stream")

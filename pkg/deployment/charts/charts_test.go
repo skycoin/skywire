@@ -16,7 +16,7 @@ func TestStoreRollsUpHours(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemoryStore()
 	base := time.Date(2026, 10, 6, 10, 0, 0, 0, time.UTC)
-	for i := 0; i < 24; i++ {
+	for i := range 24 {
 		at := base.Add(time.Duration(i) * Interval)
 		require.NoError(t, st.Add(ctx, Sample{At: at, V: map[string]float64{"a": float64(i)}}))
 	}
@@ -65,7 +65,7 @@ func TestFrameBreaksOnGaps(t *testing.T) {
 func TestPageServesOnlyRoot(t *testing.T) {
 	base := time.Now().UTC().Add(-time.Hour)
 	st := NewMemoryStore()
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		require.NoError(t, st.Add(context.Background(), Sample{At: base.Add(time.Duration(i) * Interval), V: map[string]float64{"x": float64(i)}}))
 	}
 	p := &Page{Title: "Test <service>", Build: func(ctx context.Context, r Range, now time.Time) (Content, error) {

@@ -120,8 +120,8 @@ func NewMockRPCClient(r *rand.Rand, maxTps int, maxRules int) (cipher.PubKey, AP
 			BuildInfo:       buildinfo.Get(),
 			AppProtoVersion: SupportedProtocolVersion,
 			Apps: []*appserver.AppState{
-				{AppConfig: appserver.AppConfig{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10}},
-				{AppConfig: appserver.AppConfig{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20}},
+				{Name: "foo.v1.0", Binary: "foo.v1.0", AutoStart: false, Port: 10},
+				{Name: "bar.v2.0", Binary: "bar.v2.0", AutoStart: false, Port: 20},
 			},
 			Transports:  tps,
 			RoutesCount: rt.Count(),

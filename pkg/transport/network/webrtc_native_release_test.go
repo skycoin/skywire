@@ -100,7 +100,7 @@ func TestDCConnReleaseIsIdempotent(t *testing.T) {
 	conn := newDCConn(nopRWC{}, pc, signal)
 
 	conn.fail(errors.New("boom"))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := conn.Close(); err != nil {
 			t.Fatalf("Close #%d: %v", i, err)
 		}

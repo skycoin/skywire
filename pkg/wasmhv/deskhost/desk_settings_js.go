@@ -30,7 +30,7 @@ func registerSettingsApp() {
 		Help:  "this tab's skywire.conf: what every reload generates the visor's config from",
 		Width: 820, Height: 600,
 		Open: func(_ []string) (desk.Pane, error) {
-			return &settingsPane{visorRPC: visorRPC{timeout: 30 * time.Second}}, nil
+			return &settingsPane{timeout: 30 * time.Second}, nil
 		},
 	})
 }

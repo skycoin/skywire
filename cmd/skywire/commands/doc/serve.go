@@ -128,8 +128,8 @@ func docHandler(root *cobra.Command) http.Handler {
 			return
 		}
 		// A directory: list it. See proseDirIndex.
-		if strings.HasSuffix(name, "/") {
-			if idx := proseDirIndex(strings.TrimSuffix(name, "/")); idx != nil {
+		if before, ok := strings.CutSuffix(name, "/"); ok {
+			if idx := proseDirIndex(before); idx != nil {
 				writeHTML(w, r.URL.Path, name, idx)
 				return
 			}
@@ -194,8 +194,8 @@ func proseTitle(fsys fs.FS, p string) string {
 	sc := bufio.NewScanner(io.LimitReader(f, 8<<10))
 	for n := 0; sc.Scan() && n < 40; n++ {
 		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "# ") {
-			t := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		if after, ok := strings.CutPrefix(line, "# "); ok {
+			t := strings.TrimSpace(after)
 			if t != "" {
 				return t
 			}

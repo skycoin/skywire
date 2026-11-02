@@ -64,12 +64,7 @@ type Contact struct {
 
 // HasKey reports whether pk is one of the contact's keys.
 func (c Contact) HasKey(pk cipher.PubKey) bool {
-	for _, k := range c.Keys {
-		if k == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Keys, pk)
 }
 
 // card is the contact as a vCard 4.0.
@@ -129,7 +124,7 @@ func fromCard(card vcard.Card) (Contact, error) {
 		c.Payments = append(c.Payments, p)
 	}
 	for _, v := range card.Values(vcard.FieldCategories) {
-		for _, g := range strings.Split(v, ",") {
+		for g := range strings.SplitSeq(v, ",") {
 			if g = strings.TrimSpace(g); g != "" {
 				c.Groups = append(c.Groups, g)
 			}

@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -288,9 +289,7 @@ func (v *Visor) asyncRegister(ctx context.Context, log *logging.Logger, now time
 		if len(ok) > 0 {
 			var lost map[cipher.PubKey]string
 			ok, lost = register(rec, ok)
-			for h, e := range lost {
-				failed[h] = e
-			}
+			maps.Copy(failed, lost)
 		}
 	}
 

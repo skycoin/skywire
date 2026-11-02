@@ -34,7 +34,7 @@ func TestEnginesIsolateRouteGroups(t *testing.T) {
 func TestEnginesDropIdleGroups(t *testing.T) {
 	var s Engines
 	s.For("gone")
-	for i := 0; i < engineIdleCalls+512; i++ {
+	for range engineIdleCalls + 512 {
 		s.For("live")
 	}
 	if _, ok := s.byGroup["gone"]; ok {

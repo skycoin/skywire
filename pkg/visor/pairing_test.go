@@ -44,7 +44,7 @@ func TestPairInboxRingEvictsOldest(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 
 	base := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		inbox.deliver(pk, pairing.Message{
 			Text: "msg",
 			TS:   base.Add(time.Duration(i) * time.Second),

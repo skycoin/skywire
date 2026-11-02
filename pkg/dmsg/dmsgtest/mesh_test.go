@@ -142,7 +142,7 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 
 	// Retry cross-server dial — peer mesh connection may still be establishing.
 	var stream1 *dmsg.Stream
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		stream1, err = client1.DialStream(ctx, dmsg.Addr{PK: pk2, Port: port})
 		if err == nil {
 			break

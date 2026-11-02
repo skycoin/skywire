@@ -388,10 +388,10 @@ func (c *Container) Close() (err error) {
 
 }
 
-func fatal(args ...interface{}) {
+func fatal(args ...any) {
 	log.Fatalln(args...)
 }
 
-func fatalf(format string, args ...interface{}) { //nolint:unused
+func fatalf(format string, args ...any) { //nolint:unused
 	log.Fatalf(format, args...)
 }

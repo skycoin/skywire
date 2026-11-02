@@ -123,7 +123,7 @@ func TestRetireTunnel_IsOnceOnly(t *testing.T) {
 	defer cleanup()
 
 	require.True(t, c.retireTunnel(s[0], "first sighting"))
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		require.False(t, c.retireTunnel(s[0], "same tunnel, later tick"))
 	}
 	require.True(t, c.IsStandby(s[1]), "exactly one standby was spent")
@@ -359,7 +359,7 @@ func TestRetireTunnel_PoolFillWaitsOneProbeInterval(t *testing.T) {
 			require.True(t, armed, "the death still arms the fill; only the dial waits")
 			require.Equal(t, tc.probe > 0, !retryAt.IsZero(), "the wait is the existing poolRetryAt gate")
 
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				c.maybePoolFill()
 				waitFill(t, c)
 			}

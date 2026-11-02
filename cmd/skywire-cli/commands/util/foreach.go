@@ -301,7 +301,7 @@ func runOne(parent context.Context, target string, idx int, template string) for
 // skipped. Whitespace around each token is trimmed.
 func expandTargets(spec string) ([]string, error) {
 	out := make([]string, 0, 8)
-	for _, raw := range strings.Split(spec, ",") {
+	for raw := range strings.SplitSeq(spec, ",") {
 		tok := strings.TrimSpace(raw)
 		if tok == "" {
 			continue
@@ -316,7 +316,7 @@ func expandTargets(spec string) ([]string, error) {
 			if rerr != nil {
 				return nil, fmt.Errorf("foreach: read %q: %w", tok[1:], rerr)
 			}
-			for _, line := range strings.Split(string(body), "\n") {
+			for line := range strings.SplitSeq(string(body), "\n") {
 				l := strings.TrimSpace(line)
 				if l == "" || strings.HasPrefix(l, "#") {
 					continue

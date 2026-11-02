@@ -114,7 +114,7 @@ func TestApplyTelemetryBatchMatchesSingleRows(t *testing.T) {
 	}
 	types := []string{"stcpr", "sudph", ""}
 	var rounds [][]TelemetryUpdate
-	for r := 0; r < 4; r++ {
+	for r := range 4 {
 		var batch []TelemetryUpdate
 		for i, id := range ids {
 			u := TelemetryUpdate{ID: id, Reporter: reporters[i%3], Type: types[i%3],

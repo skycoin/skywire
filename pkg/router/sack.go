@@ -159,13 +159,10 @@ func (st *sackTracker) GenerateSACK() (lastContiguous uint32, words []uint64) {
 		return lastContiguous, nil
 	}
 	span := st.highest - lastContiguous // number of sequences above the contiguous point
-	nWords := int((span + 63) / 64)
-	if nWords > sackMaxWords {
-		nWords = sackMaxWords
-	}
+	nWords := min(int((span+63)/64), sackMaxWords)
 	words = make([]uint64, nWords)
-	for w := 0; w < nWords; w++ {
-		for i := uint32(0); i < 64; i++ {
+	for w := range nWords {
+		for i := range uint32(64) {
 			seq := lastContiguous + 1 + uint32(w)*64 + i
 			if st.received[seq] {
 				words[w] |= 1 << i
@@ -468,7 +465,7 @@ func (rb *retxBuffer) ProcessSACKWith(lastContiguous uint32, words []uint64, thr
 	now := time.Now()
 	for w, word := range words {
 		base := lastContiguous + 1 + uint32(w)*64
-		for i := uint32(0); i < 64; i++ {
+		for i := range uint32(64) {
 			checkSeq := base + i
 			if word&(1<<i) != 0 {
 				if e, ok := rb.entries[checkSeq]; ok {

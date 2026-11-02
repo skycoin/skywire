@@ -580,10 +580,7 @@ func agoOrDash(t *time.Time) string {
 	if t == nil || t.IsZero() {
 		return "-"
 	}
-	d := time.Since(*t)
-	if d < 0 {
-		d = 0
-	}
+	d := max(time.Since(*t), 0)
 	return compactDuration(int64(d.Seconds())) + " ago"
 }
 

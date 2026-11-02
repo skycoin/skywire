@@ -29,7 +29,7 @@ func liveOpsClient(t *testing.T, standbys int) *Client {
 		recvStamp: map[*yamux.Session]*tunnelMeter{active: {rttMs: 50, port: 49170}},
 		standby:   map[*yamux.Session]bool{},
 	}
-	for i := 0; i < standbys; i++ {
+	for i := range standbys {
 		s, closeS := newTestSession(t)
 		t.Cleanup(closeS)
 		c.sessions = append(c.sessions, s)

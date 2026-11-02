@@ -25,7 +25,7 @@ func (env *EnvConfig) AddVisorExplicitly(visor VisorConfig) *EnvConfig {
 	return env
 }
 
-func _cmd(tmplt string, args interface{}) string {
+func _cmd(tmplt string, args any) string {
 	t, err := template.New("Cmd").Parse(tmplt)
 	if err != nil {
 		log.Fatalf("error %v parsing template: %v\n", err, tmplt)

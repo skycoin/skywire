@@ -274,10 +274,10 @@ const markerHeaderLine = MarkerHeader + ": 1\r\n"
 // over whatever was supplied.
 func IsSyntheticResponse(raw []byte) bool {
 	head := raw
-	if i := bytes.Index(raw, []byte("\r\n\r\n")); i >= 0 {
-		head = raw[:i]
+	if before, _, ok := bytes.Cut(raw, []byte("\r\n\r\n")); ok {
+		head = before
 	}
-	for _, line := range bytes.Split(head, []byte("\r\n")) {
+	for line := range bytes.SplitSeq(head, []byte("\r\n")) {
 		name, _, ok := bytes.Cut(line, []byte(":"))
 		if ok && strings.EqualFold(strings.TrimSpace(string(name)), MarkerHeader) {
 			return true

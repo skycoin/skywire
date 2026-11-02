@@ -309,7 +309,7 @@ func openUDPRelay(stream net.Conn) error {
 // udpRelayOpenTimeout bounds the exit's answer to a relay preamble.
 const udpRelayOpenTimeout = 30 * time.Second
 
-func (c *Client) udpDebugf(format string, args ...interface{}) {
+func (c *Client) udpDebugf(format string, args ...any) {
 	if c.appCl != nil {
 		c.appCl.Log().Debugf(format, args...)
 	}
@@ -409,7 +409,7 @@ func serveUDPRelay(stream net.Conn, appCl *app.Client) {
 	<-done
 }
 
-func exitDebugf(appCl *app.Client, format string, args ...interface{}) {
+func exitDebugf(appCl *app.Client, format string, args ...any) {
 	if appCl != nil {
 		appCl.Log().Debugf(format, args...)
 	}

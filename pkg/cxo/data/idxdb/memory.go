@@ -124,7 +124,7 @@ func (f *memoryFeeds) Iterate(iterateFunc data.IterateFeedsFunc) (err error) {
 		pks = append(pks, pk)
 	}
 	sort.Slice(pks, func(i, j int) bool {
-		for k := 0; k < len(pks[i]); k++ {
+		for k := range len(pks[i]) {
 			if pks[i][k] != pks[j][k] {
 				return pks[i][k] < pks[j][k]
 			}

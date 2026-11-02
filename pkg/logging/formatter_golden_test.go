@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -59,9 +60,7 @@ func goldenEntry(level logrus.Level, msg string, data logrus.Fields) *logrus.Ent
 
 func moduleFields(module string, extra logrus.Fields) logrus.Fields {
 	d := logrus.Fields{logModuleKey: module}
-	for k, v := range extra {
-		d[k] = v
-	}
+	maps.Copy(d, extra)
 	return d
 }
 

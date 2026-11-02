@@ -38,7 +38,7 @@ func TestNoPackageLinksSkycoinsCipherWasm(t *testing.T) {
 	}
 
 	deps := make(map[string]bool)
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		deps[strings.TrimSpace(line)] = true
 	}
 

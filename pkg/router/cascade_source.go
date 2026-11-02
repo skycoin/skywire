@@ -126,7 +126,7 @@ func runSourceCascade(
 }
 
 // rpcCall performs a context-aware net/rpc call.
-func rpcCall(ctx context.Context, rpcC *rpc.Client, serviceMethod string, args, reply interface{}) error {
+func rpcCall(ctx context.Context, rpcC *rpc.Client, serviceMethod string, args, reply any) error {
 	call := rpcC.Go(serviceMethod, args, reply, nil)
 	select {
 	case <-ctx.Done():

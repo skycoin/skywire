@@ -9,7 +9,7 @@ import (
 )
 
 // WriteJSONWithTimeout marshals `data` and sends it over the `conn` with the specified write `timeout`.
-func WriteJSONWithTimeout(conn net.Conn, data interface{}, timeout time.Duration) error {
+func WriteJSONWithTimeout(conn net.Conn, data any, timeout time.Duration) error {
 	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return fmt.Errorf("failed to set write deadline: %w", err)
 	}
@@ -26,7 +26,7 @@ func WriteJSONWithTimeout(conn net.Conn, data interface{}, timeout time.Duration
 }
 
 // WriteJSON marshals `data` and sends it over the `conn`.
-func WriteJSON(conn net.Conn, data interface{}) error {
+func WriteJSON(conn net.Conn, data any) error {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("error marshaling data: %w", err)
@@ -46,7 +46,7 @@ func WriteJSON(conn net.Conn, data interface{}) error {
 
 // ReadJSONWithTimeout reads portion of data from the `conn` and unmarshals it into `data` with the
 // specified read `timeout`.
-func ReadJSONWithTimeout(conn net.Conn, data interface{}, timeout time.Duration) error {
+func ReadJSONWithTimeout(conn net.Conn, data any, timeout time.Duration) error {
 	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return fmt.Errorf("failed to set read deadline: %w", err)
 	}
@@ -63,7 +63,7 @@ func ReadJSONWithTimeout(conn net.Conn, data interface{}, timeout time.Duration)
 }
 
 // ReadJSON reads portion of data from the `conn` and unmarshals it into `data`.
-func ReadJSON(conn net.Conn, data interface{}) error {
+func ReadJSON(conn net.Conn, data any) error {
 	const bufSize = 1024
 
 	var dataBytes []byte

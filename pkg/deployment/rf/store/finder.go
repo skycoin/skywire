@@ -152,13 +152,7 @@ func (g *Graph) computeRouteWeighted(ctx context.Context, source, destination ci
 	// Pool larger than `number` so a lower-latency path that BFS emits a little
 	// later (e.g. one more hop, but faster edges) can still win — bounded so
 	// dense graphs don't blow up the sort.
-	poolCap := number * 32
-	if poolCap < 128 {
-		poolCap = 128
-	}
-	if poolCap > 2048 {
-		poolCap = 2048
-	}
+	poolCap := min(max(number*32, 128), 2048)
 
 	type scored struct {
 		route   routing.Route

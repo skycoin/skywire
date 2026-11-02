@@ -67,7 +67,7 @@ func newGroupEnvN(t *testing.T, n int) []*groupNode {
 	t.Cleanup(env.Shutdown)
 
 	nodes := make([]*groupNode, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tag := string(rune('A' + i))
 		pk, sk := cipher.GenerateKeyPair()
 		c, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
@@ -385,7 +385,7 @@ func TestManagerIntegration_SubmitToOwnerRelay(t *testing.T) {
 	// The owner's relay listener binds during openOwner; give dmsg a moment.
 	const viaRelay = "submitted through the owner relay"
 	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := range 10 {
 		lastErr = sess.SubmitToOwner(ctx, viaRelay)
 		// ErrRelayNoAck means the bytes landed but the ack didn't come back —
 		// still a successful submit as far as the owner's feed is concerned.

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -737,12 +738,7 @@ type dmsgServer struct {
 }
 
 func contains(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, str)
 }
 
 type httpError struct {
@@ -978,9 +974,9 @@ func stripCSVHeader(filePath string, log *logging.Logger) {
 	content := string(data)
 	if strings.HasPrefix(content, "tp_id,recv,sent,time_stamp") {
 		// Find the first newline and remove everything before it
-		idx := strings.Index(content, "\n")
-		if idx != -1 {
-			newContent := content[idx+1:]
+		_, after, ok := strings.Cut(content, "\n")
+		if ok {
+			newContent := after
 			if err := os.WriteFile(filePath, []byte(newContent), 0600); err == nil { //nolint:gosec
 				log.Debugf("Stripped CSV header from %s", filePath)
 			}

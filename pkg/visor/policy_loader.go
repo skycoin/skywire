@@ -24,7 +24,7 @@ import (
 // (used as the prefix in v.pushCloseStack).
 type policyEngine struct {
 	engine policy.Engine
-	watch  func(logger func(string, ...interface{})) error
+	watch  func(logger func(string, ...any)) error
 	tag    string // "router.policy" or "router.policy.wasm"
 }
 
@@ -32,7 +32,7 @@ type policyEngine struct {
 // or WASM Loader by file extension. Returns nil + nil on
 // empty/none (caller treats as "no policy"). Errors propagate
 // from the underlying NewLoader.
-func loadPolicyEngine(raw string, provider policy.Provider, logger func(string, ...interface{})) (*policyEngine, error) {
+func loadPolicyEngine(raw string, provider policy.Provider, logger func(string, ...any)) (*policyEngine, error) {
 	if raw == "" || raw == "none" {
 		return nil, nil
 	}

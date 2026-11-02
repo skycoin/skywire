@@ -32,7 +32,7 @@ func TestBuildMergesPairs(t *testing.T) {
 
 func TestWarmStartKeepsThePicture(t *testing.T) {
 	var links []Link
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		links = append(links, Link{A: string(rune('A' + i%20)), B: string(rune('a' + i%13)), Type: "stcpr"})
 	}
 	g := Build(links, nil, nil)

@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -597,12 +598,8 @@ func baseKnobs(cfg benchCfg) map[string]int64 {
 
 func withKnobs(base map[string]int64, extra map[string]int64) map[string]int64 {
 	out := make(map[string]int64, len(base)+len(extra))
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range extra {
-		out[k] = v
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, extra)
 	return out
 }
 
@@ -625,9 +622,9 @@ func TestStreamBench(t *testing.T) {
 	build := func(t *testing.T, n, legsPer, standby int, direct bool) ([]*tunnel, []*tunnel, *proxy) {
 		t.Helper()
 		var active, pool []*tunnel
-		for i := 0; i < n; i++ {
+		for i := range n {
 			legs := make([]router.EmuLegSpec, 0, legsPer)
-			for j := 0; j < legsPer; j++ {
+			for j := range legsPer {
 				if direct {
 					legs = append(legs, cfg.directLeg(nextSeed()))
 				} else {
@@ -637,7 +634,7 @@ func TestStreamBench(t *testing.T) {
 			active = append(active, newTunnel(t, fmt.Sprintf("tun%d", i), legs))
 			active[len(active)-1].rig.SetRole("active")
 		}
-		for i := 0; i < standby; i++ {
+		for i := range standby {
 			pool = append(pool, newTunnel(t, fmt.Sprintf("pool%d", i),
 				[]router.EmuLegSpec{cfg.hopLeg(fmt.Sprintf("p%d", i), i, nextSeed())}))
 			pool[len(pool)-1].rig.SetRole("standby")
@@ -963,7 +960,7 @@ func TestStreamBench(t *testing.T) {
 		var wg sync.WaitGroup
 		out := make([]xfer, 2)
 		start := time.Now()
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()

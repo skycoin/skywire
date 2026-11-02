@@ -157,7 +157,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// direction filtering is active, non-matching legs are skipped here too.
 	n := uint32(len(tps)) //nolint:gosec
 	start := m.tpIndex.Add(1) - 1
-	for i := uint32(0); i < n; i++ {
+	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
 		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
@@ -177,7 +177,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// guarantees no gap. legSelectableIgnoringStandby is legReadyAt WITHOUT the
 	// standby exclusion (a parked leg that was active is ready), so it never
 	// picks a leg the peer has not confirmed.
-	for i := uint32(0); i < n; i++ {
+	for i := range n {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
 		if tp != nil && !tp.IsClosed() && m.legSelectableIgnoringStandby(idx) {

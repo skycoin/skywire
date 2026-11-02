@@ -185,8 +185,8 @@ func Snapshots() []string {
 		return nil
 	}
 	var out []string
-	for i := len(entries) - 1; i >= 0; i-- {
-		n := entries[i].Name()
+	for _, entrie := range slices.Backward(entries) {
+		n := entrie.Name()
 		if strings.HasPrefix(n, "flightrec-") && strings.HasSuffix(n, ".trace") {
 			out = append(out, filepath.Join(d, n))
 		}

@@ -60,7 +60,7 @@ func TestBridge_MultipleClients(t *testing.T) {
 	require.NoError(t, err)
 	defer b.Close() //nolint:errcheck
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		cli, err := rpc.Dial("tcp", b.Addr())
 		require.NoError(t, err)
 		var reply string

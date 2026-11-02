@@ -17,6 +17,7 @@ package router
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -152,24 +153,18 @@ func (r *router) siblingHoldsFirstHop(rPK cipher.PubKey, rPort routing.Port, hol
 	if count == 0 {
 		return false
 	}
-	for _, id := range ids {
-		if id == hold.tpID {
-			return true
-		}
+	if slices.Contains(ids, hold.tpID) {
+		return true
 	}
 	var zero cipher.PubKey
 	if hold.peer != zero {
-		for _, peer := range peers {
-			if peer == hold.peer {
-				return true
-			}
+		if slices.Contains(peers, hold.peer) {
+			return true
 		}
 	}
 	if hold.ip != "" {
-		for _, ip := range ips {
-			if ip == hold.ip {
-				return true
-			}
+		if slices.Contains(ips, hold.ip) {
+			return true
 		}
 	}
 	return false

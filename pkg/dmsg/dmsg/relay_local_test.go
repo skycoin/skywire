@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -123,12 +124,7 @@ func TestAttachLocalRelay(t *testing.T) {
 	// The identity did NOT rotate: the acceptor sees the attaching client's
 	// own key, which is the entire point of attaching rather than proxying.
 	require.Eventually(t, func() bool {
-		for _, pk := range relay.RelaySessions() {
-			if pk == attachedPK {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(relay.RelaySessions(), attachedPK)
 	}, 10*time.Second, 50*time.Millisecond)
 }
 

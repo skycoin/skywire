@@ -143,7 +143,7 @@ func TestReconnectRecordFailure_BackoffSchedule(t *testing.T) {
 
 func TestReconnectState_IndependentBetweenGroups(t *testing.T) {
 	m := newStateTestManager(t, mustPK(t))
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.reconnectRecordFailure("group-a", errors.New("force-state"))
 	}
 	now := time.Now().UTC()
@@ -165,7 +165,7 @@ func TestReconnectState_SessionAndPeerSchedulesAreIndependent(t *testing.T) {
 	pk := mustPK(t)
 	now := time.Now().UTC()
 
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.reconnectRecordFailure(id, errors.New("session-level"))
 	}
 	if m.reconnectShouldAttempt(id, now) {
@@ -180,7 +180,7 @@ func TestReconnectState_SessionAndPeerSchedulesAreIndependent(t *testing.T) {
 
 	// And the reverse.
 	m2 := newStateTestManager(t, mustPK(t))
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m2.peerReconnectRecordFailure(id, pk, errors.New("peer-level"))
 	}
 	if m2.peerReconnectShouldAttempt(id, pk, now) {
@@ -201,7 +201,7 @@ func TestPeerReconnectFailures_Counts(t *testing.T) {
 	if got := m.peerReconnectFailures(id, a); got != 0 {
 		t.Errorf("untracked peer = %d, want 0", got)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		m.peerReconnectRecordFailure(id, a, errors.New("x"))
 	}
 	if got := m.peerReconnectFailures(id, a); got != 3 {
@@ -299,7 +299,7 @@ func TestHasWarmingPeer_DeadPeerStopsHoldingFastCadence(t *testing.T) {
 		t.Fatal("precondition: the peer should start out warming")
 	}
 
-	for i := uint32(0); i < reconnectBackoffFailures1-1; i++ {
+	for range uint32(reconnectBackoffFailures1 - 1) {
 		m.peerReconnectRecordFailure(id, peer, errors.New("unreachable"))
 	}
 	if !m.hasWarmingPeer() {
@@ -732,7 +732,7 @@ func TestDefaultPortAlloc_InRange(t *testing.T) {
 	// Must stay clear of the pairing range; a collision there would have two
 	// subsystems fighting over the same dmsg port.
 	seen := map[uint16]bool{}
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		p, err := defaultPortAlloc()
 		if err != nil {
 			t.Fatalf("defaultPortAlloc: %v", err)

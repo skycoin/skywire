@@ -13,7 +13,7 @@ type Types struct {
 }
 
 // SchemaName returns schema name of given object
-func (t *Types) SchemaName(obj interface{}) (name string, err error) {
+func (t *Types) SchemaName(obj any) (name string, err error) {
 	var ok bool
 	if name, ok = t.Inverse[typeOf(obj)]; ok {
 		return

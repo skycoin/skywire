@@ -157,8 +157,8 @@ func serveAt(h http.Handler, w http.ResponseWriter, r *http.Request, path string
 // docs/design/skycoin-web-multicoin-wallets.md.
 func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, rest string) {
 	idxStr, path := rest, ""
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		idxStr, path = rest[:i], rest[i+1:]
+	if before, after, ok0 := strings.Cut(rest, "/"); ok0 {
+		idxStr, path = before, after
 	}
 	idx, err := strconv.Atoi(idxStr)
 	if err != nil {

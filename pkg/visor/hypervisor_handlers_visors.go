@@ -552,7 +552,7 @@ func (r *bufferingResponseRecorder) Write(b []byte) (int, error) {
 	r.body = append(r.body, b...)
 	return len(b), nil
 }
-func (r *bufferingResponseRecorder) decode(v interface{}) error {
+func (r *bufferingResponseRecorder) decode(v any) error {
 	if len(r.body) == 0 {
 		return fmt.Errorf("empty body")
 	}

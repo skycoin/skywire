@@ -48,23 +48,21 @@ func newNode(t *testing.T, ctx context.Context, c *dmsg.Client) *node {
 	t.Helper()
 	n := &node{t: t, ctx: ctx, peers: &pkSet{}, hvs: &pkSet{}}
 	n.cfg = ServiceConfig{
-		Host: Host{
-			PK: c.LocalPK(),
-			Listen: func(network string) (net.Listener, error) {
-				if network != NetDmsg {
-					return nil, errors.New("no skynet here")
-				}
-				return c.Listen(Port)
-			},
-			Dialers: map[string]skymailbridge.Dialer{".dmsg": dmsgDialer{c}, ".skynet": noSkynet{}},
-			PeerPK: func(conn net.Conn) (cipher.PubKey, bool) {
-				a, ok := conn.RemoteAddr().(dmsg.Addr)
-				return a.PK, ok
-			},
-			Sealer: KeySealer(c.LocalSK()),
-			Peers:  func() ([]cipher.PubKey, []cipher.PubKey) { return n.peers.list(), n.hvs.list() },
-			Log:    logrus.New(),
+		PK: c.LocalPK(),
+		Listen: func(network string) (net.Listener, error) {
+			if network != NetDmsg {
+				return nil, errors.New("no skynet here")
+			}
+			return c.Listen(Port)
 		},
+		Dialers: map[string]skymailbridge.Dialer{".dmsg": dmsgDialer{c}, ".skynet": noSkynet{}},
+		PeerPK: func(conn net.Conn) (cipher.PubKey, bool) {
+			a, ok := conn.RemoteAddr().(dmsg.Addr)
+			return a.PK, ok
+		},
+		Sealer: KeySealer(c.LocalSK()),
+		Peers:  func() ([]cipher.PubKey, []cipher.PubKey) { return n.peers.list(), n.hvs.list() },
+		Log:    logrus.New(),
 		Dir:    t.TempDir(),
 		Outbox: true,
 	}

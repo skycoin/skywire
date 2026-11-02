@@ -318,7 +318,7 @@ func encodeXorAddress(ip string, port int, transID []byte) []byte {
 	// XOR port with first 2 bytes of transaction ID (which is the magic cookie high bytes).
 	binary.BigEndian.PutUint16(buf[2:4], uint16(port)^binary.BigEndian.Uint16(transID[0:2])) //nolint:gosec // port is always valid UDP port < 65535
 	// XOR address with first 4 bytes of transaction ID (magic cookie).
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		buf[4+i] = parsed[i] ^ transID[i]
 	}
 	return buf

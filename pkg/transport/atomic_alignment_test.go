@@ -24,7 +24,7 @@ import (
 	"testing"
 )
 
-func requireAtomicField(t *testing.T, v interface{}, field string) {
+func requireAtomicField(t *testing.T, v any, field string) {
 	t.Helper()
 	f, ok := reflect.TypeOf(v).FieldByName(field)
 	if !ok {

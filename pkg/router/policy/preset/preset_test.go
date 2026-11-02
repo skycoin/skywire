@@ -247,7 +247,7 @@ func TestEngine_OnTick_AdaptiveEvictsLowThroughputLeg(t *testing.T) {
 		return legs
 	}
 	evicted := false
-	for tick := 0; tick < 8; tick++ {
+	for tick := range 8 {
 		// Legs 1,2,3 carry a full share; leg 3 carries ~2% (low outlier).
 		recv[1] += 100000
 		recv[2] += 100000
@@ -287,7 +287,7 @@ func TestEngine_OnTick_AdaptiveSwapsBadPrimary(t *testing.T) {
 		}
 	}
 	swapped := false
-	for tick := 0; tick < 6; tick++ {
+	for range 6 {
 		act := e.OnTick("adaptive", mk())
 		for _, idx := range act.DropLegs {
 			if idx == 0 {
@@ -311,7 +311,7 @@ func TestEngine_OnTick_AdaptiveSwapsBadPrimary(t *testing.T) {
 		{Index: 2, TransportID: "b", Kind: "stcpr", LatencyMs: 110, Alive: true},
 		{Index: 3, TransportID: "c", Kind: "stcpr", LatencyMs: 90, Alive: true},
 	}
-	for tick := 0; tick < 6; tick++ {
+	for tick := range 6 {
 		act := e2.OnTick("adaptive", good)
 		for _, idx := range act.DropLegs {
 			if idx == 0 {
@@ -481,7 +481,7 @@ func TestEngine_OnTick_AdaptiveStandbyFloor(t *testing.T) {
 		}
 		return legs
 	}
-	for tick := 0; tick < 40; tick++ {
+	for tick := range 40 {
 		recv += 5_000_000 // heavy sustained load on every active leg
 		act := eng.OnTick("adaptive", build())
 		for range act.PromoteFromStandby {
@@ -613,7 +613,7 @@ func TestEngine_OnTick_AdaptiveEvictsGrossOutlier(t *testing.T) {
 	}
 	// Below the hysteresis threshold: no reshape yet (a single spike must not
 	// churn the active set).
-	for i := 0; i < adaptHysteresis-1; i++ {
+	for i := range adaptHysteresis - 1 {
 		if got := e.OnTick("adaptive", legs); !reflect.DeepEqual(got, RotationAction{}) {
 			t.Fatalf("tick %d: outlier below hysteresis must not reshape; got %+v", i, got)
 		}
@@ -663,7 +663,7 @@ func TestEngine_OnTick_AdaptiveStableUnderSteady(t *testing.T) {
 		return legs
 	}
 	reshapes, tail := 0, 0
-	for tick := 0; tick < 40; tick++ {
+	for range 40 {
 		recv += 5_000_000
 		act := eng.OnTick("adaptive", build())
 		if len(act.PromoteFromStandby)+len(act.DemoteToStandby)+len(act.DropLegs) > 0 || act.AddLeg {
@@ -750,7 +750,7 @@ func TestEngine_OnTick_LedbatBacksOffOnQueuingDelay(t *testing.T) {
 	// Now leg 2 congests. Feed the spike until its EWMA queuing delay crosses the
 	// target and the controller backs off (parks leg 2). Bounded loop.
 	var got RotationAction
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		got = e.OnTick("ledbat", steady(300))
 		if len(got.DemoteToStandby) > 0 {
 			break
@@ -1028,7 +1028,7 @@ func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
 	defer SetAdaptRevActive(restoreW)
 
 	s := newAdaptiveSim(1_000_000, 0) // heavy upload, zero download
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		s.step()
 	}
 	if !s.sawAddFwd {
@@ -1054,7 +1054,7 @@ func TestEngine_OnTick_AdaptiveForwardWidensOnUpload(t *testing.T) {
 // controller (no AddForwardLeg; forward target stays at adaptFwdActive).
 func TestEngine_OnTick_AdaptiveReverseWidensOnDownload(t *testing.T) {
 	s := newAdaptiveSim(0, 1_000_000) // zero upload, heavy download
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		s.step()
 	}
 	if !s.sawAddLeg && !s.sawPromote {
@@ -1087,7 +1087,7 @@ func TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle(t *testing.T) {
 	defer SetAdaptRevActive(restoreW)
 
 	s := newAdaptiveSim(1_000_000, 0)
-	for i := 0; i < 20; i++ { // widen under upload
+	for range 20 { // widen under upload
 		s.step()
 	}
 	if s.e.adaptFwdTarget <= adaptFwdActive {
@@ -1096,7 +1096,7 @@ func TestEngine_OnTick_AdaptiveForwardCollapsesOnIdle(t *testing.T) {
 	grown := s.activeCount()
 	// Upload stops: flat SentBytes and RecvBytes from here on.
 	s.sentPerTick, s.recvPerTick = 0, 0
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		s.step()
 	}
 	if s.e.adaptFwdTarget != adaptFwdActive {

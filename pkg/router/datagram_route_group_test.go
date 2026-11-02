@@ -182,7 +182,7 @@ func TestDatagramRouteGroupInboundDroppedWhenReadChFull(t *testing.T) {
 	// Fill it without ever calling ReadFrom; the next Handle
 	// should atomically bump inboundDropped.
 	capacity := cap(dg.readCh)
-	for i := 0; i < capacity; i++ {
+	for range capacity {
 		pkt, err := routing.MakeDatagramPacket(routing.RouteID(1), []byte("x"))
 		require.NoError(t, err)
 		require.NoError(t, dg.Handle(pkt))

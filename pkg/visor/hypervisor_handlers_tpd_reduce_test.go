@@ -52,7 +52,7 @@ func TestReduceTransportMetrics_FoldsAndCaps(t *testing.T) {
 func TestReduceTransportMetrics_TruncatedBodyKeepsWhatArrived(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("[")
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		fmt.Fprintf(&b, `{"id":"tp%02d","type":"stcpr","live":true,"edges":["pk%d","pk%d"],`, i, i, i+1)
 		fmt.Fprintf(&b, `"daily":[{"date":"d1","a":{"sent":%d,"recv":0},"b":null}]},`, (i+1)*10)
 	}
@@ -73,7 +73,7 @@ func TestReduceTransportMetrics_TruncatedBodyKeepsWhatArrived(t *testing.T) {
 func TestReduceTransportMetrics_CapBounded(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("[")
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		if i > 0 {
 			b.WriteString(",")
 		}
@@ -114,7 +114,7 @@ func TestReduceTransportMetrics_LiveFilterPrecedesTheCap(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("[")
 	// 20 dead transports with the HIGHEST bandwidth...
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if i > 0 {
 			b.WriteString(",")
 		}
@@ -122,7 +122,7 @@ func TestReduceTransportMetrics_LiveFilterPrecedesTheCap(t *testing.T) {
 		fmt.Fprintf(&b, `"daily":[{"date":"d1","a":{"sent":%d,"recv":0},"b":null}]}`, 100000+i)
 	}
 	// ...and 5 live ones with much less.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		fmt.Fprintf(&b, `,{"id":"live%02d","type":"stcpr","live":true,"edges":["pkL%d","pkM%d"],`, i, i, i)
 		fmt.Fprintf(&b, `"daily":[{"date":"d1","a":{"sent":%d,"recv":0},"b":null}]}`, 10+i)
 	}

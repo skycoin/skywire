@@ -13,7 +13,7 @@ import (
 
 // writeStreamedJSON writes v piece by piece with stream. encoding/json pools its
 // buffers, and in the wasm visor a megabyte buffer left in that pool stays alive.
-func (hv *Hypervisor) writeStreamedJSON(w http.ResponseWriter, r *http.Request, v interface{}, stream func(io.Writer) error) {
+func (hv *Hypervisor) writeStreamedJSON(w http.ResponseWriter, r *http.Request, v any, stream func(io.Writer) error) {
 	if pretty, _ := httputil.BoolFromQuery(r, "pretty", false); pretty { //nolint:errcheck
 		httputil.WriteJSON(w, r, http.StatusOK, v)
 		return

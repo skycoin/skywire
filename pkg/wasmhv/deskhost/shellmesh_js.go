@@ -62,7 +62,7 @@ const visorCallTimeout = 20 * time.Second
 // visorCall invokes a visor method and awaits it, so a proxied promise and a
 // direct return look the same to the caller. It gives up rather than blocking
 // the shell forever.
-func visorCall(method string, args ...interface{}) (js.Value, error) {
+func visorCall(method string, args ...any) (js.Value, error) {
 	v := js.Global().Get("skywireVisor")
 	if !v.Truthy() {
 		return js.Undefined(), fmt.Errorf("no visor in this tab")

@@ -498,7 +498,7 @@ func FormatResolverSpecs(rs []ResolverConfig) string {
 // unnamed entry a stable default name.
 func ParseResolverSpecs(csv string) ([]ResolverConfig, error) {
 	var out []ResolverConfig
-	for _, spec := range strings.Split(csv, ",") {
+	for spec := range strings.SplitSeq(csv, ",") {
 		if strings.TrimSpace(spec) == "" {
 			continue
 		}

@@ -31,7 +31,7 @@ func TestObjectBodyCacheSharesLargeObjects(t *testing.T) {
 func TestObjectBodyCacheIsBounded(t *testing.T) {
 	var oc objectBodyCache
 	val := make([]byte, 8<<20)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		val[0] = byte(i)
 		oc.body(cipher.SumSHA256(val), val)
 	}

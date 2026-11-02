@@ -791,10 +791,7 @@ func (s *BoltStore) sweepLoop() {
 	// Run every 10 minutes or at TTL/10, whichever is smaller.
 	interval := 10 * time.Minute
 	if s.limits.TTL/10 < interval {
-		interval = s.limits.TTL / 10
-		if interval < time.Minute {
-			interval = time.Minute
-		}
+		interval = max(s.limits.TTL/10, time.Minute)
 	}
 	t := time.NewTicker(interval)
 	defer t.Stop()

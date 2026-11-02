@@ -17,7 +17,7 @@ import (
 // a transport id, a type, edges, and one day of per-edge bandwidth.
 func benchRecords(n int) []store.TransportMetric {
 	out := make([]store.TransportMetric, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out = append(out, store.TransportMetric{
 			ID:    fmt.Sprintf("%08x-1234-5678-9abc-%012x", i, i),
 			Type:  []string{"stcpr", "sudph", "dmsg", "squicr"}[i%4],

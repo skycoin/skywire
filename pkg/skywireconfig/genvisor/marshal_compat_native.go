@@ -123,7 +123,7 @@ func (o *objCtxNative) field(name string) {
 // writeIndentNative writes `depth*2` spaces. Matches the indent= "  "
 // argument passed to json.MarshalIndent in the !js build.
 func writeIndentNative(w *strings.Builder, depth int) {
-	for i := 0; i < depth; i++ {
+	for range depth {
 		w.WriteString("  ")
 	}
 }

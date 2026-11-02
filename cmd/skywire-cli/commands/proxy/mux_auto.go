@@ -229,10 +229,7 @@ func computePrune(rg muxRouteGroupInfo, p autoPreset) []prunedLeg {
 		return cmp.Compare(a.lat, b.lat)
 	})
 
-	keepAux := p.keep - 1
-	if keepAux < 0 {
-		keepAux = 0
-	}
+	keepAux := max(p.keep-1, 0)
 	var drops []prunedLeg
 	for i := keepAux; i < len(measured); i++ {
 		drops = append(drops, prunedLeg{measured[i].id, measured[i].lat})

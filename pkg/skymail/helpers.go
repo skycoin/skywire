@@ -154,7 +154,7 @@ func SealedRecipient(body []byte) (cipher.PubKey, bool) {
 		return none, false
 	}
 	var head []byte
-	for _, line := range bytes.Split(b64, []byte("\r\n")) {
+	for line := range bytes.SplitSeq(b64, []byte("\r\n")) {
 		head = append(head, bytes.TrimSpace(line)...)
 		if len(head) >= 96 {
 			break

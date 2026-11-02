@@ -43,7 +43,7 @@ func (c *Client) reconcileActiveSet(reason string) {
 	}
 	why := shapeReason(target, source, reason)
 	bound := len(c.snapshotSessions()) + 1
-	for i := 0; i < bound; i++ {
+	for range bound {
 		active := c.activeLiveCount()
 		switch {
 		case active < target:

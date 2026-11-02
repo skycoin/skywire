@@ -507,7 +507,7 @@ func (s *StatsCXOPublisher) publishDaily(ctx context.Context, now time.Time) {
 // is dropped rather than overwriting it. Past that bound the incomplete
 // sample is published with its complete=false stamp, so a feed never
 // freezes indefinitely on what might be real news.
-func (s *StatsCXOPublisher) put(path string, body interface{}, complete bool, now time.Time) {
+func (s *StatsCXOPublisher) put(path string, body any, complete bool, now time.Time) {
 	if !complete {
 		if held, ok := s.heldSince[path]; ok && now.Sub(held) < statsIncompleteHoldover {
 			s.log.WithField("path", path).Debug("holding last complete stats sample; this one looks partial")

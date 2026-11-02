@@ -245,7 +245,7 @@ func TestRecentSet(t *testing.T) {
 func TestEncryptNonceUnique(t *testing.T) {
 	key, _ := GenerateAESKey() //nolint:errcheck
 	seen := map[string]struct{}{}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		_, n, err := Encrypt(key, []byte("x"))
 		if err != nil {
 			t.Fatalf("Encrypt: %v", err)

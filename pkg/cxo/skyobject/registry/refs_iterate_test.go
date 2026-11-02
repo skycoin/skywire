@@ -214,7 +214,7 @@ func testRefsAscendFrom(
 
 	var err error
 
-	for k := 0; k < len(users); k++ {
+	for k := range users {
 
 		var called int
 
@@ -644,7 +644,7 @@ func testRefsDescendFrom(
 
 	var err error
 
-	for k := 0; k < len(users); k++ {
+	for k := range users {
 
 		var called int
 

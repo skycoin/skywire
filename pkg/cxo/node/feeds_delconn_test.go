@@ -27,11 +27,11 @@ func TestNodeFeeds_DelConn_NonBlocking(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		var wg sync.WaitGroup
-		for g := 0; g < goroutines; g++ {
+		for range goroutines {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for i := 0; i < perG; i++ {
+				for range perG {
 					n.delConn(&Conn{})
 				}
 			}()
@@ -87,7 +87,7 @@ func TestNodeFeeds_DrainDelConn_BatchesAndConverges(t *testing.T) {
 	n.fs = map[cipher.PubKey]*nodeFeed{{}: newNodeFeed(n, cipher.PubKey{})}
 
 	const total = 1000 // > batchMax (256)
-	for i := 0; i < total; i++ {
+	for range total {
 		n.delConn(&Conn{})
 	}
 

@@ -246,10 +246,8 @@ func joinReversed(l, r routing.Route) (routing.Route, bool) {
 	var buf [16]cipher.PubKey
 	seen := buf[:0]
 	add := func(pk cipher.PubKey) bool {
-		for _, s := range seen {
-			if s == pk {
-				return false
-			}
+		if slices.Contains(seen, pk) {
+			return false
 		}
 		seen = append(seen, pk)
 		return true
@@ -379,13 +377,7 @@ func (g *Graph) routeIsLive(r routing.Route) bool {
 // small budget (fast-fail on far pairs) and the fallback can run it with the
 // full cap.
 func (g *Graph) pooledBFS(ctx context.Context, src, dst cipher.PubKey, minLen, maxLen, number, queueCap int) []routing.Route {
-	poolCap := number * 32
-	if poolCap < 128 {
-		poolCap = 128
-	}
-	if poolCap > 2048 {
-		poolCap = 2048
-	}
+	poolCap := min(max(number*32, 128), 2048)
 	type scored struct {
 		route   routing.Route
 		latency float64
@@ -417,10 +409,7 @@ func (g *Graph) pooledBFS(ctx context.Context, src, dst cipher.PubKey, minLen, m
 //     budget BFS did find.
 //  3. If neither found anything, return false so the caller runs the full BFS.
 func (g *Graph) routesLandmarkHybrid(ctx context.Context, src, dst cipher.PubKey, minLen, maxLen, number int) ([]routing.Route, bool) {
-	directDepth := maxLen
-	if directDepth > landmarkDirectDepth {
-		directDepth = landmarkDirectDepth
-	}
+	directDepth := min(maxLen, landmarkDirectDepth)
 	pool := g.pooledBFS(ctx, src, dst, minLen, directDepth, number, landmarkBFSBudget)
 	if len(pool) >= number {
 		return pool[:number], true

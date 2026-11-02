@@ -113,7 +113,7 @@ func Test_fillinng(t *testing.T) {
 	testFillRoot(t, sc, rc, r)
 	testFillDBs(t, sc, rc)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 
 		t.Log(i)
 
@@ -190,7 +190,7 @@ func createDynamic(
 	pack registry.Pack,
 	reg *registry.Registry,
 	name string,
-	obj interface{},
+	obj any,
 ) (
 	dr registry.Dynamic,
 ) {

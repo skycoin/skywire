@@ -146,7 +146,7 @@ func (s *bindNotifyStore) DelBind(ctx context.Context, netType types.Type, pk ci
 // can write a per-PK signed entry under a salt and tombstone it on
 // deletion fits.
 type dhtMirror interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }
 
@@ -568,12 +568,7 @@ func (a *API) bindDialable(t types.Type, pk cipher.PubKey, remoteAddr string, lo
 // Address provided must be in host:port form while addresses
 // in the local are plain IP addresses
 func (a *API) hasAddress(ip string, local addrresolver.LocalAddresses) bool {
-	for _, localIP := range local.Addresses {
-		if ip == localIP {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(local.Addresses, ip)
 }
 
 func (a *API) resolve(w http.ResponseWriter, r *http.Request) {

@@ -80,7 +80,7 @@ func createMuxRouteGroup(t *testing.T, nTransports int) (*RouteGroup, []*transpo
 	fwds := make([]routing.Rule, 0, nTransports)
 	rvss := make([]routing.Rule, 0, nTransports)
 
-	for i := 0; i < nTransports; i++ {
+	for i := range nTransports {
 		tpID := uuid.New()
 		fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(i+1), routing.RouteID(i+100), tpID, pk2, pk1, 1, 2) //nolint:gosec
 		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(i+100), pk1, pk2, 2, 1)                             //nolint:gosec
@@ -197,7 +197,7 @@ func TestMuxSelectTransportSkipsNotReadyLeg(t *testing.T) {
 	rg.mux.legMu.Unlock()
 
 	// Every selection must return the primary while leg 1 is not ready.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rg.mu.Lock()
 		tp, _, idx, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
 		rg.mu.Unlock()
@@ -403,7 +403,7 @@ func TestPruneLivenessPreservesLastLeg(t *testing.T) {
 func TestLegLivenessPrunesSilentLegs(t *testing.T) {
 	rg, _, _ := createMuxRouteGroup(t, 3)
 
-	for i := 0; i < legPongMissThresholdDefault+2; i++ {
+	for range legPongMissThresholdDefault + 2 {
 		rg.legLivenessServiceFn(legLivenessIntervalDefault)
 	}
 
@@ -418,7 +418,7 @@ func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 3)
 	keep := mts[0].Entry.ID
 
-	for i := 0; i < legPongMissThresholdDefault+3; i++ {
+	for range legPongMissThresholdDefault + 3 {
 		rg.legLivenessMu.Lock()
 		rg.legPongSeen[keep] = true // simulate this leg's echo arriving each cycle
 		rg.legLivenessMu.Unlock()

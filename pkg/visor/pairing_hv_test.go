@@ -49,7 +49,7 @@ func TestHVPairing_PendingAndResolve(t *testing.T) {
 	// The list is bounded; the oldest sighting is evicted first.
 	oldest, _ := cipher.GenerateKeyPair()
 	p.note(oldest, "transport", now.Add(-time.Hour))
-	for i := 0; i < pairPendingMax; i++ {
+	for range pairPendingMax {
 		k, _ := cipher.GenerateKeyPair()
 		p.note(k, "transport", now)
 	}
@@ -79,7 +79,7 @@ func TestHVPairing_Codes(t *testing.T) {
 	// Too many wrong codes revoke the outstanding ones.
 	c3, err := p.newCode(time.Hour, now)
 	require.NoError(t, err)
-	for i := 0; i < pairCodeMaxTries; i++ {
+	for i := range pairCodeMaxTries {
 		require.ErrorIs(t, p.consume("WRONG"+string(rune('A'+i)), now), ErrPairCodeInvalid)
 	}
 	require.ErrorIs(t, p.consume(c3.Code, now), ErrPairCodeInvalid, "revoked after repeated wrong codes")

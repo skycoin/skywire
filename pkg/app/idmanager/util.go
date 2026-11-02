@@ -7,7 +7,7 @@ import (
 )
 
 // AssertListener asserts that `v` is of type `net.Listener`.
-func AssertListener(v interface{}) (net.Listener, error) {
+func AssertListener(v any) (net.Listener, error) {
 	lis, ok := v.(net.Listener)
 	if !ok {
 		return nil, errors.New("wrong type of value stored for listener")
@@ -17,7 +17,7 @@ func AssertListener(v interface{}) (net.Listener, error) {
 }
 
 // AssertConn asserts that `v` is of type `net.Conn`.
-func AssertConn(v interface{}) (net.Conn, error) {
+func AssertConn(v any) (net.Conn, error) {
 	conn, ok := v.(net.Conn)
 	if !ok {
 		return nil, errors.New("wrong type of value stored for conn")

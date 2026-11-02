@@ -4,6 +4,7 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"sync"
 	"time"
@@ -238,9 +239,7 @@ func (s *Server) GetSessions() map[cipher.PubKey]*SessionCommon {
 	defer s.sessionsMx.Unlock()
 
 	sessions := make(map[cipher.PubKey]*SessionCommon, len(s.sessions))
-	for pk, session := range s.sessions {
-		sessions[pk] = session
-	}
+	maps.Copy(sessions, s.sessions)
 
 	return sessions
 }

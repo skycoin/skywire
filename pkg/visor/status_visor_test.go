@@ -75,8 +75,8 @@ func TestVisorChartsCollectDetail(t *testing.T) {
 		},
 		infos: []router.MuxInfo{
 			{Desc: dialed, AppName: "skysocks-client", MuxEnabled: true, TunnelRole: "active", Legs: []router.MuxLeg{
-				{LegStats: router.LegStats{SentBytes: 60, RecvBytes: 600}, TransportID: "a", Direct: true},
-				{LegStats: router.LegStats{SentBytes: 40, RecvBytes: 400}, TransportID: "b"},
+				{SentBytes: 60, RecvBytes: 600, TransportID: "a", Direct: true},
+				{SentBytes: 40, RecvBytes: 400, TransportID: "b"},
 			}},
 			{Desc: accepted, TunnelRole: "standby", Legs: []router.MuxLeg{{TransportID: "c"}}},
 		},
@@ -123,7 +123,7 @@ func TestVisorChartsBusiestTransports(t *testing.T) {
 	c := &visorCharts{}
 	var tps []tpSample
 	var top cipher.PubKey
-	for i := 0; i < topTransports+2; i++ {
+	for i := range topTransports + 2 {
 		pk, _ := cipher.GenerateKeyPair()
 		if i == 0 {
 			top = pk

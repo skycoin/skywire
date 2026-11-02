@@ -183,7 +183,7 @@ func runLoginChain() {
 
 	// Wait for publisher to be healthy (genesis block created and signed)
 	publisherHealthy := false
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		resp, err := http.Get("http://127.0.0.1:6421/api/v1/health") //nolint:gosec
 		if err == nil {
@@ -256,7 +256,7 @@ func runLoginChain() {
 
 	// Wait for peer to be healthy
 	peerHealthy := false
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		resp, err := http.Get("http://127.0.0.1:6422/api/v1/health") //nolint:gosec
 		if err == nil {
@@ -338,7 +338,7 @@ func bootstrapLoginChain(skywireBin, publisherURL, fiberTOMLPath, genesisPath, g
 	// Wait for block #1 on the peer node
 	cmdutil.Println("Login chain: waiting for bootstrap block...")
 	peerURL := "http://127.0.0.1:6422"
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(2 * time.Second)
 		resp, err := http.Get(fmt.Sprintf("%s/api/v1/blockchain/metadata", peerURL)) //nolint:gosec
 		if err != nil {

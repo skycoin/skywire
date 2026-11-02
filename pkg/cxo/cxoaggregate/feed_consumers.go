@@ -137,8 +137,8 @@ func (h *Hub) Deliver(reporter cipher.PubKey, leaves map[string][]byte) {
 		}
 		own := make(map[string][]byte)
 		for name, b := range leaves {
-			if strings.HasPrefix(name, prefix) {
-				own[strings.TrimPrefix(name, prefix)] = b
+			if after, ok := strings.CutPrefix(name, prefix); ok {
+				own[after] = b
 			}
 		}
 		if len(own) == 0 || !h.due(hubKey{reporter, c.Service}, sumLeaves(own), time.Now()) {
@@ -204,7 +204,7 @@ func RegistrationLeaves(pack registry.Pack, n *treestore.TreeNode) map[string][]
 		return nil
 	}
 	var out map[string][]byte
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var entry treestore.TreeEntry
 		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue

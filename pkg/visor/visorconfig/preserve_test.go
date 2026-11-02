@@ -281,7 +281,7 @@ func TestFlushWithNoPriorFile(t *testing.T) {
 // the walk; it simply yields no residue.
 func TestCaptureUnknownOnInvalidJSON(t *testing.T) {
 	for _, body := range []string{"", "{not json", "[]", "null", `"scalar"`} {
-		if res := captureUnknown([]byte(body), reflect.TypeOf(V1{})); res != nil {
+		if res := captureUnknown([]byte(body), reflect.TypeFor[V1]()); res != nil {
 			t.Errorf("captureUnknown(%q) = %#v, want nil", body, res)
 		}
 	}

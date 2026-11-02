@@ -149,7 +149,7 @@ var (
 func parseHelpFlags(help string) []visorapi.AppFlag {
 	flags := []visorapi.AppFlag{}
 	prev := -1
-	for _, line := range strings.Split(help, "\n") {
+	for line := range strings.SplitSeq(help, "\n") {
 		line = strings.TrimRight(line, " \r")
 		var name, short, word, usage string
 		if m := pflagLine.FindStringSubmatch(line); m != nil {

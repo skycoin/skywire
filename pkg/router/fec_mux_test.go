@@ -22,7 +22,7 @@ func TestFECMuxRoundTripReconstruct(t *testing.T) {
 	// K data frames with distinct payloads, seqs 0..K-1 (block 0).
 	payloads := make([][]byte, k)
 	var repairs []fecRepairFrame
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		p := []byte(fmt.Sprintf("frame-%d-payload-%x", seq, seq*7919))
 		payloads[seq] = p
 		if rf := st.Add(uint32(seq), p); rf != nil {
@@ -36,7 +36,7 @@ func TestFECMuxRoundTripReconstruct(t *testing.T) {
 	// Receiver gets every data frame EXCEPT seq=3 (the slow-leg victim), plus one
 	// repair frame. seq=3 must be reconstructable once ≥K symbols are present.
 	const missing = 3
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		if seq == missing {
 			continue
 		}
@@ -68,7 +68,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 
 	payloads := make([][]byte, k)
 	var repairs []fecRepairFrame
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		// deliberately varied lengths incl. empty and near-symbol-size
 		p := bytes.Repeat([]byte{byte(seq + 1)}, seq*250)
 		payloads[seq] = p
@@ -84,7 +84,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	drop := map[int]bool{1: true, 2: true, 4: true}
 	for target := range drop {
 		rt := newFECReassembler(k, r)
-		for seq := 0; seq < k; seq++ {
+		for seq := range k {
 			if !drop[seq] {
 				rt.RecordData(uint32(seq), payloads[seq])
 			}
@@ -108,7 +108,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	// multi-erasure bug the end-to-end test exposed), so a second Reconstruct on
 	// the same block re-decodes from the pristine received symbols and succeeds.
 	reMulti := newFECReassembler(k, r)
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		if !drop[seq] {
 			reMulti.RecordData(uint32(seq), payloads[seq])
 		}
@@ -130,7 +130,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 	st2 := newFECStriper(k, r)
 	re2 := newFECReassembler(k, r)
 	var rep2 []fecRepairFrame
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		p := []byte(fmt.Sprintf("b-%d", seq))
 		payloads[seq] = p
 		if rf := st2.Add(uint32(seq), p); rf != nil {
@@ -138,7 +138,7 @@ func TestFECMuxUpToRErasures(t *testing.T) {
 		}
 	}
 	drop2 := map[int]bool{0: true, 1: true, 2: true, 3: true} // R+1 = 4
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		if !drop2[seq] {
 			re2.RecordData(uint32(seq), payloads[seq])
 		}
@@ -185,20 +185,20 @@ func TestFECMuxHoLRemoval(t *testing.T) {
 	// --- arrival time of each symbol under round-robin striping ---
 	// Legs: index 0..nFast-1 fast, index nFast slow.
 	legs := make([]*legModel, nFast+1)
-	for i := 0; i < nFast; i++ {
+	for i := range nFast {
 		legs[i] = &legModel{perFrameTime: fastTime}
 	}
 	legs[nFast] = &legModel{perFrameTime: slowTime}
 
 	// Stripe K data frames round-robin across ALL legs (incl. slow).
 	dataArrival := make([]float64, k)
-	for seq := 0; seq < k; seq++ {
+	for seq := range k {
 		leg := legs[seq%len(legs)]
 		dataArrival[seq] = leg.enqueue()
 	}
 	// R repair frames scheduled onto the FAST legs only (least-loaded fast leg).
 	repairArrival := make([]float64, r)
-	for i := 0; i < r; i++ {
+	for i := range r {
 		// pick the least-loaded fast leg
 		best := 0
 		for j := 1; j < nFast; j++ {
@@ -255,7 +255,7 @@ func TestFECMuxBlockBoundaries(t *testing.T) {
 	const k, r, blocks = 4, 2, 5
 	st := newFECStriper(k, r)
 	emitted := map[uint32]int{}
-	for seq := 0; seq < k*blocks; seq++ {
+	for seq := range k * blocks {
 		rf := st.Add(uint32(seq), []byte{byte(seq)})
 		if rf == nil {
 			if (seq+1)%k == 0 {

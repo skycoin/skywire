@@ -18,10 +18,8 @@ func PackageConfig() PkgConfig {
 	pkgConfig := PkgConfig{
 		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS", //apps are now subcommands of the skywire binary "/Applications/Skywire.app/Contents/MacOS/apps",
 		LocalPath:       "/Library/Application Support/Skywire/local",
-		Hypervisor: Hypervisor{
-			DbPath:     "/Library/Application Support/Skywire/users.db",
-			EnableAuth: true,
-		},
+		DbPath:          "/Library/Application Support/Skywire/users.db",
+		EnableAuth:      true,
 	}
 	return pkgConfig
 }

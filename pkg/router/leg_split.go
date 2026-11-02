@@ -65,7 +65,7 @@ type legSplitHost interface {
 // splitGroupPort implements legSplitHost: a random port in the ephemeral range
 // that no route group of this router already holds against the same peer.
 func (r *router) splitGroupPort(base routing.RouteDescriptor) (routing.Port, error) {
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		port, err := randomSplitPort()
 		if err != nil {
 			return 0, err

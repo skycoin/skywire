@@ -35,8 +35,8 @@ func (s *uiSocket) Conn() net.Conn { return s.c }
 
 // typedCodec reads one message and reports whether it was text.
 var typedCodec = websocket.Codec{
-	Marshal: func(v interface{}) ([]byte, byte, error) { return v.([]byte), websocket.TextFrame, nil },
-	Unmarshal: func(data []byte, payloadType byte, v interface{}) error {
+	Marshal: func(v any) ([]byte, byte, error) { return v.([]byte), websocket.TextFrame, nil },
+	Unmarshal: func(data []byte, payloadType byte, v any) error {
 		m := v.(*typedMsg)
 		m.text, m.data = payloadType == websocket.TextFrame, data
 		return nil

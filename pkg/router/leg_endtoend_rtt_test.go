@@ -120,7 +120,7 @@ func TestLatencyBandJudgesOnWindowedMinRTT(t *testing.T) {
 
 	rg.enforceLatencyBand(nil)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		require.False(t, rg.mux.isLegStandby(i),
 			"leg %d must stay active: its min-RTT over the window is level with the cluster", i)
 	}

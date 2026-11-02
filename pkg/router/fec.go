@@ -26,7 +26,7 @@ var (
 
 func init() {
 	x := byte(1)
-	for i := 0; i < 255; i++ {
+	for i := range 255 {
 		gfExp[i] = x
 		gfLog[x] = byte(i)
 		// multiply x by the generator (2) in GF(2^8) with poly 0x11d
@@ -75,10 +75,10 @@ func newFECBlockCoder(k, r, symLen int) *fecBlockCoder {
 		return nil
 	}
 	cauchy := make([][]byte, r)
-	for i := 0; i < r; i++ {
+	for i := range r {
 		row := make([]byte, k)
 		xi := byte(i)
-		for j := 0; j < k; j++ {
+		for j := range k {
 			yj := byte(r + j)       //nolint:gosec // r+j < r+k <= 256, rejected above
 			row[j] = gfInv(xi ^ yj) // xi != yj always (i<r<=r+j), so xor != 0
 		}
@@ -181,7 +181,7 @@ func (c *fecBlockCoder) Decode(recv [][]byte, present []bool) ([][]byte, error) 
 // swap available therefore signals a caller/logic error.
 func gfSolve(a [][]byte, b [][]byte, symLen int) error {
 	k := len(a)
-	for col := 0; col < k; col++ {
+	for col := range k {
 		// find pivot
 		piv := -1
 		for r := col; r < k; r++ {
@@ -203,12 +203,12 @@ func gfSolve(a [][]byte, b [][]byte, symLen int) error {
 			for j := col; j < k; j++ {
 				a[col][j] = gfMul(a[col][j], inv)
 			}
-			for x := 0; x < symLen; x++ {
+			for x := range symLen {
 				b[col][x] = gfMul(b[col][x], inv)
 			}
 		}
 		// eliminate the column from every other row
-		for r := 0; r < k; r++ {
+		for r := range k {
 			if r == col || a[r][col] == 0 {
 				continue
 			}
@@ -217,7 +217,7 @@ func gfSolve(a [][]byte, b [][]byte, symLen int) error {
 				a[r][j] ^= gfMul(f, a[col][j])
 			}
 			br, bc := b[r], b[col]
-			for x := 0; x < symLen; x++ {
+			for x := range symLen {
 				br[x] ^= gfMul(f, bc[x])
 			}
 		}

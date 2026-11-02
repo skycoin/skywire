@@ -30,7 +30,7 @@ func TestVStreamQueueBackPressure(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close() //nolint:errcheck
 
-	for i := 0; i < vstreamReadBuf; i++ {
+	for i := range vstreamReadBuf {
 		mux.deliver(s, frameN(i))
 	}
 	require.Equal(t, vstreamReadBuf, s.rq.len())
@@ -51,7 +51,7 @@ func TestVStreamQueueBackPressure(t *testing.T) {
 	require.Equal(t, vstreamReadBuf, s.rq.len(), "a full queue takes no more")
 
 	buf := make([]byte, 4)
-	for i := 0; i < vstreamReadBuf+extra; i++ {
+	for i := range vstreamReadBuf + extra {
 		_, err := io.ReadFull(s, buf)
 		require.NoError(t, err)
 		require.Equal(t, uint32(i), binary.BigEndian.Uint32(buf), "frame %d", i) //nolint:gosec

@@ -388,7 +388,7 @@ func tcpWhitelistSet(commaSep string) map[cipher.PubKey]struct{} {
 		return out
 	}
 	mu := sync.Mutex{}
-	for _, raw := range strings.Split(commaSep, ",") {
+	for raw := range strings.SplitSeq(commaSep, ",") {
 		hex := strings.TrimSpace(raw)
 		if hex == "" {
 			continue

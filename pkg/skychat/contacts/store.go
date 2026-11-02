@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -116,9 +117,7 @@ func (s *Store) All() map[string]string {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for pk, name := range s.names {
-		out[pk] = name
-	}
+	maps.Copy(out, s.names)
 	return out
 }
 

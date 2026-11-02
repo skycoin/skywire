@@ -654,12 +654,12 @@ func expandHomeAllEnv(env []string, home string) []string {
 	}
 	out := make([]string, len(env))
 	for i, kv := range env {
-		eq := strings.IndexByte(kv, '=')
-		if eq < 0 {
+		before, after, ok := strings.Cut(kv, "=")
+		if !ok {
 			out[i] = kv
 			continue
 		}
-		key, value := kv[:eq], kv[eq+1:]
+		key, value := before, after
 		out[i] = key + "=" + expandHome(value, home)
 	}
 	return out

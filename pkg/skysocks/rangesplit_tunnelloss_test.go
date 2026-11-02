@@ -29,10 +29,7 @@ type slowWriter struct {
 func (s slowWriter) Write(p []byte) (int, error) {
 	written := 0
 	for written < len(p) {
-		end := written + s.chunk
-		if end > len(p) {
-			end = len(p)
-		}
+		end := min(written+s.chunk, len(p))
 		n, err := s.w.Write(p[written:end])
 		written += n
 		if err != nil {
@@ -151,7 +148,7 @@ func newRSTwoTunnelClient(t *testing.T, backendAddr string, conc int, chunk int6
 	proxyAddr := probe.Addr().String()
 	probe.Close()                                        //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(proxyAddr) }() //nolint:errcheck
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		if cc, err := net.Dial("tcp", proxyAddr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break
@@ -162,7 +159,7 @@ func newRSTwoTunnelClient(t *testing.T, backendAddr string, conc int, chunk int6
 	// it to drain so the browser connection itself is striped onto A (the pick is
 	// least-loaded, ties to the lowest index) and the CHUNKS are what land on B.
 	sessions := client.snapshotSessions()
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		if sessions[0].NumStreams() == 0 && sessions[1].NumStreams() == 0 {
 			break
 		}
@@ -301,7 +298,7 @@ func TestRangeSplitChunkFailoverOnTunnelLoss(t *testing.T) {
 	// streams B's far end can still accept are ones whose SYN was in flight at
 	// the cut, and counting them failed this test about one run in 30. What
 	// can go wrong is the pick, so that is what is checked.
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		if s := client.pickSessionFor(pickRecv); s == bSess {
 			t.Fatal("pickSessionFor returned the closed tunnel")
 		}

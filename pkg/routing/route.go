@@ -98,7 +98,7 @@ func (br *BidirectionalRoute) Check() error {
 
 // String implements fmt.Stringer
 func (br *BidirectionalRoute) String() string {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"descriptor": br.Desc.String(),
 		"keep_alive": br.KeepAlive.String(),
 		"fwd_hops":   br.Forward,
@@ -140,7 +140,7 @@ func (er EdgeRules) Validate() error {
 
 // String implements fmt.Stringer
 func (er EdgeRules) String() string {
-	m := map[string]interface{}{
+	m := map[string]any{
 		"descriptor": er.Desc.String(),
 		"routing_rules": []string{
 			er.Forward.String(),

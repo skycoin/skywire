@@ -122,7 +122,7 @@ func cellToRow(c *Cell, run *RunDone, hitRate float64) []string {
 		// Cell was discovered but no ping_result arrived (truncated
 		// capture or in-flight at stream end). Emit empty fields
 		// for the result-derived columns.
-		for i := 0; i < 14; i++ {
+		for range 14 {
 			row = append(row, "")
 		}
 	}
@@ -140,7 +140,7 @@ func cellToRow(c *Cell, run *RunDone, hitRate float64) []string {
 			strconv.FormatFloat(hitRate, 'f', 4, 64),
 		)
 	} else {
-		for i := 0; i < 9; i++ {
+		for range 9 {
 			row = append(row, "")
 		}
 	}

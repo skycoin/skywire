@@ -247,10 +247,7 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 
 	// Start the remaining chunks NOW, so their streams (and the TLS handshakes
 	// behind them) overlap chunk0's delivery to the browser.
-	chunk0Len := c.probeChunkBytes()
-	if total < chunk0Len {
-		chunk0Len = total
-	}
+	chunk0Len := min(total, c.probeChunkBytes())
 	// The object's spread ledger, as on the plaintext path. The HTTPS split has
 	// no endgame: a duplicate here costs a second TLS handshake to the origin
 	// as well as the bytes, which is a different trade and is not measured yet.
@@ -304,7 +301,7 @@ func (c *Client) httpsRangeSplitDrive(btls, otls net.Conn, req *http.Request, re
 // redialing on churn — the HTTPS analog of fetchChunkRetry.
 func (c *Client) fetchChunkTLSRetry(req *http.Request, host, validator string, start, end int64, p chunkPlacement) ([]byte, error) {
 	var err error
-	for i := 0; i < rsChunkRetries; i++ {
+	for range rsChunkRetries {
 		var buf []byte
 		buf, err = c.fetchChunkTLS(req, host, validator, start, end, p)
 		if err == nil {

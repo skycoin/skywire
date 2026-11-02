@@ -179,7 +179,7 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "Skycoin Address") {
 				continue // skip header and empty lines
@@ -691,13 +691,7 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 		pk := r.PathValue("pk")
 
 		// Verify this PK belongs to the logged-in user's visors
-		authorized := false
-		for _, v := range sess.Visors {
-			if v == pk {
-				authorized = true
-				break
-			}
-		}
+		authorized := slices.Contains(sess.Visors, pk)
 		if !authorized {
 			httputil.WriteJSON(w, r, http.StatusForbidden, map[string]any{"error": "not authorized for this visor"})
 			return

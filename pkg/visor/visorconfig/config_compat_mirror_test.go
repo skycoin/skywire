@@ -14,8 +14,8 @@ import (
 func jsonTags(t *testing.T, typ reflect.Type) map[string]bool {
 	t.Helper()
 	tags := make(map[string]bool)
-	for i := 0; i < typ.NumField(); i++ {
-		tag := typ.Field(i).Tag.Get("json")
+	for field := range typ.Fields() {
+		tag := field.Tag.Get("json")
 		if tag == "" || tag == "-" {
 			continue
 		}
@@ -42,8 +42,8 @@ func jsonTags(t *testing.T, typ reflect.Type) map[string]bool {
 // the two drift, which is what this is — the read-side counterpart of
 // genvisor's marshal_compare_test.go.
 func TestV1JSONMirrorsEveryTaggedField(t *testing.T) {
-	want := jsonTags(t, reflect.TypeOf(V1{}))
-	got := jsonTags(t, reflect.TypeOf(v1JSON{}))
+	want := jsonTags(t, reflect.TypeFor[V1]())
+	got := jsonTags(t, reflect.TypeFor[v1JSON]())
 
 	for tag := range want {
 		if !got[tag] {

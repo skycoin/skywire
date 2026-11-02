@@ -75,7 +75,7 @@ func TestFreeFirstHops_FindsAFreeHopBeyondTheOldTwentyCandidateWindow(t *testing
 		held  []cipher.PubKey
 		cands [][]routing.Hop
 	)
-	for i := 0; i < window; i++ {
+	for range window {
 		mid := mustPK(t)
 		held = append(held, mid)
 		cands = append(cands, []routing.Hop{hop(src, mid), hop(mid, dst)})
@@ -126,7 +126,7 @@ func TestFreeFirstHops_DuplicateHoldsDoNotUnlatchTheFilter(t *testing.T) {
 	// 29 sibling entries, all naming the same first-hop peer — the shape
 	// siblingRouteGroupExclusions produces for a collapsed pool.
 	held := make([]cipher.PubKey, 0, 29)
-	for i := 0; i < 29; i++ {
+	for range 29 {
 		held = append(held, dst)
 	}
 	require.Greater(t, len(held), SetupFirstHopFilterMax(),

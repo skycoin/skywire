@@ -40,7 +40,7 @@ func (m *Manager) session(id string) *Session {
 // drainFrames reads n media frames off a raw conn, the way a peer's recv loop
 // would.
 func drainFrames(c net.Conn, n int) error {
-	for i := 0; i < n; i++ {
+	for range n {
 		var hdr [2]byte
 		if _, err := io.ReadFull(c, hdr[:]); err != nil {
 			return err

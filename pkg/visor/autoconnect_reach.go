@@ -10,6 +10,8 @@ package visor
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -59,9 +61,7 @@ func (a *autoconnector) loadReach(ctx context.Context, v *Visor) map[cipher.PubK
 		if out == nil {
 			out = make(map[cipher.PubKey]*arfeed.Reach, len(peers)*arfeed.ReachBuckets)
 		}
-		for pk, r := range peers {
-			out[pk] = r
-		}
+		maps.Copy(out, peers)
 		return true
 	})
 	return out
@@ -87,11 +87,8 @@ func reachPeers(reach map[cipher.PubKey]*arfeed.Reach, t string) map[cipher.PubK
 		if t == arfeed.TypeWEBRTC {
 			list = r.Accepts
 		}
-		for _, x := range list {
-			if x == t {
-				out[pk] = struct{}{}
-				break
-			}
+		if slices.Contains(list, t) {
+			out[pk] = struct{}{}
 		}
 	}
 	return out

@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/services"
-
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -147,11 +145,9 @@ func TestRun_InvalidMode(t *testing.T) {
 	// An unrecognized mode makes svcmode.ResolveMode fail before any
 	// listener is started.
 	svc := New(&Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "bogus",
-			Addr:    "127.0.0.1:0",
-		},
+		Testing: true,
+		Mode:    "bogus",
+		Addr:    "127.0.0.1:0",
 	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(context.Background()) })
 	require.Error(t, err)
@@ -162,10 +158,8 @@ func TestRun_DmsgModeNoSecKey(t *testing.T) {
 	// mode=dmsg with a null secret key: svcmode.Start refuses to bring up
 	// the dmsghttp listener, so Run returns the wrapped start error.
 	svc := New(&Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "dmsg",
-		},
+		Testing: true,
+		Mode:    "dmsg",
 	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(context.Background()) })
 	require.Error(t, err)
@@ -177,11 +171,9 @@ func TestRun_TestingHTTPCanceledCtx(t *testing.T) {
 	// SK means no dmsg bootstrap, and a canceled context makes the run loop
 	// unwind immediately with nil.
 	svc := New(&Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "http",
-			Addr:    "127.0.0.1:0",
-		},
+		Testing: true,
+		Mode:    "http",
+		Addr:    "127.0.0.1:0",
 	}, testLog())
 	err := runWithin(t, 10*time.Second, func() error { return svc.Run(canceledCtx()) })
 	require.NoError(t, err)
@@ -193,12 +185,10 @@ func TestRun_WithUptimeDBAndMetrics(t *testing.T) {
 	// context. Defaults Tag/Addr/StoreDataPath are also taken here.
 	dir := t.TempDir()
 	svc := New(&Config{
-		Common: services.Common{
-			Testing:     true,
-			Mode:        "http",
-			MetricsAddr: "127.0.0.1:0",
-			LogLevel:    "info",
-		},
+		Testing:       true,
+		Mode:          "http",
+		MetricsAddr:   "127.0.0.1:0",
+		LogLevel:      "info",
 		UptimeDB:      filepath.Join(dir, "uptime.db"),
 		StoreDataPath: filepath.Join(dir, "bandwidth"),
 		Whitelist:     []string{"  pk1  ", ""},
@@ -214,12 +204,10 @@ func TestRun_WithSecKeyDerivesPubKey(t *testing.T) {
 	// only require that Run returns rather than hangs.
 	_, sk := cipher.GenerateKeyPair()
 	svc := New(&Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "http",
-			SecKey:  sk,
-			Addr:    "127.0.0.1:0",
-		},
+		Testing: true,
+		Mode:    "http",
+		SecKey:  sk,
+		Addr:    "127.0.0.1:0",
 	}, testLog())
 	_ = runWithin(t, 15*time.Second, func() error { return svc.Run(canceledCtx()) }) //nolint
 }

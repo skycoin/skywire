@@ -12,6 +12,7 @@ package vpn
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -77,10 +78,10 @@ func (f *iptablesFirewall) redirectTCP(hook fwHook, iif string, dst *net.IPNet, 
 
 // teardown removes each rule (newest first) by flipping its `-A` to `-D`.
 func (f *iptablesFirewall) teardown() {
-	for i := len(f.added) - 1; i >= 0; i-- {
-		del := deleteArgv(f.added[i])
+	for _, v := range slices.Backward(f.added) {
+		del := deleteArgv(v)
 		if err := osutil.RunElevated("iptables", del...); err != nil {
-			f.log.WithError(err).Warnf("firewall teardown: remove %s", strings.Join(f.added[i], " "))
+			f.log.WithError(err).Warnf("firewall teardown: remove %s", strings.Join(v, " "))
 		}
 	}
 	f.added = nil

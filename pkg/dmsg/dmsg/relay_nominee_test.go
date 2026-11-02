@@ -131,7 +131,7 @@ func addServer(t *testing.T, dc disc.APIClient, name string) cipher.PubKey {
 func TestRelayNominee_DoesNotFanOutAcrossServers(t *testing.T) {
 	env := newRelayedTestEnv(t, nil)
 	relayPK := env.relay.LocalPK()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		addServer(t, env.dc, fmt.Sprintf("fanout-srv-%d", i))
 	}
 

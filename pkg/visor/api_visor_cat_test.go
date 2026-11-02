@@ -54,7 +54,7 @@ func TestSpliceBidirectional(t *testing.T) {
 		t.Fatalf("write b2: %v", err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):

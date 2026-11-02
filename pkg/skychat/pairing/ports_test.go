@@ -24,7 +24,7 @@ func TestComputePairPortSymmetric(t *testing.T) {
 }
 
 func TestComputePairPortInRange(t *testing.T) {
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
 		port, err := ComputePairPort(a, b)
@@ -63,7 +63,7 @@ func TestComputePairPortAvoidsReserved(t *testing.T) {
 func TestComputePairPortAvoidsRealReservedTable(t *testing.T) {
 	// Sanity-check that random pairs don't land on a real reserved port.
 	reserved := ReservedPorts()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
 		port, err := ComputePairPort(a, b)

@@ -10,7 +10,7 @@ import (
 // SortEdges orders keys exactly as the big.Int comparison it replaced, so
 // transport IDs and edge order do not change.
 func TestSortEdgesMatchesNumericOrder(t *testing.T) {
-	for i := 0; i < 2000; i++ {
+	for range 2000 {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
 		var x, y big.Int

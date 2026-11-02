@@ -81,7 +81,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	// Parse whitelist
 	var whitelistPKs []cipher.PubKey
 	if whitelist != "" {
-		for _, pkStr := range strings.Split(whitelist, ",") {
+		for pkStr := range strings.SplitSeq(whitelist, ",") {
 			pkStr = strings.TrimSpace(pkStr)
 			if pkStr == "" {
 				continue

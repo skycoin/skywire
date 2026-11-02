@@ -360,7 +360,7 @@ func (r *RPCIngressGateway) ownsLocalPort(localPort routing.Port) bool {
 	if ok {
 		return true
 	}
-	r.cm.DoRange(func(_ uint16, v interface{}) bool {
+	r.cm.DoRange(func(_ uint16, v any) bool {
 		conn, isConn := v.(net.Conn)
 		if !isConn || conn == nil {
 			return true

@@ -124,25 +124,25 @@ type Logger interface {
 	SetFlags(int)        // set Flags of undelrying log.Logger
 	SetOutput(io.Writer) // set Output of underlying log.Logger
 
-	Print(...interface{})          //
-	Println(...interface{})        //
-	Printf(string, ...interface{}) //
+	Print(...any)          //
+	Println(...any)        //
+	Printf(string, ...any) //
 
-	Panic(...interface{})          //
-	Panicln(...interface{})        //
-	Panicf(string, ...interface{}) //
+	Panic(...any)          //
+	Panicln(...any)        //
+	Panicf(string, ...any) //
 
-	Fatal(...interface{})          //
-	Fatalln(...interface{})        //
-	Fatalf(string, ...interface{}) //
+	Fatal(...any)          //
+	Fatalln(...any)        //
+	Fatalf(string, ...any) //
 
-	Debug(pin Pin, args ...interface{})                 //
-	Debugln(pin Pin, args ...interface{})               //
-	Debugf(pin Pin, format string, args ...interface{}) //
+	Debug(pin Pin, args ...any)                 //
+	Debugln(pin Pin, args ...any)               //
+	Debugf(pin Pin, format string, args ...any) //
 
-	Error(err error, args ...interface{})
-	Errorln(err error, args ...interface{})
-	Errorf(err error, format string, args ...interface{})
+	Error(err error, args ...any)
+	Errorln(err error, args ...any)
+	Errorf(err error, format string, args ...any)
 }
 
 type logger struct {
@@ -171,44 +171,44 @@ func NewLogger(c Config) Logger {
 	}
 }
 
-func (l *logger) Debug(pin Pin, args ...interface{}) {
+func (l *logger) Debug(pin Pin, args ...any) {
 	if l.debugOn(pin) {
-		args = append([]interface{}{"[DBG] "}, args...)
+		args = append([]any{"[DBG] "}, args...)
 		l.Output(2, fmt.Sprint(args...)) //nolint:errcheck,gosec
 	}
 }
 
-func (l *logger) Debugln(pin Pin, args ...interface{}) {
+func (l *logger) Debugln(pin Pin, args ...any) {
 	if l.debugOn(pin) {
-		args = append([]interface{}{"[DBG]"}, args...)
+		args = append([]any{"[DBG]"}, args...)
 		l.Output(2, fmt.Sprintln(args...)) //nolint:errcheck,gosec
 	}
 }
 
-func (l *logger) Debugf(pin Pin, format string, args ...interface{}) {
+func (l *logger) Debugf(pin Pin, format string, args ...any) {
 	if l.debugOn(pin) {
 		format = "[DBG] " + format
 		l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck,gosec
 	}
 }
 
-func (l *logger) Error(err error, args ...interface{}) {
-	errArgs := []interface{}{
+func (l *logger) Error(err error, args ...any) {
+	errArgs := []any{
 		"[ERR] ",
 		fmt.Sprintf("err=%s ", err),
 	}
 	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck,gosec
 }
 
-func (l *logger) Errorln(err error, args ...interface{}) {
-	errArgs := []interface{}{
+func (l *logger) Errorln(err error, args ...any) {
+	errArgs := []any{
 		"[ERR] ",
 		fmt.Sprintf("err=%s ", err),
 	}
 	l.Output(2, fmt.Sprint(append(errArgs, args...))) //nolint:errcheck,gosec
 }
 
-func (l *logger) Errorf(err error, format string, args ...interface{}) {
+func (l *logger) Errorf(err error, format string, args ...any) {
 	format = "[ERR] " + fmt.Sprintf("err=%s ", err) + format
 	l.Output(2, fmt.Sprintf(format, args...)) //nolint:errcheck,gosec
 }

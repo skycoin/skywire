@@ -217,7 +217,7 @@ func (v *Visor) mirroredValues() map[string][2]string {
 
 // configFieldType walks a dotted path of json names through struct types.
 func configFieldType(t reflect.Type, path string) reflect.Type {
-	for _, name := range strings.Split(path, ".") {
+	for name := range strings.SplitSeq(path, ".") {
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
@@ -234,8 +234,8 @@ func configFieldType(t reflect.Type, path string) reflect.Type {
 }
 
 func structFieldByJSONName(t reflect.Type, name string) (reflect.StructField, bool) {
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		if f.Anonymous && f.Tag.Get("json") == "" {
 			et := f.Type
 			if et.Kind() == reflect.Pointer {

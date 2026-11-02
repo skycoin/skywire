@@ -429,11 +429,11 @@ func readDATA(br *bufio.Reader, limit int64) ([]byte, error) {
 // sizeParam returns the RFC 1870 SIZE= value of a MAIL FROM argument,
 // or -1 when the client declared none.
 func sizeParam(arg string) int64 {
-	end := strings.Index(arg, ">")
-	if end < 0 {
+	_, after, ok := strings.Cut(arg, ">")
+	if !ok {
 		return -1
 	}
-	for _, p := range strings.Fields(arg[end+1:]) {
+	for p := range strings.FieldsSeq(after) {
 		if k, v, ok := strings.Cut(p, "="); ok && strings.EqualFold(k, "SIZE") {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 				return n

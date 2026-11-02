@@ -49,7 +49,7 @@ func newComposeRig(t *testing.T, app string, standby int) *composeRig {
 	rig.active.SetTunnelRole(tunnelRoleActive)
 	rig.active.SetSelfHeal(nil, 1) // one leg dialed, as a proxy tunnel is
 
-	for i := 0; i < standby; i++ {
+	for i := range standby {
 		s, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49310+i),
 			tunnelRoleStandby, []routing.Hop{{TpID: uuid.New(), From: rig.local, To: rig.exit}}, float64(50+i), 0)
 		s.SetAppName(app)
@@ -129,7 +129,7 @@ func TestComposeIdleReachesActiveWidthWithNoLoad(t *testing.T) {
 	off := newComposeRig(t, "skysocks-client-compose-idle-off-test", 4)
 	require.Zero(t, off.active.poolIdleWidth(), "with the knob off there is no idle width")
 	at := time.Now()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		poolArbiterStep(off.active, off.pool, at, off.grow(t))
 		at = at.Add(off.active.mux.knDur(routersettings.PoolLegInterval))
 	}
@@ -186,7 +186,7 @@ func TestComposeIdleNeverReleasesTheComposedWidth(t *testing.T) {
 	require.Equal(t, width, rig.active.aliveLegCount())
 
 	// Well past pool.leg_release, with no load at any tick.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		now = now.Add(10 * rig.active.mux.knDur(routersettings.PoolLegRelease))
 		poolArbiterStep(rig.active, rig.pool, now, rig.grow(t))
 	}
@@ -212,7 +212,7 @@ func newTwoActiveRig(t *testing.T, app string, actives, standby int) *twoActiveR
 	rig.exit, _ = cipher.GenerateKeyPair()
 	rig.local, _ = cipher.GenerateKeyPair()
 
-	for i := 0; i < actives; i++ {
+	for i := range actives {
 		g, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49400+i), tunnelRoleActive,
 			[]routing.Hop{{TpID: uuid.New(), From: rig.local, To: rig.exit}}, 40, 0)
 		g.SetAppName(app)
@@ -220,7 +220,7 @@ func newTwoActiveRig(t *testing.T, app string, actives, standby int) *twoActiveR
 		g.SetSelfHeal(nil, 1) // one leg dialed, as a proxy tunnel is
 		rig.active = append(rig.active, g)
 	}
-	for i := 0; i < standby; i++ {
+	for i := range standby {
 		s, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49420+i), tunnelRoleStandby,
 			[]routing.Hop{{TpID: uuid.New(), From: rig.local, To: rig.exit}}, float64(50+i), 0)
 		s.SetAppName(app)
@@ -261,7 +261,7 @@ func (rig *twoActiveRig) grow(t *testing.T) func(g, s *RouteGroup, exclude []uui
 func (rig *twoActiveRig) compose(t *testing.T, rounds int) {
 	t.Helper()
 	now := time.Now()
-	for i := 0; i < rounds; i++ {
+	for range rounds {
 		poolArbiterRound(rig.active, rig.pool, now, rig.grow(t))
 		now = now.Add(rig.active[0].mux.knDur(routersettings.PoolLegInterval))
 	}

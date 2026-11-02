@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -55,10 +56,7 @@ func (r *router) establishMuxRoutes(
 			revCount = eff
 		}
 	}
-	maxCount := fwdCount
-	if revCount > maxCount {
-		maxCount = revCount
-	}
+	maxCount := max(revCount, fwdCount)
 	// Cap the FOREGROUND initial dial. With the standby pool uncapped
 	// (adaptStandbyMax=512 → Mux ~513), planning+dialing every leg here — at
 	// connect time, Phase-2 in parallel — would be a setup-node dial storm that
@@ -286,13 +284,7 @@ func (r *router) establishMuxRoutes(
 		// told about a leg we will reject. excludeIDs seeds with the primary
 		// transport and accumulates each accepted plan's first hop below.
 		if len(muxFwd) > 0 {
-			dup := false
-			for _, ex := range excludeIDs {
-				if muxFwd[0].TpID == ex {
-					dup = true
-					break
-				}
-			}
+			dup := slices.Contains(excludeIDs, muxFwd[0].TpID)
 			if dup {
 				log.Debugf("Mux route %d/%d: planned leg reuses transport %s already in the group (route-finder fallback); skipping to avoid a half-provisioned group",
 					i+1, maxCount, muxFwd[0].TpID)
@@ -575,10 +567,8 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// before the setup-node dial, exactly as establishMuxRoutes/GrowMuxRoute
 	// already do on their planning paths.
 	if len(muxFwd) > 0 {
-		for _, ex := range excludeIDs {
-			if muxFwd[0].TpID == ex {
-				return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
-			}
+		if slices.Contains(excludeIDs, muxFwd[0].TpID) {
+			return fmt.Errorf("rotation add-leg: planned leg reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial", muxFwd[0].TpID)
 		}
 	}
 

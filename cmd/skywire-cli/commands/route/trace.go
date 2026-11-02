@@ -278,7 +278,7 @@ func bestOfDmsgPings(rc visorapi.API, pk cipher.PubKey, samples int) (time.Durat
 	defer func() { _ = rc.StopDmsgPing(pk) }() //nolint:errcheck
 	var best time.Duration
 	var firstErr error
-	for i := 0; i < samples; i++ {
+	for range samples {
 		rtt, err := rc.DmsgPingOnce(visorapi.PingConfig{PK: pk, Tries: 1, PcktSize: 32})
 		if err != nil {
 			if firstErr == nil {

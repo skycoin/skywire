@@ -368,9 +368,6 @@ func (c *Client) snubSnapshot() ([]*yamux.Session, []*tunnelMeter) {
 // snubbed within one tick of crossing it, floored so a small bound cannot turn
 // the keepalive loop into a spinner.
 func snubTick() time.Duration {
-	d := setTunnelSnubAfter() / 2
-	if d < 250*time.Millisecond {
-		d = 250 * time.Millisecond
-	}
+	d := max(setTunnelSnubAfter()/2, 250*time.Millisecond)
 	return d
 }

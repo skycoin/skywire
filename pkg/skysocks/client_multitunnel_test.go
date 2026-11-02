@@ -74,7 +74,7 @@ func TestPickSession_LeastLoadedAndSkipsClosed(t *testing.T) {
 	defer c2()
 
 	// s0=2 streams, s1=1, s2=0 → least-loaded is s2.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err := s0.Open()
 		require.NoError(t, err)
 	}
@@ -102,7 +102,7 @@ func TestPickSession_LeastLoadedAndSkipsClosed(t *testing.T) {
 func TestPickSession_StripesEvenlyAcrossTunnels(t *testing.T) {
 	const n = 3
 	sessions := make([]*yamux.Session, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s, cleanup := newTestSession(t)
 		defer cleanup()
 		sessions[i] = s
@@ -110,7 +110,7 @@ func TestPickSession_StripesEvenlyAcrossTunnels(t *testing.T) {
 	c := &Client{sessions: sessions, closeC: make(chan struct{})}
 
 	// 9 conns over 3 tunnels via least-loaded selection → 3 each.
-	for i := 0; i < 3*n; i++ {
+	for range 3 * n {
 		s := c.pickSession()
 		require.NotNil(t, s)
 		_, err := s.Open()

@@ -30,14 +30,8 @@ import (
 // otherwise count as visible characters. Doing both here means the width
 // arithmetic is done on plain strings, where it is simply the length.
 func CmdRow(name, short string, pad int) string {
-	descCol := nameIndent + pad + 1
-	if descCol > descCap {
-		descCol = descCap
-	}
-	width := helpWidth() - descCol
-	if width < descFloor {
-		width = descFloor
-	}
+	descCol := min(nameIndent+pad+1, descCap)
+	width := max(helpWidth()-descCol, descFloor)
 
 	indent := strings.Repeat(" ", nameIndent)
 	spec := indent + name

@@ -52,7 +52,7 @@ func TestCreateRouteGroup(t *testing.T) {
 			initPK := routerPKs[0]
 
 			// arrange: routers
-			routers := make(map[cipher.PubKey]interface{}, routerCount)
+			routers := make(map[cipher.PubKey]any, routerCount)
 			for _, pk := range routerPKs {
 				routers[pk] = newMockRouterGateway(pk)
 			}
@@ -295,7 +295,7 @@ func TestBroadcastIntermediaryRules(t *testing.T) {
 			workingPKs := randPKs(tc.workingRouters)
 			failingPKs := randPKs(tc.failingRouters)
 
-			gateways := make(map[cipher.PubKey]interface{}, tc.workingRouters+tc.failingRouters)
+			gateways := make(map[cipher.PubKey]any, tc.workingRouters+tc.failingRouters)
 			for _, pk := range workingPKs {
 				gateways[pk] = &mockGatewayForReserver{}
 			}

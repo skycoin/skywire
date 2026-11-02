@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -45,12 +46,7 @@ func newTestHost(t *testing.T, store string, accepts ...cipher.PubKey) (*Host, c
 		Store: store,
 		Dir:   t.TempDir(),
 		Accepts: func(k cipher.PubKey) bool {
-			for _, a := range accepts {
-				if a == k {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(accepts, k)
 		},
 	})
 	require.NoError(t, err)

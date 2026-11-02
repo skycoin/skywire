@@ -18,7 +18,7 @@ type subHVAPI struct {
 }
 
 func (s *subHVAPI) HVVisorSummary(cipher.PubKey) (*visorapi.Summary, error) {
-	return &visorapi.Summary{Overview: &visorapi.Overview{Apps: []*appserver.AppState{{AppConfig: appserver.AppConfig{Name: "skysocks"}}}}}, nil
+	return &visorapi.Summary{Overview: &visorapi.Overview{Apps: []*appserver.AppState{{Name: "skysocks"}}}}, nil
 }
 
 func (s *subHVAPI) HVAppCatalog(pk cipher.PubKey) ([]visorapi.CatalogEntry, error) {

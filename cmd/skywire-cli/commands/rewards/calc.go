@@ -711,13 +711,7 @@ func init() {
 	RootCmd.Flags().StringSliceVarP(&disallowArchitectures, "noarch", "n", []string{"null", "wasm"}, "disallowed architectures, comma separated")
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures1, "a1", "w", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
-			allow := true
-			for _, d := range dis {
-				if v == d {
-					allow = false
-					break
-				}
-			}
+			allow := !slices.Contains(dis, v)
 			if allow {
 				res = append(res, v)
 			}
@@ -727,13 +721,7 @@ func init() {
 
 	RootCmd.Flags().StringSliceVarP(&allowArchitectures2, "a2", "x", func(all []string, dis []string) (res []string) {
 		for _, v := range all {
-			allow := true
-			for _, d := range dis {
-				if v == d {
-					allow = false
-					break
-				}
-			}
+			allow := !slices.Contains(dis, v)
 			if allow {
 				res = append(res, v)
 			}
@@ -868,7 +856,7 @@ Architectures:
 		if requireTransports {
 			transportFile := fmt.Sprintf("%s/%s_transports.txt", transportHistPath, wdate)
 			if data, err := os.ReadFile(transportFile); err == nil { //nolint:gosec
-				for _, line := range strings.Split(string(data), "\n") {
+				for line := range strings.SplitSeq(string(data), "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" {
 						transportMap[line] = struct{}{}
@@ -1450,8 +1438,8 @@ comparison. Detects both http and dmsghttp service configs.`,
 }
 
 func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool {
-	var nodeInfoServices map[string]interface{}
-	var configServices map[string]interface{}
+	var nodeInfoServices map[string]any
+	var configServices map[string]any
 
 	if err := json.Unmarshal(nodeInfoData, &nodeInfoServices); err != nil {
 		if !noLogging {
@@ -1469,7 +1457,7 @@ func compareAndPrintDiffs(nodeInfoData, configData []byte, noLogging bool) bool 
 	return compareMaps(nodeInfoServices, configServices, noLogging)
 }
 
-func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogging bool) bool {
+func compareMaps(nodeInfoServices, configServices map[string]any, noLogging bool) bool {
 	for key, value1 := range nodeInfoServices {
 		if value2, ok := configServices[key]; ok {
 			// Skip nil values (JSON null) — reflect.TypeOf(nil) panics
@@ -1483,8 +1471,8 @@ func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogg
 				continue
 			}
 			if reflect.TypeOf(value1).Kind() == reflect.Slice && reflect.TypeOf(value2).Kind() == reflect.Slice {
-				slice1 := value1.([]interface{})
-				slice2 := value2.([]interface{})
+				slice1 := value1.([]any)
+				slice2 := value2.([]any)
 				if !sliceContains(slice1, slice2) {
 					if !noLogging {
 						printDifference(key, value1, value2)
@@ -1502,7 +1490,7 @@ func compareMaps(nodeInfoServices, configServices map[string]interface{}, noLogg
 	return true
 }
 
-func sliceContains(slice1, slice2 []interface{}) bool {
+func sliceContains(slice1, slice2 []any) bool {
 	for _, v2 := range slice2 {
 		found := false
 		for _, v1 := range slice1 {
@@ -1518,7 +1506,7 @@ func sliceContains(slice1, slice2 []interface{}) bool {
 	return true
 }
 
-func toJSON(value interface{}) string {
+func toJSON(value any) string {
 	jsonData, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("%v", value)
@@ -1526,7 +1514,7 @@ func toJSON(value interface{}) string {
 	return string(jsonData)
 }
 
-func printDifference(key string, value1, value2 interface{}) {
+func printDifference(key string, value1, value2 any) {
 	red := color.New(color.FgRed).SprintFunc()
 	cmdutil.Eprintf("%s: %s != %s\n", key, red(toJSON(value1)), red(toJSON(value2))) //nolint:errcheck,gosec
 }

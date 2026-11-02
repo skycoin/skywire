@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -90,10 +91,8 @@ func (v *Visor) configuredHypervisors() []cipher.PubKey {
 
 // addPK returns pks with pk appended if not already present.
 func addPK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
-	for _, p := range pks {
-		if p == pk {
-			return pks
-		}
+	if slices.Contains(pks, pk) {
+		return pks
 	}
 	return append(pks, pk)
 }
@@ -160,10 +159,8 @@ func (v *Visor) dropPeerTrust(pk cipher.PubKey) {
 		return
 	}
 	if v.conf.Pty != nil {
-		for _, w := range v.conf.Pty.Whitelist {
-			if w == pk {
-				return
-			}
+		if slices.Contains(v.conf.Pty.Whitelist, pk) {
+			return
 		}
 	}
 	if err := v.peerWhitelist.Remove(pk); err == nil {

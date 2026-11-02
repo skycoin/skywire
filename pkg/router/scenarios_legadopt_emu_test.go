@@ -94,7 +94,7 @@ func newAdoptRig(t *testing.T) *adoptRig {
 	descB := routing.NewRouteDescriptor(aPK, bPK, adoptClientPort, adoptServicePort)
 	var tpsA, tpsB []*transport.ManagedTransport
 	var fwdA, rvsA, fwdB, rvsB []routing.Rule
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		link := emu.LinkConfig{Delay: 20 * time.Millisecond, RateBps: 2 * emuMB, QueueBytes: 2 * emuMB}
 		connA, connB := emu.NewPair(emu.PairConfig{Name: "adopt-leg", AtoB: link, BtoA: link, APK: aPK, BPK: bPK, Type: "emu"})
 		id := uuid.New()

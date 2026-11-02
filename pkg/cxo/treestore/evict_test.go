@@ -26,7 +26,7 @@ func TestPublisherDropPublishedLeaves(t *testing.T) {
 	path := func(day, part int) string { return fmt.Sprintf("metrics/day/2026-10-%02d/part/%04d", day, part) }
 	var ops []PutOp
 	for d := 1; d <= 3; d++ {
-		for p := 0; p < 2; p++ {
+		for p := range 2 {
 			ops = append(ops, PutOp{Path: path(d, p), Value: body(d, p)})
 		}
 	}
@@ -82,7 +82,7 @@ func TestPublisherHydrateDropsPublishedLeaves(t *testing.T) {
 	want := map[string][]byte{}
 	var ops []PutOp
 	for d := 1; d <= 3; d++ {
-		for p := 0; p < 2; p++ {
+		for p := range 2 {
 			ops = append(ops, PutOp{Path: path(d, p), Value: body(d, p)})
 			want[path(d, p)] = body(d, p)
 		}

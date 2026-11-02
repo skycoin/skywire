@@ -133,7 +133,7 @@ func TestStore_SweepDropsExpired(t *testing.T) {
 func TestStore_FetchBatches(t *testing.T) {
 	forEachStore(t, Limits{MaxPerRecipient: 100}, func(t *testing.T, s *store) {
 		to := pk()
-		for i := 0; i < fetchBatchCount+3; i++ {
+		for i := range fetchBatchCount + 3 {
 			_, err := s.deposit(pk(), to, 25, "", []byte{byte(i)}, Policy{}, time.Now())
 			require.NoError(t, err)
 		}

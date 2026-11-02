@@ -35,8 +35,8 @@ type FindRoutesRequest struct {
 
 // HTTPResponse represents http response struct
 type HTTPResponse struct {
-	Error *HTTPError  `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
+	Error *HTTPError `json:"error,omitempty"`
+	Data  any        `json:"data,omitempty"`
 }
 
 // HTTPError is included in an HTTPResponse

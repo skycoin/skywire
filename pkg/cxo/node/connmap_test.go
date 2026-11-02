@@ -123,7 +123,7 @@ func TestAddrConnMap_ConcurrentInsertsDifferentShards(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(N)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		addr := fmt.Sprintf("peer-%04d", i)
 		c := &Conn{}
 		go func() {

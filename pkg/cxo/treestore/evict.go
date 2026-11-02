@@ -36,7 +36,7 @@ func publishedLeaves(up registry.Pack, hash skycipher.SHA256) (map[string][]byte
 		return nil, err
 	}
 	out := make(map[string][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var entry TreeEntry
 		if _, err := node.Children.ValueByIndex(up, i, &entry); err != nil {
 			return nil, err

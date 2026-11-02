@@ -37,14 +37,14 @@ func awaitJS(p js.Value) (js.Value, error) {
 	ch := make(chan struct{})
 	var res js.Value
 	var rejErr error
-	onOK := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onOK := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
 			res = args[0]
 		}
 		close(ch)
 		return nil
 	})
-	onErr := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onErr := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		msg := "promise rejected"
 		if len(args) > 0 {
 			if m := args[0].Get("message"); m.Type() == js.TypeString {
@@ -126,7 +126,7 @@ func newPeerConnection(iceServers js.Value) (js.Value, error) {
 // the signaling channel (trickle ICE). The returned func detaches and releases
 // the handler, which otherwise keeps sc and its dmsg stream in memory for good.
 func wireLocalCandidates(pc js.Value, sc *signalConn) (unwire func()) {
-	onCand := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onCand := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		cand := args[0].Get("candidate")
 		if !cand.Truthy() {
 			return nil // null candidate = gathering complete
@@ -189,7 +189,7 @@ func pumpRemoteSignals(ctx context.Context, pc js.Value, sc *signalConn, onOffer
 				}
 			}
 		case "answer":
-			desc := map[string]interface{}{"type": "answer", "sdp": m.SDP}
+			desc := map[string]any{"type": "answer", "sdp": m.SDP}
 			if _, err := awaitJS(pc.Call("setRemoteDescription", desc)); err == nil {
 				flush()
 			}
@@ -212,7 +212,7 @@ func webrtcDial(ctx context.Context, signal io.ReadWriteCloser, iceURLs []string
 	if err != nil {
 		return nil, err
 	}
-	dc := pc.Call("createDataChannel", "skywire", map[string]interface{}{"ordered": true})
+	dc := pc.Call("createDataChannel", "skywire", map[string]any{"ordered": true})
 	conn := newWebRTCConn(dc, pc, signal)
 	// Every failure below must release the peer connection: the page has a
 	// hard budget of concurrent RTCPeerConnections, and leaked failed dials
@@ -264,7 +264,7 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 		}
 	}()
 	dcCh := make(chan js.Value, 1)
-	onDC := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onDC := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		select {
 		case dcCh <- args[0].Get("channel"):
 		default:
@@ -279,7 +279,7 @@ func webrtcAccept(ctx context.Context, signal io.ReadWriteCloser, iceURLs []stri
 
 	defer wireLocalCandidates(pc, sc)()
 	go pumpRemoteSignals(ctx, pc, sc, func(offerSDP string) error {
-		desc := map[string]interface{}{"type": "offer", "sdp": offerSDP}
+		desc := map[string]any{"type": "offer", "sdp": offerSDP}
 		if _, err := awaitJS(pc.Call("setRemoteDescription", desc)); err != nil {
 			return fmt.Errorf("setRemoteDescription(offer): %w", err)
 		}
@@ -354,11 +354,11 @@ func newWebRTCConn(dc, pc js.Value, signal io.Closer) *webRTCConn {
 	dc.Set("binaryType", "arraybuffer")
 	c := &webRTCConn{dc: dc, pc: pc, signal: signal, notify: make(chan struct{}), openCh: make(chan struct{})}
 
-	onOpen := js.FuncOf(func(js.Value, []js.Value) interface{} {
+	onOpen := js.FuncOf(func(js.Value, []js.Value) any {
 		c.openOnce.Do(func() { close(c.openCh) })
 		return nil
 	})
-	onMsg := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+	onMsg := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		u8 := js.Global().Get("Uint8Array").New(args[0].Get("data"))
 		b := make([]byte, u8.Length())
 		js.CopyBytesToGo(b, u8)
@@ -368,19 +368,19 @@ func newWebRTCConn(dc, pc js.Value, signal io.Closer) *webRTCConn {
 		c.mu.Unlock()
 		return nil
 	})
-	onClose := js.FuncOf(func(js.Value, []js.Value) interface{} {
+	onClose := js.FuncOf(func(js.Value, []js.Value) any {
 		c.fail(io.EOF)
 		c.openOnce.Do(func() { c.openErr = errors.New("datachannel closed before open"); close(c.openCh) })
 		return nil
 	})
-	onErr := js.FuncOf(func(js.Value, []js.Value) interface{} {
+	onErr := js.FuncOf(func(js.Value, []js.Value) any {
 		c.fail(errors.New("datachannel error"))
 		c.openOnce.Do(func() { c.openErr = errors.New("datachannel error before open"); close(c.openCh) })
 		return nil
 	})
 	// Wakes a Write waiting for the send queue to drain. It only signals:
 	// a callback that blocks would stall the whole worker.
-	onLow := js.FuncOf(func(js.Value, []js.Value) interface{} {
+	onLow := js.FuncOf(func(js.Value, []js.Value) any {
 		c.mu.Lock()
 		c.wake()
 		c.mu.Unlock()

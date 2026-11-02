@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"net"
 	"net/http"
@@ -1430,9 +1431,7 @@ func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func (tw *timeoutResponseWriter) copyTo(w http.ResponseWriter) {
-	for k, v := range tw.header {
-		w.Header()[k] = v
-	}
+	maps.Copy(w.Header(), tw.header)
 	w.WriteHeader(tw.statusCode)
 	w.Write(tw.body) //nolint:errcheck,gosec
 }

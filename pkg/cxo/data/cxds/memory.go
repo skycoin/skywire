@@ -12,7 +12,7 @@ import (
 
 // panicf lives here (untagged) rather than in drive.go so both the memory and the
 // on-disk (!js) CXDS can use it — drive.go is excluded from the js/wasm build.
-func panicf(format string, args ...interface{}) {
+func panicf(format string, args ...any) {
 	panic(fmt.Sprintf(format, args...))
 }
 

@@ -77,7 +77,7 @@ func TestQueueDeepLegWaitsBasisPlusMargin(t *testing.T) {
 	m := newRouteMux(log, true)
 	setLegRTTs(m, []float64{20})
 	deep := uuid.New()
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		m.recordAckDelayTp(deep, 2*time.Second) // a queue-deep leg: basis ≈ 2 s
 	}
 	require.Greater(t, m.rackThresholdFor(deep), 2*time.Second,

@@ -3,6 +3,7 @@ package cliserve
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -100,10 +101,8 @@ var vhostAddCmd = &cobra.Command{
 					continue
 				}
 				for _, n := range v.Names() {
-					for _, mine := range vh.Names() {
-						if n == mine {
-							return nil, fmt.Errorf("%s is already a name of vhost %s", n, v.Name)
-						}
+					if slices.Contains(vh.Names(), n) {
+						return nil, fmt.Errorf("%s is already a name of vhost %s", n, v.Name)
 					}
 				}
 				out = append(out, v)
@@ -206,7 +205,7 @@ func listVhosts(cmd *cobra.Command) {
 // parsePKs reads a comma-separated list of public keys; empty is none.
 func parsePKs(s string) ([]cipher.PubKey, error) {
 	var out []cipher.PubKey
-	for _, f := range strings.Split(s, ",") {
+	for f := range strings.SplitSeq(s, ",") {
 		if f = strings.TrimSpace(f); f == "" {
 			continue
 		}

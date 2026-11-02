@@ -172,7 +172,7 @@ func TestArchPanelNamesFailures(t *testing.T) {
 
 // The panel is drawn beside a legend inside a 78-column rule.
 func TestArchPanelFitsThePanelWidth(t *testing.T) {
-	for _, line := range strings.Split(renderArchPanelANSI(sampleArch()), "\n") {
+	for line := range strings.SplitSeq(renderArchPanelANSI(sampleArch()), "\n") {
 		if got := len([]rune(stripANSI(line))); got > tuiWidth+2 {
 			t.Errorf("line runs to %d columns: %q", got, stripANSI(line))
 		}

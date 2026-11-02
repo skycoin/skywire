@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -552,13 +553,7 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 		// router_dial.go's establishMuxRoutes). Its intermediates are already
 		// claimed above, so the next iteration diverges.
 		if len(fwd) > 0 {
-			dup := false
-			for _, ex := range excludeIDs {
-				if fwd[0].TpID == ex {
-					dup = true
-					break
-				}
-			}
+			dup := slices.Contains(excludeIDs, fwd[0].TpID)
 			if dup {
 				consecutiveFailures++
 				log.Debugf("GrowMuxRoute: planned leg %d/%d reuses transport %s already in the group (finder ignores ExcludeTransportIDs); skipping before dial",

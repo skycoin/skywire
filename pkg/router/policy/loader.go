@@ -54,7 +54,7 @@ type Loader struct {
 
 	watcher   *fsnotify.Watcher
 	stopWatch context.CancelFunc
-	logger    func(format string, args ...interface{})
+	logger    func(format string, args ...any)
 }
 
 // NewLoader parses the supplied raw config-field value and
@@ -72,7 +72,7 @@ func NewLoader(raw string, opts ...Option) (*Loader, error) {
 		return &Loader{source: "<noop>", opts: opts}, nil
 	}
 
-	l := &Loader{opts: opts, logger: func(string, ...interface{}) {}}
+	l := &Loader{opts: opts, logger: func(string, ...any) {}}
 	for _, o := range opts {
 		// Capture logger if one was supplied (we'll reuse it for
 		// reload events). This is a bit of a hack — we materialize
@@ -101,8 +101,8 @@ func NewLoader(raw string, opts ...Option) (*Loader, error) {
 		return l, nil
 	}
 
-	if strings.HasPrefix(raw, "@") {
-		p, err := filepath.Abs(strings.TrimPrefix(raw, "@"))
+	if after, ok := strings.CutPrefix(raw, "@"); ok {
+		p, err := filepath.Abs(after)
 		if err != nil {
 			return nil, fmt.Errorf("policy: invalid file path: %w", err)
 		}
@@ -150,7 +150,7 @@ func (l *Loader) reload() error {
 // On reload failure the watcher logs the error and keeps the
 // previous Evaluator active. This way a transient editor
 // (vi-style atomic-rename) doesn't break the running policy.
-func (l *Loader) Watch(logger func(format string, args ...interface{})) error {
+func (l *Loader) Watch(logger func(format string, args ...any)) error {
 	if l.path == "" {
 		return nil // inline — nothing to watch
 	}

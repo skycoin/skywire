@@ -80,11 +80,11 @@ func (s *tuiState) handleKey(ev *tcell.EventKey) {
 	case ev.Key() == tcell.KeyDown:
 		s.move(1)
 	case ev.Key() == tcell.KeyPgUp:
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			s.move(-1)
 		}
 	case ev.Key() == tcell.KeyPgDn:
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			s.move(1)
 		}
 	case ev.Key() == tcell.KeyEnter:
@@ -166,7 +166,7 @@ func (s *tuiState) commit(v string) {
 func wrap(text string, w int) []string {
 	var lines []string
 	line := ""
-	for _, word := range strings.Fields(text) {
+	for word := range strings.FieldsSeq(text) {
 		if line != "" && len(line)+1+len(word) > w {
 			lines = append(lines, line)
 			line = ""

@@ -507,8 +507,8 @@ func drainAndClose(resp *http.Response) {
 // removed, e.g. "magnetosphere.net.<pk>.skynet" → ("magnetosphere.net.<pk>", "skynet").
 func peelNetLabel(core string) (rest, network string) {
 	for _, n := range []string{"skynet", "dmsg"} {
-		if strings.HasSuffix(core, "."+n) {
-			return strings.TrimSuffix(core, "."+n), n
+		if before, ok := strings.CutSuffix(core, "."+n); ok {
+			return before, n
 		}
 	}
 	return core, ""

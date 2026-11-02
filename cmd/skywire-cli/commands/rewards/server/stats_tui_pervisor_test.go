@@ -11,7 +11,7 @@ import (
 // transports, keyed by full-length public keys.
 func evenCounts(visors, n int) map[string]int {
 	out := make(map[string]int, visors)
-	for i := 0; i < visors; i++ {
+	for i := range visors {
 		out[fmt.Sprintf("%066x", i)] = n
 	}
 	return out
@@ -209,7 +209,7 @@ func TestGateReasonsAreWrappedToThePanel(t *testing.T) {
 	if !s.Gated {
 		t.Fatal("the longest gate reason was not produced, so nothing was wrapped")
 	}
-	for _, line := range strings.Split(renderTPPerVisorPanelANSI(s), "\n") {
+	for line := range strings.SplitSeq(renderTPPerVisorPanelANSI(s), "\n") {
 		// Columns, not bytes: the rules are box-drawing runes.
 		plain := []rune(stripANSI(line))
 		if len(plain) > tuiWidth+2 {

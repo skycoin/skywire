@@ -55,7 +55,7 @@ func TestManagedTransport_HalfOpenClosesAfterMissedPongs(t *testing.T) {
 	require.False(t, mt.IsClosed())
 
 	closed := false
-	for i := 0; i < pongMissThreshold+3; i++ {
+	for range pongMissThreshold + 3 {
 		mt.tickPing()
 		if mt.IsClosed() {
 			closed = true
@@ -72,7 +72,7 @@ func TestManagedTransport_HalfOpenClosesAfterMissedPongs(t *testing.T) {
 // first pong, and the unarmed-silence reaper only fires on TOTAL silence.
 func TestManagedTransport_NeverPongedButReceivingStaysOpen(t *testing.T) {
 	mt := NewManagedTransportForTest(&okTransport{})
-	for i := 0; i < pongMissThreshold+10; i++ {
+	for range pongMissThreshold + 10 {
 		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving something
 		mt.tickPing()
 	}
@@ -95,7 +95,7 @@ func TestManagedTransport_UnarmedSilenceCloses(t *testing.T) {
 // resets the miss counter each cycle and is never closed.
 func TestManagedTransport_HealthyPeerStaysOpen(t *testing.T) {
 	mt := NewManagedTransportForTest(&okTransport{})
-	for i := 0; i < pongMissThreshold+10; i++ {
+	for range pongMissThreshold + 10 {
 		mt.tickPing()
 		mt.handleTransportPong(testPong())
 	}
@@ -114,7 +114,7 @@ func TestManagedTransport_UnwritableClosesAfterFailedPings(t *testing.T) {
 	require.False(t, mt.pongSeen.Load(), "precondition: never armed")
 
 	closed := false
-	for i := 0; i < pongMissThreshold+3; i++ {
+	for range pongMissThreshold + 3 {
 		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving — unarmed-silence must NOT be the reason
 		mt.tickPing()
 		if mt.IsClosed() {

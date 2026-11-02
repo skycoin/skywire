@@ -181,7 +181,7 @@ func ancestorRun(id uint64) *inproc {
 		buf = make([]byte, 2*len(buf))
 	}
 	parents := map[uint64]uint64{}
-	for _, g := range bytes.Split(buf, []byte("\n\n")) {
+	for g := range bytes.SplitSeq(buf, []byte("\n\n")) {
 		gid := leadingID(bytes.TrimPrefix(g, []byte("goroutine ")))
 		if i := bytes.LastIndex(g, []byte(" in goroutine ")); i >= 0 {
 			parents[gid] = leadingID(g[i+len(" in goroutine "):])

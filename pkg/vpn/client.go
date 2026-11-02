@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -315,10 +316,8 @@ func (c *Client) AddDirectRoute(ip netip.Addr) error {
 	defer c.directIPSMu.Unlock()
 
 	c.refs[ip]++
-	for _, storedIP := range c.directIPs {
-		if ip == storedIP {
-			return nil
-		}
+	if slices.Contains(c.directIPs, ip) {
+		return nil
 	}
 	c.directIPs = append(c.directIPs, ip)
 	return c.addDirect(ip)
@@ -670,7 +669,7 @@ func dmsgSrvAddrsFromEnv() ([]netip.Addr, error) {
 	}
 
 	dmsgSrvAddrs := make([]netip.Addr, 0, dmsgSrvCount)
-	for i := 0; i < dmsgSrvCount; i++ {
+	for i := range dmsgSrvCount {
 		dmsgSrvAddr, err := ipFromEnv(DmsgAddrEnvPrefix + strconv.Itoa(i))
 		if err != nil {
 			return nil, fmt.Errorf("error getting Dmsg server address: %w", err)
@@ -707,7 +706,7 @@ func tpRemoteIPsFromEnv() ([]netip.Addr, error) {
 	}
 
 	ips = make([]netip.Addr, 0, ipsLen)
-	for i := 0; i < ipsLen; i++ {
+	for i := range ipsLen {
 		key := TPRemoteIPsEnvPrefix + strconv.Itoa(i)
 
 		ipStr := os.Getenv(key)
@@ -736,7 +735,7 @@ func stcpEntitiesFromEnv() ([]netip.Addr, error) {
 		}
 
 		stcpEntities = make([]netip.Addr, 0, stcpTableLen)
-		for i := 0; i < stcpTableLen; i++ {
+		for i := range stcpTableLen {
 			stcpKey := os.Getenv(STCPKeyEnvPrefix + strconv.Itoa(i))
 			if stcpKey == "" {
 				return nil, fmt.Errorf("env arg %s is not provided", STCPKeyEnvPrefix+strconv.Itoa(i))

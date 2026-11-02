@@ -116,7 +116,7 @@ func TestCurrentLeafUUIDParsing(t *testing.T) {
 }
 
 func TestTelemetryShardOfPathParsing(t *testing.T) {
-	for shard := uint8(0); shard < telemetrywire.ShardCount; shard++ {
+	for shard := range uint8(telemetrywire.ShardCount) {
 		got, ok := telemetryShardOfPath(telemetrywire.LeafPath(shard))
 		require.True(t, ok, "shard %d path must parse", shard)
 		require.Equal(t, shard, got)

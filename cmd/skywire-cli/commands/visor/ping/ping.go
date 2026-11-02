@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -46,8 +47,8 @@ var (
 // cascade-vs-legacy A/B valid: the same intermediates carry both arms.
 func parseRouteSpec(spec string) (fwd, rev []rpcgrpc.RouteHopDetail, err error) {
 	data := []byte(spec)
-	if strings.HasPrefix(spec, "@") {
-		data, err = os.ReadFile(strings.TrimPrefix(spec, "@")) //nolint:gosec
+	if after, ok := strings.CutPrefix(spec, "@"); ok {
+		data, err = os.ReadFile(after) //nolint:gosec
 		if err != nil {
 			return nil, nil, fmt.Errorf("read route file: %w", err)
 		}
@@ -73,8 +74,8 @@ func parseRouteSpec(spec string) (fwd, rev []rpcgrpc.RouteHopDetail, err error) 
 			rev = append(rev, toDetail(h))
 		}
 	} else {
-		for i := len(r.Forward) - 1; i >= 0; i-- {
-			h := r.Forward[i]
+		for _, h := range slices.Backward(r.Forward) {
+
 			rev = append(rev, rpcgrpc.RouteHopDetail{TpID: h.TpID.String(), From: h.To.String(), To: h.From.String()})
 		}
 	}

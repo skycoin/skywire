@@ -54,7 +54,7 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 
 	dest, _ := cipher.GenerateKeyPair()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		stream, err := pool.OpenStream(ctx, dest.Hex(), dial)
 		require.NoError(t, err, "open stream %d", i)

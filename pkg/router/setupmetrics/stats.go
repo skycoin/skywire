@@ -11,6 +11,7 @@ package setupmetrics
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -379,10 +380,8 @@ func (p *ProbeHolder) hold(pk string) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for _, held := range p.pks {
-		if held == pk {
-			return
-		}
+	if slices.Contains(p.pks, pk) {
+		return
 	}
 	p.pks = append(p.pks, pk)
 }
@@ -976,12 +975,8 @@ func (c *Collector) Snapshot() StatsSnapshot {
 		FailuresByReason: make(map[FailureReason]uint64, len(c.failsByReason)),
 		RouteLengthHist:  make(map[int]uint64, len(c.routeLenHist)),
 	}
-	for k, v := range c.failsByReason {
-		snap.FailuresByReason[k] = v
-	}
-	for k, v := range c.routeLenHist {
-		snap.RouteLengthHist[k] = v
-	}
+	maps.Copy(snap.FailuresByReason, c.failsByReason)
+	maps.Copy(snap.RouteLengthHist, c.routeLenHist)
 	if c.total > 0 {
 		snap.SuccessRatePct = float64(c.success) / float64(c.total) * 100
 	}
@@ -1059,10 +1054,7 @@ func (c *Collector) latencyStatsLocked() LatencyStats {
 	for _, v := range sorted {
 		sum += v
 	}
-	count := c.latencyRingLen
-	if count < 0 {
-		count = 0
-	}
+	count := max(c.latencyRingLen, 0)
 	return LatencyStats{
 		Count: uint64(count), //nolint:gosec // count guarded above
 		Min:   sorted[0],
@@ -1078,10 +1070,7 @@ func percentile(sorted []int64, p float64) int64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(float64(len(sorted)-1) * p)
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(float64(len(sorted)-1)*p), 0)
 	if idx >= len(sorted) {
 		idx = len(sorted) - 1
 	}

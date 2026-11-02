@@ -185,7 +185,7 @@ var goroutineHeaderRe = regexp.MustCompile(`^goroutine ([0-9]+) \[([^\]]+)\]:$`)
 func parseGoroutineDump(raw string) ([]goroutine, error) {
 	var out []goroutine
 	var cur *goroutine
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		if m := goroutineHeaderRe.FindStringSubmatch(line); m != nil {
 			if cur != nil {
 				cur.Top = topFrame(cur.Stack)
@@ -386,9 +386,9 @@ func buildSummary(grs []goroutine, topN int, showLocks bool) string {
 // true). When the state has no duration tag (e.g. "running"), returns
 // (state, 0, false).
 func splitStateAge(state string) (string, int, bool) {
-	if i := strings.Index(state, ","); i >= 0 {
-		head := strings.TrimSpace(state[:i])
-		rest := strings.TrimSpace(state[i+1:])
+	if before, after, ok := strings.Cut(state, ","); ok {
+		head := strings.TrimSpace(before)
+		rest := strings.TrimSpace(after)
 		var mins int
 		if _, err := fmt.Sscanf(rest, "%d minutes", &mins); err == nil {
 			return head, mins, true
@@ -475,7 +475,7 @@ func recordLockBucket(into map[string]*bucket, g goroutine, _ *regexp.Regexp) {
 }
 
 func callerPastSync(stack string) string {
-	for _, line := range strings.Split(stack, "\n") {
+	for line := range strings.SplitSeq(stack, "\n") {
 		if strings.HasPrefix(line, "\t") || line == "" {
 			continue
 		}

@@ -202,10 +202,7 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 			continue
 		}
 		avail := entry.Server.AvailableSessions
-		connected := dmsg.DefaultMaxSessions - avail
-		if connected < 0 {
-			connected = 0
-		}
+		connected := max(dmsg.DefaultMaxSessions-avail, 0)
 		serverEntries = append(serverEntries, serverEntry{
 			PublicKey:         entry.Static,
 			Connected:         connected,

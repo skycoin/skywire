@@ -30,7 +30,7 @@ func TestGetTransportsByEdgeExcept(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	lonely, _ := cipher.GenerateKeyPair()
 	var signed []*transport.SignedEntry
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		b, _ := cipher.GenerateKeyPair()
 		signed = append(signed, &transport.SignedEntry{Entry: &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"}})
 	}
@@ -65,7 +65,7 @@ func TestLiveSetByEdgeExcept(t *testing.T) {
 		edge: map[cipher.PubKey]map[uuid.UUID]struct{}{},
 		lat:  map[uuid.UUID]liveValue{}, tput: map[uuid.UUID]liveValue{}}
 	var es []*transport.Entry
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		b, _ := cipher.GenerateKeyPair()
 		es = append(es, &transport.Entry{ID: uuid.New(), Edges: transport.SortEdges(a, b), Type: "stcpr"})
 	}

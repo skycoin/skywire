@@ -47,10 +47,10 @@ func TestGzipBytesPoolReuse(t *testing.T) {
 	const iters = 50
 	var wg sync.WaitGroup
 	wg.Add(workers)
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		go func(seed int) {
 			defer wg.Done()
-			for i := 0; i < iters; i++ {
+			for i := range iters {
 				p := payloads[(seed+i)%len(payloads)]
 				out := gunzip(t, gzipBytes(p))
 				assert.Equal(t, p, out)

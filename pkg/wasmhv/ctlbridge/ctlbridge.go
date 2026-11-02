@@ -40,23 +40,23 @@ type tab struct {
 
 // Command is one command queued for a tab over SSE.
 type Command struct {
-	ID     string        `json:"id"`
-	Action string        `json:"action"`
-	Args   []interface{} `json:"args"`
+	ID     string `json:"id"`
+	Action string `json:"action"`
+	Args   []any  `json:"args"`
 }
 
 // Result is a tab's reply to a Command.
 type Result struct {
-	ID    string      `json:"id"`
-	OK    bool        `json:"ok"`
-	Value interface{} `json:"value"`
-	Error string      `json:"error"`
+	ID    string `json:"id"`
+	OK    bool   `json:"ok"`
+	Value any    `json:"value"`
+	Error string `json:"error"`
 }
 
 // Bridge holds the live tab registry + pending-command table. Safe for
 // concurrent use. Create with New, wire with Register.
 type Bridge struct {
-	logf    func(string, ...interface{})
+	logf    func(string, ...any)
 	mu      sync.Mutex
 	tabs    map[string]*tab
 	pending map[string]chan Result
@@ -65,9 +65,9 @@ type Bridge struct {
 
 // New returns a ready Bridge. logf is used for connection/bridge diagnostics
 // (pass log.Printf, or nil to discard).
-func New(logf func(string, ...interface{})) *Bridge {
+func New(logf func(string, ...any)) *Bridge {
 	if logf == nil {
-		logf = func(string, ...interface{}) {}
+		logf = func(string, ...any) {}
 	}
 	return &Bridge{
 		logf:    logf,
@@ -89,7 +89,7 @@ func (b *Bridge) getTab(id string) *tab {
 
 // SendCmd queues one command for a tab over SSE and waits for its result.
 // Shared by the /ctl/cmd handler and scripted sequences (e.g. meshtest).
-func (b *Bridge) SendCmd(tabID, action string, args ...interface{}) (Result, error) {
+func (b *Bridge) SendCmd(tabID, action string, args ...any) (Result, error) {
 	b.mu.Lock()
 	t := b.tabs[tabID]
 	b.mu.Unlock()
@@ -97,7 +97,7 @@ func (b *Bridge) SendCmd(tabID, action string, args ...interface{}) (Result, err
 		return Result{}, fmt.Errorf("no such tab %q (open it first)", tabID)
 	}
 	if args == nil {
-		args = []interface{}{}
+		args = []any{}
 	}
 	b.mu.Lock()
 	b.seq++

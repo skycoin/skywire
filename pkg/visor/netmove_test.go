@@ -62,7 +62,7 @@ func TestNetworkMovedCoalesces(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		wg.Add(1)
 		go func() { defer wg.Done(); v.networkMoved("burst") }()
 	}
@@ -70,7 +70,7 @@ func TestNetworkMovedCoalesces(t *testing.T) {
 	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 }, time.Second, time.Millisecond)
 
 	// Triggers during a run fold into exactly one more.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		v.networkMoved("watcher")
 		v.networkMoved("android")
 	}

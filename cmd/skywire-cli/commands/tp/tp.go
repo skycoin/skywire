@@ -586,7 +586,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(proxyData), &proxyEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range proxyEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			proxyByPK[pk] = e.Geo.Country
 		}
 	}
@@ -596,7 +596,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(vpnData), &vpnEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range vpnEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			vpnByPK[pk] = e.Geo.Country
 		}
 	}
@@ -606,7 +606,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visorapi.TransportSummary)
 		err := json.Unmarshal([]byte(visorData), &visorEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range visorEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			visorByPK[pk] = e.Geo.Country
 		}
 	}
@@ -817,7 +817,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(proxyData), &proxyEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range proxyEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			proxyByPK[pk] = e.Geo.Country
 		}
 	}
@@ -827,7 +827,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(vpnData), &vpnEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range vpnEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			vpnByPK[pk] = e.Geo.Country
 		}
 	}
@@ -837,7 +837,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		err := json.Unmarshal([]byte(visorData), &visorEntries)
 		internal.Catch(cmdFlags, err)
 		for _, e := range visorEntries {
-			pk := strings.SplitN(e.Address, ":", 2)[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			visorByPK[pk] = e.Geo.Country
 		}
 	}

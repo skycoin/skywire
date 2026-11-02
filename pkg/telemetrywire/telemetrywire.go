@@ -247,7 +247,7 @@ func DecodeShard(b []byte) (shard uint8, entries []Entry, err error) {
 	}
 	entries = make([]Entry, count)
 	off := headerLen
-	for i := 0; i < count; i++ {
+	for i := range count {
 		var e Entry
 		copy(e.ID[:], b[off:off+16])
 		e.SentBytes = binary.LittleEndian.Uint64(b[off+16 : off+24])

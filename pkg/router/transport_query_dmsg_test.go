@@ -17,7 +17,7 @@ import (
 // in-memory pipe (the same net/rpc server + gob codec the dmsg listener uses)
 // and returns a gobrpc client bound to the other end — exercising the full
 // serialize → RPC → deserialize path without needing a real dmsg transport.
-func servePipe(t *testing.T, rcvr interface{}) *gobrpc.Client {
+func servePipe(t *testing.T, rcvr any) *gobrpc.Client {
 	t.Helper()
 	srvConn, cliConn := net.Pipe()
 	rpcS := gobrpc.NewServer()

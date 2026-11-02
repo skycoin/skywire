@@ -59,7 +59,7 @@ func TestCXOTCPPubSub(t *testing.T) {
 	require.NoError(t, sub.ConnectTCP(ctx, addr), "ConnectTCP")
 
 	const n = 5
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.NoErrorf(t,
 			pub.Put(fmt.Sprintf("msgs/%05d", i), []byte(fmt.Sprintf("hello-%d", i))),
 			"publisher.Put %d", i)

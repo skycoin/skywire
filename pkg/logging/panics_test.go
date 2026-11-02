@@ -67,7 +67,7 @@ func TestPanicRingIsBoundedButCountKeepsRising(t *testing.T) {
 	ResetPanicStats()
 
 	total := PanicRingSize + 5
-	for i := 0; i < total; i++ {
+	for i := range total {
 		RecordPanic("site", i, []byte("stack"))
 	}
 

@@ -500,12 +500,7 @@ func (m *routeMux) pickFanoutLeg(tps []*transport.ManagedTransport, payload []by
 		return -1
 	}
 	inBand := func(idx int) bool {
-		for _, b := range band {
-			if b == idx {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(band, idx)
 	}
 	// Ask the SCHEDULER first, bounded to the band. ECF (the default mode)
 	// places a frame on the leg that will deliver it soonest and charges the
@@ -593,7 +588,7 @@ func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []ro
 	}
 	start := int(m.tpIndex.Add(1) - 1)
 	scan := func(match func(idx int) bool) (*transport.ManagedTransport, routing.Rule, int, bool) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			idx := ((start % n) + i) % n
 			if idx < 0 {
 				idx += n

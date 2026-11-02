@@ -35,7 +35,7 @@ func roleLeg(idx int, mid string, standby bool) Leg {
 // labeled active and 6 standby, every leg leg-active inside its own group.
 func standbyPoolSnap() Snapshot {
 	snap := Snapshot{Surface: SurfaceSkysocks, App: "skysocks-client", Running: true, SelfPK: tunnelRoleSrc}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		role := RoleStandby
 		if i < 2 {
 			role = RoleActive

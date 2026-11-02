@@ -1144,10 +1144,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	if e.adaptTarget < adaptRevActive {
 		e.adaptTarget = adaptRevActive
 	}
-	desiredActive := e.adaptTarget + forwardExtra + nonDLActive
-	if desiredActive > adaptCap {
-		desiredActive = adaptCap
-	}
+	desiredActive := min(e.adaptTarget+forwardExtra+nonDLActive, adaptCap)
 
 	// (0) No active legs — bring one up, preferring a healthy warm spare.
 	if aliveCount == 0 {
@@ -1207,13 +1204,10 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		slices.SortFunc(stby, func(a, b stbyLeg) int {
 			return cmp.Compare(b.lat, a.lat)
 		})
-		surplus := standbyCount - adaptStandbyMax
-		if surplus > len(stby) {
-			surplus = len(stby)
-		}
+		surplus := min(standbyCount-adaptStandbyMax, len(stby))
 		if surplus > 0 {
 			drop := make([]int, surplus)
-			for i := 0; i < surplus; i++ {
+			for i := range surplus {
 				drop[i] = stby[i].idx
 			}
 			e.adaptCooldown = adaptReshapeCooldown
@@ -1351,10 +1345,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 		// so the width tracks only the download-class legs, excluding both the
 		// forward-grown aux legs and a unidirectional group's non-download (upload)
 		// leg(s) (both no-ops when absent).
-		e.adaptTarget = aliveCount - forwardExtra - nonDLActive + 1
-		if e.adaptTarget > adaptCap {
-			e.adaptTarget = adaptCap
-		}
+		e.adaptTarget = min(aliveCount-forwardExtra-nonDLActive+1, adaptCap)
 		e.adaptSatTicks = 0
 		e.adaptCooldown = adaptReshapeCooldown
 		if healthyPromotable >= 0 && standbyCount > adaptStandbyMin {
@@ -1389,10 +1380,7 @@ func (e *Engine) tickAdaptive(legs []LegInfo) RotationAction {
 	// leg to release).
 	if e.adaptIdleCount >= adaptHysteresis && aliveCount-forwardExtra-nonDLActive > adaptRevActive && newestAliveIdx > 0 {
 		e.adaptIdleCount = 0
-		e.adaptTarget = aliveCount - forwardExtra - nonDLActive - 1
-		if e.adaptTarget < adaptRevActive {
-			e.adaptTarget = adaptRevActive
-		}
+		e.adaptTarget = max(aliveCount-forwardExtra-nonDLActive-1, adaptRevActive)
 		e.adaptCooldown = adaptReshapeCooldown
 		if standbyCount < adaptStandbyMax {
 			return RotationAction{DemoteToStandby: []int{newestAliveIdx}}

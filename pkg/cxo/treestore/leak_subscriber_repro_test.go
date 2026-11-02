@@ -54,7 +54,7 @@ func TestPublisherCleanupBoundedWithSubscriber(t *testing.T) {
 	}
 
 	// all-transports pattern: one fixed path, a fresh large value every tick.
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		require.NoError(t, pub.Put("all-transports", mkRandom(2*1024*1024)))
 		require.NoError(t, pub.Flush())
 		time.Sleep(20 * time.Millisecond)
@@ -122,7 +122,7 @@ func TestSubscriberCXDSBounded(t *testing.T) {
 	}
 
 	const ticks = 40
-	for i := 0; i < ticks; i++ {
+	for range ticks {
 		require.NoError(t, pub.Put("all-transports", mkRandom(2*1024*1024)))
 		require.NoError(t, pub.Flush())
 		time.Sleep(20 * time.Millisecond)

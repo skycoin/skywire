@@ -10,6 +10,7 @@ import (
 	"math"
 	"runtime"
 	"runtime/metrics"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -282,8 +283,8 @@ func upper(buckets []float64, i int) float64 {
 }
 
 func maxBucket(buckets []float64, counts []uint64) float64 {
-	for i := len(counts) - 1; i >= 0; i-- {
-		if counts[i] > 0 {
+	for i, count := range slices.Backward(counts) {
+		if count > 0 {
 			return upper(buckets, i)
 		}
 	}

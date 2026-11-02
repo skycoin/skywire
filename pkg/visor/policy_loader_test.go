@@ -18,7 +18,7 @@ func findRepoArtifact(t *testing.T, path ...string) string {
 	t.Helper()
 	_, here, _, _ := runtime.Caller(0)
 	dir := here
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		dir = filepath.Dir(dir)
 		parts := append([]string{dir}, path...)
 		candidate := filepath.Join(parts...)

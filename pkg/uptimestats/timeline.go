@@ -64,11 +64,8 @@ func BitmapToBlocks(bitmap string) string {
 	if len(bitmap) == 0 {
 		return strings.Repeat(" ", TimelineHours)
 	}
-	step := len(bitmap)
-	if step > TimelineSlots {
-		step = TimelineSlots
-	}
-	for i := 0; i < step; i++ {
+	step := min(len(bitmap), TimelineSlots)
+	for i := range step {
 		if bitmap[i] == TimelineOnline {
 			hr := i * TimelineHours / step
 			if hr >= TimelineHours {

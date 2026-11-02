@@ -14,7 +14,7 @@ func TestSvcFetchCache_ServesFreshWithoutAsking(t *testing.T) {
 	var c svcFetchCache
 	var calls atomic.Int32
 	fetch := func() ([]byte, error) { calls.Add(1); return []byte("list"), nil }
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		body, err := c.get(context.Background(), "sd /api/services?type=vpn", fetch)
 		if err != nil || string(body) != "list" {
 			t.Fatalf("get #%d = %q, %v", i, body, err)

@@ -811,7 +811,7 @@ func (p Packet) SACKWords() []uint64 {
 		return nil
 	}
 	words := make([]uint64, n)
-	for w := 0; w < n; w++ {
+	for w := range n {
 		words[w] = binary.BigEndian.Uint64(payload[5+w*8:])
 	}
 	return words

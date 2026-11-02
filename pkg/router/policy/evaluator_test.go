@@ -7,6 +7,7 @@ package policy
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -192,7 +193,7 @@ def decide_route(ctx, candidates):
 `
 	var logged string
 	eval, err := NewEvaluator("boom.star", src,
-		WithLogger(func(format string, args ...interface{}) {
+		WithLogger(func(format string, args ...any) {
 			logged += format // capture the first format string
 		}))
 	if err != nil {
@@ -279,10 +280,5 @@ def decide_route(ctx, candidates):
 }
 
 func contains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }

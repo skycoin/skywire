@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"strings"
@@ -528,7 +529,7 @@ func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode, dropped *[]
 	if err != nil {
 		return err
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var entry TreeEntry
 		if _, err := node.Children.ValueByIndex(up, i, &entry); err != nil {
 			return err
@@ -1358,9 +1359,8 @@ func cloneMemNode(n *memNode) *memNode {
 		mutSeq:      n.mutSeq,
 		evictedFrom: n.evictedFrom,
 	}
-	for k, v := range n.leaves {
-		out.leaves[k] = v // share immutable leaf byte slice
-	}
+	// share immutable leaf byte slice
+	maps.Copy(out.leaves, n.leaves)
 	for k, sub := range n.subs {
 		out.subs[k] = cloneMemNode(sub)
 	}
@@ -1601,7 +1601,7 @@ func encodeNode(up registry.Pack, n *memNode, path []string, freshSubs *[]freshS
 		return node, nil
 	}
 
-	entries := make([]interface{}, 0, len(names))
+	entries := make([]any, 0, len(names))
 	for _, name := range names {
 		entry := TreeEntry{Name: name}
 		if leaf, ok := n.leaves[name]; ok {

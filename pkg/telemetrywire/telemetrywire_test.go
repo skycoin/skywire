@@ -36,7 +36,7 @@ func TestShardOf(t *testing.T) {
 	if got := ShardOf(id); got != 0 {
 		t.Fatalf("ShardOf = %d, want 0", got)
 	}
-	for sh := uint8(0); sh < ShardCount; sh++ {
+	for sh := range uint8(ShardCount) {
 		id[0] = sh << 4
 		if got := ShardOf(id); got != sh {
 			t.Fatalf("ShardOf(byte0=%#x) = %d, want %d", id[0], got, sh)
@@ -61,7 +61,7 @@ func TestLeafPath(t *testing.T) {
 func TestRoundTrip(t *testing.T) {
 	for _, count := range []int{0, 1, 2, 53, 800} {
 		entries := make([]Entry, count)
-		for i := 0; i < count; i++ {
+		for i := range count {
 			entries[i] = sampleEntry(byte(i))
 		}
 		blob := EncodeShard(7, entries)

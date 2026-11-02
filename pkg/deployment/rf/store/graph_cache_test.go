@@ -34,7 +34,7 @@ func TestGraphCacheRebuildAndGet(t *testing.T) {
 
 	// Concurrent reads on the shared graph must be race-free (run with -race).
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -77,7 +77,7 @@ func TestGraphCacheRebuildsOnDemand(t *testing.T) {
 		mu   sync.Mutex
 		seen = map[*Graph]bool{}
 	)
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

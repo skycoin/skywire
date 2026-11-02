@@ -70,7 +70,7 @@ Use --path to print just the config file path.`,
 			}
 		}
 
-		var v interface{}
+		var v any
 		if err := json.Unmarshal(configData, &v); err != nil {
 			internal.PrintOutput(cmd.Flags(), string(configData), string(configData)+"\n")
 			return
@@ -79,7 +79,7 @@ Use --path to print just the config file path.`,
 		// Drop the secret key. GetRuntimeConfig already redacts it, but the
 		// file fallback above reads skywire-config.json verbatim and would
 		// otherwise print the visor's identity secret to the terminal.
-		if m, ok := v.(map[string]interface{}); ok {
+		if m, ok := v.(map[string]any); ok {
 			delete(m, "sk")
 		}
 
@@ -95,7 +95,7 @@ Use --path to print just the config file path.`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("compile filter: %w", err))
 			}
-			var results []interface{}
+			var results []any
 			var text string
 			iter := code.Run(v)
 			for {
@@ -110,7 +110,7 @@ Use --path to print just the config file path.`,
 				text += string(out) + "\n"
 				results = append(results, result)
 			}
-			var payload interface{} = results
+			var payload any = results
 			if len(results) == 1 {
 				payload = results[0]
 			}

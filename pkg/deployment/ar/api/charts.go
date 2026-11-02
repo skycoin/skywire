@@ -4,6 +4,7 @@ package api
 import (
 	"cmp"
 	"context"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -56,9 +57,7 @@ func (c *arCounters) snapshot() map[string]uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[string]uint64, len(c.n))
-	for k, v := range c.n {
-		out[k] = v
-	}
+	maps.Copy(out, c.n)
 	return out
 }
 

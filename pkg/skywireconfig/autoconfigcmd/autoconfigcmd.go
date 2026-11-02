@@ -32,6 +32,8 @@
 package autoconfigcmd
 
 import (
+	"maps"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -506,9 +508,7 @@ func New(v *Values) *cobra.Command {
 // without affecting the package-level data.
 func EnvMap() map[string]EnvMapping {
 	out := make(map[string]EnvMapping, len(envMap))
-	for k, v := range envMap {
-		out[k] = v
-	}
+	maps.Copy(out, envMap)
 	return out
 }
 

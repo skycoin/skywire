@@ -154,7 +154,7 @@ func (m *model) draw(f *progkit.Frame) {
 		titleSGR+"skywire"+resetSGR+dimSGR+" — interactive console"+resetSGR,
 		dimSGR+strings.Repeat("─", f.W)+resetSGR,
 	)
-	for i := 0; i < view; i++ {
+	for i := range view {
 		r := ""
 		if m.top+i < len(lines) {
 			r = lines[m.top+i]
@@ -312,7 +312,7 @@ func (m *model) append(block string) {
 // the next line.
 func wrapANSI(s string, w int) []string {
 	var out []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		var (
 			cur    strings.Builder
 			active string // SGR sequences since the last reset

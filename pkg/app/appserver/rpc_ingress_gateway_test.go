@@ -109,7 +109,7 @@ func testRPCIngressGatewayDialNoMoreSlots(t *testing.T, l *logging.Logger, dialA
 		require.NoError(t, err)
 	}
 
-	for i := uint16(0); i < math.MaxUint16; i++ {
+	for i := range uint16(math.MaxUint16) {
 		err := rpc.cm.Set(i, nil)
 		require.NoError(t, err)
 	}
@@ -338,7 +338,7 @@ func testRPCIngressGatewayListenNoMoreSlots(t *testing.T, l *logging.Logger, lis
 		require.NoError(t, err)
 	}
 
-	for i := uint16(0); i < math.MaxUint16; i++ {
+	for i := range uint16(math.MaxUint16) {
 		err := rpc.lm.Set(i, nil)
 		require.NoError(t, err)
 	}
@@ -449,7 +449,7 @@ func testRPCIngressGatewayAcceptNoMoreSlots(t *testing.T, l *logging.Logger) {
 		require.NoError(t, err)
 	}
 
-	for i := uint16(0); i < math.MaxUint16; i++ {
+	for i := range uint16(math.MaxUint16) {
 		err := rpc.cm.Set(i, nil)
 		require.NoError(t, err)
 	}

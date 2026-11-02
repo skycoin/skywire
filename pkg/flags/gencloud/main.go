@@ -85,9 +85,9 @@ func shapes(path string) ([][]string, error) {
 func sample(img image.Image, cols, rows int) []string {
 	b := img.Bounds()
 	out := make([]string, rows)
-	for y := 0; y < rows; y++ {
+	for y := range rows {
 		var line strings.Builder
-		for x := 0; x < cols; x++ {
+		for x := range cols {
 			x0 := b.Min.X + x*b.Dx()/cols
 			x1 := b.Min.X + (x+1)*b.Dx()/cols
 			y0 := b.Min.Y + y*b.Dy()/rows

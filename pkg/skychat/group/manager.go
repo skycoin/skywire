@@ -29,6 +29,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -483,10 +484,8 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	if !r.IsAdmin(m.myPK) {
 		return Record{}, errors.New("group: AddMember: only admins can edit roster")
 	}
-	for _, existing := range r.Members {
-		if existing == pk {
-			return r, nil // already present, idempotent
-		}
+	if slices.Contains(r.Members, pk) {
+		return r, nil // already present, idempotent
 	}
 	r.Members = append(r.Members, pk)
 	if err := m.store.Put(r); err != nil {

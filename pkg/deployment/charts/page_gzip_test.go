@@ -35,7 +35,7 @@ func TestPageServesCachedGzip(t *testing.T) {
 	if plain.Header().Get("Content-Encoding") != "" {
 		t.Fatal("plain client got an encoded body")
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rec := get(true)
 		if rec.Header().Get("Content-Encoding") != "gzip" {
 			t.Fatalf("request %d: not gzipped", i)

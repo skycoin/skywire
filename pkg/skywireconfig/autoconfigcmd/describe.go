@@ -89,7 +89,7 @@ func checkValue(rule, value string) error {
 			return fmt.Errorf("%q is not a public key", value)
 		}
 	case CheckPKs:
-		for _, s := range strings.Split(value, ",") {
+		for s := range strings.SplitSeq(value, ",") {
 			if err := checkValue(CheckPK, s); err != nil {
 				return err
 			}

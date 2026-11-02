@@ -130,8 +130,8 @@ func (rt *Router) register(method, path string, h http.Handler) {
 
 // wrap applies the group middleware and records the route for RoutePattern.
 func (rt *Router) wrap(pattern string, h http.Handler) http.Handler {
-	for i := len(rt.mws) - 1; i >= 0; i-- {
-		h = rt.mws[i](h)
+	for _, v := range slices.Backward(rt.mws) {
+		h = v(h)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p, ok := r.Context().Value(routePatternKey{}).(*string); ok {
@@ -168,8 +168,8 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s := rt.root.shared
 	s.once.Do(func() {
 		var h http.Handler = rt.mux
-		for i := len(s.top) - 1; i >= 0; i-- {
-			h = s.top[i](h)
+		for _, v := range slices.Backward(s.top) {
+			h = v(h)
 		}
 		s.served = h
 	})

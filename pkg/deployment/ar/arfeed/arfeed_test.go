@@ -25,7 +25,7 @@ func TestBucketIndicesMatchSortedPositions(t *testing.T) {
 	// that each LEVEL is a dense ascending run of Fanout names, then that a
 	// key's computed indices address its own bucket.
 	seen := make(map[string]bool, BucketCount)
-	for i := 0; i < BucketCount; i++ {
+	for i := range BucketCount {
 		path := BucketPathAt(i)
 		segs := strings.Split(path, "/")
 		require.Len(t, segs, Levels)
@@ -37,7 +37,7 @@ func TestBucketIndicesMatchSortedPositions(t *testing.T) {
 	}
 	require.Len(t, seen, BucketCount)
 
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		pk, _ := cipher.GenerateKeyPair()
 		segs, indices := Segments(pk), Indices(pk)
 		require.Len(t, segs, Levels)
@@ -62,7 +62,7 @@ func TestBucketIndicesMatchSortedPositions(t *testing.T) {
 func TestBucketsSpreadAcrossKeySpace(t *testing.T) {
 	const n = 4000
 	occupied := make(map[string]int)
-	for i := 0; i < n; i++ {
+	for range n {
 		pk, _ := cipher.GenerateKeyPair()
 		occupied[BucketPath(pk)]++
 	}
@@ -106,7 +106,7 @@ func TestBucketRoundTrip(t *testing.T) {
 // no-op rather than a fresh object every 30 seconds.
 func TestEncodeBucketIsDeterministic(t *testing.T) {
 	peers := map[cipher.PubKey]*PeerBindings{}
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		pk, _ := cipher.GenerateKeyPair()
 		peers[pk] = &PeerBindings{
 			STCPR: &addrresolver.VisorData{RemoteAddr: "10.0.0.1:1"},
@@ -115,7 +115,7 @@ func TestEncodeBucketIsDeterministic(t *testing.T) {
 	}
 	first, err := EncodeBucket(peers)
 	require.NoError(t, err)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		again, err := EncodeBucket(peers)
 		require.NoError(t, err)
 		require.Equal(t, first, again, "re-encode of unchanged content must be byte-identical")

@@ -162,7 +162,7 @@ func probeEntrySet() ([]*disc.Entry, error) {
 	// fail with "202 - cannot connect to delegated server" purely by drawing an
 	// unlucky relay. Each retry bootstraps fresh sessions and redraws.
 	var err error
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		entries, ferr := fetchAllServersOverDmsg(ctx)
 		cancel()

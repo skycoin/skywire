@@ -639,10 +639,7 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 				dates[0], dates[len(dates)-1], len(dates))
 		}
 		b := bars[i]
-		end := len(b) - trailTrim
-		if end < trim {
-			end = trim
-		}
+		end := max(len(b)-trailTrim, trim)
 		cmdutil.Printf("%s %s\n", e.PK.Hex(), b[trim:end])
 	}
 }
@@ -713,14 +710,8 @@ func rollingLabels(hoursBack int) string {
 	if hoursBack <= 0 {
 		return ""
 	}
-	widest := len(fmt.Sprintf("-%dh", hoursBack-1))
-	if widest < 3 {
-		widest = 3
-	}
-	step := hoursBack / 8
-	if step < widest+1 {
-		step = widest + 1
-	}
+	widest := max(len(fmt.Sprintf("-%dh", hoursBack-1)), 3)
+	step := max(hoursBack/8, widest+1)
 	buf := make([]byte, hoursBack+widest)
 	for i := range buf {
 		buf[i] = ' '

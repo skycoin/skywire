@@ -2,6 +2,8 @@
 package registry
 
 import (
+	"slices"
+
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/encoder"
 )
@@ -775,9 +777,9 @@ func (r *Refs) descendNodeLeafs(
 	// so, since the shift is local variable
 	// we are free to decrement it
 
-	for k := len(rn.leafs) - 1; k >= 0; k-- {
+	for _, v := range slices.Backward(rn.leafs) {
 
-		var el = rn.leafs[k] // current element
+		var el = v // current element
 
 		if shift > i {
 			shift--
@@ -825,9 +827,9 @@ func (r *Refs) descendNodeBranches(
 
 	var subpass int // pass for a subtree (for a branch)
 
-	for k := len(rn.branches) - 1; k >= 0; k-- {
+	for _, v := range slices.Backward(rn.branches) {
 
-		var br = rn.branches[k] // current branch
+		var br = v // current branch
 
 		if err = r.loadNodeIfNeed(pack, br, depth-1); err != nil {
 			return pass, rewind, err

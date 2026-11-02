@@ -59,7 +59,7 @@ func TestPool_ReusesRouteGroup(t *testing.T) {
 	defer p.Close() //nolint:errcheck
 
 	key := testKey(1)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		s, err := p.OpenStream(context.Background(), key, dial)
 		require.NoError(t, err)
 		roundtrip(t, s, "ping")

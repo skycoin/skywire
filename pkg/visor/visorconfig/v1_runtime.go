@@ -54,7 +54,7 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.AppLauncher, appName string, a
 // UpdateAppArg updates the cli flag of the specified app config and also within the
 // The updated config gets flushed to file if there are any changes.
 // func (v1 *V1) UpdateAppArg(appName, argName string, value interface{}) error {
-func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string, value interface{}) error {
+func (v1 *V1) UpdateAppArg(launch *launcher.AppLauncher, appName, argName string, value any) error {
 	v1.mu.Lock()
 	defer v1.mu.Unlock()
 
@@ -415,7 +415,7 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 
 		argChanged := false
 		l := len(conf.Apps[i].Args)
-		for j := 0; j < l; j++ {
+		for j := range l {
 			equalArgName := conf.Apps[i].Args[j] == argName && j+1 < len(conf.Apps[i].Args)
 			if !equalArgName {
 				continue

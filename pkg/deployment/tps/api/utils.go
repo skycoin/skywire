@@ -21,7 +21,7 @@ import (
 
 // visor RPC helpers
 
-func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.PubKey, method string, req, result interface{}) {
+func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.PubKey, method string, req, result any) {
 	if err := api.callVisorRPC(r.Context(), pk, method, req, result); err != nil {
 		api.internalError(w, r, err)
 		return
@@ -29,7 +29,7 @@ func (api *API) visorResponse(w http.ResponseWriter, r *http.Request, pk cipher.
 	httputil.WriteJSON(w, r, http.StatusOK, result)
 }
 
-func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method string, req, result interface{}) error {
+func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method string, req, result any) error {
 	port := skyenv.DmsgTransportSetupPort
 	conn, err := api.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: port})
 	if err != nil {

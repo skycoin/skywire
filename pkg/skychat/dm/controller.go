@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -138,7 +139,7 @@ type Config struct {
 	// peers; inbound bare text is always accepted regardless.
 	RawText bool
 	// Log is an optional structured logger sink.
-	Log func(format string, args ...interface{})
+	Log func(format string, args ...any)
 }
 
 // Controller is the shared DM core. Create with New; bring listeners up with
@@ -207,7 +208,7 @@ func New(cfg Config) *Controller {
 	}
 }
 
-func (c *Controller) log(format string, args ...interface{}) {
+func (c *Controller) log(format string, args ...any) {
 	if c.cfg.Log != nil {
 		c.cfg.Log(format, args...)
 	}
@@ -346,12 +347,7 @@ func (c *Controller) tryNetworkFallback(ctx context.Context, pk cipher.PubKey, c
 }
 
 func (c *Controller) hasNetwork(n appnet.Type) bool {
-	for _, x := range c.cfg.Networks {
-		if x == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.cfg.Networks, n)
 }
 
 // warmDialTimeout bounds the auto-mode background skynet dial (route setup can

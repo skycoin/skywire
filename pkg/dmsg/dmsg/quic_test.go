@@ -173,7 +173,7 @@ func TestQUICSession_ManyOpenStreams(t *testing.T) {
 	}()
 
 	const n = 150
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*quicStreamOpenTimeout)
 		conn, err := clientA.DialStream(ctx, Addr{PK: pkB, Port: 8080})
 		cancel()

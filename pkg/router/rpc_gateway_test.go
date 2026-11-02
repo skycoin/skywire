@@ -82,7 +82,7 @@ func TestRPCGateway_AddEdgeRules(t *testing.T) {
 func TestRPCGateway_AddIntermediaryRules(t *testing.T) {
 	rule1 := testInterRule
 	rule2 := testInterRule2
-	rulesIfc := []interface{}{rule1, rule2}
+	rulesIfc := []any{rule1, rule2}
 	rules := []routing.Rule{rule1, rule2}
 
 	t.Run("ok", func(t *testing.T) {

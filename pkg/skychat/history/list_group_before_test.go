@@ -26,7 +26,7 @@ func seedGroup(t *testing.T, st Store, groupID string, n int) []time.Time {
 	t.Helper()
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	out := make([]time.Time, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ts := base.Add(time.Duration(i) * time.Second)
 		err := st.AppendGroup(GroupMessage{
 			GroupID:   groupID,
@@ -103,7 +103,7 @@ func TestListGroupBefore_PagesCoverEverythingOnce(t *testing.T) {
 
 		var assembled []string
 		cursor := time.Time{}
-		for i := 0; i < total; i++ { // bounded: cannot loop forever
+		for i := range total { // bounded: cannot loop forever
 			got, err := st.ListGroupBefore("g1", cursor, page)
 			if err != nil {
 				t.Fatalf("page %d: %v", i, err)
@@ -116,7 +116,7 @@ func TestListGroupBefore_PagesCoverEverythingOnce(t *testing.T) {
 			cursor = got[0].Timestamp
 		}
 		want := make([]string, 0, total)
-		for i := 0; i < total; i++ {
+		for i := range total {
 			want = append(want, fmt.Sprintf("msg-%02d", i))
 		}
 		if !eq(assembled, want) {

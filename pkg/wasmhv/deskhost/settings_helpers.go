@@ -97,8 +97,8 @@ func rowFor(f autoconfigcmd.Flag, vals map[string]string) settingRow {
 // flagHelp drops the "— writes X in skywire.conf" tail every description
 // carries: the window already shows the variable.
 func flagHelp(desc string) string {
-	if i := strings.Index(desc, " — writes "); i >= 0 {
-		return strings.TrimSpace(desc[:i])
+	if before, _, ok := strings.Cut(desc, " — writes "); ok {
+		return strings.TrimSpace(before)
 	}
 	return desc
 }

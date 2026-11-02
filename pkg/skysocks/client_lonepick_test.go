@@ -79,7 +79,7 @@ func TestPickAnyIgnoresDownloadHistory(t *testing.T) {
 	require.Same(t, near, c.pickSessionFor(pickAny))
 
 	// 34 s of downloads, the far tunnel delivering nine times as much.
-	for i := 0; i < 68; i++ {
+	for range 68 {
 		now = now.Add(meterSampleMin)
 		mNear.rx.Add(uint64(1.0e6 * meterSampleMin.Seconds()))
 		mFar.rx.Add(uint64(9.0e6 * meterSampleMin.Seconds()))

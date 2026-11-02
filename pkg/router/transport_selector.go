@@ -434,7 +434,7 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 			schedule := make([]int, 0, len(live)*(capacityBias+1))
 			for _, l := range live {
 				count := 1 + int(float64(capacityBias)*(l.w/maxW)+0.5)
-				for j := 0; j < count; j++ {
+				for range count {
 					schedule = append(schedule, l.idx)
 				}
 			}
@@ -484,11 +484,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 			if i < len(ts.explicitWeights) && ts.explicitWeights[i] > 0 {
 				w = ts.explicitWeights[i]
 			}
-			count := int(w/minW + 0.5)
-			if count < 1 {
-				count = 1
-			}
-			for j := 0; j < count; j++ {
+			count := max(int(w/minW+0.5), 1)
+			for range count {
 				schedule = append(schedule, i)
 			}
 		}
@@ -620,10 +617,7 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 			weights[i] = 1
 		} else {
 			// Weight = max_latency / this_latency, minimum 1
-			w := int(maxLatency / lat)
-			if w < 1 {
-				w = 1
-			}
+			w := max(int(maxLatency/lat), 1)
 			weights[i] = w
 		}
 	}
@@ -641,7 +635,7 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 
 	schedule := make([]int, 0, totalWeight)
 	for i, w := range weights {
-		for j := 0; j < w; j++ {
+		for range w {
 			schedule = append(schedule, i)
 		}
 	}
@@ -778,11 +772,8 @@ func fiveTupleHash(p []byte) uint32 {
 		return h
 	}
 	// Fallback: hash the first 24 bytes (or fewer).
-	n := len(p)
-	if n > 24 {
-		n = 24
-	}
-	for i := 0; i < n; i++ {
+	n := min(len(p), 24)
+	for i := range n {
 		h ^= uint32(p[i])
 		h *= fnvPrime
 	}

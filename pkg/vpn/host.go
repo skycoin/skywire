@@ -100,7 +100,7 @@ func lookupIP(name string) ([]netip.Addr, error) {
 		return nil, err
 	}
 	var ips []netip.Addr
-	for _, f := range strings.Fields(s) {
+	for f := range strings.FieldsSeq(s) {
 		if ip, err := netip.ParseAddr(f); err == nil {
 			ips = append(ips, ip.Unmap())
 		}

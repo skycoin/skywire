@@ -152,7 +152,7 @@ func (v *Visor) SetAppRoutingPolicy(appName, path string) error {
 		return ErrPolicyHookUnavailable
 	}
 
-	logger := func(format string, args ...interface{}) {
+	logger := func(format string, args ...any) {
 		v.log.Infof(format, args...)
 	}
 	provider := newVisorPolicyProvider(v)

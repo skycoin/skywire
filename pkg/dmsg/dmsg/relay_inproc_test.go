@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -43,12 +44,7 @@ func TestAttachInProcess(t *testing.T) {
 	require.Equal(t, CarrierSkynet, sessions[0].Carrier())
 
 	require.Eventually(t, func() bool {
-		for _, pk := range host.RelaySessions() {
-			if pk == guestPK {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(host.RelaySessions(), guestPK)
 	}, 10*time.Second, 50*time.Millisecond,
 		"the host must see the guest under the guest's OWN key")
 }

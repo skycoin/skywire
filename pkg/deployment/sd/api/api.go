@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,7 +86,7 @@ type API struct {
 	// visors with both vpn and skysocks don't overwrite each other's
 	// entry. Delete drops the target when a visor has no services left.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 
@@ -104,7 +105,7 @@ type API struct {
 // SetDHTMirror sets a mirror that publishes per-visor service lists to
 // the DHT on every registration and clears them on full deregistration.
 func (a *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
@@ -725,7 +726,7 @@ func (a *API) postUptimes(w http.ResponseWriter, r *http.Request) {
 // PK hex matches one of the semicolon-separated PKs.
 func filterByPKs(summaries []store.VisorSummary, pksParam string) []store.VisorSummary {
 	want := make(map[string]struct{})
-	for _, pk := range strings.Split(pksParam, ";") {
+	for pk := range strings.SplitSeq(pksParam, ";") {
 		pk = strings.TrimSpace(pk)
 		if pk != "" {
 			want[pk] = struct{}{}
@@ -763,13 +764,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 */
 
 func ipIsPublic(se servicedisc.Service, remoteIP string) bool {
-	for _, localIP := range se.LocalIPs {
-		if localIP == remoteIP {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(se.LocalIPs, remoteIP)
 }
 
 func serviceAddrFromParam(r *http.Request) (servicedisc.SWAddr, error) {

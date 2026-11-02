@@ -180,12 +180,12 @@ func (g *Graph) layout(iterations int) {
 	for i := range pull {
 		pull[i] = 1 / math.Sqrt(float64(g.Degree[i])+1)
 	}
-	for it := 0; it < iterations; it++ {
+	for it := range iterations {
 		step := 0.08 * (1 - float64(it)/float64(iterations))
 		for i := range dx {
 			dx[i], dy[i] = 0, 0
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			xi, yi := g.X[i], g.Y[i]
 			for j := i + 1; j < n; j++ {
 				ex, ey := xi-g.X[j], yi-g.Y[j]
@@ -225,7 +225,7 @@ func (g *Graph) layout(iterations int) {
 				}
 			}
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			dx[i] -= g.X[i] * 4
 			dy[i] -= g.Y[i] * 4
 			d := math.Sqrt(dx[i]*dx[i]+dy[i]*dy[i]) + 1e-9

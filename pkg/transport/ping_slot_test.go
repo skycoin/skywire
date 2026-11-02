@@ -12,7 +12,7 @@ import (
 func TestPingSlotSpreadsTransports(t *testing.T) {
 	const n, slots = 400, 20
 	counts := make([]int, slots)
-	for i := 0; i < n; i++ {
+	for range n {
 		id := uuid.New()
 		s := pingSlot(id, slots)
 		if s != pingSlot(id, slots) {

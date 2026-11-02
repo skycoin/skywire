@@ -367,7 +367,7 @@ func collectBulkPKs(client visorapi.API, csv string, allVisors bool) ([]string, 
 		pks = append(pks, s)
 	}
 	if csv != "" {
-		for _, p := range strings.Split(csv, ",") {
+		for p := range strings.SplitSeq(csv, ",") {
 			add(p)
 		}
 	}

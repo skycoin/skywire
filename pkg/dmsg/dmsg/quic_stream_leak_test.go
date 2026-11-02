@@ -80,7 +80,7 @@ func TestQUICSession_ClosedStreamsFreeTheirSlots(t *testing.T) {
 	}()
 
 	const n = 200
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*quicStreamOpenTimeout)
 		conn, err := clientA.DialStream(ctx, Addr{PK: pkB, Port: 8080})
 		cancel()
@@ -95,7 +95,7 @@ func TestQUICSession_ClosedStreamsFreeTheirSlots(t *testing.T) {
 
 	// A dial to a port nobody listens on is refused; that must free its slot too.
 	const refused = 25 // past the limit of 20
-	for i := 0; i < refused; i++ {
+	for range refused {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*quicStreamOpenTimeout)
 		_, err := clientA.DialStream(ctx, Addr{PK: pkB, Port: 9999})
 		cancel()

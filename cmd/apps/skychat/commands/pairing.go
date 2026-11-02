@@ -599,7 +599,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+			_ = json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 				"ok": true,
 				"id": msgID,
 			})
@@ -730,7 +730,7 @@ func parsePK(s string) (cipher.PubKey, error) {
 // helper kept here to avoid importing strings or bytes for the
 // JSON-vs-text fast-reject in handlePairControlFrame.
 func bytesTrimSpace(b []byte) []byte {
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		switch b[i] {
 		case ' ', '\t', '\n', '\r':
 			continue

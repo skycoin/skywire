@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -286,13 +287,7 @@ func (c *HTTPClient) registerEntry(ctx context.Context) (Service, error) {
 		// Service discovery server checks that remote IP is in local IPs
 		if pub != "" {
 			// Check if public IP is already in the list
-			found := false
-			for _, ip := range c.entry.LocalIPs {
-				if ip == pub {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(c.entry.LocalIPs, pub)
 			if !found {
 				c.entry.LocalIPs = append(c.entry.LocalIPs, pub)
 			}

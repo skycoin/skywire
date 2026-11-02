@@ -193,7 +193,7 @@ func walkArraySlice(
 
 	var shift, m int
 
-	for i := 0; i < ln; i++ {
+	for i := range ln {
 
 		if shift > len(val) {
 			err = fmt.Errorf("unexpected end of encoded  array or slice "+

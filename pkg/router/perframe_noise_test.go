@@ -53,7 +53,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 	const n = 200
 	plain := make([][]byte, n)
 	packets := make([]routing.Packet, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		plain[i] = []byte(fmt.Sprintf("payload-%04d-the-quick-brown-fox", i))
 		pkt, seq, err := send.wrapPayload(routeID, plain[i], uuid.Nil)
 		require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestPerFrameMuxDataPathRoundTrip(t *testing.T) {
 		got = append(got, delivered...)
 	}
 	require.Len(t, got, n, "every frame must eventually be delivered")
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.Equal(t, plain[i], got[i], "frame %d delivered in order and intact", i)
 	}
 

@@ -37,9 +37,9 @@ func generateExamples() string {
 	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
 	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
 
-	serviceExample := map[string]interface{}{
+	serviceExample := map[string]any{
 		"address": pk1 + ":3", "type": "vpn", "version": "v1.3.29",
-		"geo": map[string]interface{}{"country": "US", "region": "CA", "lat": 37.77, "lon": -122.41},
+		"geo": map[string]any{"country": "US", "region": "CA", "lat": 37.77, "lon": -122.41},
 	}
 
 	return fmt.Sprintf(`
@@ -67,19 +67,19 @@ DEL /api/services/deregister/{type} (NM auth headers: NM-PK, NM-Sign)
 
 GET /security/nonces/{pk}
   %s`,
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"build_info":   map[string]string{"version": "v1.3.29"},
 			"started_at":   "2024-01-15T10:00:00Z",
 			"dmsg_address": pk1 + ":80",
 			"dmsg_servers": []string{pk2},
 		}),
-		cmdutil.ExampleJSON([]map[string]interface{}{serviceExample}),
+		cmdutil.ExampleJSON([]map[string]any{serviceExample}),
 		cmdutil.ExampleJSON(serviceExample),
-		cmdutil.ExampleJSON(map[string]interface{}{
+		cmdutil.ExampleJSON(map[string]any{
 			"address": pk1 + ":3", "type": "vpn", "version": "v1.3.29",
 		}),
 		cmdutil.ExampleJSON([]string{pk1, pk2}),
-		cmdutil.ExampleJSON(map[string]interface{}{"nonce": 12345}),
+		cmdutil.ExampleJSON(map[string]any{"nonce": 12345}),
 	)
 }
 

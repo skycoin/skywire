@@ -61,7 +61,7 @@ visor's config.`,
 		}
 
 		// Try to pretty-print JSON
-		var v interface{}
+		var v any
 		if err := json.Unmarshal(body, &v); err == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")

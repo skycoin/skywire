@@ -68,7 +68,7 @@ type Evaluator struct {
 	hostEnv  *hostEnv
 	clock    Clock
 	maxSteps int64
-	logger   func(format string, args ...interface{})
+	logger   func(format string, args ...any)
 	// preset, when non-empty, is stamped into the decide/tick/leg
 	// input wire so a combined bundle module can dispatch by name.
 	// Empty for a plain single-preset module.
@@ -91,7 +91,7 @@ func WithProvider(p policy.Provider) Option {
 }
 
 // WithLogger overrides the default no-op logger.
-func WithLogger(f func(format string, args ...interface{})) Option {
+func WithLogger(f func(format string, args ...any)) Option {
 	return func(e *Evaluator) {
 		e.logger = f
 		e.hostEnv.logger = f
@@ -126,7 +126,7 @@ func NewEvaluator(name string, wasmBytes []byte, opts ...Option) (*Evaluator, er
 
 	env := &hostEnv{
 		source: name,
-		logger: func(string, ...interface{}) {},
+		logger: func(string, ...any) {},
 	}
 	e := &Evaluator{
 		source:   name,
@@ -134,7 +134,7 @@ func NewEvaluator(name string, wasmBytes []byte, opts ...Option) (*Evaluator, er
 		hostEnv:  env,
 		clock:    systemClock{},
 		maxSteps: policy.DefaultMaxSteps,
-		logger:   func(string, ...interface{}) {},
+		logger:   func(string, ...any) {},
 	}
 	for _, opt := range opts {
 		opt(e)

@@ -106,7 +106,7 @@ func TestAdaptiveParkHoldStopsControllerFlap(t *testing.T) {
 		"the latency band re-admitted a leg the bottleneck controller just parked — this is the flap")
 
 	// 13 more ticks inside the hold: still one park, no promotions.
-	for i := 0; i < 13; i++ {
+	for i := range 13 {
 		rg.enforceBottleneckGroups(loadedDeltas(rg, mts))
 		rg.enforceLatencyBand(nil)
 		require.True(t, rg.mux.isLegStandby(1), "leg 1 must stay parked for the whole hold (tick %d)", i+2)

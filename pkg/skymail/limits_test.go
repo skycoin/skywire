@@ -61,7 +61,7 @@ func TestOversizedMessageIsRefusedAndTheSessionSurvives(t *testing.T) {
 	cmd(t, tc, 250, "RCPT TO:<%s>", addr("b", b.pk))
 	cmd(t, tc, 354, "DATA")
 	w := bufio.NewWriter(tc.W)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		fmt.Fprintf(w, "%s\r\n", strings.Repeat("x", 70)) //nolint:errcheck
 	}
 	require.NoError(t, w.Flush())

@@ -50,7 +50,7 @@ func saveRoots(t *testing.T, c *skyobject.Container, pk cipher.PubKey, sk cipher
 	}
 	defer up.Close() //nolint:errcheck
 	r := &registry.Root{Pub: pk, Nonce: nonce}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		sch, serr := tinyRegistry.SchemaByName("test.tinyValue")
 		if serr != nil {
 			t.Fatalf("SchemaByName: %v", serr)

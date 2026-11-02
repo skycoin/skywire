@@ -54,7 +54,7 @@ func TestClose_ConcurrentRemoteClosed_NoPanic(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer wg.Done()
 			<-start

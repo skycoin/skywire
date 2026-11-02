@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -70,7 +71,7 @@ type API struct {
 	// propagates DelEntry removals into the DHT so stale targets don't
 	// accumulate past their HTTP-discovery lifetime.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 
@@ -210,7 +211,7 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 // SetDHTMirror sets a mirror that publishes entries to the DHT on every
 // successful SetEntry and removes them from the DHT on DelEntry.
 func (a *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
@@ -835,11 +836,8 @@ func (a *API) clientsByServer() http.HandlerFunc {
 			if entry.Client == nil {
 				continue
 			}
-			for _, delegatedPK := range entry.Client.DelegatedServers {
-				if delegatedPK == serverPK {
-					result = append(result, entry.Static.Hex())
-					break
-				}
+			if slices.Contains(entry.Client.DelegatedServers, serverPK) {
+				result = append(result, entry.Static.Hex())
 			}
 		}
 
@@ -863,7 +861,7 @@ func (a *API) getUptimes(w http.ResponseWriter, r *http.Request) {
 
 	if visorsParam != "" {
 		want := make(map[string]struct{})
-		for _, pk := range strings.Split(visorsParam, ";") {
+		for pk := range strings.SplitSeq(visorsParam, ";") {
 			pk = strings.TrimSpace(pk)
 			if pk != "" {
 				want[pk] = struct{}{}

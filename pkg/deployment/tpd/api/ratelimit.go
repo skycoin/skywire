@@ -158,11 +158,11 @@ func isHexString(s string) bool {
 }
 
 // GetStats returns current rate limiter statistics
-func (rl *PubKeyRateLimiter) GetStats() map[string]interface{} {
+func (rl *PubKeyRateLimiter) GetStats() map[string]any {
 	rl.mu.RLock()
 	defer rl.mu.RUnlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"tracked_pubkeys": len(rl.limiters),
 		"rate_per_minute": int(rl.rate * 60),
 		"burst":           rl.burst,

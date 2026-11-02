@@ -143,7 +143,7 @@ func plackettBurman(n int) ([][]int, error) {
 func hadamard16() [][]int {
 	const n = 16
 	d := make([][]int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		row := make([]int, n-1)
 		for j := 1; j < n; j++ {
 			bits := i & j
@@ -300,8 +300,8 @@ func parseVariants(r io.Reader) (*variantsFile, error) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "#") {
-			f := strings.Fields(strings.TrimPrefix(line, "#"))
+		if after, ok := strings.CutPrefix(line, "#"); ok {
+			f := strings.Fields(after)
 			if len(f) == 4 && f[0] == "factor" && strings.HasPrefix(f[2], "low=") && strings.HasPrefix(f[3], "high=") {
 				name := f[1]
 				hdr[name] = factor{name: name, low: strings.TrimPrefix(f[2], "low="), high: strings.TrimPrefix(f[3], "high=")}

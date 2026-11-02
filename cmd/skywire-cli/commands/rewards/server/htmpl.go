@@ -242,7 +242,7 @@ func mainPage(w http.ResponseWriter, r *http.Request) {
 		`</div>`
 	//nolint:gosec
 	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + introHTML + mainnetRulesHTML)
-	tmplData := map[string]interface{}{
+	tmplData := map[string]any{
 		"Page": htmlPageTemplateData1,
 	}
 	var result bytes.Buffer

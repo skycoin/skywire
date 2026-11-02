@@ -55,7 +55,7 @@ func TestWithBatch_DoesNotInvertCacheAndWriterLocks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < lockOrderRounds; i++ {
+		for i := range lockOrderRounds {
 			lockOrderRound(t, c, i)
 		}
 	}()

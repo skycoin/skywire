@@ -55,6 +55,7 @@ package group
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -504,12 +505,7 @@ func (r Record) IsAdmin(pk cipher.PubKey) bool {
 	if r.IsFounder(pk) {
 		return true
 	}
-	for _, a := range r.Admins {
-		if a == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.Admins, pk)
 }
 
 // AdmissionTargets returns the ordered PKs to send a join request to for
@@ -529,10 +525,8 @@ func (r *Record) EnsureFounderInAdmins() {
 	if r.OwnerPK == (cipher.PubKey{}) {
 		return
 	}
-	for _, a := range r.Admins {
-		if a == r.OwnerPK {
-			return
-		}
+	if slices.Contains(r.Admins, r.OwnerPK) {
+		return
 	}
 	r.Admins = append([]cipher.PubKey{r.OwnerPK}, r.Admins...)
 }

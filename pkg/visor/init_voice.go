@@ -170,7 +170,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	// The skynet networker registers after dmsg; join its listener on the SAME
 	// port once it's up (best-effort, bounded wait).
 	go func() {
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			if serveCtx.Err() != nil {
 				return
 			}

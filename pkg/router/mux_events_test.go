@@ -23,7 +23,7 @@ func TestMuxEventsRecordLegAddAndRemoveWithReasons(t *testing.T) {
 	// The primary went in before the ring was attached; add two legs now so the
 	// prune below still has a survivor (a prune never drops the last leg).
 	aux := make([]*transport.ManagedTransport, 0, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rules := r.makeAuxRules(t, rg.desc, i)
 		mt := r.tm.Transport(rules.Forward.NextTransportID())
 		require.NotNil(t, mt)
@@ -87,7 +87,7 @@ func TestMuxEventsRecordPrimaryRehome(t *testing.T) {
 
 func TestMuxEventRingIsBoundedAndOrdered(t *testing.T) {
 	var r muxEventRing
-	for i := 0; i < MuxEventRingSizeDefault+10; i++ {
+	for i := range MuxEventRingSizeDefault + 10 {
 		r.add(MuxEvent{Reason: fmt.Sprint(i)})
 	}
 	got := r.snapshot()
@@ -103,7 +103,7 @@ func TestMuxEventRingForDescFiltersAndBounds(t *testing.T) {
 	fields := func(d routing.RouteDescriptor) routing.RouteDescriptorFields {
 		return routing.RouteDescriptorFields{DstPK: d.DstPK(), SrcPK: d.SrcPK(), DstPort: d.DstPort(), SrcPort: d.SrcPort()}
 	}
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		r.add(MuxEvent{Desc: fields(mine), Reason: fmt.Sprint(i)})
 		r.add(MuxEvent{Desc: fields(other), Reason: "other"})
 	}

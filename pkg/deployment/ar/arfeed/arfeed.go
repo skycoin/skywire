@@ -161,7 +161,7 @@ func (b *PeerBindings) Set(t types.Type, v *addrresolver.VisorData) bool {
 func Segments(pk cipher.PubKey) []string {
 	h := pk.Hex()
 	out := make([]string, Levels)
-	for i := 0; i < Levels; i++ {
+	for i := range Levels {
 		out[i] = h[KeyOffset+i : KeyOffset+i+1]
 	}
 	return out
