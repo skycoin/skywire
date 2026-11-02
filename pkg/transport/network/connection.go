@@ -157,10 +157,7 @@ func (d *debugConn) Read(p []byte) (int, error) {
 	n, err := d.Conn.Read(p)
 	// Capture first 64 bytes for debugging
 	if len(d.capturedBuf) < 64 && n > 0 {
-		remaining := 64 - len(d.capturedBuf)
-		if n < remaining {
-			remaining = n
-		}
+		remaining := min(n, 64-len(d.capturedBuf))
 		d.capturedBuf = append(d.capturedBuf, p[:remaining]...)
 	}
 	return n, err

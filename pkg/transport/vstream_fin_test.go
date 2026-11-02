@@ -18,7 +18,7 @@ import (
 // over a direct skynet conn came back as a bare EOF. Repeated because one
 // lucky pick would pass the broken version.
 func TestVStreamReadDrainsBeforeEOF(t *testing.T) {
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		s := &VStream{rq: newFrameQueue(), closed: make(chan struct{})}
 		s.rq.push([]byte("hello, "))
 		s.rq.push([]byte("world"))

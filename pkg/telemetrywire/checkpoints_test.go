@@ -27,7 +27,7 @@ func TestCheckpointShardRoundTrip(t *testing.T) {
 }
 
 func TestCheckpointLeafPath(t *testing.T) {
-	for sh := uint8(0); sh < ShardCount; sh++ {
+	for sh := range uint8(ShardCount) {
 		got, ok := ParseCheckpointLeafPath(CheckpointLeafPath(sh))
 		require.True(t, ok)
 		require.Equal(t, sh, got)

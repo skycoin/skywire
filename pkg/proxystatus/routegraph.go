@@ -361,10 +361,9 @@ func seedRouteLayout(order []*nodeAcc, nStreams int) {
 			maxLevel = a.level
 		}
 	}
-	maxCol := maxLevel + 1 // the exit sits one column past the deepest hop
-	if maxCol < 1 {
-		maxCol = 1
-	}
+	maxCol := max(
+		// the exit sits one column past the deepest hop
+		maxLevel+1, 1)
 	const (
 		center = rgSpaceSize / 2
 		xLeft  = rgSpaceSize * 0.18
@@ -395,10 +394,7 @@ func seedRouteLayout(order []*nodeAcc, nStreams int) {
 			col = maxCol
 		default: // hop
 			hop = true
-			col = a.level
-			if col < 1 {
-				col = 1
-			}
+			col = max(a.level, 1)
 			y = laneY(a.streamOrd)
 		}
 		x := colX(col)

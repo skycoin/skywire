@@ -72,7 +72,7 @@ func download(t *testing.T, m *routeMux, tps []*transport.ManagedTransport, fwd 
 	t.Helper()
 	dst, src, _, _, _ := endpointsForTest(t)
 	carried := map[int]uint64{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		_, _, idx, ok := m.selectByDirection(tps, fwd, false, dst, src)
 		if !ok {
 			t.Fatalf("frame %d: selectByDirection returned ok=false with two ready reverse legs", i)
@@ -252,7 +252,7 @@ func TestDelivEWMADecaysWhenSilent(t *testing.T) {
 	if v != 4_000_000 {
 		t.Fatalf("first sample should seed the EWMA; got %g", v)
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		v = foldDeliv(v, 0)
 	}
 	if v > 40_000 {

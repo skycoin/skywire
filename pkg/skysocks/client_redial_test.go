@@ -144,7 +144,7 @@ func TestMaybeRedial_BacksOffAfterFailuresUntilReset(t *testing.T) {
 
 		// Each attempt fails and increments the counter; the in-flight guard clears
 		// synchronously on failure, so serialized calls accumulate failures.
-		for i := 0; i < maxRedialFails; i++ {
+		for range maxRedialFails {
 			c.maybeRedial(1)
 			require.Eventually(t, func() bool { return !c.redialInFlight.Load() },
 				time.Second, 5*time.Millisecond)

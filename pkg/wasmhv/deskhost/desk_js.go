@@ -303,7 +303,7 @@ func installDesk() {
 
 	deskPanel = desk.NewPanel()
 	deskPanel.SetStartIcon("favicon.ico")
-	js.Global().Set("__skywireDesk", js.ValueOf(map[string]interface{}{
+	js.Global().Set("__skywireDesk", js.ValueOf(map[string]any{
 		"library": "0magnet/desk",
 		"launch": js.FuncOf(func(_ js.Value, a []js.Value) any {
 			if len(a) == 0 {
@@ -324,7 +324,7 @@ func installDesk() {
 		// CDP and read text back instead of screenshotting a console.
 		"exec": js.FuncOf(func(_ js.Value, a []js.Value) any {
 			if len(a) == 0 || a[0].Type() != js.TypeString {
-				return promise(func() (interface{}, error) { return nil, errors.New("exec(cmd): missing command") })
+				return promise(func() (any, error) { return nil, errors.New("exec(cmd): missing command") })
 			}
 			cmd := a[0].String()
 			timeout := execDefaultTimeout
@@ -333,11 +333,11 @@ func installDesk() {
 					timeout = time.Duration(v.Int()) * time.Millisecond
 				}
 			}
-			return promise(func() (interface{}, error) {
+			return promise(func() (any, error) {
 				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 				out, err := runHeadless(ctx, cmd)
-				res := map[string]interface{}{"out": out}
+				res := map[string]any{"out": out}
 				if err != nil {
 					res["err"] = err.Error()
 				}
@@ -399,8 +399,8 @@ func installDesk() {
 			if err != nil {
 				return nil
 			}
-			return js.ValueOf(map[string]interface{}{
-				"browser": js.ValueOf(map[string]interface{}{
+			return js.ValueOf(map[string]any{
+				"browser": js.ValueOf(map[string]any{
 					"browseTo": js.FuncOf(func(_ js.Value, a []js.Value) any {
 						if len(a) >= 2 {
 							netscrape.Navigate("http://" + a[0].String() + a[1].String())
@@ -419,7 +419,7 @@ func installDesk() {
 					}
 					return nil
 				}),
-				"wb": js.ValueOf(map[string]interface{}{
+				"wb": js.ValueOf(map[string]any{
 					"maximize": js.FuncOf(func(_ js.Value, _ []js.Value) any {
 						if w != nil {
 							w.Maximize()

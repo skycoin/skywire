@@ -79,7 +79,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	// Parse local ports
 	var ports []int
 	if localPorts != "" {
-		for _, p := range strings.Split(localPorts, ",") {
+		for p := range strings.SplitSeq(localPorts, ",") {
 			p = strings.TrimSpace(p)
 			if p == "" {
 				continue

@@ -79,7 +79,7 @@ func parseDeskTour(md string) ([]tourText, error) {
 		}
 		field, lines = "", nil
 	}
-	for _, line := range strings.Split(md, "\n") {
+	for line := range strings.SplitSeq(md, "\n") {
 		if m := tourStepRE.FindStringSubmatch(line); m != nil {
 			closeField()
 			steps = append(steps, tourText{id: m[1]})
@@ -148,7 +148,7 @@ func mdBlock(text string) string {
 			items, prev = nil, "ul"
 		}
 	}
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		t := strings.TrimSpace(line)
 		switch {
 		case t == "":

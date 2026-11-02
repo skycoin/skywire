@@ -50,10 +50,10 @@ var latView latencyState
 //
 // Argument is {visors: string[], edges: [{a,b,ms}]} where a and b index
 // into visors. Returns {points, stress, cells, hidden} — see project().
-func jsSetLatencyGraph(_ js.Value, args []js.Value) interface{} {
+func jsSetLatencyGraph(_ js.Value, args []js.Value) any {
 	cfg := arg(args, 0)
 	if !cfg.Truthy() {
-		return js.ValueOf(map[string]interface{}{"error": "no graph"})
+		return js.ValueOf(map[string]any{"error": "no graph"})
 	}
 	nVisors := cfg.Get("visors").Length()
 	rawEdges := cfg.Get("edges")
@@ -78,7 +78,7 @@ func jsSetLatencyGraph(_ js.Value, args []js.Value) interface{} {
 
 // jsRotateLatency turns the sphere. Reprojects without re-solving, which
 // is what keeps a drag interactive on a 43k-edge graph.
-func jsRotateLatency(_ js.Value, args []js.Value) interface{} {
+func jsRotateLatency(_ js.Value, args []js.Value) any {
 	latView.yaw += arg(args, 0).Float()
 	latView.pitch += arg(args, 1).Float()
 	// Stop just short of the poles so the tangent frame stays defined.
@@ -93,10 +93,10 @@ func jsRotateLatency(_ js.Value, args []js.Value) interface{} {
 // screen falls off toward the limb the way a globe's does. Points on the
 // far side are reported in `hidden` rather than dropped, because
 // dropping them would renumber every index the caller holds.
-func (s *latencyState) project() interface{} {
+func (s *latencyState) project() any {
 	n := len(s.render)
-	pts := make([]interface{}, 0, n*2)
-	hidden := make([]interface{}, 0, n)
+	pts := make([]any, 0, n*2)
+	hidden := make([]any, 0, n)
 	cy, sy := math.Cos(s.yaw), math.Sin(s.yaw)
 	cp, sp := math.Cos(s.pitch), math.Sin(s.pitch)
 
@@ -117,12 +117,12 @@ func (s *latencyState) project() interface{} {
 	// Cells as flat vertex rings, front-facing only: a cell whose every
 	// vertex is on the far side is not drawn at all, and one that
 	// straddles the limb is drawn clipped by the renderer.
-	cells := make([]interface{}, 0, len(s.cells))
+	cells := make([]any, 0, len(s.cells))
 	for _, c := range s.cells {
 		if len(c.Polygon) < 3 {
 			continue
 		}
-		ring := make([]interface{}, 0, len(c.Polygon)*2)
+		ring := make([]any, 0, len(c.Polygon)*2)
 		front := false
 		for _, v := range c.Polygon {
 			r := rot(v)
@@ -134,12 +134,12 @@ func (s *latencyState) project() interface{} {
 		if !front {
 			continue
 		}
-		cells = append(cells, map[string]interface{}{
+		cells = append(cells, map[string]any{
 			"site": c.Site,
 			"ring": ring,
 		})
 	}
-	return js.ValueOf(map[string]interface{}{
+	return js.ValueOf(map[string]any{
 		"points": pts,
 		"hidden": hidden,
 		"cells":  cells,
@@ -151,8 +151,8 @@ func (s *latencyState) project() interface{} {
 
 // jsLatencyStats reports how well the drawing fits the measurements, so
 // the view can say so rather than implying a precision it does not have.
-func jsLatencyStats(_ js.Value, _ []js.Value) interface{} {
-	return js.ValueOf(map[string]interface{}{
+func jsLatencyStats(_ js.Value, _ []js.Value) any {
+	return js.ValueOf(map[string]any{
 		"visors": len(latView.sites),
 		"edges":  len(latView.edges),
 		"stress": latView.stress,

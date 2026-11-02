@@ -116,20 +116,18 @@ func TestMergeFile_AllFieldsOverride(t *testing.T) {
 	dst := &sd.Config{}
 	pk, _ := cipher.GenerateKeyPair()
 	src := &sd.Config{
-		Common: services.Common{
-			SecKey:          cipher.SecKey{1},
-			Addr:            ":addr",
-			MetricsAddr:     ":metrics",
-			PprofAddr:       ":pprof",
-			Redis:           "redis://x",
-			EntryTimeout:    services.Duration(time.Minute),
-			Mode:            "dual",
-			SurveyWhitelist: []cipher.PubKey{pk},
-			DmsgPort:        81,
-			Testing:         true,
-		},
-		Whitelist: []string{"a"},
-		GeoIP:     "http://geo",
+		SecKey:          cipher.SecKey{1},
+		Addr:            ":addr",
+		MetricsAddr:     ":metrics",
+		PprofAddr:       ":pprof",
+		Redis:           "redis://x",
+		EntryTimeout:    services.Duration(time.Minute),
+		Mode:            "dual",
+		SurveyWhitelist: []cipher.PubKey{pk},
+		DmsgPort:        81,
+		Testing:         true,
+		Whitelist:       []string{"a"},
+		GeoIP:           "http://geo",
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  "http://disc",
 			ServerType: "stcpr",
@@ -143,13 +141,11 @@ func TestMergeFile_AllFieldsOverride(t *testing.T) {
 
 func TestMergeFile_ZeroSrcLeavesDst(t *testing.T) {
 	orig := &sd.Config{
-		Common: services.Common{
-			Addr:     ":keep",
-			Redis:    "redis://keep",
-			DmsgPort: 80,
-		},
-		GeoIP: "http://keep",
-		Dmsg:  cmdutil.DmsgConfig{Discovery: "http://keep"},
+		Addr:     ":keep",
+		Redis:    "redis://keep",
+		DmsgPort: 80,
+		GeoIP:    "http://keep",
+		Dmsg:     cmdutil.DmsgConfig{Discovery: "http://keep"},
 	}
 	dst := *orig
 

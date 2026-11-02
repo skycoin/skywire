@@ -28,9 +28,9 @@ func TestDesignIsBalanced(t *testing.T) {
 			t.Fatalf("design(%d) has %d rows, want %d", runs, len(d), runs)
 		}
 		k := runs - 1
-		for c := 0; c < k; c++ {
+		for c := range k {
 			hi := 0
-			for r := 0; r < runs; r++ {
+			for r := range runs {
 				switch d[r][c] {
 				case 1:
 					hi++
@@ -43,10 +43,10 @@ func TestDesignIsBalanced(t *testing.T) {
 				t.Errorf("runs=%d column %d has %d highs, want %d", runs, c, hi, runs/2)
 			}
 		}
-		for a := 0; a < k; a++ {
+		for a := range k {
 			for b := a + 1; b < k; b++ {
 				count := map[[2]int]int{}
-				for r := 0; r < runs; r++ {
+				for r := range runs {
 					count[[2]int{d[r][a], d[r][b]}]++
 				}
 				for _, combo := range [][2]int{{1, 1}, {1, -1}, {-1, 1}, {-1, -1}} {
@@ -72,7 +72,7 @@ func TestDesignSubsetIsBalanced(t *testing.T) {
 			t.Fatalf("row has %d columns, want 12", len(row))
 		}
 	}
-	for c := 0; c < 12; c++ {
+	for c := range 12 {
 		hi := 0
 		for r := range d {
 			if d[r][c] == 1 {

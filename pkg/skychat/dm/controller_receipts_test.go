@@ -136,7 +136,7 @@ func TestController_RequestAckDoesNotBlock(t *testing.T) {
 // instead of writing into the void again.
 func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...any) {}})
 
 	// Seed the cache with a conn nobody is reading from.
 	raw, peerEnd := net.Pipe()
@@ -158,7 +158,7 @@ func TestController_RequestAckEvictsSilentConn(t *testing.T) {
 // conn, the late watcher must leave the new one alone.
 func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 20 * time.Millisecond, Log: func(string, ...any) {}})
 
 	oldRaw, oldPeer := net.Pipe()
 	newRaw, newPeer := net.Pipe()
@@ -189,7 +189,7 @@ func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 // An ack that arrives in time keeps the conn and releases the waiter.
 func TestController_WatchAckKeepsAckedConn(t *testing.T) {
 	pk := mustPK(t)
-	c := New(Config{StaleAckWindow: 5 * time.Second, Log: func(string, ...interface{}) {}})
+	c := New(Config{StaleAckWindow: 5 * time.Second, Log: func(string, ...any) {}})
 
 	raw, peerEnd := net.Pipe()
 	t.Cleanup(func() { _ = raw.Close(); _ = peerEnd.Close() }) //nolint:errcheck

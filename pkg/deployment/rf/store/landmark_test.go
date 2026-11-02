@@ -32,18 +32,18 @@ func buildHubGraph(tb testing.TB, hubs, leaves, linksPerLeaf int) (*Graph, []cip
 	tb.Helper()
 	m := newMockStore()
 	hubPK := make([]cipher.PubKey, hubs)
-	for h := 0; h < hubs; h++ {
+	for h := range hubs {
 		hubPK[h] = pkOf(h)
 	}
-	for a := 0; a < hubs; a++ {
+	for a := range hubs {
 		for b := a + 1; b < hubs; b++ {
 			m.saveEntryLat(hubPK[a], hubPK[b], float64(1+(a+b)%5))
 		}
 	}
 	leafPK := make([]cipher.PubKey, leaves)
-	for l := 0; l < leaves; l++ {
+	for l := range leaves {
 		leafPK[l] = pkOf(1000 + l)
-		for k := 0; k < linksPerLeaf; k++ {
+		for k := range linksPerLeaf {
 			h := (l*7 + k*3) % hubs
 			m.saveEntryLat(leafPK[l], hubPK[h], float64(2+(l+k)%7))
 		}

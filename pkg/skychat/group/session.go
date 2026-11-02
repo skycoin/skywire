@@ -39,6 +39,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"path/filepath"
 	"slices"
@@ -1123,9 +1124,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// failure state, so the backoff schedule never engages either.
 	s.peerSubsMu.RLock()
 	peers := make(map[cipher.PubKey]*treestore.Subscriber, len(s.peerSubs))
-	for k, v := range s.peerSubs {
-		peers[k] = v
-	}
+	maps.Copy(peers, s.peerSubs)
 	s.peerSubsMu.RUnlock()
 	peerSuccessCount := 0
 	now := time.Now().UnixNano()
@@ -1746,7 +1745,7 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 	selfHex := self.Hex()
 	start := sort.Search(len(sorted), func(i int) bool { return sorted[i].Hex() >= selfHex })
 	out := make([]cipher.PubKey, 0, k)
-	for i := 0; i < k; i++ {
+	for i := range k {
 		out = append(out, sorted[(start+i)%len(sorted)])
 	}
 	return out
@@ -2335,12 +2334,7 @@ func (s *Session) handleRelay(c net.Conn) {
 func (s *Session) isMember(pk cipher.PubKey) bool {
 	s.membersMu.RLock()
 	defer s.membersMu.RUnlock()
-	for _, m := range s.members {
-		if m == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.members, pk)
 }
 
 // publishAs is the shared write path used by:

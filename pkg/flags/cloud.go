@@ -26,6 +26,8 @@
 package flags
 
 import (
+	"slices"
+
 	"github.com/0magnet/termanim/matrix/backdrop"
 )
 
@@ -106,8 +108,8 @@ func (c *cloudMask) Fit(cols, rows int) {
 		return
 	}
 
-	for i := len(cloudShapes) - 1; i >= 0; i-- {
-		shape := cloudShapes[i]
+	for _, shape := range slices.Backward(cloudShapes) {
+
 		st := backdrop.Stencil{Rows: shape, Floor: cloudFloor}
 		w, h := st.Size()
 		if w > free || h+cloudRowRoom > rows {

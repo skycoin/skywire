@@ -12,13 +12,7 @@ func TreeFromLeveledList(items pterm.LeveledList) pterm.TreeNode {
 	// stack[i] points at the last node emitted at level i.
 	stack := []*pterm.TreeNode{root}
 	for _, it := range items {
-		lvl := it.Level
-		if lvl < 0 {
-			lvl = 0
-		}
-		if lvl > len(stack)-1 {
-			lvl = len(stack) - 1
-		}
+		lvl := min(max(it.Level, 0), len(stack)-1)
 		parent := stack[lvl]
 		parent.Children = append(parent.Children, pterm.TreeNode{Text: it.Text})
 		node := &parent.Children[len(parent.Children)-1]

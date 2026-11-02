@@ -43,7 +43,7 @@ func wideEmuTunnel(t *testing.T, take, standby int) ([]*emuRig, *RouteGroup) {
 	rigs := shapeEmuRig(t, 1, standby)
 	active, pool := shapeSession0(rigs)
 	require.Len(t, active, 1)
-	for i := 0; i < take; i++ {
+	for i := range take {
 		require.NoError(t, rehomeChain(active[0], pool[i]), "take %d", i)
 	}
 	require.Equal(t, take+1, active[0].aliveLegCount(), "the tunnel must hold every chain it took")

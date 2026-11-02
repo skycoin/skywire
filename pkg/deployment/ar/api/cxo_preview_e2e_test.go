@@ -48,14 +48,12 @@ func TestPreviewLookupIsFixedCostAndHoldsNothing(t *testing.T) {
 	// cost would scale with this number, an indexed walk's does not.
 	const nPeers = 1000
 	peers := make([]cipher.PubKey, 0, nPeers)
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		pk, _ := cipher.GenerateKeyPair()
 		peers = append(peers, pk)
 		require.NoError(t, st.Bind(ctx, types.STCPR, pk, addrresolver.VisorData{
 			RemoteAddr: "203.0.113.7:7777",
-			LocalAddresses: addrresolver.LocalAddresses{
-				Port: "7777", Addresses: []string{"203.0.113.7", "10.0.0.5"},
-			},
+			Port:       "7777", Addresses: []string{"203.0.113.7", "10.0.0.5"},
 		}))
 		require.NoError(t, st.Bind(ctx, types.SUDPH, pk, addrresolver.VisorData{
 			RemoteAddr: "203.0.113.7:30000",

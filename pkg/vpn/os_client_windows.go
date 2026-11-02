@@ -27,8 +27,8 @@ func DefaultNetworkGateway() (netip.Addr, error) {
 
 	outBytes = bytes.TrimRight(outBytes, "\n\r")
 
-	lines := bytes.Split(outBytes, []byte{'\n'})
-	for _, line := range lines {
+	lines := bytes.SplitSeq(outBytes, []byte{'\n'})
+	for line := range lines {
 		line = bytes.TrimLeft(line, " \t\r\n")
 		if !bytes.HasPrefix(line, []byte("0.0.0.0")) {
 			continue

@@ -1327,9 +1327,9 @@ func markup(s string) string {
 
 func wrapText(s string, w int) []string {
 	var out []string
-	for _, para := range strings.Split(s, "\n") {
+	for para := range strings.SplitSeq(s, "\n") {
 		line := ""
-		for _, word := range strings.Fields(para) {
+		for word := range strings.FieldsSeq(para) {
 			if line != "" && len(line)+1+len(word) > w {
 				out = append(out, line)
 				line = ""

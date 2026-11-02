@@ -11,7 +11,7 @@ import (
 
 func TestAssertListener(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
-		var ifc interface{} = &appcommon.MockListener{}
+		var ifc any = &appcommon.MockListener{}
 
 		l, err := AssertListener(ifc)
 		require.NoError(t, err)
@@ -19,7 +19,7 @@ func TestAssertListener(t *testing.T) {
 	})
 
 	t.Run("wrong type", func(t *testing.T) {
-		var ifc interface{} = "val"
+		var ifc any = "val"
 
 		l, err := AssertListener(ifc)
 		require.Error(t, err)
@@ -30,7 +30,7 @@ func TestAssertListener(t *testing.T) {
 
 func TestAssertConn(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
-		var ifc interface{} = &appcommon.MockConn{}
+		var ifc any = &appcommon.MockConn{}
 
 		conn, err := AssertConn(ifc)
 		require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestAssertConn(t *testing.T) {
 	})
 
 	t.Run("wrong type", func(t *testing.T) {
-		var ifc interface{} = "val"
+		var ifc any = "val"
 
 		conn, err := AssertConn(ifc)
 		require.Error(t, err)

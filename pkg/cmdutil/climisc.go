@@ -20,7 +20,7 @@ func RunRoot(cmd *cobra.Command) {
 // ExampleJSON renders v as indented JSON for use in CLI --help example
 // blocks. It returns "" on a marshal error. This centralizes the helper
 // that every deployment-service command package previously copied.
-func ExampleJSON(v interface{}) string {
+func ExampleJSON(v any) string {
 	b, err := stdjson.MarshalIndent(v, "    ", "  ")
 	if err != nil {
 		return ""
@@ -36,7 +36,7 @@ func CommaSplit(s string) []string {
 		return nil
 	}
 	out := make([]string, 0, 4)
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out = append(out, p)

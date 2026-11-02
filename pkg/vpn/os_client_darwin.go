@@ -25,8 +25,8 @@ func DefaultNetworkGateway() (netip.Addr, error) {
 
 	outputBytes = bytes.TrimRight(outputBytes, "\n")
 
-	lines := bytes.Split(outputBytes, []byte{'\n'})
-	for _, l := range lines {
+	lines := bytes.SplitSeq(outputBytes, []byte{'\n'})
+	for l := range lines {
 		if bytes.Count(l, []byte{'.'}) != 3 {
 			continue
 		}

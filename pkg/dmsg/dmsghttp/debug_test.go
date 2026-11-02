@@ -168,7 +168,7 @@ func TestServeDebug_Integration(t *testing.T) {
 
 	// Retry the request — noise handshakes can race on CI
 	var resp *http.Response
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		resp, err = httpC.Get(fmt.Sprintf("dmsg://%s:%d/debug/pprof/", clientPK.Hex(), dmsghttp.DefaultDebugPort))
 		if err == nil {
 			break

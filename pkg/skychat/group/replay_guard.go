@@ -55,6 +55,7 @@
 package group
 
 import (
+	"maps"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -203,9 +204,7 @@ func copyWatermarks(in map[string]time.Time) map[string]time.Time {
 		return nil
 	}
 	out := make(map[string]time.Time, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
+	maps.Copy(out, in)
 	return out
 }
 

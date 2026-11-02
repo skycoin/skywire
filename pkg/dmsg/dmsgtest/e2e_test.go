@@ -251,7 +251,7 @@ func TestConcurrentStreams(t *testing.T) {
 	acceptCh := make(chan acceptedStream, numStreams)
 
 	go func() {
-		for i := 0; i < numStreams; i++ {
+		for range numStreams {
 			s, aErr := lisA.AcceptStream()
 			acceptCh <- acceptedStream{stream: s, err: aErr}
 		}
@@ -268,7 +268,7 @@ func TestConcurrentStreams(t *testing.T) {
 	results := make([]streamResult, numStreams)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		i := i
 		wg.Add(1)
 		go func() {
@@ -277,7 +277,7 @@ func TestConcurrentStreams(t *testing.T) {
 			// can transiently fail with "cannot connect to delegated server".
 			var s *dmsg.Stream
 			var dErr error
-			for attempt := 0; attempt < 10; attempt++ {
+			for attempt := range 10 {
 				s, dErr = clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 				if dErr == nil {
 					break
@@ -295,7 +295,7 @@ func TestConcurrentStreams(t *testing.T) {
 
 	// Collect accepted streams.
 	accepted := make([]*dmsg.Stream, 0, numStreams)
-	for i := 0; i < numStreams; i++ {
+	for range numStreams {
 		a := <-acceptCh
 		require.NoError(t, a.err)
 		accepted = append(accepted, a.stream)
@@ -303,7 +303,7 @@ func TestConcurrentStreams(t *testing.T) {
 
 	// Send data on each dialed stream and read on the accepted side.
 	var sendWg sync.WaitGroup
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		require.NoError(t, results[i].err, "stream %d dial failed", i)
 		i := i
 		sendWg.Add(1)
@@ -318,7 +318,7 @@ func TestConcurrentStreams(t *testing.T) {
 	// corresponds to which dialed stream, we collect all received data and match.
 	recvData := make([][]byte, numStreams)
 	var recvWg sync.WaitGroup
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		i := i
 		recvWg.Add(1)
 		go func() {
@@ -334,9 +334,9 @@ func TestConcurrentStreams(t *testing.T) {
 	recvWg.Wait()
 
 	// Verify each sent payload appears exactly once in received data.
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		found := false
-		for j := 0; j < numStreams; j++ {
+		for j := range numStreams {
 			if bytes.Equal(results[i].sent, recvData[j]) {
 				found = true
 				break
@@ -346,7 +346,7 @@ func TestConcurrentStreams(t *testing.T) {
 	}
 
 	// Cleanup streams.
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		_ = results[i].stream.Close()
 		_ = accepted[i].Close()
 	}
@@ -466,14 +466,14 @@ func TestListenerAcceptAll(t *testing.T) {
 
 	// Dial numConns connections and accept them all.
 	dialedStreams := make([]*dmsg.Stream, 0, numConns)
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		s, dErr := clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 		require.NoError(t, dErr, "dial %d should succeed", i)
 		dialedStreams = append(dialedStreams, s)
 	}
 
 	// Accept all connections.
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		conn, aErr := lisA.AcceptStream()
 		require.NoError(t, aErr, "accept %d should succeed", i)
 		require.NotNil(t, conn)

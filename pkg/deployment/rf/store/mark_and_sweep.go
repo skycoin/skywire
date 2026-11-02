@@ -3,6 +3,7 @@ package store
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"sync/atomic"
 
@@ -105,9 +106,7 @@ func NewGraphWithDepth(ctx context.Context, s store.Store, rootPK cipher.PubKey,
 	}
 
 	// In the first iteration every vertex in the Graph has been visited
-	for visited, vertex := range g.visited {
-		g.graph[visited] = vertex
-	}
+	maps.Copy(g.graph, g.visited)
 
 	g.Sweep()
 
@@ -215,9 +214,7 @@ func (g *Graph) Sweep() []cipher.PubKey {
 
 	// copy visited into Graph, prepare for next iteration
 	g.graph = make(map[cipher.PubKey]*vertex)
-	for pk, vertex := range g.visited {
-		g.graph[pk] = vertex
-	}
+	maps.Copy(g.graph, g.visited)
 
 	g.visited = make(map[cipher.PubKey]*vertex)
 

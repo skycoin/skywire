@@ -236,7 +236,7 @@ func TestEnv_VisorAppLs(t *testing.T) {
 	// initDmsgHTTP blocks until DMSG is connected, which delays the launcher.
 	var output []AppState
 	var err error
-	for i := 0; i < 36; i++ { // up to 3 minutes
+	for range 36 { // up to 3 minutes
 		output, err = env.VisorAppLs(visorB)
 		if err == nil && len(output) > 0 {
 			break
@@ -418,7 +418,7 @@ func TestEnv_SendSkyMessage_second(t *testing.T) {
 		return nil
 	}
 
-	for i := 0; i < qty; i++ {
+	for i := range qty {
 		require.NoError(t, sendMessage(i, visorA, visorB),
 			"A->B send %d/%d failed", i+1, qty)
 		require.NoError(t, sendMessage(i, visorB, visorA),

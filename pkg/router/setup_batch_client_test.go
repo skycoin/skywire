@@ -86,7 +86,7 @@ func TestSetupBatcher_CollectsSiblingsIntoOneRequest(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make([]error, n)
 	nodes := make([]cipher.PubKey, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -97,7 +97,7 @@ func TestSetupBatcher_CollectsSiblingsIntoOneRequest(t *testing.T) {
 	}
 	wg.Wait()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.NoError(t, errs[i])
 		require.Equal(t, node, nodes[i])
 	}
@@ -119,7 +119,7 @@ func TestSetupBatcher_SplitsAtBatchMax(t *testing.T) {
 	log := logging.MustGetLogger("test")
 
 	var wg sync.WaitGroup
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -191,7 +191,7 @@ func TestSetupBatcher_CapabilityFallback(t *testing.T) {
 	const n = 4
 	var wg sync.WaitGroup
 	errs := make([]error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -202,7 +202,7 @@ func TestSetupBatcher_CapabilityFallback(t *testing.T) {
 	}
 	wg.Wait()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.ErrorIs(t, errs[i], errBatchUnsupported, "every member falls back, none is lost")
 	}
 	require.EqualValues(t, n, b.stats().Fallback)

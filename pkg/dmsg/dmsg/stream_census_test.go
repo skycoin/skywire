@@ -87,7 +87,7 @@ func TestStreamCensus_TracksLifecycle(t *testing.T) {
 // Nothing reads the census on a server, so tracking alone must keep the map
 // from holding an entry for every stream ever made.
 func TestStreamCensus_BoundedWithoutReads(t *testing.T) {
-	for i := 0; i < 20*censusPruneMin; i++ {
+	for i := range 20 * censusPruneMin {
 		censusTrack(&Stream{}, true)
 		if i%censusPruneMin == 0 {
 			runtime.GC()

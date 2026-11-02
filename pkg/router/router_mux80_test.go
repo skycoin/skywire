@@ -207,7 +207,7 @@ func TestMuxSetup_ConcurrentLegsNoCollapse(t *testing.T) {
 	srcPortBefore := rg.desc.SrcPort()
 
 	auxRules := make([]routing.EdgeRules, nAux)
-	for i := 0; i < nAux; i++ {
+	for i := range nAux {
 		auxRules[i] = r.makeAuxRules(t, desc, i+1)
 	}
 
@@ -222,7 +222,7 @@ func TestMuxSetup_ConcurrentLegsNoCollapse(t *testing.T) {
 	}()
 
 	// Aux legs arrive from parallel goroutines, straddling the registration.
-	for i := 0; i < nAux; i++ {
+	for i := range nAux {
 		wg.Add(1)
 		go func(rules routing.EdgeRules) {
 			defer wg.Done()

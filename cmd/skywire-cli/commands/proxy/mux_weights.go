@@ -111,7 +111,7 @@ func muxWeightsOut(app string, v router.MuxWeightsView) cliproxy.MuxWeights {
 // reject shapes that are not assignments and weights that are not numbers.
 func parseLegWeights(raw string) (map[string]float64, error) {
 	out := make(map[string]float64)
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

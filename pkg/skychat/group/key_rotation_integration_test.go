@@ -199,7 +199,7 @@ func TestKeyRotation_MessagesSurviveTheRotationWindow(t *testing.T) {
 	// read it. Re-send on a timer because convergence is asynchronous.
 	const afterText = "sent after the re-key"
 	go func() {
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			select {
 			case <-ctx.Done():
 				return

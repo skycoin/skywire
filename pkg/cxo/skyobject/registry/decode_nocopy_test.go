@@ -21,10 +21,10 @@ type bytesObj struct {
 }
 
 func TestHasByteSlice(t *testing.T) {
-	if hasByteSlice(reflect.TypeOf(plainObj{}), map[reflect.Type]bool{}) {
+	if hasByteSlice(reflect.TypeFor[plainObj](), map[reflect.Type]bool{}) {
 		t.Fatal("plainObj has no byte slice")
 	}
-	if !hasByteSlice(reflect.TypeOf(bytesObj{}), map[reflect.Type]bool{}) {
+	if !hasByteSlice(reflect.TypeFor[bytesObj](), map[reflect.Type]bool{}) {
 		t.Fatal("bytesObj has a byte slice")
 	}
 }

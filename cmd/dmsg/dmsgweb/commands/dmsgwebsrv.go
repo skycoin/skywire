@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -242,13 +243,7 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 				// PKs are rejected when a whitelist is configured.
 				if len(wlkeys) > 0 {
 					remotePK := peerPK(dmsgConn)
-					allowed := false
-					for _, pk := range wlkeys {
-						if pk == remotePK {
-							allowed = true
-							break
-						}
-					}
+					allowed := slices.Contains(wlkeys, remotePK)
 					if !allowed {
 						dlog.WithField("remote_pk", remotePK.String()).Debug("Rejecting connection from non-whitelisted PK")
 						connMutex.Lock()

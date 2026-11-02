@@ -111,7 +111,7 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	// pattern in pkg/dmsg/dmsgtest/e2e_test.go:264.
 	connectWithRetry := func(p *Pair) error {
 		var lastErr error
-		for attempt := 0; attempt < 10; attempt++ {
+		for attempt := range 10 {
 			if err := p.Connect(context.Background()); err == nil {
 				return nil
 			} else {

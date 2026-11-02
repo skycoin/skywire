@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -224,7 +225,7 @@ func renderStackedAreaSVG(o chartOpts, series []chartSeries) string {
 	running := make([]float64, n)
 	for si := range series {
 		edge := make([]float64, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i < len(series[si].Vals) {
 				running[i] += series[si].Vals[i]
 			}
@@ -259,13 +260,13 @@ func renderStackedAreaSVG(o chartOpts, series []chartSeries) string {
 	// Paint from the outermost cumulative band inward, so each successive
 	// (smaller) area covers the one below it and the uncovered remainder is
 	// exactly that series' contribution.
-	for si := len(series) - 1; si >= 0; si-- {
+	for si, serie := range slices.Backward(series) {
 		d := cumulativePath(o, upper[si], yOf, baseY)
 		if d == "" {
 			continue
 		}
 		fmt.Fprintf(&sb, "<path d='%s' fill='%s' fill-opacity='0.9' stroke='%s' stroke-width='0.4'><title>%s</title></path>",
-			d, series[si].Color, series[si].Color, html.EscapeString(seriesTitle(series[si])))
+			d, serie.Color, serie.Color, html.EscapeString(seriesTitle(serie)))
 	}
 	sb.WriteString("</svg>")
 	sb.WriteString(renderChartLegend(series))
@@ -290,7 +291,7 @@ func cumulativePath(o chartOpts, edge []float64, yOf func(float64) float64, base
 	}
 	xs := make([]int, n)
 	ys := make([]int, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		v := 0.0
 		if i < len(edge) {
 			v = edge[i]
@@ -329,7 +330,7 @@ func compactPath(xs, ys []int) (*strings.Builder, int) {
 	// next point opens one with "M", 1 means it needs an explicit "L", and from
 	// 2 on the lineto is implicit and only a separator is written.
 	inSub := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if ys[i] == gapY {
 			inSub = 0
 			continue
@@ -395,7 +396,7 @@ func renderLineSVG(o chartOpts, series []chartSeries, hover []string) string {
 		// A <path> rather than a <polyline> so the pen can lift over a gap.
 		xs, ys := make([]int, n), make([]int, n)
 		measured := 0
-		for i := 0; i < n; i++ {
+		for i := range n {
 			v := math.NaN()
 			if i < len(s.Vals) {
 				v = s.Vals[i]
@@ -416,7 +417,7 @@ func renderLineSVG(o chartOpts, series []chartSeries, hover []string) string {
 			d.String(), s.Color, html.EscapeString(seriesTitle(s)))
 		// A single measured point draws no stroke at all, so mark it.
 		if measured == 1 {
-			for i := 0; i < n; i++ {
+			for i := range n {
 				if ys[i] != gapY {
 					fmt.Fprintf(&sb, "<circle cx='%d' cy='%d' r='3' fill='%s'/>", xs[i], ys[i], s.Color)
 					break

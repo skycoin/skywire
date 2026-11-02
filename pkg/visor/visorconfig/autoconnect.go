@@ -1,6 +1,8 @@
 // Package visorconfig pkg/visor/visorconfig/autoconnect.go c3-vis-core
 package visorconfig
 
+import "maps"
+
 import "slices"
 
 // DefaultAutoconnectSiteLinks is how many transports of each site type
@@ -57,9 +59,7 @@ func (v1 *V1) AutoconnectSettings() Autoconnect {
 	a.SiteTypes = slices.Clone(a.SiteTypes)
 	if a.MaxPerType != nil {
 		m := make(map[string]int, len(a.MaxPerType))
-		for k, n := range a.MaxPerType {
-			m[k] = n
-		}
+		maps.Copy(m, a.MaxPerType)
 		a.MaxPerType = m
 	}
 	return a

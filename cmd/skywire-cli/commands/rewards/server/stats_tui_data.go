@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/deployment"
@@ -100,8 +101,8 @@ func gatherStatsTUI() statsTUIData {
 		} else {
 			// TPD returns newest-first; a time axis has to run oldest to newest
 			// or every chart reads backwards.
-			for i := len(metric.Daily) - 1; i >= 0; i-- {
-				m := metric.Daily[i]
+			for _, m := range slices.Backward(metric.Daily) {
+
 				day := statsTUIDay{Date: m.Date, Bandwidth: m.Bandwidth, Latency: m.Latency,
 					ByType: make(map[string]uint64, len(m.ByType))}
 				for t, v := range m.ByType {
@@ -168,8 +169,8 @@ func gatherStatsTUI() statsTUIData {
 // reads backwards.
 func tuiDaysFromCXO(d *tpdapi.DailyStats) []statsTUIDay {
 	out := make([]statsTUIDay, 0, len(d.Daily))
-	for i := len(d.Daily) - 1; i >= 0; i-- {
-		m := d.Daily[i]
+	for _, m := range slices.Backward(d.Daily) {
+
 		day := statsTUIDay{
 			Date:      m.Date,
 			Bandwidth: m.Bandwidth,

@@ -73,7 +73,7 @@ func TestDmsgSkynetStatsRecordsRelayFailures(t *testing.T) {
 	require.Equal(t, 1, f.Confirmed)
 	require.Len(t, f.Relays, 2)
 
-	for i := 0; i < dmsgSkynetFailureRing+5; i++ {
+	for range dmsgSkynetFailureRing + 5 {
 		s.note(host, errors.New("other"))
 	}
 	snap = s.snapshot()

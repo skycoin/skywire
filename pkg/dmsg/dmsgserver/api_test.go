@@ -62,7 +62,7 @@ func TestHealthEndpoint_ResponseFields(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var body map[string]interface{}
+	var body map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &body)
 	require.NoError(t, err)
 	assert.Contains(t, body, "build_info")

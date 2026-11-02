@@ -107,7 +107,7 @@ func RegisterReadOnlyRoutes(r *httputil.Router, store *Store) {
 	r.Get("/uptime/dates", DatesHandler(store))
 }
 
-func writeJSON(w http.ResponseWriter, code int, v interface{}) {
+func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck

@@ -60,12 +60,12 @@ func (env *Env) Startup(entryTimeout time.Duration, servers, clients int, conf *
 
 	env.d = disc.NewMock(entryTimeout)
 
-	for i := 0; i < servers; i++ {
+	for range servers {
 		if _, err := env.newServer(ctx, dmsg.DefaultUpdateInterval); err != nil {
 			return err
 		}
 	}
-	for i := 0; i < clients; i++ {
+	for range clients {
 		pk, sk := cipher.GenerateKeyPair()
 		if _, err := env.newClientWithKeys(ctx, pk, sk, conf); err != nil {
 			return err

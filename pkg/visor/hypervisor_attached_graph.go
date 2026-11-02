@@ -9,6 +9,7 @@ package visor
 import (
 	"cmp"
 	"crypto/sha256"
+	"maps"
 	"slices"
 	"time"
 
@@ -31,9 +32,7 @@ const attachedGraphStaleAfter = 2 * hypervisorBackgroundPollInterval
 func (hv *Hypervisor) AttachedTransportEntries() ([]*transport.Entry, time.Time) {
 	hv.summaryCacheMx.RLock()
 	cache := make(map[cipher.PubKey]cachedSummary, len(hv.summaryCache))
-	for pk, cs := range hv.summaryCache {
-		cache[pk] = cs
-	}
+	maps.Copy(cache, hv.summaryCache)
 	hv.summaryCacheMx.RUnlock()
 
 	entries, sum := attachedEntriesFromSummaries(cache, time.Now())

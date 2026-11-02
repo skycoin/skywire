@@ -35,7 +35,7 @@ func TestSubscriberCatchesUpWhilePublisherFills(t *testing.T) {
 	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
 
 	const live = 40
-	for i := 0; i < live; i++ {
+	for i := range live {
 		require.NoError(t, other.Put(fmt.Sprintf("o/%05d", i), []byte("seed")))
 		require.NoError(t, pub.Put(fmt.Sprintf("tp/%05d", i), []byte("seed")))
 	}

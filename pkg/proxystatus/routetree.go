@@ -544,10 +544,7 @@ func compactRate(bps float64) string {
 func shareBar(val, total float64, width int) string {
 	filled := 0
 	if total > 0 && val > 0 {
-		filled = int(val/total*float64(width) + 0.5)
-		if filled > width {
-			filled = width
-		}
+		filled = min(int(val/total*float64(width)+0.5), width)
 		if filled == 0 {
 			filled = 1 // a nonzero share always shows at least one cell
 		}

@@ -109,7 +109,7 @@ func TestSBDSampleIntervalRateLimitsFolds(t *testing.T) {
 	require.Equal(t, sbdSampleIntervalDefault, SBDSampleInterval(), "default must be the compiled-in constant")
 
 	id := mts[0].Entry.ID
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		rg.mux.recordAckDelayTp(id, 40*time.Millisecond)
 	}
 	rg.legLivenessMu.Lock()

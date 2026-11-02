@@ -66,7 +66,7 @@ type overlay struct {
 
 func newOverlay(v *glView) *overlay {
 	o := &overlay{view: v}
-	o.tick = js.FuncOf(func(js.Value, []js.Value) interface{} {
+	o.tick = js.FuncOf(func(js.Value, []js.Value) any {
 		o.frame()
 		return nil
 	})
@@ -250,7 +250,7 @@ func seedPositions(n int) []float32 {
 		s ^= s << 5
 		return float32(spaceSize) * (0.45 + span*float32(s%1000)/1000.0)
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		out = append(out, next(), next())
 	}
 	return out

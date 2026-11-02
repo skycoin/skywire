@@ -47,7 +47,7 @@ func TestServeTab_DeliversStreamsToServe(t *testing.T) {
 	}
 
 	received := map[byte]bool{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case b := <-got:
 			received[b] = true
@@ -78,7 +78,7 @@ func TestServeTab_ServesStreamsConcurrently(t *testing.T) {
 		})
 	}()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		stream, err := host.Open()
 		require.NoError(t, err)
 		_, err = stream.Write([]byte{byte(i)}) // nudge the SYN across net.Pipe

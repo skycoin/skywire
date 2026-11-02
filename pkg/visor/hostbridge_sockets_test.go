@@ -86,7 +86,7 @@ func TestHostBridgeSocketsSurviveReconnect(t *testing.T) {
 			close(got)
 		}()
 		// A datagram can be lost while the bridge binds, so resend.
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			_, err := host.WriteTo([]byte(msg), pc.LocalAddr())
 			require.NoError(t, err)
 			select {

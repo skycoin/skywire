@@ -46,7 +46,7 @@ func newRSTestClientH(t *testing.T, backendAddr string, conc int, chunk int64) (
 	proxyAddr := probe.Addr().String()
 	probe.Close()                                        //nolint:errcheck,gosec
 	go func() { _ = client.ListenAndServe(proxyAddr) }() //nolint:errcheck
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if cc, err := net.Dial("tcp", proxyAddr); err == nil {
 			cc.Close() //nolint:errcheck,gosec
 			break

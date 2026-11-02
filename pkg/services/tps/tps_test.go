@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/deployment/tps/config"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/services"
 )
@@ -118,7 +117,7 @@ func TestRunConfigPathError(t *testing.T) {
 func TestRunLifecycle(t *testing.T) {
 	pk, sk := cipher.GenerateKeyPair()
 	cfg := &Config{
-		Config:   config.Config{PK: pk, SK: sk, Port: 0}, // dmsg RPC only
+		PK: pk, SK: sk, Port: 0, // dmsg RPC only
 		Tag:      "ts-run",
 		LogLevel: "info", // exercises the log-level branch
 	}

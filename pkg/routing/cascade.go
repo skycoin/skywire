@@ -323,7 +323,7 @@ func DeserializeRules(data []byte) ([]Rule, error) {
 	count := int(data[0])
 	off := 1
 	rules := make([]Rule, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if off+2 > len(data) {
 			return nil, fmt.Errorf("cascade: truncated rule %d", i)
 		}

@@ -119,7 +119,7 @@ func (g *Gateway) balance(w http.ResponseWriter, r *http.Request, b btc.Backend)
 		total += bal.Confirmed
 		addrBalances[addr] = map[string]map[string]int64{"confirmed": {"coins": bal.Confirmed}}
 	}
-	writeJSON(w, map[string]interface{}{
+	writeJSON(w, map[string]any{
 		"confirmed": map[string]int64{"coins": total},
 		"predicted": map[string]int64{"coins": total},
 		"addresses": addrBalances,
@@ -166,7 +166,7 @@ func (g *Gateway) fee(w http.ResponseWriter, r *http.Request, b btc.Backend) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]interface{}{"sat_per_byte": spb, "blocks": blocks})
+	writeJSON(w, map[string]any{"sat_per_byte": spb, "blocks": blocks})
 }
 
 // health reports whether the configured Electrum backend is reachable and, if
@@ -180,7 +180,7 @@ func (g *Gateway) health(w http.ResponseWriter, _ *http.Request, b btc.Backend) 
 		writeErr(w, http.StatusBadGateway, "electrum unreachable: "+err.Error())
 		return
 	}
-	writeJSON(w, map[string]interface{}{"tip_height": height})
+	writeJSON(w, map[string]any{"tip_height": height})
 }
 
 // send broadcasts a client-signed raw transaction — the in-browser wallet signs
@@ -210,7 +210,7 @@ func addrsParam(r *http.Request) []string {
 	return strings.Split(p, ",")
 }
 
-func writeJSON(w http.ResponseWriter, v interface{}) {
+func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck
 }

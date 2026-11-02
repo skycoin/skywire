@@ -247,7 +247,7 @@ func (s *memoryStore) online(pk cipher.PubKey, now time.Time) bool {
 // daily is the uptime percentage per day over the history window. s.mu held.
 func (s *memoryStore) daily(pkHex string, now time.Time) map[string]string {
 	out := make(map[string]string)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		u, ok := s.uptime[pkHex][date]
 		if !ok {
@@ -265,7 +265,7 @@ func (s *memoryStore) daily(pkHex string, now time.Time) map[string]string {
 // timelines renders each day's 5-minute slots: '.' heard, ' ' missed. s.mu held.
 func (s *memoryStore) timelines(pkHex string, now time.Time) map[string]string {
 	out := make(map[string]string)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		u, ok := s.uptime[pkHex][date]
 		if !ok {

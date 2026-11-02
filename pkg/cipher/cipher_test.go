@@ -148,7 +148,7 @@ func TestVerifyCacheStats(t *testing.T) {
 	// First verify — miss + populate.
 	require.NoError(t, VerifyPubKeySignedPayload(pk, sig, payload))
 	// 5 more — all hits.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		require.NoError(t, VerifyPubKeySignedPayload(pk, sig, payload))
 	}
 

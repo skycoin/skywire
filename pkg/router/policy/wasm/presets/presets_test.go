@@ -396,7 +396,7 @@ func TestAdaptiveParksToSingleActiveLeg(t *testing.T) {
 	}
 	// Drive a few ticks, applying each park to the snapshot as the route group
 	// would, until the surplus is parked down to one active leg.
-	for tick := 0; tick < 4; tick++ {
+	for tick := range 4 {
 		act, err := l.OnTick(context.Background(),
 			policy.RoutingContext{App: "skysocks-client"}, legs)
 		if err != nil {

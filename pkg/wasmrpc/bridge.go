@@ -73,7 +73,7 @@ func NewBridge(tabConn net.Conn, port int, log func(string)) (*Bridge, error) {
 // Addr is the local address `skywire cli --rpc` should target for this tab.
 func (b *Bridge) Addr() string { return b.lis.Addr().String() }
 
-func (b *Bridge) logf(format string, args ...interface{}) {
+func (b *Bridge) logf(format string, args ...any) {
 	if b.log != nil {
 		b.log(fmt.Sprintf(format, args...))
 	}

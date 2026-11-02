@@ -123,7 +123,7 @@ func parsePKList(v string) (*[]cipher.PubKey, bool, error) {
 		return &[]cipher.PubKey{}, false, nil
 	}
 	pks := []cipher.PubKey{}
-	for _, f := range strings.Split(v, ",") {
+	for f := range strings.SplitSeq(v, ",") {
 		var pk cipher.PubKey
 		if err := pk.Set(strings.TrimSpace(f)); err != nil {
 			return nil, false, fmt.Errorf("%q: %w", f, err)

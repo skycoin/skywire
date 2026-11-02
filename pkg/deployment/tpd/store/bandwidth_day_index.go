@@ -67,7 +67,7 @@ func (ix *bwDayIndex) mayHave(id uuid.UUID, day time.Time, offset int) bool {
 // (see mayHave).
 func (ix *bwDayIndex) fetchDays(id uuid.UUID, now time.Time, days int) []int {
 	out := make([]int, 0, 4)
-	for d := 0; d < days; d++ {
+	for d := range days {
 		if ix.mayHave(id, now.AddDate(0, 0, -d), d) {
 			out = append(out, d)
 		}
@@ -78,7 +78,7 @@ func (ix *bwDayIndex) fetchDays(id uuid.UUID, now time.Time, days int) []int {
 // windowMask is the bit set covering days now-0 .. now-(days-1).
 func (ix *bwDayIndex) windowMask(now time.Time, days int) uint64 {
 	var m uint64
-	for d := 0; d < days; d++ {
+	for d := range days {
 		if k, ok := ix.dayBit(now.AddDate(0, 0, -d)); ok {
 			m |= 1 << k
 		}
@@ -209,10 +209,7 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 	}
 	var fallback []uuid.UUID
 	for start := 0; start < len(ids); start += scanBatch {
-		end := start + scanBatch
-		if end > len(ids) {
-			end = len(ids)
-		}
+		end := min(start+scanBatch, len(ids))
 		batch := ids[start:end]
 		pipe := s.client.Pipeline()
 		cmds := make([]*redis.StringCmd, len(batch))
@@ -236,10 +233,7 @@ func (s *redisStore) scanBandwidthIndex(ctx context.Context) (*bwDayIndex, error
 	// Legacy transports without a persisted pair: read the newest daily hash
 	// the scan saw for each, pipelined the same way.
 	for start := 0; start < len(fallback); start += scanBatch {
-		end := start + scanBatch
-		if end > len(fallback) {
-			end = len(fallback)
-		}
+		end := min(start+scanBatch, len(fallback))
 		batch := fallback[start:end]
 		pipe := s.client.Pipeline()
 		cmds := make([]*redis.StringStringMapCmd, len(batch))
@@ -295,7 +289,7 @@ func (s *redisStore) recoverBandwidthTypes(ctx context.Context, ix *bwDayIndex, 
 
 // newestBit is the lowest set bit's position: the most recent day with data.
 func newestBit(mask uint64) int {
-	for k := 0; k < 64; k++ {
+	for k := range 64 {
 		if mask&(1<<k) != 0 {
 			return k
 		}

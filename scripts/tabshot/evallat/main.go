@@ -32,9 +32,9 @@ func main() {
 
 	var ms []float64
 	for i := 1; i <= n; i++ {
-		b, merr := json.Marshal(map[string]interface{}{
+		b, merr := json.Marshal(map[string]any{
 			"id": i, "method": "Runtime.evaluate",
-			"params": map[string]interface{}{"expression": "1+1", "returnByValue": true},
+			"params": map[string]any{"expression": "1+1", "returnByValue": true},
 		})
 		if merr != nil {
 			fmt.Fprintln(os.Stderr, "marshal:", merr)

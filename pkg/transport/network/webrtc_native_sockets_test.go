@@ -58,7 +58,7 @@ func TestWebRTCPeerConnectionsShareSockets(t *testing.T) {
 			c.Close() //nolint:errcheck,gosec
 		}
 	}()
-	for i := 0; i < pairs; i++ {
+	for i := range pairs {
 		newAcceptMux()
 		sigA, sigB := net.Pipe()
 		var a, b net.Conn

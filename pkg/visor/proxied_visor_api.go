@@ -373,7 +373,7 @@ func hexToBytes(s string) ([]byte, error) {
 		return nil, errors.New("odd-length hex")
 	}
 	out := make([]byte, len(s)/2)
-	for i := 0; i < len(out); i++ {
+	for i := range out {
 		hi, err := hexNibble(s[2*i])
 		if err != nil {
 			return nil, err

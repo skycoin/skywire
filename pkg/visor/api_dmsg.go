@@ -895,12 +895,7 @@ func (v *Visor) dmsgHTTPCtx(ctx context.Context, req visorapi.DmsgHTTPRequest) (
 // isDmsgServiceKey reports whether pk is one of the deployment services this
 // visor is configured with.
 func (v *Visor) isDmsgServiceKey(pk cipher.PubKey) bool {
-	for _, svc := range v.dmsgServicePKs() {
-		if svc == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(v.dmsgServicePKs(), pk)
 }
 
 func sortedPKs(pks []cipher.PubKey) []cipher.PubKey {

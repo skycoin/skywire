@@ -864,7 +864,7 @@ func (mt *ManagedTransport) sendBwProbe() {
 	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		mt.log.WithError(err).Debug("bw-probe: set write deadline")
 	}
-	for seq := 0; seq < transportBwProbeTrain; seq++ {
+	for seq := range transportBwProbeTrain {
 		p := routing.MakeTransportBwProbePacket(probeID, uint16(seq), transportBwProbeTrain) //nolint:gosec
 		n, err := mt.sendDig.write(tp, p)
 		if err != nil {

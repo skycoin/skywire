@@ -95,7 +95,7 @@ func RewardAddresses(xpub string, n uint32) ([]string, error) {
 		return nil, errors.New(msg)
 	}
 	addrs := make([]string, 0, n)
-	for i := uint32(0); i < n; i++ {
+	for i := range n {
 		a, err := DeriveExternalAddressFromXpub(xpub, i)
 		if err != nil {
 			return nil, err

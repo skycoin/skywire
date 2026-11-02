@@ -36,7 +36,7 @@ func TestGeneratedUpToDate(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if !strings.HasPrefix(line, "//go:generate go run ") || !strings.Contains(line, marker) {
 				continue
 			}

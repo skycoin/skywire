@@ -51,6 +51,7 @@ import (
 	"cmp"
 	"compress/gzip"
 	"context"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -326,9 +327,7 @@ func (m *MetricsCXOPublisher) publishSaved(ctx context.Context, dates, window []
 // for.
 func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int, prune bool) (ops []treestore.PutOp, next map[string]int) {
 	next = make(map[string]int, len(prev)+len(dates))
-	for d, n := range prev {
-		next[d] = n
-	}
+	maps.Copy(next, prev)
 
 	inWindow := make(map[string]bool, len(dates))
 	var deletes, puts []treestore.PutOp
@@ -366,7 +365,7 @@ func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int,
 			if n == 0 {
 				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPath(date)})
 			}
-			for i := 0; i < n; i++ {
+			for i := range n {
 				deletes = append(deletes, treestore.PutOp{Path: store.MetricsDayPartPath(date, i)})
 			}
 			delete(next, date)
@@ -478,10 +477,7 @@ func splitEvenly(metrics []store.TransportMetric, n int) [][]store.TransportMetr
 	size := (len(metrics) + n - 1) / n
 	out := make([][]store.TransportMetric, 0, n)
 	for i := 0; i < len(metrics); i += size {
-		end := i + size
-		if end > len(metrics) {
-			end = len(metrics)
-		}
+		end := min(i+size, len(metrics))
 		out = append(out, metrics[i:end])
 	}
 	return out
@@ -619,9 +615,7 @@ func (m *MetricsCXOPublisher) settle(ctx context.Context, bodies map[string][][]
 	for _, d := range open {
 		isOpen[d] = true
 	}
-	for date, parts := range bodies {
-		m.unsaved[date] = parts
-	}
+	maps.Copy(m.unsaved, bodies)
 	ls, ok := m.api.store.(leafStore)
 	for date, parts := range m.unsaved {
 		if isOpen[date] {

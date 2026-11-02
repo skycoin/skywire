@@ -3,6 +3,7 @@ package direct
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -125,11 +126,8 @@ func (c *directClient) ClientsByServer(_ context.Context, serverPK cipher.PubKey
 	var entries []*disc.Entry
 	for _, entry := range c.entries {
 		if entry.Client != nil {
-			for _, delegatedPK := range entry.Client.DelegatedServers {
-				if delegatedPK == serverPK {
-					entries = append(entries, entry)
-					break
-				}
+			if slices.Contains(entry.Client.DelegatedServers, serverPK) {
+				entries = append(entries, entry)
 			}
 		}
 	}

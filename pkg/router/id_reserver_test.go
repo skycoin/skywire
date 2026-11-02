@@ -89,10 +89,10 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 	timeout := time.Second
 
 	type testCase struct {
-		testName string                        // test name
-		routers  map[cipher.PubKey]interface{} // arrange: map of mock router gateways
-		paths    [][]routing.Hop               // arrange: idReserver input
-		expErr   error                         // assert: expected error
+		testName string                // test name
+		routers  map[cipher.PubKey]any // arrange: map of mock router gateways
+		paths    [][]routing.Hop       // arrange: idReserver input
+		expErr   error                 // assert: expected error
 	}
 
 	makeRun := func(tc testCase) func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 		testCases := []testCase{
 			{
 				testName: "fwd1_rev1",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{},
 					pkC: &mockGatewayForDialer{},
 				},
@@ -134,7 +134,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			},
 			{
 				testName: "fwd2_rev2",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{},
 					pkB: &mockGatewayForDialer{},
 					pkC: &mockGatewayForDialer{},
@@ -144,7 +144,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			},
 			{
 				testName: "fwd1_rev2",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{},
 					pkB: &mockGatewayForDialer{},
 					pkC: &mockGatewayForDialer{},
@@ -167,7 +167,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 		testCases := []testCase{
 			{
 				testName: "all_routers_hang",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{hangDuration: time.Second * 5},
 					pkC: &mockGatewayForDialer{hangDuration: time.Second * 5},
 				},
@@ -176,7 +176,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			},
 			{
 				testName: "intermediary_router_hangs",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{},
 					pkB: &mockGatewayForDialer{hangDuration: time.Second * 5},
 					pkC: &mockGatewayForDialer{},
@@ -186,7 +186,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			},
 			{
 				testName: "initiating_router_hangs",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{hangDuration: time.Second * 5},
 					pkB: &mockGatewayForDialer{},
 					pkC: &mockGatewayForDialer{},
@@ -196,7 +196,7 @@ func TestIdReserver_ReserveIDs(t *testing.T) {
 			},
 			{
 				testName: "responding_router_hangs",
-				routers: map[cipher.PubKey]interface{}{
+				routers: map[cipher.PubKey]any{
 					pkA: &mockGatewayForDialer{},
 					pkB: &mockGatewayForDialer{},
 					pkC: &mockGatewayForDialer{hangDuration: time.Second * 5},
@@ -262,7 +262,7 @@ func TestIdReserver_ReserveIDs_NoSiblingCancelOnFailure(t *testing.T) {
 	pkA, _ := cipher.GenerateKeyPair() // fails fast
 	pkC, _ := cipher.GenerateKeyPair() // slow but healthy
 
-	routers := map[cipher.PubKey]interface{}{
+	routers := map[cipher.PubKey]any{
 		pkA: errReserveGateway{},
 		pkC: &mockGatewayForDialer{hangDuration: 150 * time.Millisecond},
 	}
@@ -317,7 +317,7 @@ func (d *flakyReserveDialer) Dial(_ context.Context, pk cipher.PubKey, _ uint16)
 	d.n[pk]++
 	d.mu.Unlock()
 
-	var gw interface{} = &mockGatewayForDialer{}
+	var gw any = &mockGatewayForDialer{}
 	if k == 0 {
 		gw = shutdownGateway{}
 	}

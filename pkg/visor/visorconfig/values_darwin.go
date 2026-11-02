@@ -25,10 +25,8 @@ func UserConfig() skyenv.PkgConfig {
 	usrConfig := skyenv.PkgConfig{
 		LauncherBinPath: "/Applications/Skywire.app/Contents/MacOS",
 		LocalPath:       HomePath() + "/.skywire/local",
-		Hypervisor: skyenv.Hypervisor{
-			DbPath:     HomePath() + "/.skywire/users.db",
-			EnableAuth: true,
-		},
+		DbPath:          HomePath() + "/.skywire/users.db",
+		EnableAuth:      true,
 	}
 	return usrConfig
 }

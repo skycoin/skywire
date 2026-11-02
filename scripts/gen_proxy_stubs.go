@@ -136,11 +136,8 @@ func emitMethod(name string, ft *ast.FuncType) {
 	if ft.Results != nil {
 		for _, r := range ft.Results.List {
 			ts := typeString(r.Type)
-			n := 1
-			if len(r.Names) > 1 {
-				n = len(r.Names)
-			}
-			for i := 0; i < n; i++ {
+			n := max(len(r.Names), 1)
+			for range n {
 				results = append(results, ts)
 				zeros = append(zeros, zeroValue(ts))
 			}

@@ -208,10 +208,7 @@ Outcomes (--wait > 0):
 		// retry. The in-handler redial+retry already absorbs the
 		// common transient stale-conn case; --retries here is the
 		// belt-and-suspenders for HTTP-layer / chat-app-down cases.
-		attempts := sendRetries + 1
-		if attempts < 1 {
-			attempts = 1
-		}
+		attempts := max(sendRetries+1, 1)
 		errOut := cmd.ErrOrStderr()
 		var preCounters *statusCounters
 		if sendVerbose {
@@ -229,7 +226,7 @@ Outcomes (--wait > 0):
 			}
 		}
 		var ack *AckResponse
-		for i := 0; i < attempts; i++ {
+		for i := range attempts {
 			if sendVerbose && i > 0 {
 				fmt.Fprintf(errOut, "[verbose] retry attempt %d/%d (backoff fired)\n", i+1, attempts) //nolint:errcheck
 			}
@@ -506,7 +503,7 @@ type AckResponse struct {
 // 504-on-timeout case (which is returned as a non-nil ack with
 // Acked=false).
 func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*AckResponse, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"recipient": recipientPK,
 		"message":   msg,
 		"network":   network,

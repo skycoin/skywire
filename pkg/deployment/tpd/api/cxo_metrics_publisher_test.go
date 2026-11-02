@@ -17,9 +17,9 @@ import (
 // the real thing closely enough that the split arithmetic is exercised.
 func metricsFixture(n, days int) []store.TransportMetric {
 	out := make([]store.TransportMetric, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		daily := make([]store.DailyEdgeBandwidth, 0, days)
-		for d := 0; d < days; d++ {
+		for d := range days {
 			daily = append(daily, store.DailyEdgeBandwidth{
 				Date: fmt.Sprintf("2026-09-%02d", 1+d%28),
 				A:    &store.EdgeBandwidth{Sent: uint64(i*7919 + d), Recv: uint64(i*104729 + d)},

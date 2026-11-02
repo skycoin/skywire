@@ -66,7 +66,7 @@ func TestHandleProbeResults_CooldownPreventsThrashing(t *testing.T) {
 	}
 
 	// Keep failing within the cooldown window — no additional reconnects.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		handleProbeResults(rc, state, map[uint16]bool{136: false},
 			t0.Add(2*time.Minute+time.Duration(i)*time.Minute), false, log)
 	}

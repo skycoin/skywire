@@ -291,7 +291,7 @@ func (r *Refs) HasHash(
 func (r *Refs) ValueByHash(
 	pack Pack, //          : pack to laod
 	hash cipher.SHA256, // : hash to get
-	obj interface{}, //    : pointer to object to decode
+	obj any, //    : pointer to object to decode
 ) (
 	err error, //          : error if any
 ) {
@@ -445,7 +445,7 @@ func (r *Refs) IndicesByHash(
 func (r *Refs) ValueOfHashWithIndex(
 	pack Pack, //          : pack to laod
 	hash cipher.SHA256, // : hash to find
-	obj interface{}, //    : pointer to object to decode
+	obj any, //    : pointer to object to decode
 ) (
 	i int, //              : index of the element if found
 	err error, //          : error if any
@@ -507,7 +507,7 @@ func (r *Refs) HashByIndex(
 func (r *Refs) ValueByIndex(
 	pack Pack, //          : pack to load
 	i int, //              : index to find
-	obj interface{}, //    : pointer to object to decode
+	obj any, //    : pointer to object to decode
 ) (
 	hash cipher.SHA256, // : hash of the element
 	err error, //          : error if any
@@ -641,7 +641,7 @@ func (r *Refs) SetHashByIndex(
 func (r *Refs) SetValueByIndex(
 	pack Pack, //       : pack to load and save
 	i int, //           : index to find
-	obj interface{}, // : object to save
+	obj any, // : object to save
 ) (
 	err error, //       : error if any
 ) {
@@ -1499,7 +1499,7 @@ func (r *Refs) Append(
 // checks for the schema. Use nil for blank hash
 func (r *Refs) AppendValues(
 	pack Pack, //             : pack to load and save
-	values ...interface{}, // : values to append
+	values ...any, // : values to append
 ) (
 	err error, //             : error if any
 ) {
@@ -1532,13 +1532,6 @@ func (r *Refs) AppendValues(
 	}
 
 	return r.AppendHashes(pack, hashes...)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // AppendHashes to this Refs. The hashes msut

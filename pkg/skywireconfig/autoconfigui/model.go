@@ -92,7 +92,7 @@ func GroupOf(name string) string {
 	if g, ok := groupExact[name]; ok {
 		return g
 	}
-	if n := strings.TrimPrefix(name, "no-"); n != name {
+	if n, ok := strings.CutPrefix(name, "no-"); ok {
 		if g, ok := groupExact[n]; ok {
 			return g
 		}

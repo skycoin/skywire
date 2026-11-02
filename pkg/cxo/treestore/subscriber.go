@@ -1087,14 +1087,8 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	// streak resets in handleRootFilled; a persistent break converges to the
 	// quiet-threshold watchdog cadence.
 	streak := s.fillBreakStreak.Add(1)
-	shift := streak - 1
-	if shift > 6 { // 2s<<6 = 128s already exceeds the cap; avoid shift overflow
-		shift = 6
-	}
-	backoff := fillBreakKickBase << uint(shift)
-	if backoff > fillBreakKickMax {
-		backoff = fillBreakKickMax
-	}
+	shift := min(streak-1, 6)                                        // 2s<<6 = 128s already exceeds the cap; avoid shift overflow
+	backoff := min(fillBreakKickBase<<uint(shift), fillBreakKickMax) //nolint:gosec // shift is 0..6: streak starts at 1 and is capped above
 	now := time.Now().UnixNano()
 	if last := s.lastFillBreakKickNs.Load(); last != 0 && time.Duration(now-last) < backoff {
 		s.log.WithError(err).
@@ -1221,7 +1215,7 @@ func walkTreeBestEffort(pack registry.Pack, node *TreeNode, basePath string, out
 	if err != nil {
 		return
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var entry TreeEntry
 		if _, err := node.Children.ValueByIndex(pack, i, &entry); err != nil {
 			continue // this child's index object wasn't fetched; skip it
@@ -1252,7 +1246,7 @@ func walkTree(pack registry.Pack, node *TreeNode, basePath string, out map[strin
 	if err != nil {
 		return err
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var entry TreeEntry
 		if _, err := node.Children.ValueByIndex(pack, i, &entry); err != nil {
 			return err

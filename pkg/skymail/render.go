@@ -174,7 +174,7 @@ type newlineStripper struct{ r io.Reader }
 func (s newlineStripper) Read(p []byte) (int, error) {
 	n, err := s.r.Read(p)
 	j := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if p[i] != '\r' && p[i] != '\n' {
 			p[j] = p[i]
 			j++

@@ -113,7 +113,7 @@ func TestDatagramCipherOutOfWindowRejected(t *testing.T) {
 	// Send + receive enough datagrams to advance the window past
 	// where counter=0 was. replayWindowSize is 2048, so 3000 sends
 	// puts counter=0 well outside the trailing edge.
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		sealed, err := out.Seal(1, []byte("x"))
 		require.NoError(t, err)
 		_, err = in.Open(1, sealed)
@@ -165,7 +165,7 @@ func TestDatagramCipherReorderedDeliveryAccepted(t *testing.T) {
 
 	// Seal 10 datagrams in order.
 	sealed := make([][]byte, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s, err := out.Seal(1, []byte{byte(i)})
 		require.NoError(t, err)
 		sealed[i] = s
@@ -218,7 +218,7 @@ func TestDatagramCipherRekeyResetsState(t *testing.T) {
 	out, in, _, _ := newTestPair(t, nil)
 
 	// Send a few; advance counter to 3.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		s, err := out.Seal(1, []byte("pre"))
 		require.NoError(t, err)
 		_, err = in.Open(1, s)
@@ -266,7 +266,7 @@ func TestDatagramCipherConcurrentSealOpenSafe(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < N; i++ {
+		for i := range N {
 			s, err := out.Seal(1, []byte{byte(i)})
 			if err != nil {
 				t.Errorf("seal: %v", err)

@@ -124,7 +124,7 @@ func TestTransitWriteDoesNotBlockTheServeLoop(t *testing.T) {
 	const rounds = 200
 	ctx := context.Background()
 	start := time.Now()
-	for i := 0; i < rounds; i++ {
+	for range rounds {
 		// A transit frame for the wedged peer, then one for the local group:
 		// exactly the interleaving the single loop sees.
 		require.NoError(t, r.handleTransportPacket(ctx, transit))
@@ -195,14 +195,14 @@ func TestTransitWriteStillRelaysInOrder(t *testing.T) {
 
 	const frames = 64
 	ctx := context.Background()
-	for i := 0; i < frames; i++ {
+	for i := range frames {
 		p, err := routing.MakeDataPacket(key, []byte{byte(i)})
 		require.NoError(t, err)
 		require.NoError(t, r.handleTransportPacket(ctx, p))
 	}
 
 	buf := make([]byte, 1024)
-	for i := 0; i < frames; i++ {
+	for i := range frames {
 		require.NoError(t, far.SetReadDeadline(time.Now().Add(5*time.Second)))
 		n, err := far.Read(buf)
 		require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestForwardQueueBytesBoundsOneWedgedPeer(t *testing.T) {
 	p, err := routing.MakeDataPacket(key, make([]byte, 1024))
 	require.NoError(t, err)
 	ctx := context.Background()
-	for i := 0; i < 128; i++ {
+	for range 128 {
 		require.NoError(t, r.handleTransportPacket(ctx, p))
 	}
 

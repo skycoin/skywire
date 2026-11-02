@@ -83,7 +83,7 @@ func (l *Listener) Close() error {
 
 		var conns []net.Conn
 
-		l.cm.DoRange(func(_ uint16, v interface{}) bool {
+		l.cm.DoRange(func(_ uint16, v any) bool {
 			conn, err := idmanager.AssertConn(v)
 			if err != nil {
 				l.log.Error(err)

@@ -8,6 +8,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -120,7 +121,7 @@ func (cb *CascadeBuilder) BuildReserveMessage(hops []routing.Hop, reserveN uint8
 	}
 	targets := make([]hopTarget, 0, len(hops)+1)
 	targets = append(targets, hopTarget{pk: hops[0].From, relayTpID: hops[0].TpID})
-	for i := 0; i < len(hops); i++ {
+	for i := range hops {
 		var relayID uuid.UUID
 		if i < len(hops)-1 {
 			relayID = hops[i+1].TpID
@@ -130,7 +131,7 @@ func (cb *CascadeBuilder) BuildReserveMessage(hops []routing.Hop, reserveN uint8
 
 	// Build nested from last to first.
 	var innerPayload []byte
-	for i := len(targets) - 1; i >= 0; i-- {
+	for i, target := range slices.Backward(targets) {
 		nonce++
 		msg := &routing.CascadeSetup{
 			Phase:     routing.CascadePhaseReserve,
@@ -138,10 +139,10 @@ func (cb *CascadeBuilder) BuildReserveMessage(hops []routing.Hop, reserveN uint8
 			RSNPK:     cb.rsnPK,
 			Nonce:     nonce,
 			ReserveN:  reserveN,
-			RelayTpID: targets[i].relayTpID,
+			RelayTpID: target.relayTpID,
 			Payload:   innerPayload,
 		}
-		if err := msg.Sign(targets[i].pk, cb.rsnSK); err != nil {
+		if err := msg.Sign(target.pk, cb.rsnSK); err != nil {
 			return 0, nil, fmt.Errorf("cascade sign hop %d: %w", i, err)
 		}
 		data, err := msg.Marshal()
@@ -179,7 +180,7 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 	}
 	targets := make([]hopTarget, 0, len(hops)+1)
 	targets = append(targets, hopTarget{pk: hops[0].From, relayTpID: hops[0].TpID})
-	for i := 0; i < len(hops); i++ {
+	for i := range hops {
 		var relayID uuid.UUID
 		if i < len(hops)-1 {
 			relayID = hops[i+1].TpID
@@ -189,9 +190,9 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 
 	// Build nested from last to first.
 	var innerPayload []byte
-	for i := len(targets) - 1; i >= 0; i-- {
+	for i, target := range slices.Backward(targets) {
 		nonce++
-		rules := rulesPerHop[targets[i].pk]
+		rules := rulesPerHop[target.pk]
 		ruleData := routing.SerializeRules(rules)
 
 		msg := &routing.CascadeSetup{
@@ -200,7 +201,7 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 			RSNPK:     cb.rsnPK,
 			Nonce:     nonce,
 			RuleData:  ruleData,
-			RelayTpID: targets[i].relayTpID,
+			RelayTpID: target.relayTpID,
 			Payload:   innerPayload,
 		}
 		// Mark the terminal hop (the responding destination) as a route-group
@@ -208,7 +209,7 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 		if i == len(targets)-1 {
 			msg.EdgeDesc = edgeDesc
 		}
-		if err := msg.Sign(targets[i].pk, cb.rsnSK); err != nil {
+		if err := msg.Sign(target.pk, cb.rsnSK); err != nil {
 			return nil, fmt.Errorf("cascade sign hop %d: %w", i, err)
 		}
 		data, err := msg.Marshal()

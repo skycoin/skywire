@@ -86,10 +86,7 @@ func (s *requestStats) found(hops []int) {
 	if len(hops) == 0 {
 		return
 	}
-	n := len(hops)
-	if n > maxCountedRoutes {
-		n = maxCountedRoutes
-	}
+	n := min(len(hops), maxCountedRoutes)
 	s.mu.Lock()
 	s.perPair[n]++
 	s.mu.Unlock()

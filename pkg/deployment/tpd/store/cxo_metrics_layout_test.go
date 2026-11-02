@@ -15,7 +15,7 @@ import (
 // coverage rather than a dense rectangle.
 func windowFixture(transports int, dates []string) []TransportMetric {
 	out := make([]TransportMetric, 0, transports)
-	for i := 0; i < transports; i++ {
+	for i := range transports {
 		var daily []DailyEdgeBandwidth
 		for d, date := range dates {
 			// Transport i is silent on every (i+1)th day, so coverage is

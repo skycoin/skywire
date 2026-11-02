@@ -37,7 +37,7 @@ func TestMux_InOrderDelivery(t *testing.T) {
 	recv := newTestMux(t)
 
 	var got []byte
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		payload := []byte{byte(i)}
 		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
@@ -68,7 +68,7 @@ func TestMux_InterleavedLegs(t *testing.T) {
 		data []byte
 	}
 	var evens, odds []pkt
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		payload := []byte{byte(i)}
 		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
@@ -121,7 +121,7 @@ func TestMux_RecoversLostPacketViaRetx(t *testing.T) {
 		data []byte
 	}
 	var pkts []pkt
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		payload := []byte{byte(i)}
 		_, seq, err := send.wrapPayload(routing.RouteID(1), payload, uuid.Nil)
 		if err != nil {
@@ -185,7 +185,7 @@ func TestMux_SendDrivingWithUnreadyAuxLeg(t *testing.T) {
 	rg.mu.Unlock()
 
 	_ = rg.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		n, err := rg.Write([]byte{byte(i)})
 		if err != nil {
 			t.Fatalf("write %d STALLED/errored with an unready aux leg: %v (send-driving falls over instead of using ready leg 0)", i, err)
@@ -205,7 +205,7 @@ func TestMux_SendDistributesAcrossReadyLegs(t *testing.T) {
 	}()
 
 	_ = rg.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
-	for i := 0; i < 400; i++ {
+	for i := range 400 {
 		if _, err := rg.Write([]byte{byte(i)}); err != nil {
 			t.Fatalf("write %d failed: %v", i, err)
 		}

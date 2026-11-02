@@ -647,7 +647,7 @@ func equalList(a, b []string) bool {
 // case-insensitive hex and a transport type is already lowercase.
 func splitList(raw string) []string {
 	var out []string
-	for _, p := range strings.Split(raw, ",") {
+	for p := range strings.SplitSeq(raw, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}

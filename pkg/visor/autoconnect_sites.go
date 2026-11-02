@@ -19,6 +19,7 @@ package visor
 import (
 	"bytes"
 	"hash/fnv"
+	"maps"
 	"net"
 	"slices"
 
@@ -281,9 +282,7 @@ func (v *Visor) autoconnectDiag() *visorapi.DiagAutoconnect {
 	reach := map[cipher.PubKey]*arfeed.Reach{}
 	mgr.Walk(FeedARReach, arfeed.ReachPathPrefix, func(_ string, body []byte) bool {
 		if peers, err := arfeed.DecodeReachBucket(body); err == nil {
-			for pk, r := range peers {
-				reach[pk] = r
-			}
+			maps.Copy(reach, peers)
 		}
 		return true
 	})

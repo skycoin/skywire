@@ -15,6 +15,8 @@
 package visor
 
 import (
+	"slices"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
@@ -95,10 +97,5 @@ func (v *Visor) setPtyWhitelistLive(want []cipher.PubKey) error {
 }
 
 func pkIn(set []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, p := range set {
-		if p == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(set, pk)
 }

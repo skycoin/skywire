@@ -294,12 +294,12 @@ func buildHeaderMap(raw []string) (map[string]string, error) {
 	}
 	out := make(map[string]string, len(raw))
 	for _, h := range raw {
-		idx := strings.Index(h, ":")
-		if idx < 0 {
+		before, after, ok := strings.Cut(h, ":")
+		if !ok {
 			return nil, fmt.Errorf("invalid header %q (expected Key: Value)", h)
 		}
-		k := strings.TrimSpace(h[:idx])
-		v := strings.TrimSpace(h[idx+1:])
+		k := strings.TrimSpace(before)
+		v := strings.TrimSpace(after)
 		out[k] = v
 	}
 	return out, nil

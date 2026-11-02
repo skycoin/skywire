@@ -62,7 +62,7 @@ func (hv *Hypervisor) getLog() http.HandlerFunc {
 				if !open {
 					return
 				}
-				b, err := json.Marshal(map[string]interface{}{
+				b, err := json.Marshal(map[string]any{
 					"level": e.Level.String(),
 					"time":  e.Time.UnixMilli(),
 					"msg":   formatLogEntry(e),

@@ -228,10 +228,8 @@ func (v *Visor) isTrustedPeer(pk cipher.PubKey) bool {
 	if v.conf != nil && pk == v.conf.PK {
 		return true
 	}
-	for _, hv := range v.configuredHypervisors() {
-		if hv == pk {
-			return true
-		}
+	if slices.Contains(v.configuredHypervisors(), pk) {
+		return true
 	}
 	if v.peerWhitelist != nil {
 		if ok, err := v.peerWhitelist.Get(pk); err == nil && ok {

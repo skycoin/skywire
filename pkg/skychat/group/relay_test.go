@@ -454,7 +454,7 @@ func TestRelayRoundTrip(t *testing.T) {
 
 func TestNewRelayMsgID_Unique(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		id := newRelayMsgID()
 		if len(id) != 16 {
 			t.Fatalf("msg id %q is %d chars, want 16 hex", id, len(id))

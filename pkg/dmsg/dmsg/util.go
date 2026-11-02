@@ -25,7 +25,7 @@ func isClosed(done chan struct{}) bool {
 
 /* Gob IO */
 
-func encodeGob(v interface{}) ([]byte, error) {
+func encodeGob(v any) ([]byte, error) {
 	var b bytes.Buffer
 	if err := gob.NewEncoder(&b).Encode(v); err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func encodeGob(v interface{}) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func decodeGob(v interface{}, b []byte) error {
+func decodeGob(v any, b []byte) error {
 	// G709 (gosec taint analysis) flags any gob decode of reader-sourced bytes.
 	// Here b is a dmsg wire frame that already arrived over a Noise-authenticated,
 	// integrity-checked session, and v is a fixed internal control type — not

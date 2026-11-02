@@ -137,7 +137,7 @@ func newReachBook(log *logging.Logger) *reachBook {
 		jobs:       make(chan probeJob, probeQueue),
 		done:       make(chan struct{}),
 	}
-	for i := 0; i < probeWorkers; i++ {
+	for range probeWorkers {
 		b.wg.Add(1)
 		go b.prober()
 	}
@@ -494,7 +494,7 @@ func (b *reachBook) flush() {
 // tree is dense from the first Root.
 func (b *reachBook) attach(pub *treestore.Publisher) {
 	all := make(map[int]struct{}, arfeed.ReachBuckets)
-	for i := 0; i < arfeed.ReachBuckets; i++ {
+	for i := range arfeed.ReachBuckets {
 		all[i] = struct{}{}
 	}
 	b.mu.Lock()
@@ -606,7 +606,7 @@ func probeQUIC(ctx context.Context, target string) bool {
 	}
 	per := time.Until(deadline) / 2
 	buf := make([]byte, 1500)
-	for try := 0; try < 2; try++ {
+	for range 2 {
 		if _, err := c.WriteToUDP(pkt, raddr); err != nil {
 			return false
 		}

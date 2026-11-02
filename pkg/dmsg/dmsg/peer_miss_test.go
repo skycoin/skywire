@@ -36,7 +36,7 @@ func TestPeerMissCache(t *testing.T) {
 func TestPeerMissCacheBounded(t *testing.T) {
 	var c EntityCommon
 	c.peerMiss = make(map[cipher.PubKey]time.Time, peerMissCap)
-	for i := 0; i < peerMissCap; i++ {
+	for range peerMissCap {
 		pk, _ := cipher.GenerateKeyPair()
 		c.peerMiss[pk] = time.Now().Add(time.Minute)
 	}

@@ -16,16 +16,16 @@ func buildDenseGraph(tb testing.TB, layers int) (*Graph, cipher.PubKey, cipher.P
 	const width = 6
 	m := newMockStore()
 	pk := make([][]cipher.PubKey, layers)
-	for l := 0; l < layers; l++ {
+	for l := range layers {
 		pk[l] = make([]cipher.PubKey, width)
-		for w := 0; w < width; w++ {
+		for w := range width {
 			p, _ := cipher.GenerateKeyPair()
 			pk[l][w] = p
 		}
 	}
 	for l := 0; l < layers-1; l++ {
-		for a := 0; a < width; a++ {
-			for b := 0; b < width; b++ {
+		for a := range width {
+			for b := range width {
 				m.SaveEntry(pk[l][a], pk[l+1][b], true)
 			}
 		}

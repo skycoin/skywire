@@ -63,7 +63,7 @@ func TestRehomeForwardRuleKeepsItsNextHop(t *testing.T) {
 // re-homes in flight at once must not answer each other's waiter.
 func TestRehomeNonceIsUnique(t *testing.T) {
 	seen := make(map[uint64]bool, 64)
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		n, err := newRehomeNonce()
 		require.NoError(t, err)
 		require.False(t, seen[n], "re-home nonce repeated")

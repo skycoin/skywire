@@ -98,7 +98,7 @@ func batchFixture(t *testing.T, n int) (
 	src, _ = cipher.GenerateKeyPair()
 	dst, _ = cipher.GenerateKeyPair()
 	gws = map[cipher.PubKey]*countingGateway{src: {}, dst: {}}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		inter, _ := cipher.GenerateKeyPair()
 		inters = append(inters, inter)
 		gws[inter] = &countingGateway{}
@@ -130,7 +130,7 @@ func TestCreateRouteGroupBatch_CoalescesSharedHops(t *testing.T) {
 	batch, gws, src, dst, inters := batchFixture(t, n)
 	require.NoError(t, batch.Check())
 
-	gateways := make(map[cipher.PubKey]interface{}, len(gws))
+	gateways := make(map[cipher.PubKey]any, len(gws))
 	for pk, gw := range gws {
 		gateways[pk] = gw
 	}
@@ -177,7 +177,7 @@ func TestCreateRouteGroupBatch_CoalescesASharedIntermediate(t *testing.T) {
 	gws := map[cipher.PubKey]*countingGateway{src: {}, dst: {}, inter: {}}
 
 	var batch routing.BidirectionalRouteBatch
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		batch.Routes = append(batch.Routes, routing.BatchRouteRequest{
 			ID: uint32(i), //nolint:gosec
 			Route: routing.BidirectionalRoute{
@@ -193,7 +193,7 @@ func TestCreateRouteGroupBatch_CoalescesASharedIntermediate(t *testing.T) {
 			},
 		})
 	}
-	gateways := make(map[cipher.PubKey]interface{}, len(gws))
+	gateways := make(map[cipher.PubKey]any, len(gws))
 	for pk, gw := range gws {
 		gateways[pk] = gw
 	}
@@ -218,7 +218,7 @@ func TestCreateRouteGroupBatch_PartialFailure(t *testing.T) {
 	bad := inters[2]
 	gws[bad].refuseInter = true
 
-	gateways := make(map[cipher.PubKey]interface{}, len(gws))
+	gateways := make(map[cipher.PubKey]any, len(gws))
 	for pk, gw := range gws {
 		gateways[pk] = gw
 	}
@@ -253,7 +253,7 @@ func TestCreateRouteGroupBatch_AllInvalidAnswersEveryMember(t *testing.T) {
 	for i := range batch.Routes {
 		batch.Routes[i].Route.Reverse = nil
 	}
-	gateways := make(map[cipher.PubKey]interface{}, len(gws))
+	gateways := make(map[cipher.PubKey]any, len(gws))
 	for pk, gw := range gws {
 		gateways[pk] = gw
 	}
@@ -272,7 +272,7 @@ func TestCreateRouteGroupBatch_AllInvalidAnswersEveryMember(t *testing.T) {
 func TestCreateRouteGroupBatch_RecordsKindAndSavings(t *testing.T) {
 	const n = 5
 	batch, gws, _, _, _ := batchFixture(t, n)
-	gateways := make(map[cipher.PubKey]interface{}, len(gws))
+	gateways := make(map[cipher.PubKey]any, len(gws))
 	for pk, gw := range gws {
 		gateways[pk] = gw
 	}

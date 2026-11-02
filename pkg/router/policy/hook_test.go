@@ -286,7 +286,7 @@ def decide_route(ctx, candidates):
 	defer loader.Close() //nolint:errcheck
 
 	var logged string
-	h := NewHook(loader, WithHookLogger(func(format string, _ ...interface{}) {
+	h := NewHook(loader, WithHookLogger(func(format string, _ ...any) {
 		logged += format
 	}))
 	pk := cipher.PubKey{}
@@ -362,7 +362,7 @@ def decide_route(ctx, candidates):
 	defer loader.Close() //nolint:errcheck
 
 	var logged string
-	h := NewHook(loader, WithHookProvider(prov), WithHookLogger(func(f string, _ ...interface{}) {
+	h := NewHook(loader, WithHookProvider(prov), WithHookLogger(func(f string, _ ...any) {
 		logged += f
 	}))
 	pk := cipher.PubKey{}

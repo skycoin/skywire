@@ -123,7 +123,7 @@ func (s *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	daily := make(map[string]string)
 
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		key := uptimeKey(pkHex, date)
 
@@ -151,7 +151,7 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 // 5-minute slot, ' ' = missed.
 func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	timelines := make(map[string]string)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		tlKey := uptimeTimelineKey(pkHex, date)
 		if line, ok := readTimelineLine(ctx, s.client, tlKey); ok {
@@ -389,7 +389,7 @@ func (s *redisStore) transportDays(ctx context.Context, tpID string, now time.Ti
 	pipe := s.client.Pipeline()
 	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
 	dates := make([]string, uptimeHistoryDays)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		cmds[i] = pipe.Get(ctx, tpUptimeTimelineKey(tpID, dates[i]))
 	}
@@ -463,7 +463,7 @@ func readTimelineLine(ctx context.Context, client redis.UniversalClient, tlKey s
 func renderTimeline(raw []byte) (string, bool) {
 	var buf [timelineSlots]byte
 	hasAny := false
-	for slot := 0; slot < timelineSlots; slot++ {
+	for slot := range timelineSlots {
 		byteIdx := slot / 8
 		if byteIdx >= len(raw) {
 			buf[slot] = ' '

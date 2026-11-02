@@ -61,7 +61,7 @@ func TestMemoryCXDS_Del_RepeatedSetDel_DoesNotGrow(t *testing.T) {
 	defer ds.Close() //nolint:errcheck,gosec
 
 	const cycles = 1000
-	for i := 0; i < cycles; i++ {
+	for i := range cycles {
 		key := sha256.Sum256([]byte("k-" + strconv.Itoa(i)))
 		val := []byte("payload-" + strconv.Itoa(i))
 		if _, err := ds.Set(key, val, 1); err != nil {

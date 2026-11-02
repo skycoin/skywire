@@ -83,25 +83,23 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client, hvs ...cipher.
 	v.conf.Hypervisors = hvs
 	host := v.appMailHost(skymailApp)
 	svc, err := skymail.StartService(ctx, skymail.ServiceConfig{
-		Host: skymail.Host{
-			PK: c.LocalPK(),
-			Listen: func(network string) (net.Listener, error) {
-				if network != skymail.NetDmsg {
-					return nil, errors.New("no skynet here")
-				}
-				return c.Listen(skymail.Port)
-			},
-			Dialers: map[string]skymailbridge.Dialer{".dmsg": &visorDmsgDialer{c: c}},
-			PeerPK: func(conn net.Conn) (cipher.PubKey, bool) {
-				return remotePK(conn.RemoteAddr())
-			},
-			Sealer: hostSealer{host},
-			Peers: func() ([]cipher.PubKey, []cipher.PubKey) {
-				info := host.MailHostInfo()
-				return info.Managed, info.Hypervisors
-			},
-			Log: logrus.New(),
+		PK: c.LocalPK(),
+		Listen: func(network string) (net.Listener, error) {
+			if network != skymail.NetDmsg {
+				return nil, errors.New("no skynet here")
+			}
+			return c.Listen(skymail.Port)
 		},
+		Dialers: map[string]skymailbridge.Dialer{".dmsg": &visorDmsgDialer{c: c}},
+		PeerPK: func(conn net.Conn) (cipher.PubKey, bool) {
+			return remotePK(conn.RemoteAddr())
+		},
+		Sealer: hostSealer{host},
+		Peers: func() ([]cipher.PubKey, []cipher.PubKey) {
+			info := host.MailHostInfo()
+			return info.Managed, info.Hypervisors
+		},
+		Log:    logrus.New(),
 		Dir:    skymailDir(v.conf),
 		Outbox: true,
 	})
@@ -309,11 +307,11 @@ func TestConfiguredHypervisorsWhileUpdated(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_ = v.configuredHypervisors()
 		}
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = v.conf.UpdateHypervisors([]cipher.PubKey{hv}) //nolint:errcheck // no file to flush to
 	}
 	<-done

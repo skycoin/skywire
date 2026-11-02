@@ -192,7 +192,7 @@ func TestSSEHandler_SeedsHistoryTagged(t *testing.T) {
 	if !strings.Contains(body, "seeded inbound") || !strings.Contains(body, "seeded outbound") {
 		t.Fatalf("history was not seeded into the stream; body = %q", body)
 	}
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
@@ -246,7 +246,7 @@ func TestEventsHandler_StreamsStructuredEvents(t *testing.T) {
 		t.Errorf("stream should open with ': connected'; got %q", body)
 	}
 	var found bool
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
@@ -533,7 +533,7 @@ func (p *pollAPI) signal() {
 // goroutine ever makes before the caller's cleanup.
 func (p *pollAPI) awaitQuiet(t *testing.T, n int) { //nolint
 	t.Helper()
-	for i := 0; i < n; i++ {
+	for range n {
 		select {
 		case <-p.polled:
 		case <-time.After(3 * time.Second):

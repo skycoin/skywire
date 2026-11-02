@@ -163,8 +163,8 @@ func (s *redisStore) Service(ctx context.Context, sType string, addr servicedisc
 // redis for the whole batch at once. The returned slice has exactly len(keys)
 // entries (nil for missing keys), preserving positional correspondence with
 // keys so callers can map results back by index.
-func (s *redisStore) mgetChunked(ctx context.Context, keys []string) ([]interface{}, error) {
-	values := make([]interface{}, 0, len(keys))
+func (s *redisStore) mgetChunked(ctx context.Context, keys []string) ([]any, error) {
+	values := make([]any, 0, len(keys))
 	for _, batch := range chunkKeys(keys, mgetChunkSize) {
 		got, err := s.client.MGet(ctx, batch...).Result()
 		if err != nil {
@@ -188,10 +188,7 @@ func chunkKeys(keys []string, size int) [][]string {
 	}
 	chunks := make([][]string, 0, (len(keys)+size-1)/size)
 	for start := 0; start < len(keys); start += size {
-		end := start + size
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(start+size, len(keys))
 		chunks = append(chunks, keys[start:end])
 	}
 	return chunks
@@ -598,7 +595,7 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	dates := make([]string, uptimeHistoryDays)
 	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
 	pipe := s.client.Pipeline()
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		cmds[i] = pipe.HGet(ctx, sdUptimeKey(pkHex, dates[i]), "count")
 	}
@@ -639,7 +636,7 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	// (mirrors the dmsg-discovery fix).
 	keys := make([]string, uptimeHistoryDays)
 	dates := make([]string, uptimeHistoryDays)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		keys[i] = sdUptimeTimelineKey(pkHex, dates[i])
 	}
@@ -657,7 +654,7 @@ func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 		raw := []byte(str)
 		var buf [timelineSlots]byte
 		hasAny := false
-		for slot := 0; slot < timelineSlots; slot++ {
+		for slot := range timelineSlots {
 			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
 			byteIdx := slot / 8
 			var bit byte

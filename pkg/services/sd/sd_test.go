@@ -139,10 +139,8 @@ func TestRunInvalidRedisURL(t *testing.T) {
 	// skipped.
 	pk, _ := cipher.GenerateKeyPair()
 	svc := New(&Config{
-		Common: services.Common{
-			PubKey: pk,
-			Redis:  "ftp://localhost",
-		},
+		PubKey: pk,
+		Redis:  "ftp://localhost",
 	}, testLog()).(*service)
 	err := svc.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "redis URL") {
@@ -157,10 +155,8 @@ func TestRunRedisPingFails(t *testing.T) {
 	_, sk := cipher.GenerateKeyPair()
 	addr := closedAddr(t)
 	svc := New(&Config{
-		Common: services.Common{
-			SecKey: sk,
-			Redis:  "redis://" + addr,
-		},
+		SecKey: sk,
+		Redis:  "redis://" + addr,
 	}, testLog()).(*service)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

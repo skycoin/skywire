@@ -36,7 +36,7 @@ func TestFECStripeCap(t *testing.T) {
 		t.Fatalf("full leg0 should reassign to another leg, got (%d,%v)", alt, ok)
 	}
 	// Fill every leg to R → reassignment keeps the original pick (never fail a send).
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		for m.fecStripeUsed[i] < fecDefaultRDefault {
 			m.fecStripeUse(i)
 		}

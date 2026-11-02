@@ -78,7 +78,7 @@ var srvStartCmd = &cobra.Command{
 
 		// Validate and get first port for naming
 		var firstPort int
-		for _, portStr := range strings.Split(srvPorts, ",") {
+		for portStr := range strings.SplitSeq(srvPorts, ",") {
 			portStr = strings.TrimSpace(portStr)
 			if portStr == "" {
 				continue

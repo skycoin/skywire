@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -135,9 +136,7 @@ func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:un
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]addrresolver.VisorData, len(s.entries))
-	for k, v := range s.entries {
-		out[k] = v
-	}
+	maps.Copy(out, s.entries)
 	return out
 }
 

@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -588,10 +589,8 @@ func wasmLocalhostTLSCert() (tls.Certificate, error) {
 		// *.mesh.localhost SAN (real-origin browse origins B share this one cert
 		// with the visor origin V); otherwise fall through and regenerate.
 		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && time.Now().Before(leaf.NotAfter) {
-			for _, n := range leaf.DNSNames {
-				if n == "*.mesh.localhost" {
-					return c, nil
-				}
+			if slices.Contains(leaf.DNSNames, "*.mesh.localhost") {
+				return c, nil
 			}
 		}
 	}

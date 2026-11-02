@@ -30,7 +30,7 @@ func TestLiveSampleHasCoreMetrics(t *testing.T) {
 
 func TestRingWraps(t *testing.T) {
 	s := New(3)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s.Sample()
 	}
 	if got := len(s.Samples()); got != 3 {
@@ -42,7 +42,7 @@ func TestRingWraps(t *testing.T) {
 func feed(s *Sampler, start time.Time, f func(i uint64) Sample, n uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := uint64(0); i < n; i++ {
+	for i := range n {
 		sm := f(i)
 		sm.At = start.Add(time.Duration(i) * Interval)
 		s.ring[s.head] = sm
@@ -155,7 +155,7 @@ func TestHandlerTextAndJSON(t *testing.T) {
 
 func TestSampleDoesNotGrowHeap(t *testing.T) {
 	s := New(8)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		s.Sample()
 	}
 	allocs := testing.AllocsPerRun(50, s.Sample)

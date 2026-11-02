@@ -112,12 +112,12 @@ func TestPinnedProxyExitRecorded(t *testing.T) {
 		t.Fatalf("PinnedProxyExit = %q, want %q", v.PinnedProxyExit(), pin.Hex())
 	}
 
-	st := &appserver.AppState{AppConfig: appserver.AppConfig{Name: skyenv.SkysocksClientName}}
+	st := &appserver.AppState{Name: skyenv.SkysocksClientName}
 	v.annotatePinnedExit(st)
 	if st.PinnedExit != pin.Hex() {
 		t.Fatalf("AppState.PinnedExit = %q, want %q", st.PinnedExit, pin.Hex())
 	}
-	other := &appserver.AppState{AppConfig: appserver.AppConfig{Name: skyenv.VPNClientName}}
+	other := &appserver.AppState{Name: skyenv.VPNClientName}
 	v.annotatePinnedExit(other)
 	if other.PinnedExit != "" {
 		t.Fatal("only skysocks-client carries a pinned exit")

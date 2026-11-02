@@ -235,7 +235,7 @@ func (p *BindingsCXOPublisher) run() {
 	// array from the very first Root — that density is what lets a reader
 	// address a bucket by computed index instead of searching for it.
 	paths := make(map[string]struct{}, arfeed.BucketCount)
-	for i := 0; i < arfeed.BucketCount; i++ {
+	for i := range arfeed.BucketCount {
 		paths[arfeed.BucketPathAt(i)] = struct{}{}
 	}
 	p.encodeBuckets(paths)

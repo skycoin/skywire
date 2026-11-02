@@ -40,7 +40,7 @@ func TestConn(t *testing.T) {
 		aResults := make(chan Result)
 		bResults := make(chan Result)
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			msgAtoB := []byte(fmt.Sprintf("this is message %d from A for B", i))
 
 			go func() {
@@ -95,7 +95,7 @@ func TestConn(t *testing.T) {
 		)
 		randSleep := func() { time.Sleep(time.Duration(cipher.RandByte(1)[0]) / 255 * time.Second) }
 
-		for i := 0; i < MsgCount; i++ {
+		for i := range MsgCount {
 			msg := fmt.Sprintf("%4d", i)
 			go func() {
 				randSleep()
@@ -121,7 +121,7 @@ func TestConn(t *testing.T) {
 			}()
 		}
 
-		for i := 0; i < MsgCount; i++ {
+		for range MsgCount {
 			aWrite := <-aWrites
 			require.NoError(t, aWrite.Err)
 			require.Equal(t, MsgLen, aWrite.N)
@@ -160,7 +160,7 @@ func TestConn(t *testing.T) {
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 		go func() {
-			for i := 0; i < segCount; i++ {
+			for i := range segCount {
 				n, err := a.Write(msg[i*segLen : (i+1)*segLen])
 				aResults[i] = Result{N: n, Err: err}
 			}
@@ -225,7 +225,7 @@ func TestConn(t *testing.T) {
 			require.Equal(t, writeB, readB)
 		}
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			n := rand.IntN(10000000) // nolint:gosec
 			t.Run(fmt.Sprintf("%dBytes", n), func(t *testing.T) {
 				do(t, n)
@@ -323,12 +323,12 @@ func TestListener(t *testing.T) {
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 		go func() {
-			for i := 0; i < connCount; i++ {
+			for i := range connCount {
 				hResults[i] = dialAndWrite(lPK, addr.Addr.String())
 			}
 			wg.Done()
 		}()
-		for i := 0; i < connCount; i++ {
+		for range connCount {
 			lConn, err := l.Accept()
 			require.NoError(t, err)
 			rec := make([]byte, len(msg))
@@ -339,7 +339,7 @@ func TestListener(t *testing.T) {
 			require.NoError(t, lConn.Close())
 		}
 		wg.Wait()
-		for i := 0; i < connCount; i++ {
+		for i := range connCount {
 			require.NoError(t, hResults[i])
 		}
 	})

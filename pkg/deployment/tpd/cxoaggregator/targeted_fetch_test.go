@@ -64,7 +64,7 @@ func buildBigRoot(t *testing.T, nTransports, nTelemetry int) (*skyobject.Contain
 
 	// tp-list: the full transport set as one inlined snapshot leaf, compact form.
 	compact := make([]transport.CompactEntry, 0, nTransports)
-	for i := 0; i < nTransports; i++ {
+	for range nTransports {
 		remote, _ := cipher.GenerateKeyPair()
 		compact = append(compact, transport.CompactEntry{Remote: remote, Type: types.Type("stcpr")})
 	}
@@ -78,7 +78,7 @@ func buildBigRoot(t *testing.T, nTransports, nTelemetry int) (*skyobject.Contain
 
 	// A bulky telemetry subtree: this is the part whose whole-Root fill
 	// times out in production. The targeted fetch must NOT need any of it.
-	for i := 0; i < nTelemetry; i++ {
+	for i := range nTelemetry {
 		snap, err := json.Marshal(liveSnapshot{SentBytes: uint64(i), RecvBytes: uint64(i), SampledAt: time.Now().UTC(), Type: "stcpr"})
 		if err != nil {
 			t.Fatalf("marshal telemetry: %v", err)
@@ -276,7 +276,7 @@ func TestBoundedGetterBudget(t *testing.T) {
 	served := 0
 	inner := getterFunc(func(_ skycipher.SHA256) ([]byte, error) { served++; return []byte("x"), nil })
 	bg := newBoundedGetter(inner, 3, time.Minute)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := bg.Get(skycipher.SHA256{}); err != nil {
 			t.Fatalf("get %d before cap should succeed: %v", i, err)
 		}
@@ -317,7 +317,7 @@ func walkAllObjects(t *testing.T, aggNode *node.Node, g *servingGetter, r *regis
 		if err != nil {
 			return
 		}
-		for i := 0; i < count; i++ {
+		for i := range count {
 			var entry treestore.TreeEntry
 			if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
 				continue

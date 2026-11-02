@@ -17,6 +17,8 @@
 // install covered several routes.
 package setupmetrics
 
+import "maps"
+
 // SetupKind names a route-setup path. Values are lowercase-snake so they render
 // as JSON object keys.
 type SetupKind string
@@ -102,9 +104,7 @@ func (c *Collector) batchStatsLocked() BatchStats {
 		PerHopRPCsSaved: c.perHopRPCsSaved,
 		RoutesPerBatch:  make(map[int]uint64, len(c.routesPerBatch)),
 	}
-	for k, v := range c.routesPerBatch {
-		s.RoutesPerBatch[k] = v
-	}
+	maps.Copy(s.RoutesPerBatch, c.routesPerBatch)
 	return s
 }
 
@@ -112,11 +112,7 @@ func (c *Collector) batchStatsLocked() BatchStats {
 func (c *Collector) kindCountsLocked() (requests, routes map[SetupKind]uint64) {
 	requests = make(map[SetupKind]uint64, len(c.requestsByKind))
 	routes = make(map[SetupKind]uint64, len(c.routesByKind))
-	for k, v := range c.requestsByKind {
-		requests[k] = v
-	}
-	for k, v := range c.routesByKind {
-		routes[k] = v
-	}
+	maps.Copy(requests, c.requestsByKind)
+	maps.Copy(routes, c.routesByKind)
 	return requests, routes
 }

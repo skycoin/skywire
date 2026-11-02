@@ -19,6 +19,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -194,12 +195,8 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 		}
 	})
 	allowed := map[string]string{}
-	for k, v := range streamingCommands {
-		allowed[k] = v
-	}
-	for k, v := range pendingJSON {
-		allowed[k] = v
-	}
+	maps.Copy(allowed, streamingCommands)
+	maps.Copy(allowed, pendingJSON)
 	report(t, found, allowed,
 		"prints without ever consulting --json, so a caller asking for JSON gets prose",
 		"render through cliout.Print, or add it to streamingCommands with a reason")
@@ -247,7 +244,7 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 	var unexpected []string
 	seen := map[string]bool{}
 	for _, f := range found {
-		key := strings.SplitN(f, ":", 2)[0]
+		key, _, _ := strings.Cut(f, ":")
 		seen[key] = true
 		if _, ok := allow[key]; !ok {
 			unexpected = append(unexpected, f)

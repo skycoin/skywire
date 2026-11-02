@@ -76,7 +76,7 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 	serviceMap := make(map[string]*serviceInfo)
 	mergeIn := func(entries []sdEntry, kind string, withDisplayPK bool) {
 		for _, e := range entries {
-			pk := strings.Split(e.Address, ":")[0]
+			pk, _, _ := strings.Cut(e.Address, ":")
 			s := serviceMap[pk]
 			if s == nil {
 				s = &serviceInfo{Country: e.Geo.Country, Version: e.Version}

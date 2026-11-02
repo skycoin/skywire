@@ -49,7 +49,7 @@ func TestStackedAreaEmitsOneElementPerSeries(t *testing.T) {
 		o.Labels[i] = "2026-01-01"
 	}
 	var series []chartSeries
-	for s := 0; s < 5; s++ {
+	for s := range 5 {
 		vals := make([]float64, n)
 		for i := range vals {
 			vals[i] = float64(i%7 + s)
@@ -122,7 +122,7 @@ func TestTimeSeriesSurfaceFetchErrorsInsteadOfZeroes(t *testing.T) {
 func TestSortedMapKeysIsStable(t *testing.T) {
 	m := map[string]float64{"a": 3, "b": 9, "c": 3, "d": 1}
 	want := []string{"b", "a", "c", "d"}
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		if got := sortedMapKeys(m); !reflect.DeepEqual(got, want) {
 			t.Fatalf("iteration %d: got %v, want %v", i, got, want)
 		}

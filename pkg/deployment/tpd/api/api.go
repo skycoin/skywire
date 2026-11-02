@@ -112,8 +112,8 @@ type API struct {
 	// single transport. Delete is called when an edge no longer has any
 	// transports to drop the stale target.
 	dhtMirror interface {
-		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
-		MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+		Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
+		MirrorMany(subjectPKs []cipher.PubKey, entry any, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
 }
@@ -307,8 +307,8 @@ func (api *API) uptimeDates(w http.ResponseWriter, r *http.Request) {
 
 // SetDHTMirror sets a mirror that publishes transport lists to the DHT.
 func (api *API) SetDHTMirror(m interface {
-	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
-	MirrorMany(subjectPKs []cipher.PubKey, entry interface{}, seq uint64)
+	Mirror(subjectPK cipher.PubKey, entry any, seq uint64)
+	MirrorMany(subjectPKs []cipher.PubKey, entry any, seq uint64)
 	Delete(subjectPK cipher.PubKey)
 }) {
 	api.dhtMirror = m

@@ -318,8 +318,8 @@ var hyperVisorUpdateCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, _ []string) {
 		conf = initUpdate()
 		if addHypervisorPKs != "" {
-			keys := strings.Split(addHypervisorPKs, ",")
-			for _, key := range keys {
+			keys := strings.SplitSeq(addHypervisorPKs, ",")
+			for key := range keys {
 				keyParsed, err := coinCipher.PubKeyFromHex(strings.TrimSpace(key))
 				if err != nil {
 					logger.WithError(err).Fatalf("Failed to parse hypervisor private key: %s.", key)

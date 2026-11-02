@@ -19,7 +19,7 @@ func TestMakeTransportIDMatchesNewHash(t *testing.T) {
 		return uuid.NewHash(sha256.New(), uuid.UUID{}, data, 0)
 	}
 	tps := append(types.Known(), "", types.Type(strings.Repeat("x", 40)))
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
 		for _, tp := range tps {

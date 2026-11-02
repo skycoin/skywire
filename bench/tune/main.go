@@ -64,7 +64,7 @@ type knob struct {
 // ("4MiB", "250ms"): the CLI parses them, not this.
 func parseKnobs(spec string, route bool) ([]knob, error) {
 	var out []knob
-	for _, part := range strings.Split(spec, ";") {
+	for part := range strings.SplitSeq(spec, ";") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -74,7 +74,7 @@ func parseKnobs(spec string, route bool) ([]knob, error) {
 			return nil, fmt.Errorf("knob %q has no =<values>", part)
 		}
 		k := knob{name: strings.TrimSpace(name), route: route}
-		for _, v := range strings.Split(vals, ",") {
+		for v := range strings.SplitSeq(vals, ",") {
 			if v = strings.TrimSpace(v); v != "" {
 				k.values = append(k.values, v)
 			}
@@ -155,7 +155,7 @@ type cellRef struct {
 
 func parseObjective(spec string) ([]cellRef, error) {
 	var out []cellRef
-	for _, part := range strings.Split(spec, ",") {
+	for part := range strings.SplitSeq(spec, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -252,7 +252,7 @@ func readTSV(path string) ([][]string, error) {
 		return nil, err
 	}
 	var out [][]string
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}

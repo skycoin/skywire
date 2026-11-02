@@ -30,11 +30,11 @@ func TestMockRPCClient_AllMethods(t *testing.T) {
 		t.Fatal("nil mock")
 	}
 
-	apiType := reflect.TypeOf((*visorapi.API)(nil)).Elem()
+	apiType := reflect.TypeFor[visorapi.API]()
 	v := reflect.ValueOf(api)
 
-	for i := 0; i < apiType.NumMethod(); i++ {
-		name := apiType.Method(i).Name
+	for method := range apiType.Methods() {
+		name := method.Name
 		fn := v.MethodByName(name)
 		ft := fn.Type()
 

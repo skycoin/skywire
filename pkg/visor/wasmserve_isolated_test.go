@@ -27,7 +27,7 @@ func TestBrowseOriginIsolatedOnlyWhenAsked(t *testing.T) {
 		}()
 
 		var resp *http.Response
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			req, _ := http.NewRequest(http.MethodGet, "http://"+addr+"/", nil) //nolint:errcheck
 			req.Host = "abc.browse.example"
 			if resp, err = http.DefaultClient.Do(req); err == nil {

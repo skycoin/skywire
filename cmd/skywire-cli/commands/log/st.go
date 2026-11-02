@@ -39,8 +39,8 @@ skywire_version), and any transport-bandwidth CSVs. With --ut it also shows each
 visor's current online status + last-two-days uptime, read from /tmp/ut.json.`,
 	Run: func(_ *cobra.Command, _ []string) {
 		if pubKey != "" { //nolint:errcheck
-			pks := strings.Split(pubKey, ",")
-			for _, pk := range pks {
+			pks := strings.SplitSeq(pubKey, ",")
+			for pk := range pks {
 				var pK cipher.PubKey
 				err := pK.Set(pk)
 				if err != nil {

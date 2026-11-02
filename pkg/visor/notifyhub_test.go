@@ -207,7 +207,7 @@ func TestNotifyHub_SlowSubscriberDropsRatherThanBlocks(t *testing.T) {
 	h, _ := newTestHub(true)
 	_, cancel := h.Subscribe(1)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.Publish(appserver.NotifyReq{App: "skychat", Title: "x"})
 	}
 
@@ -239,7 +239,7 @@ func TestNotifyHub_FanoutReachesEverySubscriber(t *testing.T) {
 	const subs = 3
 
 	chans := make([]<-chan appserver.NotifyReq, subs)
-	for i := 0; i < subs; i++ {
+	for i := range subs {
 		ch, cancel := h.Subscribe(4)
 		defer cancel()
 		chans[i] = ch
@@ -271,11 +271,11 @@ func TestNotifyHub_ConcurrentPublishSubscribeCancel(t *testing.T) {
 	const workers = 16
 
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				h.Publish(appserver.NotifyReq{App: "skychat", Title: "x"})
 			}
 		}()
@@ -283,7 +283,7 @@ func TestNotifyHub_ConcurrentPublishSubscribeCancel(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				ch, cancel := h.Subscribe(1)
 				select {
 				case <-ch:

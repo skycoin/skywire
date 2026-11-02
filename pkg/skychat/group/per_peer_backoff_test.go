@@ -81,7 +81,7 @@ func TestPeerReconnectClearDropsState(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	id := "group-1"
 	// Force a known backoff state.
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.peerReconnectRecordFailure(id, pk, errors.New("force-state"))
 	}
 	if m.peerReconnectShouldAttempt(id, pk, time.Now().UTC()) {
@@ -106,7 +106,7 @@ func TestPeerReconnectIndependentBetweenPeers(t *testing.T) {
 	wedged, _ := cipher.GenerateKeyPair()
 	healthy, _ := cipher.GenerateKeyPair()
 	id := "group-1"
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.peerReconnectRecordFailure(id, wedged, errors.New("force-state"))
 	}
 	now := time.Now().UTC()
@@ -124,7 +124,7 @@ func TestPeerReconnectIndependentBetweenGroups(t *testing.T) {
 	// silently lock out reconnects in group B sharing that peer.
 	m := newPeerBackoffTestManager(t)
 	pk, _ := cipher.GenerateKeyPair()
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.peerReconnectRecordFailure("group-a", pk, errors.New("force-state"))
 	}
 	now := time.Now().UTC()
@@ -143,7 +143,7 @@ func TestPeerReconnectSecondThresholdExtendsLonger(t *testing.T) {
 	// per-peer schedule matches the session-level one.
 	m := newPeerBackoffTestManager(t)
 	pk, _ := cipher.GenerateKeyPair()
-	for i := uint32(0); i < reconnectBackoffFailures2; i++ {
+	for range uint32(reconnectBackoffFailures2) {
 		m.peerReconnectRecordFailure("group-1", pk, errors.New("force-state"))
 	}
 	now := time.Now().UTC()

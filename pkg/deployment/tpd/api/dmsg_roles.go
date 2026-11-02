@@ -85,7 +85,7 @@ func (api *API) serverRoles(ctx context.Context) map[string]string {
 	return roles
 }
 
-func (d *dmsgRoles) get(ctx context.Context, path string, out interface{}) error {
+func (d *dmsgRoles) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.base+path, nil)
 	if err != nil {
 		return err

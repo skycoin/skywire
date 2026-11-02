@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -1115,7 +1116,7 @@ func (a *visorAPIAdapter) DMSGHealth(ctx context.Context, pk string) (*tpviz.DMS
 	}
 
 	// Try to parse as JSON
-	var healthResp map[string]interface{}
+	var healthResp map[string]any
 	if err := json.Unmarshal(body, &healthResp); err == nil {
 		status := "healthy"
 		if resp.StatusCode != http.StatusOK {
@@ -1458,10 +1459,8 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 				if ip := v.stunPublicIP(); ip != "" {
 					self = net.ParseIP(ip)
 				}
-				for _, pk := range v.tpM.SameLANPeers(self) {
-					if pk == remotePK {
-						return nil // same-LAN destination → direct passthrough
-					}
+				if slices.Contains(v.tpM.SameLANPeers(self), remotePK) {
+					return nil // same-LAN destination → direct passthrough
 				}
 			}
 			// Policy wants overlay even though a direct transport

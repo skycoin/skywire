@@ -35,7 +35,7 @@ func rigShapedSets(local, remote, shared int) (src, dst cipher.PubKey, localTps 
 	// the rig's own table does — mostly sudph, some stcpr/webrtc/squicr — so the
 	// type-preference tie-breaks are exercised.
 	types := []tptypes.Type{tptypes.SUDPH, tptypes.STCPR, tptypes.QUIC, tptypes.WEBRTC}
-	for i := 0; i < local; i++ {
+	for i := range local {
 		var peer cipher.PubKey
 		if i < shared {
 			peer = sharedPKs[i]
@@ -51,7 +51,7 @@ func rigShapedSets(local, remote, shared int) (src, dst cipher.PubKey, localTps 
 	}
 
 	// Destination side: the same shared peers plus remote-only ones.
-	for i := 0; i < remote; i++ {
+	for i := range remote {
 		var peer cipher.PubKey
 		if i < shared {
 			peer = sharedPKs[i]
@@ -140,7 +140,7 @@ func TestOraclePlanCache_SingleflightsTheQuery(t *testing.T) {
 	var wg sync.WaitGroup
 	got := make([][]twoHopLeg, n)
 	errs := make([]error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -155,7 +155,7 @@ func TestOraclePlanCache_SingleflightsTheQuery(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.EqualValues(t, 1, calls, "eight concurrent dials made ONE destination-transport query")
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.NoError(t, errs[i])
 		require.Len(t, got[i], 16)
 	}
@@ -197,7 +197,7 @@ func TestOraclePlanCache_ClaimsAreDistinct(t *testing.T) {
 	var wg sync.WaitGroup
 	claims := make([]twoHopLeg, n)
 	oks := make([]bool, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -207,7 +207,7 @@ func TestOraclePlanCache_ClaimsAreDistinct(t *testing.T) {
 	wg.Wait()
 
 	seen := make(map[uuid.UUID]struct{}, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		require.True(t, oks[i], "12 candidates, 8 dials: every one is served")
 		id := claims[i].Forward[0].TpID
 		_, dup := seen[id]
@@ -217,7 +217,7 @@ func TestOraclePlanCache_ClaimsAreDistinct(t *testing.T) {
 
 	// Past the candidate count the claim fails and the caller falls back — never
 	// an error, just "no free candidate".
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, ok := c.claim(src, dst, legs, nil)
 		require.True(t, ok, "candidates 9..12")
 	}

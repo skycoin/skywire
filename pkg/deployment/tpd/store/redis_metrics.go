@@ -91,14 +91,11 @@ func (s *redisStore) getP2PTransportCounts(ctx context.Context) (map[string]int,
 	}
 
 	counts := make(map[string]int)
-	var stale []interface{}
+	var stale []any
 
 	const mgetBatch = 10000
 	for i := 0; i < len(keys); i += mgetBatch {
-		end := i + mgetBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(i+mgetBatch, len(keys))
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
 			// These counts decide online status — GetAllVisorSummaries does

@@ -28,9 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck
-	b, err := json.Marshal(map[string]interface{}{
+	b, err := json.Marshal(map[string]any{
 		"id": 1, "method": "Runtime.evaluate",
-		"params": map[string]interface{}{"expression": os.Args[2], "returnByValue": true, "awaitPromise": true},
+		"params": map[string]any{"expression": os.Args[2], "returnByValue": true, "awaitPromise": true},
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "marshal:", err)

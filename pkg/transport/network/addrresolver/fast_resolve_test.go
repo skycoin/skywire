@@ -109,7 +109,7 @@ func TestResolveRemembersNotFound(t *testing.T) {
 	defer srv.Close()
 	c := newReadyClient(t, srv)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := c.Resolve(context.Background(), "sudph", target)
 		require.ErrorIs(t, err, ErrNoEntry)
 	}

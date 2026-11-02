@@ -61,7 +61,7 @@ GET /{pk}/transports
 		cmdutil.ExampleJSON(api.TransportRequest{Type: "stcpr"}),
 		exTPID,
 		cmdutil.ExampleJSON(api.UUIDRequest{}),
-		cmdutil.ExampleJSON([]map[string]interface{}{{
+		cmdutil.ExampleJSON([]map[string]any{{
 			"id": exTPID, "type": "stcpr",
 			"edges": []string{exPK1, exPK2},
 		}}),

@@ -155,7 +155,7 @@ func (rc *rpcClient) Close() error {
 // typed visor.API method through the local visor without writing
 // 167 per-method wrappers: each typed method delegates to Call,
 // and Call routes based on proxyTarget.
-func (rc *rpcClient) Call(method string, args, reply interface{}) error {
+func (rc *rpcClient) Call(method string, args, reply any) error {
 	if rc.proxyTarget != nil {
 		return rc.callViaProxy(method, args, reply)
 	}
@@ -231,7 +231,7 @@ func (rc *rpcClient) noteCallTimeout() {
 // Summary, Health, Overview, etc.) work unconditionally. Methods
 // with structured args may not encode cleanly through the JSON
 // roundtrip — see the NewProxyRPCClient doc comment.
-func (rc *rpcClient) callViaProxy(method string, args, reply interface{}) error {
+func (rc *rpcClient) callViaProxy(method string, args, reply any) error {
 	argsBytes, err := json.Marshal(args)
 	if err != nil {
 		return fmt.Errorf("proxy rpc: marshal args for %s: %w", method, err)

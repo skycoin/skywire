@@ -28,7 +28,7 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 
 	const nPkts = 16
 	want := make([]uint32, 0, nPkts)
-	for i := 0; i < nPkts; i++ {
+	for i := range nPkts {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)
@@ -36,7 +36,7 @@ func TestMuxDropFlushesInFlightSeqs(t *testing.T) {
 		want = append(want, seq)
 	}
 	survivor := make(map[uint32]bool)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, leg0ID)
 		if err != nil {
 			t.Fatalf("wrapPayload(leg0): %v", err)
@@ -77,7 +77,7 @@ func TestMuxPruneFlushesInFlightSeqs(t *testing.T) {
 
 	const nPkts = 12
 	want := make([]uint32, 0, nPkts)
-	for i := 0; i < nPkts; i++ {
+	for i := range nPkts {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xDD}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)

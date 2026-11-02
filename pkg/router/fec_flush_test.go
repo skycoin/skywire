@@ -17,7 +17,7 @@ func TestFECHasPartialBlock(t *testing.T) {
 	if s.hasPartialBlock() {
 		t.Fatal("empty striper should have no partial block")
 	}
-	for seq := 0; seq < k-1; seq++ {
+	for seq := range k - 1 {
 		s.Add(uint32(seq), []byte{byte(seq)})
 		if !s.hasPartialBlock() {
 			t.Fatalf("after %d/%d frames a partial block should be pending", seq+1, k)

@@ -50,7 +50,7 @@ func TestBoltStore_ListGroupSince_ZeroTimeReturnsAll(t *testing.T) {
 	groupID := "11111111-2222-3333-4444-555555555555"
 	sender := "03ab" + strings.Repeat("0", 62)
 	base := time.Now().UTC().Truncate(time.Millisecond)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := s.AppendGroup(GroupMessage{
 			GroupID:   groupID,
 			SenderPK:  sender,
@@ -87,7 +87,7 @@ func TestBoltStore_ListGroupSince_ReturnsOnlyAfterCursor(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Millisecond)
 
 	// Plant 10 messages 100ms apart.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if err := s.AppendGroup(GroupMessage{
 			GroupID:   groupID,
 			SenderPK:  sender,
@@ -123,7 +123,7 @@ func TestBoltStore_ListGroupSince_CursorAtNewest(t *testing.T) {
 	groupID := "deadbeef-cafe-babe-feed-decadeaffaced"
 	sender := "0312" + strings.Repeat("3", 62)
 	base := time.Now().UTC().Truncate(time.Millisecond)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := s.AppendGroup(GroupMessage{
 			GroupID:   groupID,
 			SenderPK:  sender,
@@ -155,7 +155,7 @@ func TestBoltStore_ListGroupSince_GroupIsolation(t *testing.T) {
 	sender := "0345" + strings.Repeat("6", 62)
 	base := time.Now().UTC().Truncate(time.Millisecond)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		ts := base.Add(time.Duration(i) * time.Millisecond)
 		for _, gid := range []string{groupA, groupB} {
 			if err := s.AppendGroup(GroupMessage{

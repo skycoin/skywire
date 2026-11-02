@@ -12,7 +12,7 @@ var refSize, refsSize, dynamicSize int
 func init() {
 	for _, x := range []struct {
 		val *int
-		obj interface{}
+		obj any
 	}{
 		{&refSize, Ref{}},
 		{&refsSize, Refs{}},
@@ -34,7 +34,7 @@ func schemaArraySliceSize(el Schema, l, shift int, p []byte) (n int,
 		n += l * s
 	} else {
 		var m int
-		for i := 0; i < l; i++ {
+		for range l {
 			if n > len(p) {
 				err = ErrInvalidSchemaOrData
 				return

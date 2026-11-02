@@ -335,7 +335,7 @@ func (s *redisStore) pruneIndexes(ctx context.Context, gone []transport.Entry) {
 		return
 	}
 	pipe := s.client.Pipeline()
-	ids := make([]interface{}, len(gone))
+	ids := make([]any, len(gone))
 	for i, e := range gone {
 		idStr := e.ID.String()
 		ids[i] = idStr

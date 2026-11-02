@@ -34,7 +34,7 @@ func batchOf(t *testing.T, n int) (BidirectionalRouteBatch, cipher.PubKey, ciphe
 	src, _ := cipher.GenerateKeyPair()
 	dst, _ := cipher.GenerateKeyPair()
 	b := BidirectionalRouteBatch{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		inter, _ := cipher.GenerateKeyPair()
 		b.Routes = append(b.Routes, BatchRouteRequest{ID: uint32(i), Route: twoHopRoute(src, inter, dst)}) //nolint:gosec
 	}

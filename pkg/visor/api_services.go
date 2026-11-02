@@ -161,9 +161,9 @@ func doHealthProbe(client *http.Client, name, baseURL, transport string) visorap
 		return entry
 	}
 
-	var health map[string]interface{}
+	var health map[string]any
 	if json.Unmarshal(body, &health) == nil {
-		if bi, ok := health["build_info"].(map[string]interface{}); ok {
+		if bi, ok := health["build_info"].(map[string]any); ok {
 			if ver, ok := bi["version"].(string); ok {
 				entry.Version = ver
 			}

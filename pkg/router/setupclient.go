@@ -234,7 +234,7 @@ func (c *SetupClient) DialRouteGroup(ctx context.Context, req routing.Bidirectio
 	return resp, nil
 }
 
-func (c *SetupClient) call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
+func (c *SetupClient) call(ctx context.Context, serviceMethod string, args any, reply any) error {
 	call := c.rpc.Go(serviceMethod, args, reply, nil)
 
 	select {

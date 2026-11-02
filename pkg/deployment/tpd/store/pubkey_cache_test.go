@@ -61,7 +61,7 @@ func TestPubKeyCache_MalformedHexNotCached(t *testing.T) {
 func TestPubKeyCache_EvictsWhenFull(t *testing.T) {
 	c := newPubKeyCache(2)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pk, _ := cipher.GenerateKeyPair()
 		if _, err := c.Parse(pk.Hex()); err != nil {
 			t.Fatalf("parse %d: %v", i, err)

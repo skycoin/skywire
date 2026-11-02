@@ -44,7 +44,7 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		info := buildinfo.Get()
 		w.Header().Set("Content-Type", "application/json")
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"service_name": serviceName,
 			"build_info":   info,
 			"started_at":   startTime.Format(time.RFC3339),

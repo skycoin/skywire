@@ -67,7 +67,7 @@ func NewLogMiddleware(logger logrus.FieldLogger) func(http.Handler) http.Handler
 // LogEntrySetField adds new key-value pair to current (request scoped) log entry. This pair will be
 // printed along with all other pairs when the request is served.
 // This requires log middleware from this package to be installed in the chain
-func LogEntrySetField(r *http.Request, key string, value interface{}) {
+func LogEntrySetField(r *http.Request, key string, value any) {
 	if sl, ok := r.Context().Value(logEntryKey{}).(*structuredLogger); ok {
 		sl.logger = sl.logger.WithField(key, value)
 	}

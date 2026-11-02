@@ -22,7 +22,7 @@ func checkMemoryLimit(s string) error {
 // parseMaxPerType parses "sudph=40,webrtc=10" into a transport type to cap map.
 func parseMaxPerType(s string) (map[string]int, error) {
 	out := map[string]int{}
-	for _, pair := range strings.Split(s, ",") {
+	for pair := range strings.SplitSeq(s, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {
 			continue

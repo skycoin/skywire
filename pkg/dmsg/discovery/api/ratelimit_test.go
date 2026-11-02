@@ -25,7 +25,7 @@ func TestRemoteRateLimiter_BurstThenThrottle(t *testing.T) {
 	// Up to the burst is allowed; the next is denied (sustained rate is 100/s,
 	// so a tight burst beyond rlPerRemoteBurst can't be replenished in time).
 	allowed := 0
-	for i := 0; i < rlPerRemoteBurst+50; i++ {
+	for range rlPerRemoteBurst + 50 {
 		if rl.allow(testPK) {
 			allowed++
 		}
@@ -45,7 +45,7 @@ func TestRateLimiterMiddleware_429AndPassthrough(t *testing.T) {
 
 	// Drain a dmsg client's bucket, then expect a 429.
 	got429 := false
-	for i := 0; i < rlPerRemoteBurst+50; i++ {
+	for range rlPerRemoteBurst + 50 {
 		req := httptest.NewRequest(http.MethodGet, "/dmsg-discovery/all_servers", nil)
 		req.RemoteAddr = testPK + ":40000"
 		w := httptest.NewRecorder()

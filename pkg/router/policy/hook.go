@@ -27,7 +27,7 @@ import (
 type Hook struct {
 	loader   Engine
 	provider Provider // used for HopsGeo enrichment during SelectRoute
-	logger   func(format string, args ...interface{})
+	logger   func(format string, args ...any)
 
 	mu    sync.RWMutex
 	byApp map[string]Engine
@@ -50,7 +50,7 @@ func WithHookProvider(p Provider) HookOption {
 // non-fatal events (e.g. malformed distribution descriptor that
 // can be safely ignored). Default is a no-op so silent operation
 // stays the default in tests.
-func WithHookLogger(f func(format string, args ...interface{})) HookOption {
+func WithHookLogger(f func(format string, args ...any)) HookOption {
 	return func(h *Hook) { h.logger = f }
 }
 
@@ -59,7 +59,7 @@ func WithHookLogger(f func(format string, args ...interface{})) HookOption {
 // is legal — the hook becomes a no-op until RegisterApp adds a
 // per-app engine.
 func NewHook(l Engine, opts ...HookOption) *Hook {
-	h := &Hook{loader: l, logger: func(string, ...interface{}) {}}
+	h := &Hook{loader: l, logger: func(string, ...any) {}}
 	for _, opt := range opts {
 		opt(h)
 	}

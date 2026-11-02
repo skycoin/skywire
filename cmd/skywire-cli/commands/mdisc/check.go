@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -205,10 +206,8 @@ func dnsMismatch(wsURL, serverAddr string) string {
 	if err != nil {
 		return fmt.Sprintf("wss host %s does not resolve: %v", u.Hostname(), err)
 	}
-	for _, ip := range ips {
-		if ip == serverHost {
-			return ""
-		}
+	if slices.Contains(ips, serverHost) {
+		return ""
 	}
 	return fmt.Sprintf("wss host %s resolves to %v — not the server's own address %s (shared front, or a stale record)", u.Hostname(), ips, serverHost)
 }

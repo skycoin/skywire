@@ -583,7 +583,7 @@ func extractPrefix(e *logrus.Entry) string {
 
 // appendFormattedValue is the buffer-appending equivalent of the old
 // formatKeyValue/formatValue pair, which cost two Sprintf calls per field.
-func (f *TextFormatter) appendFormattedValue(b *bytes.Buffer, value interface{}) {
+func (f *TextFormatter) appendFormattedValue(b *bytes.Buffer, value any) {
 	switch value := value.(type) {
 	case string:
 		f.appendMaybeQuoted(b, value)
@@ -604,7 +604,7 @@ func (f *TextFormatter) appendMaybeQuoted(b *bytes.Buffer, s string) {
 	b.WriteString(f.QuoteCharacter) //nolint:gosec
 }
 
-func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value interface{}, appendSpace bool) {
+func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value any, appendSpace bool) {
 	b.WriteString(key)      //nolint:gosec
 	b.WriteByte('=')        //nolint:gosec
 	f.appendValue(b, value) //nolint:gosec
@@ -614,7 +614,7 @@ func (f *TextFormatter) appendKeyValue(b *bytes.Buffer, key string, value interf
 	}
 }
 
-func (f *TextFormatter) appendValue(b *bytes.Buffer, value interface{}) {
+func (f *TextFormatter) appendValue(b *bytes.Buffer, value any) {
 	switch value := value.(type) {
 	case string:
 		if f.needsQuoting(value) {

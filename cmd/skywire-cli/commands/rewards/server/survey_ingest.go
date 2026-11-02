@@ -144,7 +144,7 @@ func registerSurveyIngestRoutes(r1 *http.ServeMux, wd string) {
 // getlogs.sh. A bad min is treated as no gate (eligible); an unparseable reported
 // version is ineligible.
 func versionEligible(reported, min string) (bool, string) {
-	base := strings.SplitN(reported, "-", 2)[0]
+	base, _, _ := strings.Cut(reported, "-")
 	rv, err := version.NewVersion(base)
 	if err != nil {
 		return false, "unparseable version " + reported

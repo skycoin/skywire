@@ -24,8 +24,8 @@ import (
 )
 
 // creates a mock dialer
-func newMockDialer(t *testing.T, gateways map[cipher.PubKey]interface{}) network.Dialer {
-	newRPCConn := func(gw interface{}) net.Conn {
+func newMockDialer(t *testing.T, gateways map[cipher.PubKey]any) network.Dialer {
+	newRPCConn := func(gw any) net.Conn {
 		connC, connS := net.Pipe()
 		t.Cleanup(func() {
 			assert.NoError(t, connC.Close())
@@ -90,10 +90,10 @@ func (gw *mockGatewayForDialer) ReserveIDs(n uint8, routeIDs *[]routing.RouteID)
 }
 
 // create a mock id reserver
-func newMockReserver(t *testing.T, gateways map[cipher.PubKey]interface{}) IDReserver {
+func newMockReserver(t *testing.T, gateways map[cipher.PubKey]any) IDReserver {
 	rtIDR := new(MockIDReserver)
 
-	handlePK := func(pk, gw interface{}) {
+	handlePK := func(pk, gw any) {
 		connC, connS := net.Pipe()
 		t.Cleanup(func() {
 			assert.NoError(t, connC.Close())

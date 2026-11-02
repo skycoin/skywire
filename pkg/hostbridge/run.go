@@ -77,7 +77,7 @@ func Run(addr string, cfg Config, ready func(url string)) error {
 // SplitOrigins parses a comma separated origin list.
 func SplitOrigins(s string) []string {
 	var out []string
-	for _, o := range strings.Split(s, ",") {
+	for o := range strings.SplitSeq(s, ",") {
 		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
 			out = append(out, o)
 		}

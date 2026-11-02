@@ -58,7 +58,7 @@ func TestIngestIsBounded(t *testing.T) {
 		ingest: make(chan struct{}, maxConcurrentIngest)}
 	blob := shardBlob(1, 1)
 	var wg sync.WaitGroup
-	for i := 0; i < 4*maxConcurrentIngest; i++ {
+	for range 4 * maxConcurrentIngest {
 		reporter, _ := cipher.GenerateKeyPair()
 		wg.Add(1)
 		go func() {

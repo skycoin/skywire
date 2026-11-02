@@ -87,7 +87,7 @@ func TestSessionRegistry_ReapClosedImmediately(t *testing.T) {
 
 func TestNewSessionID_Unique(t *testing.T) {
 	seen := make(map[string]bool)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		id := newSessionID()
 		require.NotEmpty(t, id)
 		require.False(t, seen[id], "duplicate session id %q", id)

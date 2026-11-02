@@ -160,7 +160,7 @@ func (ps *pushState) run(buf []byte) pushResult {
 	if !ps.flush() {
 		return pushRetry
 	}
-	for i := 0; i < pushBudget; i++ {
+	for range pushBudget {
 		n, err := ps.src.r.ReadPlain(buf, ps.emitPlain)
 		if len(ps.pending) > 0 {
 			// Stop reading: the data stays in the conn, so its flow control
@@ -259,7 +259,7 @@ func (w *pushWorkers) start() {
 	w.cond = sync.NewCond(&w.mu)
 	w.retryCh = make(chan struct{}, 1)
 	n := min(max(2*runtime.NumCPU(), 4), 16)
-	for i := 0; i < n; i++ {
+	for range n {
 		go w.work()
 	}
 	go w.retryLoop()

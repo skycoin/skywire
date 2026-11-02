@@ -13,6 +13,7 @@ import (
 	"mime"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -241,12 +242,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 // argsContain reports whether an app's args include the given flag.
 func argsContain(args []string, flag string) bool {
-	for _, a := range args {
-		if a == flag {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(args, flag)
 }
 
 // argValue returns the value following flag in an app's args, or "" when the
@@ -328,10 +324,7 @@ func (v *Visor) autoStartProxyClient(log *logging.Logger, pinned bool) {
 		// Random order, a handful of candidates per cycle: a dead exit
 		// shouldn't pin the loop, and the whole list shouldn't be dialed.
 		idx := mathrand.Perm(len(svcs)) //nolint:gosec // exit-candidate shuffle, not cryptographic
-		tries := len(idx)
-		if tries > 4 {
-			tries = 4
-		}
+		tries := min(len(idx), 4)
 		for _, i := range idx[:tries] {
 			select {
 			case <-ctx.Done():

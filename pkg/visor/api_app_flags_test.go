@@ -145,7 +145,7 @@ type flagsAPI struct {
 }
 
 func (f flagsAPI) App(name string) (*appserver.AppState, error) {
-	return &appserver.AppState{AppConfig: appserver.AppConfig{Name: name}}, nil
+	return &appserver.AppState{Name: name}, nil
 }
 
 func (f flagsAPI) AppFlags(string) (visorapi.AppFlags, error) { return f.flags, nil }

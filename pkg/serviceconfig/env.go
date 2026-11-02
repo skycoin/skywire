@@ -37,7 +37,7 @@ type RunnersConfig struct {
 }
 
 // PrintJSON does json-formatting of data
-func PrintJSON(data interface{}) string {
+func PrintJSON(data any) string {
 	raw, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		log.Fatal(err)

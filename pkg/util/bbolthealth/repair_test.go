@@ -125,7 +125,7 @@ func TestRepairIfCorrupt_RecoversFromOpenPanic(t *testing.T) {
 	// Page 0 header: magic + version, then garbage. bbolt's Open
 	// reads the meta pages and validates them; corrupt meta gets
 	// rejected with an error (not a panic) on most paths.
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		data[i] = 0xAB // garbage
 	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
@@ -179,7 +179,7 @@ func TestRepairIfCorrupt_SyncWalkCatchesPageCorruption(t *testing.T) {
 			return e
 		}
 		val := make([]byte, 256)
-		for i := 0; i < 800; i++ {
+		for i := range 800 {
 			if e := b.Put([]byte(fmt.Sprintf("key-%06d", i)), val); e != nil {
 				return e
 			}

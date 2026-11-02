@@ -411,10 +411,7 @@ func (r *sealedFileReader) loadChunk(i int64) ([]byte, error) {
 	final := i == count-1
 	plainLen := int64(chunkPlainSize)
 	if final {
-		plainLen = r.hdr.PlainSize - i*chunkPlainSize
-		if plainLen < 0 {
-			plainLen = 0
-		}
+		plainLen = max(r.hdr.PlainSize-i*chunkPlainSize, 0)
 	}
 	wire := make([]byte, sealedNonceLen+plainLen+sealedTagLen)
 	off := int64(r.hdr.HeaderLen) + i*chunkWireSize

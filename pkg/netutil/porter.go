@@ -21,8 +21,8 @@ const (
 
 // PorterValue associates a port value alongside it's children.
 type PorterValue struct {
-	Value    interface{}
-	Children map[uint16]interface{}
+	Value    any
+	Children map[uint16]any
 }
 
 // Porter reserves ports.
@@ -53,7 +53,7 @@ func NewPorter(minEph uint16) *Porter {
 
 // Reserve a given port.
 // It returns a boolean informing whether the port is reserved, and a function to clear the reservation.
-func (p *Porter) Reserve(port uint16, v interface{}) (bool, func()) {
+func (p *Porter) Reserve(port uint16, v any) (bool, func()) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -67,7 +67,7 @@ func (p *Porter) Reserve(port uint16, v interface{}) (bool, func()) {
 }
 
 // ReserveChild reserves a child.
-func (p *Porter) ReserveChild(port, subPort uint16, v interface{}) (bool, func()) {
+func (p *Porter) ReserveChild(port, subPort uint16, v any) (bool, func()) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -76,7 +76,7 @@ func (p *Porter) ReserveChild(port, subPort uint16, v interface{}) (bool, func()
 		return false, nil
 	}
 	if pv.Children == nil {
-		pv.Children = make(map[uint16]interface{}, 1)
+		pv.Children = make(map[uint16]any, 1)
 	} else if _, ok := pv.Children[subPort]; ok {
 		return false, nil
 	}
@@ -119,7 +119,7 @@ func (p *Porter) ResetEphemeral() int {
 // ReserveEphemeral reserves a new ephemeral port.
 // It returns the reserved ephemeral port, a function to clear the reservation and an error (if any).
 // Returns ErrEphemeralPortSpace if all ephemeral ports (minEph through 65535) are occupied.
-func (p *Porter) ReserveEphemeral(ctx context.Context, v interface{}) (uint16, func(), error) {
+func (p *Porter) ReserveEphemeral(ctx context.Context, v any) (uint16, func(), error) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -127,7 +127,7 @@ func (p *Porter) ReserveEphemeral(ctx context.Context, v interface{}) (uint16, f
 	// The old code had no bound, spinning forever when all ports were taken
 	// while holding the mutex — burning 100% CPU on map lookups.
 	maxRange := uint32(65535-p.minEph) + 1
-	for i := uint32(0); i < maxRange; i++ {
+	for range maxRange {
 		select {
 		case <-ctx.Done():
 			return 0, nil, ctx.Err()
@@ -166,7 +166,7 @@ func (p *Porter) ReserveEphemeral(ctx context.Context, v interface{}) (uint16, f
 }
 
 // PortValue returns the value stored under a given port.
-func (p *Porter) PortValue(port uint16) (interface{}, bool) {
+func (p *Porter) PortValue(port uint16) (any, bool) {
 	p.RLock()
 	defer p.RUnlock()
 
@@ -175,7 +175,7 @@ func (p *Porter) PortValue(port uint16) (interface{}, bool) {
 }
 
 // RangePortValues ranges all ports that are currently reserved.
-func (p *Porter) RangePortValues(fn func(port uint16, v interface{}) (next bool)) {
+func (p *Porter) RangePortValues(fn func(port uint16, v any) (next bool)) {
 	p.RLock()
 	defer p.RUnlock()
 
@@ -360,7 +360,7 @@ func (p *Porter) SweepStaleEphemeral(maxAge time.Duration) int {
 	now := time.Now()
 	type sweepEntry struct {
 		port  uint16
-		value interface{}
+		value any
 	}
 	var toSweep []sweepEntry
 	for port, t := range p.reservedAt {

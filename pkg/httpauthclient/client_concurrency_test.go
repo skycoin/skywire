@@ -74,7 +74,7 @@ func TestClient_SharedNonceNoRace(t *testing.T) {
 	var wg sync.WaitGroup
 	fire := func(c *Client) {
 		defer wg.Done()
-		for i := 0; i < perClient; i++ {
+		for range perClient {
 			req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
 			if err != nil {
 				continue

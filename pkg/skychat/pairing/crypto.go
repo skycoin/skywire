@@ -203,7 +203,7 @@ func parseEpochID(s string) (EpochID, error) {
 	if len(s) != EpochIDLen*2 {
 		return id, fmt.Errorf("pairing: epoch id %q: want %d hex chars", s, EpochIDLen*2)
 	}
-	for i := 0; i < EpochIDLen; i++ {
+	for i := range EpochIDLen {
 		hi, err := hexNibble(s[i*2])
 		if err != nil {
 			return EpochID{}, err

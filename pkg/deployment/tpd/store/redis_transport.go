@@ -341,7 +341,7 @@ func (s *redisStore) getTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 	}
 
 	entries := make([]*transport.Entry, 0, len(vals))
-	var staleIDs []interface{}
+	var staleIDs []any
 	for i, val := range vals {
 		raw, ok := val.(string)
 		if !ok || raw == "" {
@@ -389,12 +389,9 @@ func (s *redisStore) GetNumberOfTransports(ctx context.Context) (map[types.Type]
 	}
 
 	const mgetBatch = 10000
-	var stale []interface{}
+	var stale []any
 	for i := 0; i < len(keys); i += mgetBatch {
-		end := i + mgetBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(i+mgetBatch, len(keys))
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
 			// Unlike GetTransportSummary there is nowhere in a bare
@@ -437,12 +434,9 @@ func (s *redisStore) GetTransportSummary(ctx context.Context, selfTransports boo
 	uniqueVisors := make(map[string]struct{})
 
 	const mgetBatch = 10000
-	var stale []interface{}
+	var stale []any
 	for i := 0; i < len(keys); i += mgetBatch {
-		end := i + mgetBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(i+mgetBatch, len(keys))
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
 			// A failed batch removes up to mgetBatch transports from the
@@ -617,13 +611,10 @@ func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, with
 
 	const mgetBatch = 10000
 	var entries []*transport.Entry
-	var stale []interface{}
+	var stale []any
 
 	for i := 0; i < len(keys); i += mgetBatch {
-		end := i + mgetBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(i+mgetBatch, len(keys))
 
 		vals, err := s.client.MGet(ctx, keys[i:end]...).Result()
 		if err != nil {
@@ -696,7 +687,7 @@ func (s *redisStore) allTransportKeysFromIndex(ctx context.Context) (keys, ids [
 // TTL'd without an explicit Deregister. Fire-and-forget so the read
 // path stays fast; index converges over time as readers detect stale
 // members.
-func (s *redisStore) maybeReapStaleTransports(stale []interface{}) {
+func (s *redisStore) maybeReapStaleTransports(stale []any) {
 	if len(stale) == 0 {
 		return
 	}

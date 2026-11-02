@@ -337,17 +337,17 @@ func parseViaTCP(spec string) (cipher.PubKey, string, error) {
 func parsePortSpec(spec string) ([]uint16, error) {
 	seen := map[uint16]struct{}{}
 	out := make([]uint16, 0, 16)
-	for _, raw := range strings.Split(spec, ",") {
+	for raw := range strings.SplitSeq(spec, ",") {
 		tok := strings.TrimSpace(raw)
 		if tok == "" {
 			continue
 		}
-		if dash := strings.IndexByte(tok, '-'); dash >= 0 {
-			lo, err := strconv.ParseUint(strings.TrimSpace(tok[:dash]), 10, 16)
+		if before, after, ok := strings.Cut(tok, "-"); ok {
+			lo, err := strconv.ParseUint(strings.TrimSpace(before), 10, 16)
 			if err != nil {
 				return nil, fmt.Errorf("invalid range start in %q: %w", tok, err)
 			}
-			hi, err := strconv.ParseUint(strings.TrimSpace(tok[dash+1:]), 10, 16)
+			hi, err := strconv.ParseUint(strings.TrimSpace(after), 10, 16)
 			if err != nil {
 				return nil, fmt.Errorf("invalid range end in %q: %w", tok, err)
 			}

@@ -651,19 +651,13 @@ func (s *Server) setupRoutes() {
 		sdAge := s.getCacheAgeSeconds(sdCacheFile)
 
 		// Find the oldest cache age
-		maxAge := tpdAge
-		if sdAge > maxAge {
-			maxAge = sdAge
-		}
+		maxAge := max(sdAge, tpdAge)
 
 		// Calculate seconds until next refresh
 		maxAgeSeconds := s.config.CacheMaxAge * 60
-		nextRefreshIn := maxAgeSeconds - int(maxAge)
-		if nextRefreshIn < 0 {
-			nextRefreshIn = 0
-		}
+		nextRefreshIn := max(maxAgeSeconds-int(maxAge), 0)
 
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"status":          "ok",
 			"cache_max_age":   s.config.CacheMaxAge,
 			"next_refresh_in": nextRefreshIn,
@@ -1750,7 +1744,7 @@ func (s *Server) handleTPSStatus(w http.ResponseWriter, r *http.Request) {
 	api := s.tpsAPI
 	s.tpsMu.RUnlock()
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"running": api != nil,
 	}
 	if api != nil {
@@ -1958,7 +1952,7 @@ func (s *Server) handleLocalAddTransport(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"id":        tp.ID.String(),
 		"local_pk":  tp.Local.String(),
 		"remote_pk": tp.Remote.String(),
@@ -2109,7 +2103,7 @@ func (s *Server) handleDMSGServers(w http.ResponseWriter, r *http.Request) {
 
 	data, err := s.getDMSGData()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
@@ -2125,13 +2119,13 @@ func (s *Server) handleDMSGEntries(w http.ResponseWriter, r *http.Request) {
 
 	data, err := s.getDMSGData()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"count":   data.EntriesCount,
 		"entries": data.Entries,
 	})
@@ -2182,7 +2176,7 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 
 	pk := r.URL.Query().Get("pk")
 	if pk == "" {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "pk parameter required",
 		})
 		return
@@ -2193,7 +2187,7 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected - DMSG health check requires visor API",
 		})
 		return
@@ -2204,7 +2198,7 @@ func (s *Server) handleDMSGHealth(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := visorAPI.DMSGHealth(ctx, pk)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
@@ -2221,7 +2215,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 
 	pk := r.URL.Query().Get("pk")
 	if pk == "" {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"status": "error",
 			"error":  "pk parameter required",
 		})
@@ -2262,7 +2256,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"status": "error",
 			"error":  "visor not connected - ping requires visor API",
 		})
@@ -2274,7 +2268,7 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := visorAPI.Ping(ctx, pk, useDMSG, localRoute, tries, sizeKB)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"status": "error",
 			"error":  err.Error(),
 			"mode":   mode,
@@ -2295,7 +2289,7 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected",
 		})
 		return
@@ -2303,7 +2297,7 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 
 	apps, err := visorAPI.Apps()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
@@ -2319,7 +2313,7 @@ func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "POST required",
 		})
 		return
@@ -2329,7 +2323,7 @@ func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "invalid request body",
 		})
 		return
@@ -2340,20 +2334,20 @@ func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected",
 		})
 		return
 	}
 
 	if err := visorAPI.StartApp(req.Name); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"status": "started",
 		"app":    req.Name,
 	})
@@ -2366,7 +2360,7 @@ func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "POST required",
 		})
 		return
@@ -2376,7 +2370,7 @@ func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "invalid request body",
 		})
 		return
@@ -2387,20 +2381,20 @@ func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected",
 		})
 		return
 	}
 
 	if err := visorAPI.StopApp(req.Name); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"status": "stopped",
 		"app":    req.Name,
 	})
@@ -2413,7 +2407,7 @@ func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "POST required",
 		})
 		return
@@ -2424,7 +2418,7 @@ func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
 		AutoStart bool   `json:"auto_start"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "invalid request body",
 		})
 		return
@@ -2435,20 +2429,20 @@ func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected",
 		})
 		return
 	}
 
 	if err := visorAPI.SetAutoStart(req.Name, req.AutoStart); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"status":     "updated",
 		"app":        req.Name,
 		"auto_start": req.AutoStart,
@@ -2462,7 +2456,7 @@ func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "POST required",
 		})
 		return
@@ -2473,7 +2467,7 @@ func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
 		PK   string `json:"pk"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "invalid request body",
 		})
 		return
@@ -2484,20 +2478,20 @@ func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
 	s.visorMu.RUnlock()
 
 	if visorAPI == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": "visor not connected",
 		})
 		return
 	}
 
 	if err := visorAPI.SetAppPK(req.Name, req.PK); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 			"error": err.Error(),
 		})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck,gosec
+	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
 		"status": "updated",
 		"app":    req.Name,
 		"pk":     req.PK,

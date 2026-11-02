@@ -35,7 +35,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 		*d = 0
 		return nil
 	}
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}

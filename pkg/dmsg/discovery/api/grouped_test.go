@@ -26,7 +26,7 @@ func TestClientsGroupedByServerReused(t *testing.T) {
 func TestClientsGroupedByServerCachedAllocs(t *testing.T) {
 	serverPK, _ := cipher.GenerateKeyPair()
 	db := newTestStore(t)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		e, _ := signedClientEntry(t, serverPK)
 		require.NoError(t, db.SetEntry(context.Background(), e, 0))
 	}

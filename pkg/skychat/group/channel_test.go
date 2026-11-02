@@ -143,7 +143,7 @@ func TestChannel_TopologyFollowsAdminsOnly(t *testing.T) {
 	admin, _ := cipher.GenerateKeyPair()
 
 	subscribers := make([]cipher.PubKey, 0, 50)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		pk, _ := cipher.GenerateKeyPair()
 		subscribers = append(subscribers, pk)
 	}
@@ -168,7 +168,7 @@ func TestChannel_TopologyFollowsAdminsOnly(t *testing.T) {
 
 	// Cost is flat in audience size: adding subscribers changes nothing.
 	bigger := channel
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		pk, _ := cipher.GenerateKeyPair()
 		bigger.Members = append(bigger.Members, pk)
 	}

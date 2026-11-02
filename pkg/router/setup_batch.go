@@ -74,7 +74,7 @@ type batchMember struct {
 
 // fail records the member's first error. Later errors are ignored — the first
 // one is the cause, the rest are consequences.
-func (m *batchMember) fail(format string, a ...interface{}) {
+func (m *batchMember) fail(format string, a ...any) {
 	if m.err == "" {
 		m.err = fmt.Sprintf(format, a...)
 	}

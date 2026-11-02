@@ -145,9 +145,9 @@ func (s *store) deposit(from, to cipher.PubKey, port uint16, ref string, payload
 		return "", err
 	}
 	m := &stored{
-		Header: Header{ID: id, From: from, Port: port, Size: len(payload), Deposited: now.UTC()},
-		To:     to,
-		Ref:    ref,
+		ID: id, From: from, Port: port, Size: len(payload), Deposited: now.UTC(),
+		To:  to,
+		Ref: ref,
 	}
 	if s.dir == "" {
 		m.payload = append([]byte(nil), payload...)

@@ -241,7 +241,7 @@ func TestPerGroupEventRingIsNotEvictedBySiblings(t *testing.T) {
 	chatty.muxEvents = shared
 
 	quiet.noteMuxEvent(MuxEvent{Event: MuxEventGroupCreated, Reason: "the one event that matters"})
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		chatty.noteMuxEvent(MuxEvent{Event: MuxEventLegParked, Reason: "churn"})
 	}
 

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -193,11 +194,8 @@ func (m *mockClient) ClientsByServer(_ context.Context, serverPK cipher.PubKey) 
 	var list []*Entry
 	for _, e := range m.entries {
 		if e := e; e.Client != nil {
-			for _, delegatedPK := range e.Client.DelegatedServers {
-				if delegatedPK == serverPK {
-					list = append(list, &e)
-					break
-				}
+			if slices.Contains(e.Client.DelegatedServers, serverPK) {
+				list = append(list, &e)
 			}
 		}
 	}

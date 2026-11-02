@@ -22,6 +22,7 @@ package skysocksc
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -108,13 +109,9 @@ Examples:
 // Split out of the command body so the parsing is testable without an RPC.
 func applySettingArgs(current map[string]int64, currentText map[string]string, args []string, reset bool) (map[string]int64, map[string]string, error) {
 	next := make(map[string]int64, len(current)+len(args))
-	for k, v := range current {
-		next[k] = v
-	}
+	maps.Copy(next, current)
 	nextText := make(map[string]string, len(currentText)+len(args))
-	for k, v := range currentText {
-		nextText[k] = v
-	}
+	maps.Copy(nextText, currentText)
 	if reset && len(args) == 0 {
 		return nil, nil, nil
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -194,10 +195,7 @@ fetchRoutesAgain:
 		// Common path: single query covers both directions. One count
 		// applies to all PathEdges in the call, so request the larger
 		// of the two directions' mux degrees.
-		num := fwdNum
-		if revNum > num {
-			num = revNum
-		}
+		num := max(revNum, fwdNum)
 		paths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
 			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops, NumRoutes: num})
 	} else {
@@ -212,12 +210,8 @@ fetchRoutesAgain:
 		}
 		if err == nil {
 			paths = make(map[routing.PathEdges][][]routing.Hop, 2)
-			for k, v := range fwdPaths {
-				paths[k] = v
-			}
-			for k, v := range revPaths {
-				paths[k] = v
-			}
+			maps.Copy(paths, fwdPaths)
+			maps.Copy(paths, revPaths)
 		}
 	}
 
@@ -1163,10 +1157,7 @@ func findRouteNumFor(mux int, opts *DialOptions) uint16 {
 	if opts == nil || !opts.DiversifyTransports || !opts.RequireDisjointFirstHop {
 		return n
 	}
-	want := DialDiversifyCandidates()
-	if want > math.MaxUint16 {
-		want = math.MaxUint16
-	}
+	want := min(DialDiversifyCandidates(), math.MaxUint16)
 	if uint16(want) > n { //nolint:gosec // clamped to MaxUint16 above
 		return uint16(want) //nolint:gosec // clamped to MaxUint16 above
 	}

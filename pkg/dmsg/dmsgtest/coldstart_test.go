@@ -129,7 +129,7 @@ func TestColdStart_UnregisteredDiscReachableViaSharedServer(t *testing.T) {
 
 	// --- Positive: transit reaches unregistered disc via the shared server.
 	var stream *dmsg.Stream
-	for attempt := 0; attempt < 8; attempt++ {
+	for range 8 {
 		stream, err = transitClient.DialStream(ctx, dmsg.Addr{PK: pkDisc, Port: discPort})
 		if err == nil {
 			break

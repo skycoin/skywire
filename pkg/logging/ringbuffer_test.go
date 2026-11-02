@@ -20,7 +20,7 @@ func TestRingBuffer_RetainsRecentAndBounds(t *testing.T) {
 
 	// Past capacity, oldest bytes are dropped (trimmed to a line boundary) and
 	// the buffer never exceeds its cap.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		_, _ = rb.Write([]byte("xxxxx\n")) //nolint:errcheck // 6 bytes each, far over cap
 	}
 	got := rb.Bytes()

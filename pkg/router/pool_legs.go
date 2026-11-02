@@ -47,6 +47,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -83,13 +84,7 @@ func poolPlanAdmitted(log *logging.Logger, port routing.Port, fwd []routing.Hop,
 	}
 	if types := routersettings.PoolTpTypes.Strings(); len(types) > 0 && tp != nil {
 		want := string(tp.Entry.Type)
-		ok := false
-		for _, t := range types {
-			if t == want {
-				ok = true
-				break
-			}
-		}
+		ok := slices.Contains(types, want)
 		if !ok {
 			if log != nil {
 				log.Debugf("pool plan from standby group :%d skipped: first hop type %q not in pool.tp_types", port, want)

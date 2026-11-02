@@ -56,7 +56,7 @@ func first(getenv func(string) string, names ...string) string {
 // exempt reports whether noProxy covers host.
 func exempt(host, noProxy string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	for _, e := range strings.Split(noProxy, ",") {
+	for e := range strings.SplitSeq(noProxy, ",") {
 		e = strings.ToLower(strings.TrimSpace(e))
 		if e == "" {
 			continue

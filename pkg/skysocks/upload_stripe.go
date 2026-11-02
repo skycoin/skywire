@@ -629,10 +629,7 @@ func (s *uploadStripe) planBurst(t uploadTunables, slots int) *uploadBurst {
 	if s.c == nil || !setUploadBurstPlan() || s.u == nil || s.u.total <= 0 || t.chunk <= 0 {
 		return nil
 	}
-	live := s.c.activeLiveCount()
-	if live < 1 {
-		live = 1
-	}
+	live := max(s.c.activeLiveCount(), 1)
 	if gate := live * s.perTunnel(); gate < slots {
 		slots = gate
 	}
@@ -681,10 +678,7 @@ func (s *uploadStripe) takeSlot() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
-		live := s.c.activeLiveCount()
-		if live < 1 {
-			live = 1
-		}
+		live := max(s.c.activeLiveCount(), 1)
 		if s.inflight < live*s.perTunnel() {
 			s.inflight++
 			return
@@ -1114,7 +1108,7 @@ func readChunkAck(resp *http.Response, body []byte) chunkAck {
 	// A sink that names what it dropped saves us the uploadDurableWait guess. A
 	// sink that does not send the header is unchanged — the backstop still covers
 	// it, which is what makes the header safe to add to a live protocol.
-	for _, f := range strings.Split(resp.Header.Get("X-Upload-Evicted"), ",") {
+	for f := range strings.SplitSeq(resp.Header.Get("X-Upload-Evicted"), ",") {
 		if v, err := strconv.ParseInt(strings.TrimSpace(f), 10, 64); err == nil && v >= 0 {
 			ack.evicted = append(ack.evicted, v)
 		}
@@ -1208,10 +1202,7 @@ func serializeResponse(resp *http.Response, body []byte) []byte {
 func writeChunkBody(st net.Conn, buf []byte, idle time.Duration) error {
 	const slice = 256 << 10
 	for off := 0; off < len(buf); {
-		end := off + slice
-		if end > len(buf) {
-			end = len(buf)
-		}
+		end := min(off+slice, len(buf))
 		_ = st.SetWriteDeadline(time.Now().Add(idle)) //nolint:errcheck
 		n, err := st.Write(buf[off:end])
 		off += n
@@ -1298,10 +1289,7 @@ func (c *Client) relayUploadOnce(conn net.Conn, sess *yamux.Session, stream net.
 		}
 		buf := make([]byte, 64<<10)
 		for int64(body.Len()) < u.total {
-			room := u.total - int64(body.Len())
-			if room > int64(len(buf)) {
-				room = int64(len(buf))
-			}
+			room := min(u.total-int64(body.Len()), int64(len(buf)))
 			_ = conn.SetReadDeadline(time.Now().Add(setUploadIdleTimeout())) //nolint:errcheck
 			n, rerr := conn.Read(buf[:room])
 			if n > 0 {

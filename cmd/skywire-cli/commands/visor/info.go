@@ -667,7 +667,7 @@ func localUptime24h(rpc visorapi.API) (map[string]string, map[string]float64, bo
 		// Window starts (24h*12 = 288) slots before nowSlot. Negative
 		// indices wrap into yesterday's slot space.
 		var slots [288]byte
-		for i := 0; i < 288; i++ {
+		for i := range 288 {
 			abs := nowSlot - 288 + i
 			var src string
 			if abs < 0 {
@@ -687,9 +687,9 @@ func localUptime24h(rpc visorapi.API) (map[string]string, map[string]float64, bo
 		var b strings.Builder
 		var onlineSlots int
 		var totalSlotsKnown int
-		for h := 0; h < totalHours; h++ {
+		for h := range totalHours {
 			count := 0
-			for s := 0; s < slotsPerHour; s++ {
+			for s := range slotsPerHour {
 				idx := h*slotsPerHour + s
 				if slots[idx] == '.' {
 					count++

@@ -51,21 +51,17 @@ func TestMergeFile(t *testing.T) {
 	t.Run("all fields override", func(t *testing.T) {
 		_, srcSK := cipher.GenerateKeyPair()
 		dst := &dmsgdisc.Config{
-			Common: services.Common{
-				Addr:  "flag-addr",
-				Redis: "flag-redis",
-			},
+			Addr:  "flag-addr",
+			Redis: "flag-redis",
 		}
 		src := &dmsgdisc.Config{
-			Common: services.Common{
-				SecKey:       srcSK,
-				Addr:         "file-addr",
-				Redis:        "file-redis",
-				DmsgPort:     81,
-				EntryTimeout: services.Duration(time.Minute),
-				Mode:         "dual",
-				Testing:      true,
-			},
+			SecKey:            srcSK,
+			Addr:              "file-addr",
+			Redis:             "file-redis",
+			DmsgPort:          81,
+			EntryTimeout:      services.Duration(time.Minute),
+			Mode:              "dual",
+			Testing:           true,
 			AuthPassphrase:    "secret",
 			OfficialServers:   []string{"pk1"},
 			DmsgServerType:    "type",
@@ -91,11 +87,9 @@ func TestMergeFile(t *testing.T) {
 
 	t.Run("zero src leaves dst untouched", func(t *testing.T) {
 		dst := &dmsgdisc.Config{
-			Common: services.Common{
-				Addr:     "keep",
-				Redis:    "keep-redis",
-				DmsgPort: 99,
-			},
+			Addr:     "keep",
+			Redis:    "keep-redis",
+			DmsgPort: 99,
 		}
 		mergeFile(dst, &dmsgdisc.Config{})
 		assert.Equal(t, "keep", dst.Addr)

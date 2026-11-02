@@ -60,7 +60,7 @@ func TestExecPool_Reuse(t *testing.T) {
 	s := &fakeExecSession{}
 	h.cacheExec(k, s)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		pe := h.acquireExec(k)
 		if pe == nil {
 			t.Fatalf("acquire %d: expected pooled session, got nil", i)

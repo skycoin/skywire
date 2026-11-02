@@ -238,7 +238,7 @@ func TagSchemaName(tag reflect.StructTag) (sch string, err error) {
 		err = ErrEmptySkyobjectTag
 		return
 	}
-	for _, part := range strings.Split(skytag, ",") {
+	for part := range strings.SplitSeq(skytag, ",") {
 		if !strings.HasPrefix(part, "schema=") {
 			continue
 		}
@@ -266,7 +266,7 @@ func mustTagSchemaName(tag reflect.StructTag) string {
 	return sch
 }
 
-func typeOf(i interface{}) reflect.Type {
+func typeOf(i any) reflect.Type {
 	return reflect.Indirect(reflect.ValueOf(i)).Type()
 }
 
@@ -296,9 +296,9 @@ func decodeSchema(b []byte) (s Schema, err error) {
 	switch ReferenceType(x.ReferenceType) {
 	case ReferenceTypeSingle, ReferenceTypeSlice, ReferenceTypeDynamic:
 		// kind, typ, elem
-		rs := referenceSchema{}
-		rs.kind = kindFromWire(x.Kind)
-		rs.typ = ReferenceType(x.ReferenceType)
+		rs := referenceSchema{
+			kind: kindFromWire(x.Kind),
+			typ:  ReferenceType(x.ReferenceType)}
 		if rs.typ != ReferenceTypeDynamic {
 			if rs.elem, err = decodeSchema(x.Elem); err != nil {
 				return s, err
@@ -319,23 +319,23 @@ func decodeSchema(b []byte) (s Schema, err error) {
 
 	switch k := kindFromWire(x.Kind); k {
 	case reflect.Slice:
-		ss := sliceSchema{}
-		ss.schema = sc
+		ss := sliceSchema{
+			schema: sc}
 		if ss.elem, err = decodeSchema(x.Elem); err != nil {
 			return s, err
 		}
 		s = &ss
 	case reflect.Array:
-		as := arraySchema{}
-		as.schema = sc
-		as.length = int(x.Len)
+		as := arraySchema{
+			schema: sc,
+			length: int(x.Len)}
 		if as.elem, err = decodeSchema(x.Elem); err != nil {
 			return s, err
 		}
 		s = &as
 	case reflect.Struct:
-		ss := structSchema{}
-		ss.schema = sc
+		ss := structSchema{
+			schema: sc}
 		var f Field
 		for _, ef := range x.Fields {
 			if f, err = decodeField(ef); err != nil {

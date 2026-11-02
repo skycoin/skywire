@@ -58,7 +58,7 @@ func TestPacedCheckpointsStillMatchOnABusyLink(t *testing.T) {
 	b, _ := cipher.GenerateKeyPair()
 	id := uuid.New()
 	const perMinute = 2400 << 20 // 40 MiB/s
-	for m := 0; m < 9; m++ {
+	for m := range 9 {
 		pos := uint64(m+1) * perMinute
 		now = time.Date(2026, 10, 16, 12, 5+m, 5, 0, time.UTC)
 		agg.flushCheckpoints()

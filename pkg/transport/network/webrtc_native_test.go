@@ -109,10 +109,7 @@ func TestWebRTCCarrier_LargePayload(t *testing.T) {
 
 	// Write in <=dcReadBuf chunks (a single SCTP message must fit the reader's buf).
 	for off := 0; off < total; off += 64 * 1024 {
-		end := off + 64*1024
-		if end > total {
-			end = total
-		}
+		end := min(off+64*1024, total)
 		if _, err := aConn.Write(payload[off:end]); err != nil {
 			t.Fatalf("write at %d: %v", off, err)
 		}

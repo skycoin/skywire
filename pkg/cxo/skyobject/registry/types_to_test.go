@@ -106,7 +106,7 @@ type TestMan struct {
 
 type testType struct {
 	Name string
-	Val  interface{}
+	Val  any
 }
 
 // name -> val to register and encode/decode/size test

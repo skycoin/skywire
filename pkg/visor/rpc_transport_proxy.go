@@ -78,7 +78,7 @@ func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string, args jso
 	}
 	defer rpcC.Close() //nolint:errcheck,gosec
 
-	var rpcArgs interface{} = &struct{}{}
+	var rpcArgs any = &struct{}{}
 	if len(args) > 0 {
 		rpcArgs = &args
 	}

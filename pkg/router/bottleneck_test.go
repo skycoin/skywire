@@ -148,7 +148,7 @@ func TestRebuildWeightsCollapsesBottleneckGroup(t *testing.T) {
 	m := newBareMux(false)
 	m.tpSelector.SetMode(WeightModeCapacity)
 	m.growLegs(3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		m.markLegReady(i)
 	}
 	// Legs 0 and 1 share a bottleneck; leg 2 is independent.
@@ -179,7 +179,7 @@ func TestRebuildWeightsGroupColdFloorPerGroup(t *testing.T) {
 	m := newBareMux(false)
 	m.tpSelector.SetMode(WeightModeCapacity)
 	m.growLegs(3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		m.markLegReady(i)
 	}
 	m.SetLegGroups([]int{0, 0, 2})

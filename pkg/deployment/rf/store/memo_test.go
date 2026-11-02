@@ -47,7 +47,7 @@ func TestGetRouteWeightedMemoized(t *testing.T) {
 
 	// Concurrent identical requests are race-free and deduped (run with -race).
 	var wg sync.WaitGroup
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

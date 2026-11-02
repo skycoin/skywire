@@ -32,7 +32,7 @@ type appLogRecorder struct {
 	lines []string
 }
 
-func (r *appLogRecorder) record(format string, args ...interface{}) {
+func (r *appLogRecorder) record(format string, args ...any) {
 	r.mu.Lock()
 	r.lines = append(r.lines, fmt.Sprintf(format, args...))
 	r.mu.Unlock()

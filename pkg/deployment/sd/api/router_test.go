@@ -95,7 +95,7 @@ func TestRouterBuiltOnce(t *testing.T) {
 	require.NotNil(t, api.Handler, "router must be built in New")
 
 	before := api.Handler
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rr := httptest.NewRecorder()
 		api.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
 		require.Equal(t, http.StatusOK, rr.Code)

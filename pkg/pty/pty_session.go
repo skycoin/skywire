@@ -80,10 +80,7 @@ func (r *ringBuffer) write(p []byte) {
 func (r *ringBuffer) at(off int, dst []byte) int {
 	c := len(r.buf)
 	avail := r.size - off
-	n := len(dst)
-	if n > avail {
-		n = avail
-	}
+	n := min(len(dst), avail)
 	idx := (r.start + off) % c
 	first := copy(dst, r.buf[idx:min(idx+n, c)])
 	if first < n {

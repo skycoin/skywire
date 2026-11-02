@@ -50,8 +50,8 @@ func addMuxSub(sub *cobra.Command, oldName string) {
 
 // firstWord returns the verb of a cobra Use line ("rm <tp-id>" -> "rm").
 func firstWord(use string) string {
-	if i := strings.IndexByte(use, ' '); i >= 0 {
-		return use[:i]
+	if before, _, ok := strings.Cut(use, " "); ok {
+		return before
 	}
 	return use
 }

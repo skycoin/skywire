@@ -24,6 +24,7 @@ package routersettings
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -677,9 +678,7 @@ func AppOverrides() map[string]map[string]string {
 		if m == nil {
 			m = map[string]string{}
 		}
-		for name, v := range vals {
-			m[name] = v
-		}
+		maps.Copy(m, vals)
 		if len(m) > 0 {
 			out[app] = m
 		}

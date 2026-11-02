@@ -96,7 +96,7 @@ func TestPoolLoadSignalIgnoresKeepaliveTraffic(t *testing.T) {
 
 	// A keepalive trickle, sampled every second for well past the engage
 	// window. It moves bytes every tick and must never read as load.
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		now = now.Add(time.Second)
 		moved += 512 // a heartbeat's worth
 		require.False(t, rg.noteLoadSample(moved, now, floor, engage),

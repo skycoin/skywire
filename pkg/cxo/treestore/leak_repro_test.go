@@ -112,7 +112,7 @@ func TestPublisherAsyncCleanupBounded(t *testing.T) {
 	}
 
 	stableValue := mkRandom(2 * 1024 * 1024)
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		// Constant path — same value every tick. Its TreeEntry hash
 		// dedups with prior roots; this is exactly the production
 		// pattern (uptime metrics where one window is unchanged).

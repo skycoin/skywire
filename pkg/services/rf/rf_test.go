@@ -173,10 +173,8 @@ func TestRunInvalidMode(t *testing.T) {
 	// Testing=true keeps the store in-memory so Run reaches the mode
 	// resolution, where an unknown mode string is rejected.
 	cfg := &Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "bogus-mode",
-		},
+		Testing: true,
+		Mode:    "bogus-mode",
 	}
 	svc := New(cfg, testLog()).(*service)
 	err := svc.Run(context.Background())
@@ -192,9 +190,7 @@ func TestRunRedisStoreFails(t *testing.T) {
 	// the init-store error branch. The redis store retries until the
 	// context deadline, so bound it tightly.
 	cfg := &Config{
-		Common: services.Common{
-			Redis: closedHostPort(t),
-		},
+		Redis: closedHostPort(t),
 	}
 	svc := New(cfg, testLog()).(*service)
 

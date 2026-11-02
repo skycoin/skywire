@@ -201,7 +201,7 @@ func collectHVTargets(client visorapi.API, csv string, all bool) ([]string, erro
 			out = append(out, s)
 		}
 	}
-	for _, s := range strings.Split(csv, ",") {
+	for s := range strings.SplitSeq(csv, ",") {
 		add(s)
 	}
 	if all {

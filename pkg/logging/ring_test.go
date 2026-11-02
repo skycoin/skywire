@@ -2,6 +2,7 @@
 package logging
 
 import (
+	"maps"
 	"testing"
 	"time"
 
@@ -13,9 +14,7 @@ func fireEntry(b *Broadcaster, level logrus.Level, module, msg string, fields lo
 	if module != "" {
 		data[logModuleKey] = module
 	}
-	for k, v := range fields {
-		data[k] = v
-	}
+	maps.Copy(data, fields)
 	_ = b.Fire(&logrus.Entry{ //nolint:errcheck // best-effort test hook fire
 		Time:    time.Now(),
 		Level:   level,
@@ -76,7 +75,7 @@ func TestRingLevelFilter(t *testing.T) {
 
 func TestRingBounded(t *testing.T) {
 	b := NewBroadcaster()
-	for i := 0; i < ringPerApp+50; i++ {
+	for range ringPerApp + 50 {
 		fireEntry(b, logrus.InfoLevel, "router", "line", logrus.Fields{"app_name": "app1"})
 	}
 	events, _ := b.RecentByApp("app1", logrus.DebugLevel)
@@ -87,7 +86,7 @@ func TestRingBounded(t *testing.T) {
 
 func TestRingMaxAppsEviction(t *testing.T) {
 	b := NewBroadcaster()
-	for i := 0; i < ringMaxApps+5; i++ {
+	for i := range ringMaxApps + 5 {
 		app := "app" + string(rune('A'+i%26)) + string(rune('0'+i/26))
 		fireEntry(b, logrus.InfoLevel, "router", "line", logrus.Fields{"app_name": app})
 	}
@@ -122,9 +121,7 @@ func TestRecentMergedOrdered(t *testing.T) {
 	// Interleave events and logs with explicit times.
 	push := func(mod, msg string, fields logrus.Fields, at time.Time) {
 		data := logrus.Fields{logModuleKey: mod}
-		for k, v := range fields {
-			data[k] = v
-		}
+		maps.Copy(data, fields)
 		_ = b.Fire(&logrus.Entry{Time: at, Level: logrus.InfoLevel, Message: msg, Data: data}) //nolint:errcheck // best-effort test hook fire
 	}
 	push("proc:app1:k", "log-early", nil, base)

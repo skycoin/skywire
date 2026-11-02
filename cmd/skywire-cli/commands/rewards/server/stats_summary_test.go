@@ -16,7 +16,7 @@ func TestSortedTransportTypesIsStableAndBiggestFirst(t *testing.T) {
 	want := []string{"sudph", "webrtc", "stcpr", "squicr", "swtr", "dmsg", "swsr"}
 
 	// Repeat: one pass could match by luck on a given map seed.
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		if got := sortedTransportTypes(byType); !reflect.DeepEqual(got, want) {
 			t.Fatalf("iteration %d: got %v, want %v", i, got, want)
 		}

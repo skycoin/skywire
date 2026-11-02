@@ -57,7 +57,7 @@ type Output interface {
 //
 // The value is the single source of truth: its json tags define the machine
 // shape, its Human method (when it has one) the text.
-func Print(cmd *cobra.Command, v interface{}) error {
+func Print(cmd *cobra.Command, v any) error {
 	w := cmd.OutOrStdout()
 	// --shape: print the type skeleton instead of the value.
 	if ShapeMode(cmd) {
@@ -73,7 +73,7 @@ func Print(cmd *cobra.Command, v interface{}) error {
 // Fprint is Print against an explicit writer, for callers that are not a
 // cobra command — tests above all, which is the other thing the old helper
 // made hard by writing to os.Stdout through fmt.Print.
-func Fprint(w io.Writer, jsonMode bool, v interface{}) error {
+func Fprint(w io.Writer, jsonMode bool, v any) error {
 	if jsonMode {
 		enc := json.NewEncoder(w)
 		if IsTerminal(w) {

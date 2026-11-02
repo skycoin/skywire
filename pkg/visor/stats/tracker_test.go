@@ -182,7 +182,7 @@ func TestBusyHubSamplePublishesAtMost16Leaves(t *testing.T) {
 	tr := newTrackerWithSink(t, sink)
 	const n = 800
 	probe := make([]TransportProbe, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		probe = append(probe, TransportProbe{
 			ID: uuid.New(), Type: "stcpr", SentBytes: uint64(i), RecvBytes: uint64(i),
 		})

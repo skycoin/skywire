@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -102,8 +103,8 @@ func (s *service) build(ctx context.Context, logger *logging.Logger, dmsgAddr st
 	cfg := s.cfg
 	var closers []func()
 	closeAll := func() {
-		for i := len(closers) - 1; i >= 0; i-- {
-			closers[i]()
+		for _, closer := range slices.Backward(closers) {
+			closer()
 		}
 	}
 

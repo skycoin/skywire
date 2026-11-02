@@ -9,7 +9,7 @@ import (
 )
 
 // LogCall is used to log an RPC call from the rpc.Server
-func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out interface{}, err *error) {
+func LogCall(log logrus.FieldLogger, method string, in any) func(out any, err *error) {
 
 	// Just in case log is not set.
 	if log == nil {
@@ -26,7 +26,7 @@ func LogCall(log logrus.FieldLogger, method string, in interface{}) func(out int
 		log = log.WithField("input", in)
 	}
 
-	return func(out interface{}, err *error) {
+	return func(out any, err *error) {
 		log := log.WithField("_elapsed", time.Since(start).String())
 		if out != nil {
 			log = log.WithField("output", out)

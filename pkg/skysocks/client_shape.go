@@ -117,7 +117,7 @@ func (c *Client) markDraining(target int, reason string) {
 		return cmp.Compare(b.rtt, a.rtt)
 	})
 	next := make(map[*yamux.Session]bool, surplus)
-	for i := 0; i < surplus; i++ {
+	for i := range surplus {
 		next[live[i].s] = true
 	}
 	changed := len(next) != len(c.draining)

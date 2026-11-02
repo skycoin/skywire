@@ -162,7 +162,7 @@ func (mb *Mailbox) loadWhitelist() error {
 		return err
 	}
 	var pks []cipher.PubKey
-	for _, line := range strings.Fields(string(raw)) {
+	for line := range strings.FieldsSeq(string(raw)) {
 		var pk cipher.PubKey
 		if err := pk.Set(line); err != nil {
 			return fmt.Errorf("skymail: whitelist entry %q: %w", line, err)

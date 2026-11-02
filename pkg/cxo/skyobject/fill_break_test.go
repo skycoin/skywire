@@ -61,7 +61,7 @@ func TestFillAfterBrokenFillsFetchesTheRest(t *testing.T) {
 				assertNil(t, err)
 
 				feed := Feed{Head: "days"}
-				for i := 0; i < 300; i++ {
+				for i := range 300 {
 					body := fmt.Sprintf("records %d", i)
 					if dup && i%2 == 0 {
 						body = "[]" // like the empty days on the metrics feed

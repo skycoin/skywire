@@ -85,7 +85,7 @@ func TestLegLivenessSwapsSoleBlackHoledLeg(t *testing.T) {
 	// The sole leg never echoes; after legPongMissThresholdDefault cycles it is declared
 	// black-holing and the swap fires. Keep the replacement (once present) echoing
 	// so it is not itself re-declared dead.
-	for i := 0; i < legPongMissThresholdDefault+3; i++ {
+	for range legPongMissThresholdDefault + 3 {
 		mu.Lock()
 		r := replID
 		mu.Unlock()
@@ -120,7 +120,7 @@ func TestLegLivenessSoleLegKeepsAliveWhenEchoing(t *testing.T) {
 	var addCalls int
 	rg.selfHealAdd = func(_ []string) { addCalls++ }
 
-	for i := 0; i < legPongMissThresholdDefault+3; i++ {
+	for range legPongMissThresholdDefault + 3 {
 		rg.legLivenessMu.Lock()
 		rg.legPongSeen[keep] = true
 		rg.legLivenessMu.Unlock()

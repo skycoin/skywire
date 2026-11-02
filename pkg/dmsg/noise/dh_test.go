@@ -74,7 +74,7 @@ func TestDHCacheEviction(t *testing.T) {
 	resetDHCache()
 	// Push 2× the cap of unique pairs and confirm size never grows
 	// past the cap.
-	for i := 0; i < dhCacheMax*2; i++ {
+	for i := range dhCacheMax * 2 {
 		pk, sk := secp256k1.GenerateKeyPair()
 		mustDH(t, sk, pk)
 		if size := dhCacheSize(); size > dhCacheMax {
@@ -128,7 +128,7 @@ func TestDHCacheStats(t *testing.T) {
 	}
 
 	// Push past the cap to trigger evictions.
-	for i := 0; i < dhCacheMax*2; i++ {
+	for range dhCacheMax * 2 {
 		pk, sk := secp256k1.GenerateKeyPair()
 		mustDH(t, sk, pk)
 	}
@@ -213,7 +213,7 @@ func TestDHEphemeralSkipsCache(t *testing.T) {
 // TestDHMatchesCipherECDH pins the output to cipher.ECDH (padded to DHLen):
 // peers on older builds derive their keys that way.
 func TestDHMatchesCipherECDH(t *testing.T) {
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		pk1, _ := cipher.GenerateKeyPair()
 		_, sk2 := cipher.GenerateKeyPair()
 		want, err := cipher.ECDH(pk1, sk2)

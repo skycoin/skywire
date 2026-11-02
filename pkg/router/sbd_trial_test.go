@@ -286,7 +286,7 @@ func TestSBDTrialHasNoVerdictOnAnIdleTick(t *testing.T) {
 	require.True(t, rg.mux.isLegStandby(1), "precondition: the co-bottlenecked leg is parked on trial")
 
 	// Three ticks between bench rows: nothing is moving, so nothing is decided.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		sbdTick(rg, ids, 10, 0)
 	}
 	require.True(t, rg.mux.isLegStandby(1), "an idle tick may not end a trial either way")
@@ -397,7 +397,7 @@ func TestSBDRulingWithDemoteOffTouchesNoWeights(t *testing.T) {
 func TestSBDRulingIsRateLimitedPerPair(t *testing.T) {
 	rg, _, ids := sbdCorrelatedRig(t)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		sbdTick(rg, ids, 25_000_000, 21_500_000)
 	}
 	require.Equal(t, 1, countEvents(rg, MuxEventSBDRuling), "ten ticks on one pair are one diagnosis")

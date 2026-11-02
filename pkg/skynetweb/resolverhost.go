@@ -27,6 +27,7 @@ package skynetweb
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -110,8 +111,8 @@ func ParseResolverHost(host, suffix string, aliases map[string]cipher.PubKey) (v
 
 	// Reverse to source order (route[0] = nearest the source).
 	route = make([]RouteLabel, 0, len(nearestDestFirst))
-	for j := len(nearestDestFirst) - 1; j >= 0; j-- {
-		route = append(route, nearestDestFirst[j])
+	for _, n := range slices.Backward(nearestDestFirst) {
+		route = append(route, n)
 	}
 
 	if i >= 0 {

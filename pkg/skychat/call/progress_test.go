@@ -306,7 +306,7 @@ func TestToneServedOnlyToTheRingingCaller(t *testing.T) {
 	if _, err := stranger.FetchTone(ctx, pkB, "call-1", hash, len(data)); !errors.Is(err, ErrToneRefused) {
 		t.Fatalf("fetch by someone other than the caller: %v, want ErrToneRefused", err)
 	}
-	for i := 0; i < toneFetchesPerCall; i++ {
+	for i := range toneFetchesPerCall {
 		got, err := caller.FetchTone(ctx, pkB, "call-1", hash, len(data))
 		if err != nil || !bytes.Equal(got, data) {
 			t.Fatalf("fetch %d by the caller: %q, %v", i+1, got, err)

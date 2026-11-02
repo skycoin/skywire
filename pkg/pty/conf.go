@@ -76,12 +76,12 @@ func findStringsEnclosedBy(str string, sep string, result []string, lastIndex in
 		return result, lastIndex
 	}
 	newS := str[s+len(sep):]
-	e := strings.Index(newS, sep)
-	if e == -1 {
+	before, _, ok := strings.Cut(newS, sep)
+	if !ok {
 		lastIndex += len(sep)
 		return result, lastIndex
 	}
-	res := newS[:e]
+	res := before
 	if res != "" {
 		result = append(result, res)
 	}

@@ -8,6 +8,7 @@ package visor
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ import (
 func normalizeVOrigins(raw string) (string, error) {
 	var out []string
 	open := false
-	for _, part := range strings.Split(raw, ",") {
+	for part := range strings.SplitSeq(raw, ",") {
 		o := strings.TrimSpace(part)
 		switch {
 		case o == "":
@@ -66,10 +67,5 @@ func normalizeVOrigins(raw string) (string, error) {
 }
 
 func hasOrigin(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, s)
 }

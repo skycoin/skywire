@@ -29,8 +29,8 @@ func ParseSize(s string) (int64, error) {
 	}
 	mult := int64(1)
 	for _, u := range sizeUnits {
-		if strings.HasSuffix(s, u.suffix) {
-			s, mult = strings.TrimSpace(strings.TrimSuffix(s, u.suffix)), u.mult
+		if before, ok := strings.CutSuffix(s, u.suffix); ok {
+			s, mult = strings.TrimSpace(before), u.mult
 			break
 		}
 	}

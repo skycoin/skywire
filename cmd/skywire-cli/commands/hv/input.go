@@ -31,6 +31,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -157,10 +158,10 @@ func inputRun(cmd *cobra.Command, args []string) error {
 	// decoding the reply into out when out is given. Waiting is the point:
 	// the browser applies input in order, and a drag whose moves are all in
 	// flight at once is not a drag the page ever sees.
-	callResult := func(method string, params map[string]interface{}, out interface{}) error {
+	callResult := func(method string, params map[string]any, out any) error {
 		id++
 		want := id
-		b, err := json.Marshal(map[string]interface{}{
+		b, err := json.Marshal(map[string]any{
 			"id": want, "method": method, "params": params,
 		})
 		if err != nil {
@@ -191,7 +192,7 @@ func inputRun(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	dispatch := func(params map[string]interface{}) error {
+	dispatch := func(params map[string]any) error {
 		return callResult("Input.dispatchMouseEvent", params, nil)
 	}
 
@@ -210,7 +211,7 @@ func inputRun(cmd *cobra.Command, args []string) error {
 				Value string `json:"value"`
 			} `json:"result"`
 		}
-		err := callResult("Runtime.evaluate", map[string]interface{}{
+		err := callResult("Runtime.evaluate", map[string]any{
 			"expression": expr, "returnByValue": true,
 		}, &out)
 		return out.Result.Value, err
@@ -231,13 +232,7 @@ func inputRun(cmd *cobra.Command, args []string) error {
 		}
 		var foreign [][2]float64
 		for _, m := range seen {
-			mine := false
-			for _, o := range ours {
-				if o == m {
-					mine = true
-					break
-				}
-			}
+			mine := slices.Contains(ours, m)
 			if !mine {
 				foreign = append(foreign, m)
 			}
@@ -259,18 +254,18 @@ func inputRun(cmd *cobra.Command, args []string) error {
 
 	move := func(p point, buttons int) error {
 		ours = append(ours, [2]float64{p.x, p.y})
-		return dispatch(map[string]interface{}{
+		return dispatch(map[string]any{
 			"type": "mouseMoved", "x": p.x, "y": p.y, "buttons": buttons,
 		})
 	}
 	press := func(p point) error {
-		return dispatch(map[string]interface{}{
+		return dispatch(map[string]any{
 			"type": "mousePressed", "x": p.x, "y": p.y,
 			"button": "left", "buttons": 1, "clickCount": 1,
 		})
 	}
 	release := func(p point) error {
-		return dispatch(map[string]interface{}{
+		return dispatch(map[string]any{
 			"type": "mouseReleased", "x": p.x, "y": p.y,
 			"button": "left", "buttons": 0, "clickCount": 1,
 		})

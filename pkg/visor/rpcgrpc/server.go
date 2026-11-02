@@ -886,10 +886,7 @@ func (s *PingServer) StreamCalcRoutes(req *CalcRoutesRequest, stream PingService
 	if maxHops <= 0 {
 		maxHops = 5
 	}
-	minHops := int(req.MinHops)
-	if minHops < 0 {
-		minHops = 0
-	}
+	minHops := max(int(req.MinHops), 0)
 
 	// Fetch the transport graph. Only TPD is wired here — DHT-source
 	// support can land separately if the offline-DHT path is needed

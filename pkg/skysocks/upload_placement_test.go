@@ -101,7 +101,7 @@ func TestPlanBurstPlacesTheTailChunkOnTheFastTunnel(t *testing.T) {
 	b := s.planBurst(tun, s.slotsFrom(tun))
 	require.NotNil(t, b, "four chunks fit the admission gate in one burst")
 	require.Same(t, fast, b.take(3*chunk), "the last chunk goes to the fast tunnel")
-	for i := int64(0); i < 3; i++ {
+	for i := range int64(3) {
 		require.Same(t, fast, b.take(i*chunk), "chunk %d", i)
 	}
 	require.Nil(t, b.take(0), "a chunk is placed once; a re-send goes through the picker")

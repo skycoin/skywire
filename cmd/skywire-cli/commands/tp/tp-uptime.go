@@ -176,7 +176,7 @@ transport type, or --json to dump raw JSON for piping.`,
 // so we share the RPC → DMSG → HTTP fallback chain + disk cache with
 // every other CLI command. The cacheKey is hashed when filterArgs is
 // non-nil so different filter selections get separate cache files.
-func cachedFetch(cmd *cobra.Command, path, cacheKey string, filterArgs interface{}) string {
+func cachedFetch(cmd *cobra.Command, path, cacheKey string, filterArgs any) string {
 	raw := cachedFetchAllowEmpty(cmd, path, cacheKey, filterArgs)
 	if raw == "" {
 		fullURL := strings.TrimRight(tpUptimeBaseURL, "/") + path
@@ -188,13 +188,13 @@ func cachedFetch(cmd *cobra.Command, path, cacheKey string, filterArgs interface
 // cachedFetchAllowEmpty is cachedFetch without the fatal-on-empty: it
 // returns "" so the caller can degrade gracefully (e.g. fall back to a
 // lighter endpoint) instead of exiting.
-func cachedFetchAllowEmpty(cmd *cobra.Command, path, cacheKey string, filterArgs interface{}) string {
+func cachedFetchAllowEmpty(cmd *cobra.Command, path, cacheKey string, filterArgs any) string {
 	fullURL := strings.TrimRight(tpUptimeBaseURL, "/") + path
 	cf := tpUptimeCacheFile(cacheKey, filterArgs)
 	return clirpc.FetchCachedServiceURL(cmd.Flags(), cf, fullURL, tpUptimeCacheAge)
 }
 
-func tpUptimeCacheFile(key string, filterArgs interface{}) string {
+func tpUptimeCacheFile(key string, filterArgs any) string {
 	if tpUptimeCacheDir == "" {
 		return ""
 	}

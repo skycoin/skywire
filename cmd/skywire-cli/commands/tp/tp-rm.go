@@ -72,7 +72,7 @@ var rmTpCmd = &cobra.Command{
 
 			var totalSuccess, totalFail int
 			var allErrors []string
-			var results []map[string]interface{}
+			var results []map[string]any
 
 			for _, targetPK := range targetPKs {
 				var successCount, failCount int
@@ -99,7 +99,7 @@ var rmTpCmd = &cobra.Command{
 				totalFail += failCount
 				allErrors = append(allErrors, errors...)
 
-				result := map[string]interface{}{
+				result := map[string]any{
 					"target":  targetPK.String(),
 					"success": successCount,
 					"failed":  failCount,

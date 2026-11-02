@@ -20,10 +20,10 @@ func TestMetricsAcrossChunks(t *testing.T) {
 	now := time.Now().UTC()
 	n := metricsChunkCmds/2 + 50
 	seed := s.client.Pipeline()
-	for i := 0; i < n; i++ {
+	for range n {
 		id := uuid.New().String()
 		seed.Set(ctx, s.bandwidthEdgesKey(id), a.Hex()+","+b.Hex()+",stcpr", 0)
-		for d := 0; d < 3; d++ {
+		for d := range 3 {
 			seed.HSet(ctx, s.bandwidthDailyKey(id, now.AddDate(0, 0, -d)), a.Hex()+":sent", 100+d, b.Hex()+":recv", 7)
 		}
 	}

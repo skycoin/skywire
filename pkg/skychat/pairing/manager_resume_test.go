@@ -182,7 +182,7 @@ func resumeEnv(t *testing.T) (dmsgA, dmsgB *dmsg.Client, pkA cipher.PubKey, skA 
 // loaded runner can transiently fail with "cannot connect to delegated server".
 func connectRetry(p *Pair) error {
 	var lastErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for attempt := range 10 {
 		if err := p.Connect(context.Background()); err == nil {
 			return nil
 		} else { //nolint:revive

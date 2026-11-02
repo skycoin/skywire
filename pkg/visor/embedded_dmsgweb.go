@@ -22,6 +22,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"sync"
@@ -256,12 +257,8 @@ func (e *EmbeddedDmsgWeb) Aliases() map[string]cipher.PubKey {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := make(map[string]cipher.PubKey, len(e.serviceAliases)+1)
-	for label, pk := range e.serviceAliases {
-		out[label] = pk
-	}
-	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
-		out[label] = pk
-	}
+	maps.Copy(out, e.serviceAliases)
+	maps.Copy(out, resolverAliasMap(e.cfg.Alias, e.localPK))
 	return out
 }
 
@@ -299,12 +296,8 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	// Canonical service aliases (tpd, ar, rf, …) first, then this visor's own
 	// alias on top so a colliding self-alias always wins.
 	cfg.Aliases = map[string]cipher.PubKey{}
-	for label, pk := range e.serviceAliases {
-		cfg.Aliases[label] = pk
-	}
-	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
-		cfg.Aliases[label] = pk
-	}
+	maps.Copy(cfg.Aliases, e.serviceAliases)
+	maps.Copy(cfg.Aliases, resolverAliasMap(e.cfg.Alias, e.localPK))
 	cfg.HomePage = e.homePage
 	// Direct-client path for non-discovery dmsg servers.
 	cfg.DirectClient = e.directClient
@@ -489,9 +482,7 @@ func dmsgServerAliases(servers []*dmsgdisc.Entry) (map[string]cipher.PubKey, map
 func resolverAliasesAndDmsgServers(v *Visor) (map[string]cipher.PubKey, map[cipher.PubKey]struct{}) {
 	aliases := serviceAliasMap(v.conf)
 	dmsgAliases, set := dmsgServerAliases(liveDmsgServerEntries(v))
-	for label, pk := range dmsgAliases {
-		aliases[label] = pk
-	}
+	maps.Copy(aliases, dmsgAliases)
 	return aliases, set
 }
 

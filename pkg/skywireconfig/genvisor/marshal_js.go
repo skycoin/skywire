@@ -105,7 +105,7 @@ func (o *objCtx) field(name string) {
 // writeIndent writes `depth*2` spaces. Matches the indent= "  "
 // argument passed to json.MarshalIndent in the !js build.
 func writeIndent(w *strings.Builder, depth int) {
-	for i := 0; i < depth; i++ {
+	for range depth {
 		w.WriteString("  ")
 	}
 }

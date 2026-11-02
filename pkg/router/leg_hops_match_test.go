@@ -56,7 +56,7 @@ func TestPoolCandidatesMatchTheGroupsHopCount(t *testing.T) {
 // leg of its own length instead, once per pool.leg_interval.
 func TestArbiterDialsAtTheGroupsLengthWhenThePoolHasNone(t *testing.T) {
 	rig := newComposeRig(t, "skysocks-client-hops-match-test", 0)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		mid, _ := cipher.GenerateKeyPair()
 		s, _ := poolTunnel(t, rig.r, rig.exit, rig.local, routing.Port(49320+i), tunnelRoleStandby,
 			poolRoute(rig.local, mid, rig.exit, uuid.New(), uuid.New()), 50, 0)

@@ -30,7 +30,7 @@ func TestResolveUDPAnswered(t *testing.T) {
 	target, _ := cipher.GenerateKeyPair()
 	go func() {
 		buf := make([]byte, 4096)
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			n, err := ar.Read(buf)
 			if err != nil {
 				return

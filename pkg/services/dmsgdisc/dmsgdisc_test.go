@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/services"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -123,9 +121,7 @@ func TestOpenStore_DefaultURLNoRedis(t *testing.T) {
 	// canceled context, so this returns an error promptly (and exercises
 	// the default-URL branch).
 	_, err := openStore(canceledCtx(), &Config{
-		Common: services.Common{
-			Redis: "",
-		},
+		Redis: "",
 	}, testLog())
 	require.Error(t, err)
 }
@@ -217,9 +213,7 @@ func TestListenAndServe_Serves(t *testing.T) {
 
 func TestRun_StoreOpenFails(t *testing.T) {
 	svc := New(&Config{
-		Common: services.Common{
-			Mode: "http",
-		},
+		Mode: "http",
 	}, testLog())
 	// Canceled ctx => openStore's redis ping bails fast => Run returns the
 	// wrapped store-open error before reaching the listener/dmsg surfaces.

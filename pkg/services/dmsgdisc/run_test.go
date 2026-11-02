@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/services"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,11 +109,9 @@ func TestRun_HTTPModeStartup(t *testing.T) {
 	require.NoError(t, ln.Close())
 
 	cfg := &Config{
-		Common: services.Common{
-			Addr:  fmt.Sprintf("127.0.0.1:%d", apiPort),
-			Redis: "redis://" + redisAddr,
-			Mode:  "http",
-		},
+		Addr:  fmt.Sprintf("127.0.0.1:%d", apiPort),
+		Redis: "redis://" + redisAddr,
+		Mode:  "http",
 		// No SecKey -> no dmsg surfaces; pure HTTP startup path.
 	}
 	svc := New(cfg, testLog())

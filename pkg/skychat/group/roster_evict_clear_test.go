@@ -32,7 +32,7 @@ func TestPeerReconnectClearOnRosterEvictionLetsReAddReconnect(t *testing.T) {
 	m := newPeerBackoffTestManager(t)
 	pk, _ := cipher.GenerateKeyPair()
 	id := "group-evict-test"
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.peerReconnectRecordFailure(id, pk, errors.New("force-state"))
 	}
 	now := time.Now().UTC()
@@ -57,7 +57,7 @@ func TestPeerReconnectClearOneOfManyKeepsOthers(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 	id := "group-evict-test"
-	for i := uint32(0); i < reconnectBackoffFailures1; i++ {
+	for range uint32(reconnectBackoffFailures1) {
 		m.peerReconnectRecordFailure(id, a, errors.New("force-state"))
 		m.peerReconnectRecordFailure(id, b, errors.New("force-state"))
 	}

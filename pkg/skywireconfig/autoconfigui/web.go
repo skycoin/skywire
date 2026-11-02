@@ -161,7 +161,7 @@ func (w *Web) apply(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, resp)
 }
 
-func writeJSON(rw http.ResponseWriter, code int, v interface{}) {
+func writeJSON(rw http.ResponseWriter, code int, v any) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(code)
 	_ = json.NewEncoder(rw).Encode(v) //nolint:errcheck

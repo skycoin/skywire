@@ -15,7 +15,7 @@ func TestPageMarksStarts(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemoryStore()
 	now := time.Now().UTC().Truncate(Interval)
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		at := now.Add(-time.Duration(12-i) * Interval)
 		require.NoError(t, st.Add(ctx, Sample{At: at, V: map[string]float64{"x": float64(i)}}))
 	}

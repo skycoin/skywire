@@ -34,7 +34,7 @@ func (r *Ref) String() string {
 }
 
 // Value of the Ref
-func (r *Ref) Value(pack Pack, obj interface{}) (err error) {
+func (r *Ref) Value(pack Pack, obj any) (err error) {
 
 	if true == r.IsBlank() { //nolint:staticcheck
 		return ErrReferenceRepresentsNil
@@ -54,7 +54,7 @@ func (r *Ref) Value(pack Pack, obj interface{}) (err error) {
 // SetValue replacing the Ref with new. Use nil-interface{} to clear
 func (r *Ref) SetValue(
 	pack Pack, //       : pack to save
-	obj interface{}, // : the value
+	obj any, // : the value
 ) (
 	err error, //       : error if any
 ) {
@@ -81,7 +81,7 @@ func (r *Ref) Clear() {
 }
 
 // isNil interface or nil pointer of a type
-func isNil(obj interface{}) bool {
+func isNil(obj any) bool {
 
 	if obj == nil {
 		return true

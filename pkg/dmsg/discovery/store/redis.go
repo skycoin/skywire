@@ -573,7 +573,7 @@ func (r *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 	dates := make([]string, uptimeHistoryDays)
 	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
 	pipe := r.client.Pipeline()
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		cmds[i] = pipe.HGet(ctx, uptimeKey(pkHex, dates[i]), "count")
 	}
@@ -611,7 +611,7 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 	// hang past 60s; this collapses it to one MGET per visor.
 	keys := make([]string, uptimeHistoryDays)
 	dates := make([]string, uptimeHistoryDays)
-	for i := 0; i < uptimeHistoryDays; i++ {
+	for i := range uptimeHistoryDays {
 		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
 		keys[i] = uptimeTimelineKey(pkHex, dates[i])
 	}
@@ -629,7 +629,7 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 		raw := []byte(s)
 		var buf [timelineSlots]byte
 		hasAny := false
-		for slot := 0; slot < timelineSlots; slot++ {
+		for slot := range timelineSlots {
 			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
 			byteIdx := slot / 8
 			var bit byte

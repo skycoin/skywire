@@ -95,8 +95,8 @@ func keepAlive() {
 
 // promise wraps a blocking Go function as a JS Promise, running it on a
 // goroutine so the js.FuncOf that returns it never blocks the event loop.
-func promise(fn func() (interface{}, error)) interface{} {
-	handler := js.FuncOf(func(_ js.Value, pArgs []js.Value) interface{} {
+func promise(fn func() (any, error)) any {
+	handler := js.FuncOf(func(_ js.Value, pArgs []js.Value) any {
 		resolve, reject := pArgs[0], pArgs[1]
 		go func() {
 			v, err := fn()

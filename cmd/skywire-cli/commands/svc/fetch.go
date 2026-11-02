@@ -115,7 +115,7 @@ func fetchViaVisorOrDirect(cmd *cobra.Command, service, path string) ([]byte, er
 // routed through the flag-aware cliout printer so they work uniformly;
 // the default human view stays pretty-indented JSON (unchanged).
 func emitPretty(cmd *cobra.Command, data []byte) {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		// Not JSON — emit the raw body (still honors --json as a string).
 		internal.Catch(cmd.Flags(), cliout.Print(cmd, string(data)))

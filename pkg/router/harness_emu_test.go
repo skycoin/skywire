@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -581,10 +582,7 @@ func (r *emuRig) Transfer(dir emuDir, n int64, timeout time.Duration) *emuTransf
 	const chunk = 256 * 1024
 	go func() {
 		for off := int64(0); off < n; off += chunk {
-			end := off + chunk
-			if end > n {
-				end = n
-			}
+			end := min(off+chunk, n)
 			if _, err := sender.Write(payload[off:end]); err != nil {
 				if res.Err == nil {
 					res.Err = err
@@ -814,10 +812,5 @@ func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
 
 // dropped reports whether this rig's simulated old relay discards the type.
 func (r *emuRig) dropped(t routing.PacketType) bool {
-	for _, d := range r.dropTypes {
-		if d == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(r.dropTypes, t)
 }

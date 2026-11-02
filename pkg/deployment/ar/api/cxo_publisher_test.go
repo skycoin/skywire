@@ -36,12 +36,12 @@ func TestBindingsCXOPublisherTreeShape(t *testing.T) {
 	// Enough peers to spread across most buckets.
 	const nPeers = 200
 	peers := make([]cipher.PubKey, 0, nPeers)
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		pk, _ := cipher.GenerateKeyPair()
 		peers = append(peers, pk)
 		require.NoError(t, st.Bind(ctx, types.STCPR, pk, addrresolver.VisorData{
-			RemoteAddr:     "10.1.2.3:7777",
-			LocalAddresses: addrresolver.LocalAddresses{Port: "7777", Addresses: []string{"10.1.2.3"}},
+			RemoteAddr: "10.1.2.3:7777",
+			Port:       "7777", Addresses: []string{"10.1.2.3"},
 		}))
 	}
 
@@ -77,7 +77,7 @@ func TestBindingsCXOPublisherTreeShape(t *testing.T) {
 		return seen == arfeed.BucketCount
 	}, "publisher must materialize all %d buckets", arfeed.BucketCount)
 
-	for i := 0; i < arfeed.BucketCount; i++ {
+	for i := range arfeed.BucketCount {
 		_, ok := sub.Get(arfeed.BucketPathAt(i))
 		require.Truef(t, ok, "bucket %s must be present", arfeed.BucketPathAt(i))
 	}
@@ -134,7 +134,7 @@ func TestBindingsCXOPublisherTreeShape(t *testing.T) {
 	}, "a DelBind must drop the peer from its bucket")
 }
 
-func waitFor(t *testing.T, cond func() bool, msg string, args ...interface{}) {
+func waitFor(t *testing.T, cond func() bool, msg string, args ...any) {
 	t.Helper()
 	// Generous: this waits on a real CXO publish + fill, and the budget is a
 	// deadlock backstop, not an expected duration. Under -race on a loaded
@@ -214,7 +214,7 @@ func TestTransientStoreErrorDoesNotPublishAbsence(t *testing.T) {
 	// Now the store cannot answer. Several flush windows of dirty marks must
 	// not remove the peer.
 	st.failing.Store(true)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		p.MarkDirty(types.STCPR, pk)
 		time.Sleep(60 * time.Millisecond)
 	}

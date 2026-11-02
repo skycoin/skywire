@@ -30,7 +30,7 @@ func TestDialRecorderCountsAndKeepsFailures(t *testing.T) {
 
 func TestDialFailureRingIsBoundedAndOrdered(t *testing.T) {
 	var r dialRecorder
-	for i := 0; i < DialFailureRingSize+5; i++ {
+	for i := range DialFailureRingSize + 5 {
 		r.record("sudph", cipher.PubKey{}, LabelAutomatic, time.Now(), errors.New(string(rune('a'+i%26))))
 	}
 	stats, fails := r.snapshot()

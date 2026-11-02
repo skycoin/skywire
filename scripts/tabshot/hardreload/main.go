@@ -27,13 +27,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort CDP goodbye
-	send := func(id int, method string, params interface{}) {
-		p, _ := json.Marshal(params)                                                                           //nolint:errcheck // static params cannot fail to marshal
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": json.RawMessage(p)}) //nolint:errcheck // static envelope cannot fail to marshal
-		_ = c.Write(ctx, websocket.MessageText, b)                                                             //nolint:errcheck
+	send := func(id int, method string, params any) {
+		p, _ := json.Marshal(params)                                                                   //nolint:errcheck // static params cannot fail to marshal
+		b, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": json.RawMessage(p)}) //nolint:errcheck // static envelope cannot fail to marshal
+		_ = c.Write(ctx, websocket.MessageText, b)                                                     //nolint:errcheck
 	}
-	send(1, "Page.enable", map[string]interface{}{})
-	send(2, "Page.reload", map[string]interface{}{"ignoreCache": true})
+	send(1, "Page.enable", map[string]any{})
+	send(2, "Page.reload", map[string]any{"ignoreCache": true})
 	// Wait for the reload command's ack (id 2), then done.
 	for {
 		_, raw, err := c.Read(ctx)

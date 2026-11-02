@@ -63,7 +63,7 @@ var (
 // a stack taken at the recover point is the useful one).
 //
 // Safe to call from any goroutine.
-func RecordPanic(site string, v interface{}, stack []byte) {
+func RecordPanic(site string, v any, stack []byte) {
 	if stack == nil {
 		stack = debug.Stack()
 	}
@@ -120,7 +120,7 @@ func ResetPanicStats() {
 // The stack is captured here rather than taken from the caller, so every site
 // gets one without having to remember debug.Stack(). log may be nil, in which
 // case the panic is recorded but not logged.
-func LogRecovered(log *Logger, site string, v interface{}) {
+func LogRecovered(log *Logger, site string, v any) {
 	stack := debug.Stack()
 	RecordPanic(site, v, stack)
 	if log != nil {

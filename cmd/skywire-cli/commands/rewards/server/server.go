@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,8 +51,8 @@ func buildRouter() http.Handler {
 	}
 
 	if wl != "" {
-		wlk := strings.Split(wl, ",")
-		for _, key := range wlk {
+		wlk := strings.SplitSeq(wl, ",")
+		for key := range wlk {
 			var pk1 cipher.PubKey
 			err := pk1.Set(key)
 			if err == nil {
@@ -878,8 +879,8 @@ func buildRouter() http.Handler {
 			l += "</thead>\n"
 			l += "<tbody>\n"
 			rewardtxncsvs, _ := histRewardDates(wd + `/hist`) //nolint:errcheck
-			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
-				statsFile := wd + "/hist/" + rewardtxncsvs[i] + "_stats.txt"
+			for _, rewardtxncsv := range slices.Backward(rewardtxncsvs) {
+				statsFile := wd + "/hist/" + rewardtxncsv + "_stats.txt"
 				skycoinpershare1 := ""
 				skycoinpershare2 := ""
 				pool2Label := ""
@@ -910,13 +911,13 @@ func buildRouter() http.Handler {
 				}
 
 				var distributedIcon string
-				if _, err := os.Stat(wd + "/hist/" + rewardtxncsvs[i] + ".txt"); err == nil {
+				if _, err := os.Stat(wd + "/hist/" + rewardtxncsv + ".txt"); err == nil {
 					distributedIcon = "<span style='color: green;'>&#10004;</span>"
 				} else {
 					distributedIcon = "<span style='color: red;'>&#10060;</span>"
 				}
 				l += "<tr style='border-bottom: 1px solid #333;'>\n"
-				l += "<td style='padding: 4px 12px; text-align: left;'><a href='/skycoin-rewards/hist/" + rewardtxncsvs[i] + "'>" + rewardtxncsvs[i] + "</a></td>\n"
+				l += "<td style='padding: 4px 12px; text-align: left;'><a href='/skycoin-rewards/hist/" + rewardtxncsv + "'>" + rewardtxncsv + "</a></td>\n"
 				l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare1 + "</td>\n"
 				if skycoinpershare2 != "" {
 					l += "<td style='padding: 4px 12px; text-align: right; font-family: monospace;'>" + skycoinpershare2 + pool2Label + "</td>\n"
@@ -943,7 +944,7 @@ func buildRouter() http.Handler {
 				Description: "Daily Skycoin reward calculation and distribution history for the Skywire Network.",
 				Content:     htmpl.HTML(l), //nolint:gosec
 			}).withCanonical("/skycoin-rewards")
-			tmplData := map[string]interface{}{
+			tmplData := map[string]any{
 				"Page": htmlPageTemplateData1,
 			}
 			var result bytes.Buffer
@@ -1489,7 +1490,7 @@ func buildRouter() http.Handler {
 				Content:     htmpl.HTML(l),      //nolint:gosec
 				JSONLD:      htmpl.HTML(jsonLD), //nolint:gosec
 			}).withCanonical("/skycoin-rewards/hist/" + r.PathValue("date"))
-			tmplData := map[string]interface{}{
+			tmplData := map[string]any{
 				"Page": htmlPageTemplateData1,
 			}
 			var result bytes.Buffer
@@ -1550,14 +1551,14 @@ func buildRouter() http.Handler {
 				return
 			}
 			counter := 0
-			for i := len(rewardtxncsvs) - 1; i >= 0; i-- {
+			for _, rewardtxncsv := range slices.Backward(rewardtxncsvs) {
 				if counter >= 90 {
 					break
 				}
 				counter++
 				var rdata reward
-				rdata.Date = rewardtxncsvs[i]
-				statsFile := wd + `/hist/` + rewardtxncsvs[i] + "_stats.txt"
+				rdata.Date = rewardtxncsv
+				statsFile := wd + `/hist/` + rewardtxncsv + "_stats.txt"
 
 				// Detect reward mode
 				rewardMode, _ := script.File(statsFile).Match("reward mode: ").Replace("reward mode: ", "").String() //nolint:errcheck,gosec
@@ -1604,7 +1605,7 @@ func buildRouter() http.Handler {
 				}
 				//			rdata.Sent = "❌"
 				rdata.Sent = "false"
-				if _, err := os.Stat(wd + `/hist/` + rewardtxncsvs[i] + ".txt"); err == nil {
+				if _, err := os.Stat(wd + `/hist/` + rewardtxncsv + ".txt"); err == nil {
 					//				rdata.Sent = "✔"
 					rdata.Sent = "true"
 				}

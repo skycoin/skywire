@@ -30,9 +30,9 @@ func DefaultNetworkGateway() (netip.Addr, error) {
 
 	outBytes = bytes.TrimRight(outBytes, "\n")
 
-	outLines := bytes.Split(outBytes, []byte{'\n'})
+	outLines := bytes.SplitSeq(outBytes, []byte{'\n'})
 
-	for _, l := range outLines {
+	for l := range outLines {
 		if bytes.Count(l, []byte{'.'}) != 3 {
 			// initially look for IPv4 address
 			continue

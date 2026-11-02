@@ -155,10 +155,7 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		// Honor the caller's requested route count (mux degree +
 		// headroom), bounded by routesCeiling. Zero keeps the default.
 		if grr.Opts.NumRoutes > 0 {
-			numRoutes = int(grr.Opts.NumRoutes)
-			if numRoutes > routesCeiling {
-				numRoutes = routesCeiling
-			}
+			numRoutes = min(int(grr.Opts.NumRoutes), routesCeiling)
 		}
 	}
 

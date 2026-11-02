@@ -128,12 +128,7 @@ func (fp *ForwardedPorts) IsWhitelisted(port int, pk cipher.PubKey) bool {
 	if len(p.Whitelist) == 0 {
 		return true // open to all
 	}
-	for _, wl := range p.Whitelist {
-		if wl == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Whitelist, pk)
 }
 
 // AllSkynetPorts returns port numbers that are forwarded over skynet.

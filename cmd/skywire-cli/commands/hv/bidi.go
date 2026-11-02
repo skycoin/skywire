@@ -199,7 +199,7 @@ func attachTab(d *bidi.Driver, want string) error {
 
 // driverGet calls one endpoint on a running `hv drive` control port and decodes
 // its JSON answer.
-func driverGet(addr, path string, q url.Values, timeout time.Duration) (map[string]interface{}, error) {
+func driverGet(addr, path string, q url.Values, timeout time.Duration) (map[string]any, error) {
 	if !strings.Contains(addr, "://") {
 		addr = "http://" + addr
 	}
@@ -218,7 +218,7 @@ func driverGet(addr, path string, q url.Values, timeout time.Duration) (map[stri
 		return nil, fmt.Errorf("driver at %s: %w", addr, err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("driver at %s: %w", addr, err)
 	}
@@ -227,7 +227,7 @@ func driverGet(addr, path string, q url.Values, timeout time.Duration) (map[stri
 
 // driverString reads one string field out of a driver answer, treating the
 // driver's own "ERROR: ..." convention as an error.
-func driverString(body map[string]interface{}, field string) (string, error) {
+func driverString(body map[string]any, field string) (string, error) {
 	s, _ := body[field].(string)
 	if rest, cut := strings.CutPrefix(s, "ERROR: "); cut {
 		return "", fmt.Errorf("%s", rest)

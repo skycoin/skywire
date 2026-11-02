@@ -228,7 +228,7 @@ func TestSealedGovernanceLeafFromAnotherKeyNeverApplies(t *testing.T) {
 
 	sealed, err := sealGossip(sealTestKey(0x99), signedMod(t, gid.String(), ModOpBan, victim, adminSK, time.Now().UTC()))
 	require.NoError(t, err)
-	for i := 0; i < deferredGossipCap+10; i++ {
+	for range deferredGossipCap + 10 {
 		s.applyModLeaf(sealed)
 	}
 
@@ -346,7 +346,7 @@ func TestWrapTagIsSigned(t *testing.T) {
 func TestCanonicalKeyBytesAreStableAcrossBlindedWraps(t *testing.T) {
 	_, adminSK := cipher.GenerateKeyPair()
 	recipients := make([]cipher.PubKey, 0, 8)
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		pk, _ := cipher.GenerateKeyPair()
 		recipients = append(recipients, pk)
 	}
@@ -357,7 +357,7 @@ func TestCanonicalKeyBytesAreStableAcrossBlindedWraps(t *testing.T) {
 	require.NoError(t, err)
 
 	want := canonicalBytesKey(m)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		require.Equal(t, want, canonicalBytesKey(m), "canonical bytes changed between calls")
 	}
 

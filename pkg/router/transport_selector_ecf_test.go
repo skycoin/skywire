@@ -173,7 +173,7 @@ func TestSelectECF_Integration(t *testing.T) {
 	})
 
 	payload := make([]byte, 512)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		idx := ts.SelectForPayload(payload)
 		require.Equal(t, 0, idx, "fast leg with capacity should always win")
 	}

@@ -24,7 +24,7 @@ var (
 // associated with the `uint16` key in a thread-safe manner.
 // Provides method to generate key.
 type Manager struct {
-	values map[uint16]interface{}
+	values map[uint16]any
 	mx     sync.RWMutex
 	lstID  uint16
 	// closed is set by CloseAll. The manager belongs to one app proc, and
@@ -40,7 +40,7 @@ type Manager struct {
 // New constructs new `Manager`.
 func New() *Manager {
 	return &Manager{
-		values: make(map[uint16]interface{}),
+		values: make(map[uint16]any),
 	}
 }
 
@@ -85,7 +85,7 @@ func (m *Manager) ReserveNextID() (id *uint16, free func() bool, err error) {
 
 // Pop removes value specified by `id` from the idManager instance and
 // returns it.
-func (m *Manager) Pop(id uint16) (interface{}, error) {
+func (m *Manager) Pop(id uint16) (any, error) {
 	m.mx.Lock()
 
 	v, ok := m.values[id]
@@ -108,7 +108,7 @@ func (m *Manager) Pop(id uint16) (interface{}, error) {
 }
 
 // Add adds the new value `v` associated with `id`.
-func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
+func (m *Manager) Add(id uint16, v any) (free func() bool, err error) {
 	m.mx.Lock()
 
 	if _, ok := m.values[id]; ok {
@@ -125,7 +125,7 @@ func (m *Manager) Add(id uint16, v interface{}) (free func() bool, err error) {
 }
 
 // Set sets value `v` associated with `id`.
-func (m *Manager) Set(id uint16, v interface{}) error {
+func (m *Manager) Set(id uint16, v any) error {
 	m.mx.Lock()
 
 	if m.closed {
@@ -152,7 +152,7 @@ func (m *Manager) Set(id uint16, v interface{}) error {
 }
 
 // Get gets the value associated with the `id`.
-func (m *Manager) Get(id uint16) (interface{}, bool) {
+func (m *Manager) Get(id uint16) (any, bool) {
 	m.mx.RLock()
 	lis, ok := m.values[id]
 	m.mx.RUnlock()
@@ -166,7 +166,7 @@ func (m *Manager) Get(id uint16) (interface{}, bool) {
 
 // DoRange performs range over the manager contents. Loop stops when
 // `next` returns false.
-func (m *Manager) DoRange(next func(id uint16, v interface{}) bool) {
+func (m *Manager) DoRange(next func(id uint16, v any) bool) {
 	m.mx.RLock()
 	for id, v := range m.values {
 		if !next(id, v) {

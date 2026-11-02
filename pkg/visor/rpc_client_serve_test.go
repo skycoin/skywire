@@ -54,7 +54,7 @@ func TestDialBackoffs(t *testing.T) {
 		t.Fatalf("fresh transient backoff = %v", nextDialBackoff(0))
 	}
 	d := time.Duration(0)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		d = nextDialBackoff(d)
 	}
 	if d != rpcDialMaxBackoff {

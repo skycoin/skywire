@@ -6,6 +6,7 @@
 package router
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/google/uuid"
@@ -93,13 +94,9 @@ func (c *intakeCounters) snapshot() (unknown, control map[string]int64, stale in
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	unknown = make(map[string]int64, len(c.unknown))
-	for k, v := range c.unknown {
-		unknown[k] = v
-	}
+	maps.Copy(unknown, c.unknown)
 	control = make(map[string]int64, len(c.control))
-	for k, v := range c.control {
-		control[k] = v
-	}
+	maps.Copy(control, c.control)
 	return unknown, control, c.stale
 }
 

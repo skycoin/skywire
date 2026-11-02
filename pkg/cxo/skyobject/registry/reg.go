@@ -20,7 +20,7 @@ func newReg() *Reg {
 // givne value is pointer, then it will be converted to
 // non-pointer inside. E.g. it registers non-pointer types
 // only
-func (r *Reg) Register(name string, val interface{}) {
+func (r *Reg) Register(name string, val any) {
 	if name == "" {
 		panic("empty name")
 	}

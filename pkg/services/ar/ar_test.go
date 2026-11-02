@@ -175,10 +175,8 @@ func TestRunInvalidMode(t *testing.T) {
 	// Testing=true keeps the stores in-memory so Run reaches the mode
 	// resolution, where an unknown mode string is rejected.
 	cfg := &Config{
-		Common: services.Common{
-			Testing: true,
-			Mode:    "bogus-mode",
-		},
+		Testing: true,
+		Mode:    "bogus-mode",
 		UDPAddr: freeUDPAddr(t),
 	}
 	svc := New(cfg, testLog()).(*service)
@@ -194,9 +192,7 @@ func TestRunRedisStoreFails(t *testing.T) {
 	// init-store error branch. "host:port" gets the redis:// scheme
 	// prefix added by Run.
 	cfg := &Config{
-		Common: services.Common{
-			Redis: closedHostPort(t),
-		},
+		Redis: closedHostPort(t),
 	}
 	svc := New(cfg, testLog()).(*service)
 

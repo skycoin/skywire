@@ -17,6 +17,7 @@ package group
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,12 +58,7 @@ func (s *Session) SetRosterChangeHandler(f func(members, admins []cipher.PubKey)
 }
 
 func containsPK(list []cipher.PubKey, pk cipher.PubKey) bool {
-	for _, x := range list {
-		if x == pk {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, pk)
 }
 
 func removePK(list []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {

@@ -30,7 +30,7 @@ func (logger *Logger) WithTime(t time.Time) *logrus.Entry {
 // trace without reaching through WithField; this forwards through the entry.
 // Used to keep low-value diagnostics (e.g. the CLI's CXO fetch-chain hit/miss
 // notes) off ordinary stdout, since the CLI's package logger runs at Debug.
-func (logger *Logger) Tracef(format string, args ...interface{}) {
+func (logger *Logger) Tracef(format string, args ...any) {
 	logger.WithFields(logrus.Fields{}).Tracef(format, args...)
 }
 

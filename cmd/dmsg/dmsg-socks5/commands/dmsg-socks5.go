@@ -105,8 +105,8 @@ var serveCmd = &cobra.Command{
 			pk, sk = cipher.GenerateKeyPair()
 		}
 		if wl != "" {
-			wlk := strings.Split(wl, ",")
-			for _, key := range wlk {
+			wlk := strings.SplitSeq(wl, ",")
+			for key := range wlk {
 				var pk1 cipher.PubKey
 				err := pk1.Set(key)
 				if err == nil {

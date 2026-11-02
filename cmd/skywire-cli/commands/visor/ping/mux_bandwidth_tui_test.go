@@ -146,7 +146,7 @@ func TestTruncate(t *testing.T) {
 // throughput and rttProbes slices.
 func TestAppendCapped(t *testing.T) {
 	s := []int{}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		s = appendCapped(s, i, 3)
 	}
 	if len(s) != 3 {

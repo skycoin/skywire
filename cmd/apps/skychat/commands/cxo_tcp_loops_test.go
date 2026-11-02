@@ -155,7 +155,7 @@ func TestPublishCXO_WritesUniqueOrderedPaths(t *testing.T) {
 
 	shape := regexp.MustCompile(`^msgs/\d{19}-\d{6}$`)
 	var paths []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p, perr := publishCXO("body " + string(rune('a'+i)))
 		if perr != nil {
 			t.Fatalf("publishCXO: %v", perr)

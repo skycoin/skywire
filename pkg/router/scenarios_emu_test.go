@@ -189,10 +189,7 @@ func TestEmuCutOfBusiestLegCompletes(t *testing.T) {
 				break
 			}
 		}
-		idx := rig.busiestSendLeg()
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(rig.busiestSendLeg(), 0)
 		before := rig.downProgress()
 		at := time.Now()
 		rig.Leg(idx).CutDown()
@@ -381,10 +378,7 @@ func TestEmuTransportRemovedUnderLegCompletes(t *testing.T) {
 				break
 			}
 		}
-		idx := rig.busiestSendLeg()
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(rig.busiestSendLeg(), 0)
 		before := rig.downProgress()
 		legsBefore := rig.LegsOn(false)
 		at := time.Now()

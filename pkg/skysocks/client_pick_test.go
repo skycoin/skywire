@@ -65,7 +65,7 @@ func TestPickSessionWeighsCapacity(t *testing.T) {
 	require.Same(t, s1, c.pickSessionFor(pickRecv), "a range chunk weighs download capacity alone")
 
 	// Three chunks already on the two-hop tunnel: (3+1)/3e6 loses to (0+1)/2e6.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		st, err := s1.Open()
 		require.NoError(t, err)
 		defer st.Close() //nolint:errcheck

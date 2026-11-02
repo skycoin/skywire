@@ -73,7 +73,7 @@ func createCapturingMuxRouteGroup(t *testing.T) (*RouteGroup, []*capturingTransp
 	fwds := make([]routing.Rule, 0, nTransports)
 	rvss := make([]routing.Rule, 0, nTransports)
 
-	for i := 0; i < nTransports; i++ {
+	for i := range nTransports {
 		tpID := uuid.New()
 		fwd := routing.ForwardRule(DefaultRouteKeepAlive, routing.RouteID(i+1), routing.RouteID(i+100), tpID, pk2, pk1, 1, 2) //nolint:gosec
 		rvs := routing.ConsumeRule(DefaultRouteKeepAlive, routing.RouteID(i+100), pk1, pk2, 2, 1)                             //nolint:gosec
@@ -140,7 +140,7 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 	// these are stranded by the demote and must be flushed.
 	const nPkts = 32
 	want := make([]uint32, 0, nPkts)
-	for i := 0; i < nPkts; i++ {
+	for i := range nPkts {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i), 0xAA, 0xBB}, leg1ID)
 		if err != nil {
 			t.Fatalf("wrapPayload: %v", err)
@@ -151,7 +151,7 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 	// the narrowed flush must leave them to the normal SACK path.
 	const nActive = 8
 	activeSeqs := make(map[uint32]bool, nActive)
-	for i := 0; i < nActive; i++ {
+	for i := range nActive {
 		_, seq, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{0xCC, byte(i)}, leg0ID)
 		if err != nil {
 			t.Fatalf("wrapPayload(leg0): %v", err)
@@ -199,7 +199,7 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 func TestMuxDemoteFlushNoActiveLegIsSafe(t *testing.T) {
 	rg, conns := createCapturingMuxRouteGroup(t)
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		if _, _, err := rg.mux.wrapPayload(routing.RouteID(2), []byte{byte(i)}, uuid.Nil); err != nil {
 			t.Fatalf("wrapPayload: %v", err)
 		}

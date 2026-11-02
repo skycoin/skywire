@@ -116,7 +116,7 @@ func TestNode_OnConnInitErr_ConcurrentCallersNoPanic(t *testing.T) {
 	const N = 32
 	var wg sync.WaitGroup
 	wg.Add(N)
-	for i := 0; i < N; i++ {
+	for range N {
 		go func() {
 			defer wg.Done()
 			// Every concurrent caller hits the guard. Pre-fix any of

@@ -208,12 +208,9 @@ func (s *redisStore) getAllFromIndex(ctx context.Context, netType types.Type) ([
 
 	const existsBatch = 256
 	live := make([]string, 0, len(members))
-	var stale []interface{}
+	var stale []any
 	for i := 0; i < len(keys); i += existsBatch {
-		end := i + existsBatch
-		if end > len(keys) {
-			end = len(keys)
-		}
+		end := min(i+existsBatch, len(keys))
 		batchKeys := keys[i:end]
 		batchPKs := members[i:end]
 		// Issue one EXISTS per key in a pipeline so we can tell which

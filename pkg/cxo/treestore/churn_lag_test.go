@@ -192,7 +192,7 @@ func TestCXOChurn_BurstFill(t *testing.T) {
 			const n = 43 // the observed live burst size
 
 			pubStart := time.Now()
-			for i := 0; i < n; i++ {
+			for i := range n {
 				require.NoError(t, pub.Put(fmt.Sprintf("tp/%05d", i), []byte(fmt.Sprintf("edge-%d", i))))
 			}
 			pubDur := time.Since(pubStart)
@@ -231,7 +231,7 @@ func TestCXOChurn_Sustained(t *testing.T) {
 				convergeBudget = 10 * time.Second
 				convergeGrace  = 20 * time.Second
 			)
-			for i := 0; i < liveTarget; i++ {
+			for i := range liveTarget {
 				require.NoError(t, pub.Put(fmt.Sprintf("tp/%05d", i), []byte("seed")))
 			}
 			require.NoError(t, pub.Flush())

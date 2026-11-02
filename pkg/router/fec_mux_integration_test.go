@@ -47,7 +47,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	// repair frames when the block completes; capture them.
 	plain := make([][]byte, k)
 	packets := make([]routing.Packet, k)
-	for i := 0; i < k; i++ {
+	for i := range k {
 		plain[i] = []byte(fmt.Sprintf("frame-%02d-the-quick-brown-fox-jumps", i))
 		pkt, seq, err := send.wrapPayload(routeID, plain[i], uuid.Nil)
 		require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	// before opening it, then inserts. The frontier stalls at seq 3.
 	const missing = 3
 	var got [][]byte
-	for i := 0; i < k; i++ {
+	for i := range k {
 		if i == missing {
 			continue
 		}
@@ -72,7 +72,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	}
 	// HoL proof: only the contiguous prefix before the gap (0,1,2) came out.
 	require.Len(t, got, missing, "frontier must be HoL-blocked at the missing seq")
-	for i := 0; i < missing; i++ {
+	for i := range missing {
 		require.Equal(t, plain[i], got[i], "pre-gap frame %d delivered intact", i)
 	}
 
@@ -84,7 +84,7 @@ func TestFECMuxWiredReconstructsSlowLegFrame(t *testing.T) {
 	got = append(got, more...)
 
 	require.Len(t, got, k, "every frame must be delivered after FEC reconstruction")
-	for i := 0; i < k; i++ {
+	for i := range k {
 		require.Equal(t, plain[i], got[i], "frame %d delivered in order and intact (FEC-reconstructed where missing)", i)
 	}
 }
@@ -100,7 +100,7 @@ func TestFECMuxWiredInertWhenDisabled(t *testing.T) {
 	const routeID = routing.RouteID(9)
 	const n = fecDefaultKDefault * 2
 	plain := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		plain[i] = []byte(fmt.Sprintf("plain-%02d", i))
 		pkt, _, err := send.wrapPayload(routeID, plain[i], uuid.Nil)
 		require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	// Sender: j real frames.
 	plain := make([][]byte, jReal)
 	realPkts := make([]routing.Packet, jReal)
-	for i := 0; i < jReal; i++ {
+	for i := range jReal {
 		plain[i] = []byte(fmt.Sprintf("tail-frame-%02d-payload", i))
 		pkt, seq, err := send.wrapPayload(routeID, plain[i], uuid.Nil)
 		require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	// Receiver: deliver every real frame EXCEPT the slow-leg victim (seq 2), plus
 	// all padding frames. Frontier stalls at seq 2.
 	const missing = 2
-	for i := 0; i < jReal; i++ {
+	for i := range jReal {
 		if i == missing {
 			continue
 		}
@@ -199,7 +199,7 @@ func TestFECMuxTailFlushProtectsPartialBlock(t *testing.T) {
 	}
 
 	require.Len(t, got, jReal, "all real tail frames delivered after FEC reconstruction (padding filtered)")
-	for i := 0; i < jReal; i++ {
+	for i := range jReal {
 		require.Equal(t, plain[i], got[i], "real tail frame %d intact (FEC-reconstructed where withheld)", i)
 	}
 }
@@ -215,7 +215,7 @@ func TestFECMuxSingleLegNoRepair(t *testing.T) {
 	send.growLegs(1) // single leg → FEC must not emit repair
 
 	const routeID = routing.RouteID(13)
-	for i := 0; i < fecDefaultKDefault*3; i++ {
+	for i := range fecDefaultKDefault * 3 {
 		_, _, err := send.wrapPayload(routeID, []byte(fmt.Sprintf("f-%02d", i)), uuid.Nil)
 		require.NoError(t, err)
 	}

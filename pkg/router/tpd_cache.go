@@ -121,7 +121,7 @@ type tpdVersioner interface {
 
 // versionProbe returns dc's CXO-snapshot-timestamp probe, or nil when dc
 // can't report one (so the caller falls back to the TTL).
-func versionProbe(dc interface{}) func() (time.Time, bool) {
+func versionProbe(dc any) func() (time.Time, bool) {
 	if v, ok := dc.(tpdVersioner); ok {
 		return v.AllTransportsSyncedAt
 	}

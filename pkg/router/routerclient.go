@@ -179,7 +179,7 @@ const rpcDeadline = 30 * time.Second
 // hours of operation, this leaked all 16,384 ephemeral ports.
 const streamIdleTimeoutForPool = 2 * time.Minute
 
-func (c *Client) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
+func (c *Client) call(ctx context.Context, method string, args any, reply any) error {
 	if c == nil || c.rpc == nil {
 		return errors.New("router client not initialized")
 	}

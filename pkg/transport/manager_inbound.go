@@ -3,6 +3,7 @@ package transport
 
 import (
 	"errors"
+	"maps"
 	"sync"
 	"time"
 
@@ -34,9 +35,7 @@ func (tm *Manager) LastInbound() map[types.Type]time.Time {
 	tm.lastInbound.mu.Lock()
 	defer tm.lastInbound.mu.Unlock()
 	out := make(map[types.Type]time.Time, len(tm.lastInbound.at))
-	for t, at := range tm.lastInbound.at {
-		out[t] = at
-	}
+	maps.Copy(out, tm.lastInbound.at)
 	return out
 }
 

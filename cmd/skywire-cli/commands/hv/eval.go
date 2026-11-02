@@ -182,12 +182,12 @@ func cdpEval(wsURL, expr string, timeout time.Duration) error {
 	defer c.Close(websocket.StatusNormalClosure, "") //nolint:errcheck
 	c.SetReadLimit(64 << 20)
 
-	send := func(id int, method string, params map[string]interface{}) {
-		b, _ := json.Marshal(map[string]interface{}{"id": id, "method": method, "params": params}) //nolint:errcheck
-		_ = c.Write(ctx, websocket.MessageText, b)                                                 //nolint:errcheck
+	send := func(id int, method string, params map[string]any) {
+		b, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params}) //nolint:errcheck
+		_ = c.Write(ctx, websocket.MessageText, b)                                         //nolint:errcheck
 	}
-	send(1, "Runtime.enable", map[string]interface{}{})
-	send(2, "Runtime.evaluate", map[string]interface{}{
+	send(1, "Runtime.enable", map[string]any{})
+	send(2, "Runtime.evaluate", map[string]any{
 		"expression": expr, "awaitPromise": true, "returnByValue": true,
 	})
 	for {
@@ -195,7 +195,7 @@ func cdpEval(wsURL, expr string, timeout time.Duration) error {
 		if err != nil {
 			return fmt.Errorf("read: %w", err)
 		}
-		var m map[string]interface{}
+		var m map[string]any
 		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
