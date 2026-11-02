@@ -493,6 +493,7 @@
       "Missed call": "未接来电",
       "Incoming call": "来电",
       "Outgoing call": "去电",
+      "Unanswered call": "未接通的去电",
       "Call {name}": "呼叫 {name}",
       "{m}m {s}s": "{m} 分 {s} 秒",
       "{s}s": "{s} 秒",
@@ -1104,6 +1105,7 @@
       "Missed call": "Llamada perdida",
       "Incoming call": "Llamada entrante",
       "Outgoing call": "Llamada saliente",
+      "Unanswered call": "Llamada no contestada",
       "Call {name}": "Llamar a {name}",
       "{m}m {s}s": "{m} min {s} s",
       "{s}s": "{s} s",
@@ -1715,6 +1717,7 @@
       "Missed call": "Appel manqué",
       "Incoming call": "Appel entrant",
       "Outgoing call": "Appel sortant",
+      "Unanswered call": "Appel sans réponse",
       "Call {name}": "Appeler {name}",
       "{m}m {s}s": "{m} min {s} s",
       "{s}s": "{s} s",
@@ -15547,7 +15550,7 @@
         const m = /^(\u{1F3A4}|\u{1F4F9}) (Voice|Video) message$/u.exec(s);
         if (m) return `${m[1]} ${m[2] === 'Video' ? t('Video message') : t('Voice message')}`;
         // A call record, as voice_missed.go callRecordText writes it.
-        const c = /^\u{1F4DE} (Missed call|Incoming call|Outgoing call)( · \d+:\d\d)?$/u.exec(s);
+        const c = /^\u{1F4DE} (Missed call|Incoming call|Outgoing call|Unanswered call)( · \d+:\d\d)?$/u.exec(s);
         return c ? `\u{1F4DE} ${this._outcomeLabel(c[1])}${c[2] || ''}` : text;
       }
 
@@ -16587,6 +16590,7 @@
         if (outcome === 'Missed call') return t('Missed call');
         if (outcome === 'Incoming call') return t('Incoming call');
         if (outcome === 'Outgoing call') return t('Outgoing call');
+        if (outcome === 'Unanswered call') return t('Unanswered call');
         return outcome;
       }
 

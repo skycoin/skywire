@@ -41,6 +41,8 @@ const (
 	callMissed     = "Missed call"
 	callIncoming   = "Incoming call"
 	callOutgoing   = "Outgoing call"
+	// callUnanswered is a call we placed that never connected.
+	callUnanswered = "Unanswered call"
 	// callTextSep separates the outcome from the duration in a record's text.
 	callTextSep = " · "
 )
@@ -110,6 +112,36 @@ type callWatch struct {
 	peer        string
 	outgoing    bool
 	connectedAt time.Time
+	// recorded is set once the call is logged. An unanswered dial stays in
+	// the visor's dialing list for a few seconds after, and must not log twice.
+	recorded bool
+}
+
+// stillDialing stands in for a dialing list that could not be read, so a
+// failed poll keeps our ringing calls ringing instead of logging them unanswered.
+func stillDialing(seen map[string]*callWatch) []visorapi.VoiceDialingInfo {
+	var out []visorapi.VoiceDialingInfo
+	for id, call := range seen {
+		if call.outgoing && call.connectedAt.IsZero() && !call.recorded {
+			out = append(out, visorapi.VoiceDialingInfo{CallID: id, Peer: call.peer})
+		}
+	}
+	return out
+}
+
+// isOutgoingOutcome reports whether a record's outcome is a call we placed.
+func isOutgoingOutcome(outcome string) bool {
+	return outcome == callOutgoing || outcome == callUnanswered
+}
+
+// dialLive reports whether a dialing entry is still trying to connect, as
+// opposed to lingering with the reason it ended (pkg/skychat/call DialOutcomeLinger).
+func dialLive(state string) bool {
+	switch state {
+	case "", "connecting", "calling", "ringing":
+		return true
+	}
+	return false
 }
 
 // watchMissedCalls is the loop, split out so a test can drive it directly.
@@ -154,8 +186,18 @@ func watchMissedCalls(ctx context.Context) {
 			// one currently in progress.
 			continue
 		}
+		// The dialing list is the only place a call we placed shows before it
+		// is answered. A visor without it just loses the unanswered records.
+		var dialing []visorapi.VoiceDialingInfo
+		if err := pairRPCCall("VoiceDialing", func(c visorapi.API) error {
+			out, e := c.VoiceDialing()
+			dialing = out
+			return e
+		}); err != nil {
+			dialing = stillDialing(seen)
+		}
 		pushBlockedCallers(time.Now())
-		resolveCalls(seen, declineBlockedCalls(incoming), active, time.Now(), recordCall)
+		resolveCalls(seen, declineBlockedCalls(incoming), active, dialing, time.Now(), recordCall)
 	}
 }
 
@@ -213,9 +255,26 @@ func declineBlockedCalls(incoming []string) []string {
 func resolveCalls(
 	seen map[string]*callWatch,
 	incoming, active []string,
+	dialing []visorapi.VoiceDialingInfo,
 	now time.Time,
 	record func(peer, outcome string, duration time.Duration),
 ) {
+	listed := make(map[string]bool, len(dialing))
+	placing := make(map[string]bool, len(dialing))
+	for _, d := range dialing {
+		if d.CallID == "" || d.Peer == "" {
+			continue
+		}
+		listed[d.CallID] = true
+		if seen[d.CallID] == nil {
+			seen[d.CallID] = &callWatch{peer: d.Peer, outgoing: true}
+			takeOutgoingCall(d.CallID)
+		}
+		if dialLive(d.State) {
+			placing[d.CallID] = true
+		}
+	}
+
 	ringing := make(map[string]bool, len(incoming))
 	for _, line := range incoming {
 		id, peer, ok := parseVoiceInvite(line)
@@ -248,10 +307,19 @@ func resolveCalls(
 	}
 
 	for id, call := range seen {
-		if ringing[id] || live[id] {
+		if ringing[id] || live[id] || placing[id] {
 			continue
 		}
+		if call.recorded {
+			if !listed[id] {
+				delete(seen, id)
+			}
+			continue
+		}
+		call.recorded = true
 		switch {
+		case call.outgoing && call.connectedAt.IsZero():
+			record(call.peer, callUnanswered, 0)
 		case call.outgoing:
 			record(call.peer, callOutgoing, now.Sub(call.connectedAt))
 		case !call.connectedAt.IsZero():
@@ -264,7 +332,9 @@ func resolveCalls(
 			// yet — so they read as one thing rather than as a guess.
 			record(call.peer, callMissed, 0)
 		}
-		delete(seen, id)
+		if !listed[id] {
+			delete(seen, id)
+		}
 	}
 }
 
@@ -301,7 +371,7 @@ func recordCall(peer, outcome string, duration time.Duration) {
 	persistMessage(history.Message{
 		Peer:      peer,
 		From:      peer,
-		Outgoing:  outcome == callOutgoing,
+		Outgoing:  isOutgoingOutcome(outcome),
 		Text:      text,
 		Timestamp: time.Now().UTC(),
 		ID:        id,
@@ -311,7 +381,7 @@ func recordCall(peer, outcome string, duration time.Duration) {
 			ID:        id,
 			Channel:   channelDM,
 			Transport: "voice",
-			Dir:       map[bool]string{true: "out", false: "in"}[outcome == callOutgoing],
+			Dir:       map[bool]string{true: "out", false: "in"}[isOutgoingOutcome(outcome)],
 			From:      peer,
 			Text:      text,
 			Len:       len(text),
