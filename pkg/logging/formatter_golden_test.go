@@ -104,7 +104,6 @@ func goldenCases() []goldenCase {
 	}
 
 	for _, lvl := range []logrus.Level{logrus.TraceLevel, logrus.DebugLevel, logrus.InfoLevel, logrus.WarnLevel, logrus.ErrorLevel, logrus.FatalLevel, logrus.PanicLevel} {
-		lvl := lvl
 		cases = append(cases,
 			goldenCase{"level/plain/" + lvl.String(), prodFormatter, goldenEntry(lvl, "level check", moduleFields("dmsg_server", logrus.Fields{"k": "v"}))},
 			goldenCase{"level/colored/" + lvl.String(), coloredFormatter, goldenEntry(lvl, "level check", moduleFields("dmsg_server", logrus.Fields{"k": "v"}))},
@@ -276,7 +275,6 @@ func TestFormatterGolden(t *testing.T) {
 
 	seen := make(map[string]bool, len(cases))
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			if seen[c.name] {
 				t.Fatalf("duplicate golden case name %q", c.name)

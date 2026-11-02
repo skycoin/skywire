@@ -1,5 +1,4 @@
 //go:build client_e2e
-// +build client_e2e
 
 // Package nativee2e — internal/nativee2e/env_test.go: a NATIVE (no-Docker)
 // client-side e2e harness that runs a small skywire deployment + two visors as

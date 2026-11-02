@@ -2,7 +2,6 @@
 // These tests require a running Docker environment with all skywire services.
 //
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 

@@ -893,7 +893,6 @@ func mirroredJSONField(block reflect.Value, name string) bool {
 	want := strings.ReplaceAll(name, "_", "")
 	t := block.Type()
 	for sf := range t.Fields() {
-		sf := sf
 		if sf.PkgPath != "" {
 			continue
 		}

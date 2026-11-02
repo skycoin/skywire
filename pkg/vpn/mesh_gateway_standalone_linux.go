@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Package vpn pkg/vpn/mesh_gateway_standalone_linux.go c4-app-vpn
 //

@@ -62,7 +62,6 @@ func TestClient_RemoteClients(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		tc := tc
 		testName := fmt.Sprintf("%d:s%d_d%d",
 			i, tc.initSrvs, len(tc.changes))
 
@@ -78,7 +77,6 @@ func TestClient_RemoteClients(t *testing.T) {
 			// arrange: emulate remote clients
 			rcs := env.AllClients()
 			for _, rc := range rcs {
-				rc := rc
 				listenAndDiscard(t, rc, port)
 			}
 

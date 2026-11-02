@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 // Package cmdutil pkg/cmdutil/sysloghook_unix.go c0-com-util
 package cmdutil

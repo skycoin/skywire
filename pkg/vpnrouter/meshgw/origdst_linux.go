@@ -1,6 +1,5 @@
 // Package meshgw pkg/vpnrouter/meshgw/origdst_linux.go c4-app-vpn
 //go:build linux
-// +build linux
 
 package meshgw
 

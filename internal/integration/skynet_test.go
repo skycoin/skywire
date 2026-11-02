@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/skynet_test.go: end-to-end
 // coverage for the skynet + skynet-client apps (port forwarding over the skywire

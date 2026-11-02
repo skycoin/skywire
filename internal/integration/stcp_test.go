@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/stcp_test.go: end-to-end
 // DATA-ROUTE coverage for the STCP (skywire-tcp) transport.

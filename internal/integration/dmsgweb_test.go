@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/dmsgweb_test.go: end-to-end
 // coverage for dmsgweb (accessing HTTP services over the dmsg network).

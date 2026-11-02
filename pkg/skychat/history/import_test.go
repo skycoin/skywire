@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history import_test.go — Store.Import across both backends.
 //

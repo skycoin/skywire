@@ -1,5 +1,4 @@
 //go:build linux && nftfw
-// +build linux,nftfw
 
 // Package vpn pkg/vpn/firewall_nftfw_linux.go c4-app-vpn
 //

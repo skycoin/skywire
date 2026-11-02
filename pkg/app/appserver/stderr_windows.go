@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package appserver pkg/app/appserver/stderr_windows.go c2-vis-appsvc
 package appserver

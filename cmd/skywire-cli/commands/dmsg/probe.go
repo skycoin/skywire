@@ -436,7 +436,6 @@ func runMultiPortProbeRPC(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, 
 	sem := make(chan struct{}, probeParallel)
 	var wg sync.WaitGroup
 	for i, p := range ports {
-		i, p := i, p
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
@@ -482,7 +481,6 @@ func runMultiPortProbeStandalone(cmd *cobra.Command, pk cipher.PubKey, ports []u
 	sem := make(chan struct{}, probeParallel)
 	var wg sync.WaitGroup
 	for i, p := range ports {
-		i, p := i, p
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {

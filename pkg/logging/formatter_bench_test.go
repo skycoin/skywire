@@ -43,7 +43,6 @@ func BenchmarkFormat(b *testing.B) {
 	}
 
 	for _, c := range cases {
-		c := c
 		b.Run(c.name, func(b *testing.B) { benchFormat(b, c.newf(), c.entry) })
 	}
 }

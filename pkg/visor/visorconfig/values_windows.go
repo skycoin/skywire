@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package visorconfig pkg/visor/visorconfig/values_windows.go c3-vis-core
 package visorconfig

@@ -151,7 +151,6 @@ func TestRegisterTransportResponses(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(_ *testing.T) {
 			wg.Add(1)
 

@@ -104,7 +104,6 @@ func TestApplyRotationDropReindexes(t *testing.T) {
 
 	canceled := make([]bool, 4)
 	for i := range c.active {
-		i := i
 		c.active[i].pumpCancel = func() { canceled[i] = true }
 	}
 

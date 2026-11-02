@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/sudph_test.go: end-to-end
 // coverage for the SUDPH (sudph) skywire transport, i.e. STUN-assisted UDP hole

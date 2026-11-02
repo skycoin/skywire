@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package store pkg/discovery/store/redis_test.go
 package store

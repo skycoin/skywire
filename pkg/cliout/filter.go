@@ -279,7 +279,6 @@ func skeletonType(t reflect.Type, seen map[reflect.Type]bool) any {
 
 func addStructFields(t reflect.Type, om *orderedMap, seen map[reflect.Type]bool) {
 	for f := range t.Fields() {
-		f := f
 		if f.PkgPath != "" { // unexported
 			continue
 		}

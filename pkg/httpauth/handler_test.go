@@ -234,7 +234,6 @@ func TestServer_Wrap(t *testing.T) {
 func TestAuthFormat(t *testing.T) {
 	headers := []string{"SW-Public", "SW-Sig", "SW-Nonce"}
 	for _, header := range headers {
-		header := header
 		t.Run(header+"-IsMissing", func(t *testing.T) {
 			hdr := validHeaders(t, nil)
 			hdr.Del(header)

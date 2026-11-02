@@ -1,5 +1,4 @@
 //go:build android
-// +build android
 
 // Package vpn pkg/vpn/tun_device_android.go c4-app-vpn
 package vpn

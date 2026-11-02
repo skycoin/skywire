@@ -1,5 +1,4 @@
 //go:build !linux
-// +build !linux
 
 // Package commands cmd/apps/vpn-router/commands/meshgw_other.go c4-app-vpn
 package commands

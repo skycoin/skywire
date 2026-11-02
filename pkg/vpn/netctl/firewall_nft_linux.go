@@ -1,5 +1,4 @@
 //go:build nftfw && linux
-// +build nftfw,linux
 
 // Package netctl pkg/vpn/netctl/firewall_nft_linux.go c4-app-vpn
 //

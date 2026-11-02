@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/wt_test.go: end-to-end
 // coverage for the WebTransport (swtr) skywire transport across real visor

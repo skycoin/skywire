@@ -367,7 +367,6 @@ func collectFields(t reflect.Type, out map[string]reflect.Type) {
 		return
 	}
 	for f := range t.Fields() {
-		f := f
 		tag := f.Tag.Get("json")
 		if tag == "-" {
 			continue

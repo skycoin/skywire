@@ -197,7 +197,6 @@ func runForeach(ctx context.Context, targets []string, template string) []foreac
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, foreachParallel)
 	for work := range in {
-		work := work
 		select {
 		case <-stopCh:
 			// Stop dispatching; record skipped targets as exit=-1

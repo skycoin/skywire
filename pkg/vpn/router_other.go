@@ -1,5 +1,4 @@
 //go:build !linux
-// +build !linux
 
 // Package vpn pkg/vpn/router_other.go c4-app-vpn
 package vpn

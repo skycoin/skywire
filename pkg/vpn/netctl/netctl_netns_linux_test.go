@@ -1,5 +1,4 @@
 //go:build netctlint && linux
-// +build netctlint,linux
 
 // Package netctl pkg/vpn/netctl/netctl_netns_linux_test.go c4-app-vpn
 //

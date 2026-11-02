@@ -235,7 +235,6 @@ func configFieldType(t reflect.Type, path string) reflect.Type {
 
 func structFieldByJSONName(t reflect.Type, name string) (reflect.StructField, bool) {
 	for f := range t.Fields() {
-		f := f
 		if f.Anonymous && f.Tag.Get("json") == "" {
 			et := f.Type
 			if et.Kind() == reflect.Pointer {

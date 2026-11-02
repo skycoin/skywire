@@ -168,7 +168,6 @@ func TestEntriesEndpoint(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.entryPreHook != nil {
 				tc.entryPreHook(t, &tc.entry, &tc.httpBody)

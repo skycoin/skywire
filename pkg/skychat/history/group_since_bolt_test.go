@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history — pkg/skychat/history/group_since_bolt_test.go:
 // pins the BoltStore.ListGroupSince contract added so the gRPC

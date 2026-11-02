@@ -1,7 +1,6 @@
 // Package integration_test provides end-to-end tests for all skywire services.
 //
 //go:build !no_ci
-// +build !no_ci
 
 package integration_test
 

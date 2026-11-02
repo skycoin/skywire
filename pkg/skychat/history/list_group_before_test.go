@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history pkg/skychat/history/list_group_before_test.go
 // the backward page cursor, across both backends.
