@@ -16,6 +16,34 @@ type MockStore struct {
 	serversLock sync.RWMutex
 	m           map[string][]byte
 	servers     map[string][]byte
+	inboxes     map[cipher.PubKey]mockInbox
+}
+
+type mockInbox struct {
+	record  []byte
+	expires time.Time
+}
+
+// SetInbox implements InboxStore.
+func (ms *MockStore) SetInbox(_ context.Context, pk cipher.PubKey, record []byte, ttl time.Duration) error {
+	ms.mLock.Lock()
+	defer ms.mLock.Unlock()
+	if ms.inboxes == nil {
+		ms.inboxes = map[cipher.PubKey]mockInbox{}
+	}
+	ms.inboxes[pk] = mockInbox{record: append([]byte(nil), record...), expires: time.Now().Add(ttl)}
+	return nil
+}
+
+// Inbox implements InboxStore.
+func (ms *MockStore) Inbox(_ context.Context, pk cipher.PubKey) ([]byte, error) {
+	ms.mLock.RLock()
+	defer ms.mLock.RUnlock()
+	in, ok := ms.inboxes[pk]
+	if !ok || time.Now().After(in.expires) {
+		return nil, disc.ErrKeyNotFound
+	}
+	return in.record, nil
 }
 
 func (ms *MockStore) setEntry(staticPubKey string, payload []byte) {
