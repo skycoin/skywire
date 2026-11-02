@@ -790,6 +790,8 @@
     "none": "none",
     "helper-has": "helper has it",
     "helpers-have": "helpers have it",
+    "parked": "parked",
+    "parked-for": "Parked on the inbox hosts of:",
     "save": "Save"
   },
   "web-proxy": {
