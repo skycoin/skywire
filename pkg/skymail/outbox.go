@@ -480,8 +480,11 @@ func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubK
 		return
 	}
 
-	// Park before a delivery attempt that may hang until attemptTimeout.
-	mb.parkIfDue(ctx, id, &st, msg)
+	// Park before a delivery attempt that may hang until attemptTimeout, when
+	// parking falls due before the attempt could end.
+	if !st.next.After(time.Now()) {
+		mb.parkIfDue(ctx, id, &st, msg, attemptTimeout)
+	}
 	if now := time.Now(); !st.next.After(now) {
 		require := ""
 		if rec.Carried != "" {
@@ -530,7 +533,7 @@ func (mb *Mailbox) attempt(ctx context.Context, id string, helpers []cipher.PubK
 	if st.needsHandoff(helpers) && !st.handNext.After(time.Now()) {
 		mb.handOff(ctx, &st, msg, helpers)
 	}
-	mb.parkIfDue(ctx, id, &st, msg)
+	mb.parkIfDue(ctx, id, &st, msg, 0)
 	if err := mb.out.release(id, &st); err != nil {
 		mb.log.WithError(err).WithField("id", id).Warn("skymail: outbox record")
 	}
