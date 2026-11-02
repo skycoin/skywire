@@ -21,6 +21,12 @@ type DmsgAsync interface {
 	// DmsgAsyncSync re-registers with the inbox hosts, republishes the record
 	// and fetches now.
 	DmsgAsyncSync() error
+	// DmsgAsyncSettings reports the effective settings and which ones the
+	// settings file overrides.
+	DmsgAsyncSettings() (*DmsgAsyncSettings, error)
+	// DmsgAsyncSetSettings changes settings live from key=value pairs and keeps
+	// them in the settings file. "default" returns a key to the config.
+	DmsgAsyncSetSettings(kv map[string]string) error
 }
 
 // DmsgAsyncStatus is DmsgAsyncStatus's answer.
@@ -69,4 +75,22 @@ type DmsgAsyncSendRequest struct {
 type DmsgAsyncSendResult struct {
 	Host cipher.PubKey `json:"host"`
 	Ref  string        `json:"ref"`
+}
+
+// DmsgAsyncSettings are the effective dmsg-async settings.
+type DmsgAsyncSettings struct {
+	// Host runs this visor's inbox host, with its limits, for its own key,
+	// the visors it manages and Hosted.
+	Host         bool            `json:"host"`
+	Hosted       []cipher.PubKey `json:"hosted"`
+	MaxMessage   int             `json:"max_message"`
+	MaxTotalSize int64           `json:"max_total_size"`
+	TTL          time.Duration   `json:"ttl"`
+	// Inbox keeps this visor's own messages on InboxHosts while it is away.
+	Inbox      bool            `json:"inbox"`
+	InboxHosts []cipher.PubKey `json:"inbox_hosts"`
+	Publish    bool            `json:"publish"`
+	Allow      []cipher.PubKey `json:"allow"`
+	// Set lists the keys the settings file overrides.
+	Set []string `json:"set"`
 }

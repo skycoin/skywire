@@ -2765,3 +2765,15 @@ func (rc *rpcClient) DmsgAsyncTake(ports []uint16) ([]dmsgasync.Message, error) 
 func (rc *rpcClient) DmsgAsyncSync() error {
 	return rc.Call("DmsgAsyncSync", &struct{}{}, &struct{}{})
 }
+
+// DmsgAsyncSettings calls DmsgAsyncSettings.
+func (rc *rpcClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
+	var out DmsgAsyncSettings
+	err := rc.Call("DmsgAsyncSettings", &struct{}{}, &out)
+	return &out, err
+}
+
+// DmsgAsyncSetSettings calls DmsgAsyncSetSettings.
+func (rc *rpcClient) DmsgAsyncSetSettings(kv map[string]string) error {
+	return rc.Call("DmsgAsyncSetSettings", &kv, &struct{}{})
+}
