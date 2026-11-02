@@ -2,7 +2,7 @@
 
 | Status   | Implemented                                                            |
 |----------|------------------------------------------------------------------------|
-| Revision | 2026-11-01, skywire 9be7f473e                                          |
+| Revision | 2026-11-02, skywire 4ac16bbc9                                          |
 | Code     | `pkg/skymail`, `pkg/skymailbridge`, `cmd/apps/skymail`, `pkg/visor/skymail.go`, `pkg/app/appserver/mail_host.go` |
 
 ## Abstract
@@ -198,6 +198,9 @@ named `skymail`, and returns `ErrNoMailHost` to any other.
 | `MailSeal` | `MailSealReq{Msg []byte, Rcpt PubKey}` | `[]byte` | seal Msg for Rcpt with the visor's key |
 | `MailOpen` | `[]byte` | `MailOpenResp{Msg []byte, Signer PubKey}` | open an envelope sealed to the visor |
 | `MailHostInfo` | none | `MailHostInfo{Managed, Hypervisors []PubKey, PortServed bool}` | the visors this visor manages as a hypervisor, its own hypervisors, and whether `serve add 25` holds port 25 |
+| `MailPark` | `MailParkReq{Rcpt PubKey, Env []byte, Ref string}` | `PubKey` | deposit a sealed envelope for Rcpt on port 25 of its dmsg-async inbox and return the host |
+| `MailUnpark` | none | `[]ParkedMail{ID string, Host, From PubKey, Body []byte}` | the envelopes parked for the visor on port 25, not removed |
+| `MailAck` | `[]ParkedRef{Host PubKey, ID string}` | none | remove the named envelopes |
 
 The app also uses the app server's `Listen`, `Dial` and `Notify` calls like
 any app.
@@ -275,6 +278,21 @@ list can be set explicitly in `settings.json`.
 A carried envelope is queued in the carrier's Outbox and delivered the same
 way as its own mail. The sender keeps its copy and keeps retrying. The
 recipient's repeat check keeps one copy.
+
+### Parking
+
+When the visor has a dmsg-async inbox ([Dmsg Async](35-Dmsg_Async.md)), a
+mailbox with an Outbox also parks each queued message once per recipient
+key, sealed for that key, on the key's inbox hosts. Parking is due once the
+first delivery attempt fails, and runs before any later attempt. A failed
+park is retried after the delays below. The ref is the first 16 bytes of
+`sha256(id + "/" + the recipient's 33 key bytes)` as hex.
+
+A mailbox fetches the mail parked for it when it starts and every 10
+minutes, and files each envelope through the delivery checks with the host
+as the relay. Mail filed or refused with a 5xx answer is removed from the
+host. Mail refused with a 4xx answer, such as into a full mailbox, stays
+parked.
 
 ### Limits
 
