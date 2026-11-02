@@ -247,3 +247,27 @@ func TestBridgeToggleReachesSkyenv(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(env), "SKYMAILBRIDGE=false")
 }
+
+// The hypervisor's reward dialog sets the address without a config flush, so
+// it must reach REWARDSKYADDR itself, or the next autoconfig restores the old one.
+func TestRewardAddressReachesSkyenv(t *testing.T) {
+	const xpub = "xpub6Cjmbker6mxQGujSPMQvfFgsaSWmF5dL9dki1ZoNS39QWCmkZkguNHHjFxszEwYyVhpxCDkkb9B767LqHdcpEwXGAQpBiub5d532TA4RJGR"
+	conf, _ := newTestConfig(t)
+	conf.LocalPath = t.TempDir()
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte("REWARDSKYADDR='2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6'\n"), 0o600))
+	conf.Skyenv = envFile
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test"), survey: surveyState{mu: new(sync.RWMutex)}}
+	v.watchSkyenv()
+
+	require.NoError(t, v.storeRewardAddress(xpub))
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.Contains(t, string(env), "REWARDSKYADDR='"+xpub+"'")
+	require.NotContains(t, string(env), "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
+
+	require.NoError(t, v.DeleteRewardAddress())
+	env, err = os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.NotContains(t, string(env), xpub)
+}
