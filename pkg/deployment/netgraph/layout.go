@@ -2,8 +2,9 @@
 package netgraph
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 )
 
 // Link is one transport between two visors, by their keys in hex.
@@ -63,7 +64,9 @@ func Build(links []Link, prev map[string][2]float64, groups map[string]string) *
 	for t := range typeCount {
 		g.Types = append(g.Types, t)
 	}
-	sort.Slice(g.Types, func(i, j int) bool { return typeCount[g.Types[i]] > typeCount[g.Types[j]] })
+	slices.SortFunc(g.Types, func(a, b string) int {
+		return cmp.Compare(typeCount[b], typeCount[a])
+	})
 	bit := map[string]uint8{}
 	for i, t := range g.Types {
 		if i >= maxTypes {
@@ -96,11 +99,11 @@ func Build(links []Link, prev map[string][2]float64, groups map[string]string) *
 		}
 		g.Edges[i].Mask |= bit[l.Type]
 	}
-	sort.Slice(g.Edges, func(i, j int) bool {
-		if g.Edges[i].A != g.Edges[j].A {
-			return g.Edges[i].A < g.Edges[j].A
-		}
-		return g.Edges[i].B < g.Edges[j].B
+	slices.SortFunc(g.Edges, func(a, b Edge) int {
+		return cmp.Or(
+			cmp.Compare(a.A, b.A),
+			cmp.Compare(a.B, b.B),
+		)
 	})
 
 	g.group(groups)

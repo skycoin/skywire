@@ -10,7 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,7 +239,7 @@ func (l *AppLauncher) AppStates() []*appserver.AppState {
 	// reshuffle on each poll (rows "moving around" and flickering in/out as the
 	// *ngFor re-rendered). Sorting by name pins the order for every consumer
 	// (UI + `cli visor app ls`).
-	sort.Strings(names)
+	slices.Sort(names)
 
 	var states []*appserver.AppState
 	for _, name := range names {

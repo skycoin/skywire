@@ -1,7 +1,7 @@
 package treestore
 
 import (
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -104,7 +104,7 @@ func TestMemNodeWalkLeavesSorted(t *testing.T) {
 		return true
 	}, nil)
 	want := []string{"a/x", "a/z", "b/y"}
-	if !sort.StringsAreSorted(visits) {
+	if !slices.IsSorted(visits) {
 		t.Errorf("visits not sorted: %v", visits)
 	}
 	if !equalSlice(visits, want) {

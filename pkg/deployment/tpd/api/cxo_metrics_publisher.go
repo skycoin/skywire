@@ -48,10 +48,11 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -380,7 +381,9 @@ func planDayOps(bodies map[string][][]byte, dates []string, prev map[string]int,
 }
 
 func sortOpsByPath(ops []treestore.PutOp) {
-	sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+	slices.SortFunc(ops, func(a, b treestore.PutOp) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 }
 
 // gzipParts encodes one day's records as one or more gzipped JSON arrays, each

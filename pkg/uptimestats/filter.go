@@ -7,7 +7,8 @@
 package uptimestats
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -62,11 +63,11 @@ func VersionCounts(entries []VisorSummary) []VersionCount {
 	for v, c := range counts {
 		out = append(out, VersionCount{Version: v, Count: c})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
-		}
-		return out[i].Version < out[j].Version
+	slices.SortFunc(out, func(a, b VersionCount) int {
+		return cmp.Or(
+			cmp.Compare(b.Count, a.Count),
+			cmp.Compare(a.Version, b.Version),
+		)
 	})
 	return out
 }

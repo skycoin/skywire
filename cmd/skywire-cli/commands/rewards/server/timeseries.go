@@ -2,6 +2,7 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -10,7 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,7 +129,9 @@ func fetchTPDDailyAggregate() (*tpdDailyAggregate, error) {
 		return nil, fmt.Errorf("TPD daily aggregate carried no days")
 	}
 	// TPD returns newest-first; charts read left-to-right oldest-first.
-	sort.Slice(agg.Daily, func(i, j int) bool { return agg.Daily[i].Date < agg.Daily[j].Date })
+	slices.SortFunc(agg.Daily, func(a, b tpdDailyPoint) int {
+		return cmp.Compare(a.Date, b.Date)
+	})
 	agg.Fetched = time.Now().UTC().Format(time.RFC3339)
 	agg.Source = httpStatsSource("/metric", cxoErr.Error()).String()
 
@@ -164,7 +167,9 @@ func dailyAggregateFromCXO(d *tpdapi.DailyStats) *tpdDailyAggregate {
 	}
 	// The feed publishes newest-first, as the endpoint does; charts read
 	// left-to-right oldest-first.
-	sort.Slice(agg.Daily, func(i, j int) bool { return agg.Daily[i].Date < agg.Daily[j].Date })
+	slices.SortFunc(agg.Daily, func(a, b tpdDailyPoint) int {
+		return cmp.Compare(a.Date, b.Date)
+	})
 
 	if d.Cumulative != nil {
 		agg.Cumulative.Bandwidth = d.Cumulative.Bandwidth

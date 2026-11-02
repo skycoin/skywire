@@ -14,6 +14,7 @@
 package clirewards
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,7 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -611,7 +612,9 @@ func writeRewardTxnCSV(w io.Writer, r *dayResult) error {
 	for a, v := range sums {
 		rows = append(rows, pair{a, v})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].amt > rows[j].amt })
+	slices.SortFunc(rows, func(a, b pair) int {
+		return cmp.Compare(b.amt, a.amt)
+	})
 	if _, err := fmt.Fprintln(w, "Skycoin Address, Reward Amount"); err != nil {
 		return err
 	}

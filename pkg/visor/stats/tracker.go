@@ -16,7 +16,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -381,8 +381,8 @@ func (t *Tracker) publishShards(entries []telemetrywire.Entry, ranProbe bool) {
 	}
 	for sh := range byShard {
 		es := byShard[sh]
-		sort.Slice(es, func(i, j int) bool {
-			return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0
+		slices.SortFunc(es, func(a, b telemetrywire.Entry) int {
+			return bytes.Compare(a.ID[:], b.ID[:])
 		})
 		byShard[sh] = es
 	}
@@ -736,7 +736,9 @@ func (t *Tracker) publishCheckpoints(entries []telemetrywire.CheckpointEntry, ra
 	var ops []SinkOp
 	var deletes []string
 	for sh, es := range byShard {
-		sort.Slice(es, func(i, j int) bool { return bytes.Compare(es[i].ID[:], es[j].ID[:]) < 0 })
+		slices.SortFunc(es, func(a, b telemetrywire.CheckpointEntry) int {
+			return bytes.Compare(a.ID[:], b.ID[:])
+		})
 		blob := telemetrywire.EncodeCheckpointShard(sh, es)
 		sig := sha256.Sum256(blob)
 		if prev, ok := t.publishedCheckpoints[sh]; ok && prev == sig {

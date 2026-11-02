@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/trace"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -168,7 +168,7 @@ func prune(d string) {
 			names = append(names, e.Name())
 		}
 	}
-	sort.Strings(names) // the timestamp in the name sorts oldest first
+	slices.Sort(names) // the timestamp in the name sorts oldest first
 	for len(names) > keepSnapshots {
 		os.Remove(filepath.Join(d, names[0])) //nolint:errcheck,gosec
 		names = names[1:]

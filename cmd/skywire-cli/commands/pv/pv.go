@@ -2,12 +2,13 @@
 package pv
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -289,8 +290,8 @@ Set cache dir to "" to disable caching for that service.`, getDeployment().Servi
 		}
 
 		// Sort by transport count descending
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].count > results[j].count
+		slices.SortFunc(results, func(a, b visorInfo) int {
+			return cmp.Compare(b.count, a.count)
 		})
 
 		if isStats {

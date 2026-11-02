@@ -32,8 +32,9 @@
 package proxystatus
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -308,16 +309,11 @@ func legNodesForStream(all []Leg, streamIdx int) []*bitree.Node {
 	if len(legs) == 0 {
 		return nil
 	}
-	sort.SliceStable(legs, func(i, j int) bool {
-		if ri, rj := legRank(legs[i]), legRank(legs[j]); ri != rj {
-			return ri < rj
-		}
-		// Stable within a role group: key on the leg's IDENTITY (its intermediate,
-		// then its transport), not its Index. The leg set churns as standby routes
-		// are added/dropped, which reassigns indices and made the tree branches jump
-		// around every ~1s refresh; keying on the peer keeps a given route in the
-		// same slot so the tree stays readable while the pool grows.
-		return legStableKey(legs[i]) < legStableKey(legs[j])
+	slices.SortStableFunc(legs, func(a, b Leg) int {
+		return cmp.Or(
+			cmp.Compare(legRank(a), legRank(b)),
+			cmp.Compare(legStableKey(a), legStableKey(b)),
+		)
 	})
 	// Aggregate per-direction goodput across the surviving legs — the denominator
 	// each route's share bar is drawn against.

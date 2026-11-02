@@ -7,8 +7,9 @@
 package visor
 
 import (
+	"cmp"
 	"crypto/sha256"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,8 +85,8 @@ func attachedEntriesFromSummaries(cache map[cipher.PubKey]cachedSummary, now tim
 	for _, e := range byID {
 		entries = append(entries, e)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].ID.String() < entries[j].ID.String()
+	slices.SortFunc(entries, func(a, b *transport.Entry) int {
+		return cmp.Compare(a.ID.String(), b.ID.String())
 	})
 	h := sha256.New()
 	for _, e := range entries {

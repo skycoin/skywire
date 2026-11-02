@@ -3,7 +3,7 @@ package router
 
 import (
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -368,7 +368,7 @@ func (rb *retxBuffer) HeldSeqsOnTps(tps map[uuid.UUID]bool) []uint32 {
 			seqs = append(seqs, seq)
 		}
 	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	slices.Sort(seqs)
 	return seqs
 }
 
@@ -609,7 +609,7 @@ func (rb *retxBuffer) Seqs() []uint32 {
 	for s := range rb.entries {
 		out = append(out, s)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 

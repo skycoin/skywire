@@ -2,7 +2,8 @@
 package tptypes
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync/atomic"
 )
 
@@ -66,8 +67,8 @@ func PreferenceOrder() []Type {
 func PreferredOrder(candidates ...Type) []Type {
 	out := make([]Type, len(candidates))
 	copy(out, candidates)
-	sort.SliceStable(out, func(i, j int) bool {
-		return TypePreference(out[i]) < TypePreference(out[j])
+	slices.SortStableFunc(out, func(a, b Type) int {
+		return cmp.Compare(TypePreference(a), TypePreference(b))
 	})
 	return out
 }

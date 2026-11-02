@@ -3,9 +3,10 @@ package clitp
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -143,8 +144,8 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Bandwidth > entries[j].Bandwidth
+	slices.SortFunc(entries, func(a, b tpEntry) int {
+		return cmp.Compare(b.Bandwidth, a.Bandwidth)
 	})
 
 	if metricsTop > 0 && metricsTop < len(entries) {
@@ -253,8 +254,8 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 	for pk, bw := range byPK {
 		sorted = append(sorted, visorEntry{PK: pk, BW: *bw})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].BW.Bandwidth > sorted[j].BW.Bandwidth
+	slices.SortFunc(sorted, func(a, b visorEntry) int {
+		return cmp.Compare(b.BW.Bandwidth, a.BW.Bandwidth)
 	})
 
 	if metricsTop > 0 && metricsTop < len(sorted) {
@@ -354,8 +355,8 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 	for pk, vt := range byPK {
 		sorted = append(sorted, sortEntry{PK: pk, Tree: vt})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Tree.Bandwidth > sorted[j].Tree.Bandwidth
+	slices.SortFunc(sorted, func(a, b sortEntry) int {
+		return cmp.Compare(b.Tree.Bandwidth, a.Tree.Bandwidth)
 	})
 
 	if metricsTop > 0 && metricsTop < len(sorted) {
@@ -375,8 +376,8 @@ func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
 			formatBytes(v.Tree.Bandwidth), len(v.Tree.Transports))
 
 		// Sort child transports by bandwidth desc
-		sort.Slice(v.Tree.Transports, func(i, j int) bool {
-			return v.Tree.Transports[i].Bandwidth > v.Tree.Transports[j].Bandwidth
+		slices.SortFunc(v.Tree.Transports, func(a, b clitp.TransportInfo) int {
+			return cmp.Compare(b.Bandwidth, a.Bandwidth)
 		})
 
 		for i, tp := range v.Tree.Transports {

@@ -2,8 +2,9 @@
 package store
 
 import (
+	"cmp"
 	"runtime"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,9 @@ func composeWithReversedTable(g *Graph, lt *landmarkTables, toHub map[cipher.Pub
 	if len(cands) == 0 {
 		return nil
 	}
-	sort.SliceStable(cands, func(i, j int) bool { return g.routeLatency(cands[i]) < g.routeLatency(cands[j]) })
+	slices.SortStableFunc(cands, func(a, b routing.Route) int {
+		return cmp.Compare(g.routeLatency(a), g.routeLatency(b))
+	})
 	out := make([]routing.Route, 0, number)
 	seen := make(map[string]struct{}, len(cands))
 	for _, r := range cands {

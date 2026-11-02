@@ -14,7 +14,6 @@ import (
 	"net"
 	"runtime"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -313,8 +312,8 @@ func (v *Visor) NetworkState() *visorapi.NetworkState {
 		out.NAT = sc.NATType.String()
 	}
 	if addrs, excluded, err := netutil.LocalAddressesDetail(); err == nil {
-		sort.Strings(addrs)
-		sort.Strings(excluded)
+		slices.Sort(addrs)
+		slices.Sort(excluded)
 		out.LocalAddresses = addrs
 		out.PolicyExcluded = excluded
 	}
@@ -375,7 +374,7 @@ func netFingerprint() string {
 	for k := range set {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return strings.Join(keys, ",")
 }
 

@@ -19,10 +19,11 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -470,7 +471,9 @@ func dmsgServerAliases(servers []*dmsgdisc.Entry) (map[string]cipher.PubKey, map
 		}
 		pks = append(pks, e.Static)
 	}
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	aliases := make(map[string]cipher.PubKey, len(pks))
 	set := make(map[cipher.PubKey]struct{}, len(pks))
 	for i, pk := range pks {

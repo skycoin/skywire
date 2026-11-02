@@ -2,7 +2,7 @@ package stats
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -111,7 +111,7 @@ func (s *recordingSink) snapshot() (map[string][]byte, []string) {
 	for k := range s.dels {
 		dels = append(dels, k)
 	}
-	sort.Strings(dels)
+	slices.Sort(dels)
 	return puts, dels
 }
 
@@ -582,7 +582,7 @@ func keysOf(m map[string][]byte) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

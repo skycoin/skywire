@@ -27,9 +27,11 @@
 package rpcgrpc
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -682,11 +684,11 @@ func (s *PingServer) muxBwPlanDisjointRoutes(
 
 	// Cheapest (fastest transports) first; break ties toward fewer hops. Stable
 	// so equal-cost routes keep BFS order (shortest-first) as the sub-tie-break.
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].cost != candidates[j].cost {
-			return candidates[i].cost < candidates[j].cost
-		}
-		return candidates[i].hops < candidates[j].hops
+	slices.SortStableFunc(candidates, func(a, b muxBwCandidate) int {
+		return cmp.Or(
+			cmp.Compare(a.cost, b.cost),
+			cmp.Compare(a.hops, b.hops),
+		)
 	})
 
 	plans := make([]muxBwRoutePlan, 0, count)

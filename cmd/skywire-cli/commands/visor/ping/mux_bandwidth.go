@@ -31,13 +31,14 @@
 package ping
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -454,8 +455,8 @@ func (t *muxBwTracker) printSummary(w io.Writer) {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		//nolint:errcheck // human-mode summary; errors here aren't actionable
 		fmt.Fprintln(tw, "route\tstate\tsetup_ms\thops\tpath")
-		sort.Slice(t.routeSet, func(i, j int) bool {
-			return t.routeSet[i].RouteIndex < t.routeSet[j].RouteIndex
+		slices.SortFunc(t.routeSet, func(a, b *rpcgrpc.MuxRouteEstablished) int {
+			return cmp.Compare(a.RouteIndex, b.RouteIndex)
 		})
 		for _, r := range t.routeSet {
 			state := "✓"
@@ -488,8 +489,8 @@ func (t *muxBwTracker) printSummary(w io.Writer) {
 		//nolint:errcheck // human-mode summary; errors here aren't actionable
 		fmt.Fprintln(lw, "leg\talive\ttp\tintermediate\tsent\trecv\tinst_send\tinst_recv")
 		legs := t.lastSample.Legs
-		sort.Slice(legs, func(i, j int) bool {
-			return legs[i].RouteIndex < legs[j].RouteIndex
+		slices.SortFunc(legs, func(a, b *rpcgrpc.MuxLegSample) int {
+			return cmp.Compare(a.RouteIndex, b.RouteIndex)
 		})
 		for _, l := range legs {
 			alive := "✓"

@@ -2,7 +2,7 @@
 package api
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -70,7 +70,7 @@ func (s *requestStats) takeTimes() []float64 {
 	t := s.times
 	s.times = nil
 	s.mu.Unlock()
-	sort.Float64s(t)
+	slices.Sort(t)
 	return t
 }
 

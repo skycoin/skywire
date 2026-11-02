@@ -6,12 +6,13 @@ package netutil
 
 import (
 	"bufio"
+	"cmp"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,9 @@ func defaultRouteInterfaces(r io.Reader) []string {
 		metric, _ := strconv.Atoi(f[6]) //nolint:errcheck // 0 sorts first, as it would
 		routes = append(routes, route{f[0], metric})
 	}
-	sort.SliceStable(routes, func(i, j int) bool { return routes[i].metric < routes[j].metric })
+	slices.SortStableFunc(routes, func(a, b route) int {
+		return cmp.Compare(a.metric, b.metric)
+	})
 	var ifcs []string
 	seen := map[string]bool{}
 	for _, rt := range routes {

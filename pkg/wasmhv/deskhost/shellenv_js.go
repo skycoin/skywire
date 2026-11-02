@@ -4,7 +4,7 @@
 package deskhost
 
 import (
-	"sort"
+	"slices"
 	"syscall/js"
 )
 
@@ -27,6 +27,6 @@ func deskShellEnv() []string {
 			out = append(out, k+"="+v.String())
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

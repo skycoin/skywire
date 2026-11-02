@@ -37,11 +37,12 @@ package visor
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -400,7 +401,9 @@ func LiveConfigFields() []ConfigFieldDoc {
 	for _, f := range liveConfigFieldTable {
 		out = append(out, ConfigFieldDoc{Path: f.Path, Desc: f.Desc})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	slices.SortFunc(out, func(a, b ConfigFieldDoc) int {
+		return cmp.Compare(a.Path, b.Path)
+	})
 	return out
 }
 
@@ -439,7 +442,7 @@ func (v *Visor) SetConfigFields(fields map[string]json.RawMessage) ([]visorapi.C
 	for p := range fields {
 		paths = append(paths, p)
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	root := reflect.ValueOf(v.conf).Elem()
 

@@ -2,12 +2,13 @@
 package commands
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,8 +64,8 @@ Run 'go generate ./deployment/' afterwards to sync the js/wasm static variant.`,
 		if len(entries) == 0 {
 			return fmt.Errorf("discovery returned no servers; refusing to wipe dmsg_servers")
 		}
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Static.Hex() < entries[j].Static.Hex()
+		slices.SortFunc(entries, func(a, b *disc.Entry) int {
+			return cmp.Compare(a.Static.Hex(), b.Static.Hex())
 		})
 
 		raw, err := os.ReadFile(pullConfigPath) //nolint:gosec // known repo-relative config

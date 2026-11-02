@@ -26,8 +26,9 @@
 package group
 
 import (
+	"cmp"
 	"errors"
-	"sort"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -75,7 +76,9 @@ func peerSubPKs(s *Session) []cipher.PubKey {
 }
 
 func sortPKs(pks []cipher.PubKey) {
-	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	slices.SortFunc(pks, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 }
 
 // assertPKSet compares two PK sets order-insensitively.

@@ -4,7 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -133,7 +133,7 @@ func edgesFromDailyHash(h map[string]string) ([2]cipher.PubKey, bool) {
 	if len(hexes) == 0 {
 		return edges, false
 	}
-	sort.Strings(hexes)
+	slices.Sort(hexes)
 	n := 0
 	for _, hex := range hexes {
 		if n >= 2 {

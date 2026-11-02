@@ -3,12 +3,13 @@ package climdisc
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -215,8 +216,8 @@ func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
 		})
 	}
 	// Most-loaded first, like `pv -t` sorts by transport count.
-	sort.Slice(serverEntries, func(i, j int) bool {
-		return serverEntries[i].Connected > serverEntries[j].Connected
+	slices.SortFunc(serverEntries, func(a, b serverEntry) int {
+		return cmp.Compare(b.Connected, a.Connected)
 	})
 
 	var b bytes.Buffer

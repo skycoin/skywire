@@ -2,9 +2,10 @@
 package visor
 
 import (
+	"cmp"
 	"os"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -93,7 +94,7 @@ func mapIntFlag(flag string) func(reflect.Value) (string, string) {
 		for k, n := range m {
 			pairs = append(pairs, k+"="+strconv.Itoa(n))
 		}
-		sort.Strings(pairs)
+		slices.Sort(pairs)
 		return flag, strings.Join(pairs, ",")
 	}
 }
@@ -176,7 +177,9 @@ func (v *Visor) mirrorChanges() {
 		}
 	}
 	v.skyenvSeen = now
-	sort.Slice(flags, func(i, j int) bool { return flags[i][0] < flags[j][0] })
+	slices.SortFunc(flags, func(a, b [2]string) int {
+		return cmp.Compare(a[0], b[0])
+	})
 	v.mirrorToSkyenv(flags)
 }
 

@@ -5,7 +5,9 @@
 package router
 
 import (
+	"cmp"
 	"math/rand"
+	"slices"
 	"sort"
 	"testing"
 
@@ -39,7 +41,9 @@ func TestPkLessMatchesStringOrder(t *testing.T) {
 	byBytes := append([]cipher.PubKey(nil), pks...)
 	byString := append([]cipher.PubKey(nil), pks...)
 	sort.SliceStable(byBytes, func(i, j int) bool { return pkLess(byBytes[i], byBytes[j]) })
-	sort.SliceStable(byString, func(i, j int) bool { return byString[i].String() < byString[j].String() })
+	slices.SortStableFunc(byString, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.String(), b.String())
+	})
 	for i := range byBytes {
 		if byBytes[i] != byString[i] {
 			t.Fatalf("sorted order diverges at %d: bytes=%s string=%s", i, byBytes[i], byString[i])

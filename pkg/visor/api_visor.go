@@ -3,6 +3,7 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -11,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -634,6 +635,8 @@ func (v *Visor) connectedHypervisorPKs() []cipher.PubKey {
 		out = append(out, pk)
 	}
 	v.initLock.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.String(), b.String())
+	})
 	return out
 }

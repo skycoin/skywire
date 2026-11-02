@@ -22,7 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -195,7 +195,7 @@ func (s *Store) List() ([]Record, error) {
 		ids = append(ids, id)
 	}
 	raws := make([][]byte, len(ids))
-	sort.Strings(ids)
+	slices.Sort(ids)
 	for i, id := range ids {
 		raws[i] = s.kvs[id]
 	}

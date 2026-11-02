@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -424,7 +425,7 @@ func (m *pingTreeModel) renderTree() string {
 	for k := range byLevel {
 		levelKeys = append(levelKeys, k)
 	}
-	sort.Ints(levelKeys)
+	slices.Sort(levelKeys)
 
 	headStyle := sgr(39, true)
 	rootStyle := sgr(87, true)
@@ -458,7 +459,7 @@ func (m *pingTreeModel) renderTree() string {
 		for pk := range parents {
 			parentKeys = append(parentKeys, pk)
 		}
-		sort.Strings(parentKeys)
+		slices.Sort(parentKeys)
 
 		for _, parentPK := range parentKeys {
 			entries := parents[parentPK]

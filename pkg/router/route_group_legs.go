@@ -3,7 +3,7 @@ package router
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -846,7 +846,7 @@ func partitionLatencyBandWith(kn *routersettings.View, legs []bandLeg, manualMod
 	if len(known) < kn.Int(routersettings.BandMinLegs) {
 		return nil, nil
 	}
-	sort.Float64s(known)
+	slices.Sort(known)
 	anchor := fastClusterAnchor(known, demoteRatio)
 	if anchor <= 0 {
 		return nil, nil
@@ -943,7 +943,7 @@ func pickPrimaryReelectionWith(kn *routersettings.View, legs []bandLeg, tight bo
 	if primary == nil || primary.latMs <= 0 || len(known) < kn.Int(routersettings.BandMinLegs) {
 		return 0, false
 	}
-	sort.Float64s(known)
+	slices.Sort(known)
 	anchor := fastClusterAnchor(known, demoteRatio)
 	if anchor <= 0 {
 		return 0, false

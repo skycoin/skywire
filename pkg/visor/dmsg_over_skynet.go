@@ -7,13 +7,13 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"slices"
-	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -167,7 +167,9 @@ func (s *dmsgSkynetStats) note(pk cipher.PubKey, err error) {
 				Relay: t.relay.String(), Confirmed: t.confirmed, Stage: t.stage, Error: t.err,
 			})
 		}
-		sort.Slice(f.Relays, func(i, j int) bool { return f.Relays[i].Relay < f.Relays[j].Relay })
+		slices.SortFunc(f.Relays, func(a, b visorapi.DiagSkynetRelayTry) int {
+			return cmp.Compare(a.Relay, b.Relay)
+		})
 	}
 	s.mu.Lock()
 	s.lastErr, s.lastPK = err.Error(), pk.String()

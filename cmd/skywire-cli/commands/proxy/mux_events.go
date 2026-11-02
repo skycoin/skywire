@@ -4,7 +4,7 @@ package skysocksc
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"text/tabwriter"
 	"time"
 
@@ -120,7 +120,9 @@ func renderMuxEvents(cmd *cobra.Command, infos any) {
 		cmdutil.Printf("no recorded route-group events for app=%s (%d active group(s))\n", muxEventsApp, len(rgs))
 		return
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].ev.At.Before(rows[j].ev.At) })
+	slices.SortStableFunc(rows, func(a, b row) int {
+		return a.ev.At.Compare(b.ev.At)
+	})
 
 	w := tabwriter.NewWriter(cmdutil.Stdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "time\trg\trole\tevent\tby\tleg\tfirst hop\treason") //nolint:errcheck,gosec

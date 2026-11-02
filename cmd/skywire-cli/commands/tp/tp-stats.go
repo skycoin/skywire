@@ -2,9 +2,10 @@
 package clitp
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -95,8 +96,8 @@ Examples:
 		}
 
 		// Sort by total descending
-		sort.Slice(visors, func(i, j int) bool {
-			return visors[i].Total > visors[j].Total
+		slices.SortFunc(visors, func(a, b visorStats) int {
+			return cmp.Compare(b.Total, a.Total)
 		})
 
 		// Limit

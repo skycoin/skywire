@@ -1,8 +1,9 @@
 package router
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -26,7 +27,9 @@ func capturedFrames(conns []*capturingTransport) []routing.Packet {
 		}
 		c.mu.Unlock()
 	}
-	sort.Slice(frames, func(i, j int) bool { return frames[i].SequenceNumber() < frames[j].SequenceNumber() })
+	slices.SortFunc(frames, func(a, b routing.Packet) int {
+		return cmp.Compare(a.SequenceNumber(), b.SequenceNumber())
+	})
 	return frames
 }
 

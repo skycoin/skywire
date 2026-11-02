@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,7 +130,7 @@ This is designed to be run hourly by the reward service.`,
 			}
 		}
 
-		sort.Strings(qualifying)
+		slices.Sort(qualifying)
 
 		tpLog.Infof("Found %d visors with >= %d transports", len(qualifying), minTp)
 

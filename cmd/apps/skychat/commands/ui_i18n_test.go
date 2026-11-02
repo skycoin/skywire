@@ -4,7 +4,7 @@ package commands
 import (
 	"encoding/json"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -39,7 +39,7 @@ func pageDictionaries(t *testing.T, page string) map[string]map[string]string {
 
 func placeholders(s string) string {
 	found := i18nPlaceholder.FindAllString(s, -1)
-	sort.Strings(found)
+	slices.Sort(found)
 	return strings.Join(found, ",")
 }
 

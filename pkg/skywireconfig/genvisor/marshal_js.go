@@ -30,7 +30,7 @@
 package genvisor
 
 import (
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1482,7 +1482,7 @@ func marshalAutoconnect(w *strings.Builder, a *visorconfig.Autoconnect, indent i
 		for k := range a.MaxPerType {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		for _, k := range keys {
 			m.field(k)
 			writeInt(w, int64(a.MaxPerType[k]))

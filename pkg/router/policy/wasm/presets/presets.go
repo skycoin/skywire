@@ -26,7 +26,7 @@ package presets
 import (
 	_ "embed"
 	"encoding/json"
-	"sort"
+	"slices"
 )
 
 //go:embed bundle.wasm
@@ -67,6 +67,6 @@ func Names() []string {
 	for n := range descriptions {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

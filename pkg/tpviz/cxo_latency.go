@@ -21,9 +21,10 @@
 package tpviz
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -153,17 +154,17 @@ func (s *Server) tryCXOLatency() (*LatencyGraph, bool) {
 	}
 	// Deterministic order so the client's point indices are stable across
 	// refreshes and the embedding does not jump when nothing changed.
-	sort.Slice(g.Edges, func(i, j int) bool {
-		if g.Edges[i].A != g.Edges[j].A {
-			return g.Edges[i].A < g.Edges[j].A
-		}
-		return g.Edges[i].B < g.Edges[j].B
+	slices.SortFunc(g.Edges, func(a, b LatencyEdge) int {
+		return cmp.Or(
+			cmp.Compare(a.A, b.A),
+			cmp.Compare(a.B, b.B),
+		)
 	})
 	g.Visors = make([]string, 0, len(seen))
 	for pk := range seen {
 		g.Visors = append(g.Visors, pk)
 	}
-	sort.Strings(g.Visors)
+	slices.Sort(g.Visors)
 	return g, true
 }
 

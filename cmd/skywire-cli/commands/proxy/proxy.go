@@ -3,12 +3,13 @@ package skysocksc
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -866,7 +867,9 @@ func renderProxyRoute(rgs []muxRouteGroupInfo, direct []directStreamInfo) string
 			plural = "leg"
 		}
 		fmt.Fprintf(&sb, "Route: %d %s to %s  (rg %d)", len(rg.Legs), plural, shortPK(rg.farEnd()), rg.Desc.DstPort)
-		sort.SliceStable(rg.Legs, func(a, b int) bool { return rg.Legs[a].Index < rg.Legs[b].Index })
+		slices.SortStableFunc(rg.Legs, func(x, y muxLegInfo) int {
+			return cmp.Compare(x.Index, y.Index)
+		})
 		for _, leg := range rg.Legs {
 			lat := ""
 			if leg.LatencyMS > 0 {

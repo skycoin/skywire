@@ -22,9 +22,10 @@
 package proxystatus
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -216,7 +217,9 @@ func buildRouteGraph(snap Snapshot) rgGraph {
 		// refreshes — otherwise a churning leg set reshuffled node first-encounter
 		// order and jittered the graph as the pool grew.
 		legs := append([]Leg(nil), t.Legs...)
-		sort.SliceStable(legs, func(i, j int) bool { return legStableKey(legs[i]) < legStableKey(legs[j]) })
+		slices.SortStableFunc(legs, func(a, b Leg) int {
+			return cmp.Compare(legStableKey(a), legStableKey(b))
+		})
 		for _, l := range legs {
 			if !l.Alive {
 				continue

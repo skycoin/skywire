@@ -16,10 +16,11 @@
 package commands
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -305,6 +306,8 @@ func parsePresencePKs(in []string) []cipher.PubKey {
 		seen[pk] = true
 		out = append(out, pk)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	slices.SortFunc(out, func(a, b cipher.PubKey) int {
+		return cmp.Compare(a.Hex(), b.Hex())
+	})
 	return out
 }

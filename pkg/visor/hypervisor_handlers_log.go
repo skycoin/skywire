@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,7 +95,7 @@ func formatLogEntry(e *logrus.Entry) string {
 		}
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, k := range keys {
 		fmt.Fprintf(&b, " %s=%v", k, e.Data[k])
 	}

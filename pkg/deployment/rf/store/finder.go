@@ -2,10 +2,11 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -175,7 +176,9 @@ func (g *Graph) computeRouteWeighted(ctx context.Context, source, destination ci
 		return nil, ErrRouteNotFound
 	}
 
-	sort.SliceStable(pool, func(i, j int) bool { return pool[i].latency < pool[j].latency })
+	slices.SortStableFunc(pool, func(a, b scored) int {
+		return cmp.Compare(a.latency, b.latency)
+	})
 
 	out := make([]routing.Route, 0, number)
 	for i := 0; i < len(pool) && i < number; i++ {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +68,7 @@ func describe(entries []*transport.Entry) []string {
 	for _, e := range entries {
 		out = append(out, fmt.Sprintf("%s-%s %s %.0f", e.Edges[0].Hex(), e.Edges[1].Hex(), e.Type, e.Latency))
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

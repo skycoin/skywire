@@ -16,9 +16,10 @@
 package skysocks
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/0magnet/yamux"
 )
@@ -112,7 +113,9 @@ func (c *Client) markDraining(target int, reason string) {
 		c.sessionsMu.Unlock()
 		return
 	}
-	sort.SliceStable(live, func(i, j int) bool { return live[i].rtt > live[j].rtt })
+	slices.SortStableFunc(live, func(a, b ranked) int {
+		return cmp.Compare(b.rtt, a.rtt)
+	})
 	next := make(map[*yamux.Session]bool, surplus)
 	for i := 0; i < surplus; i++ {
 		next[live[i].s] = true

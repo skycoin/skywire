@@ -18,6 +18,7 @@
 package cliuptime
 
 import (
+	"cmp"
 	"crypto/sha1" //nolint:gosec // hash used only as cache-filename key
 	"encoding/hex"
 	"encoding/json"
@@ -26,7 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -409,7 +410,7 @@ func collectDates(entries []uptimestats.VisorSummary, dr dateRange) []string {
 	for k := range seen {
 		all = append(all, k)
 	}
-	sort.Strings(all)
+	slices.Sort(all)
 	if dr.since != "" {
 		out := all[:0]
 		for _, d := range all {
@@ -461,7 +462,9 @@ func printTable(entries []uptimestats.VisorSummary, version string, dr dateRange
 
 	sorted := make([]uptimestats.VisorSummary, len(entries))
 	copy(sorted, entries)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].PK.Hex() < sorted[j].PK.Hex() })
+	slices.SortFunc(sorted, func(a, b uptimestats.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 
 	for _, e := range sorted {
 		fields := []string{e.PK.Hex()}
@@ -537,7 +540,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, p
 				days = append(days, d)
 			}
 		}
-		sort.Strings(days)
+		slices.Sort(days)
 		if len(days) == 0 {
 			if verbose {
 				cmdutil.Println("  (no timeline data in selected range)")
@@ -690,7 +693,9 @@ func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, ve
 func sortByPK(entries []uptimestats.VisorSummary) []uptimestats.VisorSummary {
 	out := make([]uptimestats.VisorSummary, len(entries))
 	copy(out, entries)
-	sort.Slice(out, func(i, j int) bool { return out[i].PK.Hex() < out[j].PK.Hex() })
+	slices.SortFunc(out, func(a, b uptimestats.VisorSummary) int {
+		return cmp.Compare(a.PK.Hex(), b.PK.Hex())
+	})
 	return out
 }
 

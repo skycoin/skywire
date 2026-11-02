@@ -44,7 +44,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -190,7 +190,7 @@ func median(v []float64) (float64, bool) {
 		return 0, false
 	}
 	s := append([]float64(nil), v...)
-	sort.Float64s(s)
+	slices.Sort(s)
 	if len(s)%2 == 1 {
 		return s[len(s)/2], true
 	}

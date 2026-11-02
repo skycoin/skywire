@@ -25,7 +25,7 @@ package logging
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -156,7 +156,9 @@ func (b *Broadcaster) RecentMerged(app string, minLevel logrus.Level) []Record {
 	out := make([]Record, 0, len(events)+len(logs))
 	out = append(out, events...)
 	out = append(out, logs...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
+	slices.SortStableFunc(out, func(a, b Record) int {
+		return a.Time.Compare(b.Time)
+	})
 	return out
 }
 

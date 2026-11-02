@@ -19,9 +19,10 @@
 package visor
 
 import (
+	"cmp"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -310,7 +311,7 @@ func aliasList(m map[string]cipher.PubKey) []proxystatus.Alias {
 	for name := range m {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	out := make([]proxystatus.Alias, 0, len(names))
 	for _, name := range names {
 		out = append(out, proxystatus.Alias{Name: name, PK: m[name].String()})
@@ -410,7 +411,9 @@ func (p *visorStatusProvider) dmsgSessions() []proxystatus.DmsgSession {
 		}
 		out = append(out, s)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ServerPK < out[j].ServerPK })
+	slices.SortFunc(out, func(a, b proxystatus.DmsgSession) int {
+		return cmp.Compare(a.ServerPK, b.ServerPK)
+	})
 	return out
 }
 
@@ -454,7 +457,9 @@ func (p *visorStatusProvider) fillSkynetLayer(snap *proxystatus.Snapshot) {
 				UDP:       f.UDP,
 			})
 		}
-		sort.Slice(snap.Forwards, func(i, j int) bool { return snap.Forwards[i].Port < snap.Forwards[j].Port })
+		slices.SortFunc(snap.Forwards, func(a, b proxystatus.Forward) int {
+			return cmp.Compare(a.Port, b.Port)
+		})
 	} else {
 		snap.Note = appendNote(snap.Note, "forwarded ports unavailable: "+err.Error())
 	}
@@ -473,7 +478,9 @@ func (p *visorStatusProvider) fillSkynetLayer(snap *proxystatus.Snapshot) {
 				RemotePort: c.RemotePort,
 			})
 		}
-		sort.Slice(snap.Conns, func(i, j int) bool { return snap.Conns[i].ID < snap.Conns[j].ID })
+		slices.SortFunc(snap.Conns, func(a, b proxystatus.Conn) int {
+			return cmp.Compare(a.ID, b.ID)
+		})
 	}
 }
 

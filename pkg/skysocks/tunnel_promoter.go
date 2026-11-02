@@ -5,9 +5,10 @@
 package skysocks
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/0magnet/yamux"
@@ -624,11 +625,11 @@ func (c *Client) armAudition(now time.Time, active, standby []tunnelCandidate) {
 	}
 	// Oldest measurement first (never measured is the zero time, so it sorts
 	// ahead of everything), ties to the lowest ping.
-	sort.SliceStable(pool, func(i, j int) bool {
-		if !pool[i].measuredAt.Equal(pool[j].measuredAt) {
-			return pool[i].measuredAt.Before(pool[j].measuredAt)
-		}
-		return pool[i].rtt < pool[j].rtt
+	slices.SortStableFunc(pool, func(a, b tunnelCandidate) int {
+		return cmp.Or(
+			a.measuredAt.Compare(b.measuredAt),
+			cmp.Compare(a.rtt, b.rtt),
+		)
 	})
 
 	c.sessionsMu.Lock()

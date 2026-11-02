@@ -2,9 +2,10 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -149,7 +150,7 @@ func (a *API) serverLoadCharts(f *charts.Frame, from, now time.Time, reg map[str
 		}
 	}
 	if len(silent) > 0 {
-		sort.Strings(silent)
+		slices.Sort(silent)
 		out[0].Note += " Not reporting yet (older version, or no answer): " + strings.Join(silent, ", ") + "."
 	}
 	return out
@@ -224,7 +225,9 @@ func (a *API) buildCharts(ctx context.Context, st charts.Store, r charts.Range, 
 	out.Charts = append(out.Charts, charts.Chart{Title: "Free sessions per registered dmsg server", Note: "Spare capacity each server advertises in its entry.",
 		Kind: charts.Lines, From: from, To: now, Times: f.Times, Series: free,
 		Legend: []string{"Public key", "Version", "Address", "Free sessions"}})
-	sort.SliceStable(lan, func(i, j int) bool { return lan[i].clients > lan[j].clients })
+	slices.SortStableFunc(lan, func(a, b lanServer) int {
+		return cmp.Compare(b.clients, a.clients)
+	})
 	t := charts.Table{Title: "Hypervisor LAN dmsg servers now", Head: []string{"Public key", "Version", "Clients"}}
 	for _, l := range lan {
 		// A LAN server has no server entry, but its visor's client entry has the version.

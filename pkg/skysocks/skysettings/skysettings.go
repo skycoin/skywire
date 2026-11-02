@@ -15,10 +15,11 @@
 package skysettings
 
 import (
+	"cmp"
 	"encoding/hex"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -524,7 +525,9 @@ func Catalog() []Def {
 	for _, n := range order {
 		out = append(out, knobs[n].def)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Def) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 
@@ -554,7 +557,9 @@ func Snapshot() []Entry {
 		}
 		out = append(out, e)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Entry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

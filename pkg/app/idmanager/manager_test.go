@@ -3,7 +3,7 @@ package idmanager
 
 import (
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -441,7 +441,7 @@ func TestManager_DoRange(t *testing.T) {
 
 		return true
 	})
-	sort.Ints(gotVals)
+	slices.Sort(gotVals)
 	require.Equal(t, gotVals, vals)
 
 	// run part range

@@ -2,9 +2,10 @@
 package skyobject
 
 import (
+	"cmp"
 	"fmt"
 	"log"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -539,8 +540,8 @@ func (c *Cache) cleanDown(vol int) (err error) {
 	// sort the rank using cachePoints; we
 	// are removing items with less points
 
-	sort.Slice(rank, func(i, j int) bool {
-		return rank[i].it.cachePoints < rank[j].it.cachePoints
+	slices.SortFunc(rank, func(a, b rankItem) int {
+		return cmp.Compare(a.it.cachePoints, b.it.cachePoints)
 	})
 
 	// clean by amount first

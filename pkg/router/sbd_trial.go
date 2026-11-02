@@ -7,8 +7,9 @@
 package router
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -228,7 +229,9 @@ func (rg *RouteGroup) evaluateSBDTrials(rate float64, tps []*transport.ManagedTr
 	if len(ripe) == 0 {
 		return
 	}
-	sort.Slice(ripe, func(a, b int) bool { return ripe[a].leg < ripe[b].leg })
+	slices.SortFunc(ripe, func(x, y sbdTrialVerdict) int {
+		return cmp.Compare(x.leg, y.leg)
+	})
 
 	for _, v := range ripe {
 		switch {

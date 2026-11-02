@@ -2,6 +2,7 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -11,7 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -199,8 +200,8 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 	}
 
 	// Sort by date descending (newest first)
-	sort.Slice(history, func(i, j int) bool {
-		return history[i].Date > history[j].Date
+	slices.SortFunc(history, func(a, b rewardHistoryEntry) int {
+		return cmp.Compare(b.Date, a.Date)
 	})
 
 	return history

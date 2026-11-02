@@ -19,9 +19,10 @@
 package routingfeed
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -106,7 +107,7 @@ func (r *Reader) Entries() []*transport.Entry {
 	for seq := range r.deltas {
 		seqs = append(seqs, seq)
 	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	slices.Sort(seqs)
 	for _, seq := range seqs {
 		d := r.deltas[seq]
 		for _, rm := range d.Removed {
@@ -127,6 +128,8 @@ func (r *Reader) Entries() []*transport.Entry {
 		}
 		out = append(out, e)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID.String() < out[j].ID.String() })
+	slices.SortFunc(out, func(a, b *transport.Entry) int {
+		return cmp.Compare(a.ID.String(), b.ID.String())
+	})
 	return out
 }

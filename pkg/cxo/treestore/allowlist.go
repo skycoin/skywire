@@ -16,8 +16,9 @@
 package treestore
 
 import (
+	"cmp"
 	"errors"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -112,7 +113,9 @@ func (a *allowState) deniedList() []DeniedSub {
 	for _, d := range a.denied {
 		out = append(out, *d)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastNanos > out[j].LastNanos })
+	slices.SortFunc(out, func(a, b DeniedSub) int {
+		return cmp.Compare(b.LastNanos, a.LastNanos)
+	})
 	return out
 }
 

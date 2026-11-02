@@ -3,6 +3,7 @@ package clirewards
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -404,7 +405,9 @@ func sumRewardsByAddress(nodes []nodeinfo) []rewardData {
 	for addr, reward := range sums {
 		result = append(result, rewardData{SkyAddr: addr, Reward: reward})
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Reward > result[j].Reward })
+	slices.SortFunc(result, func(a, b rewardData) int {
+		return cmp.Compare(b.Reward, a.Reward)
+	})
 	return result
 }
 
@@ -424,7 +427,9 @@ func aggregateBy(nodes []nodeinfo, field func(nodeinfo) float64) []rewardData {
 		}
 		result = append(result, rewardData{SkyAddr: addr, Reward: reward})
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Reward > result[j].Reward })
+	slices.SortFunc(result, func(a, b rewardData) int {
+		return cmp.Compare(b.Reward, a.Reward)
+	})
 	return result
 }
 
@@ -580,7 +585,9 @@ func printSaturationStats(nodes []nodeinfo, dayReward, totalShares float64) {
 	for c := range cVisors {
 		stats = append(stats, countryStat{c, cVisors[c], len(cIPs[c]), cShares[c]})
 	}
-	sort.Slice(stats, func(i, j int) bool { return stats[i].shares > stats[j].shares })
+	slices.SortFunc(stats, func(a, b countryStat) int {
+		return cmp.Compare(b.shares, a.shares)
+	})
 
 	cmdutil.Printf("%-4s %7s %5s %10s %10s\n", "CC", "Visors", "IPs", "Shares", "SKY/visor")
 	for _, cs := range stats {

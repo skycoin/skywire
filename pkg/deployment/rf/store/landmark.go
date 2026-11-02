@@ -24,7 +24,9 @@ package store
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"slices"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -333,8 +335,8 @@ func (g *Graph) composeLandmark(lt *landmarkTables, src, dst cipher.PubKey, numb
 	if len(cands) == 0 {
 		return nil
 	}
-	sort.SliceStable(cands, func(i, j int) bool {
-		return g.routeLatency(cands[i]) < g.routeLatency(cands[j])
+	slices.SortStableFunc(cands, func(a, b routing.Route) int {
+		return cmp.Compare(g.routeLatency(a), g.routeLatency(b))
 	})
 	out := make([]routing.Route, 0, number)
 	seen := make(map[string]struct{}, len(cands))
@@ -393,7 +395,9 @@ func (g *Graph) pooledBFS(ctx context.Context, src, dst cipher.PubKey, minLen, m
 		pool = append(pool, scored{route: r, latency: g.routeLatency(r)})
 		return len(pool) < poolCap
 	})
-	sort.SliceStable(pool, func(i, j int) bool { return pool[i].latency < pool[j].latency })
+	slices.SortStableFunc(pool, func(a, b scored) int {
+		return cmp.Compare(a.latency, b.latency)
+	})
 	out := make([]routing.Route, len(pool))
 	for i := range pool {
 		out[i] = pool[i].route
@@ -437,8 +441,8 @@ func (g *Graph) routesLandmarkHybrid(ctx context.Context, src, dst cipher.PubKey
 		seen[key] = struct{}{}
 		merged = append(merged, r)
 	}
-	sort.SliceStable(merged, func(i, j int) bool {
-		return g.routeLatency(merged[i]) < g.routeLatency(merged[j])
+	slices.SortStableFunc(merged, func(a, b routing.Route) int {
+		return cmp.Compare(g.routeLatency(a), g.routeLatency(b))
 	})
 	if len(merged) > number {
 		merged = merged[:number]

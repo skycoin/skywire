@@ -3,6 +3,7 @@ package clirewardsserver
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -392,8 +394,8 @@ func writeCountryStats(countryCount map[string]int, countryNames map[string]stri
 	}
 
 	// Sort by count descending
-	sort.Slice(stats, func(i, j int) bool {
-		return stats[i].Count > stats[j].Count
+	slices.SortFunc(stats, func(a, b CountryStat) int {
+		return cmp.Compare(b.Count, a.Count)
 	})
 
 	// Generate plaintext output
@@ -517,8 +519,8 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	histCache.Unlock()
 
 	// Sort files by date (newest first) so we use most recent data for each visor+date
-	sort.Slice(files, func(i, j int) bool {
-		return files[i] > files[j]
+	slices.SortFunc(files, func(a, b string) int {
+		return cmp.Compare(b, a)
 	})
 
 	// Track which visor+date combinations we've already processed to avoid double-counting
@@ -577,7 +579,7 @@ func ParseHistoricUptimeData(histDir string, minUptime float64) ([]VersionHistor
 	for d := range dateVersionCounts {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 
 	var history []VersionHistoryEntry
 	for _, date := range dates {
@@ -833,7 +835,7 @@ func ParseHistoricBandwidthData(histDir string) ([]BandwidthHistoryEntry, error)
 		return nil, err
 	}
 
-	sort.Strings(files) // chronological order
+	slices.Sort(files) // chronological order
 
 	var history []BandwidthHistoryEntry
 	for _, file := range files {
@@ -994,8 +996,8 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 	for pk, total := range visorTotals {
 		sorted = append(sorted, visorBW{PK: pk, Total: total})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Total > sorted[j].Total
+	slices.SortFunc(sorted, func(a, b visorBW) int {
+		return cmp.Compare(b.Total, a.Total)
 	})
 
 	// Top N visors shown individually, rest grouped as "Other"
@@ -1249,7 +1251,7 @@ func renderTPDBandwidthTable(metrics []tpdstore.TransportMetric, src statsSource
 	for d := range dateSet {
 		dates = append(dates, d)
 	}
-	sort.Strings(dates)
+	slices.Sort(dates)
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("<p>Showing %d transports with bandwidth data over %d days</p>\n", len(metrics), len(dates)))
@@ -1593,11 +1595,11 @@ func sortedTransportTypes(byType map[string]int) []string {
 	for tpType := range byType {
 		types = append(types, tpType)
 	}
-	sort.Slice(types, func(i, j int) bool {
-		if byType[types[i]] != byType[types[j]] {
-			return byType[types[i]] > byType[types[j]]
-		}
-		return types[i] < types[j]
+	slices.SortFunc(types, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(byType[b], byType[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	return types
 }

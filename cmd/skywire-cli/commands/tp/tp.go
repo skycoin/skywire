@@ -3,12 +3,13 @@ package clitp
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -327,7 +328,7 @@ var tpCmd = &cobra.Command{
 			for t := range byType {
 				typeNames = append(typeNames, t)
 			}
-			sort.Strings(typeNames)
+			slices.Sort(typeNames)
 			for _, t := range typeNames {
 				ts := byType[t]
 				fmt.Fprintf(&b, "  %-10s %-7d %s%s\n", t, ts.Total, inC(ts.Incoming), outC(ts.Outgoing))
@@ -471,7 +472,7 @@ func printNetworkTransportSummary(cmd *cobra.Command, baseURL string) {
 	for t := range ns.ByType {
 		typeNames = append(typeNames, t)
 	}
-	sort.Strings(typeNames)
+	slices.Sort(typeNames)
 	for _, t := range typeNames {
 		fmt.Fprintf(&b, "  %-10s %d\n", t, ns.ByType[t])
 	}
@@ -754,8 +755,8 @@ func formatLatencyMS(ms float64) string {
 }
 
 func sortTransports(tps ...*visorapi.TransportSummary) {
-	sort.Slice(tps, func(i, j int) bool {
-		return tps[i].ID.String() < tps[j].ID.String()
+	slices.SortFunc(tps, func(a, b *visorapi.TransportSummary) int {
+		return cmp.Compare(a.ID.String(), b.ID.String())
 	})
 }
 

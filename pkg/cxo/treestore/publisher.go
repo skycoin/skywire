@@ -15,7 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1652,7 +1652,7 @@ func sortedNames(n *memNode) []string {
 	for name := range n.subs {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

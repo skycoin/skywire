@@ -9,8 +9,9 @@
 package clirewardsserver
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/skycoin/skywire/deployment"
@@ -74,11 +75,11 @@ func gatherDmsgStats() dmsgStats {
 			})
 		}
 		// Fullest first: a server at zero spare is the one worth seeing.
-		sort.Slice(d.Servers, func(i, j int) bool {
-			if d.Servers[i].Available != d.Servers[j].Available {
-				return d.Servers[i].Available < d.Servers[j].Available
-			}
-			return d.Servers[i].PK < d.Servers[j].PK
+		slices.SortFunc(d.Servers, func(a, b dmsgServerRow) int {
+			return cmp.Or(
+				cmp.Compare(a.Available, b.Available),
+				cmp.Compare(a.PK, b.PK),
+			)
 		})
 	}
 

@@ -11,7 +11,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -80,8 +80,8 @@ func (c *churnSub) diff(want map[string]struct{}) (missing, extra []string) {
 			extra = append(extra, p)
 		}
 	}
-	sort.Strings(missing)
-	sort.Strings(extra)
+	slices.Sort(missing)
+	slices.Sort(extra)
 	return missing, extra
 }
 

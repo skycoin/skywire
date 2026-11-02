@@ -3,12 +3,13 @@ package contacts
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -60,11 +61,11 @@ func (s *Store) listLocked() ([]Contact, error) {
 		}
 		out = append(out, cs[0])
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name); a != b {
-			return a < b
-		}
-		return out[i].UID < out[j].UID
+	slices.SortFunc(out, func(x, y Contact) int {
+		return cmp.Or(
+			cmp.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)),
+			cmp.Compare(x.UID, y.UID),
+		)
 	})
 	return out, nil
 }

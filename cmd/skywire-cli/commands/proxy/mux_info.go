@@ -3,9 +3,10 @@ package skysocksc
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -432,7 +433,7 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 			for k := range n {
 				keys = append(keys, k)
 			}
-			sort.Strings(keys)
+			slices.Sort(keys)
 			parts := make([]string, 0, len(keys))
 			for _, k := range keys {
 				parts = append(parts, fmt.Sprintf("%s=%d", k, n[k]))
@@ -473,7 +474,9 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 		}
 
 		// Sort legs by index so the row order is stable across snapshots.
-		sort.SliceStable(rg.Legs, func(i, j int) bool { return rg.Legs[i].Index < rg.Legs[j].Index })
+		slices.SortStableFunc(rg.Legs, func(a, b muxLegInfo) int {
+			return cmp.Compare(a.Index, b.Index)
+		})
 
 		// rg descriptor is the stable cross-poll key (the list index can shift).
 		rgKey := fmt.Sprintf("%s:%d>%s:%d", rg.Desc.SrcPK, rg.Desc.SrcPort, rg.Desc.DstPK, rg.Desc.DstPort)

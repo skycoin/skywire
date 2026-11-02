@@ -2,9 +2,10 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -152,7 +153,9 @@ func buildCharts(ctx context.Context, st charts.Store, r charts.Range, now time.
 		{Name: "found", Vals: sumSeries(found, len(f.Times))},
 		{Name: "not found", Vals: sumSeries(notFound, len(f.Times))},
 	}
-	sort.SliceStable(found, func(i, j int) bool { return found[i].Name < found[j].Name })
+	slices.SortStableFunc(found, func(a, b charts.Series) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	return charts.Content{Charts: []charts.Chart{
 		chart("Visors with a binding, by type",

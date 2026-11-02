@@ -14,11 +14,12 @@
 package visor
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -156,7 +157,7 @@ func (r *ServiceRegistry) Ports() []uint16 {
 	for p := range r.handlers {
 		out = append(out, p)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 
@@ -174,7 +175,9 @@ func (r *ServiceRegistry) List() []ServiceInfo {
 	for p, svc := range r.handlers {
 		out = append(out, ServiceInfo{Port: p, Label: svc.label})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b ServiceInfo) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 
@@ -190,7 +193,9 @@ func (r *ServiceRegistry) ListPublic() []logserver.ServiceEntry {
 		}
 		out = append(out, logserver.ServiceEntry{Port: p, Label: svc.label})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	slices.SortFunc(out, func(a, b logserver.ServiceEntry) int {
+		return cmp.Compare(a.Port, b.Port)
+	})
 	return out
 }
 

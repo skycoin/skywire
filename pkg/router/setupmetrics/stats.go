@@ -11,6 +11,7 @@ package setupmetrics
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1052,7 +1053,7 @@ func (c *Collector) latencyStatsLocked() LatencyStats {
 	// Copy active part of ring and sort for percentiles.
 	sorted := make([]int64, c.latencyRingLen)
 	copy(sorted, c.latencyRing[:c.latencyRingLen])
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.Sort(sorted)
 
 	var sum int64
 	for _, v := range sorted {

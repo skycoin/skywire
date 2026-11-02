@@ -2,8 +2,9 @@
 package router
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -472,7 +473,9 @@ func (m *routeMux) forwardFanoutLegs(tps []*transport.ManagedTransport, cur int)
 	if len(ranked) < 2 {
 		return nil
 	}
-	sort.Slice(ranked, func(a, b int) bool { return ranked[a].lat < ranked[b].lat })
+	slices.SortFunc(ranked, func(x, y bandLeg) int {
+		return cmp.Compare(x.lat, y.lat)
+	})
 	band := make([]int, len(ranked))
 	for i := range ranked {
 		band[i] = ranked[i].idx

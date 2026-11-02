@@ -3,7 +3,7 @@ package cliroute
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"text/tabwriter"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -55,7 +55,7 @@ leaking them.`,
 			for t := range stats.ByType {
 				types = append(types, t)
 			}
-			sort.Strings(types)
+			slices.Sort(types)
 			for _, t := range types {
 				fmt.Fprintf(tw, "  %s\t%d\n", t, stats.ByType[t]) //nolint:errcheck,gosec
 			}

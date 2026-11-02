@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -268,7 +268,7 @@ func (s *Store) Dates() ([]string, error) {
 			return nil
 		})
 	})
-	sort.Strings(dates)
+	slices.Sort(dates)
 	return dates, err
 }
 

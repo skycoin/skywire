@@ -29,6 +29,7 @@ package router_test
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -38,7 +39,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -985,7 +986,9 @@ func TestStreamBench(t *testing.T) {
 	})
 
 	// The summary table, in the live bench's column order.
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].dir > rows[j].dir })
+	slices.SortStableFunc(rows, func(a, b row) int {
+		return cmp.Compare(b.dir, a.dir)
+	})
 	var b strings.Builder
 	b.WriteString("\nname\tdir\tsize\tgoodput_Bps\tratio\twire/goodput\thash_ok\n")
 	for _, r := range rows {

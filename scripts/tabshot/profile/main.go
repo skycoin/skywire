@@ -8,11 +8,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -97,7 +98,9 @@ func main() {
 		os.Exit(1)
 	}
 	nodes := prof.Profile.Nodes
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].HitCount > nodes[j].HitCount })
+	slices.SortFunc(nodes, func(a, b node) int {
+		return cmp.Compare(b.HitCount, a.HitCount)
+	})
 	// V8 meta-nodes ((idle), (program), (garbage collector), (root)) are not
 	// script execution — counting them as "busy" turns an idle tab into a
 	// false spin alarm, so utilization is computed from real frames only.

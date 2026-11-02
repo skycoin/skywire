@@ -63,7 +63,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -216,7 +216,7 @@ func EncodeBucket(peers map[cipher.PubKey]*PeerBindings) ([]byte, error) {
 		pks = append(pks, h)
 		idx[h] = b
 	}
-	sort.Strings(pks)
+	slices.Sort(pks)
 
 	payload := make([]byte, 0, 64+len(pks)*256)
 	payload = append(payload, '{')
