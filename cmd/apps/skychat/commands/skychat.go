@@ -745,7 +745,7 @@ func parseEventChannels(csv string) map[string]bool {
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
 	launcher.RegisterAppFlags("skychat", RootCmd.Flags())
-	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
+	RootCmd.Flags().StringVar(&addr, "addr", skyenv.SkychatAddr, "address to bind. \":PORT\" binds localhost only; use \"*:PORT\" or \"0.0.0.0:PORT\" for all interfaces")
 	RootCmd.Flags().BoolVar(&portless, "portless", false, "don't bind a TCP port; reach the UI only through the visor's control surface (the in-process surface is published either way)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
@@ -819,7 +819,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if len(args) > 0 {
 		// Create independent FlagSet for parsing without initialization cycle
 		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
-		fs.StringVar(&addr, "addr", ":8001", "address to bind")
+		fs.StringVar(&addr, "addr", skyenv.SkychatAddr, "address to bind")
 		fs.BoolVar(&portless, "portless", false, "no TCP port; reach the UI only through the visor's control surface")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
@@ -1122,7 +1122,10 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if len(address) >= 2 && address[:2] == "*:" {
 		url = "0.0.0.0" + address[1:]
 	} else if len(address) >= 1 && address[:1] == ":" {
+		// Unlike Go's own ":PORT", this stays on localhost so an old config
+		// holding "--addr :8001" never puts the chat UI on the LAN.
 		url = "127.0.0.1" + address
+		appLog("--addr %s binds localhost only; use *%s or 0.0.0.0%s to serve other machines", address, address, address)
 	} else if host, port, err := net.SplitHostPort(address); err == nil && host != "" && port != "" {
 		url = address
 	} else {
