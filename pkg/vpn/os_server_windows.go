@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 // Package vpn pkg/vpn/os_server_windows.go c4-app-vpn
 package vpn

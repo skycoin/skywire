@@ -541,7 +541,6 @@ func sendFileToGroup(ctx context.Context, path string) (int, error) {
 	}
 	path = filepath.Join(dir, sentCopyName(xfer.Offer{ID: fileID, Name: name}))
 	for _, pk := range peers {
-		pk := pk
 		go func() {
 			sctx, cancel := context.WithTimeout(ctx, sendTimeout)
 			defer cancel()

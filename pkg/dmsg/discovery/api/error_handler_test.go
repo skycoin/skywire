@@ -32,7 +32,6 @@ var errHandlerTestCases = []struct {
 
 func TestErrorHandler(t *testing.T) {
 	for _, tc := range errHandlerTestCases {
-		tc := tc
 		t.Run(tc.err.Error(), func(t *testing.T) {
 			w := httptest.NewRecorder()
 			api := New(nil, store.NewMock(), metrics.NewEmpty(), true, false, true, "", "", 0)

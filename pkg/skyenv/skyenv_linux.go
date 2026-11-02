@@ -1,5 +1,4 @@
 //go:build linux
-// +build linux
 
 // Package skyenv pkg/skyenv/skyenv_linux.go c0-com-env
 package skyenv

@@ -27,7 +27,6 @@ func Methods(rcvr any) []string {
 	var names []string
 	t := reflect.TypeOf(rcvr)
 	for m := range t.Methods() {
-		m := m
 		mt := m.Type
 		if !m.IsExported() || mt.NumIn() != 3 || mt.NumOut() != 1 || mt.Out(0) != typeOfError {
 			continue

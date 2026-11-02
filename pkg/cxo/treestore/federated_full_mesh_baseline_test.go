@@ -141,7 +141,6 @@ func TestFullMeshFourVisor_ConcurrentBurstConverges(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for _, vm := range rig.visors {
-		vm := vm
 		go func() {
 			defer wg.Done()
 			for seq := 1; seq <= perVisor; seq++ {

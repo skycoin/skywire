@@ -28,7 +28,6 @@ func TestParseShapeRoundTrip(t *testing.T) {
 		{raw: "1,3", want: "3,1", tunnels: 2, chains: 4},
 		{raw: " 2X2 ", want: "2x2", tunnels: 2, chains: 4},
 	} {
-		tc := tc
 		t.Run(tc.raw, func(t *testing.T) {
 			s, err := parseShape(tc.raw)
 			require.NoError(t, err)

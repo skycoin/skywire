@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history store_bolt_test.go
 package history

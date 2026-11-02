@@ -97,7 +97,6 @@ func TestV1JSONMirrorsEveryField(t *testing.T) {
 	tags := func(typ reflect.Type) map[string]bool {
 		out := map[string]bool{}
 		for f := range typ.Fields() {
-			f := f
 			name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 			if f.Anonymous || name == "" || name == "-" {
 				continue

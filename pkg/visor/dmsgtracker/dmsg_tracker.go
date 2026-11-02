@@ -203,7 +203,6 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context) {
 	errCh := make(chan errReport, dtsLen)
 
 	for _, dt := range dtm.dts {
-		dt := dt
 		go func() {
 			err := dt.Update(cancelCtx)
 			select {

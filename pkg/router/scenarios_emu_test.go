@@ -231,7 +231,6 @@ func TestEmuCutOfBusiestLegCompletes(t *testing.T) {
 // Two legs, so the survivor must carry everything, in both directions.
 func TestEmuBothWayCutOfALegCompletes(t *testing.T) {
 	for _, dir := range []emuDir{emuDown, emuUp} {
-		dir := dir
 		t.Run(string(dir), func(t *testing.T) {
 			const bytes = 8 * emuMB
 			legs := []emuLegSpec{

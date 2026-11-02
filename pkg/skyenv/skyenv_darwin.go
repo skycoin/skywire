@@ -1,5 +1,4 @@
 //go:build darwin
-// +build darwin
 
 // Package skyenv pkg/skyenv/skyenv_darwin.go c0-com-env
 package skyenv

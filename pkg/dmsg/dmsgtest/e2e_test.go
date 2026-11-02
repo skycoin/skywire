@@ -52,7 +52,6 @@ func TestBidirectionalStreams(t *testing.T) {
 	}
 
 	for _, p := range payloads {
-		p := p
 		t.Run(p.name, func(t *testing.T) {
 			env := NewEnv(t, timeout)
 			require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
@@ -259,7 +258,6 @@ func TestConcurrentStreams(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for i := range numStreams {
-		i := i
 		wg.Go(func() {
 			// Retry dials — on slow CI runners, concurrent handshakes
 			// can transiently fail with "cannot connect to delegated server".
@@ -305,7 +303,6 @@ func TestConcurrentStreams(t *testing.T) {
 	recvData := make([][]byte, numStreams)
 	var recvWg sync.WaitGroup
 	for i := range numStreams {
-		i := i
 		recvWg.Go(func() {
 			buf := make([]byte, payloadSize)
 			_, rErr := io.ReadFull(accepted[i], buf)

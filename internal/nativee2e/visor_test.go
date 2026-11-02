@@ -1,5 +1,4 @@
 //go:build client_e2e
-// +build client_e2e
 
 package nativee2e
 

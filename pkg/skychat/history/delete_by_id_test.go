@@ -1,5 +1,4 @@
 //go:build !js
-// +build !js
 
 // Package history delete_by_id_test.go — DeleteByID across both backends.
 //

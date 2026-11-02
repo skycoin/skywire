@@ -1,5 +1,4 @@
 //go:build linux && !android
-// +build linux,!android
 
 // Package vpn pkg/vpn/mesh_client_linux.go c4-app-vpn
 package vpn

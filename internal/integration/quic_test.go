@@ -1,5 +1,4 @@
 //go:build !no_ci
-// +build !no_ci
 
 // Package integration_test — pkg/../internal/integration/quic_test.go: end-to-end
 // coverage for the QUIC (squicr) skywire transport across real visor containers.
