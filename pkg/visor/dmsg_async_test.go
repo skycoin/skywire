@@ -147,3 +147,35 @@ func TestDmsgAsyncHostSendsToItsVisor(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, hostC.LocalPK(), msgs[0].From)
 }
+
+// A host that does not answer is left out of the record, so senders only see
+// hosts that took the registration, and its error shows in the status.
+func TestDmsgAsyncRecordNamesOnlyRegisteredHosts(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 2, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC := cs[0], cs[1]
+	on, off := true, false
+	asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	gone, _ := cipher.GenerateKeyPair()
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, gone, hostC.LocalPK())
+	require.NoError(t, rcpt.DmsgAsyncSync())
+
+	st, err := rcpt.DmsgAsyncStatus()
+	require.NoError(t, err)
+	require.Equal(t, []cipher.PubKey{hostC.LocalPK()}, st.Inbox.Record.Hosts)
+	require.NoError(t, st.Inbox.Record.Verify(time.Now()))
+	require.Len(t, st.Inbox.Hosts, 2)
+	for _, h := range st.Inbox.Hosts {
+		if h.PK == gone {
+			require.NotEmpty(t, h.Error)
+		} else {
+			require.Empty(t, h.Error)
+		}
+	}
+}

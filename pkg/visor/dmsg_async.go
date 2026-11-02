@@ -30,6 +30,7 @@ import (
 const (
 	asyncCycle          = 10 * time.Minute
 	asyncReregister     = 24 * time.Hour
+	asyncRetryFailed    = time.Hour
 	asyncRecordRenew    = 7 * 24 * time.Hour
 	asyncOpTimeout      = 90 * time.Second
 	asyncRecordCacheTTL = time.Hour
@@ -39,7 +40,9 @@ const (
 var ErrDmsgAsyncOff = errors.New("dmsg-async is not running")
 
 type asyncState struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// cycle serializes inbox cycles, so two never sign and register at once.
+	cycle    sync.Mutex
 	log      *logging.Logger
 	host     *dmsgasync.Host
 	store    string
@@ -52,6 +55,7 @@ type asyncState struct {
 	regErr   map[cipher.PubKey]string
 	pubAt    time.Time
 	pubErr   string
+	round    time.Time
 	lastFet  time.Time
 	fetched  int
 	handlers map[uint16]dmsgasync.Handler
@@ -208,53 +212,25 @@ func (v *Visor) asyncInboxLoop(ctx context.Context, log *logging.Logger) {
 	}
 }
 
-// asyncCycle keeps the record fresh, registers where needed, publishes and
-// fetches. force re-registers and republishes regardless of age.
+// asyncCycle keeps the registrations and the record fresh, publishes and
+// fetches. force does it all regardless of age.
 func (v *Visor) asyncCycle(ctx context.Context, log *logging.Logger, force bool) {
 	a := &v.async
+	a.cycle.Lock()
+	defer a.cycle.Unlock()
 	now := time.Now()
 	a.mu.Lock()
-	hosts := append([]cipher.PubKey(nil), a.hosts...)
-	rec := a.record
-	if rec == nil || rec.Expires.Sub(now) < asyncRecordRenew {
-		nr, err := dmsgasync.NewRecord(v.conf.PK, v.conf.SK, hosts, 0, uint64(now.Unix()), 0) //nolint:gosec
-		if err != nil {
-			a.mu.Unlock()
-			log.WithError(err).Warn("dmsg-async: sign inbox record")
-			return
-		}
-		rec = &nr
-		a.record = rec
-		a.reg = map[cipher.PubKey]time.Time{}
-		a.pubAt = time.Time{}
-	}
-	pol := a.policy
-	publish := a.publish
-	due := make([]cipher.PubKey, 0, len(hosts))
-	for _, h := range hosts {
-		if force || now.Sub(a.reg[h]) > asyncReregister {
-			due = append(due, h)
-		}
-	}
-	pubDue := publish && (force || now.Sub(a.pubAt) > asyncReregister)
+	due := force || a.record == nil || a.record.Expires.Sub(now) < asyncRecordRenew ||
+		now.Sub(a.round) > asyncReregister || len(a.regErr) > 0 && now.Sub(a.round) > asyncRetryFailed
 	a.mu.Unlock()
-
-	for _, h := range due {
-		cctx, cancel := context.WithTimeout(ctx, asyncOpTimeout)
-		err := dmsgasync.Register(cctx, v.asyncDial, h, *rec, pol)
-		cancel()
-		a.mu.Lock()
-		if err != nil {
-			a.regErr[h] = err.Error()
-		} else {
-			a.reg[h] = time.Now()
-			delete(a.regErr, h)
-		}
-		a.mu.Unlock()
-		if err != nil {
-			log.WithError(err).WithField("host", h).Debug("dmsg-async: register")
-		}
+	if due {
+		v.asyncRegister(ctx, log, now)
 	}
+
+	a.mu.Lock()
+	rec := a.record
+	pubDue := a.publish && rec != nil && len(rec.Hosts) > 0 && (force || a.pubAt.IsZero() || now.Sub(a.pubAt) > asyncReregister)
+	a.mu.Unlock()
 	if pubDue {
 		err := v.asyncPublish(ctx, *rec)
 		a.mu.Lock()
@@ -267,6 +243,70 @@ func (v *Visor) asyncCycle(ctx context.Context, log *logging.Logger, force bool)
 		a.mu.Unlock()
 	}
 	v.asyncFetch(ctx, log)
+}
+
+// asyncRegister registers with every candidate host under a record naming
+// them all, then re-signs the record with only the hosts that accepted and
+// registers that with them, so senders are never sent to a host that refuses.
+func (v *Visor) asyncRegister(ctx context.Context, log *logging.Logger, now time.Time) {
+	a := &v.async
+	a.mu.Lock()
+	candidates := append([]cipher.PubKey(nil), a.hosts...)
+	pol := a.policy
+	a.mu.Unlock()
+	seq := uint64(now.UnixNano()) //nolint:gosec
+
+	register := func(rec dmsgasync.Record, hosts []cipher.PubKey) (ok []cipher.PubKey, failed map[cipher.PubKey]string) {
+		failed = map[cipher.PubKey]string{}
+		for _, h := range hosts {
+			cctx, cancel := context.WithTimeout(ctx, asyncOpTimeout)
+			err := dmsgasync.Register(cctx, v.asyncDial, h, rec, pol)
+			cancel()
+			if err != nil {
+				failed[h] = err.Error()
+				log.WithError(err).WithField("host", h).Debug("dmsg-async: register")
+				continue
+			}
+			ok = append(ok, h)
+		}
+		return ok, failed
+	}
+
+	full, err := dmsgasync.NewRecord(v.conf.PK, v.conf.SK, candidates, 0, seq, 0)
+	if err != nil {
+		log.WithError(err).Warn("dmsg-async: sign inbox record")
+		return
+	}
+	ok, failed := register(full, candidates)
+	rec := full
+	if len(ok) != len(candidates) {
+		rec, err = dmsgasync.NewRecord(v.conf.PK, v.conf.SK, ok, 0, seq+1, 0)
+		if err != nil {
+			log.WithError(err).Warn("dmsg-async: sign inbox record")
+			return
+		}
+		if len(ok) > 0 {
+			var lost map[cipher.PubKey]string
+			ok, lost = register(rec, ok)
+			for h, e := range lost {
+				failed[h] = e
+			}
+		}
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	changed := a.record == nil || !slices.Equal(a.record.Hosts, rec.Hosts)
+	a.record = &rec
+	a.round = now
+	a.reg = map[cipher.PubKey]time.Time{}
+	for _, h := range ok {
+		a.reg[h] = time.Now()
+	}
+	a.regErr = failed
+	if changed {
+		a.pubAt = time.Time{}
+	}
 }
 
 func (v *Visor) asyncDiscURL() (string, bool) {

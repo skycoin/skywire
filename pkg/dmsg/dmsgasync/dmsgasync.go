@@ -141,6 +141,9 @@ func (r reply) err() error {
 		return nil
 	}
 	if e, ok := codeErr[r.Code]; ok {
+		if r.Error != "" && r.Error != e.Error() {
+			return fmt.Errorf("%w: %s", e, r.Error)
+		}
 		return e
 	}
 	return fmt.Errorf("%w: %s", ErrInternal, r.Error)
