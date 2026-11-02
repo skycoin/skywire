@@ -85,8 +85,7 @@ func TestBridgeRefusesNonSkynetRecipients(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go Serve(ctx, lis, pipeDialer{serve: func(c net.Conn) { _ = c.Close() }}, Config{}, logrus.New()) //nolint:errcheck
 
 	err = smtp.SendMail(lis.Addr().String(), nil, "a@b.c", []string{"x@example.com"}, []byte("x\r\n"))
@@ -115,8 +114,7 @@ func TestBridgeDialsTheNetworkTheSuffixNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go Serve(ctx, lis, nil, Config{Dialers: map[string]Dialer{".skynet": network("skynet"), ".dmsg": network("dmsg")}}, logrus.New()) //nolint:errcheck
 
 	pk := mustPK(t)

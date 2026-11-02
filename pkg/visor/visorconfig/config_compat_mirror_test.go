@@ -91,7 +91,7 @@ func TestV1UnmarshalCopiesEverySectionBack(t *testing.T) {
 			continue
 		}
 		switch f.Type.Kind() {
-		case reflect.Ptr:
+		case reflect.Pointer:
 			rv.Field(i).Set(reflect.New(f.Type.Elem()))
 		case reflect.Slice:
 			rv.Field(i).Set(reflect.MakeSlice(f.Type, 1, 1))

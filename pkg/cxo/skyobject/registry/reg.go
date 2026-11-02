@@ -156,7 +156,7 @@ func (r *Reg) getField(sf reflect.StructField) Field {
 		f.schema = &referenceSchema{
 			schema: schema{
 				ref:  SchemaRef{},
-				kind: reflect.Ptr, // Ref is pointer
+				kind: reflect.Pointer, // Ref is pointer
 			},
 			typ:  ReferenceTypeSingle,
 			elem: &schema{kind: reflect.Struct, name: []byte(tagRef)},
@@ -167,7 +167,7 @@ func (r *Reg) getField(sf reflect.StructField) Field {
 		f.schema = &referenceSchema{
 			schema: schema{
 				ref:  SchemaRef{},
-				kind: reflect.Ptr, // Refs is pointer (actually []*T)
+				kind: reflect.Pointer, // Refs is pointer (actually []*T)
 			},
 			typ:  ReferenceTypeSlice,
 			elem: &schema{kind: reflect.Struct, name: []byte(tagRef)},

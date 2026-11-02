@@ -158,14 +158,12 @@ func TestConn(t *testing.T) {
 		msg := cipher.RandByte(segLen * segCount)
 
 		wg := new(sync.WaitGroup)
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for i := range segCount {
 				n, err := a.Write(msg[i*segLen : (i+1)*segLen])
 				aResults[i] = Result{N: n, Err: err}
 			}
-			wg.Done()
-		}()
+		})
 
 		msgResult := make([]byte, len(msg))
 		_, err := io.ReadFull(b, msgResult)
@@ -321,13 +319,11 @@ func TestListener(t *testing.T) {
 	t.Run("Accept", func(t *testing.T) {
 		hResults := make([]error, connCount)
 		wg := new(sync.WaitGroup)
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for i := range connCount {
 				hResults[i] = dialAndWrite(lPK, addr.Addr.String())
 			}
-			wg.Done()
-		}()
+		})
 		for range connCount {
 			lConn, err := l.Accept()
 			require.NoError(t, err)

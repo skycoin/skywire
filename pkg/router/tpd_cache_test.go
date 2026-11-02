@@ -228,13 +228,11 @@ func TestTPDSnapshotCache_ConcurrentReads(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			snap, err := c.snapshot(context.Background(), fetch, nil)
 			assert.NoError(t, err)
 			assert.NotNil(t, snap)
-		}()
+		})
 	}
 	wg.Wait()
 	// The double-checked lock means at most a small number of racing

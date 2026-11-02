@@ -94,8 +94,7 @@ func (r *Reply) Error() string {
 
 // replyOr renders err as a *Reply when it is one, else as the fallback.
 func replyOr(err error, code int, enhanced string) string {
-	var r *Reply
-	if errors.As(err, &r) {
+	if r, ok := errors.AsType[*Reply](err); ok {
 		return r.Error()
 	}
 	return fmt.Sprintf("%d %s %s", code, enhanced, err)
@@ -135,12 +134,10 @@ func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName str
 			time.Sleep(acceptRetryDelay)
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer c.Close() //nolint:errcheck,gosec
 			handleSession(ctx, c, h, heloName)
-		}()
+		})
 	}
 	wg.Wait()
 	return nil

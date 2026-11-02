@@ -89,7 +89,7 @@ func isNil(obj any) bool {
 
 	val := reflect.ValueOf(obj)
 
-	return val.Kind() == reflect.Ptr && val.IsNil()
+	return val.Kind() == reflect.Pointer && val.IsNil()
 }
 
 // Walk through the Ref. See WalkFunc for details. The

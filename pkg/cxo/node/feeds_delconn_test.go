@@ -28,13 +28,11 @@ func TestNodeFeeds_DelConn_NonBlocking(t *testing.T) {
 	go func() {
 		var wg sync.WaitGroup
 		for range goroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for range perG {
 					n.delConn(&Conn{})
 				}
-			}()
+			})
 		}
 		wg.Wait()
 		close(done)

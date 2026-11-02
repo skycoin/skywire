@@ -734,12 +734,10 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		tpM.Serve(ctx)
-	}()
+	})
 
 	v.pushCloseStack("transport.manager", func() error {
 		cancel()
@@ -1257,8 +1255,7 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 
 		// Check if it's an HTTPError with a 4xx status code
-		var httpErr *httputil.HTTPError
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*httputil.HTTPError](err); ok {
 			// Don't retry on 4xx errors (client errors) - these are expected
 			// For example, 404 means no transports found, which is normal
 			if httpErr.Status >= 400 && httpErr.Status < 500 {

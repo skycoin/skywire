@@ -19,9 +19,7 @@ func fillServing(t *testing.T, sc, rc *Container, r *registry.Root, failAt int) 
 	rq := make(chan cipher.SHA256, 10)
 	f := rc.Fill(r, rq, 10)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		n := 0
 		for key := range rq {
 			if n++; n == failAt {
@@ -38,7 +36,7 @@ func fillServing(t *testing.T, sc, rc *Container, r *registry.Root, failAt int) 
 				return
 			}
 		}
-	}()
+	})
 	err := f.Run()
 	close(rq)
 	wg.Wait()

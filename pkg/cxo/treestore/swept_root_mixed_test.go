@@ -52,9 +52,7 @@ func TestSubscriberCatchesUpWhilePublisherFills(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := live; ; i++ {
 			select {
 			case <-stop:
@@ -65,7 +63,7 @@ func TestSubscriberCatchesUpWhilePublisherFills(t *testing.T) {
 			_ = other.Delete(fmt.Sprintf("o/%05d", i-live))         //nolint:errcheck
 			time.Sleep(time.Millisecond)
 		}
-	}()
+	})
 	t.Cleanup(func() { close(stop); wg.Wait() })
 
 	cs := newChurnSub()

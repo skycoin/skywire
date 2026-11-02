@@ -63,13 +63,11 @@ func (u *serviceUpdater) Start() {
 	// keeps init non-blocking; the heartbeat loop below is the real recovery
 	// mechanism anyway (retries every ServiceDiscUpdateInterval, 90s), and a
 	// failure here no longer disables re-registration.
-	u.wg.Add(1)
-	go func() {
-		defer u.wg.Done()
+	u.wg.Go(func() {
 		if err := u.register(ctx); err != nil {
 			u.log.WithError(err).Warn("Initial service discovery registration failed; will retry via heartbeat")
 		}
-	}()
+	})
 
 	u.wg.Add(1)
 	go u.heartbeatLoop(ctx)

@@ -263,11 +263,9 @@ func (c *Controller) acceptLoop(lis net.Listener) {
 		if err != nil {
 			return
 		}
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
+		c.wg.Go(func() {
 			c.Serve(conn)
-		}()
+		})
 	}
 }
 
@@ -315,11 +313,9 @@ func (c *Controller) dialAndCache(ctx context.Context, pk cipher.PubKey, addr ap
 	c.mu.Lock()
 	c.conns[pk] = fc
 	c.mu.Unlock()
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		c.readConn(fc)
-	}()
+	})
 	return fc, nil
 }
 

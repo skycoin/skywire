@@ -39,9 +39,7 @@ func TestRelayGraph_OneQueryForConcurrentLookups(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 12 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			peers, err := c.peers(context.Background(), dc, lpk, remote)
 			if err != nil {
 				t.Error(err)
@@ -50,7 +48,7 @@ func TestRelayGraph_OneQueryForConcurrentLookups(t *testing.T) {
 			if _, ok := peers[relay]; !ok || len(peers) != 1 {
 				t.Errorf("peers = %v, want only the stcpr relay", peers)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if n := dc.calls.Load(); n != 1 {

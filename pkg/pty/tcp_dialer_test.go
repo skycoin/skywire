@@ -1,7 +1,6 @@
 package pty
 
 import (
-	"context"
 	"net"
 	"testing"
 	"time"
@@ -28,8 +27,7 @@ func TestExecRemoteViaTCPDialer(t *testing.T) {
 	addr := lis.Addr().String()
 	require.NoError(t, lis.Close())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go srv.ListenAndServeTCP(ctx, addr, srvPK, srvSK) //nolint:errcheck
 	require.Eventually(t, func() bool {
 		c, err := net.Dial("tcp", addr)

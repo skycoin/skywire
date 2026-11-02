@@ -66,8 +66,7 @@ func TestMarshalErrorIsReturned(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for an unmarshallable value")
 	}
-	var ute *json.UnsupportedTypeError
-	if !errors.As(err, &ute) {
+	if !errors.As(err, new(*json.UnsupportedTypeError)) {
 		t.Fatalf("want a json.UnsupportedTypeError, got %T: %v", err, err)
 	}
 }

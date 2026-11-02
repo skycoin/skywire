@@ -118,13 +118,11 @@ func (c *Conn) run() {
 	// OnConnect may wait for replies, so it runs beside the receive loop. If
 	// it returns an error, the connection is closed.
 	var occErr error
-	c.await.Add(1)
-	go func() {
-		defer c.await.Done()
+	c.await.Go(func() {
 		if occErr = c.n.onConnect(c); occErr != nil {
 			c.signalClose()
 		}
-	}()
+	})
 
 	// Receive messages on this goroutine until close is signaled or an
 	// error occurs.

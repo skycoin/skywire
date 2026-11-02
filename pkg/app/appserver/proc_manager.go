@@ -185,11 +185,9 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 		settings:     newAppSettings(),
 	}
 
-	procM.connsWG.Add(1)
-	go func() {
-		defer procM.connsWG.Done()
+	procM.connsWG.Go(func() {
 		procM.serve()
-	}()
+	})
 
 	return procM, nil
 }

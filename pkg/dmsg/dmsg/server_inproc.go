@@ -62,16 +62,14 @@ func (s *Server) acceptInProcess(conn net.Conn) error {
 	if isClosed(s.done) {
 		return errInProcessClosed
 	}
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		defer func() {
 			if err := recover(); err != nil {
 				s.log.Warnf("panic in in-process handleSession: %+v", err)
 			}
 		}()
 		s.handleSession(conn)
-	}()
+	})
 	return nil
 }
 

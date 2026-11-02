@@ -43,11 +43,9 @@ func StartDmsgWithSetup(ctx context.Context, log *logging.Logger, pk cipher.PubK
 	}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		dmsgDC.Serve(ctx)
-	}()
+	})
 
 	stop = func() {
 		err := dmsgDC.Close()

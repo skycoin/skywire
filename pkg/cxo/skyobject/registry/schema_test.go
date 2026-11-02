@@ -356,7 +356,7 @@ func TestSchema_Fields(t *testing.T) {
 
 			var kind = fl.Kind()
 
-			if kind == reflect.Ptr || kind == reflect.Interface {
+			if kind == reflect.Pointer || kind == reflect.Interface {
 				continue // Ref, Refs, and Dynaimc (skip them)
 			} else if reflectKind := rf.Type.Kind(); kind != reflectKind {
 				t.Errorf("invalid kind of struct field: want %s, got %s",
@@ -411,7 +411,7 @@ func TestSchema_Elem(t *testing.T) {
 			var el = fs.Elem()
 
 			switch kind := fs.Kind(); kind {
-			case reflect.Ptr:
+			case reflect.Pointer:
 
 				switch fs.ReferenceType() {
 				case ReferenceTypeSingle, ReferenceTypeSlice:

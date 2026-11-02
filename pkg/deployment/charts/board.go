@@ -76,11 +76,9 @@ func (bd *Board) render(ctx context.Context, rg Range) (cached, error) {
 	built := make([]builtSection, len(sections))
 	var wg sync.WaitGroup
 	for i, s := range sections {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			built[i] = bd.build(ctx, s, rg, now)
-		}()
+		})
 	}
 	wg.Wait()
 	var process builtSection
@@ -143,8 +141,7 @@ func (bd *Board) build(ctx context.Context, s Section, rg Range, now time.Time) 
 				bd.Log.WithError(err).WithField("service", out.title).Warn("charts section render failed")
 			}
 			out.note = "Charts unavailable right now."
-			var ne NoteError
-			if errors.As(err, &ne) {
+			if ne, ok := errors.AsType[NoteError](err); ok {
 				out.note = string(ne)
 			}
 		}

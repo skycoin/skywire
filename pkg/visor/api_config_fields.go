@@ -715,7 +715,7 @@ func mapConfigTarget(m reflect.Value, key, tmpl, idx string) *configTarget {
 // derefConfigValue follows pointers/interfaces to the underlying value,
 // erroring on a nil one rather than allocating a half-built config block.
 func derefConfigValue(v reflect.Value) (reflect.Value, error) {
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return reflect.Value{}, errors.New("nil config block")
 		}

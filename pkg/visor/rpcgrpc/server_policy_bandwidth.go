@@ -208,12 +208,10 @@ func (c *muxBwController) startPumps(pumpCtx context.Context, routes []*muxBwRou
 func (c *muxBwController) spawnPump(pumpCtx context.Context, rs *muxBwRouteState, pumpStart time.Time) {
 	legCtx, cancel := context.WithCancel(pumpCtx)
 	rs.pumpCancel = cancel
-	c.pumpWg.Add(1)
-	go func() {
-		defer c.pumpWg.Done()
+	c.pumpWg.Go(func() {
 		defer rs.activeFlag.Store(false)
 		c.pumpLeg(legCtx, rs, pumpStart)
-	}()
+	})
 }
 
 // pumpLeg is the policy-aware pump: an ACTIVE leg bulk-pumps echo bytes

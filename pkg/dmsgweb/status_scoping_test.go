@@ -1,7 +1,6 @@
 package dmsgweb
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -61,8 +60,7 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 		StatusSurface:  proxystatus.SurfaceDmsg,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() { _ = serveSOCKS5Direct(ctx, logging.MustGetLogger("test"), &dmsg.Client{}, cfg) }() //nolint:errcheck
 
 	proxyAddr := fmt.Sprintf("127.0.0.1:%d", port)

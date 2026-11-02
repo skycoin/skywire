@@ -60,11 +60,9 @@ func TestIngestIsBounded(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 4 * maxConcurrentIngest {
 		reporter, _ := cipher.GenerateKeyPair()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			a.dispatchLeafSlot(telemetrywire.LeafPath(1), blob, reporter)
-		}()
+		})
 	}
 	wg.Wait()
 	if got := sink.peak.Load(); got > maxConcurrentIngest {

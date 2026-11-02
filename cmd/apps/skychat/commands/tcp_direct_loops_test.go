@@ -477,8 +477,7 @@ func TestStartTCPDirect_ListensWithFlagIdentity(t *testing.T) {
 	tcpSKFlag = srvSK.Hex()
 	tcpWhitelist = cliPK.Hex()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if err := startTCPDirect(ctx); err != nil {
 		t.Fatalf("startTCPDirect: %v", err)
 	}

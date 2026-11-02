@@ -770,8 +770,7 @@ func TestPairRPCWatchdog_DisabledIsNoOpAndStopIsIdempotent(t *testing.T) {
 	stopPairRPCWatchdog()
 
 	pairEnable = true
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	startPairRPCWatchdog(ctx)
 	if pairRPCWatchdogCancel == nil {
 		t.Fatal("an enabled watchdog should install a cancel func")
@@ -859,8 +858,7 @@ func TestProbePeerViaVisor(t *testing.T) {
 func TestStartPresenceLoop_DisabledIsNoOp(t *testing.T) {
 	withLifecycleEnv(t)
 	pairEnable = false
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	startPresenceLoop(ctx) // must return immediately without spawning a sweeper
 
 	pairEnable = true

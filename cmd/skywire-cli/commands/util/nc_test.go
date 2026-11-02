@@ -29,9 +29,7 @@ func TestNCDialListenRoundTrip(t *testing.T) {
 	want := []byte("hello over nc")
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		conn, err := lis.Accept()
 		if err != nil {
 			t.Errorf("accept: %v", err)
@@ -47,7 +45,7 @@ func TestNCDialListenRoundTrip(t *testing.T) {
 		if _, err := conn.Write(buf); err != nil {
 			t.Errorf("write: %v", err)
 		}
-	}()
+	})
 
 	conn, err := net.Dial("tcp", lis.Addr().String())
 	if err != nil {
@@ -186,9 +184,7 @@ func TestNCSpliceLargePayload(t *testing.T) {
 	want := sha256.Sum256(payload)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		conn, err := lis.Accept()
 		if err != nil {
 			t.Errorf("accept: %v", err)
@@ -196,7 +192,7 @@ func TestNCSpliceLargePayload(t *testing.T) {
 		}
 		defer conn.Close()                             //nolint:errcheck
 		_, _ = io.Copy(conn, bytes.NewReader(payload)) //nolint:errcheck
-	}()
+	})
 
 	conn, err := net.Dial("tcp", lis.Addr().String())
 	if err != nil {

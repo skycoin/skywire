@@ -341,8 +341,7 @@ func TestSOCKS5Upstream(t *testing.T) {
 	_, backendPort, err := net.SplitHostPort(backend.Listener.Addr().String())
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	log := logging.MustGetLogger("test")
 
 	// Upstream proxy in plain passthrough mode.

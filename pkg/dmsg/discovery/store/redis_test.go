@@ -145,8 +145,7 @@ func TestRedisCountEntries(t *testing.T) {
 }
 
 func TestRedisStoreInbox(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	redis, err := newRedis(ctx, redisURL, redisPassword, 0, 0, log)
 	require.NoError(t, err)
 	pk, _ := cipher.GenerateKeyPair()

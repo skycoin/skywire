@@ -149,9 +149,7 @@ func testFillRoot(t *testing.T, sc, rc *Container, r *registry.Root) {
 	var wg sync.WaitGroup
 
 	// the rq channel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		for {
 			var key, ok = <-rq
@@ -167,7 +165,7 @@ func testFillRoot(t *testing.T, sc, rc *Container, r *registry.Root) {
 			assertNil(t, err)
 		}
 
-	}()
+	})
 
 	assertNil(t, f.Run())
 

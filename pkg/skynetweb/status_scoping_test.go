@@ -1,7 +1,6 @@
 package skynetweb
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -47,8 +46,7 @@ func TestSOCKS5StatusScoping(t *testing.T) {
 	}()
 
 	proxyPort := pickFreePort(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), fakeDialer{}, Config{ //nolint:errcheck
 			ProxyPort:      proxyPort,

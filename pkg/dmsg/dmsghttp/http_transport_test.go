@@ -101,8 +101,7 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		startHTTPServer(t, server0Results, lis)
 		addr := lis.Addr().String()
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		// Arrange: create http clients (in which each http client has an underlying dmsg client).
 		// Configure timeouts to prevent hanging on errors.
 		httpC1 := http.Client{
@@ -280,8 +279,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 	})
 
 	addr := lis.Addr().String()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	httpC := http.Client{
 		Transport: MakeHTTPTransport(ctx, newDmsgClient(t, dc, minSessions, "gzipcli")),
 		Timeout:   30 * time.Second,
