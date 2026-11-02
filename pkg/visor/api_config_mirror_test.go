@@ -271,3 +271,35 @@ func TestRewardAddressReachesSkyenv(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(env), xpub)
 }
+
+func TestResolverAutostartReachesSkyenv(t *testing.T) {
+	conf, _ := newTestConfig(t)
+	conf.LocalPath = t.TempDir()
+	conf.SkynetWeb = &visorconfig.SkynetWebConfig{Enable: true}
+	rs, err := visorconfig.ParseResolverSpecs("dmsg:4447;name=lan")
+	require.NoError(t, err)
+	conf.Resolvers = rs
+	webKey, ok := autoconfigcmd.KeyFor("skynetweb")
+	require.True(t, ok)
+	resKey, ok := autoconfigcmd.KeyFor("resolvers")
+	require.True(t, ok)
+	envFile := filepath.Join(t.TempDir(), "skywire.conf")
+	require.NoError(t, os.WriteFile(envFile, []byte(webKey+"=true\n"+resKey+"=('dmsg:4447;name=lan')\n"), 0o600))
+	conf.Skyenv = envFile
+	v := &Visor{conf: conf, log: logging.MustGetLogger("test")}
+	v.watchSkyenv()
+
+	require.True(t, v.setResolverEnable("skynetweb", false))
+	require.True(t, v.setResolverEnable("resolver-lan", false))
+	require.False(t, v.setResolverEnable("skychat", false))
+	require.NoError(t, conf.Flush())
+
+	env, err := os.ReadFile(envFile) //nolint:gosec
+	require.NoError(t, err)
+	require.NotContains(t, string(env), webKey+"=true")
+	require.Contains(t, string(env), "enable=false")
+
+	again, err := visorconfig.ParseResolverSpecs(visorconfig.FormatResolverSpecs(conf.Resolvers))
+	require.NoError(t, err)
+	require.False(t, again[0].Enable)
+}

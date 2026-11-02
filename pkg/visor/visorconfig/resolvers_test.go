@@ -320,3 +320,22 @@ func TestResolverListenAddr(t *testing.T) {
 		}
 	}
 }
+
+// A resolver written back to RESOLVERS reads back the same, enable included.
+func TestFormatResolverSpecRoundTrips(t *testing.T) {
+	in := "dmsg:4447;name=lan;addr=0.0.0.0;chain=false;enable=false,skynet:4448;suffix=.skynet;upstream=127.0.0.1:1080"
+	rs, err := ParseResolverSpecs(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs[0].Enable {
+		t.Fatal("enable=false parsed as enabled")
+	}
+	again, err := ParseResolverSpecs(FormatResolverSpecs(rs))
+	if err != nil {
+		t.Fatalf("formatted specs do not parse: %v", err)
+	}
+	if !reflect.DeepEqual(rs, again) {
+		t.Fatalf("round trip changed the resolvers:\n got %+v\nwant %+v", again, rs)
+	}
+}
