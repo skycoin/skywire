@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // ErrRouterNotAvailable is returned by RPC handlers that need a
@@ -657,7 +658,14 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	}
 
 	v.log.Infof("Saving auto start = %v for app %v to config", autoStart, appName)
-	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
+	if err := v.conf.UpdateAppAutostart(v.appL, appName, autoStart); err != nil {
+		return err
+	}
+	// The mailbox starts from its own enable in settings.json, not the config.
+	if appName == skymailApp {
+		return v.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &autoStart})
+	}
+	return nil
 }
 
 // SetAppWhitelist implements API. Updates the comma-separated PK

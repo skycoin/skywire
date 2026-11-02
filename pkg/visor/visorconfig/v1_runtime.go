@@ -42,15 +42,12 @@ func (v1 *V1) UpdateAppAutostart(launch *launcher.AppLauncher, appName string, a
 			break
 		}
 	}
+	// In place: a reset to the config's list would drop the apps the visor
+	// adds at runtime, such as skymail.
+	launch.SetAppAutoStart(appName, autoStart)
 	if !changed {
 		return nil
 	}
-	launch.ResetConfig(launcher.AppLauncherConfig{
-		VisorPK:       v1.PK,
-		Apps:          conf.Apps,
-		ServerAddr:    conf.ServerAddr,
-		DisplayNodeIP: conf.DisplayNodeIP,
-	})
 	return v1.flush(v1)
 }
 
