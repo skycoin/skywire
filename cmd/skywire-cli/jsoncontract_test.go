@@ -18,7 +18,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -216,11 +216,11 @@ func forEachFile(t *testing.T, fn func(path string, file *ast.File, fset *token.
 
 func walkOne(t *testing.T, dir string, fn func(path string, file *ast.File, fset *token.FileSet), fset *token.FileSet) {
 	t.Helper()
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		parsed, perr := parser.ParseFile(fset, path, nil, parser.ParseComments)
