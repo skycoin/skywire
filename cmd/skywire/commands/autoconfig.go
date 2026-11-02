@@ -35,6 +35,7 @@ package commands
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -846,7 +847,7 @@ func chownInstall(username string) error {
 	// Walk root is the package install path (e.g. /opt/skywire) under
 	// our control; symlink-TOCTOU isn't a realistic threat for an
 	// install-time chown of paths the package itself just laid down.
-	return filepath.Walk(root, func(path string, _ os.FileInfo, walkErr error) error {
+	return filepath.WalkDir(root, func(path string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

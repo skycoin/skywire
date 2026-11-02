@@ -265,13 +265,13 @@ func TestConsecutiveWriteFailuresOnlyOnTotalFailure(t *testing.T) {
 	closeManagedTransport(mts[0], conns[0])
 
 	rg.keepAliveServiceFn(0) // force keepalive immediately
-	require.Equal(t, int32(0), rg.consecutiveWriteFailures)
+	require.Equal(t, int32(0), rg.consecutiveWriteFailures.Load())
 
 	// Kill the other — keepalive should fail, counter increments
 	closeManagedTransport(mts[1], conns[1])
 
 	rg.keepAliveServiceFn(0)
-	require.Equal(t, int32(1), rg.consecutiveWriteFailures)
+	require.Equal(t, int32(1), rg.consecutiveWriteFailures.Load())
 }
 
 // TestRouteMuxRemoveLegs verifies removeLegs compacts legs[] and ready[] in

@@ -57,7 +57,7 @@ var (
 	// Loaded from login_genesis.json on first use.
 	genesisSeed     []byte
 	genesisSeedOnce sync.Once
-	verifyAddrIndex uint32 // atomic counter for next verify address index
+	verifyAddrIndex atomic.Uint32 // atomic counter for next verify address index
 )
 
 func generateSessionID() string {
@@ -91,7 +91,7 @@ func loadGenesisSeed() {
 	}
 	genesisSeed = []byte(wallet.Meta.Seed)
 	// Start at index 1 — index 0 is the genesis address
-	atomic.StoreUint32(&verifyAddrIndex, 1)
+	verifyAddrIndex.Store(1)
 	cmdutil.Printf("Login chain: loaded genesis seed for verify address derivation\n")
 }
 
@@ -107,7 +107,7 @@ func generateVerifyAddress() string {
 		return skycoincipher.AddressFromPubKey(pk).String()
 	}
 
-	idx := atomic.AddUint32(&verifyAddrIndex, 1)
+	idx := verifyAddrIndex.Add(1)
 	// Derive address at this index from the genesis seed
 	seckeys, err := skycoincipher.GenerateDeterministicKeyPairs(genesisSeed, int(idx))
 	if err != nil || len(seckeys) < int(idx) {

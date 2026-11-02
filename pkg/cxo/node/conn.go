@@ -76,7 +76,7 @@ type Conn struct {
 	mx sync.RWMutex // locks all fields below
 
 	// request - response
-	seq  uint32                    // message seq number (for request-response)
+	seq  atomic.Uint32             // message seq number (for request-response)
 	reqs map[uint32]chan<- msg.Msg // requests
 }
 
@@ -591,7 +591,7 @@ func (c *Conn) Done() <-chan struct{} {
 }
 
 func (c *Conn) nextSeq() uint32 {
-	return atomic.AddUint32(&c.seq, 1)
+	return c.seq.Add(1)
 }
 
 // msgHead builds the 8-byte per-message header (seq + rseq).

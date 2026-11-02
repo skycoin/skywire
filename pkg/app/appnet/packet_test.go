@@ -26,8 +26,8 @@ import (
 // are no-ops; the surface is what matters here.
 type stubPacketConn struct {
 	maxPayload       int
-	inboundDropped   uint64
-	aeadAuthFailures uint64
+	inboundDropped   atomic.Uint64
+	aeadAuthFailures atomic.Uint64
 }
 
 func (s *stubPacketConn) ReadFrom(_ []byte) (int, net.Addr, error)  { return 0, nil, nil }
@@ -38,8 +38,8 @@ func (s *stubPacketConn) SetDeadline(_ time.Time) error             { return nil
 func (s *stubPacketConn) SetReadDeadline(_ time.Time) error         { return nil }
 func (s *stubPacketConn) SetWriteDeadline(_ time.Time) error        { return nil }
 func (s *stubPacketConn) MaxPayload() int                           { return s.maxPayload }
-func (s *stubPacketConn) InboundDropped() uint64                    { return atomic.LoadUint64(&s.inboundDropped) }
-func (s *stubPacketConn) AEADAuthFailures() uint64                  { return atomic.LoadUint64(&s.aeadAuthFailures) }
+func (s *stubPacketConn) InboundDropped() uint64                    { return s.inboundDropped.Load() }
+func (s *stubPacketConn) AEADAuthFailures() uint64                  { return s.aeadAuthFailures.Load() }
 
 // fakePacketNetworker satisfies the base Networker contract AND the
 // PacketNetworker opt-in. Pure local-test stub — no real network

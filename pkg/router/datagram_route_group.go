@@ -95,10 +95,9 @@ var ErrClosed = errors.New("datagram-route-group: closed")
 //     also AEAD-seal it), picks a transport, and writes it.
 //   - Close releases the readCh and marks the group dead. Idempotent.
 type DatagramRouteGroup struct {
-	// atomic; first for 64-bit alignment.
 	lastSent                 atomic.Int64
-	closeFlag                int32 // atomic; 1 once Close has run
-	consecutiveWriteFailures int32
+	closeFlag                atomic.Int32 // atomic; 1 once Close has run
+	consecutiveWriteFailures atomic.Int32
 
 	mu sync.Mutex
 
@@ -295,10 +294,10 @@ func (dg *DatagramRouteGroup) WriteTo(data []byte, addr net.Addr) (int, error) {
 	// reliable stream when the transport has no datagram channel (stcp/sudph/
 	// dmsg) or the datagram is too large, so this is always correct.
 	if err := tp.WriteDatagram(ctx, packet); err != nil {
-		atomic.AddInt32(&dg.consecutiveWriteFailures, 1)
+		dg.consecutiveWriteFailures.Add(1)
 		return 0, err
 	}
-	atomic.StoreInt32(&dg.consecutiveWriteFailures, 0)
+	dg.consecutiveWriteFailures.Store(0)
 	dg.lastSent.Store(time.Now().UnixNano())
 	dg.networkStats.AddBandwidthSent(uint64(packet.Size()))
 	return len(data), nil
@@ -390,7 +389,7 @@ func (dg *DatagramRouteGroup) Handle(packet routing.Packet) error {
 // also returns ErrClosed.
 func (dg *DatagramRouteGroup) Close() error {
 	dg.once.Do(func() {
-		atomic.StoreInt32(&dg.closeFlag, 1)
+		dg.closeFlag.Store(1)
 		close(dg.closed)
 		// Drain readCh non-blockingly so any in-flight Handle that
 		// raced the close doesn't leak.
@@ -407,7 +406,7 @@ func (dg *DatagramRouteGroup) Close() error {
 }
 
 func (dg *DatagramRouteGroup) isClosed() bool {
-	return atomic.LoadInt32(&dg.closeFlag) == 1
+	return dg.closeFlag.Load() == 1
 }
 
 // LocalAddr returns destination address of underlying
@@ -449,7 +448,7 @@ func (dg *DatagramRouteGroup) IsAlive() bool {
 	if dg.isClosed() {
 		return false
 	}
-	return atomic.LoadInt32(&dg.consecutiveWriteFailures) < maxConsecutiveWriteFailures
+	return dg.consecutiveWriteFailures.Load() < maxConsecutiveWriteFailures
 }
 
 // InboundDropped returns the count of inbound datagrams dropped

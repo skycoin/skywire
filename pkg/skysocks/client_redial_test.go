@@ -56,12 +56,12 @@ func TestMaybeRedial_ReplacesDeadTunnelOnce(t *testing.T) {
 		// The re-dial callback blocks until released, so we can observe the
 		// single-flight guard: a second maybeRedial while the first is in flight must
 		// NOT invoke the callback again.
-		var calls int32
+		var calls atomic.Int32
 		release := make(chan struct{})
 		var replacement net.Conn
 		var cleanupReplacement func()
 		c.SetTunnelRedial(func() (net.Conn, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			<-release
 			replacement, cleanupReplacement = newRedialConn(t)
 			return replacement, nil
@@ -69,14 +69,14 @@ func TestMaybeRedial_ReplacesDeadTunnelOnce(t *testing.T) {
 
 		// First trigger: live=1 < target=2 → one re-dial starts and blocks in fn.
 		c.maybeRedial(1)
-		require.Eventually(t, func() bool { return atomic.LoadInt32(&calls) == 1 },
+		require.Eventually(t, func() bool { return calls.Load() == 1 },
 			time.Second, 5*time.Millisecond, "the dead tunnel triggers one re-dial")
 		require.True(t, c.redialInFlight.Load(), "a re-dial is in flight")
 
 		// Second trigger while the first is still in flight: the single-flight guard
 		// must suppress it — no second callback invocation, still one tunnel added.
 		c.maybeRedial(1)
-		require.Equal(t, int32(1), atomic.LoadInt32(&calls), "in-flight guard blocks a concurrent re-dial")
+		require.Equal(t, int32(1), calls.Load(), "in-flight guard blocks a concurrent re-dial")
 
 		// Let the first re-dial finish; AddTunnel restores the count to the target.
 		close(release)
@@ -84,14 +84,14 @@ func TestMaybeRedial_ReplacesDeadTunnelOnce(t *testing.T) {
 			time.Second, 5*time.Millisecond, "AddTunnel restores the live count to N")
 		require.Len(t, c.snapshotSessions(), 3, "one live + one dead + the replacement")
 		require.False(t, c.redialInFlight.Load(), "the in-flight guard clears after completion")
-		require.Equal(t, int32(1), atomic.LoadInt32(&calls), "exactly one re-dial happened")
+		require.Equal(t, int32(1), calls.Load(), "exactly one re-dial happened")
 		if cleanupReplacement != nil {
 			defer cleanupReplacement()
 		}
 
 		// At/above target no further re-dial fires.
 		c.maybeRedial(c.liveSessionCount())
-		require.Equal(t, int32(1), atomic.LoadInt32(&calls), "no re-dial when live >= target")
+		require.Equal(t, int32(1), calls.Load(), "no re-dial when live >= target")
 	})
 }
 
@@ -99,9 +99,9 @@ func TestMaybeRedial_ReplacesDeadTunnelOnce(t *testing.T) {
 // death is total collapse the app's --reconnect owns, not a per-tunnel re-dial.
 func TestMaybeRedial_SingleTunnelAndGuards(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var calls int32
+		var calls atomic.Int32
 		countingRedial := func() (net.Conn, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			conn, _ := newRedialConn(t)
 			return conn, nil
 		}
@@ -113,18 +113,18 @@ func TestMaybeRedial_SingleTunnelAndGuards(t *testing.T) {
 		c1.SetTunnelRedial(countingRedial)
 		c1.maybeRedial(1)
 		synctest.Wait()
-		require.Equal(t, int32(0), atomic.LoadInt32(&calls), "N==1 never re-dials")
+		require.Equal(t, int32(0), calls.Load(), "N==1 never re-dials")
 
 		// All tunnels dead (live<=0): total collapse, not a re-dial trigger.
 		c1.maybeRedial(0)
 		synctest.Wait()
-		require.Equal(t, int32(0), atomic.LoadInt32(&calls), "all-closed is left to the app's reconnect")
+		require.Equal(t, int32(0), calls.Load(), "all-closed is left to the app's reconnect")
 
 		// No callback wired: no-op even below target.
 		c2 := &Client{sessions: []*yamux.Session{s}, closeC: make(chan struct{}), target: 3}
 		c2.maybeRedial(1)
 		synctest.Wait()
-		require.Equal(t, int32(0), atomic.LoadInt32(&calls), "no re-dial without a callback")
+		require.Equal(t, int32(0), calls.Load(), "no re-dial without a callback")
 	})
 }
 
@@ -136,9 +136,9 @@ func TestMaybeRedial_BacksOffAfterFailuresUntilReset(t *testing.T) {
 		defer cleanup()
 		c := &Client{sessions: []*yamux.Session{live}, closeC: make(chan struct{}), target: 3}
 
-		var calls int32
+		var calls atomic.Int32
 		c.SetTunnelRedial(func() (net.Conn, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			return nil, errors.New("exit unreachable")
 		})
 
@@ -149,17 +149,17 @@ func TestMaybeRedial_BacksOffAfterFailuresUntilReset(t *testing.T) {
 			require.Eventually(t, func() bool { return !c.redialInFlight.Load() },
 				time.Second, 5*time.Millisecond)
 		}
-		require.Equal(t, int32(maxRedialFails), atomic.LoadInt32(&calls))
+		require.Equal(t, int32(maxRedialFails), calls.Load())
 
 		// Now backed off: further triggers are suppressed.
 		c.maybeRedial(1)
 		synctest.Wait()
-		require.Equal(t, int32(maxRedialFails), atomic.LoadInt32(&calls), "backed off after consecutive failures")
+		require.Equal(t, int32(maxRedialFails), calls.Load(), "backed off after consecutive failures")
 
 		// A fresh death re-arms it.
 		c.resetRedialBackoff()
 		c.maybeRedial(1)
-		require.Eventually(t, func() bool { return atomic.LoadInt32(&calls) == maxRedialFails+1 },
+		require.Eventually(t, func() bool { return calls.Load() == maxRedialFails+1 },
 			time.Second, 5*time.Millisecond, "reset re-arms re-dial")
 	})
 }

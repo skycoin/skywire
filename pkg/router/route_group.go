@@ -197,7 +197,6 @@ func DefaultRouteGroupConfig() *RouteGroupConfig {
 // RouteGroup should implement 'io.ReadWriteCloser'.
 // It implements 'net.Conn'.
 type RouteGroup struct {
-	// atomic requires 64-bit alignment for struct field access
 	lastSent atomic.Int64
 
 	// lastRecv is the arrival time of the most recent inbound packet. It exists
@@ -208,7 +207,7 @@ type RouteGroup struct {
 
 	// consecutiveWriteFailures tracks repeated transport write errors.
 	// After maxConsecutiveWriteFailures, the RouteGroup closes itself.
-	consecutiveWriteFailures int32
+	consecutiveWriteFailures atomic.Int32
 
 	// wake releases the service loops parked by their gate (service_gate.go).
 	wake serviceWake
@@ -363,7 +362,7 @@ type RouteGroup struct {
 	closeObserver   func(age time.Duration, carried uint64)
 
 	// used as a bool to indicate if this particular route group initiated close loop
-	closeInitiated   int32
+	closeInitiated   atomic.Int32
 	remoteClosedOnce sync.Once
 	remoteClosed     chan struct{}
 	closed           chan struct{}
@@ -376,7 +375,7 @@ type RouteGroup struct {
 	// used to wait for all the `Close` packets to run through the loop and come back.
 	// Atomic counter + channel instead of sync.WaitGroup to avoid
 	// "WaitGroup reused before previous Wait returned" panics.
-	closeDonePending int32 // atomic counter of outstanding close acks
+	closeDonePending atomic.Int32 // atomic counter of outstanding close acks
 	// closeDoneCh is closed when closeDonePending reaches 0. It is reached
 	// from three goroutines — both Close() callers and the packet loop
 	// handling the peer's close replies — so it is created and closed through
@@ -492,14 +491,14 @@ type RouteGroup struct {
 	soleBHTicks           int
 	reorderWedgeTicks     atomic.Int64
 	reorderWedgeStartNano atomic.Int64
-	reorderWedgeSeq       uint32
+	reorderWedgeSeq       atomic.Uint32
 	reorderWedges         atomic.Uint64
 	reorderWedgeLongestMs atomic.Int64
 	reorderWedgeLoggedAt  time.Duration
 
 	// delayedAckArmed guards the one-shot delayed-ack timer (see
 	// scheduleDelayedAck): 1 while a timer is outstanding. Atomic.
-	delayedAckArmed int32
+	delayedAckArmed atomic.Int32
 	legMissed       map[uuid.UUID]int
 	inflightPings   map[int64]uuid.UUID
 	// legE2ELatency is the EWMA-smoothed END-TO-END round-trip latency per leg,
@@ -801,7 +800,7 @@ func (rg *RouteGroup) Close() error {
 		return nil
 	}
 
-	atomic.StoreInt32(&rg.closeInitiated, 1)
+	rg.closeInitiated.Store(1)
 
 	// rg.mu is deliberately NOT held across this call: close() broadcasts close
 	// packets (2s ctx) and then waits up to closeRoutineTimeout for the peer's

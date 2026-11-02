@@ -192,7 +192,7 @@ type ecfLegState struct {
 type transportSelector struct {
 	mu       sync.RWMutex
 	schedule []int // pre-computed selection sequence of transport indices
-	counter  uint32
+	counter  atomic.Uint32
 	mode     WeightMode
 
 	// Mode-specific config. Set via SetExplicitWeights or
@@ -206,7 +206,7 @@ type transportSelector struct {
 	// modes when the packet is at or under the threshold. Built
 	// at Rebuild time so per-packet selection stays lock-free.
 	smallLegSchedule []int
-	smallLegCounter  uint32
+	smallLegCounter  atomic.Uint32
 	// liveLegs holds the indexes of currently-serving transports,
 	// used by WeightModeSticky5Tuple (hash %% len) and
 	// WeightModeLatencyAdaptive (linear scan). Built at Rebuild
@@ -660,7 +660,7 @@ func (ts *transportSelector) Select() int {
 		return 0
 	}
 
-	idx := atomic.AddUint32(&ts.counter, 1) - 1
+	idx := ts.counter.Add(1) - 1
 	return sched[idx%uint32(len(sched))] //nolint:gosec
 }
 
@@ -696,7 +696,7 @@ func (ts *transportSelector) SelectForSize(size int) int {
 	if len(smallSched) == 0 {
 		return 0
 	}
-	idx := atomic.AddUint32(&ts.smallLegCounter, 1) - 1
+	idx := ts.smallLegCounter.Add(1) - 1
 	return smallSched[idx%uint32(len(smallSched))] //nolint:gosec
 }
 
@@ -744,7 +744,7 @@ func (ts *transportSelector) SelectForPayload(p []byte) int {
 		if len(smallSched) == 0 {
 			return 0
 		}
-		idx := atomic.AddUint32(&ts.smallLegCounter, 1) - 1
+		idx := ts.smallLegCounter.Add(1) - 1
 		return smallSched[idx%uint32(len(smallSched))] //nolint:gosec
 	case WeightModeSizeThreshold:
 		return ts.SelectForSize(len(p))
@@ -919,7 +919,7 @@ func (ts *transportSelector) scheduleIndexLocked() int {
 	if len(ts.schedule) == 0 {
 		return 0
 	}
-	idx := atomic.AddUint32(&ts.counter, 1) - 1
+	idx := ts.counter.Add(1) - 1
 	return ts.schedule[idx%uint32(len(ts.schedule))] //nolint:gosec
 }
 

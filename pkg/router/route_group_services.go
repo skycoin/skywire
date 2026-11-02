@@ -4,7 +4,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -396,7 +395,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 				// Keep the seconds that led here, which are gone by the time
 				// anyone reads this warning.
 				flightrec.Snapshot("reorder-wedge")
-				atomic.StoreUint32(&rg.reorderWedgeSeq, seq)
+				rg.reorderWedgeSeq.Store(seq)
 				rg.noteMuxEvent(MuxEvent{
 					Event:    MuxEventReorderWedge,
 					By:       MuxByLocal,
@@ -416,7 +415,7 @@ func (rg *RouteGroup) reorderStallServiceFn(_ time.Duration) {
 		if startNano := rg.reorderWedgeStartNano.Swap(0); startNano != 0 {
 			held = time.Since(time.Unix(0, startNano))
 		}
-		seq := atomic.LoadUint32(&rg.reorderWedgeSeq)
+		seq := rg.reorderWedgeSeq.Load()
 		rg.reorderWedges.Add(1)
 		if ms := held.Milliseconds(); ms > rg.reorderWedgeLongestMs.Load() {
 			rg.reorderWedgeLongestMs.Store(ms)
@@ -820,7 +819,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	}
 
 	if err := rg.sendKeepAlive(); err != nil {
-		failures := atomic.AddInt32(&rg.consecutiveWriteFailures, 1)
+		failures := rg.consecutiveWriteFailures.Add(1)
 		if failures >= maxConsecutiveWriteFailures {
 			rg.logger.Warnf("Closing RouteGroup after %d consecutive write failures: %v", failures, err)
 			rg.setCloseReason(fmt.Sprintf("%d consecutive keepalive write failures: %v", failures, err))
@@ -829,7 +828,7 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 		}
 		rg.logger.Warnf("Failed to send keepalive: %v", err)
 	} else {
-		atomic.StoreInt32(&rg.consecutiveWriteFailures, 0)
+		rg.consecutiveWriteFailures.Store(0)
 	}
 
 	// Prune dead transports and rebuild weights

@@ -73,7 +73,7 @@ func (d mockDialer) Dial(_ context.Context, remote cipher.PubKey, _ uint16) (net
 // If hangDuration is > 0, calling .ReserveIDS would hang for the given duration before returning.
 type mockGatewayForDialer struct {
 	hangDuration time.Duration
-	nextID       uint32
+	nextID       atomic.Uint32
 }
 
 func (gw *mockGatewayForDialer) ReserveIDs(n uint8, routeIDs *[]routing.RouteID) error {
@@ -83,7 +83,7 @@ func (gw *mockGatewayForDialer) ReserveIDs(n uint8, routeIDs *[]routing.RouteID)
 
 	out := make([]routing.RouteID, n)
 	for i := 0; i < int(n); i++ {
-		out[i] = routing.RouteID(atomic.AddUint32(&gw.nextID, 1))
+		out[i] = routing.RouteID(gw.nextID.Add(1))
 	}
 	*routeIDs = out
 	return nil

@@ -588,7 +588,7 @@ func (m *routeMux) selectByDirection(tps []*transport.ManagedTransport, fwd []ro
 		return idx < len(fwd) && tp != nil && !tp.IsClosed() &&
 			legIsDirect(tp, dst, src) == wantDirect
 	}
-	start := int(atomic.AddUint32(&m.tpIndex, 1) - 1)
+	start := int(m.tpIndex.Add(1) - 1)
 	scan := func(match func(idx int) bool) (*transport.ManagedTransport, routing.Rule, int, bool) {
 		for i := 0; i < n; i++ {
 			idx := ((start % n) + i) % n

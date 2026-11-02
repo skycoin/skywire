@@ -53,7 +53,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 	// pre-fix is tiny; loop count is high enough to hit it reliably
 	// under -race.
 	const N = 200
-	var sentOK, recovered int32
+	var sentOK, recovered atomic.Int32
 
 	var wg sync.WaitGroup
 	for i := 0; i < N; i++ {
@@ -65,11 +65,11 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 				// (i.e. the fix being absent) fails the test
 				// loudly instead of nuking the test binary.
 				if r := recover(); r != nil {
-					atomic.AddInt32(&recovered, 1)
+					recovered.Add(1)
 				}
 			}()
 			if err := rg.handleDataPacket(pkt); err == nil {
-				atomic.AddInt32(&sentOK, 1)
+				sentOK.Add(1)
 			}
 		}()
 	}
@@ -100,10 +100,10 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 	// hitting handleDataPacket's defer-recover. recovered > 0
 	// means the fix is incomplete (test-level recover caught what
 	// handleDataPacket's didn't).
-	require.Zero(t, atomic.LoadInt32(&recovered),
+	require.Zero(t, recovered.Load(),
 		"handleDataPacket panicked %d/%d times — fix incomplete",
-		atomic.LoadInt32(&recovered), N)
+		recovered.Load(), N)
 
 	t.Logf("ok: %d/%d sends succeeded, %d goroutines recovered at test level",
-		atomic.LoadInt32(&sentOK), N, atomic.LoadInt32(&recovered))
+		sentOK.Load(), N, recovered.Load())
 }

@@ -889,10 +889,10 @@ func (v *Visor) setEmbeddedProxyUpstreamPersist(kind, addr string) error {
 
 // mirroredJSONField reports whether the block has a field NAMED for this JSON
 // key but tagged `json:"-"` — a mirror the block's own MarshalJSON writes out
-// while the canonical value lives elsewhere. Matched on the Go field name in
-// UpperCamel, which is how every such mirror in the config is spelled.
+// while the canonical value lives elsewhere. Matched case-insensitively on the
+// Go field name with the underscores of the snake_case key removed.
 func mirroredJSONField(block reflect.Value, name string) bool {
-	want := strings.ReplaceAll(strings.Title(strings.ReplaceAll(name, "_", " ")), " ", "") //nolint:staticcheck // ASCII config keys
+	want := strings.ReplaceAll(name, "_", "")
 	t := block.Type()
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)

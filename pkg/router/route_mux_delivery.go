@@ -3,7 +3,6 @@ package router
 
 import (
 	"math"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +42,7 @@ func (m *routeMux) wrapPayload(routeID routing.RouteID, data []byte, tpID uuid.U
 	if len(data)+m.frameOverhead() > math.MaxUint16 {
 		return nil, 0, routing.ErrPayloadTooBig
 	}
-	seq := atomic.AddUint32(&m.writeSeq, 1) - 1
+	seq := m.writeSeq.Add(1) - 1
 	// Delivery check: stamp the CRC32C of (seq ‖ payload) BEFORE the seal, so the
 	// trailer rides inside the ciphertext and a retransmit or FEC reconstruction
 	// of this seq reproduces identical bytes. The receiver verifies it when this
@@ -250,5 +249,5 @@ func (m *routeMux) reorderNextSeq() uint32 {
 // writeSeqValue returns the count of DATA frames this mux has emitted (the next
 // outgoing sequence number). A cheap aggregate outbound-progress counter.
 func (m *routeMux) writeSeqValue() uint32 {
-	return atomic.LoadUint32(&m.writeSeq)
+	return m.writeSeq.Load()
 }

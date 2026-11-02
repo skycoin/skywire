@@ -107,7 +107,7 @@ type BindingsCXOPublisher struct {
 	done  chan struct{}
 	wg    sync.WaitGroup
 
-	dropped uint64 // atomic; bumped when marks overflows
+	dropped atomic.Uint64 // atomic; bumped when marks overflows
 
 	// state is the live per-peer record set, and pending the marks awaiting a
 	// re-resolve. Both are owned exclusively by the worker goroutine (run), so
@@ -181,7 +181,7 @@ func (p *BindingsCXOPublisher) Dropped() uint64 {
 	if p == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&p.dropped)
+	return p.dropped.Load()
 }
 
 // LastError returns the most recent publish error, or nil.
@@ -219,7 +219,7 @@ func (p *BindingsCXOPublisher) MarkDirty(t types.Type, pk cipher.PubKey) {
 	case p.marks <- dirtyMark{pk: pk, t: types.NormalizeType(t)}:
 	case <-p.done:
 	default:
-		dropped := atomic.AddUint64(&p.dropped, 1)
+		dropped := p.dropped.Add(1)
 		if dropped&(dropped-1) == 0 {
 			p.log.WithField("dropped_total", dropped).
 				Warn("CXO bindings mark queue full; dropping (peer recovers on the next resync)")

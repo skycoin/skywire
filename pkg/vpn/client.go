@@ -63,7 +63,7 @@ type Client struct {
 	tun        TUNDevice
 	tunCreated bool
 
-	connectedDuration int64
+	connectedDuration atomic.Int64
 
 	defaultSystemDNS string //nolint:unused
 
@@ -539,7 +539,7 @@ serveLoop:
 		case <-c.closeC:
 			break serveLoop
 		case <-t.C:
-			atomic.AddInt64(&c.connectedDuration, 1)
+			c.connectedDuration.Add(1)
 			c.setConnectionDuration()
 		}
 	}
@@ -848,7 +848,7 @@ func (c *Client) setConnectionDuration() {
 	if c.appCl == nil {
 		return
 	}
-	if err := c.appCl.SetConnectionDuration(atomic.LoadInt64(&c.connectedDuration)); err != nil {
+	if err := c.appCl.SetConnectionDuration(c.connectedDuration.Load()); err != nil {
 		print(fmt.Sprintf("Failed to set connection duration: %v\n", err))
 	}
 }
@@ -873,7 +873,7 @@ func (c *Client) isClosed() bool {
 }
 
 func (c *Client) resetConnDuration() {
-	atomic.StoreInt64(&c.connectedDuration, 0)
+	c.connectedDuration.Store(0)
 	c.setConnectionDuration()
 }
 

@@ -44,9 +44,9 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	go serveSkyForwardingMuxSession(log, serverConn, v)
 
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		return clientConn, nil // the single held route group
 	}
 	pool := skyroute.New(time.Minute, nil)
@@ -72,7 +72,7 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 		cancel()
 	}
 
-	require.EqualValues(t, 1, atomic.LoadInt32(&dials),
+	require.EqualValues(t, 1, dials.Load(),
 		"all 5 connections must reuse ONE route group, not re-dial")
 }
 

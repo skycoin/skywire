@@ -57,13 +57,15 @@ func withCXOEnv(t *testing.T) {
 	t.Setenv("DMSGCURL_SK", "") // resolveTCPIdentity reads it
 
 	cxoMu.Lock()
-	cxoPub, cxoSubs, cxoGroupSess, cxoSeq = nil, nil, nil, 0
+	cxoPub, cxoSubs, cxoGroupSess = nil, nil, nil
+	cxoSeq.Store(0)
 	cxoMu.Unlock()
 
 	t.Cleanup(func() {
 		cxoMu.Lock()
 		pub, subs, sess := cxoPub, cxoSubs, cxoGroupSess
-		cxoPub, cxoSubs, cxoGroupSess, cxoSeq = nil, nil, nil, 0
+		cxoPub, cxoSubs, cxoGroupSess = nil, nil, nil
+		cxoSeq.Store(0)
 		cxoMu.Unlock()
 		for _, s := range subs {
 			_ = s.Close() //nolint:errcheck

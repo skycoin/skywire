@@ -3,7 +3,6 @@ package router
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/router/routersettings"
@@ -207,11 +206,11 @@ func (rg *RouteGroup) resendSeqs(seqs []uint32) error {
 // SACK per delayedAckDelay. The fire path re-checks the shared SACK rate
 // limit, so a gap-SACK that went out meanwhile suppresses it.
 func (rg *RouteGroup) scheduleDelayedAck() {
-	if !atomic.CompareAndSwapInt32(&rg.delayedAckArmed, 0, 1) {
+	if !rg.delayedAckArmed.CompareAndSwap(0, 1) {
 		return
 	}
 	time.AfterFunc(rg.knDur(routersettings.SackDelayedAckDelay), func() {
-		atomic.StoreInt32(&rg.delayedAckArmed, 0)
+		rg.delayedAckArmed.Store(0)
 		if rg.isClosed() {
 			return
 		}

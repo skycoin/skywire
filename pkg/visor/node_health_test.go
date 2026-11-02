@@ -14,10 +14,10 @@ import (
 
 // newTestTracker builds a tracker with a stubbed per-node check so no real
 // dmsg dials occur. checks counts how many times the stub ran.
-func newTestTracker(tps, rsn func() []cipher.PubKey, checks *int32) *NodeHealthTracker {
+func newTestTracker(tps, rsn func() []cipher.PubKey, checks *atomic.Int32) *NodeHealthTracker {
 	nht := NewNodeHealthTracker(nil, logging.MustGetLogger("node_health_test"), tps, rsn)
 	nht.checkFn = func(_ context.Context, pk cipher.PubKey, _ uint16, _ string) *visorapi.NodeHealth {
-		atomic.AddInt32(checks, 1)
+		checks.Add(1)
 		return &visorapi.NodeHealth{PK: pk, Healthy: true, LastChecked: time.Now()}
 	}
 	return nht
@@ -27,7 +27,7 @@ func newTestTracker(tps, rsn func() []cipher.PubKey, checks *int32) *NodeHealthT
 // served from cache without recomputing (the stub check is not re-invoked).
 func TestNodeHealthTracker_CacheHit(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	var checks int32
+	var checks atomic.Int32
 	nht := newTestTracker(
 		func() []cipher.PubKey { return []cipher.PubKey{pk} },
 		func() []cipher.PubKey { return nil },
@@ -38,7 +38,7 @@ func TestNodeHealthTracker_CacheHit(t *testing.T) {
 	if got := nht.GetTPSHealth(); len(got) != 1 {
 		t.Fatalf("first GetTPSHealth: got %d entries, want 1", len(got))
 	}
-	if c := atomic.LoadInt32(&checks); c != 1 {
+	if c := checks.Load(); c != 1 {
 		t.Fatalf("after first call: checks=%d, want 1", c)
 	}
 
@@ -46,7 +46,7 @@ func TestNodeHealthTracker_CacheHit(t *testing.T) {
 	if got := nht.GetTPSHealth(); len(got) != 1 {
 		t.Fatalf("second GetTPSHealth: got %d entries, want 1", len(got))
 	}
-	if c := atomic.LoadInt32(&checks); c != 1 {
+	if c := checks.Load(); c != 1 {
 		t.Fatalf("after cache-hit call: checks=%d, want 1 (recompute stampede)", c)
 	}
 }
@@ -59,7 +59,7 @@ func TestNodeHealthTracker_ReseedOnStale(t *testing.T) {
 	pk2, _ := cipher.GenerateKeyPair()
 
 	current := []cipher.PubKey{pk1}
-	var checks int32
+	var checks atomic.Int32
 	nht := newTestTracker(
 		func() []cipher.PubKey { return current },
 		func() []cipher.PubKey { return nil },
@@ -86,7 +86,7 @@ func TestNodeHealthTracker_ReseedOnStale(t *testing.T) {
 // TestNodeHealthTracker_EmptyNoPanic verifies recompute with empty providers
 // produces empty results without touching the (nil) dmsg client.
 func TestNodeHealthTracker_EmptyNoPanic(t *testing.T) {
-	var checks int32
+	var checks atomic.Int32
 	nht := newTestTracker(
 		func() []cipher.PubKey { return nil },
 		func() []cipher.PubKey { return nil },
@@ -95,7 +95,7 @@ func TestNodeHealthTracker_EmptyNoPanic(t *testing.T) {
 	if got := nht.GetRSNHealth(); len(got) != 0 {
 		t.Fatalf("GetRSNHealth with no nodes: got %d, want 0", len(got))
 	}
-	if c := atomic.LoadInt32(&checks); c != 0 {
+	if c := checks.Load(); c != 0 {
 		t.Fatalf("checks=%d, want 0 (no nodes to check)", c)
 	}
 }

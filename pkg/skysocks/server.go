@@ -29,7 +29,7 @@ type Server struct {
 	sMu       sync.Mutex
 	socks     *socks5.Server
 	listener  net.Listener
-	closed    uint32
+	closed    atomic.Uint32
 	whitelist map[cipher.PubKey]struct{}
 	useWL     bool
 }
@@ -287,11 +287,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) close() {
-	atomic.StoreUint32(&s.closed, 1)
+	s.closed.Store(1)
 }
 
 func (s *Server) isClosed() bool {
-	return atomic.LoadUint32(&s.closed) != 0
+	return s.closed.Load() != 0
 }
 
 // IsPublic returns true if whitelist is not enabled (server is public)

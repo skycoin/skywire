@@ -19,7 +19,7 @@ type HealthCheckable interface {
 
 // internalHealthInfo contains information of the status of the visor itself.
 // It's thread-safe, and could be used in multiple goroutines
-type internalHealthInfo int32
+type internalHealthInfo struct{ v atomic.Int32 }
 
 // newHealthInfo creates
 func newInternalHealthInfo() *internalHealthInfo {
@@ -28,22 +28,22 @@ func newInternalHealthInfo() *internalHealthInfo {
 
 // init sets the internalHealthInfo status to initial value (2)
 func (h *internalHealthInfo) init() {
-	atomic.StoreInt32((*int32)(h), 2)
+	h.v.Store(2)
 }
 
 // set sets the internalHealthInfo status to true.
 func (h *internalHealthInfo) set() {
-	atomic.StoreInt32((*int32)(h), 1)
+	h.v.Store(1)
 }
 
 // unset sets the internalHealthInfo to false.
 func (h *internalHealthInfo) unset() {
-	atomic.StoreInt32((*int32)(h), 0)
+	h.v.Store(0)
 }
 
 // value gets the internalHealthInfo value
 func (h *internalHealthInfo) value() string {
-	val := atomic.LoadInt32((*int32)(h))
+	val := h.v.Load()
 	switch val {
 	case 0:
 		return "connecting"

@@ -29,7 +29,7 @@ type pipeLeg struct {
 	ch       chan []byte
 	latency  time.Duration
 	deliver  func([]byte)
-	recv     int64 // atomic: bytes carried on this leg
+	recv     atomic.Int64 // atomic: bytes carried on this leg
 	once     sync.Once
 }
 
@@ -70,7 +70,7 @@ func (p *pipeLeg) Write(b []byte) (int, error) {
 	}
 	cp := make([]byte, len(b))
 	copy(cp, b)
-	atomic.AddInt64(&p.recv, int64(len(b)))
+	p.recv.Add(int64(len(b)))
 	select {
 	case p.ch <- cp:
 	case <-p.closed:
@@ -204,7 +204,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 		defer cleanup()
 
 		done := make(chan struct{})
-		var got int64
+		var got atomic.Int64
 		var seenMu sync.Mutex
 		seen := make(map[byte]int)
 		go func() {
@@ -218,7 +218,7 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 						seen[d[0]]++
 						seenMu.Unlock()
 					}
-					if atomic.AddInt64(&got, int64(len(d))) >= int64(nFrames*frameSize) {
+					if got.Add(int64(len(d))) >= int64(nFrames*frameSize) {
 						close(done)
 						return
 					}
@@ -252,12 +252,12 @@ func TestFECMuxEndToEndThroughput(t *testing.T) {
 			}
 			seenMu.Unlock()
 			t.Fatalf("transfer did not complete (fec=%v): got %d/%d bytes; missing seqs=%v dup seqs=%v",
-				fec, atomic.LoadInt64(&got), nFrames*frameSize, missing, dups)
+				fec, got.Load(), nFrames*frameSize, missing, dups)
 		}
 		elapsed := time.Since(start)
 		perLeg := make([]int64, len(pipes))
 		for i, p := range pipes {
-			perLeg[i] = atomic.LoadInt64(&p.recv)
+			perLeg[i] = p.recv.Load()
 		}
 		return elapsed, perLeg
 	}

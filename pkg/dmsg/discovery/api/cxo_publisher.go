@@ -130,7 +130,7 @@ type ClientsByServerCXOPublisher struct {
 	done   chan struct{}
 	wg     sync.WaitGroup
 
-	dropped uint64 // atomic; incremented on queue overflow
+	dropped atomic.Uint64 // atomic; incremented on queue overflow
 
 	// state is the live per-server client set: server PK -> client PK ->
 	// that client's full JSON disc.Entry. Owned exclusively by the single
@@ -246,7 +246,7 @@ func (p *ClientsByServerCXOPublisher) submit(fn func()) {
 	select {
 	case p.events <- fn:
 	default:
-		dropped := atomic.AddUint64(&p.dropped, 1)
+		dropped := p.dropped.Add(1)
 		if dropped&(dropped-1) == 0 {
 			p.log.WithField("dropped_total", dropped).
 				Warn("CXO publish queue full; dropping mirror event")
@@ -263,7 +263,7 @@ func (p *ClientsByServerCXOPublisher) Dropped() uint64 {
 	if p == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&p.dropped)
+	return p.dropped.Load()
 }
 
 // Close stops the worker goroutine and the underlying publisher.

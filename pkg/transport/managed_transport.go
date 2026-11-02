@@ -40,7 +40,7 @@ const (
 )
 
 // Records number of managedTransports.
-var mTpCount int32
+var mTpCount atomic.Int32
 
 var (
 	// ErrNotServing is the error returned when a transport is no longer served.
@@ -78,7 +78,7 @@ type ManagedTransport struct {
 	Entry       Entry
 	LogEntry    *LogEntry
 	logMx       sync.Mutex
-	logUpdates  uint32
+	logUpdates  atomic.Uint32
 	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
 	// openedAt and onClose feed the manager's transport event ring; see
@@ -515,7 +515,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
 		WithField("remote_pk", mt.rPK).
-		WithField("tp_index", atomic.AddInt32(&mTpCount, 1))
+		WithField("tp_index", mTpCount.Add(1))
 
 	log.Debug("Serving.")
 
@@ -524,7 +524,7 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 		// Final flush so the LogStore reflects the last byte counts
 		// before the manager drops this transport from its map.
 		mt.recordLog()
-		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
+		log.WithField("remaining_tps", mTpCount.Add(-1)).
 			Debug("Stopped serving.")
 		mt.wg.Done()
 	}()
@@ -1546,7 +1546,7 @@ func (mt *ManagedTransport) logSent(b uint64) {
 	defer mt.logMx.Unlock()
 
 	mt.LogEntry.AddSent(b)
-	atomic.AddUint32(&mt.logUpdates, 1)
+	mt.logUpdates.Add(1)
 }
 
 func (mt *ManagedTransport) logRecv(b uint64) {
@@ -1554,13 +1554,13 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 	defer mt.logMx.Unlock()
 
 	mt.LogEntry.AddRecv(b)
-	atomic.AddUint32(&mt.logUpdates, 1)
+	mt.logUpdates.Add(1)
 }
 
 // logMod flushes the number of operations performed in this transport
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
-	if ops := atomic.SwapUint32(&mt.logUpdates, 0); ops > 0 {
+	if ops := mt.logUpdates.Swap(0); ops > 0 {
 		if mt.log.IsLevelEnabled(logrus.TraceLevel) {
 			mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
 		}

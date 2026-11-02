@@ -3,7 +3,6 @@ package router
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -157,7 +156,7 @@ func (m *routeMux) selectTransportRaw(tps []*transport.ManagedTransport, fwd []r
 	// primary leg (0) is always ready, so this loop always finds it. When
 	// direction filtering is active, non-matching legs are skipped here too.
 	n := uint32(len(tps)) //nolint:gosec
-	start := atomic.AddUint32(&m.tpIndex, 1) - 1
+	start := m.tpIndex.Add(1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]

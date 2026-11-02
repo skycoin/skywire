@@ -17,16 +17,16 @@ func TestPool_OpenStreamAfterClose(t *testing.T) {
 	p := New(time.Minute, nil)
 	require.NoError(t, p.Close())
 
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
 	}
 	_, err := p.OpenStream(context.Background(), testKey(10), dial)
 	require.Error(t, err)
-	require.EqualValues(t, 0, atomic.LoadInt32(&dials), "closed pool must not dial")
+	require.EqualValues(t, 0, dials.Load(), "closed pool must not dial")
 }
 
 // Close is idempotent.
@@ -45,9 +45,9 @@ func TestPool_ReleaseUnknownKey(t *testing.T) {
 
 // A closed underlying session is dropped and OpenStream transparently re-dials.
 func TestPool_ReuseDropsClosedSession(t *testing.T) {
-	var dials int32
+	var dials atomic.Int32
 	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
-		atomic.AddInt32(&dials, 1)
+		dials.Add(1)
 		a, b := net.Pipe()
 		go echoServer(b)
 		return a, nil
@@ -73,7 +73,7 @@ func TestPool_ReuseDropsClosedSession(t *testing.T) {
 	require.NoError(t, err)
 	roundtrip(t, s2, "yo")
 	require.NoError(t, s2.Close())
-	require.EqualValues(t, 2, atomic.LoadInt32(&dials), "closed session must force a re-dial")
+	require.EqualValues(t, 2, dials.Load(), "closed session must force a re-dial")
 }
 
 // reap deletes sessions whose underlying yamux session has closed and expires

@@ -639,8 +639,7 @@ func CancellableCopy(ctx context.Context, w io.Writer, body io.ReadCloser, lengt
 
 // ProgressWriter prints the progress of a download to stdout.
 type ProgressWriter struct {
-	// atomic requires 64-bit alignment for struct field access
-	Current int64
+	Current atomic.Int64
 	Total   int64
 }
 
@@ -648,8 +647,8 @@ type ProgressWriter struct {
 func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	n := len(p)
 
-	current := atomic.AddInt64(&pw.Current, int64(n))
-	total := atomic.LoadInt64(&pw.Total)
+	current := pw.Current.Add(int64(n))
+	total := pw.Total
 	pc := fmt.Sprintf("%d%%", current*100/total)
 	cmdutil.Printf("Downloading: %d/%dB (%s)", current, total, pc)
 	if current != total {

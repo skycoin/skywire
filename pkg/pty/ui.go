@@ -108,7 +108,7 @@ func (ui *UI) writeBanner(w io.Writer, uiAddr string, sID int32) error {
 
 // Handler returns a http handler that serves the dmsgpty-ui.
 func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
-	var sc int32 // session counter
+	var sc atomic.Int32 // session counter
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := ui.log.WithField("remote_addr", r.RemoteAddr)
 
@@ -129,10 +129,10 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		}
 
 		// serve terminal
-		sID := atomic.AddInt32(&sc, 1)
+		sID := sc.Add(1)
 		log = log.WithField("ui_sid", sID)
 		log.Debug("Serving terminal websocket...")
-		defer func() { log.Debugf("Terminal closed: %d terminals left open.", atomic.AddInt32(&sc, -1)+1) }()
+		defer func() { log.Debugf("Terminal closed: %d terminals left open.", sc.Add(-1)+1) }()
 
 		acceptUISocket(w, r, log, func(ws *uiSocket) { ui.serveTerminal(r, log, ws, sID, customCommands) })
 	}

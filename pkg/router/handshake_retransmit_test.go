@@ -20,7 +20,7 @@ import (
 // was called, so a test can observe (re)transmitted handshake packets.
 type countingTransport struct {
 	closed   chan struct{}
-	writes   int32
+	writes   atomic.Int32
 	pk1, pk2 cipher.PubKey
 }
 
@@ -35,11 +35,11 @@ func (t *countingTransport) Write(b []byte) (int, error) {
 	case <-t.closed:
 		return 0, net.ErrClosed
 	default:
-		atomic.AddInt32(&t.writes, 1)
+		t.writes.Add(1)
 		return len(b), nil
 	}
 }
-func (t *countingTransport) writeCount() int { return int(atomic.LoadInt32(&t.writes)) }
+func (t *countingTransport) writeCount() int { return int(t.writes.Load()) }
 
 func (t *countingTransport) Read([]byte) (int, error) { <-t.closed; return 0, net.ErrClosed }
 func (t *countingTransport) Close() error {
@@ -67,8 +67,8 @@ func (t *countingTransport) Network() types.Type              { return "test" }
 // even though the initiator had begun retransmitting.
 func TestAwaitHandshakeAck_StopsOnProcessed(t *testing.T) {
 	processed := make(chan struct{})
-	var calls int32
-	retransmit := func() { atomic.AddInt32(&calls, 1) }
+	var calls atomic.Int32
+	retransmit := func() { calls.Add(1) }
 
 	go func() {
 		time.Sleep(35 * time.Millisecond) // let at least one retransmit tick fire
@@ -79,7 +79,7 @@ func TestAwaitHandshakeAck_StopsOnProcessed(t *testing.T) {
 	defer cancel()
 	err := awaitHandshakeAck(ctx, processed, retransmit, 10*time.Millisecond)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, int(atomic.LoadInt32(&calls)), 1, "initiator should retransmit while waiting")
+	require.GreaterOrEqual(t, int(calls.Load()), 1, "initiator should retransmit while waiting")
 }
 
 // A responder passes retransmit == nil: it must simply wait for the forward
@@ -99,14 +99,14 @@ func TestAwaitHandshakeAck_ResponderNoRetransmit(t *testing.T) {
 // hard-fails the dial) — but only after retransmitting several times, proving a
 // lost handshake would have been given multiple chances to recover.
 func TestAwaitHandshakeAck_TimeoutAfterRetransmits(t *testing.T) {
-	var calls int32
-	retransmit := func() { atomic.AddInt32(&calls, 1) }
+	var calls atomic.Int32
+	retransmit := func() { calls.Add(1) }
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
 	defer cancel()
 	err := awaitHandshakeAck(ctx, make(chan struct{}), retransmit, 20*time.Millisecond)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.GreaterOrEqual(t, int(atomic.LoadInt32(&calls)), 2, "handshake must be retransmitted multiple times before failing")
+	require.GreaterOrEqual(t, int(calls.Load()), 2, "handshake must be retransmitted multiple times before failing")
 }
 
 // End-to-end at the route-group level: an initiator that never receives the

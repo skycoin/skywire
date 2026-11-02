@@ -39,7 +39,6 @@ type EntityCommon struct {
 	// relay counts the streams this entity bridged and the bytes they carried.
 	relay relayCounters
 
-	// atomic requires 64-bit alignment for struct field access
 	lastUpdate atomic.Int64 // Timestamp (in unix seconds) of last update.
 
 	// lastInbound is the time a remote-initiated stream was last accepted on any
