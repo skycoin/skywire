@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // ErrRouterNotAvailable is returned by RPC handlers that need a
@@ -665,7 +666,36 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	if appName == skymailApp {
 		return v.MailSetSettings(visorapi.MailSettingsUpdate{Enable: &autoStart})
 	}
+	if v.setResolverEnable(appName, autoStart) {
+		return v.conf.Flush()
+	}
 	return nil
+}
+
+// setResolverEnable sets the config enable a resolving proxy autostarts from,
+// since those apps are added at runtime and have no launcher config row.
+func (v *Visor) setResolverEnable(appName string, enable bool) bool {
+	switch appName {
+	case "dmsgweb":
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.Enable = enable
+		return true
+	case "skynetweb":
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.Enable = enable
+		return true
+	}
+	for i := range v.conf.Resolvers {
+		if v.conf.Resolvers[i].AppName() == appName {
+			v.conf.Resolvers[i].Enable = enable
+			return true
+		}
+	}
+	return false
 }
 
 // SetAppWhitelist implements API. Updates the comma-separated PK

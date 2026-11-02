@@ -58,6 +58,12 @@ var mirrorGetters = map[string]func(c *visorconfig.V1) (flag, value string, ok b
 		}
 		return "minsess", strconv.Itoa(c.Dmsg.Primary().SessionsCount), true
 	},
+	"resolvers": func(c *visorconfig.V1) (string, string, bool) {
+		if len(c.Resolvers) == 0 {
+			return "", "", false
+		}
+		return "resolvers", visorconfig.FormatResolverSpecs(c.Resolvers), true
+	},
 }
 
 func boolFlag(flag string) func(reflect.Value) (string, string) {
