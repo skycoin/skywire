@@ -211,3 +211,19 @@ func TestPolicy_Allows(t *testing.T) {
 	require.False(t, Policy{Deny: []cipher.PubKey{a}}.Allows(a))
 	require.False(t, Policy{Allow: []cipher.PubKey{a}, Deny: []cipher.PubKey{a}}.Allows(a), "deny wins")
 }
+
+func TestPolicy_AllowsOn(t *testing.T) {
+	a, b := pk(), pk()
+	p := Policy{PortAllow: map[uint16][]cipher.PubKey{25: {a}}}
+	require.True(t, p.AllowsOn(a, 25))
+	require.False(t, p.AllowsOn(b, 25), "only the listed senders on a named port")
+	require.True(t, p.AllowsOn(b, 1), "other ports follow Allow and Deny")
+	p.Deny = []cipher.PubKey{a}
+	require.False(t, p.AllowsOn(a, 25), "deny still wins")
+
+	q := Policy{PortAllow: map[uint16][]cipher.PubKey{25: {a}}, Deny: []cipher.PubKey{a}}
+	require.True(t, p.Equal(q))
+	q.PortAllow = map[uint16][]cipher.PubKey{25: {b}}
+	require.False(t, p.Equal(q))
+	require.True(t, Policy{}.Equal(Policy{PortAllow: map[uint16][]cipher.PubKey{}}), "no list and an empty map are the same")
+}

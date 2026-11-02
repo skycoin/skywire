@@ -81,8 +81,9 @@ func (mb *Mailbox) park(ctx context.Context, id string, st *queueItem, msg []byt
 	st.parkNext = time.Now().Add(retryDelay(st.parkTries))
 }
 
-func (mb *Mailbox) parkIfDue(ctx context.Context, id string, st *queueItem, msg []byte) {
-	if mb.out.parking && st.needsPark() && !st.parkNext.After(time.Now()) {
+// parkIfDue parks when parking falls due within `within`.
+func (mb *Mailbox) parkIfDue(ctx context.Context, id string, st *queueItem, msg []byte, within time.Duration) {
+	if mb.out.parking && st.needsPark() && !st.parkNext.After(time.Now().Add(within)) {
 		mb.park(ctx, id, st, msg)
 	}
 }

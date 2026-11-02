@@ -4,6 +4,7 @@ package dmsgasync
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -102,6 +103,9 @@ type Policy struct {
 	// MaxPerSender bounds what one sender may have waiting. Zero takes
 	// DefaultMaxPerSender.
 	MaxPerSender int `json:"max_per_sender,omitempty"`
+	// PortAllow narrows who may deposit on the ports it names: only the listed
+	// senders, and only when Allow and Deny let them.
+	PortAllow map[uint16][]cipher.PubKey `json:"port_allow,omitempty"`
 }
 
 // Allows reports whether sender may deposit.
@@ -110,6 +114,21 @@ func (p Policy) Allows(sender cipher.PubKey) bool {
 		return false
 	}
 	return len(p.Allow) == 0 || slices.Contains(p.Allow, sender)
+}
+
+// AllowsOn reports whether sender may deposit on port.
+func (p Policy) AllowsOn(sender cipher.PubKey, port uint16) bool {
+	if !p.Allows(sender) {
+		return false
+	}
+	list, ok := p.PortAllow[port]
+	return !ok || slices.Contains(list, sender)
+}
+
+// Equal reports whether p and q allow the same senders with the same limit.
+func (p Policy) Equal(q Policy) bool {
+	return slices.Equal(p.Allow, q.Allow) && slices.Equal(p.Deny, q.Deny) && p.MaxPerSender == q.MaxPerSender &&
+		maps.EqualFunc(p.PortAllow, q.PortAllow, slices.Equal)
 }
 
 func (p Policy) perSender() int {

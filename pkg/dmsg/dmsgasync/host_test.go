@@ -226,3 +226,23 @@ func TestHost_HoldsAfterAcceptsChanges(t *testing.T) {
 	require.True(t, ok)
 	require.ErrorIs(t, Register(ctx, pipeDialer(rcpt.pk, hosts), hpk, rec, Policy{}), ErrNotHosted, "a new registration is still checked")
 }
+
+// A port the recipient's policy narrows takes deposits only from the senders
+// it lists. Other ports are unaffected.
+func TestHost_PortPolicy(t *testing.T) {
+	ctx := context.Background()
+	rcpt, friend, stranger := newParty(), newParty(), newParty()
+	h, hpk := newTestHost(t, StoreMemory, rcpt.pk)
+	hosts := map[cipher.PubKey]*Host{hpk: h}
+	rec, err := NewRecord(rcpt.pk, rcpt.sk, []cipher.PubKey{hpk}, 0, 1, time.Hour)
+	require.NoError(t, err)
+	pol := Policy{PortAllow: map[uint16][]cipher.PubKey{25: {friend.pk}}}
+	require.NoError(t, Register(ctx, pipeDialer(rcpt.pk, hosts), hpk, rec, pol))
+
+	_, err = Deposit(ctx, pipeDialer(friend.pk, hosts), hpk, rcpt.pk, 25, "", []byte("x"))
+	require.NoError(t, err)
+	_, err = Deposit(ctx, pipeDialer(stranger.pk, hosts), hpk, rcpt.pk, 25, "", []byte("x"))
+	require.ErrorIs(t, err, ErrNotAllowed)
+	_, err = Deposit(ctx, pipeDialer(stranger.pk, hosts), hpk, rcpt.pk, 1, "", []byte("x"))
+	require.NoError(t, err, "a port the policy does not name")
+}

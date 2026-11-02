@@ -387,7 +387,12 @@ func (v *Visor) MailRetry(id string) error {
 
 // MailSetWhitelist implements visorapi.API.
 func (v *Visor) MailSetWhitelist(pks []cipher.PubKey) error {
-	return v.mailCall(func(c skymail.Control) error { return c.SetWhitelist(pks) })
+	err := v.mailCall(func(c skymail.Control) error { return c.SetWhitelist(pks) })
+	if err == nil {
+		// The inbox hosts apply the whitelist to parked mail too.
+		v.asyncKick()
+	}
+	return err
 }
 
 func (h mailHost) MailPark(rcpt cipher.PubKey, env []byte, ref string) (cipher.PubKey, error) {

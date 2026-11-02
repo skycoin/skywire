@@ -217,3 +217,32 @@ func TestFailedParkBacksOff(t *testing.T) {
 	defer store.mu.Unlock()
 	require.Equal(t, 1, store.calls)
 }
+
+// A park retry that falls due while a delivery attempt could still hang runs
+// before that attempt, not after it.
+func TestParkRetryBeforeAHangingAttempt(t *testing.T) {
+	store := newParkStore()
+	store.err = errors.New("not allowed yet")
+	n := newTestNet()
+	a := n.addVisor(t)
+	setParker(a, store)
+	b := n.addVisor(t)
+	n.setDown(b, true)
+	startOutbox(t, a)
+	_, err := a.mb.Send(context.Background(), Outgoing{From: "alice", To: []string{addr("bob", b.pk)}, Subject: "s", Body: "b"})
+	require.NoError(t, err)
+	waitFor(t, "the first park fails", func() bool {
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		return store.calls >= 1
+	})
+
+	store.mu.Lock()
+	store.err = nil
+	store.mu.Unlock()
+	n.mu.Lock()
+	n.down[b.pk], n.hang[b.pk] = false, true
+	n.mu.Unlock()
+	require.NoError(t, a.mb.Retry(""), "delivery due now, the park retry still ahead")
+	waitFor(t, "A parks it before the attempt hangs", func() bool { return store.count(b.pk) == 1 })
+}

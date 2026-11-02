@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -43,25 +44,27 @@ var ErrDmsgAsyncOff = errors.New("dmsg-async is not running")
 type asyncState struct {
 	mu sync.Mutex
 	// cycle serializes inbox cycles, so two never sign and register at once.
-	cycle    sync.Mutex
-	log      *logging.Logger
-	host     *dmsgasync.Host
-	store    string
-	inbox    bool
-	hosts    []cipher.PubKey
-	publish  bool
-	policy   dmsgasync.Policy
-	record   *dmsgasync.Record
-	reg      map[cipher.PubKey]time.Time
-	regErr   map[cipher.PubKey]string
-	pubAt    time.Time
-	pubErr   string
-	round    time.Time
-	lastFet  time.Time
-	fetched  int
-	handlers map[uint16]dmsgasync.Handler
-	cache    map[cipher.PubKey]cachedRecord
-	kick     chan struct{}
+	cycle   sync.Mutex
+	log     *logging.Logger
+	host    *dmsgasync.Host
+	store   string
+	inbox   bool
+	hosts   []cipher.PubKey
+	publish bool
+	// basePolicy is the configured policy, and policy the one registered.
+	basePolicy dmsgasync.Policy
+	policy     dmsgasync.Policy
+	record     *dmsgasync.Record
+	reg        map[cipher.PubKey]time.Time
+	regErr     map[cipher.PubKey]string
+	pubAt      time.Time
+	pubErr     string
+	round      time.Time
+	lastFet    time.Time
+	fetched    int
+	handlers   map[uint16]dmsgasync.Handler
+	cache      map[cipher.PubKey]cachedRecord
+	kick       chan struct{}
 }
 
 type cachedRecord struct {
@@ -150,7 +153,8 @@ func initDmsgAsync(ctx context.Context, v *Visor, log *logging.Logger) error {
 	a.inbox = true
 	a.hosts = hosts
 	a.publish = conf.Inbox.Publish == nil || *conf.Inbox.Publish
-	a.policy = dmsgasync.Policy{Allow: conf.Inbox.Allow}
+	a.basePolicy = dmsgasync.Policy{Allow: conf.Inbox.Allow}
+	a.policy = a.basePolicy
 	a.mu.Unlock()
 	go v.asyncInboxLoop(ctx, log)
 	return nil
@@ -213,6 +217,44 @@ func (v *Visor) asyncInboxLoop(ctx context.Context, log *logging.Logger) {
 	}
 }
 
+// asyncPolicy is the inbox policy: the configured senders, narrowed on the
+// mail port to the mailbox's whitelist. While the mailbox cannot be asked
+// it keeps the registered policy.
+func (v *Visor) asyncPolicy() dmsgasync.Policy {
+	a := &v.async
+	a.mu.Lock()
+	base, cur := a.basePolicy, a.policy
+	a.mu.Unlock()
+	var wl []cipher.PubKey
+	err := v.mailCall(func(c skymail.Control) error {
+		st, err := c.Status()
+		wl = st.Whitelist
+		return err
+	})
+	if err != nil {
+		return cur
+	}
+	pol := base
+	if len(wl) > 0 {
+		pol.PortAllow = map[uint16][]cipher.PubKey{skymail.Port: wl}
+	}
+	return pol
+}
+
+// asyncKick runs an inbox cycle soon, as when the policy changed.
+func (v *Visor) asyncKick() {
+	v.async.mu.Lock()
+	k := v.async.kick
+	v.async.mu.Unlock()
+	if k == nil {
+		return
+	}
+	select {
+	case k <- struct{}{}:
+	default:
+	}
+}
+
 // asyncCycle keeps the registrations and the record fresh, publishes and
 // fetches. force does it all regardless of age.
 func (v *Visor) asyncCycle(ctx context.Context, log *logging.Logger, force bool) {
@@ -220,8 +262,11 @@ func (v *Visor) asyncCycle(ctx context.Context, log *logging.Logger, force bool)
 	a.cycle.Lock()
 	defer a.cycle.Unlock()
 	now := time.Now()
+	pol := v.asyncPolicy()
 	a.mu.Lock()
-	due := force || a.record == nil || a.record.Expires.Sub(now) < asyncRecordRenew ||
+	polChanged := !pol.Equal(a.policy)
+	a.policy = pol
+	due := force || polChanged || a.record == nil || a.record.Expires.Sub(now) < asyncRecordRenew ||
 		now.Sub(a.round) > asyncReregister || len(a.regErr) > 0 && now.Sub(a.round) > asyncRetryFailed
 	a.mu.Unlock()
 	if due {

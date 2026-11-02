@@ -255,7 +255,7 @@ func (h *Host) deposit(conn net.Conn, from cipher.PubKey, req request, now time.
 	if !ok {
 		return errReply(ErrNotHosted)
 	}
-	if !reg.Policy.Allows(from) {
+	if !reg.Policy.AllowsOn(from, req.Port) {
 		return errReply(ErrNotAllowed)
 	}
 	limit := h.store.lim.MaxMessage
