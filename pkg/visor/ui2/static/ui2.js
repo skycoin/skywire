@@ -110,3 +110,29 @@
 		else if (document.documentElement.lang) setLang(document.documentElement.lang);
 	}
 })();
+
+// A [data-follow] list keeps showing its newest line while the reader is at
+// the bottom, and a [data-max-children] list drops its oldest.
+(function () {
+	'use strict';
+	var stick = true;
+	document.addEventListener('htmx:oobBeforeSwap', function (e) {
+		var el = document.querySelector('[data-follow]');
+		if (el) stick = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+	});
+	function settle() {
+		document.querySelectorAll('[data-max-children]').forEach(function (el) {
+			var max = parseInt(el.getAttribute('data-max-children'), 10) || 0;
+			while (max > 0 && el.children.length > max) el.removeChild(el.firstElementChild);
+		});
+		document.querySelectorAll('[data-follow]').forEach(function (el) {
+			if (stick) el.scrollTop = el.scrollHeight;
+		});
+	}
+	document.addEventListener('htmx:oobAfterSwap', settle);
+	document.addEventListener('htmx:afterSettle', function (e) {
+		var el = e.detail.elt;
+		if (el && el.matches && (el.matches('[data-follow]') || el.querySelector('[data-follow]'))) { stick = true; settle(); }
+	});
+	document.addEventListener('DOMContentLoaded', settle);
+})();

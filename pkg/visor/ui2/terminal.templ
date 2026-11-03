@@ -1,0 +1,9 @@
+package ui2
+
+// TerminalPage hosts the hypervisor's dmsgpty terminal page.
+templ TerminalPage(pk string) {
+	@VisorLayout(pk, "terminal") {
+		@islandHead(T(ctx, "node.tabs.terminal"), T(ctx, "terminal.help"), "pty/"+pk, T(ctx, "terminal.open-fullscreen"))
+		<iframe class="island" src={ "pty/" + pk } title={ T(ctx, "node.tabs.terminal") } allowfullscreen></iframe>
+	}
+}

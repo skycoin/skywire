@@ -83,6 +83,7 @@ type Page struct {
 	Auth   bool
 	HVPK   string
 	Remote bool
+	TPViz  bool
 	cat    *Catalog
 }
 

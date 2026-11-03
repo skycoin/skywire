@@ -27,6 +27,10 @@ templ Layout(title, classic string) {
 					if From(ctx).HVPK != "" {
 						<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
 					}
+					if From(ctx).TPViz {
+						<a href="tp-viz/">{ T(ctx, "node.details.tpviz.title") }</a>
+					}
+					<a href="route-viz">{ T(ctx, "ui2.route-viz") }</a>
 				</nav>
 				<span class="spacer"></span>
 				<select class="lang" aria-label={ T(ctx, "ui2.language") } data-lang>

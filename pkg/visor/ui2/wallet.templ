@@ -1,0 +1,17 @@
+package ui2
+
+// WalletPage opens the dashboard's wallet and hosts its node settings page,
+// as the Angular wallet tab does.
+templ WalletPage(pk string) {
+	@VisorLayout(pk, "wallet") {
+		<div class="head">
+			<h1>{ T(ctx, "wallet.title") }</h1>
+			<span class="spacer"></span>
+			<a class="btn primary" href="#/wallet"><span class="mi">account_balance_wallet</span>{ T(ctx, "wallet.open") }</a>
+			<a class="btn sm" href="#/wallet" target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ T(ctx, "wallet.open-fullscreen") }</a>
+		</div>
+		<p class="small dim">{ T(ctx, "wallet.help") }</p>
+		<h2>{ T(ctx, "ui2.wallet.node") }</h2>
+		<iframe class="island wallet-config" src="wallet/config" title={ T(ctx, "ui2.wallet.node") }></iframe>
+	}
+}

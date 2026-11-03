@@ -228,3 +228,28 @@ dl.tp-info { margin-bottom: 8px; }
   .list td.actions { text-align: left; }
   .path-form .filter { flex-basis: 100%; }
 }
+/* logs */
+.logs-controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.logs-row { display: inline-flex; align-items: center; gap: 6px; }
+.logs-row input { width: 220px; }
+.loglist { max-height: 65vh; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 8px; background: var(--input-bg); }
+.log-entry { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+.log-entry > span + span { margin-left: 6px; }
+.lv { font-weight: 700; }
+.lv-err { color: rgb(var(--rose)); }
+.lv-warn { color: rgb(var(--amber)); }
+.lv-info { color: rgb(var(--green)); }
+.lv-dim { color: rgba(var(--fg), 0.6); }
+@media (max-width: 600px) { .logs-row, .logs-row input { width: 100%; } }
+
+/* mail */
+.mail-list tr.unread td { font-weight: 700; }
+.mail-body { padding: 12px; border: 1px solid var(--card-border); border-radius: 6px; margin: 12px 0; }
+.mail-queue { margin: 8px 0; }
+.when-busy { display: none; }
+form.htmx-request .when-idle { display: none; }
+form.htmx-request .when-busy { display: inline; }
+
+/* wallet */
+iframe.island.wallet-config { height: 60vh; background: transparent; }
+iframe.island.chat { background: transparent; }
