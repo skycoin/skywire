@@ -888,6 +888,7 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "no-history": "history is disabled (--persist not set)",
+    "remote-unavailable": "Chat is only available for the visor this hypervisor runs on. Open the remote visor's own hypervisor or skychat UI to use its chat.",
     "empty": "No messages yet — incoming chats from connected peers will appear here.",
     "peers": "Peers",
     "peers-empty": "No peers yet. Send a message or wait for an incoming chat.",

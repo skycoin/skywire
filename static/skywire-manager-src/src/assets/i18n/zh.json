@@ -888,6 +888,7 @@
     "connected": "已连接",
     "disconnected": "未连接",
     "no-history": "历史记录已禁用（未设置 --persist）",
+    "remote-unavailable": "聊天仅适用于运行此管理程序的节点。请打开远程节点自己的管理界面或 skychat 界面来使用其聊天。",
     "empty": "暂无消息。来自已连接对端的聊天消息会显示在这里。",
     "peers": "对端",
     "peers-empty": "暂无对端。发送一条消息或等待对方发来消息。",

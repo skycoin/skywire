@@ -951,5 +951,8 @@
       "save-config-button": "Save configuration",
       "done": "Changes saved."
     }
+  },
+  "skychat": {
+    "remote-unavailable": "Chat is only available for the visor this hypervisor runs on. Open the remote visor's own hypervisor or skychat UI to use its chat."
   }
 }

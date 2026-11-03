@@ -9,7 +9,7 @@ import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from '../../../utils/home-tabs';
-import { nodeTabsData } from '../../../utils/node-tabs';
+import { isRemoteVisor, nodeTabsData } from '../../../utils/node-tabs';
 import { visorSwitcherChips } from '../../../utils/visor-switcher';
 import { NodeService } from '../../../services/node.service';
 import { LiveService } from '../../../services/live.service';
@@ -304,7 +304,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // above the per-node tabs, so navigation stays available on node pages.
       this.refreshNavRows();
 
-      this.tabsData = nodeTabsData(NodeComponent.currentNodeKey, !!this.node && (this.node as any).arch === 'wasm');
+      this.tabsData = nodeTabsData(NodeComponent.currentNodeKey, !!this.node && (this.node as any).arch === 'wasm',
+        isRemoteVisor(NodeComponent.currentNodeKey, this.storageService.getLocalHypervisorPk()));
 
       // Pick the selected tab by matching the URL to a tab's route (its last
       // linkParts segment), last match wins — robust to tabs being filtered out

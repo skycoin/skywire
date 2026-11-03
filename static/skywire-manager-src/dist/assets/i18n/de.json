@@ -599,5 +599,8 @@
 
   "tabs-window" : {
     "title" : "Tab wechseln"
+  },
+  "skychat": {
+    "remote-unavailable": "Der Chat ist nur für den Visor verfügbar, auf dem dieser Hypervisor läuft. Öffne den eigenen Hypervisor oder die Skychat-Oberfläche des entfernten Visors, um dessen Chat zu nutzen."
   }
 }

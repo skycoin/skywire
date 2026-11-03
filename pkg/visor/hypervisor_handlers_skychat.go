@@ -8,6 +8,7 @@
 package visor
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -17,6 +18,11 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+)
+
+var (
+	errSkychatProxyNoLocal = errors.New("skychat proxy: no local visor")
+	errSkychatProxyRemote  = errors.New("skychat proxy: the chat of a remote visor is not available through this hypervisor, open that visor's own hypervisor or skychat UI")
 )
 
 func (hv *Hypervisor) getSkychatPassword() http.HandlerFunc {
@@ -82,13 +88,21 @@ func (hv *Hypervisor) deleteSkychatPassword() http.HandlerFunc {
 // password gate skychat has set on the standalone :8001 surface is
 // bypassed for in-process hvui calls.
 //
-// For now this only supports the local visor — proxying skychat
-// for remote visors would need streaming RPC which net/rpc doesn't
-// naturally do. Callers targeting a remote visor get 501.
+// Only the local visor is served. A remote visor's skychat would need
+// streaming over net/rpc, so a remote pk gets 501 instead of local chat.
 func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hv.visor == nil {
-			http.Error(w, "skychat proxy: no local visor", http.StatusNotImplemented)
+			httputil.WriteJSON(w, r, http.StatusNotImplemented, errSkychatProxyNoLocal)
+			return
+		}
+		pk, err := pkFromParam(r, "pk")
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		if pk != hv.c.PK {
+			httputil.WriteJSON(w, r, http.StatusNotImplemented, errSkychatProxyRemote)
 			return
 		}
 		path := r.URL.Path
