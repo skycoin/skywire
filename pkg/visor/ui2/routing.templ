@@ -40,31 +40,49 @@ templ MinHops(pk, minHops string, edit bool, errMsg string) {
 	</div>
 }
 
-// RulesView is the routing rules table.
-templ RulesView(pk string, rules []Rule, errMsg string) {
-	<div id="rules">
+// RulesView is the routing rules view: the filter box and the list.
+templ RulesView(r Rules) {
+	<div id="rules-view">
 		<p class="small dim">{ T(ctx, "routes.info") }</p>
-		@ErrorBox(errMsg)
-		if len(rules) == 0 {
+		if r.Total > 0 {
+			<div class="bar">
+				@ListSearch(r.url(), "#rules", "#rules-view", T(ctx, "ui2.list.search-rules"), r.Pager.ListQuery)
+			</div>
+		}
+		@RulesList(r)
+	</div>
+}
+
+// RulesList is one page of the routing rules table.
+templ RulesList(r Rules) {
+	<div id="rules" hx-include="#rules-view">
+		@ListState(r.Pager)
+		@ErrorBox(r.Err)
+		if r.Total == 0 {
 			<p class="dim">{ T(ctx, "routes.empty") }</p>
+		} else if len(r.Rows) == 0 {
+			<p class="dim">{ T(ctx, "ui2.list.no-match") }</p>
 		} else {
+			<div class="bar">
+				@PagerNav(r.Pager, r.url(), "#rules")
+			</div>
 			<div class="table-wrap">
 				<table class="list">
 					<thead>
 						<tr>
-							<th>{ T(ctx, "routes.key") }</th>
-							<th>{ T(ctx, "routes.type") }</th>
-							<th>{ T(ctx, "routes.local-port") }</th>
-							<th>{ T(ctx, "routes.remote-pk") }</th>
-							<th>{ T(ctx, "routes.remote-port") }</th>
-							<th>{ T(ctx, "routes.next-rid") }</th>
+							@SortTh(T(ctx, "routes.key"), "key", r.Pager, r.url(), "#rules", false)
+							@SortTh(T(ctx, "routes.type"), "type", r.Pager, r.url(), "#rules", false)
+							<th class="num">{ T(ctx, "routes.local-port") }</th>
+							@SortTh(T(ctx, "routes.remote-pk"), "remote", r.Pager, r.url(), "#rules", false)
+							<th class="num">{ T(ctx, "routes.remote-port") }</th>
+							<th class="num">{ T(ctx, "routes.next-rid") }</th>
 							<th>{ T(ctx, "routes.next-tp") }</th>
 							<th>{ T(ctx, "routes.keep-alive") }</th>
 							<th></th>
 						</tr>
 					</thead>
 					<tbody>
-						for _, x := range rules {
+						for _, x := range r.Rows {
 							<tr>
 								<td class="name" data-label={ T(ctx, "routes.key") }>{ x.Key }</td>
 								<td data-label={ T(ctx, "routes.type") }>{ x.Type }</td>
@@ -79,13 +97,18 @@ templ RulesView(pk string, rules []Rule, errMsg string) {
 								<td class="mono small" data-label={ T(ctx, "routes.next-tp") }>{ x.NextTP }</td>
 								<td class="small" data-label={ T(ctx, "routes.keep-alive") }>{ x.KeepAlive }</td>
 								<td class="actions">
-									<button class="icon-btn" type="button" hx-delete={ VisorURL(pk, "routing") + "/rules/" + x.Key } hx-confirm={ T(ctx, "routes.delete-confirmation") } hx-target="#rules" hx-swap="outerHTML" title={ T(ctx, "routes.delete") }><span class="mi">close</span></button>
+									<button class="icon-btn" type="button" hx-delete={ VisorURL(r.PK, "routing") + "/rules/" + x.Key } hx-confirm={ T(ctx, "routes.delete-confirmation") } hx-target="#rules" hx-swap="outerHTML" title={ T(ctx, "routes.delete") }><span class="mi">close</span></button>
 								</td>
 							</tr>
 						}
 					</tbody>
 				</table>
 			</div>
+			if r.Pager.Pages() > 1 {
+				<div class="bar">
+					@PagerNav(r.Pager, r.url(), "#rules")
+				</div>
+			}
 		}
 	</div>
 }

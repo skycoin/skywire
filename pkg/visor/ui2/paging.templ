@@ -1,0 +1,57 @@
+package ui2
+
+// ListSearch is the filter box of a paged list. scope holds the box and the
+// list, so a redraw keeps the sort and the page asks for page one.
+templ ListSearch(url, target, scope, placeholder string, q ListQuery) {
+	<input
+		class="filter"
+		type="search"
+		name="q"
+		value={ q.Q }
+		placeholder={ placeholder }
+		aria-label={ placeholder }
+		autocomplete="off"
+		hx-get={ url }
+		hx-trigger="input changed delay:300ms, search"
+		hx-target={ target }
+		hx-swap="outerHTML"
+		hx-include={ scope }
+		hx-vals={ `{"page":"1"}` }
+	/>
+}
+
+// ListState carries the sort and page of a paged list into the next request.
+templ ListState(p Pager) {
+	<input type="hidden" name="sort" value={ p.Sort }/>
+	if p.Desc {
+		<input type="hidden" name="desc" value="1"/>
+	}
+	<input type="hidden" name="page" value={ itoa(p.Page) }/>
+}
+
+// SortTh is a column head that sorts the list by key.
+templ SortTh(label, key string, p Pager, url, target string, num bool) {
+	<th aria-sort={ p.ariaSort(key) } class={ templ.KV("num", num) }>
+		<button class="sort" type="button" hx-get={ url } hx-target={ target } hx-swap="outerHTML" hx-vals={ p.sortVals(key) }>
+			{ label }
+			if ic := p.sortIcon(key); ic != "" {
+				<span class="mi">{ ic }</span>
+			}
+		</button>
+	</th>
+}
+
+// PagerNav shows which rows are on screen and moves between pages.
+templ PagerNav(p Pager, url, target string) {
+	<div class="pager">
+		if p.Total > 0 {
+			<span class="small dim">{ T(ctx, "ui2.list.showing", "from", itoa(p.From()), "to", itoa(p.To()), "total", itoa(p.Total)) }</span>
+		}
+		if p.Pages() > 1 {
+			<span class="spacer"></span>
+			<button class="btn sm" type="button" disabled?={ p.Page <= 1 } hx-get={ url } hx-target={ target } hx-swap="outerHTML" hx-vals={ p.pageVals(p.Page - 1) } aria-label={ T(ctx, "ui2.list.prev") }><span class="mi">chevron_left</span></button>
+			<span class="small">{ T(ctx, "ui2.list.page", "n", itoa(p.Page), "of", itoa(p.Pages())) }</span>
+			<button class="btn sm" type="button" disabled?={ p.Page >= p.Pages() } hx-get={ url } hx-target={ target } hx-swap="outerHTML" hx-vals={ p.pageVals(p.Page + 1) } aria-label={ T(ctx, "ui2.list.next") }><span class="mi">chevron_right</span></button>
+		}
+	</div>
+}

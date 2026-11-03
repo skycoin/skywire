@@ -2008,6 +2008,15 @@
       "back-to-settings": "返回设置"
     },
     "try": "试用新界面",
-    "try-tooltip": "在新的服务端渲染界面中打开此页面"
+    "try-tooltip": "在新的服务端渲染界面中打开此页面",
+    "list": {
+      "search-transports": "按 ID、公钥、类型或标签筛选",
+      "search-rules": "按键、类型、Visor 或传输筛选",
+      "showing": "第 {{ from }}–{{ to }} 项，共 {{ total }} 项",
+      "page": "第 {{ n }} / {{ of }} 页",
+      "prev": "上一页",
+      "next": "下一页",
+      "no-match": "没有符合筛选条件的项。"
+    }
   }
 }

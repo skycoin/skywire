@@ -2,6 +2,7 @@
 package ui2
 
 import (
+	"cmp"
 	"fmt"
 	"sort"
 	"strconv"
@@ -24,6 +25,9 @@ type Transport struct {
 	Recv       string
 	Persistent bool
 	Offline    bool
+
+	sentN, recvN    uint64
+	latencyN, tputN float64
 }
 
 // TypeCount is how many transports of one type there are.
@@ -36,6 +40,8 @@ type TypeCount struct {
 type Transports struct {
 	PK          string
 	List        []Transport
+	Rows        []Transport
+	Pager       Pager
 	ByType      []TypeCount
 	Types       []string
 	Autoconnect bool
@@ -80,16 +86,20 @@ func TransportsOf(pk string, tps []*visorapi.TransportSummary, persistent []tran
 		}
 		if s.LatencyMS > 0 {
 			row.Latency = fmt.Sprintf("%.0f ms", s.LatencyMS)
+			row.latencyN = s.LatencyMS
 		}
 		if s.ThroughputBps > 0 {
 			row.Throughput = Bytes(uint64(s.ThroughputBps)) + "/s"
+			row.tputN = s.ThroughputBps
 		}
 		if l := s.Log; l != nil {
 			if l.SentBytes != nil {
 				row.Sent = Bytes(*l.SentBytes)
+				row.sentN = *l.SentBytes
 			}
 			if l.RecvBytes != nil {
 				row.Recv = Bytes(*l.RecvBytes)
+				row.recvN = *l.RecvBytes
 			}
 		}
 		t.List = append(t.List, row)
@@ -118,6 +128,7 @@ func TransportsOf(pk string, tps []*visorapi.TransportSummary, persistent []tran
 		}
 		return t.ByType[i].Type < t.ByType[j].Type
 	})
+	t.Select(ListQuery{})
 	return t
 }
 
@@ -144,4 +155,27 @@ func (t Transports) TypeSummary() string {
 		parts[i] = c.Type + ": " + strconv.Itoa(c.Count)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// transportSorts are the columns the list sorts by.
+var transportSorts = map[string]func(a, b Transport) int{
+	"id":         func(a, b Transport) int { return cmp.Compare(a.ID, b.ID) },
+	"remote":     func(a, b Transport) int { return cmp.Compare(a.Remote, b.Remote) },
+	"type":       func(a, b Transport) int { return cmp.Compare(a.Type, b.Type) },
+	"sent":       func(a, b Transport) int { return cmp.Compare(a.sentN, b.sentN) },
+	"recv":       func(a, b Transport) int { return cmp.Compare(a.recvN, b.recvN) },
+	"latency":    func(a, b Transport) int { return cmp.Compare(a.latencyN, b.latencyN) },
+	"throughput": func(a, b Transport) int { return cmp.Compare(a.tputN, b.tputN) },
+}
+
+// Select filters, sorts and pages the list for q into Rows and Pager.
+func (t *Transports) Select(q ListQuery) {
+	rows := make([]Transport, 0, len(t.List))
+	for _, x := range t.List {
+		if q.Match(x.ID, x.Remote, x.Type, x.Label) {
+			rows = append(rows, x)
+		}
+	}
+	sortBy(rows, q, transportSorts)
+	t.Rows, t.Pager = Paginate(rows, q, ListPageSize)
 }

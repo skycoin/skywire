@@ -2008,6 +2008,15 @@
       "back-to-settings": "Back to settings"
     },
     "try": "Try new UI",
-    "try-tooltip": "Open this page in the new server rendered UI"
+    "try-tooltip": "Open this page in the new server rendered UI",
+    "list": {
+      "search-transports": "Filter by ID, key, type or label",
+      "search-rules": "Filter by key, type, visor or transport",
+      "showing": "{{ from }}–{{ to }} of {{ total }}",
+      "page": "Page {{ n }} of {{ of }}",
+      "prev": "Previous page",
+      "next": "Next page",
+      "no-match": "Nothing matches the filter."
+    }
   }
 }

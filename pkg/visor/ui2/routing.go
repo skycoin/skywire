@@ -2,6 +2,7 @@
 package ui2
 
 import (
+	"cmp"
 	"sort"
 	"strconv"
 
@@ -137,3 +138,39 @@ func PoliciesOf(s *visorapi.RoutingPoliciesSummary) Policies {
 	sort.Strings(p.Apps)
 	return p
 }
+
+// Rules is one page of the routing rules view.
+type Rules struct {
+	PK    string
+	Total int
+	Rows  []Rule
+	Pager Pager
+	Err   string
+}
+
+func ruleKey(r Rule) uint64 {
+	n, _ := strconv.ParseUint(r.Key, 10, 64) //nolint:errcheck
+	return n
+}
+
+var ruleSorts = map[string]func(a, b Rule) int{
+	"key":    func(a, b Rule) int { return cmp.Compare(ruleKey(a), ruleKey(b)) },
+	"type":   func(a, b Rule) int { return cmp.Compare(a.Type, b.Type) },
+	"remote": func(a, b Rule) int { return cmp.Compare(a.RemotePK, b.RemotePK) },
+}
+
+// SelectRules filters, sorts and pages rules for q.
+func SelectRules(pk string, all []Rule, q ListQuery, errMsg string) Rules {
+	rows := make([]Rule, 0, len(all))
+	for _, x := range all {
+		if q.Match(x.Key, x.Type, x.RemotePK, x.NextTP) {
+			rows = append(rows, x)
+		}
+	}
+	sortBy(rows, q, ruleSorts)
+	r := Rules{PK: pk, Total: len(all), Err: errMsg}
+	r.Rows, r.Pager = Paginate(rows, q, ListPageSize)
+	return r
+}
+
+func (r Rules) url() string { return VisorURL(r.PK, "routing") + "/rules?list=1" }
