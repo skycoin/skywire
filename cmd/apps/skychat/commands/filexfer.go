@@ -282,11 +282,14 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	// surfaces as a normal file event.
 	switch {
 	case wasRequested && err == nil:
+		fileURL := ""
+		if ev.FilePath != "" {
+			fileURL = "/files/" + filepath.Base(ev.FilePath)
+		}
+		if offer.Group == "" {
+			refileOffered(peer, offer.ID, fileURL)
+		}
 		if hub != nil {
-			fileURL := ""
-			if ev.FilePath != "" {
-				fileURL = "/files/" + filepath.Base(ev.FilePath)
-			}
 			if body, mErr := json.Marshal(map[string]any{
 				"channel":  "file-ready",
 				"file_id":  offer.ID,
@@ -459,6 +462,9 @@ func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name s
 	}
 	rc, err := mgr.SendFile(ctx, peer, offer, f)
 	if err != nil {
+		if errors.Is(err, xfer.ErrUnreachable) && group == "" && keepCopy && parkFileOffer(ctx, peer, offer) {
+			return offer.ID, errFileParked
+		}
 		// The body and its digest went out in full and only the receiver's
 		// verdict is missing: the file IS on the peer's disk, so reporting a
 		// failure here would be wrong (it showed up as "File send failed:
@@ -669,6 +675,16 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 				return
 			}
 			id, serr := sendFileToPeer(sctx, pk, path)
+			if errors.Is(serr, errFileParked) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				resp := map[string]any{"id": id, "pk": pkHex, "parked": true}
+				if url := sentCopyURL(id, path); url != "" {
+					resp["file_url"] = url
+				}
+				_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
+				return
+			}
 			if serr != nil {
 				http.Error(w, serr.Error(), http.StatusBadGateway)
 				return

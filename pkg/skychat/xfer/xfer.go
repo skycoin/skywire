@@ -116,6 +116,8 @@ var (
 	// peer's side — only the confirmation is missing — so a caller should treat
 	// this as delivered-but-unconfirmed rather than as a failed transfer.
 	ErrNoReceipt = errors.New("xfer: no receipt")
+	// ErrUnreachable is a send whose dial to the peer failed, so nothing went out.
+	ErrUnreachable = errors.New("xfer: peer unreachable")
 )
 
 // idleConn re-arms the conn's deadline before every read and write, so a

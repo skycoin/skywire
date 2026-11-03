@@ -226,7 +226,7 @@ signature, so it never has to trust the host's `from` header.
 | Skychat 1:1 | 1 | a message to an offline contact is deposited, and fetched messages enter history as if received live |
 | Group join requests and admissions | 8060 | a request waits for an offline admin, and a decision, which carries the group key when it admits, waits for the requester |
 | Contact and pairing requests | 1 | a request waits for the other visor instead of failing |
-| Missed call and file offer notices | 62, 64 | a short notice waits. The call or the file itself still needs both ends online |
+| Missed call and file offer notices | 1 | a chat message or file-offer frame waits. The call or the file itself still needs both ends online |
 | Hypervisor to managed visor | 46 | a config change or update request waits for a managed visor that is offline |
 
 Every consumer sends small messages that only need to arrive eventually.

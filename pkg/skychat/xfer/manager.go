@@ -3,6 +3,7 @@ package xfer
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -137,7 +138,7 @@ func (m *Manager) SendFile(ctx context.Context, peer cipher.PubKey, offer Offer,
 	offer.From = m.cfg.LocalPK
 	conn, err := m.cfg.Dial(ctx, peer, m.cfg.Port)
 	if err != nil {
-		return Receipt{}, err
+		return Receipt{}, fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer func() { _ = conn.Close() }() //nolint:errcheck
 
