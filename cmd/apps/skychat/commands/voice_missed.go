@@ -115,6 +115,8 @@ type callWatch struct {
 	// recorded is set once the call is logged. An unanswered dial stays in
 	// the visor's dialing list for a few seconds after, and must not log twice.
 	recorded bool
+	// state is the last dial state the visor listed for a call we placed.
+	state string
 }
 
 // stillDialing stands in for a dialing list that could not be read, so a
@@ -270,6 +272,9 @@ func resolveCalls(
 			seen[d.CallID] = &callWatch{peer: d.Peer, outgoing: true}
 			takeOutgoingCall(d.CallID)
 		}
+		if d.State != "" {
+			seen[d.CallID].state = d.State
+		}
 		if dialLive(d.State) {
 			placing[d.CallID] = true
 		}
@@ -320,6 +325,9 @@ func resolveCalls(
 		switch {
 		case call.outgoing && call.connectedAt.IsZero():
 			record(call.peer, callUnanswered, 0)
+			if call.state == "offline" {
+				parkMissedCall(call.peer, id)
+			}
 		case call.outgoing:
 			record(call.peer, callOutgoing, now.Sub(call.connectedAt))
 		case !call.connectedAt.IsZero():
@@ -394,4 +402,20 @@ func recordCall(peer, outcome string, duration time.Duration) {
 		notifyOSInboundThread(peer, peer, displayName(peer), text)
 	}
 	appLog("Voice: %s with %s logged", strings.ToLower(outcome), shortHexPK(peer))
+}
+
+// parkMissedCall leaves the missed call for a peer the call never reached, on
+// its inbox. The id comes from the call, so a repeat is stored once.
+var parkMissedCall = func(peer, callID string) {
+	pk, err := parsePK(peer)
+	if err != nil || chatCtrl == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if chatCtrl.ParkText(ctx, pk, callRecordText(callMissed, 0), "call-"+callID) {
+			appLog("Voice: missed call parked for %s", peer)
+		}
+	}()
 }
