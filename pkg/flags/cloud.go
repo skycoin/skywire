@@ -88,8 +88,8 @@ type cloudMask struct {
 // same terminal, so the size is chosen per screen rather than per terminal.
 //
 // Largest-that-fits rather than one size scaled: these are cell grids, and a
-// resampled cell grid is a worse picture. The variants run from 31x15 to
-// 73x36, covering a terminal with just enough room through one opened full
+// resampled cell grid is a worse picture. The variants run from 40x15 to
+// 96x36, covering a terminal with just enough room through one opened full
 // width.
 //
 // Centered in the free column range rather than pinned to the right margin.

@@ -10,8 +10,10 @@
 // color it is — the rain supplies the color, which is the whole point of
 // drawing the logo as a silhouette rather than as a picture pasted on top.
 //
-// A terminal cell is about twice as tall as it is wide, so a square logo is
-// sampled into a grid twice as wide as it is tall. Several sizes are emitted
+// A terminal cell is about twice as tall as it is wide, so the logo is sampled
+// into a grid of twice its own width over height in columns per row: the mark
+// is a third wider than it is tall, 532 by 400, and two columns a row — the
+// grid of a square logo — drew it a quarter too narrow. Several sizes are emitted
 // because the help screen it has to fit into is a different size on every
 // command; pkg/flags picks the largest that fits.
 //
@@ -29,8 +31,8 @@ import (
 	"strings"
 )
 
-// sizes are the variants emitted, in rows. Columns are twice the rows, which
-// is what keeps the logo square on screen.
+// sizes are the variants emitted, in rows. Columns follow from the logo's
+// proportions; see columns.
 //
 // None smaller than this. The mark is a cloud cut by diagonal slashes, and
 // below about fifteen rows a slash is narrower than a cell: the sampler
@@ -75,9 +77,16 @@ func shapes(path string) ([][]string, error) {
 
 	out := make([][]string, 0, len(sizes))
 	for _, rows := range sizes {
-		out = append(out, trim(sample(img, 2*rows, rows)))
+		out = append(out, trim(sample(img, columns(img, rows), rows)))
 	}
 	return out, nil
+}
+
+// columns is the columns that keep the logo in proportion at rows rows: its
+// width over its height, doubled for a cell twice as tall as it is wide.
+func columns(img image.Image, rows int) int {
+	b := img.Bounds()
+	return (2*rows*b.Dx() + b.Dy()/2) / b.Dy()
 }
 
 // sample reduces the image to a character grid, one character per cell, by

@@ -7,11 +7,11 @@ import "testing"
 // text. This is the whole gate: below it, every cell is handed back untouched
 // and the help screen is exactly what it was.
 //
-// The threshold is 118 columns — 80 of text, its indent, the gutter, the
-// margin, and 30 for the narrowest variant that still resolves the logo's
+// The threshold is 128 columns — 80 of text, its indent, the gutter, the
+// margin, and 40 for the narrowest variant that still resolves the logo's
 // diagonal slashes.
 func TestNoRoomNoCloud(t *testing.T) {
-	for _, cols := range []int{80, 90, 100, 110} {
+	for _, cols := range []int{80, 100, 118, 127} {
 		c := &cloudMask{}
 		c.Fit(cols, 40)
 		if c.on {
@@ -36,7 +36,7 @@ func TestNoRoomVerticallyNoCloud(t *testing.T) {
 // column budget and keeps its right margin.
 func TestPlacementGrowsAndClears(t *testing.T) {
 	var lastW int
-	for _, cols := range []int{120, 130, 150, 200} {
+	for _, cols := range []int{128, 140, 160, 200} {
 		c := &cloudMask{}
 		c.Fit(cols, 40)
 		if !c.on {
