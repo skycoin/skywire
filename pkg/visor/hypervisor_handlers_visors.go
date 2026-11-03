@@ -113,8 +113,6 @@ type VisorTreeResponse struct {
 // dedup by hypervisor PK.
 func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		localPK := hv.visor.conf.PK
-
 		// This handler does a parallel sub-hypervisor RPC walk with a 10s
 		// per-remote timeout, then a 5s fallback Summary pass, then writes a
 		// large (often >1MB) body — all BEFORE the first byte goes out. That
@@ -127,231 +125,237 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(45 * time.Second)); err != nil {
 			hv.log(r).WithError(err).Debug("tree-summary: could not extend write deadline")
 		}
+		resp := VisorTreeResponse{Sections: hv.visorTree()}
+		hv.writeStreamedJSON(w, r, resp, func(w io.Writer) error { return writeVisorTree(w, resp) })
+	}
+}
 
-		// Build the local section by reusing the same Summary
-		// machinery as /visors-summary — same fields, same cache,
-		// same offline-row semantics.
-		localVisors := hv.collectLocalVisorSummaries()
-		sections := []VisorTreeSection{{
-			HypervisorPK: localPK,
-			ViaChain:     nil,
-			Visors:       localVisors,
-		}}
+// visorTree is the local section and one section per direct remote that
+// is itself a hypervisor, for the tree summary and the ui2 visor list.
+func (hv *Hypervisor) visorTree() []VisorTreeSection {
+	localPK := hv.visor.conf.PK
 
-		// Snapshot direct remotes for the sub-hypervisor walk. Each
-		// remote that's itself a hypervisor contributes a section;
-		// non-hypervisors are silently skipped (every visor in a
-		// deployment would otherwise show as a "this isn't a
-		// hypervisor" placeholder).
-		hv.mu.RLock()
-		type remote struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]remote, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, remote{pk, c})
-		}
-		hv.mu.RUnlock()
+	// Build the local section by reusing the same Summary
+	// machinery as /visors-summary — same fields, same cache,
+	// same offline-row semantics.
+	localVisors := hv.collectLocalVisorSummaries()
+	sections := []VisorTreeSection{{
+		HypervisorPK: localPK,
+		ViaChain:     nil,
+		Visors:       localVisors,
+	}}
 
-		type subResult struct {
-			hyperPK cipher.PubKey
-			entries []visorapi.HVVisorEntry
-			err     error
-		}
-		results := make([]subResult, len(remotes))
-		var wg sync.WaitGroup
-		wg.Add(len(remotes))
-		for i, e := range remotes {
-			go func(idx int, pk cipher.PubKey, api visorapi.API) {
-				defer wg.Done()
-				done := make(chan struct {
+	// Snapshot direct remotes for the sub-hypervisor walk. Each
+	// remote that's itself a hypervisor contributes a section;
+	// non-hypervisors are silently skipped (every visor in a
+	// deployment would otherwise show as a "this isn't a
+	// hypervisor" placeholder).
+	hv.mu.RLock()
+	type remote struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]remote, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, remote{pk, c})
+	}
+	hv.mu.RUnlock()
+
+	type subResult struct {
+		hyperPK cipher.PubKey
+		entries []visorapi.HVVisorEntry
+		err     error
+	}
+	results := make([]subResult, len(remotes))
+	var wg sync.WaitGroup
+	wg.Add(len(remotes))
+	for i, e := range remotes {
+		go func(idx int, pk cipher.PubKey, api visorapi.API) {
+			defer wg.Done()
+			done := make(chan struct {
+				vs  []visorapi.HVVisorEntry
+				err error
+			}, 1)
+			go func() {
+				vs, err := api.HVListDirectVisors()
+				done <- struct {
 					vs  []visorapi.HVVisorEntry
 					err error
-				}, 1)
-				go func() {
-					vs, err := api.HVListDirectVisors()
-					done <- struct {
-						vs  []visorapi.HVVisorEntry
-						err error
-					}{vs, err}
-				}()
-				select {
-				case r := <-done:
-					results[idx] = subResult{pk, r.vs, r.err}
-				case <-time.After(10 * time.Second):
-					results[idx] = subResult{pk, nil, fmt.Errorf("timeout")}
-				}
-			}(i, e.pk, e.conn.API)
+				}{vs, err}
+			}()
+			select {
+			case r := <-done:
+				results[idx] = subResult{pk, r.vs, r.err}
+			case <-time.After(10 * time.Second):
+				results[idx] = subResult{pk, nil, fmt.Errorf("timeout")}
+			}
+		}(i, e.pk, e.conn.API)
+	}
+	wg.Wait()
+
+	rendered := map[cipher.PubKey]bool{localPK: true}
+	for _, sr := range results {
+		if rendered[sr.hyperPK] {
+			continue
 		}
-		wg.Wait()
-
-		rendered := map[cipher.PubKey]bool{localPK: true}
-		for _, sr := range results {
-			if rendered[sr.hyperPK] {
+		if sr.err != nil {
+			// Skip remotes that simply aren't hypervisors (the
+			// most common case — every plain visor in the
+			// deployment would otherwise show as a no-op error
+			// row in the tree). Mirrors isNotHypervisorErr() in
+			// rpc_hypervisor_proxy.go — kept in sync there.
+			if isNotHypervisorErr(sr.err) {
 				continue
 			}
-			if sr.err != nil {
-				// Skip remotes that simply aren't hypervisors (the
-				// most common case — every plain visor in the
-				// deployment would otherwise show as a no-op error
-				// row in the tree). Mirrors isNotHypervisorErr() in
-				// rpc_hypervisor_proxy.go — kept in sync there.
-				if isNotHypervisorErr(sr.err) {
-					continue
-				}
-				es := sr.err.Error()
-				rendered[sr.hyperPK] = true
-				sections = append(sections, VisorTreeSection{
-					HypervisorPK: sr.hyperPK,
-					ViaChain:     []cipher.PubKey{localPK},
-					SubError:     es,
-				})
-				continue
-			}
+			es := sr.err.Error()
 			rendered[sr.hyperPK] = true
-			// Project HVVisorEntry → Summary so the UI's existing
-			// table renderer works identically across all sections.
-			// Sub-hypervisor visors don't carry the full Summary
-			// shape (health, dmsg stats, etc.) — those fields stay
-			// zero/empty. The basic fields the table cares about
-			// (PK, version, uptime, transports, apps, IP, country)
-			// come through populateEntryFromSummary on the remote
-			// side, here projected back.
-			visors := make([]visorapi.Summary, 0, len(sr.entries))
-			type fetchTarget struct {
-				idx int
-				pk  cipher.PubKey
-			}
-			var fetchTargets []fetchTarget
-			for i, e := range sr.entries {
-				s := projectEntryToSummary(e)
-				// The sub-section's ★ icon should appear on the
-				// section's own hypervisor row and nowhere else.
-				// Override IsHypervisor (which projectEntryToSummary
-				// sets from e.IsLocal) with strict PK-equality
-				// against this section's HypervisorPK. Defends
-				// against any path that might mistakenly mark a
-				// non-local entry with IsLocal=true on the remote
-				// side, and matches the semantic the hvui's
-				// node-list uses for the local section: "star = this
-				// row is the section's hypervisor."
-				s.IsHypervisor = e.PK == sr.hyperPK
-				visors = append(visors, s)
-				// Pre-#2789 sub-hypervisors return HVVisorEntry with
-				// only the transport COUNT, no per-transport detail.
-				// projectEntryTransports synthesizes typeless "?"
-				// placeholders so the count renders; the frontend
-				// filters those out for cleanliness — net effect is
-				// "Total: N" with no per-type breakdown. Fall back
-				// to HVVisorSummary (which routes through the
-				// proxy chain and ultimately calls the visor's real
-				// Summary()) so the per-type breakdown surfaces
-				// regardless of the sub-hypervisor's version.
-				if e.Online && len(e.TransportSummaries) == 0 && e.Transports > 0 {
-					fetchTargets = append(fetchTargets, fetchTarget{i, e.PK})
-				}
-			}
-			// Fan-out the fallback Summary fetches in parallel,
-			// bounded by a per-call timeout so a slow visor doesn't
-			// hold the entire tree response. Failures are silently
-			// tolerated — the placeholder row is still rendered as
-			// "Total: N" via projectEntryTransports, so the
-			// per-type breakdown just stays missing if the deeper
-			// query times out or errors.
-			if len(fetchTargets) > 0 && hv.visor != nil {
-				var fwg sync.WaitGroup
-				fwg.Add(len(fetchTargets))
-				for _, ft := range fetchTargets {
-					go func(idx int, pk cipher.PubKey) {
-						defer fwg.Done()
-						done := make(chan *visorapi.Summary, 1)
-						go func() {
-							s, err := hv.visor.HVVisorSummary(pk)
-							if err != nil {
-								done <- nil
-								return
-							}
-							done <- s
-						}()
-						select {
-						case full := <-done:
-							if full == nil || full.Overview == nil || len(full.Overview.Transports) == 0 {
-								return
-							}
-							if visors[idx].Overview == nil {
-								return
-							}
-							visors[idx].Overview.Transports = compactTransportSummaries(full.Overview.Transports)
-						case <-time.After(5 * time.Second):
-						}
-					}(ft.idx, ft.pk)
-				}
-				fwg.Wait()
-			}
-
-			// Enrich Hostname from the local summaryCache when the
-			// sub-hypervisor's HVVisorEntry round-trip didn't carry it
-			// — happens when the sub-hypervisor predates the
-			// Hostname-on-HVVisorEntry change (PR #2808). The local
-			// section already polls Summary for any PK we have a
-			// direct conn to, and that Summary's Overview.Hostname is
-			// the source of truth. Without this bridge, sub-section
-			// rows show LAN IP as the default label until the
-			// sub-hypervisor itself updates.
-			hv.summaryCacheMx.RLock()
-			for i := range visors {
-				if visors[i].Overview == nil || visors[i].Overview.Hostname != "" {
-					continue
-				}
-				cached, ok := hv.summaryCache[visors[i].Overview.PubKey]
-				if !ok || cached.sum == nil || cached.sum.Overview == nil {
-					continue
-				}
-				visors[i].Overview.Hostname = cached.sum.Overview.Hostname
-			}
-			hv.summaryCacheMx.RUnlock()
-
 			sections = append(sections, VisorTreeSection{
 				HypervisorPK: sr.hyperPK,
 				ViaChain:     []cipher.PubKey{localPK},
-				Visors:       visors,
+				SubError:     es,
 			})
+			continue
 		}
-
-		// Intentionally NOT scrubbing the local section. A visor that
-		// is both (a) directly connected to this hypervisor and (b)
-		// itself a hypervisor with its own section represents two
-		// distinct relationships, and both should be visible. The
-		// local section's row reflects "this visor is one of my
-		// managed visors"; the sub-section's IsLocal row reflects
-		// "this visor runs its own hypervisor too." Operators rely on
-		// the local-section row to manage the visor as a peer — pty
-		// access, transport admin, etc. — independent of its
-		// hypervisor role. Filtering it out hid managed visors that
-		// happened to also run a hypervisor.
-		//
-		// Sections still dedup by hypervisor PK (line 173 onward), so
-		// no section ever appears twice; only visor *rows* replicate
-		// across sections, which matches the doc comment at the top
-		// of this function ("Visor entries replicate across sections
-		// when a visor is connected to multiple hypervisors").
-
-		// A nil Visors slice marshals to JSON `null`, not `[]`. The hvui's
-		// node-list concatenates every section's `visors` and maps over the
-		// result; a `null` there throws "(...).map is not a function", which
-		// crashes buildSwitcherTabs and hangs the whole UI with a spinner. The
-		// SubError branch (an errored/timed-out sub-hypervisor) leaves Visors
-		// nil, so coerce every section to an empty array before writing.
-		for i := range sections {
-			if sections[i].Visors == nil {
-				sections[i].Visors = []visorapi.Summary{}
+		rendered[sr.hyperPK] = true
+		// Project HVVisorEntry → Summary so the UI's existing
+		// table renderer works identically across all sections.
+		// Sub-hypervisor visors don't carry the full Summary
+		// shape (health, dmsg stats, etc.) — those fields stay
+		// zero/empty. The basic fields the table cares about
+		// (PK, version, uptime, transports, apps, IP, country)
+		// come through populateEntryFromSummary on the remote
+		// side, here projected back.
+		visors := make([]visorapi.Summary, 0, len(sr.entries))
+		type fetchTarget struct {
+			idx int
+			pk  cipher.PubKey
+		}
+		var fetchTargets []fetchTarget
+		for i, e := range sr.entries {
+			s := projectEntryToSummary(e)
+			// The sub-section's ★ icon should appear on the
+			// section's own hypervisor row and nowhere else.
+			// Override IsHypervisor (which projectEntryToSummary
+			// sets from e.IsLocal) with strict PK-equality
+			// against this section's HypervisorPK. Defends
+			// against any path that might mistakenly mark a
+			// non-local entry with IsLocal=true on the remote
+			// side, and matches the semantic the hvui's
+			// node-list uses for the local section: "star = this
+			// row is the section's hypervisor."
+			s.IsHypervisor = e.PK == sr.hyperPK
+			visors = append(visors, s)
+			// Pre-#2789 sub-hypervisors return HVVisorEntry with
+			// only the transport COUNT, no per-transport detail.
+			// projectEntryTransports synthesizes typeless "?"
+			// placeholders so the count renders; the frontend
+			// filters those out for cleanliness — net effect is
+			// "Total: N" with no per-type breakdown. Fall back
+			// to HVVisorSummary (which routes through the
+			// proxy chain and ultimately calls the visor's real
+			// Summary()) so the per-type breakdown surfaces
+			// regardless of the sub-hypervisor's version.
+			if e.Online && len(e.TransportSummaries) == 0 && e.Transports > 0 {
+				fetchTargets = append(fetchTargets, fetchTarget{i, e.PK})
 			}
 		}
+		// Fan-out the fallback Summary fetches in parallel,
+		// bounded by a per-call timeout so a slow visor doesn't
+		// hold the entire tree response. Failures are silently
+		// tolerated — the placeholder row is still rendered as
+		// "Total: N" via projectEntryTransports, so the
+		// per-type breakdown just stays missing if the deeper
+		// query times out or errors.
+		if len(fetchTargets) > 0 && hv.visor != nil {
+			var fwg sync.WaitGroup
+			fwg.Add(len(fetchTargets))
+			for _, ft := range fetchTargets {
+				go func(idx int, pk cipher.PubKey) {
+					defer fwg.Done()
+					done := make(chan *visorapi.Summary, 1)
+					go func() {
+						s, err := hv.visor.HVVisorSummary(pk)
+						if err != nil {
+							done <- nil
+							return
+						}
+						done <- s
+					}()
+					select {
+					case full := <-done:
+						if full == nil || full.Overview == nil || len(full.Overview.Transports) == 0 {
+							return
+						}
+						if visors[idx].Overview == nil {
+							return
+						}
+						visors[idx].Overview.Transports = compactTransportSummaries(full.Overview.Transports)
+					case <-time.After(5 * time.Second):
+					}
+				}(ft.idx, ft.pk)
+			}
+			fwg.Wait()
+		}
 
-		resp := VisorTreeResponse{Sections: sections}
-		hv.writeStreamedJSON(w, r, resp, func(w io.Writer) error { return writeVisorTree(w, resp) })
+		// Enrich Hostname from the local summaryCache when the
+		// sub-hypervisor's HVVisorEntry round-trip didn't carry it
+		// — happens when the sub-hypervisor predates the
+		// Hostname-on-HVVisorEntry change (PR #2808). The local
+		// section already polls Summary for any PK we have a
+		// direct conn to, and that Summary's Overview.Hostname is
+		// the source of truth. Without this bridge, sub-section
+		// rows show LAN IP as the default label until the
+		// sub-hypervisor itself updates.
+		hv.summaryCacheMx.RLock()
+		for i := range visors {
+			if visors[i].Overview == nil || visors[i].Overview.Hostname != "" {
+				continue
+			}
+			cached, ok := hv.summaryCache[visors[i].Overview.PubKey]
+			if !ok || cached.sum == nil || cached.sum.Overview == nil {
+				continue
+			}
+			visors[i].Overview.Hostname = cached.sum.Overview.Hostname
+		}
+		hv.summaryCacheMx.RUnlock()
+
+		sections = append(sections, VisorTreeSection{
+			HypervisorPK: sr.hyperPK,
+			ViaChain:     []cipher.PubKey{localPK},
+			Visors:       visors,
+		})
 	}
+
+	// Intentionally NOT scrubbing the local section. A visor that
+	// is both (a) directly connected to this hypervisor and (b)
+	// itself a hypervisor with its own section represents two
+	// distinct relationships, and both should be visible. The
+	// local section's row reflects "this visor is one of my
+	// managed visors"; the sub-section's IsLocal row reflects
+	// "this visor runs its own hypervisor too." Operators rely on
+	// the local-section row to manage the visor as a peer — pty
+	// access, transport admin, etc. — independent of its
+	// hypervisor role. Filtering it out hid managed visors that
+	// happened to also run a hypervisor.
+	//
+	// Sections still dedup by hypervisor PK (line 173 onward), so
+	// no section ever appears twice; only visor *rows* replicate
+	// across sections, which matches the doc comment at the top
+	// of this function ("Visor entries replicate across sections
+	// when a visor is connected to multiple hypervisors").
+
+	// A nil Visors slice marshals to JSON `null`, not `[]`. The hvui's
+	// node-list concatenates every section's `visors` and maps over the
+	// result; a `null` there throws "(...).map is not a function", which
+	// crashes buildSwitcherTabs and hangs the whole UI with a spinner. The
+	// SubError branch (an errored/timed-out sub-hypervisor) leaves Visors
+	// nil, so coerce every section to an empty array before writing.
+	for i := range sections {
+		if sections[i].Visors == nil {
+			sections[i].Visors = []visorapi.Summary{}
+		}
+	}
+	return sections
 }
 
 // collectLocalVisorSummaries returns the Summary slice this

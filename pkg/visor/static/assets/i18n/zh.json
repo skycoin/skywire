@@ -2018,6 +2018,12 @@
       "prev": "上一页",
       "next": "下一页",
       "no-match": "没有符合筛选条件的项。"
+    },
+    "routing-rules": "路由规则",
+    "routing-rules-info": "此 Visor 路由表中的规则。每条路由在两端及经过的每一跳各使用若干条规则。",
+    "route-groups": "路由组",
+    "nodes": {
+      "shown": "{{ total }} 中的 {{ n }}"
     }
   }
 }

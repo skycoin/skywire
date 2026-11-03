@@ -2018,6 +2018,12 @@
       "prev": "Previous page",
       "next": "Next page",
       "no-match": "Nothing matches the filter."
+    },
+    "routing-rules": "Routing rules",
+    "routing-rules-info": "Rules in this visor's routing table. Each route uses a few, at the ends and at every hop it passes.",
+    "route-groups": "Route groups",
+    "nodes": {
+      "shown": "{{ n }} of {{ total }}"
     }
   }
 }

@@ -201,3 +201,66 @@ document.addEventListener('DOMContentLoaded', function () {
 	});
 	document.addEventListener('keydown', function (e) { if (e.key === 'Escape') set(false); });
 })();
+
+// The visor list: the labels set in the Angular UI (kept in this origin's
+// localStorage under <hypervisor key>labelsData, storage.service.ts), the
+// search box, the online and offline filters and the nested rows of a
+// sub-hypervisor. Applied again after every poll.
+(function () {
+	'use strict';
+	var expanded = {};
+	function labels() {
+		var hv = document.body.getAttribute('data-hvpk'), m = {};
+		if (!hv) return m;
+		try {
+			(JSON.parse(localStorage.getItem(hv + 'labelsData') || '[]') || []).forEach(function (l) {
+				if (l && l.id && l.label) m[l.id] = l.label;
+			});
+		} catch (_) { /* no storage or bad data */ }
+		return m;
+	}
+	function apply() {
+		var card = document.querySelector('[data-nodes]');
+		if (!card) return;
+		var m = labels();
+		var qi = card.querySelector('[data-node-q]');
+		var q = qi ? qi.value.toLowerCase().trim() : '';
+		var sb = card.querySelector('[data-node-state][aria-pressed="true"]');
+		var st = sb ? sb.getAttribute('data-node-state') : '';
+		var shown = 0, total = 0;
+		card.querySelectorAll('#nodes tbody tr').forEach(function (tr) {
+			var pk = tr.getAttribute('data-pk'), parent = tr.getAttribute('data-parent'), ok = true;
+			if (pk) {
+				var lab = m[pk], a = tr.querySelector('[data-label-for]'), h = tr.querySelector('[data-host-for]');
+				if (lab && a && a.textContent !== lab) a.textContent = lab;
+				if (h) h.hidden = !lab || h.textContent === lab;
+				var text = (tr.getAttribute('data-text') || '') + ' ' + (lab || '').toLowerCase();
+				ok = (!q || text.indexOf(q) >= 0) && (!st || (st === 'on') === (tr.getAttribute('data-online') === '1'));
+			}
+			if (!parent) { total++; if (ok) shown++; }
+			tr.classList.toggle('open', !parent || !!expanded[parent] || (!!q && ok));
+			tr.style.display = ok ? '' : 'none';
+		});
+		card.querySelectorAll('[data-node-toggle]').forEach(function (b) {
+			b.setAttribute('aria-expanded', expanded[b.getAttribute('data-node-toggle')] ? 'true' : 'false');
+		});
+		var c = card.querySelector('[data-node-shown]');
+		if (c) c.textContent = (q || st) ? c.getAttribute('data-fmt').replace('{{ n }}', shown).replace('{{ total }}', total) : '';
+	}
+	document.addEventListener('input', function (e) { if (e.target.matches && e.target.matches('[data-node-q]')) apply(); });
+	document.addEventListener('click', function (e) {
+		if (!e.target.closest) return;
+		var s = e.target.closest('[data-node-state]');
+		if (s) {
+			var on = s.getAttribute('aria-pressed') !== 'true';
+			document.querySelectorAll('[data-node-state]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+			s.setAttribute('aria-pressed', on ? 'true' : 'false');
+			apply();
+			return;
+		}
+		var t = e.target.closest('[data-node-toggle]');
+		if (t) { var pk = t.getAttribute('data-node-toggle'); expanded[pk] = !expanded[pk]; apply(); }
+	});
+	document.addEventListener('htmx:afterSettle', apply);
+	document.addEventListener('DOMContentLoaded', apply);
+})();

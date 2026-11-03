@@ -78,7 +78,8 @@ templ overview(i Info) {
 		<a class="ov-card link" href={ templ.URL(VisorURL(i.PK, "routing")) }>
 			<span class="ov-title">{ T(ctx, "node.overview.network") }</span>
 			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.dmsg-servers") }</span>{ strconv.Itoa(len(i.Sum.DMSGServers)) }</span>
-			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.routes") }</span>{ strconv.Itoa(i.ov().RoutesCount) }</span>
+			<span class="ov-row" title={ T(ctx, "ui2.routing-rules-info") }><span class="ov-key">{ T(ctx, "ui2.routing-rules") }</span>{ strconv.Itoa(i.ov().RoutesCount) }</span>
+			<span class="ov-row"><span class="ov-key">{ T(ctx, "ui2.route-groups") }</span>{ strconv.Itoa(len(i.Sum.RouteGroups)) }</span>
 			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.min-hops") }</span>{ strconv.Itoa(int(i.Sum.MinHops)) }</span>
 			<span class="ov-row"><span class="ov-key">{ T(ctx, "node.overview.public") }</span>{ yesNo(ctx, i.Sum.IsPublic) }</span>
 		</a>

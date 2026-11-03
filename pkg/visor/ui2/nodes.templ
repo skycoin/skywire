@@ -3,10 +3,16 @@ package ui2
 // NodesPage is the list of visors this hypervisor manages.
 templ NodesPage(ns []Node, errMsg string) {
 	@Layout(T(ctx, "nodes.title"), "#/nodes/list") {
-		<section class="card">
+		<section class="card" data-nodes>
 			<div class="head">
 				<h1>{ T(ctx, "nodes.title") }</h1>
 				@Count(len(ns), false)
+			</div>
+			<div class="bar">
+				<input class="filter" type="search" placeholder={ T(ctx, "nodes.quick.search") } aria-label={ T(ctx, "nodes.quick.search") } autocomplete="off" data-node-q/>
+				<button class="btn sm" type="button" aria-pressed="false" data-node-state="on">{ T(ctx, "nodes.quick.online") }</button>
+				<button class="btn sm" type="button" aria-pressed="false" data-node-state="off">{ T(ctx, "nodes.quick.offline") }</button>
+				<span class="small dim" data-node-shown data-fmt={ T(ctx, "ui2.nodes.shown") }></span>
 			</div>
 			@NodeRows(ns, errMsg, false)
 		</section>
@@ -14,33 +20,45 @@ templ NodesPage(ns []Node, errMsg string) {
 }
 
 // NodeRows is the table, which polls itself every 10 seconds as the Angular
-// list does by default.
+// list does by default. ui2.js applies the Angular UI's labels and the
+// filter after every swap.
 templ NodeRows(ns []Node, errMsg string, oob bool) {
 	<div id="nodes" hx-get="ui2/nodes" hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML">
 		@ErrorBox(errMsg)
 		if len(ns) == 0 {
 			<p class="dim">{ T(ctx, "nodes.empty") }</p>
 		} else {
-			<table class="list">
-				<thead>
-					<tr>
-						<th>{ T(ctx, "nodes.state") }</th>
-						<th>{ T(ctx, "nodes.label") }</th>
-						<th>{ T(ctx, "nodes.key") }</th>
-						<th>{ T(ctx, "nodes.version") }</th>
-						<th>{ T(ctx, "nodes.ip-location") }</th>
-						<th>{ T(ctx, "nodes.transports") }</th>
-						<th>{ T(ctx, "node.tabs.apps") }</th>
-						<th>{ T(ctx, "nodes.ping") }</th>
-						<th>{ T(ctx, "nodes.reward") }</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, n := range ns {
-						@nodeRow(n)
-					}
-				</tbody>
-			</table>
+			<div class="table-wrap">
+				<table class="list nodes">
+					<thead>
+						<tr>
+							<th class="state"><span class="sr">{ T(ctx, "nodes.state") }</span></th>
+							<th>{ T(ctx, "nodes.label") }</th>
+							<th>{ T(ctx, "nodes.key") }</th>
+							<th>{ T(ctx, "nodes.version") }</th>
+							<th>{ T(ctx, "nodes.ip-location") }</th>
+							<th class="num">{ T(ctx, "nodes.transports") }</th>
+							<th class="num">{ T(ctx, "node.tabs.apps") }</th>
+							<th class="num">{ T(ctx, "nodes.ping") }</th>
+							<th>{ T(ctx, "nodes.reward") }</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, n := range ns {
+							@nodeRow(n, "")
+							if n.SubErr != "" {
+								<tr class="child" data-parent={ n.PK }>
+									<td></td>
+									<td colspan="8" class="error small">{ n.SubErr }</td>
+								</tr>
+							}
+							for _, c := range n.Children {
+								@nodeRow(c, n.PK)
+							}
+						}
+					</tbody>
+				</table>
+			</div>
 		}
 	</div>
 	if oob && errMsg == "" {
@@ -48,36 +66,64 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 	}
 }
 
-templ nodeRow(n Node) {
-	<tr class="row" data-href={ VisorURL(n.PK, "info") } tabindex="0">
-		<td data-label={ T(ctx, "nodes.state") }>
+// nodeRow is one visor. parent is the sub-hypervisor a nested row is under.
+templ nodeRow(n Node, parent string) {
+	<tr
+		class={ "row", templ.KV("child", parent != ""), templ.KV("offline", !n.Online) }
+		if !n.ViaSub {
+			data-href={ VisorURL(n.PK, "info") }
+			tabindex="0"
+		}
+		if parent != "" {
+			data-parent={ parent }
+		}
+		data-pk={ n.PK }
+		data-online={ boolStr(n.Online) }
+		data-text={ n.SearchText() }
+	>
+		<td class="state" data-label={ T(ctx, "nodes.state") }>
 			if n.Online {
 				<span class="dot on" title={ T(ctx, "ui2.online") }></span>
 				<span class="sr">{ T(ctx, "ui2.online") }</span>
 			} else {
 				<span class="dot off" title={ T(ctx, "ui2.offline") }></span>
-				<span class="small dim">{ T(ctx, "ui2.offline") }</span>
-				if n.LastSeen != "" {
-					<div class="small dim">{ T(ctx, "ui2.last-seen") } { n.LastSeen }</div>
-				}
+				<span class="sr">{ T(ctx, "ui2.offline") }</span>
 			}
 		</td>
 		<td class="name" data-label={ T(ctx, "nodes.label") }>
-			<a href={ templ.URL(VisorURL(n.PK, "info")) }>
-				if n.Hostname != "" {
-					{ n.Hostname }
-				} else {
-					{ T(ctx, "common.unknown") }
+			<div class="lbl-line">
+				if len(n.Children) > 0 {
+					<button class="icon-btn sm" type="button" aria-expanded="false" data-node-toggle={ n.PK }><span class="mi">chevron_right</span></button>
 				}
-			</a>
-			if n.IsHV {
-				<span class="badge" title={ T(ctx, "nodes.hypervisor-info") }>{ T(ctx, "nodes.hypervisor") }</span>
+				if !n.ViaSub {
+					<a href={ templ.URL(VisorURL(n.PK, "info")) } data-label-for={ n.PK }>{ n.Name() }</a>
+				} else {
+					<span data-label-for={ n.PK }>{ n.Name() }</span>
+				}
+				if n.IsHV {
+					<span class="badge" title={ T(ctx, "nodes.hypervisor-info") }>{ T(ctx, "nodes.hypervisor") }</span>
+				}
+				if len(n.Children) > 0 {
+					<span class="badge">{ itoa(len(n.Children)) }</span>
+				}
+			</div>
+			<div class="small dim" data-host-for={ n.PK } hidden>{ n.Name() }</div>
+			if !n.Online && n.LastSeen != "" {
+				<div class="small dim">{ T(ctx, "ui2.last-seen") } { n.LastSeen }</div>
 			}
 		</td>
-		<td class="mono small" data-label={ T(ctx, "nodes.key") }>
-			<span class="key" data-copy={ n.PK } title={ T(ctx, "nodes.copy-key") }>{ n.PK }</span>
+		<td class="pk" data-label={ T(ctx, "nodes.key") }>
+			<span class="pk-line">
+				<span class="mono small pk-text" title={ n.PK }>{ n.PK }</span>
+				<button class="icon-btn sm" type="button" data-copy={ n.PK } title={ T(ctx, "nodes.copy-key") } aria-label={ T(ctx, "nodes.copy-key") }><span class="mi">content_copy</span></button>
+			</span>
 		</td>
-		<td class="small" data-label={ T(ctx, "nodes.version") }>{ n.Version }</td>
+		<td class="small nowrap" data-label={ T(ctx, "nodes.version") }>
+			<span title={ n.Version }>{ n.ShortVersion() }</span>
+			if n.ShortVersion() != n.Version {
+				<span class="badge" title={ n.Version }>dev</span>
+			}
+		</td>
 		<td class="small" data-label={ T(ctx, "nodes.ip-location") }>
 			if n.PublicIP != "" {
 				<div>{ n.PublicIP }</div>
@@ -92,7 +138,7 @@ templ nodeRow(n Node) {
 		<td class="num" data-label={ T(ctx, "nodes.transports") }>{ itoa(n.Transports) }</td>
 		<td class="num" data-label={ T(ctx, "node.tabs.apps") }>{ itoa(n.AppsRunning) } / { itoa(n.Apps) }</td>
 		<td class="num small" data-label={ T(ctx, "nodes.ping") }>{ n.DmsgPing }</td>
-		<td data-label={ T(ctx, "nodes.reward") }>
+		<td class="reward" data-label={ T(ctx, "nodes.reward") }>
 			if n.Reward != "" {
 				<span class="mi ok" title={ T(ctx, "nodes.reward-set") }>check_circle</span>
 			} else {
