@@ -255,6 +255,11 @@ A call that ends with the dial state `offline` is parked for the callee as a
 chat message with the missed-call text and the id `call-` plus the call id, so
 the callee's call log shows it.
 
+A 1:1 file whose transfer cannot dial the peer is offered on the peer's inbox
+as a `file-offer` control frame with the transfer id, name and size. The peer
+files it as a file message without bytes, and asks the sender for them by the
+transfer id with the same `file-request` a backfill uses.
+
 ### Skychat groups
 
 A join request that reaches no admin of the invite is parked on port 8060

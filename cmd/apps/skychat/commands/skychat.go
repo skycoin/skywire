@@ -977,7 +977,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 			if handlePairControlFrame(context.Background(), peer, payload) {
 				return true
 			}
-			return handleFileRequestFrame(context.Background(), peer, payload)
+			return handleFileRequestFrame(context.Background(), peer, payload) || handleFileOfferFrame(peer, payload)
 		},
 		// A receipt about a message WE sent becomes a dm-status event, which is
 		// how the browser advances a bubble's tick to received / read.

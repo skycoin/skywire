@@ -227,3 +227,10 @@ func (c *Controller) ParkText(ctx context.Context, pk cipher.PubKey, text, id st
 	_, ok := c.park(ctx, pk, wire, id)
 	return ok
 }
+
+// ParkFrame leaves a raw control frame with id for pk, as ParkText does a
+// chat message. The peer offers it to PreHandleFrame when it fetches.
+func (c *Controller) ParkFrame(ctx context.Context, pk cipher.PubKey, frame []byte, id string) bool {
+	_, ok := c.park(ctx, pk, frame, id)
+	return ok
+}
