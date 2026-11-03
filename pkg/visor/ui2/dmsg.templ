@@ -1,0 +1,81 @@
+package ui2
+
+import "strconv"
+
+// DmsgPage is the dmsg tab.
+templ DmsgPage(d Dmsg) {
+	@VisorLayout(d.PK, "dmsg") {
+		<div class="head">
+			<h1>{ T(ctx, "dmsg.title") }</h1>
+		</div>
+		<div class="bar">
+			<button class="btn primary" hx-post={ VisorURL(d.PK, "dmsg/connect-all") } hx-target="#dmsg-result"><span class="mi">cable</span>{ T(ctx, "dmsg.connect-all") }</button>
+			<form class="inline" hx-put={ VisorURL(d.PK, "dmsg/sessions-count") } hx-target="#dmsg-result">
+				<label for="sessions-count" class="dim">{ T(ctx, "dmsg-settings.sessions-count-label") }:</label>
+				<input id="sessions-count" class="num" type="number" name="count" min="0" max="99" value={ strconv.Itoa(d.Count) }/>
+				<button class="btn" type="submit">{ T(ctx, "dmsg-settings.apply-count") }</button>
+			</form>
+		</div>
+		<div id="dmsg-result"></div>
+		@DmsgClients(d)
+	}
+}
+
+// DmsgResult is the outcome of connect-all or of a new sessions_count.
+templ DmsgResult(d Dmsg) {
+	<div id="dmsg-result">
+		@ErrorBox(d.Err)
+		if r := d.Result; r != nil {
+			<p class="small">
+				<strong>{ d.Action }:</strong>
+				{ T(ctx, "dmsg-settings.result-total") } { strconv.Itoa(r.Total) },
+				{ T(ctx, "dmsg-settings.result-already") } { strconv.Itoa(r.AlreadyConnected) },
+				{ T(ctx, "dmsg-settings.result-new") } { strconv.Itoa(r.NewlyConnected) }
+				if len(r.Failed) > 0 {
+					<span class="error">· { T(ctx, "dmsg-settings.result-failed") }: { strconv.Itoa(len(r.Failed)) }</span>
+				}
+			</p>
+		}
+	</div>
+}
+
+// DmsgClients lists each client's sessions, refreshed every 5 seconds as
+// the Angular tab does.
+templ DmsgClients(d Dmsg) {
+	<div id="dmsg-clients" hx-get={ VisorURL(d.PK, "dmsg/clients") } hx-trigger="every 5s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		if d.Result == nil {
+			@ErrorBox(d.Err)
+		}
+		if len(d.Clients) == 0 && d.Err == "" {
+			<p class="dim">{ T(ctx, "dmsg-settings.no-clients") }</p>
+		}
+		<div class="grid">
+			for _, c := range d.Clients {
+				<section class="card">
+					<div class="head">
+						<span class={ "badge", templ.KV("on", c.Role == "main") }>{ T(ctx, RoleKey(c.Role)) }</span>
+						<span class="small dim">{ strconv.Itoa(c.Count) } { T(ctx, "dmsg-settings.sessions") }</span>
+					</div>
+					<div class="mono small key" data-copy={ c.PK.Hex() }>{ c.PK.Hex() }</div>
+					if len(c.Servers) == 0 {
+						<p class="dim small">{ T(ctx, "dmsg-settings.no-sessions") }</p>
+					} else {
+						<ul class="plain">
+							for _, s := range c.Servers {
+								<li class="mono small">
+									<span class="key" data-copy={ s.Hex() }>{ s.Hex() }</span>
+									if p := Protocol(c, s.Hex()); p != "" {
+										<span class="badge">{ p }</span>
+									}
+								</li>
+							}
+						</ul>
+					}
+				</section>
+			}
+		</div>
+		if d.Fetched != "" {
+			<p class="small dim">{ T(ctx, "dmsg.fetched-at") }: { d.Fetched }</p>
+		}
+	</div>
+}

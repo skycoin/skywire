@@ -157,45 +157,54 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 			return
 		}
 
-		// Reward system is reached over dmsg only — plain HTTP to deployment
-		// services is no longer supported. The dmsg URL may live in either config
-		// field (the dmsg-only default stores it in the "http" field).
-		rewardDmsg := ""
-		if hv.visor != nil && hv.visor.conf != nil {
-			rewardDmsg = hv.visor.conf.RewardSystemDmsg
-			if !strings.HasPrefix(rewardDmsg, "dmsg://") {
-				rewardDmsg = hv.visor.conf.RewardSystem
-			}
-		}
-		if !strings.HasPrefix(rewardDmsg, "dmsg://") {
-			rewardDmsg = deployment.Prod.RewardSystemDmsg
-		}
-		log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
-
-		if !strings.HasPrefix(rewardDmsg, "dmsg://") || hv.visor == nil {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system dmsg URL configured")
-			return
-		}
-		dmsgURL := rewardDmsg + "/" + path
-		log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
-		resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
-			URL:    dmsgURL,
-			Method: "GET",
-		})
-		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(resp.StatusCode)
-			w.Write(resp.Body) //nolint:errcheck,gosec
-			return
-		}
+		body, status, err := hv.rewardSystemGet(path)
 		if err != nil {
-			log.WithError(err).Warn("reward system DMSG fetch failed")
-			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable over dmsg: %w", err))
+			httputil.WriteJSON(w, r, status, err.Error())
 			return
 		}
-		log.Warnf("reward system DMSG fetch returned status %d", resp.StatusCode)
-		httputil.WriteJSON(w, r, http.StatusBadGateway, "reward system returned non-success over dmsg")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body) //nolint:errcheck,gosec
 	}
+}
+
+// rewardSystemGet fetches path from the reward system over dmsg, the only
+// way it is reached. The dmsg URL may live in either config field (the
+// dmsg-only default stores it in the "http" field). On error status is the
+// one to answer with.
+func (hv *Hypervisor) rewardSystemGet(path string) ([]byte, int, error) {
+	if hv.visor == nil {
+		return nil, http.StatusServiceUnavailable, errors.New("no reward system dmsg URL configured")
+	}
+	rewardDmsg := ""
+	if hv.visor.conf != nil {
+		rewardDmsg = hv.visor.conf.RewardSystemDmsg
+		if !strings.HasPrefix(rewardDmsg, "dmsg://") {
+			rewardDmsg = hv.visor.conf.RewardSystem
+		}
+	}
+	if !strings.HasPrefix(rewardDmsg, "dmsg://") {
+		rewardDmsg = deployment.Prod.RewardSystemDmsg
+	}
+	if !strings.HasPrefix(rewardDmsg, "dmsg://") {
+		return nil, http.StatusServiceUnavailable, errors.New("no reward system dmsg URL configured")
+	}
+	log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
+	dmsgURL := rewardDmsg + "/" + path
+	log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
+	resp, err := hv.visor.DmsgHTTP(visorapi.DmsgHTTPRequest{
+		URL:    dmsgURL,
+		Method: "GET",
+	})
+	if err != nil {
+		log.WithError(err).Warn("reward system DMSG fetch failed")
+		return nil, http.StatusBadGateway, fmt.Errorf("reward system unreachable over dmsg: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Warnf("reward system DMSG fetch returned status %d", resp.StatusCode)
+		return nil, http.StatusBadGateway, errors.New("reward system returned non-success over dmsg")
+	}
+	return resp.Body, resp.StatusCode, nil
 }
 
 func (hv *Hypervisor) putIsPublic() http.HandlerFunc {

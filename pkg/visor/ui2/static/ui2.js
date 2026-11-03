@@ -136,3 +136,37 @@
 	});
 	document.addEventListener('DOMContentLoaded', settle);
 })();
+
+// Filter: an input with data-filter="<selector>" shows the matching elements
+// whose data-text holds its text; a data-filter-set checkbox keeps only those
+// with data-set="1". A [data-filter-count] in the same form counts them.
+(function () {
+	'use strict';
+	function apply(form) {
+		var q = form.querySelector('[data-filter]');
+		var only = form.querySelector('[data-filter-set]');
+		var sel = (q || only).getAttribute(q ? 'data-filter' : 'data-filter-set');
+		var text = q ? q.value.toLowerCase().trim() : '';
+		var shown = 0;
+		form.querySelectorAll(sel).forEach(function (el) {
+			var ok = (!text || (el.getAttribute('data-text') || '').indexOf(text) >= 0) &&
+				(!only || !only.checked || el.getAttribute('data-set') === '1');
+			el.style.display = ok ? '' : 'none';
+			if (ok) shown++;
+		});
+		var c = form.querySelector('[data-filter-count]');
+		if (c) c.textContent = String(shown);
+	}
+	function onEvent(e) {
+		if (!e.target.matches || !e.target.matches('[data-filter],[data-filter-set]')) return;
+		apply(e.target.closest('form') || document);
+	}
+	document.addEventListener('input', onEvent);
+	document.addEventListener('change', onEvent);
+})();
+
+// Keep the current tab in view when the tab bar scrolls (narrow screens).
+document.addEventListener('DOMContentLoaded', function () {
+	var a = document.querySelector('nav.tabs .tab.active');
+	if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest', inline: 'center' });
+});

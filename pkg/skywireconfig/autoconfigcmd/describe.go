@@ -75,6 +75,9 @@ var envChecks = map[string]string{
 	"LOGLVL":           CheckLogLevel,
 }
 
+// CheckValue applies a flag's check rule to a value, as a save does.
+func CheckValue(rule, value string) error { return checkValue(rule, value) }
+
 // checkValue applies rule to value. An empty value always passes: it leaves
 // the variable blank, which config gen reads as its default.
 func checkValue(rule, value string) error {

@@ -1,0 +1,117 @@
+package ui2
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// UptimePage is the uptime tab: the visor's own tier bitmaps, then what the
+// deployment services recorded of it.
+templ UptimePage(u Uptime) {
+	@VisorLayout(u.PK, "uptime") {
+		@UptimeBars(u)
+		<section class="card">
+			<h2>{ T(ctx, "uptime.services-title") }</h2>
+			<p class="small dim">{ T(ctx, "uptime.services-help") }</p>
+			<div hx-get={ VisorURL(u.PK, "uptime/services") } hx-trigger="load">
+				<p class="dim">{ T(ctx, "common.loading") }</p>
+			</div>
+		</section>
+	}
+}
+
+// UptimeBars is the window picker and the day bars. It refreshes every
+// minute: the visor samples every five.
+templ UptimeBars(u Uptime) {
+	<div id="uptime" hx-get={ VisorURL(u.PK, "uptime/bars?days=" + strconv.Itoa(u.Days)) } hx-trigger="every 60s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		<div class="bar">
+			<span class="dim">{ T(ctx, "uptime.window") }:</span>
+			@windowBtn(u, 1, T(ctx, "uptime.window-now"))
+			@windowBtn(u, 7, "7d")
+			@windowBtn(u, 30, "30d")
+			<span class="spacer"></span>
+			<button class="btn sm" hx-get={ VisorURL(u.PK, "uptime/bars?days=" + strconv.Itoa(u.Days)) } hx-target="#uptime" hx-swap="outerHTML"><span class="mi">refresh</span>{ T(ctx, "uptime.refresh") }</button>
+		</div>
+		@ErrorBox(u.Err)
+		if len(u.List) == 0 && u.Err == "" {
+			<p class="dim">{ T(ctx, "uptime.empty") }</p>
+		}
+		if len(u.List) > 0 {
+			<div class="bar small">
+				<span class="dim">{ T(ctx, "uptime.window-avg") }:</span>
+				for _, s := range u.Summary {
+					<span>{ T(ctx, "uptime.tier-" + s.Name) } <span class={ "mono", PctClass(s.Pct) }>{ Pct(s.Pct) }</span></span>
+				}
+				if u.Fetched != "" {
+					<span class="dim">— { T(ctx, "uptime.last-updated") }: { u.Fetched }</span>
+				}
+			</div>
+		}
+		for _, d := range u.List {
+			<div class="up-day">
+				<div class="up-head">
+					<span class="mono">{ d.Date }</span>
+					if d.Today {
+						<span class="small dim">{ T(ctx, "uptime.today") }</span>
+					}
+				</div>
+				for _, t := range d.Tiers {
+					<div class="up-line">
+						<span class="up-name small" title={ T(ctx, "uptime.tier-" + t.Name + "-info") }>{ T(ctx, "uptime.tier-" + t.Name) }</span>
+						<span class="up-bar">
+							for _, r := range t.Runs {
+								<span class={ "up-run", r.State } style={ fmt.Sprintf("flex-grow:%d", r.N) } title={ r.From + "–" + r.To + " " + T(ctx, "uptime.legend-"+runLegend(r.State)) }></span>
+							}
+						</span>
+						<span class="up-pct mono small">
+							if t.Empty {
+								–
+							} else {
+								<span class={ PctClass(t.Pct) }>{ Pct(t.Pct) }</span>
+							}
+						</span>
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ windowBtn(u Uptime, days int, label string) {
+	<button class={ "btn sm", templ.KV("primary", u.Days == days) } hx-get={ VisorURL(u.PK, "uptime/bars?days=" + strconv.Itoa(days)) } hx-target="#uptime" hx-swap="outerHTML">{ label }</button>
+}
+
+func runLegend(state string) string {
+	switch state {
+	case "on":
+		return "up"
+	case "off":
+		return "down"
+	}
+	return "future"
+}
+
+// ServiceUptimes is the per-service table, loaded after the page.
+templ ServiceUptimes(rows []ServiceUptime) {
+	<table class="list">
+		<thead><tr><th>{ T(ctx, "uptime.services-col-service") }</th><th>{ T(ctx, "uptime.services-col-recent") }</th></tr></thead>
+		<tbody>
+			for _, s := range rows {
+				<tr>
+					<td class="name">{ s.Service }</td>
+					<td>
+						if s.Err != "" {
+							<span class="error small">{ s.Err }</span>
+						} else if len(s.Days) == 0 {
+							<span class="dim">{ T(ctx, "uptime.services-no-data") }</span>
+						} else {
+							for _, d := range s.Days {
+								<span class={ "badge", PctClass(d.Pct) } title={ d.Name }>{ fmt.Sprintf("%.0f%%", d.Pct) }</span>
+							}
+						}
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
