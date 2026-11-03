@@ -9,7 +9,7 @@ templ DmsgPage(d Dmsg) {
 			<h1>{ T(ctx, "dmsg.title") }</h1>
 		</div>
 		<div class="bar">
-			<button class="btn primary" hx-post={ VisorURL(d.PK, "dmsg/connect-all") } hx-target="#dmsg-result"><span class="mi">cable</span>{ T(ctx, "dmsg.connect-all") }</button>
+			<button class="btn primary" hx-post={ VisorURL(d.PK, "dmsg/connect-all") } hx-target="#dmsg-result"><span class="mi">settings_ethernet</span>{ T(ctx, "dmsg.connect-all") }</button>
 			<form class="inline" hx-put={ VisorURL(d.PK, "dmsg/sessions-count") } hx-target="#dmsg-result">
 				<label for="sessions-count" class="dim">{ T(ctx, "dmsg-settings.sessions-count-label") }:</label>
 				<input id="sessions-count" class="num" type="number" name="count" min="0" max="99" value={ strconv.Itoa(d.Count) }/>

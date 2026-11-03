@@ -393,3 +393,19 @@ input.invalid { border-color: rgb(var(--rose)); }
   .list.nodes td.num, .list.nodes td.reward { display: inline-block; padding-right: 12px; }
   .list.nodes td:empty { display: none; }
 }
+
+/* sweep: headings in a row, and phone sized controls */
+.head h2 { margin: 0; }
+.card.sub > .head, section.card > .head { margin-bottom: 8px; }
+@media (max-width: 600px) {
+  input, select, textarea { font-size: 16px; }
+  .btn.sm { height: 40px; padding: 0 12px; }
+  .icon-btn { width: 40px; height: 40px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; margin: 0 6px 0 0; }
+  .visor-head .key { font-size: 0.8em; }
+}
+.seg { display: inline-flex; gap: 4px; }
+@media (max-width: 600px) {
+  dl.kv.tp-info { grid-template-columns: max-content 1fr; gap: 6px 12px; align-items: center; }
+  dl.kv.tp-info dd { margin: 0; }
+}

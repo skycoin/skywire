@@ -127,9 +127,9 @@ templ GroupsView(groups []Group, errMsg string) {
 						<th>{ T(ctx, "routing.groups.role") }</th>
 						<th>{ T(ctx, "routing.groups.remote") }</th>
 						<th>{ T(ctx, "routing.groups.ports") }</th>
-						<th>{ T(ctx, "routing.groups.fwd-rule") }</th>
-						<th>{ T(ctx, "routing.groups.consume-rule") }</th>
-						<th>{ T(ctx, "routing.groups.hops") }</th>
+						<th class="num">{ T(ctx, "routing.groups.fwd-rule") }</th>
+						<th class="num">{ T(ctx, "routing.groups.consume-rule") }</th>
+						<th class="num">{ T(ctx, "routing.groups.hops") }</th>
 						<th>{ T(ctx, "routing.groups.next-tp") }</th>
 					</tr>
 				</thead>
@@ -187,7 +187,7 @@ templ PathView(q PathQuery) {
 		if len(q.Paths) > 0 {
 			<div class="table-wrap">
 				<table class="list">
-					<thead><tr><th>#</th><th>{ T(ctx, "routing.groups.hops") }</th><th>{ T(ctx, "routing.find.path") }</th></tr></thead>
+					<thead><tr><th>#</th><th class="num">{ T(ctx, "routing.groups.hops") }</th><th>{ T(ctx, "routing.find.path") }</th></tr></thead>
 					<tbody>
 						for i, p := range q.Paths {
 							<tr>

@@ -109,9 +109,11 @@ templ RewardHistoryView(h RewardHistory) {
 		<div class="head">
 			<h2>{ T(ctx, "ui2.rewards.history") }</h2>
 			<span class="spacer"></span>
-			for _, d := range []int{7, 30, 90} {
-				<button class={ "btn sm", templ.KV("primary", h.Days == d) } hx-get={ VisorURL(h.PK, "rewards/history?days=" + strconv.Itoa(d)) } hx-target="#reward-history" hx-swap="outerHTML">{ strconv.Itoa(d) }d</button>
-			}
+			<span class="seg">
+				for _, d := range []int{7, 30, 90} {
+					<button class={ "btn sm", templ.KV("primary", h.Days == d) } hx-get={ VisorURL(h.PK, "rewards/history?days="+strconv.Itoa(d)) } hx-target="#reward-history" hx-swap="outerHTML">{ strconv.Itoa(d) }d</button>
+				}
+			</span>
 		</div>
 		@ErrorBox(h.Err)
 		if len(h.List) == 0 && h.Err == "" {
@@ -123,8 +125,8 @@ templ RewardHistoryView(h RewardHistory) {
 				<thead>
 					<tr>
 						<th>{ T(ctx, "ui2.rewards.date") }</th>
-						<th>{ T(ctx, "ui2.rewards.amount") }</th>
-						<th>{ T(ctx, "ui2.rewards.share") }</th>
+						<th class="num">{ T(ctx, "ui2.rewards.amount") }</th>
+						<th class="num">{ T(ctx, "ui2.rewards.share") }</th>
 						<th>{ T(ctx, "ui2.rewards.status") }</th>
 						<th>{ T(ctx, "ui2.rewards.tx") }</th>
 					</tr>
