@@ -1,10 +1,11 @@
 import { Injectable, NgZone } from '@angular/core';
-import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders, HttpResponse } from '@angular/common/http';
 import { Observable, catchError, first, map, mergeMap, throwError } from 'rxjs';
 import { webSocket } from 'rxjs/webSocket';
 import { Router } from '@angular/router';
 
 import { processServiceError } from '../utils/errors';
+import { SnackbarService } from './snackbar.service';
 import { environment } from 'src/environments/environment';
 
 export enum ResponseTypes {
@@ -59,6 +60,7 @@ export class ApiService {
     private http: HttpClient,
     private router: Router,
     private ngZone: NgZone,
+    private snackbar: SnackbarService,
   ) { }
 
   /**
@@ -147,8 +149,9 @@ export class ApiService {
       // Use the session cookies.
       withCredentials: true,
       body: this.getPostBody(body, options),
-    }).pipe(
-      map(result => this.successHandler(result)),
+      observe: 'response',
+    } as any).pipe(
+      map((response: any) => this.successHandler(this.noteParked(response as HttpResponse<any>))),
       catchError(error => this.errorHandler(error, options)),
     );
   }
@@ -189,6 +192,18 @@ export class ApiService {
     Object.keys(body).forEach(key => formData.append(key, body[key]));
 
     return formData;
+  }
+
+  /**
+   * A 202 naming an inbox host is a change for an offline visor that waits on
+   * its dmsg-async inbox. Says so after any message the caller shows.
+   */
+  private noteParked(response: HttpResponse<any>): any {
+    if (response.status === 202 && response.headers.get('X-Skywire-Parked')) {
+      setTimeout(() => this.snackbar.showWarning('common.change-parked'));
+    }
+
+    return response.body;
   }
 
   private successHandler(result: any) {

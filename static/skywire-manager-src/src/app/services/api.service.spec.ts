@@ -1,9 +1,10 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { provideHttpClient, withXhr } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
 
 import { ApiService, RequestOptions, RequestTypes, ResponseTypes } from './api.service';
+import { SnackbarService } from './snackbar.service';
 
 // ApiService is exercised through Angular's HttpTestingController so the real
 // request pipeline (URL prefixing, CSRF pre-fetch, header/body encoding, the
@@ -13,13 +14,16 @@ describe('ApiService', () => {
   let service: ApiService;
   let httpMock: HttpTestingController;
   let routerSpy: jasmine.SpyObj<Router>;
+  let snackbarSpy: jasmine.SpyObj<SnackbarService>;
 
   beforeEach(() => {
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
+    snackbarSpy = jasmine.createSpyObj('SnackbarService', ['showWarning']);
     TestBed.configureTestingModule({
       providers: [
         ApiService,
         { provide: Router, useValue: routerSpy },
+        { provide: SnackbarService, useValue: snackbarSpy },
         provideHttpClient(withXhr()),
         provideHttpClientTesting(),
       ],
@@ -130,4 +134,49 @@ describe('ApiService', () => {
       expect(routerSpy.navigate).toHaveBeenCalledWith(['vpnlogin', 'VPNPK'], { replaceUrl: true });
     });
   });
+});
+
+// A change the hypervisor left on an offline visor's inbox answers 202 with
+// the host in X-Skywire-Parked, and the user is told it applies later.
+describe('ApiService parked changes', () => {
+  let service: ApiService;
+  let httpMock: HttpTestingController;
+  let snackbarSpy: jasmine.SpyObj<SnackbarService>;
+
+  beforeEach(() => {
+    snackbarSpy = jasmine.createSpyObj('SnackbarService', ['showWarning']);
+    TestBed.configureTestingModule({
+      providers: [
+        ApiService,
+        { provide: Router, useValue: jasmine.createSpyObj('Router', ['navigate']) },
+        { provide: SnackbarService, useValue: snackbarSpy },
+        provideHttpClient(withXhr()),
+        provideHttpClientTesting(),
+      ],
+    });
+    service = TestBed.inject(ApiService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('says a parked change applies when the visor is back', fakeAsync(() => {
+    let result: any;
+    service.put('visors/pk/apps/x', { autostart: true }).subscribe((r) => (result = r));
+    httpMock.expectOne(service.apiPrefix + 'csrf').flush({ csrf_token: 't' });
+    httpMock.expectOne(service.apiPrefix + 'visors/pk/apps/x')
+      .flush({ name: 'x' }, { status: 202, statusText: 'Accepted', headers: { 'X-Skywire-Parked': 'host' } });
+    tick();
+    expect(result).toEqual({ name: 'x' });
+    expect(snackbarSpy.showWarning).toHaveBeenCalledWith('common.change-parked');
+  }));
+
+  it('says nothing for an ordinary 202', fakeAsync(() => {
+    service.post('visors/pk/restart').subscribe();
+    httpMock.expectOne(service.apiPrefix + 'csrf').flush({ csrf_token: 't' });
+    httpMock.expectOne(service.apiPrefix + 'visors/pk/restart')
+      .flush({ restarting: true }, { status: 202, statusText: 'Accepted' });
+    tick();
+    expect(snackbarSpy.showWarning).not.toHaveBeenCalled();
+  }));
 });
