@@ -1,0 +1,260 @@
+package ui2
+
+import "context"
+
+// RoutingPage is the routing tab: the min hops setting, then one sub view.
+templ RoutingPage(pk string, minHops string, view string) {
+	@VisorLayout(pk, "routing") {
+		<div class="head">
+			<h1>{ T(ctx, "node.tabs.routing") }</h1>
+		</div>
+		@MinHops(pk, minHops, false, "")
+		<nav class="subnav" aria-label={ T(ctx, "node.tabs.routing") }>
+			for _, v := range RoutingViews {
+				<a class={ "btn sm", templ.KV("primary", v == view) } href={ templ.URL(VisorURL(pk, "routing") + "?view=" + v) } hx-get={ VisorURL(pk, "routing") + "/" + v } hx-target="#rt-view" hx-push-url={ VisorURL(pk, "routing") + "?view=" + v } data-subnav>{ T(ctx, "routing.view." + v) }</a>
+			}
+			<a class="btn sm" href="route-viz" target="_blank" rel="noopener"><span class="mi">open_in_new</span>{ T(ctx, "routing.view.mux") }</a>
+		</nav>
+		<div id="rt-view" hx-get={ VisorURL(pk, "routing") + "/" + view } hx-trigger="load"></div>
+	}
+}
+
+// MinHops shows the visor's minimum hops, or with edit set the form that
+// changes it.
+templ MinHops(pk, minHops string, edit bool, errMsg string) {
+	<div id="min-hops" class="card sub">
+		<h2>{ T(ctx, "node.details.router-info.title") }</h2>
+		@ErrorBox(errMsg)
+		if edit {
+			<form class="bar" hx-post={ VisorURL(pk, "routing") + "/min-hops" } hx-target="#min-hops" hx-swap="outerHTML">
+				<label>{ T(ctx, "node.details.router-info.min-hops") } <input type="number" name="min" min="0" max="999" value={ minHops } required class="narrow-num"/></label>
+				<button class="btn primary sm" type="submit">{ T(ctx, "common.save") }</button>
+				<button class="btn sm" type="button" hx-get={ VisorURL(pk, "routing") + "/min-hops" } hx-target="#min-hops" hx-swap="outerHTML">{ T(ctx, "common.cancel") }</button>
+			</form>
+		} else {
+			<div class="bar">
+				<span class="dim">{ T(ctx, "node.details.router-info.min-hops") }</span> { minHops }
+				<button class="icon-btn" type="button" hx-get={ VisorURL(pk, "routing") + "/min-hops?edit=1" } hx-target="#min-hops" hx-swap="outerHTML" title={ T(ctx, "node.details.router-info.change-config-button") }><span class="mi">edit</span></button>
+			</div>
+		}
+	</div>
+}
+
+// RulesView is the routing rules table.
+templ RulesView(pk string, rules []Rule, errMsg string) {
+	<div id="rules">
+		<p class="small dim">{ T(ctx, "routes.info") }</p>
+		@ErrorBox(errMsg)
+		if len(rules) == 0 {
+			<p class="dim">{ T(ctx, "routes.empty") }</p>
+		} else {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th>{ T(ctx, "routes.key") }</th>
+							<th>{ T(ctx, "routes.type") }</th>
+							<th>{ T(ctx, "routes.local-port") }</th>
+							<th>{ T(ctx, "routes.remote-pk") }</th>
+							<th>{ T(ctx, "routes.remote-port") }</th>
+							<th>{ T(ctx, "routes.next-rid") }</th>
+							<th>{ T(ctx, "routes.next-tp") }</th>
+							<th>{ T(ctx, "routes.keep-alive") }</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, x := range rules {
+							<tr>
+								<td class="name" data-label={ T(ctx, "routes.key") }>{ x.Key }</td>
+								<td data-label={ T(ctx, "routes.type") }>{ x.Type }</td>
+								<td class="num" data-label={ T(ctx, "routes.local-port") }>{ x.LocalPort }</td>
+								<td class="mono small" data-label={ T(ctx, "routes.remote-pk") }>
+									if x.RemotePK != "" {
+										<span class="key" data-copy={ x.RemotePK }>{ x.RemotePK }</span>
+									}
+								</td>
+								<td class="num" data-label={ T(ctx, "routes.remote-port") }>{ x.RemotePort }</td>
+								<td class="num" data-label={ T(ctx, "routes.next-rid") }>{ x.NextRID }</td>
+								<td class="mono small" data-label={ T(ctx, "routes.next-tp") }>{ x.NextTP }</td>
+								<td class="small" data-label={ T(ctx, "routes.keep-alive") }>{ x.KeepAlive }</td>
+								<td class="actions">
+									<button class="icon-btn" type="button" hx-delete={ VisorURL(pk, "routing") + "/rules/" + x.Key } hx-confirm={ T(ctx, "routes.delete-confirmation") } hx-target="#rules" hx-swap="outerHTML" title={ T(ctx, "routes.delete") }><span class="mi">close</span></button>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+// GroupsView is the active route groups table.
+templ GroupsView(groups []Group, errMsg string) {
+	<h2>{ T(ctx, "routing.groups.title") }</h2>
+	@ErrorBox(errMsg)
+	if len(groups) == 0 {
+		<p class="dim">{ T(ctx, "routing.groups.empty") }</p>
+	} else {
+		<div class="table-wrap">
+			<table class="list">
+				<thead>
+					<tr>
+						<th>{ T(ctx, "routing.groups.role") }</th>
+						<th>{ T(ctx, "routing.groups.remote") }</th>
+						<th>{ T(ctx, "routing.groups.ports") }</th>
+						<th>{ T(ctx, "routing.groups.fwd-rule") }</th>
+						<th>{ T(ctx, "routing.groups.consume-rule") }</th>
+						<th>{ T(ctx, "routing.groups.hops") }</th>
+						<th>{ T(ctx, "routing.groups.next-tp") }</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, g := range groups {
+						<tr>
+							<td data-label={ T(ctx, "routing.groups.role") }>
+								if g.Initiator {
+									<span class="badge on">initiator</span>
+								} else {
+									<span class="badge">responder</span>
+								}
+							</td>
+							<td class="mono small" data-label={ T(ctx, "routing.groups.remote") }><span class="key" data-copy={ g.Remote }>{ g.Remote }</span></td>
+							<td class="mono" data-label={ T(ctx, "routing.groups.ports") }>{ g.Ports }</td>
+							<td class="num" data-label={ T(ctx, "routing.groups.fwd-rule") }>{ g.FwdRID }</td>
+							<td class="num" data-label={ T(ctx, "routing.groups.consume-rule") }>{ g.ConsumeRID }</td>
+							<td class="num" data-label={ T(ctx, "routing.groups.hops") }>{ itoa(g.Hops) }</td>
+							<td class="mono small" data-label={ T(ctx, "routing.groups.next-tp") }>{ g.NextTP }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+// PathView is the route find or the route calculation form, with the paths
+// it returned.
+templ PathView(q PathQuery) {
+	<div id="path-view">
+		if q.Calc {
+			<h2>{ T(ctx, "routing.calc.title") }</h2>
+			<p class="small dim">{ T(ctx, "routing.calc.help") }</p>
+		} else {
+			<h2>{ T(ctx, "routing.find.title") }</h2>
+			<p class="small dim">{ T(ctx, "routing.find.help") }</p>
+		}
+		<form class="bar path-form" hx-post={ VisorURL(q.PK, "routing") + "/" + pathView(q.Calc) } hx-target="#path-view" hx-swap="outerHTML">
+			<input class="mono filter" name="dst" value={ q.Dst } required placeholder={ pathPlaceholder(ctx, q.Calc) }/>
+			<label class="small">{ T(ctx, "node.details.router-info.min-hops") } <input class="narrow-num" type="number" name="min" min="0" max="10" value={ q.MinHops }/></label>
+			<label class="small">{ T(ctx, "node.details.router-info.max-hops") } <input class="narrow-num" type="number" name="max" min="1" max="10" value={ q.MaxHops }/></label>
+			if q.Calc {
+				<label class="small">{ T(ctx, "ui2.routing.count") } <input class="narrow-num" type="number" name="count" min="1" max="1000" value={ q.Count }/></label>
+			}
+			<button class="btn primary" type="submit">
+				<span class="idle">{ pathSubmit(ctx, q.Calc) }</span>
+				<span class="busy">{ pathBusy(ctx, q.Calc) }</span>
+			</button>
+		</form>
+		@ErrorBox(q.Err)
+		if q.Ran && q.Calc && q.Err == "" {
+			<p class="small">{ T(ctx, "routing.calc.found", "count", itoa(len(q.Paths))) }</p>
+		}
+		if len(q.Paths) > 0 {
+			<div class="table-wrap">
+				<table class="list">
+					<thead><tr><th>#</th><th>{ T(ctx, "routing.groups.hops") }</th><th>{ T(ctx, "routing.find.path") }</th></tr></thead>
+					<tbody>
+						for i, p := range q.Paths {
+							<tr>
+								<td>{ itoa(i + 1) }</td>
+								<td class="num" data-label={ T(ctx, "routing.groups.hops") }>{ itoa(len(p.Hops)) }</td>
+								<td class="mono small" data-label={ T(ctx, "routing.find.path") }>
+									for _, h := range p.Hops {
+										<span>{ h }</span> <span class="dim">→</span>
+									}
+									<span>{ p.Dst }</span>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		} else if q.Err == "" {
+			if q.Calc {
+				<p class="dim">{ T(ctx, "routing.calc.empty") }</p>
+			} else {
+				<p class="dim">{ T(ctx, "routing.find.empty") }</p>
+			}
+		}
+	</div>
+}
+
+// PoliciesView is the routing policies view.
+templ PoliciesView(p Policies, errMsg string) {
+	<h2>{ T(ctx, "routing.policies.title") }</h2>
+	@ErrorBox(errMsg)
+	if p.Default == nil && len(p.Apps) == 0 {
+		<p class="dim">{ T(ctx, "routing.policies.empty") }</p>
+	}
+	if p.Default != nil {
+		<p>
+			<span class="dim">{ T(ctx, "routing.policies.default") }:</span>
+			<span class="mono small">{ p.Default.Source }</span>
+			@policyBadge(p.Default.Active)
+			if p.Default.Backend != "" {
+				<span class="badge">{ p.Default.Backend }</span>
+			}
+		</p>
+	}
+	if len(p.Apps) > 0 {
+		<table class="list">
+			<thead>
+				<tr>
+					<th>{ T(ctx, "routing.policies.col-app") }</th>
+					<th>{ T(ctx, "routing.policies.col-source") }</th>
+					<th>{ T(ctx, "routing.policies.col-backend") }</th>
+					<th>{ T(ctx, "routing.policies.col-active") }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, name := range p.Apps {
+					<tr>
+						<td class="name" data-label={ T(ctx, "routing.policies.col-app") }>{ name }</td>
+						<td class="mono small" data-label={ T(ctx, "routing.policies.col-source") }>{ p.PerApp[name].Source }</td>
+						<td data-label={ T(ctx, "routing.policies.col-backend") }>{ p.PerApp[name].Backend }</td>
+						<td data-label={ T(ctx, "routing.policies.col-active") }>@policyBadge(p.PerApp[name].Active)</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ policyBadge(active bool) {
+	if active {
+		<span class="badge on">{ T(ctx, "routing.policies.active") }</span>
+	} else {
+		<span class="badge off">{ T(ctx, "routing.policies.inactive") }</span>
+	}
+}
+
+func pathView(calc bool) string {
+	if calc {
+		return "calc"
+	}
+	return "find"
+}
+
+func pathPlaceholder(ctx context.Context, calc bool) string {
+	return T(ctx, "routing."+pathView(calc)+".dst-placeholder")
+}
+
+func pathSubmit(ctx context.Context, calc bool) string {
+	return T(ctx, "routing."+pathView(calc)+".submit")
+}
+
+func pathBusy(ctx context.Context, calc bool) string {
+	return T(ctx, "routing."+pathView(calc)+".searching")
+}

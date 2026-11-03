@@ -1,0 +1,194 @@
+package ui2
+
+import (
+	"context"
+	"strings"
+)
+
+// TransportsPage is the transports tab: the summary and toggles, the add
+// form and the list.
+templ TransportsPage(t Transports) {
+	@VisorLayout(t.PK, "transports") {
+		<div class="head">
+			<h1>{ T(ctx, "transports.title") }</h1>
+		</div>
+		<p class="small dim">{ T(ctx, "transports.info") }</p>
+		<details class="add">
+			<summary class="btn primary">{ T(ctx, "transports.create") }</summary>
+			<form class="form" hx-post={ t.url("") } hx-target="#tp-body" hx-swap="outerHTML">
+				<label>{ T(ctx, "transports.dialog.remote-key") }<input class="mono" name="remote" required minlength="66" maxlength="66" pattern="[0-9a-fA-F]{66}"/></label>
+				<label>
+					{ T(ctx, "transports.dialog.transport-type") }
+					<select name="type" required>
+						for _, typ := range t.Types {
+							<option value={ typ } selected?={ typ == "dmsg" }>{ typ }</option>
+						}
+					</select>
+				</label>
+				<label class="check" title={ T(ctx, "transports.dialog.persistent-tooltip") }><input type="checkbox" name="persistent" value="1"/>{ T(ctx, "transports.dialog.make-persistent") }</label>
+				<div class="bar"><button class="btn primary" type="submit">{ T(ctx, "transports.create") }</button></div>
+			</form>
+		</details>
+		@TransportsBody(t)
+	}
+}
+
+// TransportsBody is the part that polls: the summary, the toggles and the
+// list.
+templ TransportsBody(t Transports) {
+	<div id="tp-body" hx-get={ t.url("/body") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML">
+		@ErrorBox(t.Err)
+		<dl class="kv tp-info">
+			<dt>{ T(ctx, "node.details.transports-info.total") }</dt>
+			<dd>
+				{ itoa(t.Online()) }
+				if len(t.ByType) > 0 {
+					<span class="dim">({ t.TypeSummary() })</span>
+				}
+			</dd>
+			<dt title={ T(ctx, "node.details.transports-info.autoconnect-info") }>{ T(ctx, "node.details.transports-info.autoconnect") }</dt>
+			<dd>@toggle(t.url("/autoconnect"), t.Autoconnect, T(ctx, "node.details.transports-info.autoconnect-info"))</dd>
+			<dt title={ T(ctx, "node.details.transports-info.is-public-info") }>{ T(ctx, "node.details.transports-info.is-public") }</dt>
+			<dd>@toggle(t.url("/public"), t.IsPublic, T(ctx, "node.details.transports-info.is-public-info"))</dd>
+		</dl>
+		<div class="bar">
+			<h2>{ T(ctx, "transports.list-title") }</h2>
+			<span class="spacer"></span>
+			if t.Online() > 0 {
+				<button class="btn warn sm" type="button" hx-delete={ t.url("") } hx-confirm={ T(ctx, "ui2.transports.remove-all-confirm") } hx-target="#tp-body" hx-swap="outerHTML">{ T(ctx, "ui2.transports.remove-all") }</button>
+			}
+		</div>
+		if len(t.List) == 0 {
+			<p class="dim">{ T(ctx, "transports.empty") }</p>
+		} else {
+			<div class="table-wrap">
+				<table class="list">
+					<thead>
+						<tr>
+							<th title={ T(ctx, "transports.persistent-tooltip") }><span class="mi">star_border</span></th>
+							<th>{ T(ctx, "transports.id") }</th>
+							<th>{ T(ctx, "transports.remote-node") }</th>
+							<th>{ T(ctx, "transports.type") }</th>
+							<th>{ T(ctx, "common.uploaded") }</th>
+							<th>{ T(ctx, "common.downloaded") }</th>
+							<th>{ T(ctx, "transports.latency") }</th>
+							<th>{ T(ctx, "ui2.transports.throughput") }</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, x := range t.List {
+							@transportRow(t, x)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ toggle(url string, on bool, title string) {
+	<button class={ "switch", templ.KV("on", on) } type="button" role="switch" aria-checked={ boolText(on) } title={ title } hx-put={ url } hx-vals={ onVals(!on) } hx-target="#tp-body" hx-swap="outerHTML"><span></span></button>
+}
+
+templ transportRow(t Transports, x Transport) {
+	<tr class={ templ.KV("offline", x.Offline) }>
+		<td data-label={ T(ctx, "transports.persistent") }>
+			<button
+				class="icon-btn"
+				type="button"
+				hx-put={ t.url("/persistent") }
+				hx-vals={ persistVals(x, !x.Persistent) }
+				hx-confirm={ persistConfirm(ctx, x) }
+				hx-target="#tp-body"
+				hx-swap="outerHTML"
+				title={ persistTitle(ctx, x.Persistent) }
+			>
+				if x.Persistent {
+					<span class="mi star">star</span>
+				} else {
+					<span class="mi dim">star_border</span>
+				}
+			</button>
+		</td>
+		<td class="mono small" data-label={ T(ctx, "transports.id") }>
+			if x.Offline {
+				<span class="badge off">{ T(ctx, "transports.offline") }</span>
+			} else {
+				<span class="key" data-copy={ x.ID }>{ x.ID }</span>
+			}
+		</td>
+		<td class="mono small" data-label={ T(ctx, "transports.remote-node") }><span class="key" data-copy={ x.Remote }>{ x.Remote }</span></td>
+		<td data-label={ T(ctx, "transports.type") }>
+			{ x.Type }
+			if x.Label != "" {
+				<span class="badge">{ x.Label }</span>
+			}
+		</td>
+		<td class="num small" data-label={ T(ctx, "common.uploaded") }>{ x.Sent }</td>
+		<td class="num small" data-label={ T(ctx, "common.downloaded") }>{ x.Recv }</td>
+		<td class="num small" data-label={ T(ctx, "transports.latency") }>{ x.Latency }</td>
+		<td class="num small" data-label={ T(ctx, "ui2.transports.throughput") }>{ x.Throughput }</td>
+		<td class="actions">
+			if !x.Offline {
+				<button class="icon-btn" type="button" hx-delete={ t.url("/" + x.ID) } hx-confirm={ deleteConfirm(ctx, x.Persistent) } hx-target="#tp-body" hx-swap="outerHTML" title={ T(ctx, "transports.delete") }><span class="mi">close</span></button>
+			}
+		</td>
+	</tr>
+}
+
+func boolText(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func onVals(on bool) string {
+	if on {
+		return `{"on":"1"}`
+	}
+	return `{"on":""}`
+}
+
+func persistVals(x Transport, on bool) string {
+	v := ""
+	if on {
+		v = "1"
+	}
+	return `{"pk":"` + x.Remote + `","type":"` + jsonSafe(x.Type) + `","on":"` + v + `"}`
+}
+
+func persistConfirm(ctx context.Context, x Transport) string {
+	switch {
+	case x.Persistent && x.Offline:
+		return T(ctx, "transports.make-offline-non-persistent-confirmation")
+	case x.Persistent:
+		return T(ctx, "transports.make-non-persistent-confirmation")
+	}
+	return T(ctx, "transports.make-persistent-confirmation")
+}
+
+func persistTitle(ctx context.Context, on bool) string {
+	if on {
+		return T(ctx, "transports.persistent-transport-button-tooltip")
+	}
+	return T(ctx, "transports.non-persistent-transport-button-tooltip")
+}
+
+func deleteConfirm(ctx context.Context, persistent bool) string {
+	if persistent {
+		return T(ctx, "transports.delete-persistent-confirmation")
+	}
+	return T(ctx, "transports.delete-confirmation")
+}
+
+// jsonSafe drops the characters that would break a hand written JSON string.
+func jsonSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '"' || r == '\\' || r < 0x20 {
+			return -1
+		}
+		return r
+	}, s)
+}

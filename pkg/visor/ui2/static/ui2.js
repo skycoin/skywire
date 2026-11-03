@@ -71,6 +71,13 @@
 			window.location.href = row.getAttribute('data-href');
 		}
 	}, true);
+	// data-clear="#id" empties a panel; a sub nav marks the view it opened.
+	document.addEventListener('click', function (e) {
+		var c = e.target.closest && e.target.closest('[data-clear]');
+		if (c) { var p = document.querySelector(c.getAttribute('data-clear')); if (p) p.innerHTML = ''; return; }
+		var s = e.target.closest && e.target.closest('[data-subnav]');
+		if (s) { s.parentNode.querySelectorAll('[data-subnav]').forEach(function (a) { a.classList.toggle('primary', a === s); }); }
+	});
 	document.addEventListener('keydown', function (e) {
 		if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('row')) e.target.click();
 	});

@@ -191,3 +191,40 @@ iframe.island { width: 100%; height: 70vh; min-height: 360px; border: 1px solid 
   .list td.name { font-weight: 700; }
   .list td:empty { display: none; }
 }
+
+/* apps, transports, routing */
+.dot.starting { background: rgb(var(--amber)); }
+.card.sub { margin: 12px 0; box-shadow: inset 0 0 30px 0 var(--card-inset); }
+.card.sub h2 { margin: 0; }
+.logbox { max-height: 50vh; overflow: auto; padding: 8px; border-radius: 6px; background: var(--input-bg); }
+fieldset.radios { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+fieldset.radios legend { padding: 0; margin-bottom: 4px; }
+.subnav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+input.narrow-num { width: 5em; }
+.path-form .filter { max-width: 560px; }
+.path-form label { display: inline-flex; align-items: center; gap: 4px; }
+.btn .busy, .htmx-request .btn .idle, .btn.htmx-request .idle { display: none; }
+.htmx-request .btn .busy, .btn.htmx-request .busy { display: inline; }
+details.add { margin: 12px 0; }
+details.add summary { list-style: none; display: inline-flex; }
+details.add summary::-webkit-details-marker { display: none; }
+details.add[open] summary { margin-bottom: 8px; }
+details.add .form { max-width: 640px; }
+.mi.star { color: rgb(var(--amber)); }
+tr.offline td { opacity: 0.6; }
+dl.tp-info { margin-bottom: 8px; }
+.switch {
+  position: relative; width: 40px; height: 22px; border-radius: 11px; border: 0; padding: 0; cursor: pointer;
+  background: rgba(var(--fg), 0.25); vertical-align: middle; transition: background 0.15s;
+}
+.switch span {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: rgb(var(--shade)); transition: left 0.15s;
+}
+.switch.on { background: var(--accent); }
+.switch.on span { left: 21px; background: #fff; }
+.list td.actions { white-space: nowrap; text-align: right; }
+@media (max-width: 600px) {
+  .list td.actions { text-align: left; }
+  .path-form .filter { flex-basis: 100%; }
+}
