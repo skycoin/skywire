@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/require"
 
@@ -82,8 +83,12 @@ func TestPickLang(t *testing.T) {
 }
 
 func TestCatalogFallback(t *testing.T) {
-	c := NewCatalog(nil)
-	require.Equal(t, "Classic UI", c.Get("zh", "ui2.classic"))
+	c := NewCatalog(fstest.MapFS{
+		"assets/i18n/en.json": {Data: []byte(`{"ui2": {"classic": "Classic UI", "visors-count": "{{ n }} visors"}}`)},
+		"assets/i18n/zh.json": {Data: []byte(`{"ui2": {"theme": "主题"}}`)},
+	})
+	require.Equal(t, "Classic UI", c.Get("zh", "ui2.classic"), "a key zh lacks falls back to English")
+	require.Equal(t, "主题", c.Get("zh", "ui2.theme"))
 	require.Equal(t, "no.such.key", c.Get("en", "no.such.key"))
 	ctx := With(context.Background(), Page{Lang: "en"}, c)
 	require.Equal(t, "3 visors", T(ctx, "ui2.visors-count", "n", "3"))

@@ -1920,5 +1920,94 @@
       "save-config-button": "保存配置",
       "done": "更改已保存。"
     }
+  },
+  "ui2": {
+    "classic": "经典界面",
+    "classic-tab": "在经典界面中打开此标签页",
+    "not-ported": "新界面暂未包含此标签页。",
+    "theme": "主题",
+    "username": "用户名",
+    "login": "登录",
+    "create-account": "创建账户",
+    "create-help": "尚未创建账户。请为 admin 账户设置密码。",
+    "online": "在线",
+    "offline": "离线",
+    "routes": "路由",
+    "this-hypervisor": "本 Hypervisor",
+    "last-seen": "最后在线",
+    "open-full-page": "在新标签页中打开",
+    "refresh": "刷新",
+    "visors-count": "{{ n }} 个 Visor",
+    "no-session": "会话已结束，请重新登录。",
+    "unreachable": "Hypervisor 没有响应。",
+    "language": "语言",
+    "menu": "菜单",
+    "password-confirm": "确认密码",
+    "password-mismatch": "两次输入的密码不一致。",
+    "apps": {
+      "no-logs": "过去 24 小时内没有日志。"
+    },
+    "routing": {
+      "count": "数量"
+    },
+    "transports": {
+      "throughput": "吞吐量",
+      "remove-all": "全部移除",
+      "remove-all-confirm": "移除此 Visor 的所有传输？持久传输可能很快会被重新创建。"
+    },
+    "route-viz": "路由可视化",
+    "wallet": {
+      "node": "币节点"
+    },
+    "mail": {
+      "deleted": "邮件已删除。",
+      "retrying": "正在重试。",
+      "sent": "已发送。",
+      "queued": "已排队。此 Visor 会持续重试，直到收件人上线。",
+      "no-recipient": "请至少添加一位收件人。",
+      "turned-on": "邮件已开启。",
+      "turned-off": "邮件已关闭。",
+      "saved": "已保存。",
+      "delete-confirm": "删除这封邮件？",
+      "cancel-confirm": "停止投递这封邮件并将其删除？"
+    },
+    "dmsg": {
+      "role-main": "主 Visor",
+      "role-route_setup": "路由设置节点",
+      "role-transport_setup": "传输设置节点"
+    },
+    "rewards": {
+      "history": "奖励历史",
+      "none": "此 Visor 暂无奖励数据。",
+      "total": "合计：{{ total }} SKY",
+      "date": "日期",
+      "amount": "数量 (SKY)",
+      "share": "份额 (%)",
+      "status": "状态",
+      "tx": "交易",
+      "sent": "已发送",
+      "pending": "待发放",
+      "no-reward": "无奖励"
+    },
+    "settings": {
+      "not-exist": "— 尚不存在；保存时会创建。",
+      "not-writable": "— 此 Visor 无法写入该文件。查看更改即可获得用于修改它的 sudo skywire autoconfig 命令。",
+      "intro": "Visor 读取 skywire.json，该文件由 skywire autoconfig 根据此文件重新生成。更改会在 autoconfig 再次运行且 Visor 重启后生效。",
+      "filter": "筛选",
+      "set-only": "仅显示文件中已设置的项",
+      "to-fix": "{{ n }} 项需修正",
+      "review": "查看更改",
+      "saved": "已保存到 {{ path }}。",
+      "saved-help": "在 skywire.json 重新生成并重启之前，Visor 仍使用旧设置运行：",
+      "no-changes": "没有更改。",
+      "variable": "变量",
+      "now": "当前",
+      "after": "更改后",
+      "run-cmd": "在 Visor 所在主机上运行此命令；它会修改文件、重新生成 skywire.json 并重启 Visor：",
+      "back": "返回",
+      "back-to-settings": "返回设置"
+    },
+    "try": "试用新界面",
+    "try-tooltip": "在新的服务端渲染界面中打开此页面"
   }
 }

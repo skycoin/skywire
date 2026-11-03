@@ -32,6 +32,8 @@ func newUI2AuthServer(t *testing.T) (*httptest.Server, cipher.PubKey) {
 	pk, _ := cipher.GenerateKeyPair()
 	store, err := usermanager.NewBoltUserStore(filepath.Join(t.TempDir(), "users.db"))
 	require.NoError(t, err)
+	// Windows cannot remove an open file, so close it before TempDir cleans up.
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	cc := visorconfig.CookieConfig{HashKey: bytes.Repeat([]byte{1}, 32), BlockKey: bytes.Repeat([]byte{2}, 32)}
 	cc.FillDefaults()
 	hv := &Hypervisor{

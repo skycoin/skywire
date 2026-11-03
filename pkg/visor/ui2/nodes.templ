@@ -30,7 +30,7 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 						<th>{ T(ctx, "nodes.version") }</th>
 						<th>{ T(ctx, "nodes.ip-location") }</th>
 						<th>{ T(ctx, "nodes.transports") }</th>
-						<th>{ T(ctx, "ui2.apps") }</th>
+						<th>{ T(ctx, "node.tabs.apps") }</th>
 						<th>{ T(ctx, "nodes.ping") }</th>
 						<th>{ T(ctx, "nodes.reward") }</th>
 					</tr>
@@ -90,7 +90,7 @@ templ nodeRow(n Node) {
 			}
 		</td>
 		<td class="num" data-label={ T(ctx, "nodes.transports") }>{ itoa(n.Transports) }</td>
-		<td class="num" data-label={ T(ctx, "ui2.apps") }>{ itoa(n.AppsRunning) } / { itoa(n.Apps) }</td>
+		<td class="num" data-label={ T(ctx, "node.tabs.apps") }>{ itoa(n.AppsRunning) } / { itoa(n.Apps) }</td>
 		<td class="num small" data-label={ T(ctx, "nodes.ping") }>{ n.DmsgPing }</td>
 		<td data-label={ T(ctx, "nodes.reward") }>
 			if n.Reward != "" {

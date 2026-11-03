@@ -1920,5 +1920,94 @@
       "save-config-button": "Save configuration",
       "done": "Changes saved."
     }
+  },
+  "ui2": {
+    "classic": "Classic UI",
+    "classic-tab": "Open this tab in the classic UI",
+    "not-ported": "This tab is not in the new UI yet.",
+    "theme": "Theme",
+    "username": "Username",
+    "login": "Log in",
+    "create-account": "Create account",
+    "create-help": "No account exists yet. Choose the password for the admin account.",
+    "online": "Online",
+    "offline": "Offline",
+    "routes": "Routes",
+    "this-hypervisor": "This hypervisor",
+    "last-seen": "Last seen",
+    "open-full-page": "Open in a new tab",
+    "refresh": "Refresh",
+    "visors-count": "{{ n }} visors",
+    "no-session": "Your session ended. Log in again.",
+    "unreachable": "The hypervisor did not answer.",
+    "language": "Language",
+    "menu": "Menu",
+    "password-confirm": "Confirm password",
+    "password-mismatch": "The passwords do not match.",
+    "apps": {
+      "no-logs": "No log lines in the last 24 hours."
+    },
+    "routing": {
+      "count": "Count"
+    },
+    "transports": {
+      "throughput": "Throughput",
+      "remove-all": "Remove all",
+      "remove-all-confirm": "Remove every transport of this visor? Persistent ones may be created again shortly."
+    },
+    "route-viz": "Route visualizer",
+    "wallet": {
+      "node": "Coin node"
+    },
+    "mail": {
+      "deleted": "Message deleted.",
+      "retrying": "Trying again now.",
+      "sent": "Sent.",
+      "queued": "Queued. This visor keeps trying until the recipient is online.",
+      "no-recipient": "Add at least one recipient.",
+      "turned-on": "Mail turned on.",
+      "turned-off": "Mail turned off.",
+      "saved": "Saved.",
+      "delete-confirm": "Delete this message?",
+      "cancel-confirm": "Stop trying to deliver this message and delete it?"
+    },
+    "dmsg": {
+      "role-main": "Main visor",
+      "role-route_setup": "Route Setup Node",
+      "role-transport_setup": "Transport Setup Node"
+    },
+    "rewards": {
+      "history": "Reward History",
+      "none": "No reward data available for this visor.",
+      "total": "Total: {{ total }} SKY",
+      "date": "Date",
+      "amount": "Amount (SKY)",
+      "share": "Share (%)",
+      "status": "Status",
+      "tx": "Transaction",
+      "sent": "Sent",
+      "pending": "Pending",
+      "no-reward": "No reward"
+    },
+    "settings": {
+      "not-exist": "— does not exist yet; saving creates it.",
+      "not-writable": "— this visor cannot write it. Review a change to get the sudo skywire autoconfig command that makes it.",
+      "intro": "The visor reads skywire.json, which skywire autoconfig regenerates from this file. A change applies once autoconfig runs again and the visor restarts.",
+      "filter": "Filter",
+      "set-only": "Set in the file only",
+      "to-fix": "{{ n }} to fix",
+      "review": "Review changes",
+      "saved": "Saved to {{ path }}.",
+      "saved-help": "The visor runs with its old settings until skywire.json is regenerated and it restarts:",
+      "no-changes": "Nothing changed.",
+      "variable": "Variable",
+      "now": "Now",
+      "after": "After",
+      "run-cmd": "Run this on the visor's host; it edits the file, regenerates skywire.json and restarts the visor:",
+      "back": "Back",
+      "back-to-settings": "Back to settings"
+    },
+    "try": "Try new UI",
+    "try-tooltip": "Open this page in the new server rendered UI"
   }
 }
