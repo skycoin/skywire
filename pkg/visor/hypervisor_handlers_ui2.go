@@ -61,6 +61,11 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		hv.ui2ChatRoutes(r)
 		hv.ui2TerminalRoutes(r)
 		hv.ui2WalletRoutes(r)
+		hv.ui2InfoRoutes(r)
+		hv.ui2UptimeRoutes(r)
+		hv.ui2RewardsRoutes(r)
+		hv.ui2DmsgRoutes(r)
+		hv.ui2SettingsRoutes(r)
 	})
 	// Without this an unknown /ui2 path would fall through to the Angular UI.
 	r.HandleFunc("/ui2/{rest...}", http.NotFound)

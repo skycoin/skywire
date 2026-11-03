@@ -1,4 +1,4 @@
-package deskhost
+package skyenvform
 
 import (
 	"reflect"
@@ -13,7 +13,7 @@ func testState(vals map[string]string) visorapi.SkyenvState {
 	return visorapi.SkyenvState{Exists: true, Writable: true, Values: vals, Flags: autoconfigcmd.Describe()}
 }
 
-func rowByKey(t *testing.T, rows []settingRow, key string) settingRow {
+func rowByKey(t *testing.T, rows []Row, key string) Row {
 	t.Helper()
 	for _, r := range rows {
 		if r.Key == key {
@@ -21,11 +21,11 @@ func rowByKey(t *testing.T, rows []settingRow, key string) settingRow {
 		}
 	}
 	t.Fatalf("no row for %s", key)
-	return settingRow{}
+	return Row{}
 }
 
 func TestSettingRowsOnePerVariable(t *testing.T) {
-	rows := settingRows(testState(map[string]string{
+	rows := Rows(testState(map[string]string{
 		"ISHYPERVISOR": "true", "HYPERVISORPKS": "aa bb", "DMSGWEBSK": visorapi.SkyenvRedacted,
 	}))
 	seen := map[string]bool{}
@@ -40,7 +40,7 @@ func TestSettingRowsOnePerVariable(t *testing.T) {
 	}
 	// --ishv and --no-ishv are one row, edited through the positive flag.
 	hv := rowByKey(t, rows, "ISHYPERVISOR")
-	if hv.Flag != "ishv" || hv.Negate || !hv.Set || hv.Value != "true" || !hv.Desk {
+	if hv.Flag != "ishv" || hv.Negate || !hv.Set || hv.Value != "true" {
 		t.Fatalf("ISHYPERVISOR row = %+v", hv)
 	}
 	if pks := rowByKey(t, rows, "HYPERVISORPKS"); pks.Value != "aa,bb" {
@@ -49,20 +49,20 @@ func TestSettingRowsOnePerVariable(t *testing.T) {
 	if sk := rowByKey(t, rows, "DMSGWEBSK"); !sk.Secret {
 		t.Fatal("DMSGWEBSK should be a secret row")
 	}
-	if r := rowByKey(t, rows, "VPNROUTERSSID"); !r.HostOnly {
-		t.Fatal("VPNROUTERSSID should be host-only")
-	}
-	if r := rowByKey(t, rows, "MINDMSGSESS"); r.HostOnly || r.Desk || r.Set {
+	if r := rowByKey(t, rows, "MINDMSGSESS"); r.Locked || r.Set {
 		t.Fatalf("MINDMSGSESS row = %+v", r)
 	}
 }
 
 func TestSettingsEdits(t *testing.T) {
-	rows := settingRows(testState(map[string]string{
+	rows := Rows(testState(map[string]string{
 		"MINDMSGSESS": "3", "HYPERVISORPKS": "aa bb", "DMSGWEBSK": visorapi.SkyenvRedacted,
 		"PROXYSERVER": "true", "LOGLVL": "debug", "SURVEYPKS": "",
 	}))
-	edits, changes, err := settingsEdits(rows, map[string]settingInput{
+	for i := range rows {
+		rows[i].Locked = rows[i].Key == "ISHYPERVISOR"
+	}
+	edits, changes, err := Edits(rows, map[string]Input{
 		"MINDMSGSESS":   {Value: "3"},      // unchanged
 		"HYPERVISORPKS": {Value: "aa, bb"}, // unchanged once normalized
 		"DMSGWEBSK":     {Value: "(set)"},  // placeholder echoed back
@@ -70,9 +70,9 @@ func TestSettingsEdits(t *testing.T) {
 		"SKYCHAT":       {Value: "on"},     // unset → set
 		"LOGLVL":        {Value: ""},       // cleared text → back to default
 		"MAXTRANSPORTS": {Unset: true},     // already at default
-		"ISHYPERVISOR":  {Value: "false"},  // the desk owns it
+		"ISHYPERVISOR":  {Value: "false"},  // locked by the caller
 		"ROUTESETUPPKS": {Value: "cc\ndd"}, // newline-separated list
-		"VPNROUTERSSID": {Value: "home"},   // host-only rows are still editable
+		"VPNROUTERSSID": {Value: "home"},   // any other row is editable
 		"SURVEYPKS":     {Value: ""},       // set to nothing and left empty
 	})
 	if err != nil {
@@ -98,11 +98,11 @@ func TestSettingsEdits(t *testing.T) {
 // A --no-X flag seen alone is sent inverted, and a new secret is never
 // echoed into the preview.
 func TestSettingsEditsNegatedAndSecret(t *testing.T) {
-	rows := []settingRow{
+	rows := []Row{
 		{Key: "NODIRECT", Flag: "no-direct", Negate: true, Format: "bool"},
 		{Key: "DMSGWEBSK", Flag: "dmsgweb-sk", Format: "string"},
 	}
-	edits, changes, err := settingsEdits(rows, map[string]settingInput{
+	edits, changes, err := Edits(rows, map[string]Input{
 		"NODIRECT": {Value: "true"}, "DMSGWEBSK": {Value: "abc"},
 	})
 	if err != nil {
@@ -116,7 +116,23 @@ func TestSettingsEditsNegatedAndSecret(t *testing.T) {
 			t.Fatalf("secret previewed as %q", c.To)
 		}
 	}
-	if _, _, err := settingsEdits(rows, map[string]settingInput{"NODIRECT": {Value: "maybe"}}); err == nil {
+	if _, _, err := Edits(rows, map[string]Input{"NODIRECT": {Value: "maybe"}}); err == nil {
 		t.Fatal("a non-bool value for a bool should fail")
+	}
+}
+
+func TestCheckAndCommand(t *testing.T) {
+	rows := Rows(testState(nil))
+	hops := rowByKey(t, rows, "MINDMSGSESS")
+	if Check(hops, "x") == "" || Check(hops, "3") != "" || Check(hops, "") != "" {
+		t.Fatal("int check")
+	}
+	hvpks := rowByKey(t, rows, "HYPERVISORPKS")
+	if Check(hvpks, "nope") == "" {
+		t.Fatal("pks check")
+	}
+	got := Command(rows, visorapi.SkyenvEdits{Set: map[string]string{"skychat": "true", "loglvl": "a b"}, Unset: []string{"ishv"}})
+	if want := "sudo skywire autoconfig '--loglvl=a b' --skychat=true --ishv=" + rowByKey(t, rows, "ISHYPERVISOR").Default; got != want {
+		t.Fatalf("Command = %q, want %q", got, want)
 	}
 }
