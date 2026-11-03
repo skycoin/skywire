@@ -1,0 +1,24 @@
+package ui2
+
+// ChatPage hosts the Angular UI's chat tab in its chrome-less embed mode, as
+// the wasm desktop's chat window does. Chat and voice are not reimplemented.
+// The skychat page behind the proxy cannot be hosted: it asks for /sse at the
+// root.
+templ ChatPage(pk string) {
+	@VisorLayout(pk, "chat") {
+		@islandHead(T(ctx, "skychat.title"), "", ClassicURL(pk, "chat"), T(ctx, "ui2.open-full-page"))
+		<iframe class="island chat" src={ ClassicURL(pk, "chat") + "?embed=1" } title={ T(ctx, "skychat.title") } allow="microphone; autoplay; clipboard-write"></iframe>
+	}
+}
+
+// islandHead is the title row of a tab that hosts a page of its own.
+templ islandHead(title, help, href, open string) {
+	<div class="head">
+		<h1>{ title }</h1>
+		<span class="spacer"></span>
+		<a class="btn sm" href={ templ.URL(href) } target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ open }</a>
+	</div>
+	if help != "" {
+		<p class="small dim">{ help }</p>
+	}
+}

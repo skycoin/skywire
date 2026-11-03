@@ -1,0 +1,356 @@
+package ui2
+
+import (
+	"context"
+	"strconv"
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/skymail"
+)
+
+// MailPage is the mail tab.
+templ MailPage(m Mail) {
+	@VisorLayout(m.PK, "mail") {
+		@MailBody(m)
+	}
+}
+
+// MailBody is the whole tab below the tab bar. Every action swaps it, so the
+// counts in the folder bar stay current.
+templ MailBody(m Mail) {
+	<div id="mail">
+		<div class="head">
+			<h1>{ T(ctx, "mail.title") }</h1>
+			if s := m.Status; s != nil {
+				if s.Running {
+					<span class="badge on">{ T(ctx, "mail.running") }</span>
+				} else if s.Enabled {
+					<span class="badge err">{ T(ctx, "mail.not-running") }</span>
+				} else {
+					<span class="badge off">{ T(ctx, "mail.off") }</span>
+				}
+			}
+		</div>
+		@ErrorBox(m.StatusErr)
+		if s := m.Status; s != nil {
+			if s.Reason != "" {
+				<p class="small dim">{ s.Reason }</p>
+			}
+			<dl class="kv small">
+				if s.Address != "" {
+					<dt>{ T(ctx, "mail.address") }</dt>
+					<dd class="mono key" data-copy={ s.Address } title={ T(ctx, "mail.copy") }>{ s.Address }</dd>
+				}
+				if s.AddressDmsg != "" {
+					<dt>{ T(ctx, "mail.address-dmsg") }</dt>
+					<dd class="mono key" data-copy={ s.AddressDmsg } title={ T(ctx, "mail.copy") }>{ s.AddressDmsg }</dd>
+				}
+			</dl>
+		}
+		<div class="bar mail-bar">
+			@mailTab(m, "list", FolderInbox, T(ctx, "mail.inbox"), unread(m))
+			@mailTab(m, "list", FolderSent, T(ctx, "mail.sent"), 0)
+			if m.Status != nil && m.Status.HasOutbox {
+				@mailTab(m, "list", FolderOutbox, T(ctx, "mail.outbox"), m.Status.Outbox)
+			}
+			@mailTab(m, "compose", "", T(ctx, "mail.compose"), 0)
+			<span class="spacer"></span>
+			@mailTab(m, "settings", "", T(ctx, "mail.settings"), 0)
+		</div>
+		@ErrorBox(m.Err)
+		switch m.View {
+			case "message":
+				@mailMessage(m)
+			case "compose":
+				@mailCompose(m)
+			case "settings":
+				@mailSettings(m)
+			default:
+				@mailList(m)
+		}
+	</div>
+}
+
+func unread(m Mail) int {
+	if m.Status == nil {
+		return 0
+	}
+	return m.Status.Unread
+}
+
+templ mailTab(m Mail, view, folder, label string, n int) {
+	<button
+		type="button"
+		class={ "btn sm", templ.KV("primary", m.View == view && (folder == "" || folder == m.Folder)) }
+		hx-get={ MailURL(m.PK, "/"+view, "folder", folder) }
+		hx-target="#mail"
+		hx-swap="outerHTML"
+	>
+		{ label }
+		if n > 0 {
+			({ strconv.Itoa(n) })
+		}
+	</button>
+}
+
+templ mailList(m Mail) {
+	if len(m.List) == 0 {
+		<p class="dim">
+			switch m.Folder {
+				case FolderSent:
+					{ T(ctx, "mail.empty-sent") }
+				case FolderOutbox:
+					{ T(ctx, "mail.empty-outbox") }
+				default:
+					{ T(ctx, "mail.empty-inbox") }
+			}
+		</p>
+	} else {
+		if m.Folder == FolderOutbox {
+			<div class="bar">
+				<span class="small dim">{ T(ctx, "mail.outbox-help") }</span>
+				<span class="spacer"></span>
+				<button class="btn sm" type="button" hx-post={ MailURL(m.PK, "/retry", "folder", m.Folder) } hx-target="#mail" hx-swap="outerHTML">{ T(ctx, "mail.retry-all") }</button>
+			</div>
+		}
+		<table class="list mail-list">
+			<thead>
+				<tr>
+					<th>
+						if m.Folder == FolderInbox {
+							{ T(ctx, "mail.from") }
+						} else {
+							{ T(ctx, "mail.to") }
+						}
+					</th>
+					<th>{ T(ctx, "mail.subject") }</th>
+					<th>
+						if m.Folder == FolderOutbox {
+							{ T(ctx, "mail.next-try") }
+						} else {
+							{ T(ctx, "mail.date") }
+						}
+					</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, s := range m.List {
+					@mailRow(m, s)
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ mailRow(m Mail, s skymail.Summary) {
+	<tr class={ "row", templ.KV("unread", !s.Seen && m.Folder == FolderInbox) } hx-get={ MailURL(m.PK, "/message", "folder", m.Folder, "id", s.ID) } hx-target="#mail" hx-swap="outerHTML" tabindex="0">
+		<td class="mono small name">
+			if m.Folder == FolderInbox {
+				{ s.From }
+				if s.FromVerified {
+					<span class="ok" title={ T(ctx, "mail.verified") }>✓</span>
+				}
+			} else if s.Queue != nil && len(s.Queue.Pending) > 0 {
+				{ strings.Join(s.Queue.Pending, ", ") }
+			} else {
+				{ s.To }
+			}
+		</td>
+		<td data-label={ T(ctx, "mail.subject") }>
+			if s.Queue != nil && s.Queue.CarriedFor != "" {
+				<span class="dim">{ T(ctx, "mail.carried-for") }</span> <span class="mono">{ s.Queue.CarriedFor }</span>
+			} else if s.Subject != "" {
+				{ s.Subject }
+			} else {
+				<span class="dim">{ T(ctx, "mail.no-subject") }</span>
+			}
+		</td>
+		<td class="small" data-label={ T(ctx, "mail.date") } title={ queueErr(s.Queue) }>
+			if m.Folder == FolderOutbox && s.Queue != nil {
+				{ When(s.Queue.NextAttempt) } · { strconv.Itoa(s.Queue.Attempts) } { tries(ctx, s.Queue.Attempts) }
+				if len(s.Queue.Parked) > 0 {
+					· { T(ctx, "mail.parked") }
+				}
+			} else {
+				{ When(s.Date) }
+			}
+		</td>
+	</tr>
+}
+
+func queueErr(q *skymail.Queued) string {
+	if q == nil {
+		return ""
+	}
+	return q.LastError
+}
+
+func tries(ctx context.Context, n int) string {
+	if n == 1 {
+		return T(ctx, "mail.try")
+	}
+	return T(ctx, "mail.tries")
+}
+
+templ mailMessage(m Mail) {
+	<article class="mail-msg">
+		if q := m.Queue; q != nil && q.CarriedFor != "" {
+			<h2>{ T(ctx, "mail.sealed-title") }</h2>
+		} else if msg := m.Msg; msg != nil {
+			<h2>
+				if msg.Subject != "" {
+					{ msg.Subject }
+				} else {
+					{ T(ctx, "mail.no-subject") }
+				}
+			</h2>
+			<dl class="kv small">
+				<dt>{ T(ctx, "mail.from") }</dt>
+				<dd class="mono">
+					{ msg.From }
+					if msg.Verified {
+						<span class="ok">✓ { T(ctx, "mail.verified") }</span>
+					}
+				</dd>
+				if msg.RelayPK != "" {
+					<dt>{ T(ctx, "mail.relayed-by") }</dt>
+					<dd class="mono">{ msg.RelayPK }</dd>
+				}
+				<dt>{ T(ctx, "mail.to") }</dt>
+				<dd class="mono">{ msg.To }</dd>
+				if msg.Cc != "" {
+					<dt>Cc</dt>
+					<dd class="mono">{ msg.Cc }</dd>
+				}
+				<dt>{ T(ctx, "mail.date") }</dt>
+				<dd>{ msg.Date }</dd>
+			</dl>
+		}
+		if q := m.Queue; q != nil && m.Folder == FolderOutbox {
+			<div class="small mail-queue">
+				<div>{ T(ctx, "mail.waiting-for") } <span class="mono">{ strings.Join(q.Pending, ", ") }</span></div>
+				<div class="dim">
+					{ T(ctx, "mail.tries-so-far") } { strconv.Itoa(q.Attempts) } · { T(ctx, "mail.next-try") } { When(q.NextAttempt) }
+					if !q.GiveUp.IsZero() {
+						· { T(ctx, "mail.gives-up") } { When(q.GiveUp) }
+					}
+				</div>
+				if len(q.Handed) > 0 {
+					<div class="dim">{ T(ctx, "mail.handed-to") } <span class="mono">{ strings.Join(q.Handed, ", ") }</span></div>
+				}
+				if len(q.Parked) > 0 {
+					<div class="dim">{ T(ctx, "mail.parked-for") } <span class="mono">{ strings.Join(q.Parked, ", ") }</span></div>
+				}
+				if q.CarriedFor != "" {
+					<div class="dim">{ T(ctx, "mail.carried-note") } <span class="mono">{ q.CarriedFor }</span></div>
+				}
+				@ErrorBox(q.LastError)
+			</div>
+		}
+		if msg := m.Msg; msg != nil && (m.Queue == nil || m.Queue.CarriedFor == "") {
+			if msg.FromHTML {
+				<p class="small dim">{ T(ctx, "mail.from-html") }</p>
+			}
+			<pre class="mail-body">{ msg.Text }</pre>
+			if len(msg.Attachments) > 0 {
+				<div class="small bar">
+					<span class="dim">{ T(ctx, "mail.attachments") }</span>
+					for i, a := range msg.Attachments {
+						<a class="btn sm" href={ templ.URL(MailAPI(m.PK, m.Folder, m.MsgID, "/attachments/"+strconv.Itoa(i))) } download>{ a.Name } ({ Size(int64(a.Size)) })</a>
+					}
+				</div>
+			}
+		}
+		<div class="bar">
+			if m.Folder == FolderOutbox {
+				<button class="btn" type="button" hx-post={ MailURL(m.PK, "/retry", "folder", m.Folder, "id", m.MsgID) } hx-target="#mail" hx-swap="outerHTML">{ T(ctx, "mail.retry") }</button>
+			} else if m.Msg != nil {
+				<button class="btn" type="button" hx-get={ MailURL(m.PK, "/compose", "folder", m.Folder, "reply", m.MsgID) } hx-target="#mail" hx-swap="outerHTML">{ T(ctx, "mail.reply") }</button>
+			}
+			<a class="btn" href={ templ.URL(MailAPI(m.PK, m.Folder, m.MsgID, "/raw")) } download>{ T(ctx, "mail.raw") }</a>
+			<span class="spacer"></span>
+			<button class="btn warn" type="button" hx-delete={ MailURL(m.PK, "/message", "folder", m.Folder, "id", m.MsgID) } hx-confirm={ deleteQuestion(ctx, m.Folder) } hx-target="#mail" hx-swap="outerHTML">
+				if m.Folder == FolderOutbox {
+					{ T(ctx, "mail.cancel-delivery") }
+				} else {
+					{ T(ctx, "mail.delete") }
+				}
+			</button>
+		</div>
+	</article>
+}
+
+func deleteQuestion(ctx context.Context, folder string) string {
+	if folder == FolderOutbox {
+		return T(ctx, "ui2.mail.cancel-confirm")
+	}
+	return T(ctx, "ui2.mail.delete-confirm")
+}
+
+templ mailCompose(m Mail) {
+	<form class="form" hx-post={ MailURL(m.PK, "/send") } hx-encoding="multipart/form-data" hx-target="#mail" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]">
+		<input type="hidden" name="in_reply_to" value={ m.Draft.InReplyTo }/>
+		<label>{ T(ctx, "mail.to") }<input class="mono" name="to" value={ m.Draft.To } placeholder="anyone@<pk>.skynet" required/></label>
+		<label>Cc<input class="mono" name="cc" value={ m.Draft.Cc }/></label>
+		<label>{ T(ctx, "mail.subject") }<input name="subject" value={ m.Draft.Subject }/></label>
+		<textarea name="body" rows="12">{ "\n" + m.Draft.Body }</textarea>
+		<label class="small">{ T(ctx, "mail.attachments") }<input type="file" name="files" multiple/></label>
+		for _, r := range m.Report {
+			if r.Queued {
+				<div class="small" title={ r.Err }>{ r.Rcpt }: { T(ctx, "mail.queued") }</div>
+			} else if r.Err != "" {
+				<div class="small error">{ r.Rcpt }: { r.Err }</div>
+			} else {
+				<div class="small">{ r.Rcpt }: { T(ctx, "mail.delivered-via") } { r.Via }</div>
+			}
+		}
+		<div class="bar">
+			<button class="btn primary" type="submit">
+				<span class="when-idle">{ T(ctx, "mail.send") }</span>
+				<span class="when-busy">{ T(ctx, "mail.sending") }</span>
+			</button>
+		</div>
+	</form>
+}
+
+templ mailSettings(m Mail) {
+	if s := m.Status; s != nil {
+		<div class="form">
+			<div class="bar">
+				<button class="btn" type="button" hx-post={ MailURL(m.PK, "/enable", "on", onOff(!s.Enabled)) } hx-target="#mail" hx-swap="outerHTML">
+					if s.Enabled {
+						{ T(ctx, "mail.turn-off") }
+					} else {
+						{ T(ctx, "mail.turn-on") }
+					}
+				</button>
+				<span class="small dim">
+					{ T(ctx, "mail.usage") } { Size(s.Usage) }
+					if s.Limits.MaxTotalSize > 0 {
+						/ { Size(s.Limits.MaxTotalSize) }
+					}
+				</span>
+			</div>
+			<form class="form" hx-post={ MailURL(m.PK, "/whitelist") } hx-target="#mail" hx-swap="outerHTML">
+				<label class="small">{ T(ctx, "mail.whitelist") }<textarea class="mono" name="pks" rows="5">{ PKLines(s.Whitelist) }</textarea></label>
+				<p class="small dim">{ T(ctx, "mail.whitelist-help") }</p>
+				<div class="bar"><button class="btn" type="submit">{ T(ctx, "mail.save") }</button></div>
+			</form>
+			if s.HasOutbox {
+				<form class="form" hx-post={ MailURL(m.PK, "/helpers") } hx-target="#mail" hx-swap="outerHTML">
+					<label class="small">{ T(ctx, "mail.helpers") }<textarea class="mono" name="helpers" rows="3" placeholder={ T(ctx, "mail.helpers-default") }>{ ListText(s.Helpers, s.HelpersDefault) }</textarea></label>
+					<label class="small">{ T(ctx, "mail.relay-for") }<textarea class="mono" name="relay_for" rows="3" placeholder={ T(ctx, "mail.relay-for-default") }>{ ListText(s.RelayFor, s.RelayForDefault) }</textarea></label>
+					<p class="small dim">{ T(ctx, "mail.helpers-help") }</p>
+					<div class="bar"><button class="btn" type="submit">{ T(ctx, "mail.save") }</button></div>
+				</form>
+			}
+		</div>
+	}
+}
+
+func onOff(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}

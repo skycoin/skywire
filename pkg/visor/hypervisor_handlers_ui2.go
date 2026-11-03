@@ -56,6 +56,11 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		hv.ui2AppsRoutes(r)
 		hv.ui2TransportsRoutes(r)
 		hv.ui2RoutingRoutes(r)
+		hv.ui2LogsRoutes(r)
+		hv.ui2MailRoutes(r)
+		hv.ui2ChatRoutes(r)
+		hv.ui2TerminalRoutes(r)
+		hv.ui2WalletRoutes(r)
 	})
 	// Without this an unknown /ui2 path would fall through to the Angular UI.
 	r.HandleFunc("/ui2/{rest...}", http.NotFound)
@@ -109,7 +114,7 @@ func (hv *Hypervisor) ui2Auth(next http.Handler) http.Handler {
 
 // ui2Ctx is the request context with the page settings the templates read.
 func (hv *Hypervisor) ui2Ctx(r *http.Request) context.Context {
-	p := ui2.Page{Base: ui2.BaseFor(r.URL.Path), HVPK: hv.c.PK.Hex()}
+	p := ui2.Page{Base: ui2.BaseFor(r.URL.Path), HVPK: hv.c.PK.Hex(), TPViz: hv.tpvizServer != nil}
 	p.Auth = hv.c.EnableAuth && hv.users != nil && hv.users.HasSession(r)
 	var lang string
 	if c, err := r.Cookie(ui2.LangCookie); err == nil {

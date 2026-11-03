@@ -1,0 +1,106 @@
+package ui2
+
+import "strconv"
+
+// LogsPage is the runtime log viewer.
+templ LogsPage(l Logs) {
+	@VisorLayout(l.PK, "logs") {
+		<form class="logs-controls" hx-get={ "ui2/visors/" + l.PK + "/logs/list" } hx-target="#logbody" hx-swap="outerHTML" hx-trigger="change, input changed delay:300ms from:input">
+			<label class="logs-row">
+				<span class="dim">{ T(ctx, "logs.filter") }</span>
+				<select name="level">
+					for _, lv := range LogLevels {
+						<option value={ strconv.Itoa(int(lv.Level)) } selected?={ lv.Level == l.Filter.MinLevel }>{ lv.Label }</option>
+					}
+				</select>
+			</label>
+			<label class="logs-row">
+				<span class="dim">{ T(ctx, "logs.module") }</span>
+				<input name="module" value={ l.Filter.Module } placeholder={ T(ctx, "logs.module-placeholder") } spellcheck="false" autocomplete="off"/>
+			</label>
+			<label class="logs-row">
+				<span class="dim">{ T(ctx, "logs.search") }</span>
+				<input type="search" name="q" value={ l.Filter.Text } placeholder={ T(ctx, "logs.search-placeholder") } spellcheck="false" autocomplete="off"/>
+			</label>
+			<a class="btn sm" href={ templ.URL("api/visors/" + l.PK + "/runtime-logs") } target="_blank" rel="noreferrer"><span class="mi">open_in_new</span>{ T(ctx, "logs.open-raw") }</a>
+		</form>
+		@LogBody(l)
+	}
+}
+
+// LogBody is the list and its poller, swapped whole when a filter changes.
+templ LogBody(l Logs) {
+	<div id="logbody">
+		@ErrorBox(l.Err)
+		<div class="bar">
+			if l.Filter.Paused {
+				<button class="btn sm" type="button" hx-get={ "ui2/visors/" + l.PK + "/logs/list" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">play_arrow</span>{ T(ctx, "logs.resume") }</button>
+			} else {
+				<button class="btn sm primary" type="button" hx-get={ "ui2/visors/" + l.PK + "/logs/list?paused=1" } hx-include=".logs-controls" hx-target="#logbody" hx-swap="outerHTML"><span class="mi">pause</span>{ T(ctx, "logs.pause") }</button>
+			}
+			@logDropped(l.Dropped, false)
+		</div>
+		if l.More {
+			<p class="small"><a href={ templ.URL("api/visors/" + l.PK + "/runtime-logs") } target="_blank" rel="noreferrer">{ T(ctx, "logs.view-rest", "number", strconv.FormatInt(l.Total, 10)) }</a></p>
+		}
+		if len(l.Entries) == 0 && l.Err == "" {
+			<p class="dim" id="logempty">{ T(ctx, "logs.empty") }</p>
+		}
+		<div id="loglist" class="loglist mono small" data-follow data-max-children={ strconv.Itoa(LogMax) }>
+			for _, e := range l.Entries {
+				@logEntry(e)
+			}
+		</div>
+		@logPoll(l)
+	</div>
+}
+
+// LogMore is one poll: the new entries, appended out of band, and the next
+// poller.
+templ LogMore(l Logs) {
+	@logPoll(l)
+	if len(l.Entries) > 0 {
+		<div hx-swap-oob="beforeend:#loglist">
+			for _, e := range l.Entries {
+				@logEntry(e)
+			}
+		</div>
+		<p id="logempty" hx-swap-oob="delete"></p>
+	}
+	if l.Dropped > 0 {
+		@logDropped(l.Dropped, true)
+	}
+}
+
+templ logPoll(l Logs) {
+	if l.Filter.Paused {
+		<span id="logpoll"></span>
+	} else {
+		<span id="logpoll" hx-get={ l.url("/more", "since", strconv.FormatInt(l.Cursor, 10), "dropped", strconv.FormatInt(l.Dropped, 10)) } hx-trigger="every 2s [document.visibilityState === 'visible']" hx-swap="outerHTML"></span>
+	}
+}
+
+templ logDropped(n int64, oob bool) {
+	<span id="logdropped" class="small warn-text" hx-swap-oob?={ oob }>
+		if n > 0 {
+			<span class="mi">history</span> { T(ctx, "logs.dropped", "count", strconv.FormatInt(n, 10)) }
+		}
+	</span>
+}
+
+templ logEntry(e LogEntry) {
+	<div class="log-entry">
+		<span class="dim">{ e.Time }</span>
+		<span class={ "lv", e.LevelClass() }>{ e.LevelName() }</span>
+		if e.Module != "" {
+			<span class="dim">[{ e.Module }]</span>
+		}
+		if e.Func != "" {
+			<span class="dim">{ e.Func }</span>
+		}
+		<span class="msg">{ e.Msg }</span>
+		for _, kv := range e.Extra {
+			<span class="dim">{ kv.Name }={ kv.Value }</span>
+		}
+	</div>
+}
