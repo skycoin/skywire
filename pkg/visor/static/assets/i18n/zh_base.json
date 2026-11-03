@@ -1,6 +1,7 @@
 {
   "common": {
     "open-full-page": "Open full page",
+    "change-parked": "The visor is offline. The change will apply when it is back.",
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",

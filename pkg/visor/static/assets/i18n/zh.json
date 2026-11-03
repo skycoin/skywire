@@ -1,6 +1,7 @@
 {
   "common": {
     "open-full-page": "打开完整页面",
+    "change-parked": "该 visor 当前离线。更改将在其重新上线后生效。",
     "save": "保存",
     "cancel": "取消",
     "loading": "加载中…",
