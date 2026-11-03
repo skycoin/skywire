@@ -251,6 +251,10 @@ skychat starts and every 2 minutes, handles each message like a frame from a
 live conn from its signer, and removes it from the host. A message whose id is
 already in the conversation's history is only removed.
 
+A call that ends with the dial state `offline` is parked for the callee as a
+chat message with the missed-call text and the id `call-` plus the call id, so
+the callee's call log shows it.
+
 ### Skychat groups
 
 A join request that reaches no admin of the invite is parked on port 8060

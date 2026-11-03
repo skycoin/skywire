@@ -334,3 +334,34 @@ func TestController_SendRawAcked(t *testing.T) {
 		t.Errorf("without a parker: parked=%v err=%v, want the send error", parked, err)
 	}
 }
+
+// ParkText parks without a network attempt and without an outgoing record.
+func TestController_ParkText(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	box := newInbox(t)
+	recA, recB := &recorder{}, &recorder{}
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recA.on, Parker: inboxParker{box, pkA}})
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on, Store: boltStore(t), Parker: inboxParker{box, pkB}})
+	for _, c := range []*Controller{ctrlA, ctrlB} {
+		if err := c.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() }) //nolint:errcheck
+	}
+	for range 2 {
+		if !ctrlA.ParkText(context.Background(), pkB, "missed", "call-1") {
+			t.Fatal("ParkText did not park")
+		}
+	}
+	if n := box.count(pkB); n != 1 {
+		t.Fatalf("inbox holds %d, want 1", n)
+	}
+	if n := ctrlB.Unpark(context.Background()); n != 1 {
+		t.Fatalf("Unpark filed %d, want 1", n)
+	}
+	waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.ID == "call-1" && e.Text == "missed" })
+	if e, ok := recA.find(func(e Event) bool { return e.Dir == "out" }); ok {
+		t.Errorf("ParkText recorded %+v", e)
+	}
+}

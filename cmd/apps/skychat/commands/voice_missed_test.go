@@ -267,3 +267,29 @@ func TestUnansweredRecordRoundTrips(t *testing.T) {
 		t.Fatalf("parsed %+v (ok=%v), want an outgoing %s", rec, ok, callUnanswered)
 	}
 }
+
+// A call that never reached its peer is parked for the peer as a missed call.
+// One that rang out was logged there already.
+func TestOfflineCallIsParkedForThePeer(t *testing.T) {
+	var parked []string
+	orig := parkMissedCall
+	parkMissedCall = func(peer, callID string) { parked = append(parked, peer+"/"+callID) }
+	t.Cleanup(func() { parkMissedCall = orig })
+
+	seen := map[string]*callWatch{}
+	pollDialAt(seen, nil, nil, dial("connecting"), time.Now())
+	pollDialAt(seen, nil, nil, dial("offline"), time.Now())
+	pollDialAt(seen, nil, nil, nil, time.Now())
+	if len(parked) != 1 || parked[0] != bob+"/c1" {
+		t.Fatalf("parked %v, want the call for %s", parked, bob)
+	}
+
+	parked = nil
+	seen = map[string]*callWatch{}
+	pollDialAt(seen, nil, nil, dial("ringing"), time.Now())
+	pollDialAt(seen, nil, nil, dial("no_answer"), time.Now())
+	pollDialAt(seen, nil, nil, nil, time.Now())
+	if len(parked) != 0 {
+		t.Fatalf("parked %v for a call that rang", parked)
+	}
+}

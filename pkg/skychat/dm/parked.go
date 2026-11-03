@@ -215,3 +215,15 @@ func (c *Controller) SendRawAcked(ctx context.Context, pk cipher.PubKey, payload
 	}
 	return false, err
 }
+
+// ParkText leaves a chat message with text and id for pk without trying a
+// network first, and without recording it here. It reports whether it parked.
+func (c *Controller) ParkText(ctx context.Context, pk cipher.PubKey, text, id string) bool {
+	env := message.Envelope{Type: message.TypeMsg, ID: id, Body: text}
+	wire, err := env.Marshal()
+	if err != nil {
+		return false
+	}
+	_, ok := c.park(ctx, pk, wire, id)
+	return ok
+}
