@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
 	"github.com/skycoin/skywire/pkg/logging"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -172,5 +173,54 @@ func TestDmsgAsyncRecordNamesOnlyRegisteredHosts(t *testing.T) {
 		} else {
 			require.Empty(t, h.Error)
 		}
+	}
+}
+
+// A group frame parked by one visor reaches the other's handler with the
+// sender's key, and only the recipient can open it.
+func TestGroupParkWiring(t *testing.T) {
+	env := dmsgtest.NewEnv(t, 10*time.Second)
+	require.NoError(t, env.Startup(0, 1, 3, &dmsg.Config{MinSessions: 1}))
+	t.Cleanup(env.Shutdown)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cs := env.AllClients()
+	hostC, rcptC, senderC := cs[0], cs[1], cs[2]
+	on, off := true, false
+	_ = asyncVisor(t, ctx, hostC, &visorconfig.DmsgAsyncConfig{Host: visorconfig.DmsgAsyncHostConfig{
+		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{rcptC.LocalPK()},
+	}})
+	rcpt := asyncVisor(t, ctx, rcptC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hostC.LocalPK())
+	sender := asyncVisor(t, ctx, senderC, nil)
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	st, err := rcpt.DmsgAsyncStatus()
+	require.NoError(t, err)
+	sender.async.mu.Lock()
+	sender.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
+	sender.async.mu.Unlock()
+
+	type frame struct {
+		from    cipher.PubKey
+		payload []byte
+	}
+	got := make(chan frame, 1)
+	rcpt.AsyncHandle(skychatgroup.ParkPort, rcpt.groupParkHandler(func(from cipher.PubKey, p []byte, _ time.Time) error {
+		got <- frame{from, p}
+		return nil
+	}))
+	require.NoError(t, sender.groupParker(rcptC.LocalPK(), []byte(`{"kind":"x"}`)))
+
+	held, err := rcpt.asyncPeek([]uint16{skychatgroup.ParkPort})
+	require.NoError(t, err)
+	require.Len(t, held, 1)
+	require.NotContains(t, string(held[0].Payload), `"kind"`, "the host must hold it sealed")
+
+	require.NoError(t, rcpt.DmsgAsyncSync())
+	select {
+	case f := <-got:
+		require.Equal(t, senderC.LocalPK(), f.from)
+		require.Equal(t, `{"kind":"x"}`, string(f.payload))
+	default:
+		t.Fatal("the handler did not get the frame")
 	}
 }
