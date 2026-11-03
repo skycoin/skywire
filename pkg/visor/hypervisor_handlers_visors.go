@@ -636,213 +636,160 @@ func (hv *Hypervisor) getRewardRules() http.HandlerFunc {
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get DMSG stats first (uses its own lock internally)
-		dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
-		for _, stat := range hv.getDmsgSummary() {
-			dmsgStats[stat.PK.String()] = stat
-		}
+		compact := hv.allVisorSummaries()
+		hv.writeStreamedJSON(w, r, compact, func(w io.Writer) error { return writeJSONArray(w, compact) })
+	}
+}
 
-		// Snapshot remote visors under lock, then release immediately
-		hv.mu.RLock()
-		type visorEntry struct {
-			pk   cipher.PubKey
-			conn Conn
-		}
-		remotes := make([]visorEntry, 0, len(hv.remoteVisors))
-		for pk, c := range hv.remoteVisors {
-			remotes = append(remotes, visorEntry{pk, c})
-		}
-		hv.mu.RUnlock()
+// allVisorSummaries is the node list: this visor and every visor connected
+// or cached, with the per-transport detail compacted.
+func (hv *Hypervisor) allVisorSummaries() []visorapi.Summary {
+	// Get DMSG stats first (uses its own lock internally)
+	dmsgStats := make(map[string]dmsgtracker.DmsgClientSummary)
+	for _, stat := range hv.getDmsgSummary() {
+		dmsgStats[stat.PK.String()] = stat
+	}
 
-		summaries := make([]visorapi.Summary, 0, len(remotes)+1)
+	// Snapshot remote visors under lock, then release immediately
+	hv.mu.RLock()
+	type visorEntry struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]visorEntry, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, visorEntry{pk, c})
+	}
+	hv.mu.RUnlock()
 
-		// Local visor summary
-		summary, err := hv.visor.Summary()
-		if err != nil {
-			hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
-			summary = &visorapi.Summary{
-				Overview: &visorapi.Overview{PubKey: hv.visor.conf.PK},
-				Health:   &visorapi.HealthInfo{},
+	summaries := make([]visorapi.Summary, 0, len(remotes)+1)
+
+	// Local visor summary
+	summary, err := hv.visor.Summary()
+	if err != nil {
+		hv.logger.WithError(err).Warn("Failed to obtain summary of this visor.")
+		summary = &visorapi.Summary{
+			Overview: &visorapi.Overview{PubKey: hv.visor.conf.PK},
+			Health:   &visorapi.HealthInfo{},
+		}
+	}
+	summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
+
+	// Remote visor summaries with per-visor timeout. The 5s outer
+	// cap keeps the UI snappy; cache update + eviction live in
+	// the inner Summary goroutine so completions that arrive
+	// after the outer fired still land — without this, an RPC
+	// that consistently took 6–20s would never refresh the cache
+	// and the visor would render permanently stale.
+	var mu sync.Mutex
+	// deadVisors accumulates PKs that errored Summary inside the
+	// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
+	// the eviction can't race with the poll goroutines still
+	// reading their captured Conn copies. The failed conn's API is
+	// kept alongside the PK so eviction can verify the map still
+	// holds the SAME conn: a peer that re-registered between our
+	// snapshot and wg.Wait (restart churn does this constantly)
+	// must not have its FRESH conn deleted for the old conn's sins.
+	type deadVisor struct {
+		pk  cipher.PubKey
+		api visorapi.API
+	}
+	var deadVisors []deadVisor
+	wg := new(sync.WaitGroup)
+	wg.Add(len(remotes))
+
+	// Visors whose cache was refreshed within this freshness
+	// window count as "live" even if THIS round's Summary RPC
+	// timed out at the 5s outer cap — they're slow, not broken.
+	// 3 minutes covers the 2-minute dmsg.StreamIdleTimeout
+	// (pkg/dmsg/dmsg/types.go) plus a generous slack for the
+	// peer-side redial → hypervisor-accept → next-poll cycle.
+	// Without this, a peer whose stream just idle-closed shows
+	// "last seen 2-3min ago" in the UI for one or two polls
+	// before the new conn's first Summary lands — visible
+	// flicker that operators flag as "nodes are stale". 30s
+	// (the original value) caught only inline RPC slowness
+	// and missed the steady-state 2-min idle pattern entirely.
+	// (cacheFreshWindow is now a package const — see hypervisor.go.)
+
+	for _, entry := range remotes {
+		go func(pk cipher.PubKey, c Conn) {
+			defer wg.Done()
+
+			type rpcResult struct {
+				sum    *visorapi.Summary
+				rpcErr error
 			}
-		}
-		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
-
-		// Remote visor summaries with per-visor timeout. The 5s outer
-		// cap keeps the UI snappy; cache update + eviction live in
-		// the inner Summary goroutine so completions that arrive
-		// after the outer fired still land — without this, an RPC
-		// that consistently took 6–20s would never refresh the cache
-		// and the visor would render permanently stale.
-		var mu sync.Mutex
-		// deadVisors accumulates PKs that errored Summary inside the
-		// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
-		// the eviction can't race with the poll goroutines still
-		// reading their captured Conn copies. The failed conn's API is
-		// kept alongside the PK so eviction can verify the map still
-		// holds the SAME conn: a peer that re-registered between our
-		// snapshot and wg.Wait (restart churn does this constantly)
-		// must not have its FRESH conn deleted for the old conn's sins.
-		type deadVisor struct {
-			pk  cipher.PubKey
-			api visorapi.API
-		}
-		var deadVisors []deadVisor
-		wg := new(sync.WaitGroup)
-		wg.Add(len(remotes))
-
-		// Visors whose cache was refreshed within this freshness
-		// window count as "live" even if THIS round's Summary RPC
-		// timed out at the 5s outer cap — they're slow, not broken.
-		// 3 minutes covers the 2-minute dmsg.StreamIdleTimeout
-		// (pkg/dmsg/dmsg/types.go) plus a generous slack for the
-		// peer-side redial → hypervisor-accept → next-poll cycle.
-		// Without this, a peer whose stream just idle-closed shows
-		// "last seen 2-3min ago" in the UI for one or two polls
-		// before the new conn's first Summary lands — visible
-		// flicker that operators flag as "nodes are stale". 30s
-		// (the original value) caught only inline RPC slowness
-		// and missed the steady-state 2-min idle pattern entirely.
-		// (cacheFreshWindow is now a package const — see hypervisor.go.)
-
-		for _, entry := range remotes {
-			go func(pk cipher.PubKey, c Conn) {
-				defer wg.Done()
-
-				type rpcResult struct {
-					sum    *visorapi.Summary
-					rpcErr error
+			resultCh := make(chan rpcResult, 1)
+			go func() {
+				s, e := c.API.Summary()
+				if e == nil && s != nil {
+					// Cache the success here (not in the outer
+					// select arm) so completions that arrive
+					// after the 5s outer timeout still refresh
+					// the cache for the next poll round. This
+					// is the load-bearing half of #2842: slow
+					// peers stay current in cache instead of
+					// rotting to "last seen at" forever.
+					now := time.Now().UTC()
+					cached := *s
+					hv.summaryCacheMx.Lock()
+					hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+					hv.summaryCacheMx.Unlock()
 				}
-				resultCh := make(chan rpcResult, 1)
-				go func() {
-					s, e := c.API.Summary()
-					if e == nil && s != nil {
-						// Cache the success here (not in the outer
-						// select arm) so completions that arrive
-						// after the 5s outer timeout still refresh
-						// the cache for the next poll round. This
-						// is the load-bearing half of #2842: slow
-						// peers stay current in cache instead of
-						// rotting to "last seen at" forever.
-						now := time.Now().UTC()
-						cached := *s
-						hv.summaryCacheMx.Lock()
-						hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
-						hv.summaryCacheMx.Unlock()
-					}
-					resultCh <- rpcResult{s, e}
-				}()
+				resultCh <- rpcResult{s, e}
+			}()
 
-				select {
-				case r := <-resultCh:
-					if r.rpcErr == nil {
-						now := time.Now().UTC()
-						resp := makeSummaryResp(true, false, r.sum)
-						resp.LastSeenAt = &now
-						mu.Lock()
-						summaries = append(summaries, resp)
-						mu.Unlock()
-						return
-					}
-					// Inline-arm RPC failure: peer's conn errored
-					// inside the 5s outer budget — that's a strong
-					// signal the underlying stream is broken. Queue
-					// for eviction (deadVisors → mu/deadMu pattern
-					// below). NOTE we intentionally do NOT evict
-					// from inside the inner goroutine when it
-					// returns past the 5s mark: that double-arm
-					// eviction (which earlier iterations of #2842
-					// did) kicked out peers whose Summary was
-					// merely slow (dmsg jitter, route flap, transient
-					// load) and forced redial-and-re-register on
-					// every poll round, surfacing the flicker
-					// operators reported as "things were instant a
-					// week ago, now nodes appear slowly and some
-					// flicker to last-seen-at." Outer-arm-only
-					// eviction matches the pre-#2842 behavior;
-					// the cache update above still recovers slow
-					// peers' state for the next round.
-					hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+			select {
+			case r := <-resultCh:
+				if r.rpcErr == nil {
+					now := time.Now().UTC()
+					resp := makeSummaryResp(true, false, r.sum)
+					resp.LastSeenAt = &now
 					mu.Lock()
-					deadVisors = append(deadVisors, deadVisor{pk: pk, api: c.API})
+					summaries = append(summaries, resp)
 					mu.Unlock()
-				case <-time.After(5 * time.Second):
-					hv.logger.WithField("pk", pk).
-						Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
-				}
-
-				// Live fetch didn't return success in time — try the cache.
-				hv.summaryCacheMx.RLock()
-				cached, ok := hv.summaryCache[pk]
-				hv.summaryCacheMx.RUnlock()
-				if !ok {
 					return
 				}
-				stale := *cached.sum
-				// A recent cache hit means a previous round (or this
-				// round's background completion) just updated us —
-				// the visor's RPCs are merely slow, not dead. Surface
-				// it as online so the UI doesn't flap on slow peers.
-				fresh := time.Since(cached.seenAt) < cacheFreshWindow
-				seenAt := cached.seenAt
-				resp := makeSummaryResp(fresh, false, &stale)
-				resp.LastSeenAt = &seenAt
-				if !fresh {
-					offlineSince := time.Now().UTC()
-					resp.OfflineSince = &offlineSince
-				}
+				// Inline-arm RPC failure: peer's conn errored
+				// inside the 5s outer budget — that's a strong
+				// signal the underlying stream is broken. Queue
+				// for eviction (deadVisors → mu/deadMu pattern
+				// below). NOTE we intentionally do NOT evict
+				// from inside the inner goroutine when it
+				// returns past the 5s mark: that double-arm
+				// eviction (which earlier iterations of #2842
+				// did) kicked out peers whose Summary was
+				// merely slow (dmsg jitter, route flap, transient
+				// load) and forced redial-and-re-register on
+				// every poll round, surfacing the flicker
+				// operators reported as "things were instant a
+				// week ago, now nodes appear slowly and some
+				// flicker to last-seen-at." Outer-arm-only
+				// eviction matches the pre-#2842 behavior;
+				// the cache update above still recovers slow
+				// peers' state for the next round.
+				hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
 				mu.Lock()
-				summaries = append(summaries, resp)
+				deadVisors = append(deadVisors, deadVisor{pk: pk, api: c.API})
 				mu.Unlock()
-			}(entry.pk, entry.conn)
-		}
-		wg.Wait()
-
-		// Now that all goroutines have stopped reading their captured
-		// Conn entries, it's safe to delete the broken ones from
-		// remoteVisors. The peer's hypervisor_client will redial and
-		// the accept loop will re-register a fresh Conn — the cache
-		// keeps the row visible (as offline/stale) in the meantime
-		// via the sweep branch below.
-		if len(deadVisors) > 0 {
-			hv.mu.Lock()
-			for _, d := range deadVisors {
-				// Identity check: evict only if the entry is still the
-				// conn that failed. A differing API means the peer
-				// re-registered mid-poll and the new conn is innocent.
-				if cur, ok := hv.remoteVisors[d.pk]; ok && cur.API == d.api {
-					delete(hv.remoteVisors, d.pk)
-				}
+			case <-time.After(5 * time.Second):
+				hv.logger.WithField("pk", pk).
+					Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
 			}
-			hv.mu.Unlock()
-		}
 
-		// Surface stale cache rows for PKs that didn't make it into
-		// summaries this round. The above loop only consults the cache
-		// for visors still present in remoteVisors at fetch time, so
-		// once a visor's been cleaned up after its first transient RPC
-		// failure, subsequent refreshes would drop the row entirely —
-		// operators saw nodes disappearing from the list rather than
-		// staying as offline. Sweeping the cache here makes the offline
-		// state durable across cleanups; rows reappear as live when the
-		// visor reconnects and the cache is overwritten with fresh data.
-		rendered := make(map[cipher.PubKey]struct{}, len(summaries))
-		for _, s := range summaries {
-			if s.Overview != nil {
-				rendered[s.Overview.PubKey] = struct{}{}
-			}
-		}
-		hv.summaryCacheMx.RLock()
-		for pk, cached := range hv.summaryCache {
-			if _, already := rendered[pk]; already {
-				continue
+			// Live fetch didn't return success in time — try the cache.
+			hv.summaryCacheMx.RLock()
+			cached, ok := hv.summaryCache[pk]
+			hv.summaryCacheMx.RUnlock()
+			if !ok {
+				return
 			}
 			stale := *cached.sum
-			// Same freshness window as the in-remoteVisors fallback
-			// path above: a peer that was just Summary'd N seconds
-			// ago (within the dmsg stream-idle cycle) hasn't been
-			// disconnected long enough to render as offline. Once
-			// outside the window the row keeps showing "last seen
-			// at" with offline_since stamped.
+			// A recent cache hit means a previous round (or this
+			// round's background completion) just updated us —
+			// the visor's RPCs are merely slow, not dead. Surface
+			// it as online so the UI doesn't flap on slow peers.
 			fresh := time.Since(cached.seenAt) < cacheFreshWindow
 			seenAt := cached.seenAt
 			resp := makeSummaryResp(fresh, false, &stale)
@@ -851,18 +798,77 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				offlineSince := time.Now().UTC()
 				resp.OfflineSince = &offlineSince
 			}
+			mu.Lock()
 			summaries = append(summaries, resp)
-		}
-		hv.summaryCacheMx.RUnlock()
+			mu.Unlock()
+		}(entry.pk, entry.conn)
+	}
+	wg.Wait()
 
-		// Attach DMSG stats
-		for i := 0; i < len(summaries); i++ {
-			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
-				summaries[i].DmsgStats = &stat
+	// Now that all goroutines have stopped reading their captured
+	// Conn entries, it's safe to delete the broken ones from
+	// remoteVisors. The peer's hypervisor_client will redial and
+	// the accept loop will re-register a fresh Conn — the cache
+	// keeps the row visible (as offline/stale) in the meantime
+	// via the sweep branch below.
+	if len(deadVisors) > 0 {
+		hv.mu.Lock()
+		for _, d := range deadVisors {
+			// Identity check: evict only if the entry is still the
+			// conn that failed. A differing API means the peer
+			// re-registered mid-poll and the new conn is innocent.
+			if cur, ok := hv.remoteVisors[d.pk]; ok && cur.API == d.api {
+				delete(hv.remoteVisors, d.pk)
 			}
 		}
-
-		compact := compactSummaryTransports(summaries)
-		hv.writeStreamedJSON(w, r, compact, func(w io.Writer) error { return writeJSONArray(w, compact) })
+		hv.mu.Unlock()
 	}
+
+	// Surface stale cache rows for PKs that didn't make it into
+	// summaries this round. The above loop only consults the cache
+	// for visors still present in remoteVisors at fetch time, so
+	// once a visor's been cleaned up after its first transient RPC
+	// failure, subsequent refreshes would drop the row entirely —
+	// operators saw nodes disappearing from the list rather than
+	// staying as offline. Sweeping the cache here makes the offline
+	// state durable across cleanups; rows reappear as live when the
+	// visor reconnects and the cache is overwritten with fresh data.
+	rendered := make(map[cipher.PubKey]struct{}, len(summaries))
+	for _, s := range summaries {
+		if s.Overview != nil {
+			rendered[s.Overview.PubKey] = struct{}{}
+		}
+	}
+	hv.summaryCacheMx.RLock()
+	for pk, cached := range hv.summaryCache {
+		if _, already := rendered[pk]; already {
+			continue
+		}
+		stale := *cached.sum
+		// Same freshness window as the in-remoteVisors fallback
+		// path above: a peer that was just Summary'd N seconds
+		// ago (within the dmsg stream-idle cycle) hasn't been
+		// disconnected long enough to render as offline. Once
+		// outside the window the row keeps showing "last seen
+		// at" with offline_since stamped.
+		fresh := time.Since(cached.seenAt) < cacheFreshWindow
+		seenAt := cached.seenAt
+		resp := makeSummaryResp(fresh, false, &stale)
+		resp.LastSeenAt = &seenAt
+		if !fresh {
+			offlineSince := time.Now().UTC()
+			resp.OfflineSince = &offlineSince
+		}
+		summaries = append(summaries, resp)
+	}
+	hv.summaryCacheMx.RUnlock()
+
+	// Attach DMSG stats
+	for i := 0; i < len(summaries); i++ {
+		if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {
+			summaries[i].DmsgStats = &stat
+		}
+	}
+
+	return compactSummaryTransports(summaries)
 }

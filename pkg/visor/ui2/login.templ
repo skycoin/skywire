@@ -1,0 +1,57 @@
+package ui2
+
+// LoginPage logs in, or with create set makes the first account. It posts
+// as a plain form, so it works before any script has loaded.
+templ LoginPage(create bool, errMsg string) {
+	@Layout(T(ctx, "ui2.login"), "#/login") {
+		<section class="card narrow">
+			if create {
+				<h1>{ T(ctx, "ui2.create-account") }</h1>
+				<p class="small dim">{ T(ctx, "ui2.create-help") }</p>
+			} else {
+				<h1>{ T(ctx, "ui2.login") }</h1>
+			}
+			@ErrorBox(errMsg)
+			<form class="form" method="post" action="ui2/login">
+				<input type="hidden" name="create" value={ boolStr(create) }/>
+				<label>
+					{ T(ctx, "ui2.username") }
+					<input name="username" value="admin" autocomplete="username" required/>
+				</label>
+				<label>
+					{ T(ctx, "login.password") }
+					<input type="password" name="password" autocomplete={ pwAuto(create) } required autofocus/>
+				</label>
+				if create {
+					<label>
+						{ T(ctx, "ui2.password-confirm") }
+						<input type="password" name="confirm" autocomplete="new-password" required/>
+					</label>
+				}
+				<div class="bar">
+					<button class="btn primary" type="submit">
+						if create {
+							{ T(ctx, "ui2.create-account") }
+						} else {
+							{ T(ctx, "ui2.login") }
+						}
+					</button>
+				</div>
+			</form>
+		</section>
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "1"
+	}
+	return ""
+}
+
+func pwAuto(create bool) string {
+	if create {
+		return "new-password"
+	}
+	return "current-password"
+}

@@ -43,6 +43,7 @@ require (
 	github.com/AudriusButkevicius/pfilter v0.0.12
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/MichaelMure/go-term-markdown v0.1.4
+	github.com/a-h/templ v0.3.1070
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/bitfield/script v0.25.2
 	github.com/blang/semver/v4 v4.0.0

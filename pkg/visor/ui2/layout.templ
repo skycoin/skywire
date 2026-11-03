@@ -1,0 +1,117 @@
+package ui2
+
+// Layout is the whole document around a page. classic is the same page's
+// route in the Angular UI.
+templ Layout(title, classic string) {
+	<!DOCTYPE html>
+	<html lang={ From(ctx).Lang }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<base href={ From(ctx).Base }/>
+			<title>{ title } · Skywire</title>
+			<link rel="icon" type="image/png" href="assets/img/logo-s.png"/>
+			<script>try{var t=localStorage.getItem('hvui-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+			<link rel="stylesheet" href={ Asset("ui2.css") }/>
+			<script src={ Asset("htmx.min.js") } defer></script>
+			<script src={ Asset("ui2.js") } defer></script>
+		</head>
+		<body data-unreachable={ T(ctx, "ui2.unreachable") }>
+			<header class="top">
+				<a class="brand" href="ui2/">
+					<img src="assets/img/logo-s.png" alt="" width="24" height="24"/>
+					<span>Skywire</span>
+				</a>
+				<nav class="home">
+					<a href="ui2/">{ T(ctx, "nodes.title") }</a>
+					if From(ctx).HVPK != "" {
+						<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
+					}
+				</nav>
+				<span class="spacer"></span>
+				<select class="lang" aria-label={ T(ctx, "ui2.language") } data-lang>
+					for _, l := range Langs {
+						<option value={ l.Code } selected?={ l.Code == From(ctx).Lang }>{ l.Name }</option>
+					}
+				</select>
+				<button class="icon-btn" type="button" data-theme-toggle title={ T(ctx, "ui2.theme") } aria-label={ T(ctx, "ui2.theme") }><span class="mi">brightness_6</span></button>
+				<a class="btn sm" href={ templ.URL(classic) }>{ T(ctx, "ui2.classic") }</a>
+				if From(ctx).Auth {
+					<button class="btn sm" type="button" hx-post="ui2/logout" hx-confirm={ T(ctx, "common.logout-confirmation") }>{ T(ctx, "common.logout") }</button>
+				}
+			</header>
+			<main>
+				{ children... }
+			</main>
+			<div id="toast" role="status"></div>
+		</body>
+	</html>
+}
+
+// VisorLayout is a visor page: its key, the tab bar and the tab's card.
+templ VisorLayout(pk, seg string) {
+	@Layout(tabTitle(ctx, seg), ClassicURL(pk, seg)) {
+		<div class="visor-head">
+			<a class="icon-btn" href="ui2/" aria-label={ T(ctx, "nodes.title") }><span class="mi">arrow_back</span></a>
+			<div class="vh">
+				<div class="vh-title">
+					if pk == From(ctx).HVPK {
+						{ T(ctx, "nodes.local-visor-title") }
+					} else {
+						{ T(ctx, "nodes.view-node") }
+					}
+				</div>
+				<div class="mono small dim key" data-copy={ pk } title={ T(ctx, "nodes.copy-key") }>{ pk }</div>
+			</div>
+		</div>
+		<nav class="tabs" aria-label={ T(ctx, "ui2.menu") }>
+			for _, t := range VisorTabs {
+				<a class={ "tab", templ.KV("active", t.Seg == seg) } href={ templ.URL(VisorURL(pk, t.Seg)) }>
+					<span class="mi">{ t.Icon }</span>
+					<span>{ T(ctx, t.Label) }</span>
+				</a>
+			}
+		</nav>
+		<section class="card">
+			{ children... }
+		</section>
+	}
+}
+
+// NotPorted stands in for a tab the new UI does not have yet.
+templ NotPorted(pk, seg string) {
+	@VisorLayout(pk, seg) {
+		<h1>{ tabTitle(ctx, seg) }</h1>
+		<p class="dim">{ T(ctx, "ui2.not-ported") }</p>
+		<p><a class="btn primary" href={ templ.URL(ClassicURL(pk, seg)) }>{ T(ctx, "ui2.classic-tab") }</a></p>
+	}
+}
+
+templ Count(n int, oob bool) {
+	if oob {
+		<span id="count" class="small dim" hx-swap-oob="true">{ itoa(n) }</span>
+	} else {
+		<span id="count" class="small dim">{ itoa(n) }</span>
+	}
+}
+
+templ Toast(msg string, isErr bool) {
+	<div id="toast" role="status" hx-swap-oob="true" class={ "show", templ.KV("err", isErr) }>{ msg }</div>
+}
+
+// ErrorBox shows an error the page could not avoid, such as a visor that did
+// not answer.
+templ ErrorBox(msg string) {
+	if msg != "" {
+		<p class="error">{ msg }</p>
+	}
+}
+
+// VisorError is a visor tab whose visor could not be reached.
+templ VisorError(pk, seg, msg string) {
+	@VisorLayout(pk, seg) {
+		<h1>{ tabTitle(ctx, seg) }</h1>
+		@ErrorBox(msg)
+		<p><a class="btn" href={ templ.URL(VisorURL(pk, seg)) }>{ T(ctx, "ui2.refresh") }</a></p>
+	}
+}
