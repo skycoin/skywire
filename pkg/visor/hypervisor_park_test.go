@@ -38,7 +38,6 @@ func TestHypervisorParkedChange(t *testing.T) {
 		Enable: &on, Store: dmsgasync.StoreMemory, Hosted: []cipher.PubKey{mvC.LocalPK()},
 	}})
 	mv := asyncVisor(t, ctx, mvC, &visorconfig.DmsgAsyncConfig{Inbox: visorconfig.DmsgAsyncInboxConfig{Publish: &off}}, hvC.LocalPK())
-	mv.conf.SetLogger(logging.NewMasterLogger())
 	require.NoError(t, mv.DmsgAsyncSync())
 
 	api, rec := visorapi.NewRecordingRPCClient(hvParkAllows)
