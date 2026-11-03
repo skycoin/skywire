@@ -21,8 +21,8 @@ env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   # TinyGo 0.44 supports Go up to 1.27.
   GO_VERSION: '1.27.x'
-  TINYGO_RELEASE: v0.44.0-skywire.3
-  TINYGO_SHA256: 667abf8bc745f74ef4902d952c91ff7e22beb966d766479176c9be4d631fe8cf
+  TINYGO_RELEASE: v0.45.0-dev-skywire.1
+  TINYGO_SHA256: f715d49e07925729b9285e3a6005cc2208516732877f1b1f3b998b6a737b5991
   MODULE: github.com/skycoin/skywire
 
 jobs:
