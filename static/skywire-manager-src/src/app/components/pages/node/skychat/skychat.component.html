@@ -1,4 +1,8 @@
-@if (node) {
+@if (node && remoteVisor) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">{{ 'skychat.remote-unavailable' | translate }}</div>
+  </div>
+} @else if (node) {
   <div class="rounded-elevated-box mt-3 skychat-box">
     <div class="box-internal-container sc-shell">
 

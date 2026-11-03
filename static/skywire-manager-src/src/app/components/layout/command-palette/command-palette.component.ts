@@ -11,13 +11,14 @@ import { NodeService } from '../../../services/node.service';
 import { ClipboardService } from '../../../services/clipboard.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { homeTabsData } from '../../../utils/home-tabs';
-import { nodePaletteTabs } from '../../../utils/node-tabs';
+import { isRemoteVisor, nodePaletteTabs } from '../../../utils/node-tabs';
 import { ptyUrl } from '../../../utils/pty-url';
 import GeneralUtils from '../../../utils/generalUtils';
 import { PaletteGroup, PaletteItem, PaletteVisor, paletteEntries, paletteTokens, rankPalette } from '../../../utils/command-palette';
 import { NodeData, UpdateAllComponent } from '../update-all/update-all.component';
 import { BulkRewardAddressChangerComponent } from '../bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { ThemeService } from '../../../services/theme.service';
+import { StorageService } from '../../../services/storage.service';
 
 interface ShownGroup {
   group: PaletteGroup;
@@ -101,6 +102,7 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private cdr: ChangeDetectorRef,
     private themeService: ThemeService,
+    private storageService: StorageService,
   ) { }
 
   ngOnInit() {
@@ -256,7 +258,7 @@ export class CommandPaletteComponent implements OnInit, OnDestroy {
       visors: this.visors,
       current: current,
       homeTabs: homeTabsData(),
-      tabsFor: v => nodePaletteTabs(v.pk, !!v.wasm),
+      tabsFor: v => nodePaletteTabs(v.pk, !!v.wasm, isRemoteVisor(v.pk, this.storageService.getLocalHypervisorPk())),
       translate: k => this.translate.instant(k),
       themeChoice: this.themeService.choice,
     }, paletteTokens(this.query));

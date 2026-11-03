@@ -568,5 +568,8 @@
   },
   "tabs-window": {
     "title": "Alterar guia"
+  },
+  "skychat": {
+    "remote-unavailable": "O chat só está disponível para o visor em que este hypervisor é executado. Abra o hypervisor próprio ou a interface do skychat do visor remoto para usar o chat dele."
   }
 }

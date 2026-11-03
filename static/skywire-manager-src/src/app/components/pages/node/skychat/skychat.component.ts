@@ -9,6 +9,8 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
 import { LiveService } from 'src/app/services/live.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { StorageService } from 'src/app/services/storage.service';
+import { isRemoteVisor } from 'src/app/utils/node-tabs';
 import { environment } from 'src/environments/environment';
 
 /**
@@ -93,6 +95,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // Unset for the normal routed tab, which keeps using NodeComponent.currentNode.
   @Input() embeddedNodeKey?: string;
   @Input() embeddedPeer?: string;
+  // The hypervisor proxies only its own visor's skychat, so a remote visor
+  // gets a notice instead of this visor's chat.
+  remoteVisor = false;
 
   node!: Node;
   // Bound to the compose form.
@@ -230,6 +235,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
     private router: Router,
+    private storage: StorageService,
   ) {
     super();
   }
@@ -267,6 +273,10 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       // provided key — the component only reads node.localPk — and start the
       // same data flows the routed subscription would have kicked off.
       this.node = { localPk: this.embeddedNodeKey } as Node;
+      this.remoteVisor = isRemoteVisor(this.embeddedNodeKey, this.storage.getLocalHypervisorPk());
+      if (this.remoteVisor) {
+        return super.ngOnInit();
+      }
       // Embedded chat (the wasm HV's ☰ Chat, ?embed=1) is always THIS local
       // visor. The synthesized node carries no build_info, so tag arch='wasm'
       // when the in-process skychat hooks exist — otherwise connectSSE falls
@@ -286,6 +296,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         const wasUnset = !this.node;
         this.node = node;
         if (wasUnset) {
+          this.remoteVisor = isRemoteVisor(node.localPk, this.storage.getLocalHypervisorPk());
+        }
+        if (wasUnset && !this.remoteVisor) {
           this.connectSSE();
           this.tryLoadPeers();
           this.refreshPasswordState();
