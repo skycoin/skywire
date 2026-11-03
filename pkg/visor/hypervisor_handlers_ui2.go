@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/a-h/templ"
 
@@ -260,21 +261,57 @@ func (hv *Hypervisor) ui2Logout() http.HandlerFunc {
 }
 
 // ui2Nodes serves the visor list page, or with part set only the table the
-// page polls.
+// page polls. A visor that runs its own hypervisor lists that hypervisor's
+// visors under its row, as the Angular list does.
 func (hv *Hypervisor) ui2Nodes(part bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		sums := hv.allVisorSummaries()
-		ns := make([]ui2.Node, 0, len(sums))
-		for _, s := range sums {
-			ns = append(ns, ui2.NodeOf(s))
-		}
-		ui2.SortNodes(ns)
+		// The sub-hypervisor walk can take longer than the server's write
+		// timeout, as for /api/visors-tree-summary.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(45 * time.Second)) //nolint:errcheck
+		ns := ui2NodesOf(hv.visorTree())
 		if part {
 			hv.render(w, r, ui2.NodeRows(ns, "", true))
 			return
 		}
 		hv.render(w, r, ui2.NodesPage(ns, ""))
 	}
+}
+
+// ui2NodesOf turns the tree into rows: the local section, each with the
+// section of the sub-hypervisor it runs, if any, nested under it.
+func ui2NodesOf(secs []VisorTreeSection) []ui2.Node {
+	if len(secs) == 0 {
+		return nil
+	}
+	ns := make([]ui2.Node, 0, len(secs[0].Visors))
+	direct := map[string]bool{}
+	for _, s := range secs[0].Visors {
+		n := ui2.NodeOf(s)
+		direct[n.PK] = true
+		ns = append(ns, n)
+	}
+	sub := map[string]VisorTreeSection{}
+	for _, s := range secs[1:] {
+		sub[s.HypervisorPK.Hex()] = s
+	}
+	for i := range ns {
+		s, ok := sub[ns[i].PK]
+		if !ok {
+			continue
+		}
+		ns[i].SubErr = s.SubError
+		for _, v := range s.Visors {
+			c := ui2.NodeOf(v)
+			if c.PK == ns[i].PK {
+				continue
+			}
+			c.ViaSub, c.IsHV = !direct[c.PK], false
+			ns[i].Children = append(ns[i].Children, c)
+		}
+		ui2.SortNodes(ns[i].Children)
+	}
+	ui2.SortNodes(ns)
+	return ns
 }
 
 // ui2NotPorted answers a visor tab the new UI does not have yet with a link

@@ -16,7 +16,7 @@ templ Layout(title, classic string) {
 			<script src={ Asset("htmx.min.js") } defer></script>
 			<script src={ Asset("ui2.js") } defer></script>
 		</head>
-		<body data-unreachable={ T(ctx, "ui2.unreachable") }>
+		<body data-unreachable={ T(ctx, "ui2.unreachable") } data-hvpk={ From(ctx).HVPK }>
 			<header class="top">
 				<a class="brand" href="ui2/">
 					<img src="assets/img/skywire-icon.png" alt="" width="32" height="32"/>
