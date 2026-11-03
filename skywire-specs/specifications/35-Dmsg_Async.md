@@ -271,6 +271,17 @@ requester applies a decision only from a key the invite names as an admin,
 while it awaits one or, for an approval, after a refusal. The visor fetches
 port 8060 with its own cycle.
 
+### Hypervisor
+
+A hypervisor request that changes a managed visor which is disconnected runs
+against a recording client. When it succeeds, its calls are left on the
+visor's inbox on port 46 as gob RPC request frames, sealed to the visor, and
+the hypervisor answers 202 with the host in `X-Skywire-Parked`. Only settings
+calls in `hvParkAllowed` are recorded, and any other call refuses the request
+with 503 as before. The visor serves the frames on a fresh RPC server once it
+has finished starting, only when a configured hypervisor signed them, and
+serves each change once.
+
 ### Limits
 
 | Constant | Value | Identifier |

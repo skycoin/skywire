@@ -87,6 +87,9 @@ type rpcClient struct {
 	// proxyTarget once routes ALL of them to the remote visor —
 	// no per-method wrapper code. Used by CLI's --rpc skynet://<pk>.
 	proxyTarget *cipher.PubKey
+
+	// rec, when set, records calls instead of sending them. See record.go.
+	rec *CallRecorder
 }
 
 // NewRPCClient creates a new API.
@@ -156,6 +159,9 @@ func (rc *rpcClient) Close() error {
 // 167 per-method wrappers: each typed method delegates to Call,
 // and Call routes based on proxyTarget.
 func (rc *rpcClient) Call(method string, args, reply any) error {
+	if rc.rec != nil {
+		return rc.rec.record(rc.prefix, method, args)
+	}
 	if rc.proxyTarget != nil {
 		return rc.callViaProxy(method, args, reply)
 	}

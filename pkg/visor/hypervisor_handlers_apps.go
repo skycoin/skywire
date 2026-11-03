@@ -322,6 +322,14 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			}
 		}
 
+		if ctx.rec != nil {
+			// The visor is offline, so only the autostart this request sets is known.
+			if reqBody.AutoStart != nil {
+				ctx.App.AutoStart = *reqBody.AutoStart
+			}
+			httputil.WriteJSON(w, r, http.StatusOK, ctx.App)
+			return
+		}
 		// get the latest AppState of the app after changes
 		app, err := ctx.API.App(ctx.App.Name)
 		if err != nil {
