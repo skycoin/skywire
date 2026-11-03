@@ -193,6 +193,18 @@ func (v *Visor) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
 	return v.voice.CallAudio(callID)
 }
 
+// VoiceCallDevices reports whether an active call has a real mic and speaker.
+func (v *Visor) VoiceCallDevices(callID string) (visorapi.VoiceDevices, error) {
+	if v.voice == nil {
+		return visorapi.VoiceDevices{}, ErrVoiceDisabled
+	}
+	d, err := v.voice.CallDevices(callID)
+	if err != nil {
+		return visorapi.VoiceDevices{}, err
+	}
+	return visorapi.VoiceDevices{Mic: d.Mic, Speaker: d.Speaker, MicErr: d.MicErr, SpeakerErr: d.SpeakerErr}, nil
+}
+
 // VoiceMute toggles the mic (send) and speaker (playback) mute of an active
 // call. mic silences what the peer hears from us; speaker silences what we hear
 // from the peer.

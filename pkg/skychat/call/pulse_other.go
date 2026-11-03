@@ -19,3 +19,6 @@ func NewMicSource(_ bool, _ int) (Source, error) { return nil, ErrAudioUnsupport
 
 // NewSpeakerSink is unavailable off Linux.
 func NewSpeakerSink(_ int) (Sink, error) { return nil, ErrAudioUnsupported }
+
+// ProbeAudio reports that this build has no audio backend.
+func ProbeAudio() error { return ErrAudioUnsupported }

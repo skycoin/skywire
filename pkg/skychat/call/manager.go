@@ -86,6 +86,8 @@ type Manager struct {
 	calls   map[string]*Session
 	ringing map[string]*ringingCall
 	taps    map[string]*callTap
+	// devices records whether each live call opened a real mic and speaker.
+	devices map[string]DeviceStatus
 	// dialing holds calls THIS visor is placing, from the moment an id
 	// exists until the peer answers or the invite fails. Without it a call
 	// being dialed is invisible: it is in neither Incoming (that is the
@@ -499,6 +501,7 @@ func (m *Manager) Incoming() []Sig {
 func (m *Manager) startSession(callID string, peer cipher.PubKey, conn net.Conn, ssrc uint32) *Session {
 	src := m.cfg.NewSource()
 	sink := m.cfg.NewSink()
+	dev := deviceStatus(src, sink)
 	if m.cfg.Visualize {
 		tap := &callTap{sent: newAudioRing(sampleRate), recv: newAudioRing(sampleRate)} // ~1s each
 		src = &teeSource{inner: src, ring: tap.sent}
@@ -511,6 +514,10 @@ func (m *Manager) startSession(callID string, peer cipher.PubKey, conn net.Conn,
 	sess.SetPeer(peer)
 	m.mu.Lock()
 	m.calls[callID] = sess
+	if m.devices == nil {
+		m.devices = make(map[string]DeviceStatus)
+	}
+	m.devices[callID] = dev
 	m.mu.Unlock()
 	m.log.WithField("call", callID).Info("voice: call established")
 	return sess
@@ -533,6 +540,7 @@ func (m *Manager) dropCall(callID string) {
 	sess := m.calls[callID]
 	delete(m.calls, callID)
 	delete(m.taps, callID)
+	delete(m.devices, callID)
 	m.mu.Unlock()
 	if sess != nil {
 		sess.Close()
@@ -624,4 +632,16 @@ func sigTypeName(t SigType) string {
 	default:
 		return fmt.Sprintf("sig(%d)", t)
 	}
+}
+
+// CallDevices reports whether the live call callID has a real microphone and
+// speaker, or is sending silence and dropping the peer's audio.
+func (m *Manager) CallDevices(callID string) (DeviceStatus, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	dev, ok := m.devices[callID]
+	if !ok {
+		return DeviceStatus{}, errors.New("voice: no such call")
+	}
+	return dev, nil
 }

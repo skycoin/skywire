@@ -160,3 +160,13 @@ func (r *RPC) VoiceCallAudio(callID *string, out *visorapi.VoiceAudioSnapshot) (
 	out.Sent, out.Recv = sent, recv
 	return nil
 }
+
+// VoiceCallDevices replies with whether a call has a real mic and speaker.
+func (r *RPC) VoiceCallDevices(callID *string, out *visorapi.VoiceDevices) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceCallDevices", callID)(out, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	*out, err = r.visor.VoiceCallDevices(*callID)
+	return err
+}

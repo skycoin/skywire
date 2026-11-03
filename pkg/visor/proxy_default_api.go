@@ -1071,6 +1071,11 @@ func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) 
 	return nil, nil, ErrProxyNotSupported
 }
 
+// VoiceCallDevices implements API (not proxied).
+func (proxyDefaultAPI) VoiceCallDevices(_ string) (visorapi.VoiceDevices, error) {
+	return visorapi.VoiceDevices{}, ErrProxyNotSupported
+}
+
 // VoiceMute implements API (not proxied).
 func (proxyDefaultAPI) VoiceMute(_ string, _, _ bool) error {
 	return ErrProxyNotSupported

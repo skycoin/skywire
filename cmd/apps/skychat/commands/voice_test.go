@@ -38,7 +38,10 @@ type voiceAPI struct {
 	// ringback tones: the visor's own, and the one per outbound call.
 	myTone   visorapi.VoiceRingback
 	dialTone map[string]visorapi.VoiceRingback
+	devices  visorapi.VoiceDevices
 }
+
+func (a *voiceAPI) VoiceCallDevices(string) (visorapi.VoiceDevices, error) { return a.devices, nil }
 
 func (a *voiceAPI) VoiceSetRingback(t visorapi.VoiceRingback) error {
 	if len(t.Data) > 0 && !strings.HasPrefix(t.Mime, "audio/") {
@@ -432,5 +435,27 @@ func TestVoiceDialRingbackHandler(t *testing.T) {
 	h(rr, httptest.NewRequest(http.MethodGet, "/voice/ringback", nil))
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("no call: code=%d, want 400", rr.Code)
+	}
+}
+
+// The call panel learns that this visor has no mic or speaker, and why.
+func TestVoiceDevicesHandler(t *testing.T) {
+	fake := &voiceAPI{devices: visorapi.VoiceDevices{Speaker: true, MicErr: "voice: pulse connect: no server"}}
+	withFakePairRPC(t, fake)
+
+	rr := httptest.NewRecorder()
+	voiceDevicesHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/devices?call=c1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("devices: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	var got visorapi.VoiceDevices
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || got != fake.devices {
+		t.Fatalf("devices resp=%q err=%v", rr.Body.String(), err)
+	}
+
+	rr = httptest.NewRecorder()
+	voiceDevicesHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/devices", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("no call id: code=%d", rr.Code)
 	}
 }

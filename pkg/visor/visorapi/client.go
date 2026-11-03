@@ -2088,6 +2088,13 @@ func (rc *rpcClient) VoiceCallAudio(callID string) (sent, recv []int16, err erro
 	return out.Sent, out.Recv, nil
 }
 
+// VoiceCallDevices implements API.
+func (rc *rpcClient) VoiceCallDevices(callID string) (VoiceDevices, error) {
+	var out VoiceDevices
+	err := rc.Call("VoiceCallDevices", &callID, &out)
+	return out, err
+}
+
 // VoiceMute implements API.
 func (rc *rpcClient) VoiceMute(callID string, mic, speaker bool) error {
 	return rc.Call("VoiceMute", &VoiceMuteReq{CallID: callID, Mic: mic, Speaker: speaker}, &struct{}{})

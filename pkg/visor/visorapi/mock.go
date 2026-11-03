@@ -1555,6 +1555,11 @@ func (mc *mockRPCClient) VoiceCallAudio(_ string) (sent, recv []int16, err error
 	return nil, nil, nil
 }
 
+// VoiceCallDevices implements API.
+func (mc *mockRPCClient) VoiceCallDevices(_ string) (VoiceDevices, error) {
+	return VoiceDevices{}, nil
+}
+
 // VoiceMute implements API.
 func (mc *mockRPCClient) VoiceMute(_ string, _, _ bool) error {
 	return nil

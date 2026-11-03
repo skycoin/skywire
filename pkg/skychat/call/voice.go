@@ -103,3 +103,48 @@ func (SilentSource) Read(pcm []int16) (int, error) {
 	}
 	return len(pcm), nil
 }
+
+// UnavailableSource is the silence a call sends when no capture device
+// opened. Err says why, so the call can report it.
+type UnavailableSource struct {
+	SilentSource
+	Err error
+}
+
+// UnavailableSink discards the peer's audio when no playback device opened.
+type UnavailableSink struct {
+	NullSink
+	Err error
+}
+
+// DeviceStatus says whether a call has a real microphone and speaker. The
+// error strings are set only for a device that failed to open.
+type DeviceStatus struct {
+	Mic        bool
+	Speaker    bool
+	MicErr     string
+	SpeakerErr string
+}
+
+func deviceStatus(src Source, sink Sink) DeviceStatus {
+	st := DeviceStatus{Mic: true, Speaker: true}
+	switch s := src.(type) {
+	case UnavailableSource:
+		st.Mic = false
+		if s.Err != nil {
+			st.MicErr = s.Err.Error()
+		}
+	case SilentSource:
+		st.Mic = false
+	}
+	switch s := sink.(type) {
+	case UnavailableSink:
+		st.Speaker = false
+		if s.Err != nil {
+			st.SpeakerErr = s.Err.Error()
+		}
+	case NullSink:
+		st.Speaker = false
+	}
+	return st
+}
