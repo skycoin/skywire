@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -154,7 +155,7 @@ func initDmsgAsync(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 	a := &v.async
 	a.mu.Lock()
-	a.handlers = map[uint16]dmsgasync.Handler{}
+	a.handlers = map[uint16]dmsgasync.Handler{skyenv.DmsgHypervisorPort: v.takeHypervisorParked}
 	a.cache = map[cipher.PubKey]cachedRecord{}
 	a.reg = map[cipher.PubKey]time.Time{}
 	a.regErr = map[cipher.PubKey]string{}

@@ -1408,6 +1408,10 @@ type httpCtx struct {
 
 	// Route
 	RtKey routing.RouteID
+
+	// rec records the calls for a managed visor that is offline, to be left on
+	// its inbox when the request succeeds. See hypervisor_park.go.
+	rec *visorapi.CallRecorder
 }
 type (
 	valuesFunc  func(w http.ResponseWriter, r *http.Request) (*httpCtx, bool)
