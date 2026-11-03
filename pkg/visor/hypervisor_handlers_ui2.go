@@ -53,6 +53,9 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 		})
 		r.Get("/ui2/visors/{pk}/{tab}", hv.ui2NotPorted())
 		hv.ui2ContactsRoutes(r)
+		hv.ui2AppsRoutes(r)
+		hv.ui2TransportsRoutes(r)
+		hv.ui2RoutingRoutes(r)
 	})
 	// Without this an unknown /ui2 path would fall through to the Angular UI.
 	r.HandleFunc("/ui2/{rest...}", http.NotFound)

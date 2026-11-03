@@ -1,0 +1,214 @@
+package ui2
+
+import "context"
+
+// AppsPage is the apps tab: the lists, and a panel for one app's settings or
+// logs.
+templ AppsPage(a Apps) {
+	@VisorLayout(a.PK, "apps") {
+		<div class="head">
+			<h1>{ T(ctx, "apps.apps-list.title") }</h1>
+			<span class="spacer"></span>
+			<a class="btn sm" href={ templ.URL(ClassicURL(a.PK, "apps/catalog")) }><span class="mi">view_module</span>{ T(ctx, "apps.tabs.catalog") }</a>
+		</div>
+		<div id="app-panel"></div>
+		@AppsRows(a)
+	}
+}
+
+// AppsRows is both lists. It polls itself so a started app shows as running.
+templ AppsRows(a Apps) {
+	@appsRows(a, false)
+}
+
+// AppsRowsOOB is AppsRows as an out of band swap.
+templ AppsRowsOOB(a Apps) {
+	@appsRows(a, true)
+}
+
+templ appsRows(a Apps, oob bool) {
+	<div id="apps-rows" hx-get={ a.url("/rows") } hx-trigger="every 10s [document.visibilityState === 'visible']" hx-swap="outerHTML" { oobAttrs(oob)... }>
+		@ErrorBox(a.Err)
+		<h2>{ T(ctx, "apps.apps-list.heading-official") }</h2>
+		@appTable(a, a.Official, "apps.apps-list.empty-official")
+		<h2>{ T(ctx, "apps.apps-list.heading-other") }</h2>
+		@appTable(a, a.Other, "apps.apps-list.empty-user")
+	</div>
+}
+
+templ appTable(a Apps, rows []App, empty string) {
+	if len(rows) == 0 {
+		<p class="dim">{ T(ctx, empty) }</p>
+	} else {
+		<table class="list apps">
+			<thead>
+				<tr>
+					<th title={ T(ctx, "apps.apps-list.state-tooltip") }>{ T(ctx, "apps.apps-list.state") }</th>
+					<th>{ T(ctx, "apps.apps-list.app-name") }</th>
+					<th>{ T(ctx, "apps.apps-list.port") }</th>
+					<th title={ T(ctx, "apps.apps-list.otp-tooltip") }>{ T(ctx, "apps.apps-list.otp") }</th>
+					<th>{ T(ctx, "apps.apps-list.auto-start") }</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, x := range rows {
+					@appRow(a, x)
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ appRow(a Apps, x App) {
+	<tr>
+		<td data-label={ T(ctx, "apps.apps-list.state") }>
+			@appState(x)
+		</td>
+		<td class="name" data-label={ T(ctx, "apps.apps-list.app-name") }>{ x.Name }</td>
+		<td class="small" data-label={ T(ctx, "apps.apps-list.port") }>
+			if x.Port != "" {
+				{ x.Port }
+			} else {
+				<span class="dim">—</span>
+			}
+		</td>
+		<td class="mono small" data-label={ T(ctx, "apps.apps-list.otp") }>
+			if x.OTP != "" {
+				<span class="key" data-copy={ x.OTP } title={ T(ctx, "apps.apps-list.otp-tooltip") }>{ x.OTP }</span>
+			} else {
+				<span class="dim">-</span>
+			}
+		</td>
+		<td data-label={ T(ctx, "apps.apps-list.auto-start") }>
+			<button
+				class="icon-btn"
+				type="button"
+				hx-put={ a.url("/" + x.Name + "/autostart") }
+				hx-vals={ autostartVals(!x.AutoStart) }
+				hx-confirm={ autostartConfirm(ctx, x.AutoStart) }
+				hx-target="#apps-rows"
+				hx-swap="outerHTML"
+				title={ autostartTitle(ctx, x.AutoStart) }
+			>
+				if x.AutoStart {
+					<span class="mi ok">done</span>
+				} else {
+					<span class="mi dim">close</span>
+				}
+			</button>
+		</td>
+		<td class="actions">
+			<button class="icon-btn" type="button" hx-get={ a.url("/" + x.Name + "/settings") } hx-target="#app-panel" hx-swap="innerHTML" title={ T(ctx, "apps.settings") }><span class="mi">settings</span></button>
+			<button class="icon-btn" type="button" hx-get={ a.url("/" + x.Name + "/logs") } hx-target="#app-panel" hx-swap="innerHTML" title={ T(ctx, "apps.view-logs") }><span class="mi">list</span></button>
+			if x.Running() {
+				<button class="icon-btn" type="button" hx-put={ a.url("/" + x.Name + "/state") } hx-vals='{"run":""}' hx-confirm={ T(ctx, "apps.stop-confirmation") } hx-target="#apps-rows" hx-swap="outerHTML" title={ T(ctx, "apps.stop-app") }><span class="mi">stop</span></button>
+			} else {
+				<button class="icon-btn" type="button" hx-put={ a.url("/" + x.Name + "/state") } hx-vals='{"run":"1"}' hx-target="#apps-rows" hx-swap="outerHTML" title={ T(ctx, "apps.start-app") }><span class="mi">play_arrow</span></button>
+			}
+		</td>
+	</tr>
+}
+
+templ appState(x App) {
+	switch x.Status {
+		case 1:
+			<span class="dot on" title={ T(ctx, "apps.status-running-tooltip") }></span>
+			<span class="small">{ T(ctx, "apps.status-running") }</span>
+		case 2:
+			<span class="mi error" title={ T(ctx, "apps.status-failed-tooltip", "error", x.Detail) }>warning</span>
+			<span class="small error">{ x.Detail }</span>
+		case 3:
+			<span class="dot starting" title={ T(ctx, "apps.status-connecting-tooltip") }></span>
+			<span class="small">{ T(ctx, "apps.status-connecting") }</span>
+		default:
+			<span class="dot off" title={ T(ctx, "apps.status-stopped-tooltip") }></span>
+			<span class="small dim">{ T(ctx, "apps.status-stopped") }</span>
+	}
+}
+
+// AppSettings is the settings form of one app: its args, environment,
+// launcher mode and autostart, as the Angular settings panel edits them.
+templ AppSettings(pk string, x App, errMsg string) {
+	<section class="card sub">
+		<div class="head">
+			<h2>{ T(ctx, "app-settings.title") }: { x.Name }</h2>
+			<span class="spacer"></span>
+			<button class="icon-btn" type="button" data-clear="#app-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		@ErrorBox(errMsg)
+		if x.Status == 2 && x.Detail != "" {
+			<p class="small"><span class="dim">{ T(ctx, "app-settings.last-error") }:</span> <span class="error">{ x.Detail }</span></p>
+		}
+		<form class="form" hx-put={ VisorURL(pk, "apps") + "/" + x.Name + "/settings" } hx-target="#app-panel">
+			<label>{ T(ctx, "app-settings.args") }<input class="mono" name="args" value={ x.Args }/></label>
+			<label>{ T(ctx, "app-settings.env") } <span class="dim">{ T(ctx, "contacts.one-per-line") }</span><textarea class="mono" name="env" rows="3">{ x.Env }</textarea></label>
+			<fieldset class="radios">
+				<legend>{ T(ctx, "app-settings.launcher-mode") }</legend>
+				<label class="check"><input type="radio" name="launcher_mode" value="" checked?={ x.LauncherMode == "" }/>{ T(ctx, "app-settings.mode-default") }</label>
+				<label class="check"><input type="radio" name="launcher_mode" value="internal" checked?={ x.LauncherMode == "internal" }/>{ T(ctx, "app-settings.mode-internal") }</label>
+				<label class="check"><input type="radio" name="launcher_mode" value="external" checked?={ x.LauncherMode == "external" }/>{ T(ctx, "app-settings.mode-external") }</label>
+			</fieldset>
+			<label class="check"><input type="checkbox" name="autostart" value="1" checked?={ x.AutoStart }/>{ T(ctx, "app-settings.autostart") }</label>
+			<div class="bar">
+				<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>
+				<button class="btn" type="button" data-clear="#app-panel">{ T(ctx, "common.cancel") }</button>
+				<span class="spacer"></span>
+				<button class="btn" type="button" hx-get={ VisorURL(pk, "apps") + "/" + x.Name + "/help" } hx-target="#app-help">{ T(ctx, "app-settings.show-help") }</button>
+			</div>
+		</form>
+		<div id="app-help"></div>
+	</section>
+}
+
+// AppHelp is an app's --help output.
+templ AppHelp(text, errMsg string) {
+	@ErrorBox(errMsg)
+	if text != "" {
+		<pre class="mono small logbox">{ text }</pre>
+	}
+}
+
+// AppLogs is the recent log of one app.
+templ AppLogs(pk, name string, lines []string, errMsg string) {
+	<section class="card sub">
+		<div class="head">
+			<h2>{ T(ctx, "apps.view-logs") }: { name }</h2>
+			<span class="spacer"></span>
+			<button class="btn sm" type="button" hx-get={ VisorURL(pk, "apps") + "/" + name + "/logs" } hx-target="#app-panel">{ T(ctx, "ui2.refresh") }</button>
+			<button class="icon-btn" type="button" data-clear="#app-panel" aria-label={ T(ctx, "common.close") }><span class="mi">close</span></button>
+		</div>
+		@ErrorBox(errMsg)
+		if len(lines) == 0 && errMsg == "" {
+			<p class="dim">{ T(ctx, "ui2.apps.no-logs") }</p>
+		} else {
+			<pre class="mono small logbox">
+				for _, l := range lines {
+					{ l }
+					{ "\n" }
+				}
+			</pre>
+		}
+	</section>
+}
+
+func autostartVals(on bool) string {
+	if on {
+		return `{"autostart":"1"}`
+	}
+	return `{"autostart":""}`
+}
+
+func autostartConfirm(ctx context.Context, on bool) string {
+	if on {
+		return T(ctx, "apps.disable-autostart-confirmation")
+	}
+	return T(ctx, "apps.enable-autostart-confirmation")
+}
+
+func autostartTitle(ctx context.Context, on bool) string {
+	if on {
+		return T(ctx, "apps.apps-list.disable-autostart")
+	}
+	return T(ctx, "apps.apps-list.enable-autostart")
+}
