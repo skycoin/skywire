@@ -80,7 +80,11 @@ func (hv *Hypervisor) ui2RulesView(w http.ResponseWriter, r *http.Request, ctx *
 	if err != nil {
 		msg = err.Error()
 	}
-	view := ui2.RulesView(r.PathValue("pk"), ui2.RulesOf(rules), msg)
+	rs := ui2.SelectRules(r.PathValue("pk"), ui2.RulesOf(rules), ui2.ParseListQuery(r.FormValue), msg)
+	view := ui2.RulesView(rs)
+	if r.FormValue("list") != "" || toast != "" {
+		view = ui2.RulesList(rs)
+	}
 	if toast != "" {
 		hv.render(w, r, view, ui2.Toast(toast, false))
 		return

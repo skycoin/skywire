@@ -311,3 +311,19 @@ input.invalid { border-color: rgb(var(--rose)); }
   .up-line { grid-template-columns: 52px 1fr 48px; gap: 4px; }
   .bar.sticky { top: 0; }
 }
+
+/* paged lists */
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
+.pager .btn .mi { font-size: 18px; }
+.list th button.sort {
+  display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; white-space: nowrap;
+}
+.list th button.sort:hover { color: rgba(var(--fg), 1); }
+.list th button.sort .mi { font-size: 16px; }
+.list th.num { text-align: right; }
+.bar h2 { margin: 0; }
+@media (max-width: 600px) {
+  .pager { flex-basis: 100%; }
+  .pager .btn.sm { height: 40px; min-width: 40px; }
+}

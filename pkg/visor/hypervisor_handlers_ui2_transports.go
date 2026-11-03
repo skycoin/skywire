@@ -32,7 +32,8 @@ func (hv *Hypervisor) ui2TransportsRoutes(r *httputil.Router) {
 	r.Put("/ui2/visors/{pk}/transports/persistent", hv.ui2TransportWrite(ui2SetPersistent, "transports.changes-made"))
 }
 
-func ui2LoadTransports(ctx *httpCtx, pk string) ui2.Transports {
+func ui2LoadTransports(ctx *httpCtx, r *http.Request) ui2.Transports {
+	pk := r.PathValue("pk")
 	var errs []string
 	tps, err := ctx.API.Transports(nil, nil, true)
 	if err != nil {
@@ -62,14 +63,15 @@ func ui2LoadTransports(ctx *httpCtx, pk string) ui2.Transports {
 	if len(errs) > 0 {
 		t.Err = errs[0]
 	}
+	t.Select(ui2.ParseListQuery(r.FormValue))
 	return t
 }
 
 func (hv *Hypervisor) ui2Transports(body bool) http.HandlerFunc {
 	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		t := ui2LoadTransports(ctx, r.PathValue("pk"))
+		t := ui2LoadTransports(ctx, r)
 		if body {
-			hv.render(w, r, ui2.TransportsBody(t))
+			hv.render(w, r, ui2.TransportsBody(t), ui2.TransportsSummary(t, true))
 			return
 		}
 		hv.render(w, r, ui2.TransportsPage(t))
@@ -85,8 +87,8 @@ func (hv *Hypervisor) ui2TransportWrite(op ui2TransportOp, done string) http.Han
 		if !op(hv, w, r, ctx) {
 			return
 		}
-		t := ui2LoadTransports(ctx, r.PathValue("pk"))
-		hv.render(w, r, ui2.TransportsBody(t), ui2.Toast(hv.ui2T(r, done), false))
+		t := ui2LoadTransports(ctx, r)
+		hv.render(w, r, ui2.TransportsBody(t), ui2.TransportsSummary(t, true), ui2.Toast(hv.ui2T(r, done), false))
 	})
 }
 
