@@ -1260,6 +1260,9 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 		r.Get("/route-viz", hv.getRouteViz())
 		r.Get("/route-viz/", hv.getRouteViz())
 
+		// The server rendered htmx pages (pkg/visor/ui2), before the catch-all.
+		hv.ui2Routes(r)
+
 		// HV-served skycoin wallet: embedded /wallet/ static + node API proxied
 		// over the visor's dmsg client — no skycoin-web process/port, the native
 		// equivalent of the wasm visor's /wallet/. Mounted before the UI
