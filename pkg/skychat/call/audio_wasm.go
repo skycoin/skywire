@@ -113,3 +113,6 @@ func (s *wasmSink) Write(pcm []int16) (int, error) {
 }
 
 func (s *wasmSink) Close() error { return nil }
+
+// ProbeAudio succeeds: the page's WebAudio is asked for devices per call.
+func ProbeAudio() error { return nil }

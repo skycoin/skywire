@@ -259,6 +259,8 @@ type Chat interface {
 	// call plays, once it has arrived (VoiceDialingInfo.Ringback).
 	VoiceDialRingback(callID string) (VoiceRingback, error)
 	VoiceCallAudio(callID string) (sent, recv []int16, err error)
+	// VoiceCallDevices reports whether an active call has a real mic and speaker.
+	VoiceCallDevices(callID string) (VoiceDevices, error)
 	VoiceMute(callID string, mic, speaker bool) error
 }
 

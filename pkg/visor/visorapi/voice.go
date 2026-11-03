@@ -36,3 +36,13 @@ type VoiceAudioSnapshot struct {
 	Sent []int16
 	Recv []int16
 }
+
+// VoiceDevices says whether an active call has a real microphone and speaker.
+// A device that failed to open sends silence or drops the peer's audio, and
+// its error says why.
+type VoiceDevices struct {
+	Mic        bool   `json:"mic"`
+	Speaker    bool   `json:"speaker"`
+	MicErr     string `json:"mic_err,omitempty"`
+	SpeakerErr string `json:"speaker_err,omitempty"`
+}

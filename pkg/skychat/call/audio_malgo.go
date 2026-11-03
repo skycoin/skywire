@@ -162,3 +162,6 @@ var (
 	_ io.Closer = (*malgoSource)(nil)
 	_ io.Closer = (*malgoSink)(nil)
 )
+
+// ProbeAudio succeeds: malgo opens the system default devices per call.
+func ProbeAudio() error { return nil }
