@@ -70,6 +70,13 @@ type Manager struct {
 	// loop that drives the retries.
 	pendingJoinLast map[string]time.Time
 
+	// park leaves join frames on a dmsg-async inbox. See parked.go.
+	parkMu sync.RWMutex
+	park   Parker
+	// joinMu serializes applyJoinResponse between the retry loop and
+	// decisions fetched from the inbox.
+	joinMu sync.Mutex
+
 	mu       sync.RWMutex
 	sessions map[string]*Session
 

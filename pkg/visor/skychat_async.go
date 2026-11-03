@@ -2,8 +2,12 @@
 package visor
 
 import (
+	"time"
+
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgasync"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -55,3 +59,32 @@ func (h chatHost) ChatUnpark() ([]appserver.ParkedChat, error) {
 }
 
 func (h chatHost) ChatAck(refs []appserver.ParkedRef) error { return h.v.ackParked(refs) }
+
+// parkGroupJoins lets mgr leave join requests and decisions on dmsg-async
+// inboxes, sealed and signed with the visor key, and takes the ones left here.
+func (v *Visor) parkGroupJoins(mgr *skychatgroup.Manager) {
+	mgr.SetParker(v.groupParker)
+	v.AsyncHandle(skychatgroup.ParkPort, v.groupParkHandler(mgr.HandleParked))
+}
+
+func (v *Visor) groupParker(to cipher.PubKey, payload []byte) error {
+	env, err := skymail.Seal(payload, v.conf.SK, to)
+	if err != nil {
+		return err
+	}
+	_, err = v.DmsgAsyncSend(visorapi.DmsgAsyncSendRequest{To: to, Port: skychatgroup.ParkPort, Payload: env})
+	return err
+}
+
+// groupParkHandler opens a parked frame and hands it to take with its signer
+// and the time the host took it.
+// A frame that does not open is dropped.
+func (v *Visor) groupParkHandler(take func(from cipher.PubKey, payload []byte, at time.Time) error) dmsgasync.Handler {
+	return func(m dmsgasync.Message) error {
+		msg, signer, err := skymail.OpenSealed(m.Payload, v.conf.SK)
+		if err != nil {
+			return nil
+		}
+		return take(signer, msg, m.Deposited)
+	}
+}

@@ -26,10 +26,10 @@ Three parties take part.
   takes the payload, and is told the message id.
 
 Consumers name a dmsg-async port, which labels the message and is not a
-listener. Skymail parks mail on port 25 ([Skymail](34-Skymail.md)) and
-skychat parks 1:1 messages on port 1. Both seal the payload for R and sign
-it with S's key, so the host can read neither and R does not have to trust
-the host's `from`.
+listener. Skymail parks mail on port 25 ([Skymail](34-Skymail.md)), skychat
+parks 1:1 messages on port 1 and group join frames on port 8060. All seal the
+payload for R and sign it with S's key, so the host can read neither and R
+does not have to trust the host's `from`.
 
 ## Addressing
 
@@ -250,6 +250,17 @@ conn succeeds. The ref is the first 16 bytes of
 skychat starts and every 2 minutes, handles each message like a frame from a
 live conn from its signer, and removes it from the host. A message whose id is
 already in the conversation's history is only removed.
+
+### Skychat groups
+
+A join request that reaches no admin of the invite is parked on port 8060
+with each of them, and the requester keeps the group as awaiting approval. An
+admin handles a parked request like one from a live stream from its signer.
+It parks its decision on a parked request for the requester, and so does an
+approval or refusal from its queue. An approval carries the group key. The
+requester applies a decision only from a key the invite names as an admin,
+while it awaits one or, for an approval, after a refusal. The visor fetches
+port 8060 with its own cycle.
 
 ### Limits
 

@@ -168,6 +168,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	mgr.SetMessageHandler(inbox.deliver)
+	v.parkGroupJoins(mgr)
 
 	v.initLock.Lock()
 	v.grouping.store = store
