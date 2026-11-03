@@ -12,7 +12,7 @@ templ InfoPage(i Info) {
 	@VisorLayout(i.PK, "info") {
 		@InfoLive(i)
 		<div class="bar">
-			<button class="btn" hx-post={ VisorURL(i.PK, "info/restart") } hx-confirm={ T(ctx, "palette.restart-confirmation", "name", i.PK) } hx-swap="none"><span class="mi">restart_alt</span>{ T(ctx, "palette.actions.restart") }</button>
+			<button class="btn" hx-post={ VisorURL(i.PK, "info/restart") } hx-confirm={ T(ctx, "palette.restart-confirmation", "name", i.PK) } hx-swap="none"><span class="mi">replay</span>{ T(ctx, "palette.actions.restart") }</button>
 			<button class="btn warn" hx-post={ VisorURL(i.PK, "info/shutdown") } hx-confirm={ T(ctx, "actions.turn-off.confirmation") } hx-swap="none"><span class="mi">power_settings_new</span>{ T(ctx, "actions.menu.turn-off") }</button>
 			<a class="btn" href={ templ.URL(VisorURL(i.PK, "dmsg")) }><span class="mi">device_hub</span>{ T(ctx, "node.details.dmsg-settings.title") }</a>
 		</div>
