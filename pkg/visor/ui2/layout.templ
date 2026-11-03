@@ -10,7 +10,7 @@ templ Layout(title, classic string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<base href={ From(ctx).Base }/>
 			<title>{ title } · Skywire</title>
-			<link rel="icon" type="image/png" href="assets/img/logo-s.png"/>
+			<link rel="icon" type="image/png" href="assets/img/skywire-icon.png"/>
 			<script>try{var t=localStorage.getItem('hvui-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 			<link rel="stylesheet" href={ Asset("ui2.css") }/>
 			<script src={ Asset("htmx.min.js") } defer></script>
@@ -19,30 +19,35 @@ templ Layout(title, classic string) {
 		<body data-unreachable={ T(ctx, "ui2.unreachable") }>
 			<header class="top">
 				<a class="brand" href="ui2/">
-					<img src="assets/img/logo-s.png" alt="" width="24" height="24"/>
+					<img src="assets/img/skywire-icon.png" alt="" width="32" height="32"/>
 					<span>Skywire</span>
 				</a>
-				<nav class="home">
-					<a href="ui2/">{ T(ctx, "nodes.title") }</a>
-					if From(ctx).HVPK != "" {
-						<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
-					}
-					if From(ctx).TPViz {
-						<a href="tp-viz/">{ T(ctx, "node.details.tpviz.title") }</a>
-					}
-					<a href="route-viz">{ T(ctx, "ui2.route-viz") }</a>
-				</nav>
-				<span class="spacer"></span>
-				<select class="lang" aria-label={ T(ctx, "ui2.language") } data-lang>
-					for _, l := range Langs {
-						<option value={ l.Code } selected?={ l.Code == From(ctx).Lang }>{ l.Name }</option>
-					}
-				</select>
-				<button class="icon-btn" type="button" data-theme-toggle title={ T(ctx, "ui2.theme") } aria-label={ T(ctx, "ui2.theme") }><span class="mi">brightness_6</span></button>
-				<a class="btn sm" href={ templ.URL(classic) }>{ T(ctx, "ui2.classic") }</a>
-				if From(ctx).Auth {
-					<button class="btn sm" type="button" hx-post="ui2/logout" hx-confirm={ T(ctx, "common.logout-confirmation") }>{ T(ctx, "common.logout") }</button>
-				}
+				<button class="icon-btn menu-btn" type="button" aria-expanded="false" aria-controls="top-menu" aria-label={ T(ctx, "ui2.menu") } data-menu-toggle><span class="mi">menu</span></button>
+				<div class="menu-items" id="top-menu">
+					<nav class="home">
+						<a href="ui2/">{ T(ctx, "nodes.title") }</a>
+						if From(ctx).HVPK != "" {
+							<a href={ templ.URL(VisorURL(From(ctx).HVPK, "info")) }>{ T(ctx, "nodes.local-visor-title") }</a>
+						}
+						if From(ctx).TPViz {
+							<a href="tp-viz/">{ T(ctx, "node.details.tpviz.title") }</a>
+						}
+						<a href="route-viz">{ T(ctx, "ui2.route-viz") }</a>
+					</nav>
+					<span class="spacer"></span>
+					<div class="tools">
+						<select class="lang" aria-label={ T(ctx, "ui2.language") } data-lang>
+							for _, l := range Langs {
+								<option value={ l.Code } selected?={ l.Code == From(ctx).Lang }>{ l.Name }</option>
+							}
+						</select>
+						<button class="icon-btn" type="button" data-theme-toggle title={ T(ctx, "ui2.theme") } aria-label={ T(ctx, "ui2.theme") }><span class="mi">brightness_6</span></button>
+						<a class="btn sm" href={ templ.URL(classic) }>{ T(ctx, "ui2.classic") }</a>
+						if From(ctx).Auth {
+							<button class="btn sm" type="button" hx-post="ui2/logout" hx-confirm={ T(ctx, "common.logout-confirmation") }>{ T(ctx, "common.logout") }</button>
+						}
+					</div>
+				</div>
 			</header>
 			<main>
 				{ children... }

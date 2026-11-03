@@ -165,8 +165,39 @@
 	document.addEventListener('change', onEvent);
 })();
 
-// Keep the current tab in view when the tab bar scrolls (narrow screens).
+// The tab bar scrolls on phones: keep the current tab in view and fade an
+// edge that has more tabs behind it.
 document.addEventListener('DOMContentLoaded', function () {
-	var a = document.querySelector('nav.tabs .tab.active');
-	if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest', inline: 'center' });
+	var nav = document.querySelector('nav.tabs');
+	if (!nav) return;
+	function fades() {
+		var more = nav.scrollWidth - nav.clientWidth;
+		nav.classList.toggle('fade-l', more > 1 && nav.scrollLeft > 1);
+		nav.classList.toggle('fade-r', more > 1 && nav.scrollLeft < more - 1);
+	}
+	var a = nav.querySelector('.tab.active');
+	if (a && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = a.offsetLeft - nav.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2;
+	fades();
+	nav.addEventListener('scroll', fades, { passive: true });
+	window.addEventListener('resize', fades);
+	if (document.fonts) document.fonts.ready.then(fades);
 });
+
+// The top bar's menu on narrow screens: the button opens it, and a click
+// outside it or Escape closes it.
+(function () {
+	'use strict';
+	function set(open) {
+		var top = document.querySelector('header.top');
+		var b = top && top.querySelector('[data-menu-toggle]');
+		if (!b) return;
+		top.classList.toggle('open', open);
+		b.setAttribute('aria-expanded', open ? 'true' : 'false');
+	}
+	document.addEventListener('click', function (e) {
+		if (!e.target.closest) return;
+		if (e.target.closest('[data-menu-toggle]')) { set(!document.querySelector('header.top.open')); return; }
+		if (!e.target.closest('.menu-items')) set(false);
+	});
+	document.addEventListener('keydown', function (e) { if (e.key === 'Escape') set(false); });
+})();
