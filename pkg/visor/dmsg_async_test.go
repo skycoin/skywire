@@ -33,6 +33,7 @@ func asyncVisor(t *testing.T, ctx context.Context, c *dmsg.Client, conf *visorco
 		initLock: new(sync.RWMutex),
 	}
 	v.conf.Hypervisors = hvs
+	v.conf.SetLogger(logging.NewMasterLogger())
 	require.NoError(t, initDmsgAsync(ctx, v, logging.MustGetLogger("dmsg-async-test")))
 	return v
 }
