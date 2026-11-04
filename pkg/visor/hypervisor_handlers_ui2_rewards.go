@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -67,8 +68,8 @@ func (hv *Hypervisor) ui2Rewards(part bool) http.HandlerFunc {
 	})
 }
 
-// ui2RewardSave sets the reward address, an account xpub as putRewardAddress
-// requires. An empty field removes it.
+// ui2RewardSave sets the reward address: an account xpub, or a single address
+// with the accept_risk box ticked, as putRewardAddress takes. An empty field removes it.
 func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 	return hv.withCtx(hv.ui2VisorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		pk := r.PathValue("pk")
@@ -77,10 +78,11 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			return
 		}
 		draft := r.PostForm.Get("address")
+		acceptRisk := r.PostForm.Get("accept_risk") != ""
 		fail := func(msg string) {
 			cur, _ := ctx.API.GetRewardAddress() //nolint:errcheck
 			rw := hv.ui2RewardView(pk, cur)
-			rw.Editing, rw.Draft, rw.Err = true, draft, msg
+			rw.Editing, rw.Draft, rw.AcceptRisk, rw.Err = true, draft, acceptRisk, msg
 			hv.render(w, r, ui2.RewardAddress(rw))
 		}
 		if draft == "" {
@@ -91,12 +93,20 @@ func (hv *Hypervisor) ui2RewardSave() http.HandlerFunc {
 			hv.render(w, r, ui2.RewardAddress(hv.ui2RewardView(pk, "")), ui2.Toast(hv.ui2T(r, "rewards-address-config.done"), false))
 			return
 		}
-		canonical, err := rewardconfig.ValidateRewardXpub(draft)
-		if err != nil {
+		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(draft, acceptRisk)
+		switch {
+		case errors.Is(err, rewardconfig.ErrSingleAddress):
+			fail(hv.ui2T(r, "rewards-address-config.single-needs-opt-in"))
+			return
+		case err != nil:
 			fail(hv.ui2T(r, "rewards-address-config.address-error"))
 			return
 		}
-		set, err := ctx.API.SetRewardAddress(canonical)
+		setFn := ctx.API.SetRewardAddress
+		if !isXpub {
+			setFn = ctx.API.SetSingleRewardAddress
+		}
+		set, err := setFn(canonical)
 		if err != nil {
 			fail(err.Error())
 			return

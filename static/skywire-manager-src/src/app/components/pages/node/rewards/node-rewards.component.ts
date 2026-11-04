@@ -11,6 +11,7 @@ import { NodeService } from 'src/app/services/node.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+import { needsAcceptRisk, rewardAddressValidator } from 'src/app/utils/reward-address';
 
 interface RewardDay {
   date: string;
@@ -66,6 +67,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   private xpubSub?: Subscription;
   private formXpubSub?: Subscription;
   private formChangesSub?: Subscription;
+  private riskSub?: Subscription;
 
   constructor(
     private http: HttpClient,
@@ -78,7 +80,14 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.rewardForm = this.formBuilder.group({
-      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+      address: ['', Validators.compose([
+        Validators.minLength(20), Validators.maxLength(112), rewardAddressValidator(() => !!this.rewardForm?.get('acceptRisk')!.value),
+      ])],
+      acceptRisk: [false],
+    });
+    this.riskSub = this.rewardForm.get('acceptRisk')!.valueChanges.subscribe(() => {
+      this.rewardForm.get('address')!.updateValueAndValidity();
+      this.changeDetectorRef.markForCheck();
     });
     this.formChangesSub = this.rewardForm.get('address')!.valueChanges.pipe(debounceTime(300)).subscribe(value => {
       this.formXpubSub?.unsubscribe();
@@ -108,6 +117,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.exposureSub?.unsubscribe();
     this.xpubSub?.unsubscribe();
     this.formXpubSub?.unsubscribe();
+    this.riskSub?.unsubscribe();
     this.formChangesSub?.unsubscribe();
   }
 
@@ -219,6 +229,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.showRewardForm = !this.showRewardForm;
     if (this.showRewardForm) {
       this.rewardForm.get('address')!.setValue(this.rewardsAddress || '');
+      this.rewardForm.get('acceptRisk')!.setValue(false);
     }
   }
 
@@ -228,7 +239,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 }
     const newAddr = (this.rewardForm.get('address')!.value || '').trim();
     const op = newAddr
-      ? this.nodeService.setRewardsAddress(this.pk, newAddr)
+      ? this.nodeService.setRewardsAddress(this.pk, newAddr, needsAcceptRisk(newAddr, this.rewardForm.get('acceptRisk')!.value))
       : this.nodeService.deleteRewardsAddress(this.pk);
     this.saveRewardsSubscription = op.subscribe({
       next: () => {

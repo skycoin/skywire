@@ -99,3 +99,24 @@ tr.pending td {
     overflow-wrap: anywhere;
   }
 }
+
+.single-risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 4px solid rgb(var(--sw-gold-rgb));
+  border-radius: 4px;
+  background: rgba(var(--sw-gold-rgb), 0.12);
+}
+
+.accept-risk {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.accept-risk-text {
+  white-space: normal;
+  font-size: 0.85rem;
+}

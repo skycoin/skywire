@@ -60,3 +60,18 @@ mat-form-field {
 :host ::ng-deep .list-container .mdc-label {
   color: variables.$blue-medium !important;
 }
+
+.accept-risk {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.accept-risk-text {
+  white-space: normal;
+  font-size: 0.85rem;
+}
+
+// The global dark-theme checkbox label rule (styles.scss) would make the text white on this light dialog.
+:host ::ng-deep .accept-risk .mdc-label {
+  color: variables.$blue-medium !important;
+}

@@ -42,8 +42,14 @@ func TestUI2Rewards(t *testing.T) {
 
 	code, body = ui2Do(t, ui2Req(t, http.MethodPut, base+"/address", ui2Form, url.Values{"address": {"2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"}}.Encode()))
 	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, body, "valid account xpub", "a plain address is refused")
+	require.Contains(t, body, "accepts its risk", "a plain address needs the opt-in")
 	require.Contains(t, body, "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6", "the form keeps what was typed")
+	require.NotContains(t, body, `value="1" checked`)
+
+	code, body = ui2Do(t, ui2Req(t, http.MethodPut, base+"/address", ui2Form, url.Values{"address": {"notanaddress"}, "accept_risk": {"1"}}.Encode()))
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, body, "valid account xpub", "an invalid address is refused")
+	require.Contains(t, body, `name="accept_risk" value="1" checked`, "the box stays ticked")
 
 	code, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/rules", "", ""))
 	require.Equal(t, http.StatusOK, code)
