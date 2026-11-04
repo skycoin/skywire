@@ -5,9 +5,8 @@ reward system derives a fresh address from it for every payout and never pays
 the same address twice. This page shows how to make the wallet, which xpub to
 copy, and how to set it.
 
-From mid-November 2026 rewards are planned to require an xpub. A single
-Skycoin address can already no longer be set, and one set earlier is still
-paid for now.
+From November 15, 2026 rewards require an xpub. A single Skycoin address
+can already no longer be set, and one set earlier is paid only until then.
 
 ## Why an xpub
 
