@@ -48,14 +48,14 @@ function field(unit,    i) {
 }
 /^Benchmark/ {
 	name = $1; sub(/-[0-9]+$/, "", name); sub(/^Benchmark/, "", name)
-	if (FILENAME ~ /go$/ && FILENAME !~ /tinygo$/) { gns[name] = field("ns/op"); gal[name] = field("allocs/op"); order[++n] = name }
-	else { tns[name] = field("ns/op"); tal[name] = field("allocs/op") }
+	if (FILENAME ~ /go$/ && FILENAME !~ /tinygo$/) { gns[name] = field("ns/op"); gb[name] = field("B/op"); gal[name] = field("allocs/op"); order[++n] = name }
+	else { tns[name] = field("ns/op"); tb[name] = field("B/op"); tal[name] = field("allocs/op") }
 }
 END {
-	printf "%-28s %12s %12s %7s %10s %10s\n", "benchmark", "go ns/op", "tinygo ns/op", "ratio", "go allocs", "tg allocs"
+	printf "%-26s %11s %12s %6s %9s %9s %9s %9s\n", "benchmark", "go ns/op", "tinygo ns/op", "ratio", "go B", "tg B", "go allocs", "tg allocs"
 	for (i = 1; i <= n; i++) {
 		k = order[i]; t = (k in tns) ? tns[k] : "-"
 		r = (t != "-" && gns[k] > 0) ? sprintf("%.2f", t / gns[k]) : "-"
-		printf "%-28s %12s %12s %7s %10s %10s\n", k, gns[k], t, r, gal[k], (k in tal) ? tal[k] : "-"
+		printf "%-26s %11s %12s %6s %9s %9s %9s %9s\n", k, gns[k], t, r, gb[k], (k in tb) ? tb[k] : "-", gal[k], (k in tal) ? tal[k] : "-"
 	}
 }' "$out/go" "$out/tinygo"
