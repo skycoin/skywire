@@ -106,18 +106,20 @@ type NetworkEvent struct {
 }
 
 // The connectivity states. A visor starts connecting, is online while it
-// holds a dmsg session, and offline once it has had none for a while or an
-// app reported that the device has no network.
+// has a live transport, dmsg-only while it has none but holds a dmsg
+// session, and offline once it has had neither for a while or an app
+// reported that the device has no network.
 const (
 	ConnConnecting = "connecting"
 	ConnOnline     = "online"
+	ConnDmsgOnly   = "dmsg-only"
 	ConnOffline    = "offline"
 )
 
 // Connectivity says whether the visor can reach the skywire network.
 type Connectivity struct {
-	// State is one of ConnConnecting, ConnOnline or ConnOffline, and Online
-	// is true only for ConnOnline.
+	// State is one of ConnConnecting, ConnOnline, ConnDmsgOnly or
+	// ConnOffline, and Online is true only for ConnOnline.
 	State  string `json:"state"`
 	Online bool   `json:"online"`
 	// Since is when State began and Reason what decided it.
@@ -125,4 +127,8 @@ type Connectivity struct {
 	Reason string    `json:"reason,omitempty"`
 	// Changes counts the state changes since start.
 	Changes uint64 `json:"changes"`
+	// Transports and DmsgSessions are the live transports and dmsg
+	// sessions at the last check.
+	Transports   int `json:"transports"`
+	DmsgSessions int `json:"dmsg_sessions"`
 }

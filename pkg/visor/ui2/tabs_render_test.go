@@ -55,6 +55,8 @@ func TestInfoRender(t *testing.T) {
 	require.Contains(t, out, "vpn-client failed.")
 	require.Contains(t, out, "This visor has no transports.")
 	require.Contains(t, out, "Offline, waiting for network.")
+	i.Sum.Connectivity = &visorapi.Connectivity{State: visorapi.ConnDmsgOnly}
+	require.Contains(t, renderEN(t, InfoPage(i)), "No transports, reachable over dmsg only.")
 	require.Contains(t, out, "Not eligible for rewards: old version")
 	require.Contains(t, out, "The config was made by v1.3.100")
 	require.Contains(t, out, "2 hours")

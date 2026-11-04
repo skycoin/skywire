@@ -60,6 +60,8 @@ describe('visor overview alerts', () => {
     const n = base();
     n.connectivity = 'offline';
     expect(texts(n)[0]).toBe('node.overview.alert-offline');
+    n.connectivity = 'dmsg-only';
+    expect(texts(n)[0]).toBe('node.overview.alert-dmsg-only');
     n.connectivity = 'online';
     expect(texts(n)).not.toContain('node.overview.alert-offline');
   });
