@@ -5,6 +5,8 @@ package transport
 import (
 	"bytes"
 	"crypto/sha256"
+	"hash"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -19,24 +21,38 @@ import (
 func MakeTransportID(keyA, keyB cipher.PubKey, netType types.Type) uuid.UUID {
 	tpType := string(netType)
 	keys := SortEdges(keyA, keyB)
-	// uuid.NewHash(sha256.New(), uuid.UUID{}, keys ‖ type, 0), on the stack.
-	var buf [16 + 33*2 + 32]byte
 	if len(tpType) > 32 {
 		data := make([]byte, 0, 33*2+len(tpType))
 		data = append(append(append(data, keys[0][:]...), keys[1][:]...), tpType...)
 		return uuid.NewHash(sha256.New(), uuid.UUID{}, data, 0)
 	}
+	// uuid.NewHash(sha256.New(), uuid.UUID{}, keys ‖ type, 0) with pooled
+	// buffers, since TinyGo heap allocates Sum256's state on every call.
+	t := tpIDPool.Get().(*tpIDHasher)
 	i := 16
-	i += copy(buf[i:], keys[0][:])
-	i += copy(buf[i:], keys[1][:])
-	i += copy(buf[i:], tpType)
-	sum := sha256.Sum256(buf[:i])
+	i += copy(t.buf[i:], keys[0][:])
+	i += copy(t.buf[i:], keys[1][:])
+	i += copy(t.buf[i:], tpType)
+	t.h.Reset()
+	t.h.Write(t.buf[:i]) //nolint:errcheck
+	t.h.Sum(t.sum[:0])
 	var id uuid.UUID
-	copy(id[:], sum[:])
+	copy(id[:], t.sum[:])
+	tpIDPool.Put(t)
 	id[6] &= 0x0f
 	id[8] = (id[8] & 0x3f) | 0x80
 	return id
 }
+
+// tpIDHasher holds MakeTransportID's state. buf[:16] stays zero, the
+// all-zero namespace UUID.
+type tpIDHasher struct {
+	h   hash.Hash
+	buf [16 + 33*2 + 32]byte
+	sum [sha256.Size]byte
+}
+
+var tpIDPool = sync.Pool{New: func() any { return &tpIDHasher{h: sha256.New()} }}
 
 // SortEdges sorts keys so that least-significant comes first
 func SortEdges(keyA, keyB cipher.PubKey) [2]cipher.PubKey {
