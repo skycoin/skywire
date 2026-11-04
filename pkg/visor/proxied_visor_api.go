@@ -410,3 +410,7 @@ var _ json.RawMessage
 func (p *proxiedVisorAPI) RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error) {
 	return p.hvAPI.RewardAddressExposure(addr)
 }
+
+func (p *proxiedVisorAPI) SetSingleRewardAddress(addr string) (string, error) {
+	return p.hvAPI.HVSetSingleRewardAddress(p.targetPK, addr)
+}

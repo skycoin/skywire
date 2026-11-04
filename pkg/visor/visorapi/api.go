@@ -85,6 +85,8 @@ type Node interface {
 	NetworkView() (*NetworkViewResponse, error)
 	Ports() (map[string]PortDetail, error)
 	SetRewardAddress(string) (string, error)
+	// SetSingleRewardAddress sets a single address with the opt-in, refusing one that has sent coins.
+	SetSingleRewardAddress(string) (string, error)
 	GetRewardAddress() (string, error)
 	RewardAddressExposure(addr string) (rewardconfig.AddressExposure, error)
 	DeleteRewardAddress() error
@@ -147,6 +149,7 @@ type Hypervisors interface {
 	HVAddApp(pk cipher.PubKey, appName, binaryName string) error
 	HVSetMinHops(pk cipher.PubKey, hops uint16) error
 	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
+	HVSetSingleRewardAddress(pk cipher.PubKey, addr string) (string, error)
 	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
 	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
 	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)

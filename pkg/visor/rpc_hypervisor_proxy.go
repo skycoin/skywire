@@ -961,3 +961,15 @@ func (v *Visor) HVUpdateForwardedPort(pk cipher.PubKey, p visorapi.ForwardedPort
 	}
 	return sub.HVUpdateForwardedPort(pk, p)
 }
+
+// HVSetSingleRewardAddress sets a single reward address, with the opt-in, on the visor identified by pk.
+func (v *Visor) HVSetSingleRewardAddress(pk cipher.PubKey, addr string) (string, error) {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return "", err
+	}
+	if direct != nil {
+		return direct.SetSingleRewardAddress(addr)
+	}
+	return sub.HVSetSingleRewardAddress(pk, addr)
+}

@@ -95,3 +95,23 @@ func TestRewardAddresses(t *testing.T) {
 		t.Fatal("chain xpub must not derive reward addresses")
 	}
 }
+
+func TestValidateRewardSetting(t *testing.T) {
+	account, chain := testXpubs(t)
+	const addr = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"
+
+	if _, _, err := ValidateRewardSetting(addr, false); !errors.Is(err, ErrSingleAddress) {
+		t.Fatalf("single address without opt-in: %v", err)
+	}
+	if got, isXpub, err := ValidateRewardSetting(" "+addr, true); err != nil || isXpub || got != addr {
+		t.Fatalf("single address with opt-in: %q %v %v", got, isXpub, err)
+	}
+	for _, risk := range []bool{false, true} {
+		if got, isXpub, err := ValidateRewardSetting(account, risk); err != nil || !isXpub || got != account {
+			t.Fatalf("account xpub, opt-in %v: %q %v %v", risk, got, isXpub, err)
+		}
+		if _, _, err := ValidateRewardSetting(chain, risk); !errors.Is(err, ErrNotAccountXpub) {
+			t.Fatalf("chain xpub, opt-in %v: %v", risk, err)
+		}
+	}
+}

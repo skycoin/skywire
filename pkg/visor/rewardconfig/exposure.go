@@ -3,6 +3,9 @@ package rewardconfig
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/skycoin/skycoin/src/util/droplet"
@@ -18,7 +21,24 @@ type AddressExposure struct {
 
 // AddressUxoutsPath is the skycoin node API query that ParseAddressUxouts reads.
 func AddressUxoutsPath(addr string) string {
-	return "/api/v1/address_uxouts?address=" + addr
+	return "/api/v1/address_uxouts?address=" + url.QueryEscape(addr)
+}
+
+// FetchAddressExposure asks the skycoin node at nodeURL whether addr has ever spent.
+func FetchAddressExposure(c *http.Client, nodeURL, addr string) (AddressExposure, error) {
+	resp, err := c.Get(strings.TrimRight(nodeURL, "/") + AddressUxoutsPath(addr))
+	if err != nil {
+		return AddressExposure{}, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return AddressExposure{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return AddressExposure{}, fmt.Errorf("skycoin node %s returned %d: %s", nodeURL, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return ParseAddressUxouts(addr, body)
 }
 
 // ParseAddressUxouts reads a node's address_uxouts response for addr.
@@ -47,15 +67,16 @@ func ParseAddressUxouts(addr string, body []byte) (AddressExposure, error) {
 	return e, nil
 }
 
-// Warning is the text shown for an exposed address, or "" when it never spent.
+// Warning is the text shown for an address that has sent coins, or "" when it never spent.
 func (e AddressExposure) Warning() string {
 	if !e.Spent {
 		return ""
 	}
-	w := "WARNING: reward address " + e.Address + " has sent coins before, so its public key\n" +
-		"is on the blockchain. A future quantum computer could use it to steal coins sent there.\n"
+	w := "WARNING: reward address " + e.Address + " has sent coins, so it no longer earns rewards.\n" +
+		"Set your wallet's account xpub as the reward address: skywire cli reward XPUB\n" +
+		"Its public key is also on the blockchain, where a future quantum computer could use it to take coins sent there.\n"
 	if e.Balance != "0" {
-		w += "It holds " + e.Balance + " SKY now. Move them to a new address.\n"
+		w += "It holds " + e.Balance + " SKY now. Move them to an address of the xpub's wallet.\n"
 	}
-	return w + "Set a new address or a BIP44 account xpub as your reward address."
+	return strings.TrimSuffix(w, "\n")
 }

@@ -594,3 +594,10 @@ func (r *RPC) RewardAddressExposure(addr *string, out *rewardconfig.AddressExpos
 	*out = e
 	return err
 }
+
+// SetSingleRewardAddress sets a single reward address with the opt-in.
+func (r *RPC) SetSingleRewardAddress(p string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "SetSingleRewardAddress", p)(out, &err)
+	*out, err = r.visor.SetSingleRewardAddress(p)
+	return err
+}

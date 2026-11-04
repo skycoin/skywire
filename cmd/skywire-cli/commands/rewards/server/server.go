@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	htmpl "html/template"
 	"io"
@@ -1043,6 +1044,13 @@ func buildRouter() http.Handler {
 						w.Write([]byte("skywire skycoin cli decodeRawTransaction:\n\n" + decoded + "\n\nskywire skycoin cli decodeRawTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
+					// Never send to a single reward address that has sent coins, whatever the day.
+					if err := checkPayoutTxn(wd+`/hist`, d, string(body)); err != nil {
+						log.Warnf("reward transaction for %s refused: %v", d, err)
+						w.WriteHeader(http.StatusBadRequest)
+						w.Write([]byte("reward transaction for " + d + " refused:\n\n" + err.Error() + "\n\nBuild it from GET /skycoin-rewards/payout instead.")) //nolint:errcheck,gosec
+						return
+					}
 					//if all is well, broadcast the transaction
 					txid, err := script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
 					if err != nil {
@@ -1074,6 +1082,35 @@ func buildRouter() http.Handler {
 			w.WriteHeader(http.StatusNotFound)
 			h, _ := script.FindFiles(wd + `/hist/`).String()               //nolint:errcheck,gosec
 			w.Write([]byte("No undistributed rewards csv found.\n\n" + h)) //nolint:errcheck,gosec
+		})
+
+		// The oldest undistributed day's reward transaction CSV, without the
+		// payouts to single addresses that have sent coins. sendrewards.sh
+		// builds the transaction from it.
+		handleAuth("GET /skycoin-rewards/payout", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Server", "")
+			active, _ := script.Exec(`systemctl is-active skywire-reward.service`).String() //nolint:errcheck,gosec
+			if strings.TrimRight(active, "\n") == "active" {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("reward calculation running")) //nolint:errcheck,gosec
+				return
+			}
+			day, csv, err := nextPayout(wd + `/hist`)
+			switch {
+			case errors.Is(err, errNoPayout):
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(err.Error())) //nolint:errcheck,gosec
+				return
+			case err != nil:
+				log.Errorf("payout csv for %s: %v", day, err)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("payout csv for " + day + ": " + err.Error())) //nolint:errcheck,gosec
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("X-Reward-Day", day)
+			w.WriteHeader(http.StatusOK)
+			w.Write(csv) //nolint:errcheck,gosec
 		})
 
 		r1.HandleFunc("GET /skycoin-rewards/csv", func(w http.ResponseWriter, r *http.Request) {

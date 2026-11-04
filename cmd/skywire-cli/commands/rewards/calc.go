@@ -10,12 +10,14 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -261,23 +263,63 @@ func perIPShareLimit(t time.Time) int {
 	return 8
 }
 
-// singleAddressCutoff is the first reward day that pays only an account xpub.
-// See rewards/mainnet_rules.md, Skycoin Address.
+// singleAddressCutoff is the first reward day that pays a single address only
+// if it has never sent coins. See rewards/mainnet_rules.md, Skycoin Address.
 var singleAddressCutoff = time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
 
-// rewardAddressError checks a visor's reward address for the reward day t.
-func rewardAddressError(addr string, t time.Time) error {
-	_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
-	if err == nil && !isXpub && !t.Before(singleAddressCutoff) {
-		return rewardconfig.ErrSingleAddress
+// spentCache holds, per run, whether each single address has sent coins.
+var spentCache = struct {
+	sync.Mutex
+	m map[string]bool
+}{m: map[string]bool{}}
+
+// addressSpent asks the skycoin node whether addr has ever sent coins.
+func addressSpent(addr string) (bool, error) {
+	spentCache.Lock()
+	defer spentCache.Unlock()
+	if s, ok := spentCache.m[addr]; ok {
+		return s, nil
 	}
-	return err
+	e, err := rewardconfig.FetchAddressExposure(&http.Client{Timeout: 30 * time.Second}, skycoinNodeURL, addr)
+	if err != nil {
+		return false, err
+	}
+	spentCache.m[addr] = e.Spent
+	return e.Spent, nil
+}
+
+// checkRewardAddress checks a visor's reward address for the reward day t.
+// ineligible is the reason it is not paid. failed means the node could not
+// say whether a single address has sent coins, so the calculation must stop.
+func checkRewardAddress(addr string, t time.Time) (ineligible, failed error) {
+	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+	if err != nil || isXpub || t.Before(singleAddressCutoff) {
+		return err, nil
+	}
+	spent, err := addressSpent(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("check whether reward address %s has sent coins (skycoin node %s): %w", canonical, skycoinNodeURL, err)
+	}
+	if spent {
+		return rewardconfig.ErrAddressSpent, nil
+	}
+	return nil, nil
+}
+
+// rewardAddressError is checkRewardAddress, stopping the calculation when the
+// node cannot be asked, rather than paying or leaving out the visor.
+func rewardAddressError(addr string, t time.Time) error {
+	ineligible, failed := checkRewardAddress(addr, t)
+	if failed != nil {
+		log.Fatal(failed)
+	}
+	return ineligible
 }
 
 // addressReason is the ineligibility reason for an addrErr from rewardAddressError.
 func addressReason(err error) string {
-	if errors.Is(err, rewardconfig.ErrSingleAddress) {
-		return "Single address, xpub required"
+	if errors.Is(err, rewardconfig.ErrAddressSpent) {
+		return "Reward address has sent coins"
 	}
 	return "Invalid Skycoin address"
 }

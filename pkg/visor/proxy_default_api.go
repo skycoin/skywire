@@ -1484,3 +1484,11 @@ func (proxyDefaultAPI) DmsgAsyncSettings() (*visorapi.DmsgAsyncSettings, error) 
 
 // DmsgAsyncSetSettings implements visorapi.API.
 func (proxyDefaultAPI) DmsgAsyncSetSettings(map[string]string) error { return ErrProxyNotSupported }
+
+func (proxyDefaultAPI) SetSingleRewardAddress(_ string) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", ErrProxyNotSupported
+}
