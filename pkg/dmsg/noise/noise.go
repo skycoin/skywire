@@ -76,7 +76,7 @@ func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
 	if !config.RemotePK.Null() {
 		dh.peerStatic = config.RemotePK[:]
 	}
-	suite := noise.NewCipherSuite(dh, noise.CipherChaChaPoly, noise.HashSHA256)
+	suite := noise.NewCipherSuite(dh, cipherChaChaPoly, noise.HashSHA256)
 	nc := noise.Config{
 		CipherSuite: suite,
 		Random:      rand.Reader,
