@@ -316,6 +316,9 @@ const (
 	// (stcpr/sudph) transport to each configured hypervisor, so RPC + skypty ride a
 	// fast p2p path instead of the dmsg relay (dmsg stays the bootstrap/fallback).
 	HypervisorAutoconnect = true
+	// DmsgServerTransports determines if the visor keeps one automatic transport to
+	// each dmsg server it holds a session with, when that server is also a visor.
+	DmsgServerTransports = true
 
 	// Dmsgpty constants.
 

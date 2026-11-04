@@ -84,6 +84,9 @@ const envfileTemplate = `#
 #--	Never create direct transports. dmsg is still used
 #NODIRECTTRANSPORTS=true
 
+#--	Do not keep a transport to each dmsg server the visor holds a session with
+#NODMSGSERVERTRANSPORTS=true
+
 #--	Address resolver registration: 0 stays registered, N>0 leaves after N
 #	transports, a negative value never registers (no inbound transports)
 #ARTRANSPORTLIMIT=0

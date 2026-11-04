@@ -11,6 +11,8 @@
 package visorcore
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -87,4 +89,24 @@ func (c *Connector) BackedOff(now time.Time) int {
 		}
 	}
 	return n
+}
+
+// ErrBackingOff is returned by Dial while an earlier failure of the same
+// target and type is still backing off.
+var ErrBackingOff = errors.New("dial backing off after an earlier failure")
+
+// Dial establishes one automatic transport of type t to pk, sharing the
+// backoff ConnectToVisors keeps.
+func (c *Connector) Dial(ctx context.Context, pk cipher.PubKey, t tptypes.Type) error {
+	if c.inBackoff(pk, t, time.Now()) {
+		return ErrBackingOff
+	}
+	if err := c.tryEstablishTransport(ctx, pk, t, c.Log.WithField("pk", pk).WithField("type", string(t))); err != nil {
+		if !isContextError(err) {
+			c.noteFailure(pk, t, time.Now())
+		}
+		return err
+	}
+	c.noteSuccess(pk, t)
+	return nil
 }
