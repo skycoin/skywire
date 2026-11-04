@@ -37,7 +37,6 @@ import (
 	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 	"github.com/skycoin/skywire/rewards"
 )
 
@@ -390,7 +389,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 		uu := survey.UUID
 
-		_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
+		addrErr := rewardAddressError(sky, wDate)
 
 		// TPD-integrated UT already gated >= 2 transports at heartbeat
 		// time, so every pk we're iterating qualified by definition.
@@ -494,7 +493,7 @@ func ineligibilityReason(archAllowed bool, arch, ip, uu, ifc string, macs []stri
 	case hv != "null":
 		return hv
 	case addrErr != nil:
-		return "Invalid Skycoin address"
+		return addressReason(addrErr)
 	case !meetsTP:
 		return "No transports"
 	default:

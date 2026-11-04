@@ -261,6 +261,27 @@ func perIPShareLimit(t time.Time) int {
 	return 8
 }
 
+// singleAddressCutoff is the first reward day that pays only an account xpub.
+// See rewards/mainnet_rules.md, Skycoin Address.
+var singleAddressCutoff = time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
+
+// rewardAddressError checks a visor's reward address for the reward day t.
+func rewardAddressError(addr string, t time.Time) error {
+	_, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
+	if err == nil && !isXpub && !t.Before(singleAddressCutoff) {
+		return rewardconfig.ErrSingleAddress
+	}
+	return err
+}
+
+// addressReason is the ineligibility reason for an addrErr from rewardAddressError.
+func addressReason(err error) string {
+	if errors.Is(err, rewardconfig.ErrSingleAddress) {
+		return "Single address, xpub required"
+	}
+	return "Invalid Skycoin address"
+}
+
 // calcPresenceShare computes a visor's share after IP cap and MAC dedup.
 func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 {
 	share := 1.0
@@ -998,7 +1019,7 @@ Architectures:
 			}
 			uu := survey.UUID
 
-			_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
+			addrErr := rewardAddressError(sky, wDate)
 
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
@@ -1037,7 +1058,7 @@ Architectures:
 					case hv != "null":
 						return hv
 					case addrErr != nil:
-						return "Invalid Skycoin address"
+						return addressReason(addrErr)
 					case !meetsTransportReq:
 						return "No transports"
 					default:
