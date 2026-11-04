@@ -215,8 +215,9 @@ func (v *Visor) refreshNetwork(reason string) {
 	v.initLock.Unlock()
 
 	// Sessions dialed from the old network can linger. The public IP lookup
-	// asks these sessions, so they have to be fresh first.
-	if v.dmsgC != nil && reason != netBackOnline {
+	// asks these sessions, so they have to be fresh first. Sessions that
+	// just brought the visor back online are kept.
+	if v.dmsgC != nil && (reason != netBackOnline || len(v.dmsgC.AllSessions()) == 0) {
 		v.dmsgC.ForceReconnect()
 		deadline := time.Now().Add(netMoveDmsgWait)
 		for len(v.dmsgC.AllSessions()) == 0 && time.Now().Before(deadline) {

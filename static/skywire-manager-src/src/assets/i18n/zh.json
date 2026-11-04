@@ -171,6 +171,7 @@
       "alert-no-transports": "此节点没有任何传输。",
       "alert-no-dmsg": "此节点未连接到任何 DMSG 服务器。",
       "alert-offline": "离线，正在等待网络。",
+      "alert-dmsg-only": "没有传输，仅可通过 DMSG 访问。",
       "alert-no-reward": "未设置奖励地址，因此此节点不会获得奖励。",
       "alert-reward-ineligible": "不符合奖励条件：{{ reason }}",
       "alert-config-version": "配置由 {{ config }} 生成，而不是由当前运行的版本生成。",

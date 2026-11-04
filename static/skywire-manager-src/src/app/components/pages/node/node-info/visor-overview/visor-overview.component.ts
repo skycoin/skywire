@@ -46,6 +46,8 @@ export function overviewAlerts(node: Node): OverviewAlert[] {
   const alerts: OverviewAlert[] = [];
   if (node.connectivity === 'offline') {
     alerts.push({ level: 'warn', text: 'node.overview.alert-offline' });
+  } else if (node.connectivity === 'dmsg-only') {
+    alerts.push({ level: 'info', text: 'node.overview.alert-dmsg-only' });
   }
   const health = node.health || {};
   // The visor reports each check as "healthy" or "connecting" until it passes

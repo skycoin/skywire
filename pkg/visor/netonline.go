@@ -1,9 +1,10 @@
 // Package visor pkg/visor/netonline.go c3-vis-core
 //
 // Whether the visor can reach the skywire network. It is online while it
-// holds a dmsg session and offline once it has held none for offlineGrace,
-// or right away when an app or the browser reports that the device has no
-// network. Coming back online refreshes every registration at once.
+// has a live transport, dmsg-only while it has none but holds a dmsg
+// session, and offline once it has had neither for offlineGrace, or right
+// away when an app or the browser reports that the device has no network.
+// Leaving offline refreshes every registration at once.
 package visor
 
 import (
@@ -11,22 +12,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 var (
-	// onlineCheckInterval is how often the dmsg sessions are counted.
+	// onlineCheckInterval is how often the transports and sessions are counted.
 	onlineCheckInterval = 2 * time.Second
-	// offlineGrace is how long the visor goes without a dmsg session before
-	// it counts as offline.
+	// offlineGrace is how long the visor goes without a live transport or a
+	// dmsg session before it counts as offline.
 	offlineGrace = 30 * time.Second
 	// reportedOfflineHold bounds how long a report of no network outweighs
-	// the dmsg sessions, which can outlive the network by a keepalive.
+	// the transports and sessions, which can outlive the network by a keepalive.
 	reportedOfflineHold = 2 * time.Minute
+	// liveTransportWindow is how recently a transport must have received a
+	// packet to count as live. Both ends ping every transportPingInterval.
+	liveTransportWindow = 150 * time.Second
 )
 
 // netBackOnline is the networkMoved reason for a return from offline. Its
-// sessions were just dialed, so the refresh keeps them.
+// dmsg sessions, if any, were just dialed, so the refresh keeps them.
 const netBackOnline = "back online"
 
 // onlineState is the connectivity state machine. Its zero value starts
@@ -36,21 +41,25 @@ type onlineState struct {
 	since      time.Time
 	reason     string
 	changes    uint64
+	transports int
+	sessions   int
 	start      time.Time // first observation
-	lastSeen   time.Time // last observation with a dmsg session
+	lastSeen   time.Time // last observation with a transport or a session
 	reportedAt time.Time // an app or the browser said there is no network
 	reportedBy string
-	sessions   func() int // tests replace the dmsg session count
+	// tests replace the live transport and dmsg session counts
+	countTransports, countSessions func() int
 }
 
-// observe takes the dmsg session count at now and the mode in force. It
-// returns the log line of a state change, "" when there was none, and
-// whether the change was a return from offline.
-func (s *onlineState) observe(now time.Time, sessions int, mode string) (line string, backOnline bool) {
+// observe takes the live transport and dmsg session counts at now and the
+// mode in force. It returns the log line of a state change, "" when there
+// was none, and whether the change left offline.
+func (s *onlineState) observe(now time.Time, transports, sessions int, mode string) (line string, backOnline bool) {
 	if s.start.IsZero() {
 		s.start, s.state, s.since = now, visorapi.ConnConnecting, now
 	}
-	if sessions > 0 {
+	s.transports, s.sessions = transports, sessions
+	if transports > 0 || sessions > 0 {
 		s.lastSeen = now
 	}
 	target, reason := s.state, s.reason
@@ -61,15 +70,17 @@ func (s *onlineState) observe(now time.Time, sessions int, mode string) (line st
 	switch {
 	case !s.reportedAt.IsZero() && now.Sub(s.reportedAt) < reportedOfflineHold:
 		target, reason = visorapi.ConnOffline, s.reportedBy+" reported no network"
+	case transports > 0:
+		target, reason = visorapi.ConnOnline, fmt.Sprintf("%d transports, %d dmsg sessions", transports, sessions)
 	case sessions > 0:
-		target, reason = visorapi.ConnOnline, fmt.Sprintf("%d dmsg sessions", sessions)
+		target, reason = visorapi.ConnDmsgOnly, fmt.Sprintf("no transports, %d dmsg sessions", sessions)
 	case mode == visorapi.ModeOffline:
 		target, reason = visorapi.ConnOffline, "network mode offline"
 	case now.Sub(quiet) >= offlineGrace:
-		target, reason = visorapi.ConnOffline, fmt.Sprintf("no dmsg sessions for %s", offlineGrace)
+		target, reason = visorapi.ConnOffline, fmt.Sprintf("no transports or dmsg sessions for %s", offlineGrace)
 	}
 	if target == s.state {
-		if target == visorapi.ConnOnline {
+		if target != visorapi.ConnOffline {
 			s.reason = reason
 		}
 		return "", false
@@ -77,7 +88,7 @@ func (s *onlineState) observe(now time.Time, sessions int, mode string) (line st
 	prev := s.state
 	s.state, s.since, s.reason = target, now, reason
 	s.changes++
-	return fmt.Sprintf("network: %s (%s)", target, reason), prev == visorapi.ConnOffline && target == visorapi.ConnOnline
+	return fmt.Sprintf("network: %s (%s)", target, reason), prev == visorapi.ConnOffline
 }
 
 // report records an app's or the browser's word on the network. Offline
@@ -96,22 +107,47 @@ func (s *onlineState) snapshot() visorapi.Connectivity {
 		st = visorapi.ConnConnecting
 	}
 	return visorapi.Connectivity{
-		State:   st,
-		Online:  st == visorapi.ConnOnline,
-		Since:   s.since,
-		Reason:  s.reason,
-		Changes: s.changes,
+		State:        st,
+		Online:       st == visorapi.ConnOnline,
+		Since:        s.since,
+		Reason:       s.reason,
+		Changes:      s.changes,
+		Transports:   s.transports,
+		DmsgSessions: s.sessions,
 	}
 }
 
 func (v *Visor) dmsgSessionCount() int {
-	if f := v.netMove.online.sessions; f != nil {
+	if f := v.netMove.online.countSessions; f != nil {
 		return f()
 	}
 	if v.dmsgC == nil {
 		return 0
 	}
 	return len(v.dmsgC.AllSessions())
+}
+
+// liveTransportCount counts the open transports that received a packet
+// within liveTransportWindow, or have not yet had the time to.
+func (v *Visor) liveTransportCount(now time.Time) int {
+	if f := v.netMove.online.countTransports; f != nil {
+		return f()
+	}
+	tm := v.tpMLocked()
+	if tm == nil {
+		return 0
+	}
+	n := 0
+	tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp.IsClosed() {
+			return true
+		}
+		if at := tp.LastRecvAt(); at.IsZero() || now.Sub(at) < liveTransportWindow {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 func (v *Visor) currentMode() string {
@@ -121,12 +157,12 @@ func (v *Visor) currentMode() string {
 }
 
 // checkOnline takes one observation, logs a change and refreshes the
-// network on a return from offline.
+// network on leaving offline.
 func (v *Visor) checkOnline(now time.Time) {
-	n, mode := v.dmsgSessionCount(), v.currentMode()
+	tps, n, mode := v.liveTransportCount(now), v.dmsgSessionCount(), v.currentMode()
 	s := &v.netMove
 	s.mu.Lock()
-	line, back := s.online.observe(now, n, mode)
+	line, back := s.online.observe(now, tps, n, mode)
 	s.mu.Unlock()
 	if line != "" {
 		v.netMoveLog().Info(line)
