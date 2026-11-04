@@ -538,7 +538,11 @@
     var asked = /[?&]tour=1(&|$)/.test(location.search);
     var seen = true;
     try { seen = !!localStorage.getItem(SEEN_KEY); } catch (e) { /* private mode: do not nag */ }
-    if (seen && !asked) { return; }
+    // A page framed by another one, such as the ui2 Chat tab's ?embed=1 tab,
+    // is not the dashboard: its first step would navigate the frame away.
+    var framed = true;
+    try { framed = window.self !== window.top; } catch (e) { /* cross-origin parent */ }
+    if ((seen || framed) && !asked) { return; }
 
     // Offered once, and only once we are past the login guard and Angular has
     // had time to draw the list the first step points at. On the login page we
