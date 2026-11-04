@@ -10,11 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Series keys dmsg-discovery samples.
@@ -31,7 +30,7 @@ const (
 
 // StartCharts samples the discovery's counts into st until ctx ends and
 // serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	page := &charts.Page{
 		Title: "Skywire dmsg discovery",
 		About: strings.Split(a.dmsgAddr, ":")[0],

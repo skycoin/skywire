@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -59,7 +58,7 @@ func TestRewindBody(t *testing.T) {
 }
 
 func TestHTTPTransport_RoundTrip(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	const (
 		nSrvs       = 1
@@ -235,7 +234,7 @@ func newDmsgClient(t *testing.T, dc disc.APIClient, minSessions int, name string
 // (TPD/AR/SD) receive uncompressed bodies even though the server can gzip,
 // driving dmsg-server write CPU + egress (Beta's post-#2980 residual).
 func TestHTTPTransport_TransparentGzip(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	const (
 		nSrvs       = 1
@@ -336,7 +335,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 // one request and then dropped (the v1.3.93 self-probe did this every minute)
 // kept its stream reserved in the dmsg porter for the life of the process.
 func TestHTTPTransport_IdleStreamEvictedUnattended(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 	old := idleEvictDelay
 	idleEvictDelay = 500 * time.Millisecond
 	t.Cleanup(func() { idleEvictDelay = old })

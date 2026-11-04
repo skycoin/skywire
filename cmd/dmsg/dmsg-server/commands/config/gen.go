@@ -3,7 +3,7 @@ package config
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
