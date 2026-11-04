@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -998,7 +996,7 @@ func (v *Visor) LogsSince(timestamp time.Time, appName string) ([]string, error)
 func (v *Visor) RecentAppLog(appName, level string) ([]string, error) {
 	minLevel, err := logging.LevelFromString(level)
 	if err != nil {
-		minLevel = logrus.DebugLevel
+		minLevel = logging.DebugLevel
 	}
 	recs := v.RecentAppLogMerged(appName, minLevel)
 	out := make([]string, 0, len(recs))

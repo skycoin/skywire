@@ -12,12 +12,11 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -134,7 +133,7 @@ func hasFastTransportTo(tpM *transport.Manager, pk cipher.PubKey) bool {
 // the conn ends unexpectedly.
 func dialHypervisorRPC(
 	ctx context.Context,
-	log logrus.FieldLogger,
+	log logging.FieldLogger,
 	tpM *transport.Manager,
 	dmsgC *dmsg.Client,
 	rAddr dmsg.Addr,
@@ -181,7 +180,7 @@ func shouldUpgradeToSkynet(hasFast bool, lastSkyFail *atomic.Int64) bool {
 // watchForSkynetUpgrade closes conn (a dmsg-served RPC conn) once a direct
 // transport to pk exists and skynet is dialable, so ServeRPCClient redials
 // over skynet. Returns when ctx (the conn's serve context) ends.
-func watchForSkynetUpgrade(ctx context.Context, log logrus.FieldLogger, tpM *transport.Manager, pk cipher.PubKey, lastSkyFail *atomic.Int64, conn net.Conn) {
+func watchForSkynetUpgrade(ctx context.Context, log logging.FieldLogger, tpM *transport.Manager, pk cipher.PubKey, lastSkyFail *atomic.Int64, conn net.Conn) {
 	t := time.NewTicker(rpcUpgradePoll)
 	defer t.Stop()
 	for {
@@ -291,7 +290,7 @@ func waitForRedial(ctx context.Context, wait time.Duration, tpM *transport.Manag
 // a RPC server to that address. The dial uses dmsg by default, switching
 // to skynet when an underlying fast transport exists and isn't in
 // cooldown — see dialHypervisorRPC.
-func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, tpM *transport.Manager, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
+func ServeRPCClient(ctx context.Context, log logging.FieldLogger, tpM *transport.Manager, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
 	// lastSkyFail is per-hypervisor (this function is one goroutine
 	// per hypervisor PK). Records the most recent skynet failure so
 	// dialHypervisorRPC can apply the cooldown.
@@ -416,10 +415,10 @@ type idleConn struct {
 	idleTimeout  time.Duration
 	stopOnce     sync.Once
 	stopped      chan struct{}
-	log          logrus.FieldLogger
+	log          logging.FieldLogger
 }
 
-func newIdleConn(c net.Conn, idleTimeout time.Duration, log logrus.FieldLogger) *idleConn {
+func newIdleConn(c net.Conn, idleTimeout time.Duration, log logging.FieldLogger) *idleConn {
 	ic := &idleConn{
 		Conn:        c,
 		idleTimeout: idleTimeout,

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Router is a stub on non-Linux platforms — the VPN gateway/AP role relies on
@@ -17,7 +17,7 @@ type Router struct{}
 
 // NewRouter reports that the VPN router is unsupported on this platform. The
 // config is still validated so misconfiguration surfaces the same way.
-func NewRouter(cfg RouterConfig, _ logrus.FieldLogger) (*Router, error) {
+func NewRouter(cfg RouterConfig, _ logging.FieldLogger) (*Router, error) {
 	if err := cfg.withDefaults().validate(); err != nil {
 		return nil, err
 	}

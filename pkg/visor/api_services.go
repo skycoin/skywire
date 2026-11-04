@@ -15,8 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
@@ -380,7 +378,7 @@ func (v *Visor) servicesFromDmsg(serviceType, version, country string) ([]servic
 	}
 	log := logging.MustGetLogger("servicedisc")
 	vLog := logging.NewMasterLogger()
-	vLog.SetLevel(logrus.InfoLevel)
+	vLog.SetLevel(logging.InfoLevel)
 	sdClient := servicedisc.NewClient(log, vLog, servicedisc.Config{
 		Type:          serviceType,
 		PK:            v.conf.PK,

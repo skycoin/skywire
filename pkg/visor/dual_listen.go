@@ -37,11 +37,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -74,7 +73,7 @@ func goServeSkynetMirror(
 	pk cipher.PubKey,
 	port uint16,
 	label string,
-	log logrus.FieldLogger,
+	log logging.FieldLogger,
 	serve func(net.Listener),
 ) {
 	go func() {

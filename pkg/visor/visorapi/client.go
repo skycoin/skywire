@@ -14,7 +14,6 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -68,7 +67,7 @@ const closeOnConsecTimeouts = 3
 // API provides methods to call an RPC Server.
 // It implements API
 type rpcClient struct {
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 	timeout time.Duration
 	conn    io.ReadWriteCloser
 	client  *rpc.Client
@@ -93,7 +92,7 @@ type rpcClient struct {
 }
 
 // NewRPCClient creates a new API.
-func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) API {
+func NewRPCClient(log logging.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration) API {
 	if log == nil {
 		log = logging.MustGetLogger("visor_rpc_client")
 	}
@@ -121,7 +120,7 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 // SetMinHops, etc.) don't currently survive the TransportRPCCall
 // JSON-bytes wire format. No-arg query methods (the bulk of what
 // the CLI does) work directly.
-func NewProxyRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration, remotePK cipher.PubKey) API {
+func NewProxyRPCClient(log logging.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration, remotePK cipher.PubKey) API {
 	if log == nil {
 		log = logging.MustGetLogger("visor_rpc_client_proxy")
 	}

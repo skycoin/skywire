@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -32,7 +31,7 @@ func TestWhitelistAuthAdmitsOwnKey(t *testing.T) {
 }
 
 type fakeLogLevelController struct {
-	level   logrus.Level
+	level   logging.Level
 	ttl     time.Duration
 	cleared bool
 }
@@ -41,7 +40,7 @@ func (f *fakeLogLevelController) LogLevelStatus() LogLevelStatus {
 	return LogLevelStatus{Level: f.level.String()}
 }
 
-func (f *fakeLogLevelController) SetTempLogLevel(level logrus.Level, ttl time.Duration) (LogLevelStatus, error) {
+func (f *fakeLogLevelController) SetTempLogLevel(level logging.Level, ttl time.Duration) (LogLevelStatus, error) {
 	if ttl > time.Hour {
 		return LogLevelStatus{}, errors.New("ttl too long")
 	}
@@ -76,7 +75,7 @@ func serveLogLevel(t *testing.T, r http.Handler, method, target string) (*httpte
 }
 
 func TestLogLevelRoutes(t *testing.T) {
-	c := &fakeLogLevelController{level: logrus.InfoLevel}
+	c := &fakeLogLevelController{level: logging.InfoLevel}
 	r := newLogLevelTestAPI(c)
 
 	rec, st := serveLogLevel(t, r, http.MethodGet, "/debug/loglevel")
@@ -98,7 +97,7 @@ func TestLogLevelRoutes(t *testing.T) {
 }
 
 func TestLogLevelRoutesRejectBadInput(t *testing.T) {
-	c := &fakeLogLevelController{level: logrus.InfoLevel}
+	c := &fakeLogLevelController{level: logging.InfoLevel}
 	r := newLogLevelTestAPI(c)
 	for _, target := range []string{
 		"/debug/loglevel",                     // no level
@@ -110,7 +109,7 @@ func TestLogLevelRoutesRejectBadInput(t *testing.T) {
 		rec, _ := serveLogLevel(t, r, http.MethodPost, target)
 		require.Equalf(t, http.StatusBadRequest, rec.Code, "POST %s", target)
 	}
-	require.Equal(t, logrus.InfoLevel, c.level)
+	require.Equal(t, logging.InfoLevel, c.level)
 }
 
 func TestLogLevelRoutesWithoutController(t *testing.T) {

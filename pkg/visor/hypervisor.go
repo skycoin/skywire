@@ -19,7 +19,6 @@ import (
 	"github.com/0magnet/bottle/vnet"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -822,7 +821,7 @@ func (hv *Hypervisor) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &httputil.StatusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
-		hv.logger.WithFields(logrus.Fields{
+		hv.logger.WithFields(logging.Fields{
 			"method":  r.Method,
 			"path":    r.URL.Path,
 			"status":  sw.Status(),
@@ -839,7 +838,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 	r.Use(httputil.RealIP)
 
 	if hv.visor != nil {
-		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
+		if hv.visor.MasterLogger().GetLevel() == logging.DebugLevel || hv.visor.MasterLogger().GetLevel() == logging.TraceLevel {
 			r.Use(hv.logRequests)
 			r.Use(httputil.Recoverer)
 		}
@@ -1328,7 +1327,7 @@ func uiCacheControl(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
+func (hv *Hypervisor) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	tpdstore "github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -152,16 +152,16 @@ func TestCalcMemStore(t *testing.T) {
 	})
 }
 
-// TestToAppLogEntry pins the logrus.Entry → wire AppLogEntry mapping:
+// TestToAppLogEntry pins the logging.Entry → wire AppLogEntry mapping:
 // the _module field is hoisted to Module, every other field is
 // stringified into Fields, and the level/message/timestamp carry over.
 func TestToAppLogEntry(t *testing.T) {
 	now := time.Now()
-	e := &logrus.Entry{
+	e := &logging.Entry{
 		Time:    now,
-		Level:   logrus.WarnLevel,
+		Level:   logging.WarnLevel,
 		Message: "disk almost full",
-		Data: logrus.Fields{
+		Data: logging.Fields{
 			"_module": "skychat",
 			"pct":     97,
 			"path":    "/var",
@@ -196,11 +196,11 @@ func TestToAppLogEntry(t *testing.T) {
 // is not a string must NOT be hoisted — it falls through to Fields like
 // any other key (the type assertion fails, no Module set).
 func TestToAppLogEntryNonStringModule(t *testing.T) {
-	e := &logrus.Entry{
+	e := &logging.Entry{
 		Time:    time.Now(),
-		Level:   logrus.InfoLevel,
+		Level:   logging.InfoLevel,
 		Message: "x",
-		Data:    logrus.Fields{"_module": 42},
+		Data:    logging.Fields{"_module": 42},
 	}
 	out := toAppLogEntry(e)
 	if out.Module != "" {

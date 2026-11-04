@@ -4,13 +4,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // The visor adds apps such as skymail to the launcher at runtime, outside the
@@ -26,7 +26,7 @@ func TestUpdateAppAutostartKeepsRuntimeApps(t *testing.T) {
 	pm := &appserver.MockProcManager{}
 	pm.On("ErrorByName", mock.Anything).Return("", false)
 	pm.On("ProcByName", mock.Anything).Return((*appserver.Proc)(nil), false)
-	l, err := launcher.NewLauncher(logrus.New(), launcher.AppLauncherConfig{
+	l, err := launcher.NewLauncher(logging.New(), launcher.AppLauncherConfig{
 		BinPath:   filepath.Join(dir, "bin"),
 		LocalPath: filepath.Join(dir, "local"),
 		Apps:      []appserver.AppConfig{{Name: "skychat"}, {Name: "skymail"}},

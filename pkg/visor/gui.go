@@ -16,7 +16,6 @@ import (
 
 	"fyne.io/systray"
 	"github.com/gen2brain/dlgs"
-	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -81,7 +80,7 @@ type appTray struct {
 func getOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 	doneCh := make(chan bool, 1)
 	logger := logging.NewMasterLogger()
-	logger.SetLevel(logrus.InfoLevel)
+	logger.SetLevel(logging.InfoLevel)
 
 	httpC := getSystrayHTTPClient(context.Background(), conf, logger)
 

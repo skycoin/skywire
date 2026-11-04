@@ -11,7 +11,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -231,7 +230,7 @@ func TestNetworkEventOverRPC(t *testing.T) {
 	v, _ := meterVisor(t)
 	v.netMove.refresh = func(string) {}
 	srv := rpc.NewServer()
-	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logrus.New()}))
+	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logging.New()}))
 	sc, cc := net.Pipe()
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)

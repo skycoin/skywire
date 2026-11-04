@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
@@ -114,7 +113,7 @@ func (p *visorStatusProvider) StatusSnapshot(surface proxystatus.Surface) (proxy
 	// route creation, RSN-oracle legs, handshakes, mux-enable/SACK, mux route
 	// established, distribution, self-heal) tagged app_name=<app>; ring "logs"
 	// are the app's own output.
-	ringEvents, ringLogs := p.v.RecentAppEvents(app, logrus.DebugLevel)
+	ringEvents, ringLogs := p.v.RecentAppEvents(app, logging.DebugLevel)
 	if len(ringEvents) > 0 {
 		snap.Events = tailRecordLines(ringEvents, statusEventsCap)
 	}

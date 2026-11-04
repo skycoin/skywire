@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymail"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -99,7 +99,7 @@ func mailVisor(t *testing.T, ctx context.Context, c *dmsg.Client, hvs ...cipher.
 			info := host.MailHostInfo()
 			return info.Managed, info.Hypervisors
 		},
-		Log:    logrus.New(),
+		Log:    logging.New(),
 		Dir:    skymailDir(v.conf),
 		Outbox: true,
 	})
@@ -166,7 +166,7 @@ func TestMailAPIOverTheApp(t *testing.T) {
 	require.NoError(t, err)
 	err = skymailbridge.Relay(ctx, &visorDmsgDialer{c: clients[2]},
 		skymailbridge.Config{Suffix: ".dmsg", Mode: "b", HeloName: "c", RemotePort: skymail.Port},
-		from, []skymailbridge.Recipient{{Original: bobAt(pkB), Forward: bobAt(pkB), PeerPK: pkB}}, sealed, logrus.New())
+		from, []skymailbridge.Recipient{{Original: bobAt(pkB), Forward: bobAt(pkB), PeerPK: pkB}}, sealed, logging.New())
 	require.NoError(t, err)
 	inbox, err = b.MailList(skymail.FolderInbox)
 	require.NoError(t, err)
@@ -211,7 +211,7 @@ func TestMailSendRPCCarriesTheReasons(t *testing.T) {
 	require.NoError(t, b.MailSetWhitelist([]cipher.PubKey{clients[2].LocalPK()}))
 
 	srv := rpc.NewServer()
-	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: a, log: logrus.New()}))
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: a, log: logging.New()}))
 	sc, cc := net.Pipe()
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
@@ -277,7 +277,7 @@ func TestMailSettingsOverRPC(t *testing.T) {
 	b := mailVisor(t, ctx, clients[0])
 
 	srv := rpc.NewServer()
-	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: b, log: logrus.New()}))
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: b, log: logging.New()}))
 	sc, cc := net.Pipe()
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)

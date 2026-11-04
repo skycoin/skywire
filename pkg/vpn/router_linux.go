@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
 	"github.com/skycoin/skywire/pkg/vpnrouter"
@@ -26,7 +25,7 @@ import (
 // NewRouter, then Run.
 type Router struct {
 	cfg RouterConfig
-	log logrus.FieldLogger
+	log logging.FieldLogger
 
 	confDir string
 	daemons []*exec.Cmd
@@ -53,13 +52,13 @@ const lanPolicyTable = 142
 
 // NewRouter validates cfg and returns a Router ready to Run. It does not touch
 // any system state.
-func NewRouter(cfg RouterConfig, log logrus.FieldLogger) (*Router, error) {
+func NewRouter(cfg RouterConfig, log logging.FieldLogger) (*Router, error) {
 	cfg = cfg.withDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	if log == nil {
-		log = logrus.New()
+		log = logging.New()
 	}
 	return &Router{cfg: cfg, log: log}, nil
 }

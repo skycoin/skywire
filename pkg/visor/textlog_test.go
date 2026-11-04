@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,9 +23,9 @@ func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
 	hook, err := newTextLogHook(path)
 	require.NoError(t, err)
 
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(io.Discard) // the hook is what is under test
-	log.SetLevel(logrus.TraceLevel)
+	log.SetLevel(logging.TraceLevel)
 	log.AddHook(hook)
 
 	log.Info("before rotation")
