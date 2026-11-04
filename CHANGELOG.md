@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.106
+
+-   scripts, dmsg: compare hot path benchmarks under Go and TinyGo  [#6027](https://github.com/skycoin/skywire/pull/6027)
+-   rewards: stop paying single addresses from November 15  [#6026](https://github.com/skycoin/skywire/pull/6026)
+-   rewards, docs: set November 15 as the single address cutoff  [#6025](https://github.com/skycoin/skywire/pull/6025)
+-   rewards: describe the two week version rule and the xpub change  [#6024](https://github.com/skycoin/skywire/pull/6024)
+-   visor: keep a transport to each dmsg server the visor uses  [#6022](https://github.com/skycoin/skywire/pull/6022)
+
 ## 1.3.105
 
 -   visor, hvui, ui2: base connectivity on transports first  [#6021](https://github.com/skycoin/skywire/pull/6021)
