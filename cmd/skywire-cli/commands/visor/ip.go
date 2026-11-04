@@ -4,7 +4,6 @@ package clivisor
 import (
 	"fmt"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -24,7 +23,7 @@ var ipCmd = &cobra.Command{
 	Long:  "\n  IP information of network",
 	Run: func(cmd *cobra.Command, _ []string) {
 		mLog := logging.NewMasterLogger()
-		mLog.SetLevel(logrus.PanicLevel)
+		mLog.SetLevel(logging.PanicLevel)
 		logger := mLog.PackageLogger("visor_ip_information")
 
 		// The visor already resolved its public IP + NAT type via STUN at

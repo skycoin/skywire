@@ -30,8 +30,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
@@ -171,16 +169,16 @@ var verboseFormatter = &logging.TextFormatter{
 func emitEntry(w io.Writer, e *rpcgrpc.AppLogEntry) {
 	level, err := logging.LevelFromString(e.Level)
 	if err != nil {
-		level = logrus.DebugLevel
+		level = logging.DebugLevel
 	}
-	data := logrus.Fields{}
+	data := logging.Fields{}
 	if e.Module != "" {
 		data["_module"] = e.Module
 	}
 	for k, v := range e.GetFields() {
 		data[k] = v
 	}
-	entry := &logrus.Entry{
+	entry := &logging.Entry{
 		Time:    time.Unix(0, e.TimestampNs),
 		Level:   level,
 		Message: e.Message,

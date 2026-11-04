@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 
@@ -255,7 +254,7 @@ func saveConfig(conf *visorconfig.V1) {
 
 func initUpdate() (conf *visorconfig.V1) {
 	mLog := logging.NewMasterLogger()
-	mLog.SetLevel(logrus.InfoLevel)
+	mLog.SetLevel(logging.InfoLevel)
 	if input == "" {
 		input = output
 	}

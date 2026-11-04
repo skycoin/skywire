@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
@@ -91,7 +90,7 @@ Example URLs:
 				// at debug level natively — when the request is
 				// proxied through the visor, we want the same
 				// experience by default.
-				if !cmd.Flags().Changed("verbose") && lvl >= logrus.DebugLevel {
+				if !cmd.Flags().Changed("verbose") && lvl >= logging.DebugLevel {
 					curlVerbose = true
 				}
 			}

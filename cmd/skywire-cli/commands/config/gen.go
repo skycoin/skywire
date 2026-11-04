@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/bitfield/script"
-	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
 	"github.com/wlynxg/anet"
@@ -962,7 +961,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 
 	dmsgLog := log
 	if isStdout {
-		silentLogger := logrus.New()
+		silentLogger := logging.New()
 		silentLogger.SetOutput(io.Discard)
 		dmsgLog = &logging.Logger{FieldLogger: silentLogger}
 	}

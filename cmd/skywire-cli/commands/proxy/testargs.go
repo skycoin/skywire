@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
@@ -46,7 +46,7 @@ func restoreProxyArgsOnExit(cmd *cobra.Command, rpcClient visorapi.API, appName 
 		r.args = append([]string(nil), st.Args...)
 		r.running = st.Status == appserver.AppStatusRunning
 	}
-	sigCtx, sigCancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+	sigCtx, sigCancel := cmdutil.SignalContext(context.Background(), logging.Discard())
 	go func() {
 		defer sigCancel()
 		select {

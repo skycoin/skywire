@@ -18,7 +18,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/blang/semver/v4"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 	"golang.org/x/net/proxy"
@@ -30,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -261,7 +261,7 @@ var startCmd = &cobra.Command{
 		if startingTimeout != 0 {
 			tCtx, tCtxCancelFunc = context.WithTimeout(context.Background(), time.Duration(startingTimeout)*time.Second)
 		}
-		ctx, cancel := cmdutil.SignalContext(tCtx, &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(tCtx, logging.Discard())
 		go func() {
 			<-ctx.Done()
 			cancel()

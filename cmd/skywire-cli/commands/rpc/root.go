@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/0magnet/bottle/vnet"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -745,7 +744,7 @@ func fetchViaDmsgDirect(flags *pflag.FlagSet, dmsgURL string) ([]byte, error) {
 	// for every fetch, which drowns the caller's own output. Use a
 	// dedicated master logger so we don't mutate the global one.
 	dmaster := logging.NewMasterLogger()
-	dmaster.SetLevel(logrus.ErrorLevel)
+	dmaster.SetLevel(logging.ErrorLevel)
 	dlog := dmaster.PackageLogger("cli:dmsg-fetch")
 
 	pk, sk, servers, idSource := resolveFetchIdentity(flags)

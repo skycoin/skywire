@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/vpn"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -17,7 +16,7 @@ import (
 // runMeshGatewayOnly builds a standalone mesh-gateway config from the parsed
 // flags and runs it until ctx is canceled. Linux-only: the transparent proxy +
 // REDIRECT need netfilter.
-func runMeshGatewayOnly(ctx context.Context, dial meshgw.MeshDial, logger logrus.FieldLogger) error {
+func runMeshGatewayOnly(ctx context.Context, dial meshgw.MeshDial, logger logging.FieldLogger) error {
 	if lanIfc == "" {
 		return fmt.Errorf("--mesh-gateway-only needs --lan-ifc (the interface LAN traffic arrives on)")
 	}

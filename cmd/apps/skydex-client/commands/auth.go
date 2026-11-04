@@ -49,9 +49,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
@@ -155,7 +154,7 @@ func unauthorized(w http.ResponseWriter, reason string) {
 //
 // With no password configured it returns uiAddr unchanged and starts nothing —
 // the desktop default stays exactly what it was, one server on one port.
-func gatedServer(ctx context.Context, uiAddr string, log logrus.FieldLogger) (string, error) {
+func gatedServer(ctx context.Context, uiAddr string, log logging.FieldLogger) (string, error) {
 	if !uiPasswordSet() {
 		return uiAddr, nil
 	}
