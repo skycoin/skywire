@@ -141,6 +141,9 @@ func (i Info) AppCounts() (running, autostart, failed int) {
 // Alerts follows overviewAlerts of the Angular overview.
 func (i Info) Alerts(ctx context.Context) []Alert {
 	var out []Alert
+	if c := i.Sum.Connectivity; c != nil && c.State == visorapi.ConnOffline {
+		out = append(out, Alert{true, T(ctx, "node.overview.alert-offline")})
+	}
 	settled := i.Sum.Uptime >= healthGrace
 	h := i.health()
 	for _, c := range []struct{ state, key string }{

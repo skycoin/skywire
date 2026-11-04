@@ -713,6 +713,9 @@ type Summary struct {
 	// for the `hv ls --load` view. omitempty so the field is absent on
 	// summaries from older visors that don't populate it.
 	Load *LoadStats `json:"load,omitempty"`
+	// Connectivity is whether the visor can reach the skywire network, nil
+	// from visors older than the field.
+	Connectivity *Connectivity `json:"connectivity,omitempty"`
 }
 
 // HealthInfo carries information about visor's services health.

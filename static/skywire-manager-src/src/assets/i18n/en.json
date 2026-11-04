@@ -170,6 +170,7 @@
       "alert-app-stopped-why": "{{ app }} is set to start with the visor but is not running: {{ why }}",
       "alert-no-transports": "This visor has no transports.",
       "alert-no-dmsg": "This visor is not connected to any DMSG server.",
+      "alert-offline": "Offline, waiting for network.",
       "alert-no-reward": "No reward address is set, so this visor earns no rewards.",
       "alert-reward-ineligible": "Not eligible for rewards: {{ reason }}",
       "alert-config-version": "The config was made by {{ config }}, not by the running version.",

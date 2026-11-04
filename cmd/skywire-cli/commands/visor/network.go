@@ -151,6 +151,9 @@ func formatNetworkState(n *visorapi.NetworkState) string {
 		}
 		return s
 	}
+	if c := n.Connectivity; c.State != "" {
+		fmt.Fprintf(&b, "connectivity:   %s%s, %s\n", c.State, at(c.Since), orDash(c.Reason))
+	}
 	src := ""
 	if n.PublicIPSource != "" {
 		src = " via " + n.PublicIPSource

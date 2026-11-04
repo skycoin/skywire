@@ -240,6 +240,8 @@ func (v *Visor) Summary() (*visorapi.Summary, error) {
 		IsHypervisor:           v.IsHypervisorEnabled(),
 		Load:                   collectLoadStats(),
 	}
+	conn := v.Connectivity()
+	summary.Connectivity = &conn
 	if v.conf.Hypervisor != nil {
 		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr
 	}

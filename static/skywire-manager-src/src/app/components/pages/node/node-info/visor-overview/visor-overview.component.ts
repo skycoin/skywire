@@ -44,6 +44,9 @@ export function sameRelease(version: string, configVersion: string): boolean {
  */
 export function overviewAlerts(node: Node): OverviewAlert[] {
   const alerts: OverviewAlert[] = [];
+  if (node.connectivity === 'offline') {
+    alerts.push({ level: 'warn', text: 'node.overview.alert-offline' });
+  }
   const health = node.health || {};
   // The visor reports each check as "healthy" or "connecting" until it passes
   // (internalHealthInfo.value in pkg/visor/api.go), so only time tells a slow

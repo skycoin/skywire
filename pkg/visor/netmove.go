@@ -61,6 +61,7 @@ type netMoveState struct {
 	refresh                func(reason string) // tests replace the refresh
 	fingerprint            func() string       // tests replace the address source
 	runs                   atomic.Int64
+	online                 onlineState // guarded by mu
 }
 
 func (s *netMoveState) wakeChs() (watch, ip chan struct{}) {
@@ -215,7 +216,7 @@ func (v *Visor) refreshNetwork(reason string) {
 
 	// Sessions dialed from the old network can linger. The public IP lookup
 	// asks these sessions, so they have to be fresh first.
-	if v.dmsgC != nil {
+	if v.dmsgC != nil && reason != netBackOnline {
 		v.dmsgC.ForceReconnect()
 		deadline := time.Now().Add(netMoveDmsgWait)
 		for len(v.dmsgC.AllSessions()) == 0 && time.Now().Before(deadline) {
@@ -306,6 +307,7 @@ func (v *Visor) NetworkState() *visorapi.NetworkState {
 		Pending:               s.scheduled,
 		WatchInterval:         intervalString(intervalOf(&s.watchNS, defaultNetworkWatchInterval)),
 		PublicIPCheckInterval: intervalString(intervalOf(&s.ipCheckNS, defaultPublicIPCheckInterval)),
+		Connectivity:          s.online.snapshot(),
 	}
 	s.mu.Unlock()
 	if sc := v.stun.client.Load(); sc != nil {
@@ -467,6 +469,10 @@ func (v *Visor) setNetworkIntervals(watch, ipCheck time.Duration) {
 
 // initNetworkWatch starts the address watcher and the public IP recheck.
 func initNetworkWatch(_ context.Context, v *Visor, _ *logging.Logger) error {
+	if v.ctx != nil {
+		go v.watchOnline(v.ctx)
+		watchBrowserOnline(v.ctx, v)
+	}
 	if runtime.GOOS == "js" {
 		return nil
 	}
