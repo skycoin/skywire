@@ -30,6 +30,7 @@ var (
 	genMinHops                 int
 	arTransportLimit           int
 	noDirectTransports         bool
+	noDmsgServerTransports     bool
 	ptyRPCExec                 bool
 	sk                         cipher.SecKey
 	output                     string

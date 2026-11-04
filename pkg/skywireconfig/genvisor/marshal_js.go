@@ -1021,6 +1021,10 @@ func marshalTransport(w *strings.Builder, t *visorconfig.Transport, indent int) 
 		o.field("hypervisor_autoconnect")
 		writeBool(w, *t.HypervisorAutoconnect)
 	}
+	if t.DmsgServerTransports != nil {
+		o.field("dmsg_server_transports")
+		writeBool(w, *t.DmsgServerTransports)
+	}
 	if t.TCPNotSentLowat != nil {
 		o.field("tcp_notsent_lowat")
 		writeInt(w, int64(*t.TCPNotSentLowat))

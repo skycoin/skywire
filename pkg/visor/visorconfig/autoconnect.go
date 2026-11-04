@@ -72,3 +72,11 @@ func (v1 *V1) UpdateAutoconnect(set func(*Autoconnect)) error {
 	v1.mu.Unlock()
 	return v1.flush(v1)
 }
+
+// DmsgServerTransportsOn reports whether the visor keeps a transport to each
+// dmsg server it holds a session with. Unset is on.
+func (v1 *V1) DmsgServerTransportsOn() bool {
+	v1.mu.RLock()
+	defer v1.mu.RUnlock()
+	return v1.Transport == nil || v1.Transport.DmsgServerTransports == nil || *v1.Transport.DmsgServerTransports
+}

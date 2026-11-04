@@ -1036,6 +1036,10 @@ func marshalTransportNative(w *strings.Builder, t *visorconfig.Transport, indent
 		o.field("hypervisor_autoconnect")
 		writeBoolNative(w, *t.HypervisorAutoconnect)
 	}
+	if t.DmsgServerTransports != nil {
+		o.field("dmsg_server_transports")
+		writeBoolNative(w, *t.DmsgServerTransports)
+	}
 	if t.TCPNotSentLowat != nil {
 		o.field("tcp_notsent_lowat")
 		writeIntNative(w, int64(*t.TCPNotSentLowat))

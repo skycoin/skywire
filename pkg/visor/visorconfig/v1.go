@@ -696,6 +696,9 @@ type Transport struct {
 	// so configs written before this field existed keep the prior always-on
 	// behavior; set it to false to keep the hypervisor link on the dmsg relay only.
 	HypervisorAutoconnect *bool `json:"hypervisor_autoconnect,omitempty"`
+	// DmsgServerTransports keeps one automatic transport to each dmsg server
+	// the visor holds a session with, when the server is also a visor. Nil is on.
+	DmsgServerTransports *bool `json:"dmsg_server_transports,omitempty"`
 	// TCPNotSentLowat caps the unsent bytes the kernel holds for each stcpr or
 	// stcp transport (TCP_NOTSENT_LOWAT). Unset is 128 KiB, 0 is the kernel's
 	// default. Linux and Android only; it applies to transports opened after it.

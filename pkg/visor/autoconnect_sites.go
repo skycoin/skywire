@@ -260,6 +260,7 @@ func (v *Visor) autoconnectDiag() *visorapi.DiagAutoconnect {
 	}
 	ac := v.conf.AutoconnectSettings()
 	d := &visorapi.DiagAutoconnect{SiteLinks: ac.Links(), SiteTypes: ac.SiteTypes}
+	d.DmsgServerTransports, d.DmsgServers = v.dmsgServerTransportCount()
 	bindings, ok := v.arBindingsAll()
 	if !ok {
 		return d

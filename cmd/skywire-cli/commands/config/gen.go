@@ -193,6 +193,7 @@ func init() {
 	skyenvIntVar(genConfigCmd.Flags(), &genMinHops, "min-hops", "${MINHOPS:-1}", "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
 	skyenvIntVar(genConfigCmd.Flags(), &arTransportLimit, "ar-transport-limit", "${ARTRANSPORTLIMIT:-0}", "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
 	skyenvBoolVar(genConfigCmd.Flags(), &noDirectTransports, "no-direct-transports", "${NODIRECTTRANSPORTS:-false}", "never create direct p2p transports; dmsg (relay) is still allowed")
+	skyenvBoolVar(genConfigCmd.Flags(), &noDmsgServerTransports, "no-dmsg-server-transports", "${NODMSGSERVERTRANSPORTS:-false}", "do not keep a transport to each dmsg server the visor holds a session with")
 	skyenvBoolVar(genConfigCmd.Flags(), &ptyRPCExec, "pty-rpc-exec", "${PTYRPCEXEC:-false}", "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
 
 	// Routing flags
@@ -1411,11 +1412,13 @@ func configureDMSG() {
 func configureTransports() {
 	tpLogPath := skyenv.LocalPath + "/" + skyenv.TpLogStore
 	hypervisorAutoconnect := skyenv.HypervisorAutoconnect
+	dmsgServerTransports := !noDmsgServerTransports
 	conf.Transport = &visorconfig.Transport{
 		Discovery:             services.TransportDiscovery, //utilenv.TpDiscAddr,
 		AddressResolver:       services.AddressResolver,    //utilenv.AddressResolverAddr,
 		PublicAutoconnect:     skyenv.PublicAutoconnect,
 		HypervisorAutoconnect: &hypervisorAutoconnect,
+		DmsgServerTransports:  &dmsgServerTransports,
 		TransportSetupPKs:     services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
 			// "file" (the retired on-disk CSV store) is now a no-op that only warns
@@ -2895,15 +2898,16 @@ func getInterfaceNames() string { //nolint Note: pending implementation for conf
 var (
 	// Boolean flags: the line the flag turns on.
 	flagToEnv = map[string]string{
-		"pkg":                  "PKGENV=true",
-		"ishv":                 "ISHYPERVISOR=true",
-		"dmsghttp":             "DMSGHTTP=true",
-		"public":               "VISORISPUBLIC=true",
-		"servevpn":             "VPNSERVER=true",
-		"autoconn":             "DISABLEPUBLICAUTOCONN=true",
-		"publicip":             "DISPLAYNODEIP=true",
-		"no-direct-transports": "NODIRECTTRANSPORTS=true",
-		"pty-rpc-exec":         "PTYRPCEXEC=true",
+		"pkg":                       "PKGENV=true",
+		"ishv":                      "ISHYPERVISOR=true",
+		"dmsghttp":                  "DMSGHTTP=true",
+		"public":                    "VISORISPUBLIC=true",
+		"servevpn":                  "VPNSERVER=true",
+		"autoconn":                  "DISABLEPUBLICAUTOCONN=true",
+		"publicip":                  "DISPLAYNODEIP=true",
+		"no-direct-transports":      "NODIRECTTRANSPORTS=true",
+		"no-dmsg-server-transports": "NODMSGSERVERTRANSPORTS=true",
+		"pty-rpc-exec":              "PTYRPCEXEC=true",
 		// The resolving proxies. Missing from this map, `config gen --dmsgweb`
 		// left DMSGWEB commented in the conf it emitted, so a later run from
 		// that conf produced a config with no dmsg_web block at all. The proxy

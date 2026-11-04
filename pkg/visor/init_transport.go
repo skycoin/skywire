@@ -893,6 +893,7 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initPublicAutoconnect(ctx context.Context, v *Visor, log *logging.Logger) error {
+	initDmsgServerTransports(ctx, v, log)
 	if !v.conf.Transport.PublicAutoconnect {
 		return nil
 	}
