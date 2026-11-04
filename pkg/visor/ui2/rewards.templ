@@ -46,6 +46,8 @@ templ RewardAddress(rw Rewards) {
 				}
 				{ T(ctx, "node.details.rewards-info.exposed-action") }
 			</p>
+		} else if rw.Address != "" && !rw.IsXpub {
+			<p class="alert">{ T(ctx, "node.details.rewards-info.single-risk") }</p>
 		}
 		if rw.IsXpub {
 			@xpubList(rw.Addresses, rw.XpubErr)
@@ -56,6 +58,10 @@ templ RewardAddress(rw Rewards) {
 				<label>
 					{ T(ctx, "rewards-address-config.address") }
 					<input class="mono" name="address" value={ rw.Draft } maxlength="112" placeholder="xpub…" autocomplete="off" spellcheck="false" autofocus/>
+				</label>
+				<label class="check">
+					<input type="checkbox" name="accept_risk" value="1" checked?={ rw.AcceptRisk }/>
+					<span class="small">{ T(ctx, "rewards-address-config.accept-risk") }</span>
 				</label>
 				<div class="bar">
 					<button class="btn primary" type="submit">{ T(ctx, "common.save") }</button>

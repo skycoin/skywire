@@ -8,6 +8,7 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { FormArray, UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ButtonComponent } from '../button/button.component';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { needsAcceptRisk, rewardAddressValidator } from 'src/app/utils/reward-address';
 
 /**
  * Params for BulkRewardAddressChangerComponent.
@@ -60,6 +61,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
   form: UntypedFormGroup;
 
   private operationSubscriptions!: Subscription[];
+  private riskSubscription?: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -83,8 +85,15 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.form = formBuilder.group({
-      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112), Validators.pattern(/^\s*xpub/)])],
+      address: ['', Validators.compose([
+        Validators.minLength(20), Validators.maxLength(112), rewardAddressValidator(() => !!this.form?.get('acceptRisk')!.value),
+      ])],
+      acceptRisk: [false],
       nodes: formBuilder.array([]),
+    });
+    this.riskSubscription = this.form.get('acceptRisk')!.valueChanges.subscribe(() => {
+      this.form.get('address')!.updateValueAndValidity();
+      this.changeDetectorRef.markForCheck();
     });
 
     // Create an entry for each node, to let the user select and deselect nodes.
@@ -196,7 +205,9 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     this.nodesToEdit = newList;
 
     const newAddress = this.form.get('address')!.value;
+    const acceptRisk = needsAcceptRisk(newAddress, this.form.get('acceptRisk')!.value);
     this.form.get('address')!.disable();
+    this.form.get('acceptRisk')!.disable();
 
     this.currentlyProcessed = 0;
 
@@ -204,7 +215,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     this.nodesToEdit.forEach((node, i) => {
       // If the user entered an address, the operation must save it. If not, the operation is for
       // removing the currently saved address.
-      let operation: Observable<any> = this.nodeService.setRewardsAddress(node.key, newAddress);
+      let operation: Observable<any> = this.nodeService.setRewardsAddress(node.key, newAddress, acceptRisk);
       if (!newAddress) {
         operation = this.nodeService.deleteRewardsAddress(node.key);
       }
@@ -236,6 +247,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    this.riskSubscription?.unsubscribe();
     this.closeoperationSubscriptions();
   }
 

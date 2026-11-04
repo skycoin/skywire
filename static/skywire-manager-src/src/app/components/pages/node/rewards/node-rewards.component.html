@@ -55,6 +55,11 @@
           {{ 'node.details.rewards-info.exposed-action' | translate }}
         </span>
       </div>
+    } @else if (rewardsAddress && !rewardsAddressIsXpub) {
+      <div class="single-risk">
+        <mat-icon [inline]="true">info</mat-icon>
+        <span>{{ 'node.details.rewards-info.single-risk' | translate }}</span>
+      </div>
     }
     @if (xpubAddresses && rewardsAddressIsXpub) {
       <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: xpubAddresses }"></ng-container>
@@ -64,7 +69,11 @@
         <mat-form-field appearance="outline" class="inline-form-field">
           <mat-label>{{ 'node.details.rewards-info.rewards-address' | translate }}</mat-label>
           <input matInput formControlName="address" maxlength="112" placeholder="xpub…">
+          <mat-error>{{ 'rewards-address-config.address-error' | translate }}</mat-error>
         </mat-form-field>
+        <mat-checkbox class="accept-risk" color="primary" formControlName="acceptRisk">
+          <span class="accept-risk-text">{{ 'rewards-address-config.accept-risk' | translate }}</span>
+        </mat-checkbox>
         @if (formXpubAddresses && formXpubAddresses.xpub !== rewardsAddress) {
           <ng-container *ngTemplateOutlet="xpubList; context: { $implicit: formXpubAddresses }"></ng-container>
         }

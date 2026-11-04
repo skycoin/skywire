@@ -124,13 +124,13 @@ func (hv *Hypervisor) putRewardAddress() http.HandlerFunc {
 			return
 		}
 
-		canonical, _, err := rewardconfig.ValidateRewardSetting(reqBody.RewardAddress, reqBody.AcceptRisk)
+		canonical, isXpub, err := rewardconfig.ValidateRewardSetting(reqBody.RewardAddress, reqBody.AcceptRisk)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return
 		}
 		set := ctx.API.SetRewardAddress
-		if reqBody.AcceptRisk {
+		if !isXpub {
 			set = ctx.API.SetSingleRewardAddress
 		}
 		pConf, err := set(canonical)

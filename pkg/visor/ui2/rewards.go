@@ -19,7 +19,9 @@ type Rewards struct {
 	Balance string
 	Err     string
 	Editing bool
-	Draft   string
+	// AcceptRisk keeps the single address box ticked when a save fails.
+	AcceptRisk bool
+	Draft      string
 }
 
 // RewardDay is one day of the reward system's history for a visor.

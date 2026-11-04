@@ -708,12 +708,14 @@ return {
   }
 
   /**
-   * Sets the rewards address of the node.
+   * Sets the rewards address of the node. acceptRisk opts in to a single address
+   * instead of an account xpub.
    */
-  setRewardsAddress(nodeKey: string, address: string) {
-    const data = {
-      reward_address: address,
-    };
+  setRewardsAddress(nodeKey: string, address: string, acceptRisk = false) {
+    const data: { reward_address: string; accept_risk?: boolean } = { reward_address: address };
+    if (acceptRisk) {
+      data.accept_risk = true;
+    }
 
     return this.apiService.put(`visors/${nodeKey}/reward`, data);
   }

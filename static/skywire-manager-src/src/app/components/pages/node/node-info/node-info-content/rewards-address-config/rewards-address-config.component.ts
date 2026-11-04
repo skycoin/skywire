@@ -10,6 +10,7 @@ import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
 import { NodeService } from 'src/app/services/node.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
+import { needsAcceptRisk, rewardAddressValidator } from 'src/app/utils/reward-address';
 
 /**
  * Params for RewardsAddressComponent.
@@ -43,6 +44,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
   form!: UntypedFormGroup;
 
   private operationSubscription!: Subscription | null;
+  private riskSubscription?: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -68,7 +70,14 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(112), Validators.pattern(/^\s*xpub/)])],
+      address: [this.data.currentAddress, Validators.compose([
+        Validators.minLength(20), Validators.maxLength(112), rewardAddressValidator(() => !!this.form?.get('acceptRisk')!.value),
+      ])],
+      acceptRisk: [false],
+    });
+    this.riskSubscription = this.form.get('acceptRisk')!.valueChanges.subscribe(() => {
+      this.form.get('address')!.updateValueAndValidity();
+      this.changeDetectorRef.markForCheck();
     });
 
     // change-detection: no view state — focuses an input
@@ -76,6 +85,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.riskSubscription?.unsubscribe();
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
@@ -118,7 +128,9 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
 
     // If the user entered an address, the operation must save it. If not, the operation is for
     // removing the currently saved address.
-    let operation: Observable<any> = this.nodeService.setRewardsAddress(this.data.nodePk, newAddress);
+    let operation: Observable<any> = this.nodeService.setRewardsAddress(
+      this.data.nodePk, newAddress, needsAcceptRisk(newAddress, this.form.get('acceptRisk')!.value),
+    );
     if (!newAddress) {
       operation = this.nodeService.deleteRewardsAddress(this.data.nodePk);
     }

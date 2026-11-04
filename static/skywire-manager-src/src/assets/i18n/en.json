@@ -229,10 +229,11 @@
         "set-address-button": "Set address",
         "change-address-button": "Change address",
         "show-rules": "Reward rules (embedded mainnet_rules.md)",
-        "exposed": "This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent to it.",
-        "exposed-balance": "It holds {{ balance }} SKY now. Move them to a new address.",
-        "exposed-action": "Set a BIP44 account xpub as the reward address, so each reward goes to a fresh address.",
-        "xpub-addresses": "Rewards go to these addresses of the xpub, each day to the next one not used yet. They should match the first addresses of the wallet:"
+        "exposed": "This address has sent coins, so it no longer earns rewards.",
+        "exposed-balance": "It holds {{ balance }} SKY now. Move them to an address of the xpub's wallet.",
+        "exposed-action": "Set your wallet's account xpub as the reward address. The address's public key is also on the blockchain, where a future quantum computer could use it to take coins sent there.",
+        "xpub-addresses": "Rewards go to these addresses of the xpub, each day to the next one not used yet. They should match the first addresses of the wallet:",
+        "single-risk": "A single reward address stops earning rewards from the first reward day after it sends coins. Send from it only after switching to an xpub. An account xpub avoids this."
       },
       "transports-info": {
         "title": "Transport",
@@ -329,13 +330,15 @@
   },
   "rewards-address-config": {
     "title": "Reward Address Configuration",
-    "info": "Here you can set the account xpub (BIP44, account level) of the wallet the rewards are sent to. Each reward goes to a fresh address derived from it. A single Skycoin address is no longer accepted. If you leave the field empty, the registration will be deleted and the visor will not receive rewards.",
+    "info": "Here you can set the account xpub (BIP44, account level) of the wallet the rewards are sent to. Each reward goes to a fresh address derived from it. A single Skycoin address can be set only by accepting its risk below. If you leave the field empty, the registration will be deleted and the visor will not receive rewards.",
     "more-info-link": "(More info about the reward system)",
     "address": "Account xpub",
-    "address-error": "Please enter a valid account xpub. It starts with \"xpub\".",
+    "address-error": "Please enter a valid account xpub. It starts with \"xpub\". For a single address, tick the box below.",
     "save-config-button": "Save configuration",
     "done": "Changes saved.",
-    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?"
+    "empty-warning": "The address in empty, so the registration will be deleted and no rewards will be received. Do you really want to continue?",
+    "accept-risk": "Use a single address and accept the risk. It stops earning rewards from the first reward day after it sends coins, so send from it only after switching to an xpub. An address that has already sent coins is refused.",
+    "single-needs-opt-in": "A single address can be set only by ticking the box that accepts its risk. An account xpub is recommended."
   },
   "router-config": {
     "title": "Router Configuration",
@@ -1004,7 +1007,7 @@
   },
   "bulk-rewards": {
     "title": "Change reward address",
-    "info": "Enter the account xpub (BIP44, account level) of the wallet where you want to receive the rewards. It will be set on all the selected visors. If you leave the field empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
+    "info": "Enter the account xpub (BIP44, account level) of the wallet where you want to receive the rewards. It will be set on all the selected visors. A single Skycoin address can be set only by accepting its risk below. If you leave the field empty, the registration will be deleted and the visors will not receive rewards. You can also set the reward address of each node individually using the option on the visor details page.",
     "more-info-link": "(More info about the reward system)",
     "address": "New address",
     "select-visors": "Visors to alter:",
