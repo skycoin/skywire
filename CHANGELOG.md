@@ -8,6 +8,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.105
 
+-   visor, hvui, ui2: base connectivity on transports first  [#6021](https://github.com/skycoin/skywire/pull/6021)
 -   visor, hvui, ui2: track whether the visor is online  [#6020](https://github.com/skycoin/skywire/pull/6020)
 -   hvui: do not start the dashboard tour inside a frame  [#6019](https://github.com/skycoin/skywire/pull/6019)
 -   skymail: wait for delivery attempts when the outbox stops  [#6018](https://github.com/skycoin/skywire/pull/6018)
