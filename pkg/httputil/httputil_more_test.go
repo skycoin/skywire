@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func discardLog() logrus.FieldLogger {
-	l := logrus.New()
+func discardLog() logging.FieldLogger {
+	l := logging.New()
 	l.SetOutput(io.Discard)
 	return l
 }
@@ -145,7 +145,7 @@ func TestGetLogger(t *testing.T) {
 }
 
 func TestSetLoggerMiddleware(t *testing.T) {
-	var seen logrus.FieldLogger
+	var seen logging.FieldLogger
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { seen = GetLogger(r) })
 
 	t.Run("with request id sets context logger", func(t *testing.T) {

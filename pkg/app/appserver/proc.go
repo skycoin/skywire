@@ -16,7 +16,6 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/orandin/lumberjackrus"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -660,7 +659,7 @@ func storeLog(log *logging.MasterLogger, localPath string) {
 // INFO, WARN and ERROR lines were written to a file nobody could read. The
 // default logger alone, with no per-level overrides, keeps every level on a
 // single rotating writer. Same bug, same fix as pkg/visor/visor.go.
-func newAppLogHook(path string) (logrus.Hook, error) {
+func newAppLogHook(path string) (logging.Hook, error) {
 	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
 		Filename:   path,
 		MaxSize:    1,
@@ -669,7 +668,7 @@ func newAppLogHook(path string) (logrus.Hook, error) {
 		Compress:   false,
 		LocalTime:  false,
 	},
-		logrus.TraceLevel,
+		logging.TraceLevel,
 		&logging.TextFormatter{
 			DisableColors:   true,
 			FullTimestamp:   true,

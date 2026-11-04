@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -16,14 +14,14 @@ import (
 type Broadcaster struct {
 	timeout time.Duration
 
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 	clients map[RPCClient]chan error
 	closed  bool
 	mx      sync.Mutex
 }
 
 // NewBroadcaster instantiates a Broadcaster.
-func NewBroadcaster(log logrus.FieldLogger, timeout time.Duration) *Broadcaster {
+func NewBroadcaster(log logging.FieldLogger, timeout time.Duration) *Broadcaster {
 	if log == nil {
 		log = logging.MustGetLogger("event_broadcaster")
 	}

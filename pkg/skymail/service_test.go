@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 )
 
@@ -62,7 +62,7 @@ func newNode(t *testing.T, ctx context.Context, c *dmsg.Client) *node {
 		},
 		Sealer: KeySealer(c.LocalSK()),
 		Peers:  func() ([]cipher.PubKey, []cipher.PubKey) { return n.peers.list(), n.hvs.list() },
-		Log:    logrus.New(),
+		Log:    logging.New(),
 		Dir:    t.TempDir(),
 		Outbox: true,
 	}
@@ -203,7 +203,7 @@ func TestServiceSealedEnvelopeRelayed(t *testing.T) {
 	require.NoError(t, err)
 	err = skymailbridge.Relay(ctx, dmsgDialer{clients[2]},
 		skymailbridge.Config{Suffix: ".dmsg", Mode: "b", HeloName: "c", RemotePort: Port},
-		from, []skymailbridge.Recipient{{Original: bobAt(pkB), Forward: bobAt(pkB), PeerPK: pkB}}, sealed, logrus.New())
+		from, []skymailbridge.Recipient{{Original: bobAt(pkB), Forward: bobAt(pkB), PeerPK: pkB}}, sealed, logging.New())
 	require.NoError(t, err, "C is not whitelisted, but A, who signed it, is")
 
 	inbox, err := b.ctl.List(FolderInbox)

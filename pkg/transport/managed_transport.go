@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -811,7 +810,7 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 		return
 	}
 	mt.SetLatency(rttMs)
-	if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+	if mt.log.IsLevelEnabled(logging.TraceLevel) {
 		mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
 	}
 }
@@ -1528,7 +1527,7 @@ func (mt *ManagedTransport) readPacket() (packet routing.Packet, tp network.Tran
 	if n := len(packet); n > routing.PacketHeaderSize {
 		mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
-	if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+	if mt.log.IsLevelEnabled(logging.TraceLevel) {
 		mt.log.WithField("type", packet.Type().String()).
 			WithField("rt_id", packet.RouteID()).
 			WithField("size", packet.Size()).
@@ -1561,7 +1560,7 @@ func (mt *ManagedTransport) logRecv(b uint64) {
 // and returns true if it was bigger than 0
 func (mt *ManagedTransport) logMod() bool {
 	if ops := mt.logUpdates.Swap(0); ops > 0 {
-		if mt.log.IsLevelEnabled(logrus.TraceLevel) {
+		if mt.log.IsLevelEnabled(logging.TraceLevel) {
 			mt.log.WithField("func", "ManagedTransport.logMod").Tracef("entry log: recording %d operations", ops)
 		}
 		return true

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -32,6 +31,7 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -74,7 +74,7 @@ type Config struct {
 	Minter skynetca.LeafMinter
 	// MTU of the tunnel. Zero means 1500.
 	MTU int
-	Log logrus.FieldLogger
+	Log logging.FieldLogger
 }
 
 // Engine is SkyDNS on one tunnel. Write hands it the packets [Owns] picks out,
@@ -82,7 +82,7 @@ type Config struct {
 type Engine struct {
 	gw   *meshgw.Gateway
 	up   Exchanger
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 	pool netip.Prefix
 
 	stack *stack.Stack
@@ -112,7 +112,7 @@ func New(cfg Config) (*Engine, error) {
 	}
 	log := cfg.Log
 	if log == nil {
-		log = logrus.New()
+		log = logging.New()
 	}
 	mtu := cfg.MTU
 	if mtu <= 0 {

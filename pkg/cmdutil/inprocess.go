@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 
 	"github.com/fatih/color"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -51,7 +50,7 @@ func init() {
 			startMu.Unlock()
 		}
 	})
-	logrus.StandardLogger().ExitFunc = Exit
+	logging.StandardLogger().ExitFunc = Exit
 	logging.ExitFunc = Exit
 	logging.Stderr = Stderr
 }

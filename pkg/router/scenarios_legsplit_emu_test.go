@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -111,7 +110,7 @@ func TestEmuReleasedLegClosesWhenTheExitNeverAcks(t *testing.T) {
 	})
 
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	rig := newEmuRig(t, emuOpts{Legs: []emuLegSpec{
 		symmetric("leg-a", 2*emuMB, 120*time.Millisecond, 2*emuMB),
 		symmetric("leg-b", 2*emuMB, 150*time.Millisecond, 2*emuMB),

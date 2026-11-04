@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -34,7 +34,7 @@ var (
 
 // SkywireNetworker implements `Networker` for skynet.
 type SkywireNetworker struct {
-	log       logrus.FieldLogger
+	log       logging.FieldLogger
 	r         router.Router
 	porter    *netutil.Porter
 	isServing atomic.Int32
@@ -59,7 +59,7 @@ type SkywireNetworker struct {
 const directDialHandshakeTimeout = 5 * time.Second
 
 // NewSkywireNetworker constructs skywire networker.
-func NewSkywireNetworker(l logrus.FieldLogger, r router.Router) Networker {
+func NewSkywireNetworker(l logging.FieldLogger, r router.Router) Networker {
 	return &SkywireNetworker{
 		log:    l,
 		r:      r,

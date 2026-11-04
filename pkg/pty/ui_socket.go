@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/coder/websocket"
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // uiSocket is the terminal UI's websocket. Natively it is coder/websocket;
@@ -21,7 +21,7 @@ type uiSocket struct {
 }
 
 // acceptUISocket upgrades the request and runs serve on the socket.
-func acceptUISocket(w http.ResponseWriter, r *http.Request, log logrus.FieldLogger, serve func(*uiSocket)) {
+func acceptUISocket(w http.ResponseWriter, r *http.Request, log logging.FieldLogger, serve func(*uiSocket)) {
 	ws, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.WithError(err).Warn("Failed to upgrade to websocket.")

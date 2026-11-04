@@ -10,7 +10,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -584,7 +583,7 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 
 // ReserveRouteIDs dials to all routers and reserves required route IDs from them.
 // The number of route IDs to be reserved per router, is extrapolated from the 'route' input.
-func ReserveRouteIDs(ctx context.Context, log logrus.FieldLogger, dialer network.Dialer, pool *ClientPool, route routing.BidirectionalRoute) (idR IDReserver, err error) {
+func ReserveRouteIDs(ctx context.Context, log logging.FieldLogger, dialer network.Dialer, pool *ClientPool, route routing.BidirectionalRoute) (idR IDReserver, err error) {
 	log.Debug("Reserving route IDs...")
 	defer func() {
 		if err != nil {
@@ -671,7 +670,7 @@ func GenerateRules(idR IDReserver, routes []routing.Route) (fwdRules, revRules, 
 // On each hop's successful install it records the installed RouteIDs into
 // `installed` (when non-nil) so a later setup failure can tear them down
 // instead of orphaning them.
-func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtIDR IDReserver, interRules RulesMap, installed *installedRules) (err error) {
+func BroadcastIntermediaryRules(ctx context.Context, log logging.FieldLogger, rtIDR IDReserver, interRules RulesMap, installed *installedRules) (err error) {
 	log.WithField("intermediary_routers", len(interRules)).Debug("Broadcasting intermediary rules...")
 	defer func() {
 		if err != nil {
@@ -742,7 +741,7 @@ func (ir *installedRules) add(pk cipher.PubKey, rules ...routing.Rule) {
 // deadline), it derives a fresh bounded context so the teardown RPCs still get
 // sent: cleanup must not be skipped just because the request that necessitated
 // it timed out. Errors are logged, never returned — this is cleanup.
-func (ir *installedRules) teardown(ctx context.Context, log logrus.FieldLogger, rtIDR IDReserver) {
+func (ir *installedRules) teardown(ctx context.Context, log logging.FieldLogger, rtIDR IDReserver) {
 	ir.mu.Lock()
 	snapshot := make(map[cipher.PubKey][]routing.RouteID, len(ir.m))
 	for pk, ids := range ir.m {

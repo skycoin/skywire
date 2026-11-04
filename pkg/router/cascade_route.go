@@ -11,9 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -28,7 +27,7 @@ import (
 // eliminating the need for DMSG connections to each hop.
 func createRouteGroupCascade(
 	ctx context.Context,
-	log logrus.FieldLogger,
+	log logging.FieldLogger,
 	cb *CascadeBuilder,
 	biRt routing.BidirectionalRoute,
 ) (routing.EdgeRules, error) {

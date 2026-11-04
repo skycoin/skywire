@@ -8,7 +8,6 @@ import (
 	"log/syslog"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -25,27 +24,27 @@ func (sf *ServiceFlags) sysLogHook(log *logging.Logger, sysLvl int) {
 	logging.AddHook(hook)
 }
 
-// LevelFromString returns a logrus.Level and syslog.Priority from a string
+// LevelFromString returns a logging.Level and syslog.Priority from a string
 // identifier. An unrecognized (or empty) identifier yields info level plus an
 // error naming it — never debug, which would silently make an unattended
 // service verbose in production.
-func LevelFromString(s string) (logrus.Level, int, error) {
+func LevelFromString(s string) (logging.Level, int, error) {
 	switch strings.ToLower(s) {
 	case "debug":
-		return logrus.DebugLevel, int(syslog.LOG_DEBUG), nil
+		return logging.DebugLevel, int(syslog.LOG_DEBUG), nil
 	case "info", "notice":
-		return logrus.InfoLevel, int(syslog.LOG_INFO), nil
+		return logging.InfoLevel, int(syslog.LOG_INFO), nil
 	case "warn", "warning":
-		return logrus.WarnLevel, int(syslog.LOG_WARNING), nil
+		return logging.WarnLevel, int(syslog.LOG_WARNING), nil
 	case "error":
-		return logrus.ErrorLevel, int(syslog.LOG_ERR), nil
+		return logging.ErrorLevel, int(syslog.LOG_ERR), nil
 	case "fatal", "critical":
-		return logrus.FatalLevel, int(syslog.LOG_CRIT), nil
+		return logging.FatalLevel, int(syslog.LOG_CRIT), nil
 	case "panic":
-		return logrus.PanicLevel, int(syslog.LOG_EMERG), nil
+		return logging.PanicLevel, int(syslog.LOG_EMERG), nil
 	case "trace":
-		return logrus.TraceLevel, int(syslog.LOG_DEBUG), nil
+		return logging.TraceLevel, int(syslog.LOG_DEBUG), nil
 	default:
-		return logrus.InfoLevel, int(syslog.LOG_INFO), fmt.Errorf("%w: %q", ErrInvalidLogString, s)
+		return logging.InfoLevel, int(syslog.LOG_INFO), fmt.Errorf("%w: %q", ErrInvalidLogString, s)
 	}
 }

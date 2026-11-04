@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const (
@@ -395,9 +395,9 @@ func (p *Porter) SweepStaleEphemeral(maxAge time.Duration) int {
 }
 
 // CloseAll closes all contained variables that implement io.Closer
-func (p *Porter) CloseAll(log logrus.FieldLogger) {
+func (p *Porter) CloseAll(log logging.FieldLogger) {
 	if log == nil {
-		l := logrus.New()
+		l := logging.New()
 		l.SetOutput(os.Stderr)
 		log = l
 	}

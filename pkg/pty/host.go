@@ -14,8 +14,6 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -395,7 +393,7 @@ func (h *Host) ListenAndServeNet(ctx context.Context, lis net.Listener, extractP
 }
 
 // serveConn serves a CLI connection or dmsg stream.
-func (h *Host) serveConn(ctx context.Context, log logrus.FieldLogger, mux *hostMux, conn net.Conn) {
+func (h *Host) serveConn(ctx context.Context, log logging.FieldLogger, mux *hostMux, conn net.Conn) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -413,7 +411,7 @@ func (h *Host) serveConn(ctx context.Context, log logrus.FieldLogger, mux *hostM
 }
 
 // authorize returns true if the provided public key is whitelisted.
-func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
+func (h *Host) authorize(log logging.FieldLogger, rPK cipher.PubKey) bool {
 	ok, err := h.wl.Get(rPK)
 	if err != nil {
 		log.WithError(err).Error("pty.Whitelist error.")
@@ -426,7 +424,7 @@ func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
 	return true
 }
 
-// log returns the logrus.FieldLogger that should be used for all log outputs.
+// log returns the logging.FieldLogger that should be used for all log outputs.
 //
 // The direct-TCP host (`cli pty host`, and the sshd command backing it) is
 // constructed as NewHost(nil, wl): it serves the dmsgpty protocol over a
@@ -435,7 +433,7 @@ func (h *Host) authorize(log logrus.FieldLogger, rPK cipher.PubKey) bool {
 // for nil; this one did not, and handlePty's teardown goroutine is the first
 // caller once a connection closes — so the host panicked after serving
 // exactly one session.
-func (h *Host) log() logrus.FieldLogger {
+func (h *Host) log() logging.FieldLogger {
 	if h == nil || h.dmsgC == nil {
 		return logging.MustGetLogger("dmsgpty_host")
 	}

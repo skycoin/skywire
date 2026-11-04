@@ -9,7 +9,6 @@ import (
 	"io"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -17,12 +16,12 @@ import (
 
 // RPCGateway represents the RPC gateway that opens up an app for incoming events from visor.
 type RPCGateway struct {
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 	subs *Subscriber
 }
 
 // NewRPCGateway returns a new RPCGateway.
-func NewRPCGateway(log logrus.FieldLogger, subs *Subscriber) *RPCGateway {
+func NewRPCGateway(log logging.FieldLogger, subs *Subscriber) *RPCGateway {
 	if log == nil {
 		log = logging.MustGetLogger("app_rpc_egress_gateway")
 	}

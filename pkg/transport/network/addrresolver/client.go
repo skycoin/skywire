@@ -17,8 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauthclient"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -873,7 +871,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 // v6 — same code path as a pre-#1525 build). Errors are logged at
 // debug and discarded: the v4 bind's success is the primary outcome
 // and a v6 hiccup shouldn't surface as a startup-fatal error.
-func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses, log *logrus.Entry) {
+func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses, log *logging.Entry) {
 	if c.httpClientV6 == nil {
 		return
 	}

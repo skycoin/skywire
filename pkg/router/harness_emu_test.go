@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -278,7 +277,7 @@ func newEmuRig(t *testing.T, opts emuOpts) *emuRig {
 	hops := []cipher.PubKey{hopA, hopB, hopC}
 
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 
 	cfg := DefaultRouteGroupConfig()
 	if opts.ReadChBufSize > 0 {

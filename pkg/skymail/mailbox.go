@@ -15,9 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 )
 
@@ -70,7 +69,7 @@ type Config struct {
 	// OnDeliver, when set, is told of each message the network files in the
 	// inbox, once it is stored. It must not block.
 	OnDeliver func(Delivered)
-	Log       logrus.FieldLogger
+	Log       logging.FieldLogger
 }
 
 // Delivered is a message the network just filed in the inbox.
@@ -89,7 +88,7 @@ type Mailbox struct {
 	sent  *maildir
 	out   *outbox
 	seen  *seenIndex
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 
 	wlMu      sync.RWMutex
 	whitelist map[cipher.PubKey]struct{}
@@ -122,7 +121,7 @@ func Open(cfg Config) (*Mailbox, error) {
 	}
 	log := cfg.Log
 	if log == nil {
-		log = logrus.NewEntry(logrus.New())
+		log = logging.NewEntry(logging.New())
 	}
 	seen, err := openSeen(cfg.Dir)
 	if err != nil {

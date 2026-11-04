@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -60,7 +59,7 @@ func TestContainsAndIgnoreErrs(t *testing.T) {
 
 func TestPrintStdErr(t *testing.T) {
 	r, w := io.Pipe()
-	log := logrus.NewEntry(logrus.New())
+	log := logging.NewEntry(logging.New())
 	printStdErr(r, log)
 
 	// One suppressed line, one real line — neither should panic.

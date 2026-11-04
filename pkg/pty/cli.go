@@ -12,17 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // CLI connects with and has ownership over a pty.Host.
 type CLI struct {
-	Log  logrus.FieldLogger `json:"-"`
-	Net  string             `json:"cli_network"`
-	Addr string             `json:"cli_address"`
+	Log  logging.FieldLogger `json:"-"`
+	Net  string              `json:"cli_network"`
+	Addr string              `json:"cli_address"`
 }
 
 // DefaultCLI returns a CLI with default values.

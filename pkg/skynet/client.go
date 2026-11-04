@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"github.com/0magnet/bottle/vnet"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // DialRemoteFunc returns a fresh authenticated net.Conn to the remote
@@ -39,7 +39,7 @@ type DialRemoteFunc func() (net.Conn, error)
 // dials a fresh remote per accept so sequential local clients each
 // get a clean independent forward.
 type Client struct {
-	log         logrus.FieldLogger
+	log         logging.FieldLogger
 	remotePK    cipher.PubKey
 	remotePort  int
 	localPort   int
@@ -53,7 +53,7 @@ type Client struct {
 
 // NewClient creates a new skynet client. dialRemote is called once
 // per accepted local connection to produce a fresh remote conn.
-func NewClient(log logrus.FieldLogger, remotePK cipher.PubKey, remotePort, localPort int, dialRemote DialRemoteFunc) *Client {
+func NewClient(log logging.FieldLogger, remotePK cipher.PubKey, remotePort, localPort int, dialRemote DialRemoteFunc) *Client {
 	return &Client{
 		log:        log,
 		remotePK:   remotePK,
@@ -248,7 +248,7 @@ func (c *Client) forwardOnce(localConn, remoteConn net.Conn) {
 // by the surrounding defer. Falls back to full Close when the
 // underlying conn doesn't implement CloseWriter — preserves
 // pre-#2735-style behavior in that path.
-func halfCloseWrite(log logrus.FieldLogger, c net.Conn, side string) {
+func halfCloseWrite(log logging.FieldLogger, c net.Conn, side string) {
 	type closeWriter interface{ CloseWrite() error }
 	if cw, ok := c.(closeWriter); ok {
 		if err := cw.CloseWrite(); err != nil {

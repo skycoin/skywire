@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -29,7 +28,7 @@ func oldRelayRigPair(t *testing.T, gLeg, sLeg emuLegSpec) (g, s *emuRig) {
 	t.Helper()
 	sbdOffForEmu(t)
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	drop := []routing.PacketType{routing.LegRehomePacket}
 	g = newEmuRig(t, emuOpts{

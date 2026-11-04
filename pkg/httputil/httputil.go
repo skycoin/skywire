@@ -11,8 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -131,13 +129,13 @@ const LoggerKey ctxKeyLogger = -1
 //
 // The miss is the common case, not an edge case: SetLoggerMiddleware only
 // puts a logger in the context when a request ID is present. This used to
-// return logging.NewMasterLogger(), which built a whole logrus.Logger,
+// return logging.NewMasterLogger(), which built a whole logging.MasterLogger,
 // TextFormatter and hook map per call, and whose entries then bypassed the
 // process hooks and configured level because it was its own master. The
 // package logger is created once and routes through the master logger, so
 // hooks and level apply.
-func GetLogger(r *http.Request) logrus.FieldLogger {
-	if ctxLog, ok := r.Context().Value(LoggerKey).(logrus.FieldLogger); ok && ctxLog != nil {
+func GetLogger(r *http.Request) logging.FieldLogger {
+	if ctxLog, ok := r.Context().Value(LoggerKey).(logging.FieldLogger); ok && ctxLog != nil {
 		return ctxLog
 	}
 
@@ -148,7 +146,7 @@ func GetLogger(r *http.Request) logrus.FieldLogger {
 // remove and use structured logging
 
 // SetLoggerMiddleware sets logger to context of HTTP requests.
-func SetLoggerMiddleware(log logrus.FieldLogger) func(next http.Handler) http.Handler {
+func SetLoggerMiddleware(log logging.FieldLogger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 type structuredLogger struct {
-	logger logrus.FieldLogger
+	logger logging.FieldLogger
 }
 
 // RequestLogSlow is the latency above which a request that otherwise
@@ -22,7 +22,7 @@ var RequestLogSlow = 2 * time.Second
 // NewLogMiddleware creates a new instance of logging middleware. This will allow
 // adding log fields in the handler and any further middleware. At the end of request, this
 // log entry will be printed at Info level via passed logger
-func NewLogMiddleware(logger logrus.FieldLogger) func(http.Handler) http.Handler {
+func NewLogMiddleware(logger logging.FieldLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			sl := &structuredLogger{logger}
@@ -32,7 +32,7 @@ func NewLogMiddleware(logger logrus.FieldLogger) func(http.Handler) http.Handler
 			newContext := context.WithValue(r.Context(), logEntryKey{}, sl)
 			next.ServeHTTP(ww, r.WithContext(newContext))
 			latency := time.Since(start)
-			fields := logrus.Fields{
+			fields := logging.Fields{
 				"status":  ww.Status(),
 				"took":    latency,
 				"remote":  r.RemoteAddr,

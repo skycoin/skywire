@@ -8,7 +8,6 @@ import (
 	"os"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -23,7 +22,7 @@ import (
 
 // Client is used by skywire apps.
 type Client struct {
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 	conf    appcommon.ProcConfig
 	rpcC    appserver.RPCIngressClient
 	lm      *idmanager.Manager // contains listeners associated with their IDs
@@ -33,7 +32,7 @@ type Client struct {
 
 // NewClient creates a new Client, panicking on any error.
 func NewClient(eventSubs *appevent.Subscriber) *Client {
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(os.Stderr)
 	// Use same formatter as visor for consistent log output
 	log.SetFormatter(&logging.TextFormatter{
@@ -51,7 +50,7 @@ func NewClient(eventSubs *appevent.Subscriber) *Client {
 		log.WithError(err).Fatal("Failed to obtain proc config.")
 	}
 	// Add app name to logger for identification (uses _module key for bracket display)
-	var appLog logrus.FieldLogger = log.WithField("_module", conf.AppName)
+	var appLog logging.FieldLogger = log.WithField("_module", conf.AppName)
 	// An in-process app is a goroutine of the visor, so the logger above is the
 	// visor's console and nothing else: no stderr pipe exists for the proc
 	// manager to read back into the app's log store and local/log/skywire.log.
@@ -70,7 +69,7 @@ func NewClient(eventSubs *appevent.Subscriber) *Client {
 }
 
 // NewClientFromConfig creates a new client from a given proc config.
-func NewClientFromConfig(log logrus.FieldLogger, conf appcommon.ProcConfig, subs *appevent.Subscriber) (*Client, error) {
+func NewClientFromConfig(log logging.FieldLogger, conf appcommon.ProcConfig, subs *appevent.Subscriber) (*Client, error) {
 	conn, closers, err := appevent.DoReqHandshake(conf, subs)
 	if err != nil {
 		return nil, err
@@ -92,7 +91,7 @@ func (c *Client) Config() appcommon.ProcConfig {
 }
 
 // Log returns the client's logger for apps to use for logging.
-func (c *Client) Log() logrus.FieldLogger {
+func (c *Client) Log() logging.FieldLogger {
 	return c.log
 }
 

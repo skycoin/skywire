@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 )
 
@@ -89,7 +89,7 @@ func relayAs(n *testNet, via, to cipher.PubKey, from string, body []byte) error 
 	rcpt := addr("b", to)
 	return skymailbridge.Relay(context.Background(), n.dialerFor(via),
 		skymailbridge.Config{Suffix: ".skynet", Mode: "b", HeloName: "relay", RemotePort: 25},
-		from, []skymailbridge.Recipient{{Original: rcpt, Forward: rcpt, PeerPK: to}}, body, logrus.New())
+		from, []skymailbridge.Recipient{{Original: rcpt, Forward: rcpt, PeerPK: to}}, body, logging.New())
 }
 
 func TestRelayedEnvelopeIsFiledUnderItsSigner(t *testing.T) {
