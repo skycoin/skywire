@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -109,7 +107,7 @@ func TestBootReportFileRotates(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := &bootReportFile{path: file}
-	if err := f.add(logrus.Fields{"kind": "error"}, time.Now()); err != nil {
+	if err := f.add(logging.Fields{"kind": "error"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if st, err := os.Stat(file + ".1"); err != nil || st.Size() != bootReportFileMax {

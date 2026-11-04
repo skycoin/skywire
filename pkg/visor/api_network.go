@@ -18,7 +18,6 @@ import (
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -701,7 +700,7 @@ func (v *Visor) vhostSites(log *logging.Logger) []logserver.Vhost {
 
 // serveForwardConn bridges one caller of a forwarded port to its local target,
 // applying the port's whitelist and, when set, the caller-key header.
-func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport string, log logrus.FieldLogger) {
+func (v *Visor) serveForwardConn(conn net.Conn, port, localPort int, transport string, log logging.FieldLogger) {
 	defer conn.Close() //nolint:errcheck
 	// Identify the peer once (used for the whitelist gate AND,
 	// when enabled, the X-Skywire-Remote-PK header injection).

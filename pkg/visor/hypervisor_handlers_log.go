@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -41,7 +39,7 @@ func (hv *Hypervisor) getLog() http.HandlerFunc {
 			hv.log(r).WithError(err).Debug("log SSE: could not clear write deadline")
 		}
 		// Empty filter = firehose (every module, Debug+). See Broadcaster.matches.
-		ch, cancel := hv.visor.SubscribeLogs(logging.Filter{MinLevel: logrus.DebugLevel}, 512)
+		ch, cancel := hv.visor.SubscribeLogs(logging.Filter{MinLevel: logging.DebugLevel}, 512)
 		if ch == nil {
 			http.Error(w, "log broadcaster unavailable", http.StatusServiceUnavailable)
 			return
@@ -82,7 +80,7 @@ func (hv *Hypervisor) getLog() http.HandlerFunc {
 // formatLogEntry renders a logrus entry as "[module] message k=v …" (module
 // first, then the message, then the remaining fields sorted for stability) —
 // matching how the console-captured wasm log reads.
-func formatLogEntry(e *logrus.Entry) string {
+func formatLogEntry(e *logging.Entry) string {
 	var b strings.Builder
 	if m, ok := e.Data["_module"].(string); ok && m != "" {
 		fmt.Fprintf(&b, "[%s] ", m)

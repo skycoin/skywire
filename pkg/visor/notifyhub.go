@@ -36,9 +36,9 @@ import (
 	"unsafe"
 
 	"github.com/0magnet/osnotify"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -78,7 +78,7 @@ type NotifyHub struct {
 	// the OS sink's errors are not actionable — which leaves an operator
 	// asking "why did nothing appear?" with nothing to read. One Debug line
 	// per publish answers it. Nil is valid (tests, a bare hub).
-	log logrus.FieldLogger
+	log logging.FieldLogger
 }
 
 type notifySub struct {
@@ -99,7 +99,7 @@ const _ = uint(0 - unsafe.Offsetof(notifySub{}.dropped)%8)
 
 // NewNotifyHub constructs an empty hub with the host-OS sink wired up. log may
 // be nil; it only carries the per-publish trace.
-func NewNotifyHub(log logrus.FieldLogger) *NotifyHub {
+func NewNotifyHub(log logging.FieldLogger) *NotifyHub {
 	h := &NotifyHub{
 		subs:        make(map[*notifySub]struct{}),
 		osAvailable: osnotify.Available,

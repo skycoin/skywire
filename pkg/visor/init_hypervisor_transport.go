@@ -38,9 +38,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
@@ -64,7 +63,7 @@ const (
 
 // autoUpgradeHypervisorTransport runs in a goroutine per configured
 // hypervisor PK. See the package doc for the gating + ordering.
-func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.PubKey, log logrus.FieldLogger) {
+func (v *Visor) autoUpgradeHypervisorTransport(ctx context.Context, hvPK cipher.PubKey, log logging.FieldLogger) {
 	backoff := hypervisorTransportInitialBackoff
 
 	for {

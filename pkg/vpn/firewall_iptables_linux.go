@@ -15,19 +15,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 )
 
 type iptablesFirewall struct {
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 	added [][]string // full iptables argv (incl. -t <table> -A <chain>) per rule
 }
 
 // newFirewall builds the iptables backend. It never fails (rules are added
 // lazily); errors surface per-operation.
-func newFirewall(log logrus.FieldLogger) (firewall, error) {
+func newFirewall(log logging.FieldLogger) (firewall, error) {
 	return &iptablesFirewall{log: log}, nil
 }
 

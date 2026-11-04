@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -644,7 +642,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	logger := v.MasterLogger().PackageLogger("dmsghttp_logserver")
 
 	var printLog bool
-	if v.MasterLogger().GetLevel() == logrus.DebugLevel || v.MasterLogger().GetLevel() == logrus.TraceLevel {
+	if v.MasterLogger().GetLevel() == logging.DebugLevel || v.MasterLogger().GetLevel() == logging.TraceLevel {
 		printLog = true
 	}
 
@@ -1480,7 +1478,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			v.dmsgLatency.servers[serverPK] = avgLatency
 			v.dmsgLatency.mu.Unlock()
 
-			log.WithFields(logrus.Fields{
+			log.WithFields(logging.Fields{
 				"server":  serverPKStr,
 				"latency": avgLatency.Round(time.Millisecond),
 				"elapsed": time.Since(start).Round(time.Millisecond),

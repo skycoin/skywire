@@ -3,7 +3,6 @@ package visor
 import (
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -16,11 +15,11 @@ func TestSetLogLevelSetsProcessLevel(t *testing.T) {
 	defer logging.SetLevel(prev)
 
 	ml := logging.NewMasterLogger()
-	setLogLevel(ml, logrus.DebugLevel)
-	require.Equal(t, logrus.DebugLevel, ml.GetLevel())
-	require.Equal(t, logrus.DebugLevel, logging.GetLevel())
+	setLogLevel(ml, logging.DebugLevel)
+	require.Equal(t, logging.DebugLevel, ml.GetLevel())
+	require.Equal(t, logging.DebugLevel, logging.GetLevel())
 
-	setLogLevel(ml, logrus.InfoLevel)
-	require.Equal(t, logrus.InfoLevel, ml.GetLevel())
-	require.Equal(t, logrus.InfoLevel, logging.GetLevel())
+	setLogLevel(ml, logging.InfoLevel)
+	require.Equal(t, logging.InfoLevel, ml.GetLevel())
+	require.Equal(t, logging.InfoLevel, logging.GetLevel())
 }

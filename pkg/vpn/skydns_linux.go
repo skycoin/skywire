@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skydns"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpn/netctl"
@@ -36,7 +35,7 @@ const (
 func RunSkyDNS(ctx context.Context, cfg SkyDNSConfig) error {
 	log := cfg.Log
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = logging.StandardLogger()
 	}
 	var (
 		tun  TUNDevice

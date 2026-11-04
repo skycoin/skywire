@@ -8,9 +8,8 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -36,7 +35,7 @@ var (
 
 type RPC struct {
 	visor visorapi.API
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 }
 
 func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {

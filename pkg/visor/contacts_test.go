@@ -7,11 +7,11 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/contacts"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -25,7 +25,7 @@ func TestContactsOverRPC(t *testing.T) {
 	v.conf.LocalPath = filepath.Join(root, "local")
 
 	srv := rpc.NewServer()
-	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logrus.New()}))
+	require.NoError(t, registerVisorRPC(srv, visorapi.RPCPrefix, &RPC{visor: v, log: logging.New()}))
 	sc, cc := net.Pipe()
 	go srv.ServeConn(sc)
 	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)

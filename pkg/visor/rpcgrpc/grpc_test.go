@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -49,7 +48,7 @@ type fakeVisor struct {
 	getDmsgPingServerPK    func(cipher.PubKey) (cipher.PubKey, error)
 	getRemoteDmsgServers   func(cipher.PubKey) ([]cipher.PubKey, error)
 	dialDmsgRPC            func(cipher.PubKey) (net.Conn, error)
-	subscribeLogs          func(logging.Filter, int) (<-chan *logrus.Entry, func() uint64)
+	subscribeLogs          func(logging.Filter, int) (<-chan *logging.Entry, func() uint64)
 	subscribeGroupMessages func(int) (<-chan GroupMessageData, func() uint64)
 	snapshotGroupAfterNs   func(int64) []GroupMessageData
 	snapshotHistoryAfterNs func(string, int64) []GroupMessageData
@@ -88,7 +87,7 @@ func newFakeVisor() *fakeVisor {
 		getDmsgPingServerPK:  func(cipher.PubKey) (cipher.PubKey, error) { return srvPK, nil },
 		getRemoteDmsgServers: func(cipher.PubKey) ([]cipher.PubKey, error) { return []cipher.PubKey{srvPK}, nil },
 		dialDmsgRPC:          func(cipher.PubKey) (net.Conn, error) { return nil, errors.New("dmsg rpc not available") },
-		subscribeLogs: func(logging.Filter, int) (<-chan *logrus.Entry, func() uint64) {
+		subscribeLogs: func(logging.Filter, int) (<-chan *logging.Entry, func() uint64) {
 			return nil, func() uint64 { return 0 }
 		},
 		subscribeGroupMessages: func(int) (<-chan GroupMessageData, func() uint64) {
@@ -133,7 +132,7 @@ func (f *fakeVisor) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, err
 	return f.getRemoteDmsgServers(pk)
 }
 func (f *fakeVisor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) { return f.dialDmsgRPC(pk) }
-func (f *fakeVisor) SubscribeLogs(filt logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (f *fakeVisor) SubscribeLogs(filt logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64) {
 	return f.subscribeLogs(filt, capacity)
 }
 func (f *fakeVisor) SubscribeGroupMessages(capacity int) (<-chan GroupMessageData, func() uint64) {
@@ -467,9 +466,9 @@ func TestStreamAppLogsNoBroadcaster(t *testing.T) {
 }
 
 func TestStreamAppLogsDelivers(t *testing.T) {
-	logCh := make(chan *logrus.Entry, 4)
+	logCh := make(chan *logging.Entry, 4)
 	fv := newFakeVisor()
-	fv.subscribeLogs = func(logging.Filter, int) (<-chan *logrus.Entry, func() uint64) {
+	fv.subscribeLogs = func(logging.Filter, int) (<-chan *logging.Entry, func() uint64) {
 		return logCh, func() uint64 { return 0 }
 	}
 	client, cleanup := newTestServer(t, fv)
@@ -493,7 +492,7 @@ func TestStreamAppLogsDelivers(t *testing.T) {
 		t.Fatal("never received subscribed sentinel")
 	}
 
-	logCh <- &logrus.Entry{Time: time.Now(), Level: logrus.InfoLevel, Message: "hello", Data: logrus.Fields{"_module": "mod"}}
+	logCh <- &logging.Entry{Time: time.Now(), Level: logging.InfoLevel, Message: "hello", Data: logging.Fields{"_module": "mod"}}
 	select {
 	case e := <-got:
 		if e.Message != "hello" {

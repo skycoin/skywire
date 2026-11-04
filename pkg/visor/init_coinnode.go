@@ -24,8 +24,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -191,7 +189,7 @@ func initCoinNodes(_ context.Context, v *Visor, log *logging.Logger) error {
 // matching the convention used by the on-demand services lookup path.
 func newInfoMasterLogger() *logging.MasterLogger {
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.InfoLevel)
+	ml.SetLevel(logging.InfoLevel)
 	return ml
 }
 
@@ -200,7 +198,7 @@ func newInfoMasterLogger() *logging.MasterLogger {
 // once immediately, then on each tick. On a failed probe it deregisters (the
 // node is down / the advertisement would be dead). CoinInfo is refreshed every
 // successful probe so volatile fields (HeadSeq) stay current.
-func runCoinRegistrar(ctx context.Context, log logrus.FieldLogger, sd *servicedisc.HTTPClient, localHTTP *http.Client, node visorconfig.CoinNodeConfig) {
+func runCoinRegistrar(ctx context.Context, log logging.FieldLogger, sd *servicedisc.HTTPClient, localHTTP *http.Client, node visorconfig.CoinNodeConfig) {
 	ticker := time.NewTicker(skyenv.ServiceDiscUpdateInterval)
 	defer ticker.Stop()
 

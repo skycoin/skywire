@@ -21,7 +21,6 @@ import (
 
 	nrpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/proxy"
 	"google.golang.org/grpc"
@@ -874,7 +873,7 @@ func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubK
 	return a.v.GetRemoteDmsgServers(pk)
 }
 
-func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64) {
 	return a.v.SubscribeLogs(f, capacity)
 }
 

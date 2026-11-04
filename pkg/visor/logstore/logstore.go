@@ -4,7 +4,7 @@ package logstore
 import (
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // LogRealLineKey is a key in the log entry that denotes real log line number
@@ -34,9 +34,9 @@ type Store interface {
 // DefaultHookLevel is the most verbose level the hook returned by MakeStore
 // accepts.
 //
-// It is deliberately not logrus.AllLevels. Fire below takes a process-wide
+// It is deliberately not logging.AllLevels. Fire below takes a process-wide
 // mutex, allocates a new Entry via entry.WithField, runs a full
-// logrus.JSONFormatter.Format and copies the result into a string — for every
+// logging.JSONFormatter.Format and copies the result into a string — for every
 // entry the visor emits, on top of the formatting the logger already did for
 // its own output. Measured on a production node running at debug, ~67k
 // lines/min reach a hook like this one; the store holds 300 entries, so at
@@ -47,28 +47,28 @@ type Store interface {
 // The visor's default log level is info (skyenv.LogLevel), so info-and-above
 // is exactly what those readers see today — this only keeps the hot debug and
 // trace paths out of the formatter and off the mutex.
-const DefaultHookLevel = logrus.InfoLevel
+const DefaultHookLevel = logging.InfoLevel
 
 // MakeStore returns a new store that will hold up to max entries,
 // overwriting the oldest entry when over the capacity
 // returned hook should be registered in logrus master logger to
 // store log entries. The hook accepts DefaultHookLevel and above; use
 // MakeStoreLevel to capture more.
-func MakeStore(maxx int) (Store, logrus.Hook) {
+func MakeStore(maxx int) (Store, logging.Hook) {
 	return MakeStoreLevel(maxx, DefaultHookLevel)
 }
 
 // MakeStoreLevel is MakeStore with an explicit minimum severity for the
 // returned hook: entries less severe than level never reach Fire, and so never
 // pay the JSON encode or the store mutex.
-func MakeStoreLevel(maxx int, level logrus.Level) (Store, logrus.Hook) {
-	if level > logrus.TraceLevel {
-		level = logrus.TraceLevel
+func MakeStoreLevel(maxx int, level logging.Level) (Store, logging.Hook) {
+	if level > logging.TraceLevel {
+		level = logging.TraceLevel
 	}
-	levels := make([]logrus.Level, level+1)
-	copy(levels, logrus.AllLevels[:level+1])
+	levels := make([]logging.Level, level+1)
+	copy(levels, logging.AllLevels[:level+1])
 	entries := make([]string, maxx)
-	formatter := &logrus.JSONFormatter{}
+	formatter := &logging.JSONFormatter{}
 	store := &store{cap: int64(maxx), entries: entries, formatter: formatter, levels: levels}
 	return store, store
 }
@@ -80,8 +80,8 @@ type store struct {
 	// number of the next entry to come (also number of entries processed since the beginning)
 	entryNum  int64
 	entries   []string
-	formatter logrus.Formatter
-	levels    []logrus.Level
+	formatter logging.Formatter
+	levels    []logging.Level
 }
 
 // collect log lines into a single string, starting at from (inclusive)
@@ -143,16 +143,16 @@ func (s *store) GetLogsSince(since int64) ([]string, int64, int64) {
 	return logs, dropped, s.entryNum
 }
 
-// Levels implements logrus.Hook interface. It denotes log levels
+// Levels implements logging.Hook interface. It denotes log levels
 // that we are interested in — see DefaultHookLevel for why this is not
-// logrus.AllLevels.
-func (s *store) Levels() []logrus.Level {
+// logging.AllLevels.
+func (s *store) Levels() []logging.Level {
 	return s.levels
 }
 
-// Fire implements logrus.Hook interface to process new log entry
+// Fire implements logging.Hook interface to process new log entry
 // that we simply store
-func (s *store) Fire(entry *logrus.Entry) error {
+func (s *store) Fire(entry *logging.Entry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx := s.entryNum % s.cap

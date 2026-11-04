@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/orandin/lumberjackrus"
-	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
 
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -699,7 +698,7 @@ func Run(parentCtx context.Context, conf *visorconfig.V1, opts Options) error {
 // hypervisor HTTP port and dies deep in init with an opaque bind error; here we
 // detect it up front and say exactly what is already running. A second visor
 // on the host is configured with its own cli_addr, which this check passes.
-func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error {
+func preflightSingleInstance(conf *visorconfig.V1, log logging.FieldLogger) error {
 	addr := conf.CLIAddr
 	if addr == "" {
 		return nil // no local RPC configured — nothing to probe
@@ -1274,7 +1273,7 @@ func (v *Visor) SetLogBroadcaster(b *logging.Broadcaster) {
 // Wraps the broadcaster so callers don't need a direct handle.
 // Returns nil channel + nil cancel when the broadcaster is not
 // installed (e.g. tests).
-func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logging.Entry, func() uint64) {
 	if v.logBcast == nil {
 		return nil, func() uint64 { return 0 }
 	}
@@ -1285,7 +1284,7 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 // lines captured for appName by the log broadcaster's per-app ring, filtered to
 // entries at least as severe as minLevel. Both slices are oldest-first. Returns
 // empty slices (not an error) when nothing has been captured.
-func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, logs []logging.Record) {
+func (v *Visor) RecentAppEvents(appName string, minLevel logging.Level) (events, logs []logging.Record) {
 	if v.logBcast == nil {
 		return nil, nil
 	}
@@ -1295,7 +1294,7 @@ func (v *Visor) RecentAppEvents(appName string, minLevel logrus.Level) (events, 
 // RecentAppLogMerged returns the recent events+logs for appName merged into one
 // time-ordered slice (oldest first), filtered to entries at least as severe as
 // minLevel. This is the "reading the log" view `cli proxy log` prints.
-func (v *Visor) RecentAppLogMerged(appName string, minLevel logrus.Level) []logging.Record {
+func (v *Visor) RecentAppLogMerged(appName string, minLevel logging.Level) []logging.Record {
 	if v.logBcast == nil {
 		return nil
 	}
@@ -1556,7 +1555,7 @@ func addJSONLogHook(conf *visorconfig.V1) {
 
 // newJSONLogHook builds the JSON-lines hook for path. Split out so a test
 // can assert the on-disk shape without a running visor.
-func newJSONLogHook(path string) (logrus.Hook, error) {
+func newJSONLogHook(path string) (logging.Hook, error) {
 	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
 		Filename:   path,
 		MaxSize:    1,
@@ -1564,7 +1563,7 @@ func newJSONLogHook(path string) (logrus.Hook, error) {
 		MaxAge:     1,
 		Compress:   false,
 		LocalTime:  false,
-	}, logrus.TraceLevel, &logrus.JSONFormatter{
+	}, logging.TraceLevel, &logging.JSONFormatter{
 		// RFC3339 with nanoseconds: the text log is second-resolution, too
 		// coarse to order a boot sequence.
 		TimestampFormat: time.RFC3339Nano,
@@ -1658,7 +1657,7 @@ func (v *Visor) GetNetworkTypes() []string {
 // INFO, WARN and ERROR lines were written to a file nobody could read. The
 // default logger alone, with no per-level overrides, keeps every level on a
 // single rotating writer.
-func newTextLogHook(path string) (logrus.Hook, error) {
+func newTextLogHook(path string) (logging.Hook, error) {
 	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
 		Filename:   path,
 		MaxSize:    1,
@@ -1666,7 +1665,7 @@ func newTextLogHook(path string) (logrus.Hook, error) {
 		MaxAge:     1,
 		Compress:   false,
 		LocalTime:  false,
-	}, logrus.TraceLevel, &logging.TextFormatter{
+	}, logging.TraceLevel, &logging.TextFormatter{
 		DisableColors:   true,
 		FullTimestamp:   true,
 		ForceFormatting: true,
