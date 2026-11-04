@@ -33,9 +33,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const (
@@ -141,7 +140,7 @@ func (c Config) Validate() error {
 // its recipients' PK label, over the network its suffix names. With
 // cfg.Dialers set, each suffix there is accepted and dialed with its
 // own dialer; otherwise cfg.Suffix is, with dialer.
-func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logrus.FieldLogger) error {
+func Serve(ctx context.Context, lis net.Listener, dialer Dialer, cfg Config, log logging.FieldLogger) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -170,7 +169,7 @@ type relayHandler struct {
 	dialers  map[string]Dialer
 	suffixes []string
 	cfg      Config
-	log      logrus.FieldLogger
+	log      logging.FieldLogger
 }
 
 // parse finds the suffix rcpt ends in and parses it under that suffix.
@@ -318,7 +317,7 @@ func ParseRecipient(addr, suffix, mode string) (cipher.PubKey, string, bool, err
 // Errors are surfaced verbatim so the calling SMTP session can
 // translate them to an appropriate 4xx/5xx for the upstream
 // Postfix.
-func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []Recipient, body []byte, log logrus.FieldLogger) error {
+func Relay(ctx context.Context, dialer Dialer, cfg Config, from string, rcpts []Recipient, body []byte, log logging.FieldLogger) error {
 	if len(rcpts) == 0 {
 		return errors.New("no recipients")
 	}

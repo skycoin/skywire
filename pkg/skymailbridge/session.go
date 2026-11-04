@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // acceptRetryDelay paces the accept loop after a transient error so a
@@ -100,16 +100,16 @@ func replyOr(err error, code int, enhanced string) string {
 	return fmt.Sprintf("%d %s %s", code, enhanced, err)
 }
 
-func orDefaultLog(log logrus.FieldLogger) logrus.FieldLogger {
+func orDefaultLog(log logging.FieldLogger) logging.FieldLogger {
 	if log == nil {
-		return logrus.NewEntry(logrus.New())
+		return logging.NewEntry(logging.New())
 	}
 	return log
 }
 
 // ServeHandler runs an SMTP server on lis until ctx is canceled or lis
 // is closed, handing every connection to its own session with h.
-func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName string, log logrus.FieldLogger) error {
+func ServeHandler(ctx context.Context, lis net.Listener, h Handler, heloName string, log logging.FieldLogger) error {
 	if h == nil {
 		return errors.New("skymailbridge: Handler is nil")
 	}

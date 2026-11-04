@@ -13,8 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -22,7 +21,7 @@ import (
 // serviceUpdater updates service-discovery entry of locally running App.
 type serviceUpdater struct {
 	client            *servicedisc.HTTPClient
-	log               logrus.FieldLogger
+	log               logging.FieldLogger
 	heartbeatInterval time.Duration
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
@@ -38,7 +37,7 @@ type serviceUpdater struct {
 }
 
 // newServiceUpdater creates a new serviceUpdater with heartbeat support.
-func newServiceUpdater(log logrus.FieldLogger, client *servicedisc.HTTPClient, heartbeatInterval time.Duration) *serviceUpdater {
+func newServiceUpdater(log logging.FieldLogger, client *servicedisc.HTTPClient, heartbeatInterval time.Duration) *serviceUpdater {
 	if heartbeatInterval <= 0 {
 		heartbeatInterval = skyenv.ServiceDiscUpdateInterval
 	}
@@ -174,7 +173,7 @@ func (u *serviceUpdater) Stop() {
 // if the visor should stay registered in service discovery.
 type PublicVisorUpdater struct {
 	inner               *serviceUpdater
-	log                 logrus.FieldLogger
+	log                 logging.FieldLogger
 	registrationTimeout time.Duration
 	maxTransports       int
 	getTransportCount   func() int // callback to get current transport count
@@ -200,7 +199,7 @@ type PublicVisorUpdater struct {
 
 // NewPublicVisorUpdater creates a new public visor updater with validation logic.
 func NewPublicVisorUpdater(
-	log logrus.FieldLogger,
+	log logging.FieldLogger,
 	inner *serviceUpdater,
 	registrationTimeout time.Duration,
 	maxTransports int,

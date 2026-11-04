@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -91,7 +90,7 @@ func TestRehomeRefusedWhenPeerLacksTheBit(t *testing.T) {
 func newRehomeTestGroup(t *testing.T, srcPK, dstPK cipher.PubKey, srcPort, dstPort routing.Port, rehome bool) *RouteGroup {
 	t.Helper()
 	l := logging.NewMasterLogger()
-	l.SetLevel(logrus.PanicLevel)
+	l.SetLevel(logging.PanicLevel)
 	rt := routing.NewTable(l.PackageLogger("rehome-rt"))
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), rt, routing.NewRouteDescriptor(srcPK, dstPK, srcPort, dstPort), l)
 	rg.mux = newRouteMux(l.PackageLogger("rehome-mux"), true)

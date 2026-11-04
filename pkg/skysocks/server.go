@@ -13,7 +13,6 @@ import (
 	ipc "github.com/0magnet/golang-ipc"
 	"github.com/0magnet/yamux"
 	"github.com/armon/go-socks5"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -50,7 +49,7 @@ func NewServer(whitelist []cipher.PubKey, appCl *app.Client, opts ...ServerOptio
 	// Debug: a SOCKS proxy failing a *client-requested* dial is a routine,
 	// client-driven condition, not a proxy error.
 	cfg := &socks5.Config{
-		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logrus.DebugLevel),
+		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logging.DebugLevel),
 	}
 	for _, o := range opts {
 		o(cfg)

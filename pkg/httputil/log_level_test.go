@@ -7,22 +7,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 )
 
 // collectHook records every entry the logger emits.
-type collectHook struct{ entries []*logrus.Entry }
+type collectHook struct{ entries []*logging.Entry }
 
-func (h *collectHook) Levels() []logrus.Level { return logrus.AllLevels }
-func (h *collectHook) Fire(e *logrus.Entry) error {
+func (h *collectHook) Levels() []logging.Level { return logging.AllLevels }
+func (h *collectHook) Fire(e *logging.Entry) error {
 	h.entries = append(h.entries, e)
 	return nil
 }
 
-func serveOnce(t *testing.T, level logrus.Level, status int, delay time.Duration) []*logrus.Entry {
+func serveOnce(t *testing.T, level logging.Level, status int, delay time.Duration) []*logging.Entry {
 	t.Helper()
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(discardWriter{})
 	log.SetLevel(level)
 	hook := &collectHook{}
@@ -43,22 +43,22 @@ func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 // Debug (a service answering thousands a minute must not fill its log at Info),
 // a server error is Warn, and a slow request is Info even when it succeeded.
 func TestLogMiddleware_LevelByOutcome(t *testing.T) {
-	one := func(status int, delay time.Duration) *logrus.Entry {
-		es := serveOnce(t, logrus.DebugLevel, status, delay)
+	one := func(status int, delay time.Duration) *logging.Entry {
+		es := serveOnce(t, logging.DebugLevel, status, delay)
 		require.Len(t, es, 1)
 		return es[0]
 	}
 
-	require.Equal(t, logrus.DebugLevel, one(http.StatusOK, 0).Level)
-	require.Equal(t, logrus.DebugLevel, one(http.StatusUnprocessableEntity, 0).Level,
+	require.Equal(t, logging.DebugLevel, one(http.StatusOK, 0).Level)
+	require.Equal(t, logging.DebugLevel, one(http.StatusUnprocessableEntity, 0).Level,
 		"a client's own malformed request must not be loggable at Info by that client")
-	require.Equal(t, logrus.WarnLevel, one(http.StatusInternalServerError, 0).Level)
+	require.Equal(t, logging.WarnLevel, one(http.StatusInternalServerError, 0).Level)
 
 	old := RequestLogSlow
 	RequestLogSlow = 10 * time.Millisecond
 	defer func() { RequestLogSlow = old }()
 	slow := one(http.StatusOK, 40*time.Millisecond)
-	require.Equal(t, logrus.InfoLevel, slow.Level)
+	require.Equal(t, logging.InfoLevel, slow.Level)
 	require.Equal(t, "Served slow request.", slow.Message)
 	RequestLogSlow = old
 
@@ -72,7 +72,7 @@ func TestLogMiddleware_LevelByOutcome(t *testing.T) {
 
 // At Info the ordinary request log is silent — the whole point of the change.
 func TestLogMiddleware_QuietAtInfo(t *testing.T) {
-	require.Empty(t, serveOnce(t, logrus.InfoLevel, http.StatusOK, 0))
-	require.Len(t, serveOnce(t, logrus.InfoLevel, http.StatusBadGateway, 0), 1,
+	require.Empty(t, serveOnce(t, logging.InfoLevel, http.StatusOK, 0))
+	require.Len(t, serveOnce(t, logging.InfoLevel, http.StatusBadGateway, 0), 1,
 		"a server error must still be logged at Info")
 }

@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -31,7 +30,7 @@ import (
 func poolArbiterRig(t *testing.T, n int) (g *emuRig, pool []*emuRig) {
 	t.Helper()
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	g = newEmuRig(t, emuOpts{
 		Legs:      []emuLegSpec{symmetric("active-2MBs-120ms", 2*emuMB, 120*time.Millisecond, 2*emuMB)},

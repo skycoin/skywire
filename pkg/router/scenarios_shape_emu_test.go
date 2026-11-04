@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -51,7 +50,7 @@ func (h *emuHost) allGroups() []*RouteGroup {
 func shapeEmuRig(t *testing.T, actives, standby int) []*emuRig {
 	t.Helper()
 	ml := logging.NewMasterLogger()
-	ml.SetLevel(logrus.PanicLevel)
+	ml.SetLevel(logging.PanicLevel)
 	shared := newEmuShared(ml)
 	rigs := make([]*emuRig, 0, actives+standby)
 	for i := 0; i < actives+standby; i++ {

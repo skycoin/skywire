@@ -9,9 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skymailbridge"
 )
 
@@ -41,7 +40,7 @@ type Host struct {
 	// Parker reaches the visor's dmsg-async inbox. Nil turns parking off.
 	Parker    Parker
 	OnDeliver func(Delivered)
-	Log       logrus.FieldLogger
+	Log       logging.FieldLogger
 }
 
 // ServiceConfig starts a Service.
@@ -73,7 +72,7 @@ type Service struct {
 // mail over dmsg, as a .skynet address cannot reach it anyway.
 func StartService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	if cfg.Log == nil {
-		cfg.Log = logrus.NewEntry(logrus.New())
+		cfg.Log = logging.NewEntry(logging.New())
 	}
 	saved, err := LoadSettings(cfg.Dir)
 	if err != nil {

@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -310,7 +310,7 @@ func TestBroadcastIntermediaryRules(t *testing.T) {
 			defer cancel()
 
 			// act
-			err := BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules, nil)
+			err := BroadcastIntermediaryRules(ctx, logging.New(), rtIDR, rules, nil)
 
 			// assert
 			if tc.failingRouters > 0 {

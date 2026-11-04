@@ -30,8 +30,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -109,7 +107,7 @@ func (h *Host) ListenAndServeTCP(ctx context.Context, addr string, localPK ciphe
 // the accept loop.
 func (h *Host) handleTCPConn(
 	ctx context.Context,
-	parentLog logrus.FieldLogger,
+	parentLog logging.FieldLogger,
 	mux *hostMux,
 	conn net.Conn,
 	localPK cipher.PubKey,
@@ -159,7 +157,7 @@ func (h *Host) ServeAcceptedTCP(
 // in one place.
 func (h *Host) serveTCPConn(
 	ctx context.Context,
-	parentLog logrus.FieldLogger,
+	parentLog logging.FieldLogger,
 	mux *hostMux,
 	conn net.Conn,
 	localPK cipher.PubKey,

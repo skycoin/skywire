@@ -37,8 +37,8 @@ import (
 	"time"
 
 	"github.com/0magnet/yamux"
-	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -77,7 +77,7 @@ type heldSession struct {
 // Pool holds and reuses route groups keyed by an opaque route key.
 type Pool struct {
 	idleTTL time.Duration
-	log     logrus.FieldLogger
+	log     logging.FieldLogger
 
 	mu       sync.Mutex
 	sessions map[string]*heldSession
@@ -87,12 +87,12 @@ type Pool struct {
 }
 
 // New builds a Pool. idleTTL ≤ 0 uses DefaultIdleTTL. A nil log discards output.
-func New(idleTTL time.Duration, log logrus.FieldLogger) *Pool {
+func New(idleTTL time.Duration, log logging.FieldLogger) *Pool {
 	if idleTTL <= 0 {
 		idleTTL = DefaultIdleTTL
 	}
 	if log == nil {
-		l := logrus.New()
+		l := logging.New()
 		l.SetOutput(discard{})
 		log = l
 	}

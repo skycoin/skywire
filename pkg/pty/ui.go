@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -41,7 +39,7 @@ func DefaultUIConfig() UIConfig {
 
 // UI connects to a dmsgpty-host and exposes a pty via a web UI.
 type UI struct {
-	log    logrus.FieldLogger
+	log    logging.FieldLogger
 	conf   UIConfig
 	dialer UIDialer
 }
@@ -59,13 +57,13 @@ func NewUI(dialer UIDialer, conf UIConfig) *UI {
 }
 
 // Logger returns the internal logger.
-func (ui *UI) Logger() logrus.FieldLogger {
+func (ui *UI) Logger() logging.FieldLogger {
 	return ui.log
 }
 
 // SetLogger sets the internal logger.
 // This should be called before serving .Handler()
-func (ui *UI) SetLogger(log logrus.FieldLogger) {
+func (ui *UI) SetLogger(log logging.FieldLogger) {
 	ui.log = log
 }
 
@@ -139,7 +137,7 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 }
 
 // serveTerminal runs one terminal over an accepted websocket.
-func (ui *UI) serveTerminal(r *http.Request, log logrus.FieldLogger, ws *uiSocket, sID int32, customCommands map[string][]string) {
+func (ui *UI) serveTerminal(r *http.Request, log logging.FieldLogger, ws *uiSocket, sID int32, customCommands map[string][]string) {
 	{
 		var err error
 		// Binary mode for PTY data; text mode fails on non-UTF-8 bytes.
@@ -430,7 +428,7 @@ func logWS(conn net.Conn, msg string) {
 	_, _ = fmt.Fprintf(conn, "[skypty-ui] Status: %s\r", msg) //nolint:errcheck
 }
 
-func writeWSError(log logrus.FieldLogger, wsConn net.Conn, err error) {
+func writeWSError(log logging.FieldLogger, wsConn net.Conn, err error) {
 	log.WithError(err).
 		WithField("remote_addr", wsConn.RemoteAddr()).
 		Error()
@@ -441,7 +439,7 @@ func writeWSError(log logrus.FieldLogger, wsConn net.Conn, err error) {
 	logWS(wsConn, "Stopped!")
 }
 
-func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, err error, code int) {
+func writeError(log logging.FieldLogger, w http.ResponseWriter, r *http.Request, err error, code int) {
 	log.WithError(err).
 		WithField("http_status", code).
 		WithField("remote_addr", r.RemoteAddr).
@@ -500,14 +498,14 @@ type resizeMsg struct {
 type wsReader struct {
 	ws     *uiSocket
 	ptyC   *PtyClient
-	log    logrus.FieldLogger
+	log    logging.FieldLogger
 	ctx    *http.Request
 	closed bool
 	mu     sync.Mutex
 	buf    []byte // buffered remainder from previous read
 }
 
-func newWSReader(ws *uiSocket, ptyC *PtyClient, log logrus.FieldLogger, r *http.Request) *wsReader {
+func newWSReader(ws *uiSocket, ptyC *PtyClient, log logging.FieldLogger, r *http.Request) *wsReader {
 	return &wsReader{
 		ws:   ws,
 		ptyC: ptyC,

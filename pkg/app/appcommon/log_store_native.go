@@ -19,8 +19,8 @@ import (
 
 	"github.com/0magnet/bbolt"
 	bboltErrors "github.com/0magnet/bbolt/errors"
-	log "github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
@@ -169,7 +169,7 @@ func (l *bBoltLogStore) LogsSince(t time.Time) (logs []string, err error) {
 	return logs, err
 }
 
-func (l *bBoltLogStore) Fire(entry *log.Entry) error {
+func (l *bBoltLogStore) Fire(entry *logging.Entry) error {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
@@ -217,8 +217,8 @@ func (l *bBoltLogStore) Fire(entry *log.Entry) error {
 	return nil
 }
 
-func (l *bBoltLogStore) Levels() []log.Level {
-	return log.AllLevels
+func (l *bBoltLogStore) Levels() []logging.Level {
+	return logging.AllLevels
 }
 
 func (l *bBoltLogStore) Flush() error {

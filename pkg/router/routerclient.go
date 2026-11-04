@@ -9,7 +9,6 @@ import (
 	"time"
 
 	rpc "github.com/0magnet/gobrpc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -23,7 +22,7 @@ type Client struct {
 	rpc  *rpc.Client
 	conn io.ReadWriteCloser // raw DMSG stream, kept for deadline management
 	rPK  cipher.PubKey      // public key of remote router
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 }
 
 // DialTimeout is the maximum time allowed for a single dial attempt to a remote visor.

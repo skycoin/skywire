@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/0magnet/metrics"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // AddMetricsHandler adds a prometheus-format Handle at '/metrics' to the provided serve mux.
@@ -26,7 +26,7 @@ func AddMetricsHandler(mux *httputil.Router) {
 // ServePProf starts a pprof debug server on the given address.
 // The serviceName is exposed at /debug/service so operators can identify
 // which service a pprof endpoint belongs to.
-func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
+func ServePProf(log logging.FieldLogger, addr, serviceName string) {
 	if addr == "" {
 		return
 	}
@@ -80,7 +80,7 @@ func ServePProf(log logrus.FieldLogger, addr, serviceName string) {
 }
 
 // ServeHTTPMetrics starts serving metrics on a given `addr`.
-func ServeHTTPMetrics(log logrus.FieldLogger, addr string) {
+func ServeHTTPMetrics(log logging.FieldLogger, addr string) {
 	if addr == "" {
 		return
 	}

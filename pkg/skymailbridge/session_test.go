@@ -8,9 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // pipeDialer connects every dial to a function playing the peer.
@@ -52,7 +51,7 @@ func TestBridgeRelaysThroughTheSharedSessionLoop(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, lis, dialer, Config{}, logrus.New()) }()
+	go func() { done <- Serve(ctx, lis, dialer, Config{}, logging.New()) }()
 
 	pk := mustPK(t)
 	rcpt := "user@magnetosphere.net." + pk.DNSLabel() + ".skynet"
@@ -86,7 +85,7 @@ func TestBridgeRefusesNonSkynetRecipients(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
-	go Serve(ctx, lis, pipeDialer{serve: func(c net.Conn) { _ = c.Close() }}, Config{}, logrus.New()) //nolint:errcheck
+	go Serve(ctx, lis, pipeDialer{serve: func(c net.Conn) { _ = c.Close() }}, Config{}, logging.New()) //nolint:errcheck
 
 	err = smtp.SendMail(lis.Addr().String(), nil, "a@b.c", []string{"x@example.com"}, []byte("x\r\n"))
 	if err == nil || !strings.Contains(err.Error(), "550") {
@@ -115,7 +114,7 @@ func TestBridgeDialsTheNetworkTheSuffixNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
-	go Serve(ctx, lis, nil, Config{Dialers: map[string]Dialer{".skynet": network("skynet"), ".dmsg": network("dmsg")}}, logrus.New()) //nolint:errcheck
+	go Serve(ctx, lis, nil, Config{Dialers: map[string]Dialer{".skynet": network("skynet"), ".dmsg": network("dmsg")}}, logging.New()) //nolint:errcheck
 
 	pk := mustPK(t)
 	for _, sfx := range []string{".skynet", ".dmsg"} {

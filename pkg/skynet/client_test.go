@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestNewClientAndGetters(t *testing.T) {
@@ -215,8 +215,8 @@ func waitForListen(t *testing.T, addr string) {
 	t.Fatalf("listener at %s never came up", addr)
 }
 
-func testLog() logrus.FieldLogger {
-	l := logrus.New()
+func testLog() logging.FieldLogger {
+	l := logging.New()
 	l.SetOutput(io.Discard)
 	return l
 }

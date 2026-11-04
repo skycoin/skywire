@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skywireconfig/skyenvfile"
 )
 
@@ -110,7 +110,7 @@ func checkValue(rule, value string) error {
 			return fmt.Errorf("%q is not a duration like 10s or 5m", value)
 		}
 	case CheckLogLevel:
-		if _, err := logrus.ParseLevel(value); err != nil {
+		if _, err := logging.ParseLevel(value); err != nil {
 			return fmt.Errorf("%q is not a log level (trace, debug, info, warn, error, fatal, panic)", value)
 		}
 	}

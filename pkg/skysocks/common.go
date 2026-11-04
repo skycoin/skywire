@@ -5,12 +5,12 @@ import (
 	"time"
 
 	ipc "github.com/0magnet/golang-ipc"
-	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-func listenIPC(ipcClient *ipc.Client, appName string, log logrus.FieldLogger, onClose func()) {
+func listenIPC(ipcClient *ipc.Client, appName string, log logging.FieldLogger, onClose func()) {
 	time.Sleep(5 * time.Second)
 	if ipcClient == nil {
 		log.Error("Unable to create IPC Client: server is non-existent")

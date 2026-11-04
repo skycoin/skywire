@@ -13,7 +13,6 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,7 +25,7 @@ import (
 )
 
 func TestMakeMap(t *testing.T) {
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	const timeout = time.Second * 5
 

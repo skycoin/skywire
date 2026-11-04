@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/geo"
@@ -95,7 +93,7 @@ type KeepaliveSink interface {
 
 // HTTPClient is responsible for interacting with the service-discovery
 type HTTPClient struct {
-	log            logrus.FieldLogger
+	log            logging.FieldLogger
 	mLog           *logging.MasterLogger
 	conf           Config
 	entry          Service
@@ -112,7 +110,7 @@ type HTTPClient struct {
 }
 
 // NewClient creates a new HTTPClient.
-func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
+func NewClient(log logging.FieldLogger, mLog *logging.MasterLogger, conf Config, client *http.Client, clientPublicIP string) *HTTPClient {
 	return &HTTPClient{
 		log:  log,
 		mLog: mLog,

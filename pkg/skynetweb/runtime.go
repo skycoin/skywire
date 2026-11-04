@@ -26,7 +26,6 @@ import (
 
 	"github.com/0magnet/bottle/vnet"
 	"github.com/armon/go-socks5"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -271,7 +270,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 		// the library's raw stdout "2006/01/02 ... [ERR] socks:" default.
 		// Cap at Debug: a SOCKS proxy failing a *client-requested* dial is a
 		// routine, client-driven condition, not a visor error.
-		Logger:   logging.NewStdLoggerLevel(log, logrus.DebugLevel),
+		Logger:   logging.NewStdLoggerLevel(log, logging.DebugLevel),
 		Resolver: &skynetResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (retConn net.Conn, retErr error) {
 			// Fail the single request instead of crashing the whole visor if

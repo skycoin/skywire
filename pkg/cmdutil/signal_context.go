@@ -6,13 +6,13 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // SignalContext returns a context that cancels on given syscall signals.
-func SignalContext(ctx context.Context, log logrus.FieldLogger) (context.Context, context.CancelFunc) {
+func SignalContext(ctx context.Context, log logging.FieldLogger) (context.Context, context.CancelFunc) {
 	if log == nil {
-		l := logrus.New()
+		l := logging.New()
 		l.SetOutput(os.Stderr)
 		log = l
 	}

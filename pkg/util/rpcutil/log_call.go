@@ -5,15 +5,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // LogCall is used to log an RPC call from the rpc.Server
-func LogCall(log logrus.FieldLogger, method string, in any) func(out any, err *error) {
+func LogCall(log logging.FieldLogger, method string, in any) func(out any, err *error) {
 
 	// Just in case log is not set.
 	if log == nil {
-		l := logrus.New()
+		l := logging.New()
 		l.SetOutput(os.Stderr)
 		log = l
 	}

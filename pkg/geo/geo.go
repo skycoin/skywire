@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
@@ -38,7 +36,7 @@ type LocationData struct {
 type LocationDetails func(ip net.IP) (*LocationData, error)
 
 // MakeIPDetails returns a GeoFunc.
-func MakeIPDetails(log logrus.FieldLogger, geoip string) LocationDetails {
+func MakeIPDetails(log logging.FieldLogger, geoip string) LocationDetails {
 	// Just in case.
 	if log == nil {
 		log = logging.MustGetLogger("geo")

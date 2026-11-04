@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Package errors
@@ -33,11 +33,11 @@ type Retrier struct {
 	tries  int64              // number of times the given function is to be retried until success, if 0 it will be retried forever until success
 	factor float64            // multiplier for the backoff duration that is applied on every retry
 	errWl  map[error]struct{} // list of errors which will always trigger retirer to return
-	log    logrus.FieldLogger
+	log    logging.FieldLogger
 }
 
 // NewRetrier returns a retrier that is ready to call Do() method
-func NewRetrier(log logrus.FieldLogger, initBO, maxBO time.Duration, tries int64, factor float64) *Retrier {
+func NewRetrier(log logging.FieldLogger, initBO, maxBO time.Duration, tries int64, factor float64) *Retrier {
 	if log != nil {
 		log = log.WithField("func", "retrier")
 	}
@@ -52,7 +52,7 @@ func NewRetrier(log logrus.FieldLogger, initBO, maxBO time.Duration, tries int64
 }
 
 // NewDefaultRetrier creates a retrier with default values.
-func NewDefaultRetrier(log logrus.FieldLogger) *Retrier {
+func NewDefaultRetrier(log logging.FieldLogger) *Retrier {
 	return NewRetrier(log, DefaultInitBackoff, DefaultMaxBackoff, DefaultTries, DefaultFactor)
 }
 

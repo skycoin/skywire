@@ -8,15 +8,13 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // PtyClient represents the client end of a dmsgpty session.
 type PtyClient struct {
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 	rpcC *rpc.Client
 	done chan struct{}
 	once sync.Once

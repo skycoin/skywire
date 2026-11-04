@@ -48,9 +48,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // MaxFrameSize is the largest UDP payload the bridge will ferry in
@@ -113,7 +112,7 @@ type ServerConfig struct {
 // per-source stream → framer. Blocks until ctx is canceled or the
 // underlying listener fails. The Dialer is invoked lazily on the
 // first datagram from each new source.
-func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logrus.FieldLogger) error {
+func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logging.FieldLogger) error {
 	if dialer == nil {
 		return errors.New("skyudpbridge: Dialer is nil")
 	}
@@ -130,7 +129,7 @@ func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logrus.
 		cfg.DialTimeout = DefaultDialTimeout
 	}
 	if log == nil {
-		log = logrus.NewEntry(logrus.New())
+		log = logging.NewEntry(logging.New())
 	}
 
 	udpAddr, err := net.ResolveUDPAddr("udp", cfg.ListenUDP)
@@ -169,7 +168,7 @@ func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logrus.
 // canceled or the listener fails. accept is the inbound-stream
 // accept function — provided by the caller because dmsg and
 // skywire-routing have different listen primitives.
-func RunServer(ctx context.Context, cfg ServerConfig, accept func() (net.Conn, error), log logrus.FieldLogger) error {
+func RunServer(ctx context.Context, cfg ServerConfig, accept func() (net.Conn, error), log logging.FieldLogger) error {
 	if accept == nil {
 		return errors.New("skyudpbridge: accept fn is nil")
 	}
@@ -180,7 +179,7 @@ func RunServer(ctx context.Context, cfg ServerConfig, accept func() (net.Conn, e
 		cfg.IdleTimeout = DefaultIdleTimeout
 	}
 	if log == nil {
-		log = logrus.NewEntry(logrus.New())
+		log = logging.NewEntry(logging.New())
 	}
 
 	target, err := net.ResolveUDPAddr("udp", cfg.TargetUDP)
@@ -256,7 +255,7 @@ type clientFlow struct {
 type clientState struct {
 	cfg    ClientConfig
 	dialer Dialer
-	log    logrus.FieldLogger
+	log    logging.FieldLogger
 	udpC   *net.UDPConn
 
 	mu    sync.Mutex
@@ -396,7 +395,7 @@ func (c *clientState) removeFlow(src *net.UDPAddr) {
 
 // --- server side internals ---
 
-func handleServerStream(ctx context.Context, stream net.Conn, target *net.UDPAddr, idleTimeout time.Duration, log logrus.FieldLogger) {
+func handleServerStream(ctx context.Context, stream net.Conn, target *net.UDPAddr, idleTimeout time.Duration, log logging.FieldLogger) {
 	defer stream.Close() //nolint:errcheck,gosec
 
 	// Per-stream UDP socket. Source-port replies from target land

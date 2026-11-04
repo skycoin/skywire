@@ -17,13 +17,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/util/pathutil"
 )
@@ -41,7 +40,7 @@ var (
 // AppLauncher is responsible for launching and keeping track of app states.
 type AppLauncher struct {
 	conf  AppLauncherConfig
-	log   logrus.FieldLogger
+	log   logging.FieldLogger
 	r     router.Router
 	procM appserver.ProcManager
 	apps  map[string]appserver.AppConfig
@@ -92,7 +91,7 @@ func (l *AppLauncher) SetAppAutoStart(name string, autoStart bool) bool {
 }
 
 // NewLauncher creates a new launcher.
-func NewLauncher(log logrus.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
+func NewLauncher(log logging.FieldLogger, conf AppLauncherConfig, dmsgC *dmsg.Client, r router.Router, procM appserver.ProcManager) (*AppLauncher, error) {
 	launcher := &AppLauncher{
 		conf:  conf,
 		log:   log,

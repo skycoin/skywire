@@ -9,7 +9,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -33,9 +32,9 @@ func TestGetLoggerFallbackIsShared(t *testing.T) {
 
 // A logger in the context still wins.
 func TestGetLoggerPrefersContext(t *testing.T) {
-	ctxLog := logrus.New().WithField("RequestID", "abc")
+	ctxLog := logging.New().WithField("RequestID", "abc")
 	r := httptest.NewRequest(http.MethodGet, "/p", nil).
-		WithContext(context.WithValue(context.Background(), LoggerKey, logrus.FieldLogger(ctxLog)))
+		WithContext(context.WithValue(context.Background(), LoggerKey, logging.FieldLogger(ctxLog)))
 
 	require.Same(t, ctxLog, GetLogger(r))
 }
@@ -66,11 +65,11 @@ func TestGetLoggerFallbackObeysMasterLogger(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodGet, "/p", nil)
 
-	logging.SetLevel(logrus.InfoLevel)
+	logging.SetLevel(logging.InfoLevel)
 	GetLogger(r).Debug(msg)
 	require.Zero(t, count(), "the configured level must apply to the fallback logger")
 
-	logging.SetLevel(logrus.DebugLevel)
+	logging.SetLevel(logging.DebugLevel)
 	GetLogger(r).Debug(msg)
 	require.Equal(t, 1, count(), "the process hooks must see the fallback logger's entries")
 }

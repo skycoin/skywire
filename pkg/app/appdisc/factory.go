@@ -4,8 +4,6 @@ package appdisc
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -22,7 +20,7 @@ import (
 // out emptyUpdater. Client is typed `any` (an *http.Client on native) so this
 // shared struct definition stays net/http-free.
 type Factory struct {
-	Log            logrus.FieldLogger
+	Log            logging.FieldLogger
 	MLog           *logging.MasterLogger
 	PK             cipher.PubKey
 	SK             cipher.SecKey

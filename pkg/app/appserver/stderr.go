@@ -6,13 +6,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // printStdErr reads app stderr and logs non-suppressed lines as errors.
 // Suppressed messages (see getIgnoreErrs) are harmless OS/library noise
 // that cannot be eliminated at source (iptables lock, rpc shutdown, etc).
-func printStdErr(stderr io.ReadCloser, errorLog *logrus.Entry) {
+func printStdErr(stderr io.ReadCloser, errorLog *logging.Entry) {
 	cmdStderr := bufio.NewScanner(stderr)
 	iErrs := getIgnoreErrs()
 	go func() {

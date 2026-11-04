@@ -21,7 +21,6 @@ import (
 	"runtime"
 
 	ipc "github.com/0magnet/golang-ipc"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -60,7 +59,7 @@ func attachCmdLogs(cmdAny any, appLog *logging.MasterLogger, moduleName string) 
 	if cmd == nil {
 		return nil
 	}
-	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
+	cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logging.DebugLevel)
 
 	errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
 	stderr, _ := cmd.StderrPipe() //nolint:errcheck
