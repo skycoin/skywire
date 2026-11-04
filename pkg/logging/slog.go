@@ -4,64 +4,79 @@ package logging
 import (
 	"context"
 	"log/slog"
-
-	"github.com/sirupsen/logrus"
+	"maps"
+	"time"
 )
 
-// Slog returns a *slog.Logger that forwards to this Logger, for libraries
-// that take a log/slog logger (e.g. github.com/0magnet/wisp). Levels map
-// onto logrus' levels, so the logger's configured level still gates output,
-// and an "err" attribute becomes the logrus error field.
+// Slog returns a *slog.Logger that writes through this Logger: same fields,
+// level, formatter and hooks. Levels map onto Level, so the configured level
+// still gates output, and an "err" attribute is stored under ErrorKey.
 func (logger *Logger) Slog() *slog.Logger {
-	return slog.New(&slogHandler{fl: logger.FieldLogger})
+	return slog.New(&Handler{e: logger.WithFields(nil)})
 }
 
-// slogHandler is a slog.Handler writing through a logrus.FieldLogger.
-type slogHandler struct {
-	fl     logrus.FieldLogger
+// Slog returns a *slog.Logger that writes through this master logger.
+func (logger *MasterLogger) Slog() *slog.Logger {
+	return slog.New(&Handler{e: logger.entry()})
+}
+
+// NewSlog returns a *slog.Logger for module on the master logger, the slog
+// counterpart of MustGetLogger.
+func NewSlog(module string) *slog.Logger { return MustGetLogger(module).Slog() }
+
+// Handler is a slog.Handler that renders records exactly as the rest of the
+// logger's entries are rendered and fires the same hooks.
+type Handler struct {
+	e      *Entry // logger and fields from WithAttrs
 	prefix string // group prefix for attribute keys
 }
 
-func (h *slogHandler) Enabled(_ context.Context, l slog.Level) bool {
-	switch v := h.fl.(type) {
-	case *logrus.Entry:
-		return v.Logger.IsLevelEnabled(toLogrusLevel(l))
-	case *logrus.Logger:
-		return v.IsLevelEnabled(toLogrusLevel(l))
-	}
-	return true
+// Enabled reports whether the logger emits records at l.
+func (h *Handler) Enabled(_ context.Context, l slog.Level) bool {
+	return h.e.Logger.IsLevelEnabled(fromSlogLevel(l))
 }
 
-func (h *slogHandler) Handle(_ context.Context, r slog.Record) error {
-	fields := make(logrus.Fields, r.NumAttrs())
+// Handle writes r.
+func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
+	data := make(Fields, len(h.e.Data)+r.NumAttrs())
+	maps.Copy(data, h.e.Data)
 	r.Attrs(func(a slog.Attr) bool {
-		h.addAttr(fields, h.prefix, a)
+		addAttr(data, h.prefix, a)
 		return true
 	})
-	e := h.fl.WithFields(fields)
-	if !r.Time.IsZero() {
-		e = e.WithTime(r.Time)
+	t := r.Time
+	if t.IsZero() {
+		t = time.Now()
 	}
-	e.Log(toLogrusLevel(r.Level), r.Message)
+	h.e.Logger.emit(&Entry{
+		Logger:  h.e.Logger,
+		Data:    data,
+		Time:    t,
+		Level:   fromSlogLevel(r.Level),
+		Message: r.Message,
+		Context: ctx,
+	})
 	return nil
 }
 
-func (h *slogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	fields := make(logrus.Fields, len(attrs))
+// WithAttrs returns a handler that adds attrs to every record.
+func (h *Handler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	fields := make(Fields, len(attrs))
 	for _, a := range attrs {
-		h.addAttr(fields, h.prefix, a)
+		addAttr(fields, h.prefix, a)
 	}
-	return &slogHandler{fl: h.fl.WithFields(fields), prefix: h.prefix}
+	return &Handler{e: h.e.WithFields(fields), prefix: h.prefix}
 }
 
-func (h *slogHandler) WithGroup(name string) slog.Handler {
+// WithGroup returns a handler that prefixes later attribute keys with name.
+func (h *Handler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return h
 	}
-	return &slogHandler{fl: h.fl, prefix: h.prefix + name + "."}
+	return &Handler{e: h.e, prefix: h.prefix + name + "."}
 }
 
-func (h *slogHandler) addAttr(fields logrus.Fields, prefix string, a slog.Attr) {
+func addAttr(fields Fields, prefix string, a slog.Attr) {
 	v := a.Value.Resolve()
 	if v.Kind() == slog.KindGroup {
 		p := prefix
@@ -69,7 +84,7 @@ func (h *slogHandler) addAttr(fields logrus.Fields, prefix string, a slog.Attr) 
 			p += a.Key + "."
 		}
 		for _, ga := range v.Group() {
-			h.addAttr(fields, p, ga)
+			addAttr(fields, p, ga)
 		}
 		return
 	}
@@ -78,21 +93,23 @@ func (h *slogHandler) addAttr(fields logrus.Fields, prefix string, a slog.Attr) 
 	}
 	key := prefix + a.Key
 	if key == "err" {
-		key = logrus.ErrorKey
+		key = ErrorKey
 	}
 	fields[key] = v.Any()
 }
 
-func toLogrusLevel(l slog.Level) logrus.Level {
+// fromSlogLevel maps a slog level onto the nearest Level at or below its
+// severity.
+func fromSlogLevel(l slog.Level) Level {
 	switch {
 	case l < slog.LevelDebug:
-		return logrus.TraceLevel
+		return TraceLevel
 	case l < slog.LevelInfo:
-		return logrus.DebugLevel
+		return DebugLevel
 	case l < slog.LevelWarn:
-		return logrus.InfoLevel
+		return InfoLevel
 	case l < slog.LevelError:
-		return logrus.WarnLevel
+		return WarnLevel
 	}
-	return logrus.ErrorLevel
+	return ErrorLevel
 }

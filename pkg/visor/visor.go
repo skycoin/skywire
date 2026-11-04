@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/orandin/lumberjackrus"
 	"github.com/toqueteos/webbrowser"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
@@ -1514,12 +1514,9 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 		_ = os.Chmod(logFile, 0644) //nolint:gosec,errcheck
 	}
 
-	if hook, err := newTextLogHook(logFile); err != nil {
-		mLog.WithError(err).Warn("Failed to open the log file; logging to stdout only")
-	} else {
-		mLog.Hooks.Add(hook)
-		conf.MasterLogger().Hooks.Add(hook)
-	}
+	hook := newTextLogHook(logFile)
+	mLog.Hooks.Add(hook)
+	conf.MasterLogger().Hooks.Add(hook)
 
 	if logJSON {
 		addJSONLogHook(conf)
@@ -1531,7 +1528,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 //
 // The text log is the right thing to read; it is the wrong thing to query.
 // Answering "what did wasm-serve report during this boot" means grepping a
-// format that was never meant to be parsed, and the fields logrus was given —
+// format that was never meant to be parsed, and the fields the logger was given —
 // module, error, and whatever WithField carried — are flattened into the
 // message on the way out. The JSON lines keep them, so the same question is
 // `jq 'select(.module=="wasm-serve")' skywire.jsonl` with no regex at all.
@@ -1542,11 +1539,7 @@ func storeLog(conf *visorconfig.V1, logJSON bool) {
 // snapshot cannot express.
 func addJSONLogHook(conf *visorconfig.V1) {
 	path := conf.LocalPath + "/log/skywire.jsonl"
-	hook, err := newJSONLogHook(path)
-	if err != nil {
-		mLog.WithError(err).Warn("Failed to open the JSON log; text logging is unaffected")
-		return
-	}
+	hook := newJSONLogHook(path)
 	mLog.Hooks.Add(hook)
 	conf.MasterLogger().Hooks.Add(hook)
 	mLog.PackageLogger("visor").WithField("path", path).
@@ -1555,19 +1548,17 @@ func addJSONLogHook(conf *visorconfig.V1) {
 
 // newJSONLogHook builds the JSON-lines hook for path. Split out so a test
 // can assert the on-disk shape without a running visor.
-func newJSONLogHook(path string) (logging.Hook, error) {
-	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+func newJSONLogHook(path string) logging.Hook {
+	return logging.NewFormatterHook(&lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    1,
 		MaxBackups: 1,
 		MaxAge:     1,
-		Compress:   false,
-		LocalTime:  false,
 	}, logging.TraceLevel, &logging.JSONFormatter{
 		// RFC3339 with nanoseconds: the text log is second-resolution, too
 		// coarse to order a boot sequence.
 		TimestampFormat: time.RFC3339Nano,
-	}, nil)
+	})
 }
 
 func setForceColor(conf *visorconfig.V1) {
@@ -1648,26 +1639,20 @@ func (v *Visor) GetNetworkTypes() []string {
 
 // newTextLogHook builds the file hook for the human-readable log at path.
 //
-// One writer, deliberately. lumberjackrus accepts a per-level LogFile map, and
-// this used to carry one entry per level, every one of them naming this same
-// file. That gave each level its own lumberjack.Logger over one path, and
-// rotation is per-writer: whichever level first crossed MaxSize renamed the
-// file and opened a fresh one while the others kept writing to the renamed —
-// then reaped — inode. DEBUG has the most volume so it always won, and the
-// INFO, WARN and ERROR lines were written to a file nobody could read. The
-// default logger alone, with no per-level overrides, keeps every level on a
-// single rotating writer.
-func newTextLogHook(path string) (logging.Hook, error) {
-	return lumberjackrus.NewHook(&lumberjackrus.LogFile{
+// One writer, deliberately. This once had a lumberjack.Logger per level, all
+// over this same file. Rotation is per writer, so whichever level first
+// crossed MaxSize renamed the file while the others kept writing to the
+// renamed, then reaped, inode, and the INFO, WARN and ERROR lines were lost.
+// One writer keeps every level on a single rotating file.
+func newTextLogHook(path string) logging.Hook {
+	return logging.NewFormatterHook(&lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    1,
 		MaxBackups: 1,
 		MaxAge:     1,
-		Compress:   false,
-		LocalTime:  false,
 	}, logging.TraceLevel, &logging.TextFormatter{
 		DisableColors:   true,
 		FullTimestamp:   true,
 		ForceFormatting: true,
-	}, nil)
+	})
 }

@@ -20,8 +20,7 @@ import (
 func TestTextLogHook_LevelsShareOneWriter(t *testing.T) {
 	path := filepath.Join(logTestDir(t), "skywire.log")
 
-	hook, err := newTextLogHook(path)
-	require.NoError(t, err)
+	hook := newTextLogHook(path)
 
 	log := logging.New()
 	log.SetOutput(io.Discard) // the hook is what is under test

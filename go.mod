@@ -83,7 +83,6 @@ require (
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/miekg/dns v1.1.73
-	github.com/orandin/lumberjackrus v1.0.1
 	github.com/oschwald/geoip2-golang/v2 v2.5.0
 	github.com/peterh/liner v1.2.3
 	github.com/pion/datachannel v1.6.3
@@ -125,6 +124,7 @@ require (
 	golang.zx2c4.com/wireguard v0.0.0-20261006164505-2631ce99a06f
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/telebot.v3 v3.3.8
 	gvisor.dev/gvisor v0.0.0-20261017122056-1b7906fdee8c
 )
@@ -266,7 +266,6 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9 // indirect
 	modernc.org/libc v1.79.0 // indirect

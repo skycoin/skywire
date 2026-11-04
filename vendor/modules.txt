@@ -785,9 +785,6 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/orandin/lumberjackrus v1.0.1
-## explicit
-github.com/orandin/lumberjackrus
 # github.com/oschwald/geoip2-golang/v2 v2.5.0
 ## explicit; go 1.26.0
 github.com/oschwald/geoip2-golang/v2
@@ -1010,7 +1007,6 @@ github.com/shopspring/decimal
 # github.com/sirupsen/logrus v1.10.2
 ## explicit; go 1.23
 github.com/sirupsen/logrus
-github.com/sirupsen/logrus/hooks/syslog
 # github.com/skycoin/skycoin v0.28.7
 ## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands

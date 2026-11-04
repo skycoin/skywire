@@ -10,13 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func newEntry(level logrus.Level, msg string, data logrus.Fields) *logrus.Entry {
-	e := logrus.NewEntry(logrus.New())
+func newEntry(level Level, msg string, data Fields) *Entry {
+	e := NewEntry(New())
 	e.Level = level
 	e.Message = msg
 	e.Time = time.Unix(1_700_000_000, 0)
@@ -29,20 +28,20 @@ func newEntry(level logrus.Level, msg string, data logrus.Fields) *logrus.Entry 
 // --- logging.go ---
 
 func TestLevelFromString(t *testing.T) {
-	cases := map[string]logrus.Level{
-		"debug":    logrus.DebugLevel,
-		"info":     logrus.InfoLevel,
-		"notice":   logrus.InfoLevel,
-		"warn":     logrus.WarnLevel,
-		"warning":  logrus.WarnLevel,
-		"error":    logrus.ErrorLevel,
-		"fatal":    logrus.FatalLevel,
-		"critical": logrus.FatalLevel,
-		"panic":    logrus.PanicLevel,
-		"none":     logrus.PanicLevel,
-		"off":      logrus.PanicLevel,
-		"trace":    logrus.TraceLevel,
-		"INFO":     logrus.InfoLevel, // case-insensitive
+	cases := map[string]Level{
+		"debug":    DebugLevel,
+		"info":     InfoLevel,
+		"notice":   InfoLevel,
+		"warn":     WarnLevel,
+		"warning":  WarnLevel,
+		"error":    ErrorLevel,
+		"fatal":    FatalLevel,
+		"critical": FatalLevel,
+		"panic":    PanicLevel,
+		"none":     PanicLevel,
+		"off":      PanicLevel,
+		"trace":    TraceLevel,
+		"INFO":     InfoLevel, // case-insensitive
 	}
 	for s, want := range cases {
 		got, err := LevelFromString(s)
@@ -58,8 +57,8 @@ func TestGlobalLoggerControls(t *testing.T) {
 	origOut, origLevel := log.Out, log.GetLevel()
 	t.Cleanup(func() { log.Out = origOut; log.SetLevel(origLevel) })
 
-	SetLevel(logrus.WarnLevel)
-	assert.Equal(t, logrus.WarnLevel, GetLevel())
+	SetLevel(WarnLevel)
+	assert.Equal(t, WarnLevel, GetLevel())
 
 	var buf bytes.Buffer
 	SetOutputTo(&buf)
@@ -124,9 +123,9 @@ func TestWriteHook(t *testing.T) {
 	h := NewWriteHook(&buf)
 	// Info and above by default — see DefaultHookLevel; the full-level
 	// behavior is covered in hook_levels_test.go.
-	assert.Equal(t, logrus.AllLevels[:logrus.InfoLevel+1], h.Levels())
+	assert.Equal(t, AllLevels[:InfoLevel+1], h.Levels())
 
-	require.NoError(t, h.Fire(newEntry(logrus.InfoLevel, "hooked-line", logrus.Fields{"k": "v"})))
+	require.NoError(t, h.Fire(newEntry(InfoLevel, "hooked-line", Fields{"k": "v"})))
 	out := buf.String()
 	assert.Contains(t, out, "hooked-line")
 	assert.Contains(t, out, "k")
@@ -136,12 +135,12 @@ func TestWriteHook(t *testing.T) {
 
 func TestBroadcasterDelivery(t *testing.T) {
 	b := NewBroadcaster()
-	assert.Equal(t, logrus.AllLevels, b.Levels())
+	assert.Equal(t, AllLevels, b.Levels())
 
 	ch, cancel := b.Subscribe(Filter{Modules: []string{"router"}}, 8)
 
 	// Matching module prefix is delivered.
-	require.NoError(t, b.Fire(newEntry(logrus.InfoLevel, "match", logrus.Fields{logModuleKey: "router_setup"})))
+	require.NoError(t, b.Fire(newEntry(InfoLevel, "match", Fields{logModuleKey: "router_setup"})))
 	select {
 	case e := <-ch:
 		assert.Equal(t, "match", e.Message)
@@ -150,7 +149,7 @@ func TestBroadcasterDelivery(t *testing.T) {
 	}
 
 	// Non-matching module is dropped.
-	require.NoError(t, b.Fire(newEntry(logrus.InfoLevel, "nomatch", logrus.Fields{logModuleKey: "dmsg"})))
+	require.NoError(t, b.Fire(newEntry(InfoLevel, "nomatch", Fields{logModuleKey: "dmsg"})))
 	select {
 	case e := <-ch:
 		t.Fatalf("unexpected delivery: %s", e.Message)
@@ -172,7 +171,7 @@ func TestBroadcasterDropsWhenFull(t *testing.T) {
 	defer cancel()
 
 	for range 4 {
-		require.NoError(t, b.Fire(newEntry(logrus.InfoLevel, "m", logrus.Fields{logModuleKey: "x"})))
+		require.NoError(t, b.Fire(newEntry(InfoLevel, "m", Fields{logModuleKey: "x"})))
 	}
 	assert.GreaterOrEqual(t, cancel(), uint64(2), "entries beyond capacity should be dropped")
 }
@@ -183,7 +182,7 @@ func TestBroadcasterFilters(t *testing.T) {
 	t.Run("app name via field", func(t *testing.T) {
 		ch, cancel := b.Subscribe(Filter{AppName: "vpn"}, 4)
 		defer cancel()
-		require.NoError(t, b.Fire(newEntry(logrus.InfoLevel, "byfield", logrus.Fields{"app_name": "vpn"})))
+		require.NoError(t, b.Fire(newEntry(InfoLevel, "byfield", Fields{"app_name": "vpn"})))
 		select {
 		case e := <-ch:
 			assert.Equal(t, "byfield", e.Message)
@@ -193,12 +192,12 @@ func TestBroadcasterFilters(t *testing.T) {
 	})
 
 	t.Run("min level filters out less severe", func(t *testing.T) {
-		ch, cancel := b.Subscribe(Filter{Modules: []string{"m"}, MinLevel: logrus.WarnLevel}, 4)
+		ch, cancel := b.Subscribe(Filter{Modules: []string{"m"}, MinLevel: WarnLevel}, 4)
 		defer cancel()
 		// Info is less severe than Warn → dropped.
-		require.NoError(t, b.Fire(newEntry(logrus.InfoLevel, "info", logrus.Fields{logModuleKey: "m"})))
+		require.NoError(t, b.Fire(newEntry(InfoLevel, "info", Fields{logModuleKey: "m"})))
 		// Error is more severe → delivered.
-		require.NoError(t, b.Fire(newEntry(logrus.ErrorLevel, "err", logrus.Fields{logModuleKey: "m"})))
+		require.NoError(t, b.Fire(newEntry(ErrorLevel, "err", Fields{logModuleKey: "m"})))
 		select {
 		case e := <-ch:
 			assert.Equal(t, "err", e.Message)
@@ -212,7 +211,7 @@ func TestBroadcasterFilters(t *testing.T) {
 
 func TestTextFormatterPlain(t *testing.T) {
 	f := &TextFormatter{DisableColors: true, FullTimestamp: true, ForceFormatting: true}
-	out, err := f.Format(newEntry(logrus.InfoLevel, "plain-msg", logrus.Fields{
+	out, err := f.Format(newEntry(InfoLevel, "plain-msg", Fields{
 		logModuleKey: "mymod",
 		"count":      3,
 		"name":       "alice",
@@ -226,14 +225,14 @@ func TestTextFormatterPlain(t *testing.T) {
 
 func TestTextFormatterColored(t *testing.T) {
 	f := &TextFormatter{ForceColors: true, ForceFormatting: true, FullTimestamp: true}
-	out, err := f.Format(newEntry(logrus.ErrorLevel, "colored-msg", logrus.Fields{logModuleKey: "m"}))
+	out, err := f.Format(newEntry(ErrorLevel, "colored-msg", Fields{logModuleKey: "m"}))
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "colored-msg")
 }
 
 func TestTextFormatterQuoting(t *testing.T) {
 	f := &TextFormatter{DisableColors: true, AlwaysQuoteStrings: true, QuoteEmptyFields: true, ForceFormatting: true}
-	out, err := f.Format(newEntry(logrus.WarnLevel, "msg with spaces", logrus.Fields{"empty": ""}))
+	out, err := f.Format(newEntry(WarnLevel, "msg with spaces", Fields{"empty": ""}))
 	require.NoError(t, err)
 	assert.NotEmpty(t, out)
 }

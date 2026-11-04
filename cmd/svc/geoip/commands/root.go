@@ -145,7 +145,7 @@ Usage Examples:
 		enc := json.NewEncoder(cmdutil.Stdout())
 		enc.SetIndent("", "  ")
 		if err = enc.Encode(res); err != nil {
-			logger.Warn("failed to encode response: %v", err)
+			logger.Warnf("failed to encode response: %v", err)
 		}
 	},
 }

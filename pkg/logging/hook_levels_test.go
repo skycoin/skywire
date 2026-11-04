@@ -6,7 +6,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,16 +13,16 @@ import (
 // test can assert the SECOND format pass a capture hook performs is actually
 // skipped rather than merely producing no output.
 type countingFormatter struct {
-	inner logrus.Formatter
+	inner Formatter
 	n     int
 }
 
-func (c *countingFormatter) Format(e *logrus.Entry) ([]byte, error) {
+func (c *countingFormatter) Format(e *Entry) ([]byte, error) {
 	c.n++
 	return c.inner.Format(e)
 }
 
-func newCountingWriteHook(w io.Writer, level logrus.Level) (*WriteHook, *countingFormatter) {
+func newCountingWriteHook(w io.Writer, level Level) (*WriteHook, *countingFormatter) {
 	h := NewWriteHookLevel(w, level)
 	cf := &countingFormatter{inner: h.formatter}
 	h.formatter = cf
@@ -34,18 +33,18 @@ func newCountingWriteHook(w io.Writer, level logrus.Level) (*WriteHook, *countin
 // ~10 MB/min of formatting on a production dmsg-server at debug level, poured
 // into a 256 KiB ring that could only hold ~1.5s of it.
 func TestWriteHookSkipsDebugByDefault(t *testing.T) {
-	require.Equal(t, logrus.InfoLevel, DefaultHookLevel)
+	require.Equal(t, InfoLevel, DefaultHookLevel)
 
 	var buf bytes.Buffer
 	h := NewWriteHook(&buf)
-	require.NotContains(t, h.Levels(), logrus.DebugLevel)
-	require.NotContains(t, h.Levels(), logrus.TraceLevel)
-	require.Contains(t, h.Levels(), logrus.InfoLevel)
-	require.Contains(t, h.Levels(), logrus.ErrorLevel)
+	require.NotContains(t, h.Levels(), DebugLevel)
+	require.NotContains(t, h.Levels(), TraceLevel)
+	require.Contains(t, h.Levels(), InfoLevel)
+	require.Contains(t, h.Levels(), ErrorLevel)
 
 	h, cf := newCountingWriteHook(&buf, DefaultHookLevel)
-	l := logrus.New()
-	l.SetLevel(logrus.TraceLevel)
+	l := New()
+	l.SetLevel(TraceLevel)
 	l.SetOutput(io.Discard)
 	l.AddHook(h)
 
@@ -68,9 +67,9 @@ func TestWriteHookSkipsDebugByDefault(t *testing.T) {
 // into the ring the /debug/log endpoint serves.
 func TestWriteHookDebugOptIn(t *testing.T) {
 	var buf bytes.Buffer
-	h, cf := newCountingWriteHook(&buf, logrus.DebugLevel)
-	l := logrus.New()
-	l.SetLevel(logrus.DebugLevel)
+	h, cf := newCountingWriteHook(&buf, DebugLevel)
+	l := New()
+	l.SetLevel(DebugLevel)
 	l.SetOutput(io.Discard)
 	l.AddHook(h)
 
@@ -80,17 +79,17 @@ func TestWriteHookDebugOptIn(t *testing.T) {
 }
 
 func TestHookLevel(t *testing.T) {
-	require.Equal(t, logrus.InfoLevel, HookLevel("", logrus.InfoLevel))
-	require.Equal(t, logrus.DebugLevel, HookLevel("debug", logrus.InfoLevel))
+	require.Equal(t, InfoLevel, HookLevel("", InfoLevel))
+	require.Equal(t, DebugLevel, HookLevel("debug", InfoLevel))
 	// Garbage falls back to the default rather than widening /debug/log.
-	require.Equal(t, logrus.InfoLevel, HookLevel("not-a-level", logrus.InfoLevel))
+	require.Equal(t, InfoLevel, HookLevel("not-a-level", InfoLevel))
 }
 
 func TestLevelsUpTo(t *testing.T) {
-	require.Equal(t, []logrus.Level{logrus.PanicLevel}, LevelsUpTo(logrus.PanicLevel))
-	require.Equal(t, logrus.AllLevels, LevelsUpTo(logrus.TraceLevel))
+	require.Equal(t, []Level{PanicLevel}, LevelsUpTo(PanicLevel))
+	require.Equal(t, AllLevels, LevelsUpTo(TraceLevel))
 	// Out-of-range clamps rather than panicking on the slice bound.
-	require.Equal(t, logrus.AllLevels, LevelsUpTo(logrus.Level(99)))
+	require.Equal(t, AllLevels, LevelsUpTo(Level(99)))
 }
 
 // With nothing subscribed and the ring off, Fire must return before doing any
@@ -100,20 +99,20 @@ func TestBroadcasterFireShortCircuits(t *testing.T) {
 
 	// No subscribers and ring capture off: Fire must do nothing at all.
 	b.SetRingCapture(false)
-	e := logrus.NewEntry(logrus.New())
-	e.Level = logrus.InfoLevel
+	e := NewEntry(New())
+	e.Level = InfoLevel
 	e.Message = "orphan"
-	e.Data = logrus.Fields{logModuleKey: "proc:skysocks-client:abc"}
+	e.Data = Fields{logModuleKey: "proc:skysocks-client:abc"}
 	require.NoError(t, b.Fire(e))
 
-	events, logs := b.RecentByApp("skysocks-client", logrus.DebugLevel)
+	events, logs := b.RecentByApp("skysocks-client", DebugLevel)
 	require.Nil(t, events)
 	require.Nil(t, logs)
 
 	// Ring capture back on (the default) still records.
 	b.SetRingCapture(true)
 	require.NoError(t, b.Fire(e))
-	_, logs = b.RecentByApp("skysocks-client", logrus.DebugLevel)
+	_, logs = b.RecentByApp("skysocks-client", DebugLevel)
 	require.Len(t, logs, 1)
 	require.Equal(t, "orphan", logs[0].Message)
 }
@@ -128,10 +127,10 @@ func TestBroadcasterSubCountTracksSubscribers(t *testing.T) {
 	ch, cancel := b.Subscribe(Filter{Modules: []string{"router"}}, 4)
 	require.EqualValues(t, 1, b.subCount.Load())
 
-	e := logrus.NewEntry(logrus.New())
-	e.Level = logrus.InfoLevel
+	e := NewEntry(New())
+	e.Level = InfoLevel
 	e.Message = "delivered"
-	e.Data = logrus.Fields{logModuleKey: "router"}
+	e.Data = Fields{logModuleKey: "router"}
 	require.NoError(t, b.Fire(e))
 
 	select {

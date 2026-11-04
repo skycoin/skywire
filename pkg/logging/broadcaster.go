@@ -5,11 +5,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/sirupsen/logrus"
 )
 
-// Broadcaster is a logrus.Hook that fans out entries to a set of
+// Broadcaster is a Hook that fans out entries to a set of
 // subscriber channels. Subscribers register a Filter; only entries
 // that pass the filter are delivered.
 //
@@ -68,25 +66,25 @@ func NewBroadcaster() *Broadcaster {
 // than "show me what layer X is doing for app Y".
 //
 // MinLevel is inclusive — entries strictly less severe than MinLevel
-// are dropped. logrus levels descend from Panic (0) to Trace (6), so
+// are dropped. Levels descend from Panic (0) to Trace (6), so
 // "less severe" means "higher numerically".
 type Filter struct {
 	AppName  string
 	Modules  []string
-	MinLevel logrus.Level
+	MinLevel Level
 }
 
 type subscription struct {
 	filter  Filter
-	ch      chan *logrus.Entry
+	ch      chan *Entry
 	dropped atomic.Uint64
 	closed  atomic.Bool
 }
 
-// Levels reports all logrus levels — Broadcaster does its own level
+// Levels reports all levels — Broadcaster does its own level
 // filtering per-subscriber so the hook itself runs on every level.
-func (b *Broadcaster) Levels() []logrus.Level {
-	return logrus.AllLevels
+func (b *Broadcaster) Levels() []Level {
+	return AllLevels
 }
 
 // SetRingCapture turns the bounded per-app ring on or off. It is on by
@@ -108,7 +106,7 @@ func (b *Broadcaster) SetRingCapture(enabled bool) {
 // is subscribed, which is the steady state, and the ring capture is skipped
 // when it has been turned off. Only when one of them is actually live does an
 // entry pay for field resolution or allocation.
-func (b *Broadcaster) Fire(e *logrus.Entry) error {
+func (b *Broadcaster) Fire(e *Entry) error {
 	if b.subCount.Load() > 0 {
 		b.mu.RLock()
 		for sub := range b.subs {
@@ -136,16 +134,16 @@ func (b *Broadcaster) Fire(e *logrus.Entry) error {
 // cancel func. The channel is closed when cancel is called. Capacity
 // is the per-subscriber buffer — entries beyond it are dropped (see
 // Dropped).
-func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *Entry, func() uint64) {
 	if capacity <= 0 {
 		capacity = 256
 	}
 	if f.MinLevel == 0 {
-		f.MinLevel = logrus.DebugLevel
+		f.MinLevel = DebugLevel
 	}
 	sub := &subscription{
 		filter: f,
-		ch:     make(chan *logrus.Entry, capacity),
+		ch:     make(chan *Entry, capacity),
 	}
 	b.mu.Lock()
 	if b.subs == nil {
@@ -172,7 +170,7 @@ func (b *Broadcaster) Subscribe(f Filter, capacity int) (<-chan *logrus.Entry, f
 	return sub.ch, cancel
 }
 
-func (s *subscription) matches(e *logrus.Entry) bool {
+func (s *subscription) matches(e *Entry) bool {
 	if e.Level > s.filter.MinLevel {
 		return false
 	}

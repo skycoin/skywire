@@ -20,9 +20,10 @@ import (
 	"os/signal"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging/logrusbridge"
 
 	"github.com/0magnet/calvin"
+	"github.com/sirupsen/logrus"
 	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -79,11 +80,14 @@ func Execute() {
 // appHost adapts the visor app client to the engine's Host: it supplies the
 // logger, publishes the operator OTP to the visor app list, and reports the
 // market's own identity (the visor public key).
-type appHost struct{ appCl *app.Client }
+type appHost struct {
+	appCl *app.Client
+	log   logrus.FieldLogger
+}
 
-func (h appHost) Log() logging.FieldLogger { return h.appCl.Log() }
-func (h appHost) PublishOTP(otp string)    { h.appCl.SetOTPOrLog(otp) }
-func (h appHost) PubKey() string           { return h.appCl.VisorPubKey() }
+func (h appHost) Log() logrus.FieldLogger { return h.log }
+func (h appHost) PublishOTP(otp string)   { h.appCl.SetOTPOrLog(otp) }
+func (h appHost) PubKey() string          { return h.appCl.VisorPubKey() }
 
 // RunSkydexMarket runs the skydex-market app: it wires the visor's appnet dmsg
 // transport to the skycoin exchange engine.
@@ -143,7 +147,9 @@ func RunSkydexMarket(ctx context.Context, args []string) error {
 	}
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- skydexmarket.Run(ctx, cfg, lis, identify, appHost{appCl}) }()
+	go func() {
+		errCh <- skydexmarket.Run(ctx, cfg, lis, identify, appHost{appCl: appCl, log: logrusbridge.New(appCl.Log())})
+	}()
 
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)

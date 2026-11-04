@@ -5,17 +5,15 @@ import (
 	"maps"
 	"testing"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
-func fireEntry(b *Broadcaster, level logrus.Level, module, msg string, fields logrus.Fields) {
-	data := logrus.Fields{}
+func fireEntry(b *Broadcaster, level Level, module, msg string, fields Fields) {
+	data := Fields{}
 	if module != "" {
 		data[logModuleKey] = module
 	}
 	maps.Copy(data, fields)
-	_ = b.Fire(&logrus.Entry{ //nolint:errcheck // best-effort test hook fire
+	_ = b.Fire(&Entry{ //nolint:errcheck // best-effort test hook fire
 		Time:    time.Now(),
 		Level:   level,
 		Message: msg,
@@ -27,15 +25,15 @@ func TestRingClassifiesEventsAndLogs(t *testing.T) {
 	b := NewBroadcaster()
 
 	// Layered router entry tagged with app_name → events bucket.
-	fireEntry(b, logrus.InfoLevel, "router", "Requesting new routes", logrus.Fields{"app_name": "skysocks-client"})
+	fireEntry(b, InfoLevel, "router", "Requesting new routes", Fields{"app_name": "skysocks-client"})
 	// RouteGroup entry tagged with app_name → events bucket.
-	fireEntry(b, logrus.DebugLevel, "RouteGroup abc", "Sent handshake via transport", logrus.Fields{"app_name": "skysocks-client"})
+	fireEntry(b, DebugLevel, "RouteGroup abc", "Sent handshake via transport", Fields{"app_name": "skysocks-client"})
 	// App's own stdout (proc:<app>:<key>) → logs bucket.
-	fireEntry(b, logrus.InfoLevel, "proc:skysocks-client:xyz", "App is Running", nil)
+	fireEntry(b, InfoLevel, "proc:skysocks-client:xyz", "App is Running", nil)
 	// Unrelated entry with no app association → dropped.
-	fireEntry(b, logrus.InfoLevel, "dmsg", "some dmsg thing", nil)
+	fireEntry(b, InfoLevel, "dmsg", "some dmsg thing", nil)
 
-	events, logs := b.RecentByApp("skysocks-client", logrus.DebugLevel)
+	events, logs := b.RecentByApp("skysocks-client", DebugLevel)
 	if len(events) != 2 {
 		t.Fatalf("want 2 events, got %d: %+v", len(events), events)
 	}
@@ -50,7 +48,7 @@ func TestRingClassifiesEventsAndLogs(t *testing.T) {
 	}
 
 	// Nothing captured for an unknown app.
-	e2, l2 := b.RecentByApp("other", logrus.DebugLevel)
+	e2, l2 := b.RecentByApp("other", DebugLevel)
 	if len(e2) != 0 || len(l2) != 0 {
 		t.Fatalf("unknown app should be empty, got %d/%d", len(e2), len(l2))
 	}
@@ -58,16 +56,16 @@ func TestRingClassifiesEventsAndLogs(t *testing.T) {
 
 func TestRingLevelFilter(t *testing.T) {
 	b := NewBroadcaster()
-	fireEntry(b, logrus.TraceLevel, "router", "trace line", logrus.Fields{"app_name": "app1"})
-	fireEntry(b, logrus.InfoLevel, "router", "info line", logrus.Fields{"app_name": "app1"})
+	fireEntry(b, TraceLevel, "router", "trace line", Fields{"app_name": "app1"})
+	fireEntry(b, InfoLevel, "router", "info line", Fields{"app_name": "app1"})
 
 	// At info level, the trace entry is excluded.
-	events, _ := b.RecentByApp("app1", logrus.InfoLevel)
+	events, _ := b.RecentByApp("app1", InfoLevel)
 	if len(events) != 1 {
 		t.Fatalf("info filter: want 1 event, got %d", len(events))
 	}
 	// At trace level, both are included.
-	events, _ = b.RecentByApp("app1", logrus.TraceLevel)
+	events, _ = b.RecentByApp("app1", TraceLevel)
 	if len(events) != 2 {
 		t.Fatalf("trace filter: want 2 events, got %d", len(events))
 	}
@@ -76,9 +74,9 @@ func TestRingLevelFilter(t *testing.T) {
 func TestRingBounded(t *testing.T) {
 	b := NewBroadcaster()
 	for range ringPerApp + 50 {
-		fireEntry(b, logrus.InfoLevel, "router", "line", logrus.Fields{"app_name": "app1"})
+		fireEntry(b, InfoLevel, "router", "line", Fields{"app_name": "app1"})
 	}
-	events, _ := b.RecentByApp("app1", logrus.DebugLevel)
+	events, _ := b.RecentByApp("app1", DebugLevel)
 	if len(events) != ringPerApp {
 		t.Fatalf("ring should cap at %d, got %d", ringPerApp, len(events))
 	}
@@ -88,7 +86,7 @@ func TestRingMaxAppsEviction(t *testing.T) {
 	b := NewBroadcaster()
 	for i := range ringMaxApps + 5 {
 		app := "app" + string(rune('A'+i%26)) + string(rune('0'+i/26))
-		fireEntry(b, logrus.InfoLevel, "router", "line", logrus.Fields{"app_name": app})
+		fireEntry(b, InfoLevel, "router", "line", Fields{"app_name": app})
 	}
 	b.ringMu.Lock()
 	n := len(b.rings)
@@ -101,7 +99,7 @@ func TestRingMaxAppsEviction(t *testing.T) {
 func TestRecordFormat(t *testing.T) {
 	r := Record{
 		Time:    time.Unix(0, 0).UTC(),
-		Level:   logrus.InfoLevel,
+		Level:   InfoLevel,
 		Module:  "router",
 		Message: "Created new routes",
 		Fields:  map[string]string{"app_name": "skysocks-client"},
@@ -119,16 +117,16 @@ func TestRecentMergedOrdered(t *testing.T) {
 	b := NewBroadcaster()
 	base := time.Now()
 	// Interleave events and logs with explicit times.
-	push := func(mod, msg string, fields logrus.Fields, at time.Time) {
-		data := logrus.Fields{logModuleKey: mod}
+	push := func(mod, msg string, fields Fields, at time.Time) {
+		data := Fields{logModuleKey: mod}
 		maps.Copy(data, fields)
-		_ = b.Fire(&logrus.Entry{Time: at, Level: logrus.InfoLevel, Message: msg, Data: data}) //nolint:errcheck // best-effort test hook fire
+		_ = b.Fire(&Entry{Time: at, Level: InfoLevel, Message: msg, Data: data}) //nolint:errcheck // best-effort test hook fire
 	}
 	push("proc:app1:k", "log-early", nil, base)
-	push("router", "event-mid", logrus.Fields{"app_name": "app1"}, base.Add(time.Second))
+	push("router", "event-mid", Fields{"app_name": "app1"}, base.Add(time.Second))
 	push("proc:app1:k", "log-late", nil, base.Add(2*time.Second))
 
-	merged := b.RecentMerged("app1", logrus.DebugLevel)
+	merged := b.RecentMerged("app1", DebugLevel)
 	if len(merged) != 3 {
 		t.Fatalf("want 3 merged, got %d", len(merged))
 	}

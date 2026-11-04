@@ -4,20 +4,18 @@ import (
 	"errors"
 	"io"
 	"testing"
-
-	"github.com/sirupsen/logrus"
 )
 
-type captureHook struct{ entries []*logrus.Entry }
+type captureHook struct{ entries []*Entry }
 
-func (h *captureHook) Levels() []logrus.Level { return logrus.AllLevels }
+func (h *captureHook) Levels() []Level { return AllLevels }
 
-func (h *captureHook) Fire(e *logrus.Entry) error {
+func (h *captureHook) Fire(e *Entry) error {
 	h.entries = append(h.entries, e)
 	return nil
 }
 
-func (h *captureHook) last() *logrus.Entry {
+func (h *captureHook) last() *Entry {
 	if len(h.entries) == 0 {
 		return nil
 	}
@@ -25,9 +23,9 @@ func (h *captureHook) last() *logrus.Entry {
 }
 
 func TestSlogBridge(t *testing.T) {
-	l := logrus.New()
+	l := New()
 	l.SetOutput(io.Discard)
-	l.SetLevel(logrus.InfoLevel)
+	l.SetLevel(InfoLevel)
 	hook := &captureHook{}
 	l.AddHook(hook)
 	sl := (&Logger{FieldLogger: l.WithField("module", "wisp")}).Slog()
@@ -40,7 +38,7 @@ func TestSlogBridge(t *testing.T) {
 	boom := errors.New("boom")
 	sl.With("component", "wisp").WithGroup("g").Warn("stream closed", "id", 7, "err", boom)
 	e := hook.last()
-	if e == nil || e.Level != logrus.WarnLevel || e.Message != "stream closed" {
+	if e == nil || e.Level != WarnLevel || e.Message != "stream closed" {
 		t.Fatalf("unexpected entry %+v", e)
 	}
 	if e.Data["module"] != "wisp" || e.Data["component"] != "wisp" || e.Data["g.id"] != int64(7) {
@@ -51,7 +49,7 @@ func TestSlogBridge(t *testing.T) {
 	}
 
 	sl.Info("plain", "err", boom)
-	if hook.last().Data[logrus.ErrorKey] != boom {
+	if hook.last().Data[ErrorKey] != boom {
 		t.Fatalf("err not mapped to logrus error key: %v", hook.last().Data)
 	}
 }
