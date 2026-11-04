@@ -537,6 +537,30 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 	return p, nil
 }
 
+// SetSingleRewardAddress implements API. It is SetRewardAddress with the
+// opt-in for a single address, which is refused if it has sent coins or if
+// the skycoin node cannot say whether it has.
+func (v *Visor) SetSingleRewardAddress(p string) (string, error) {
+	p, isXpub, err := rewardconfig.ValidateRewardSetting(p, true)
+	if err != nil {
+		return "", err
+	}
+	if !isXpub {
+		e, err := v.RewardAddressExposure(p)
+		if err != nil {
+			return "", fmt.Errorf("could not check whether %s has sent coins, so it was not set: %w", p, err)
+		}
+		if e.Spent {
+			return "", fmt.Errorf("%s: %w", p, rewardconfig.ErrAddressSpent)
+		}
+	}
+	if err := v.storeRewardAddress(p); err != nil {
+		return p, err
+	}
+	go GenerateSurvey(v, v.log, false)
+	return p, nil
+}
+
 // GetRewardAddress implements API.
 func (v *Visor) GetRewardAddress() (string, error) {
 	// Prefer config value

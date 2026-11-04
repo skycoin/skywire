@@ -1632,6 +1632,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.HVSetRewardAddress(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HVSetSingleRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(visorapi.HVRewardArgs)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.HVSetSingleRewardAddress(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".HVShutdown", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(cipher.PubKey)
 		if err := rpcDec.Decode(rpcArg); err != nil {
@@ -2980,6 +2990,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(struct{})
 			return rpcReply, rpcRcvr.SetSTCPAddr(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".SetSingleRewardAddress", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		var rpcArg string
+		if err := rpcDec.Decode(&rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.SetSingleRewardAddress(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".SetSkychatPassword", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

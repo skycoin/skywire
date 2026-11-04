@@ -1,6 +1,8 @@
 package rewardconfig
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -30,4 +32,24 @@ func TestParseAddressUxouts(t *testing.T) {
 
 	_, err = ParseAddressUxouts(addr, []byte(`{"error":"x"}`))
 	require.Error(t, err)
+}
+
+func TestFetchAddressExposure(t *testing.T) {
+	const addr = "2VfPAT8tZMwoypWSZgdhgCiKrYdYoSxy1dE"
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/address_uxouts" || r.URL.Query().Get("address") != addr {
+			http.Error(w, "bad query", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(`[{"coins":7000000,"spent_block_seq":195400}]`)) //nolint:errcheck,gosec
+	}))
+	defer node.Close()
+
+	e, err := FetchAddressExposure(node.Client(), node.URL+"/", addr)
+	require.NoError(t, err)
+	require.True(t, e.Spent)
+	require.Contains(t, e.Warning(), "no longer earns rewards")
+
+	_, err = FetchAddressExposure(node.Client(), node.URL, "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6")
+	require.ErrorContains(t, err, "returned 400")
 }

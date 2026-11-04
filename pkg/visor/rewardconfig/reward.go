@@ -13,6 +13,8 @@ import (
 // Reward represents the json-encoded contents of the reward.json file
 type Reward struct {
 	RewardAddress string `json:"reward_address,omitempty"`
+	// AcceptRisk opts in to a single address, see SingleAddressRisk.
+	AcceptRisk bool `json:"accept_risk,omitempty"`
 }
 
 // ValidateRewardAddress validates a reward address string.
@@ -41,9 +43,39 @@ func ValidateRewardAddress(addr string) (canonical string, isXpub bool, err erro
 // ErrSingleAddress is returned when a plain address is given where only an
 // account xpub is accepted. A single address shows every reward it was paid
 // to anyone, and spending from it links them; an xpub pays a fresh address.
-var ErrSingleAddress = errors.New("a single skycoin address is no longer accepted as a reward address: " +
+var ErrSingleAddress = errors.New("a single skycoin address is accepted as a reward address only with an explicit opt-in: " +
 	"set your wallet's account xpub instead, so each reward goes to a fresh address. " +
-	"In the Skycoin desktop wallet or skycoin-web, copy the wallet's Account xPub")
+	"In the Skycoin desktop wallet or skycoin-web, copy the wallet's Account xPub. " +
+	"To use a single address anyway, accept the risk with: skywire cli reward ADDRESS --accept-risk")
+
+// ErrAddressSpent is returned for a single address that has sent coins. It
+// earns no rewards, so it is refused as a reward address.
+var ErrAddressSpent = errors.New("this address has already sent coins, so it cannot earn rewards. " +
+	"Set your wallet's account xpub, or an address that has never sent coins")
+
+// SingleAddressRisk is shown wherever a single reward address is set or shown.
+const SingleAddressRisk = "A single reward address stops earning rewards from the first reward day after it sends coins. " +
+	"Send from it only after switching to an xpub. An account xpub avoids this."
+
+// ValidateRewardSetting validates a reward address being set. An account
+// xpub is always accepted. A single address needs acceptRisk, and the caller
+// must then refuse it if it has sent coins (see AddressExposure).
+func ValidateRewardSetting(addr string, acceptRisk bool) (canonical string, isXpub bool, err error) {
+	canonical, isXpub, err = ValidateRewardAddress(addr)
+	if err != nil {
+		return "", false, err
+	}
+	if !isXpub {
+		if !acceptRisk {
+			return "", false, ErrSingleAddress
+		}
+		return canonical, false, nil
+	}
+	if CheckXpubDepth(canonical) != "" {
+		return "", true, ErrNotAccountXpub
+	}
+	return canonical, true, nil
+}
 
 // ErrNotAccountXpub is returned for an xpub that is not a BIP44 account xpub.
 // Rewards derive m/44'/8000'/0'/0/i from it, so a chain xpub (depth 4) would
@@ -58,17 +90,8 @@ const AccountXpubDepth = 3
 // ValidateRewardXpub validates a reward address being set, which must be a
 // BIP44 account xpub. Addresses already set are still read with ValidateRewardAddress.
 func ValidateRewardXpub(addr string) (string, error) {
-	canonical, isXpub, err := ValidateRewardAddress(addr)
-	if err != nil {
-		return "", err
-	}
-	if !isXpub {
-		return "", ErrSingleAddress
-	}
-	if CheckXpubDepth(canonical) != "" {
-		return "", ErrNotAccountXpub
-	}
-	return canonical, nil
+	canonical, _, err := ValidateRewardSetting(addr, false)
+	return canonical, err
 }
 
 // CheckXpubDepth returns a message when xpub is not at the BIP44 account level

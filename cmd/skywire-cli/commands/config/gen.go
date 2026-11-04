@@ -1595,7 +1595,7 @@ func configureLauncher(log *logging.Logger) {
 		// An existing REWARDSKYADDR still applies, so a regen never drops an
 		// operator's address, but a new one should be an xpub.
 		if !isXpub {
-			log.Warn(rewardconfig.ErrSingleAddress)
+			log.Warn(rewardconfig.SingleAddressRisk)
 		}
 		conf.RewardAddress = canonical
 	}

@@ -41,7 +41,7 @@ var hvParkAllowed = map[string]bool{
 	"SetAppEnvFull": true, "SetAppLauncherMode": true, "DoCustomSetting": true,
 	"StartApp": true, "StopApp": true, "RestartApp": true,
 	"SetPublicAutoconnect": true, "SetMinHops": true, "SetSkyenv": true,
-	"SetPersistentTransports": true, "SetRewardAddress": true,
+	"SetPersistentTransports": true, "SetRewardAddress": true, "SetSingleRewardAddress": true,
 	"DeleteRewardAddress": true, "SetIsPublic": true, "SetRuntimeConfig": true,
 }
 

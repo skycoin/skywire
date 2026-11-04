@@ -2013,3 +2013,13 @@ func (mc *mockRPCClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
 
 // DmsgAsyncSetSettings implements API.
 func (mc *mockRPCClient) DmsgAsyncSetSettings(map[string]string) error { return nil }
+
+// SetSingleRewardAddress implements API.
+func (mc *mockRPCClient) SetSingleRewardAddress(_ string) (string, error) {
+	return "", nil
+}
+
+// HVSetSingleRewardAddress implements API.
+func (mc *mockRPCClient) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (string, error) {
+	return "", fmt.Errorf("not supported in mock")
+}

@@ -16,8 +16,14 @@ reward address setting
 	  reward rules      display the mainnet reward eligibility rules
 
 	Sets the reward account xpub for the visor: a BIP44 account-level
-	xpub, so each reward goes to a fresh address. A single skycoin
-	address is no longer accepted; one set earlier still works.
+	xpub, so each reward goes to a fresh address.
+
+	A single skycoin address is accepted only with --accept-risk, and is
+	refused if it has already sent coins. It stops earning rewards from
+	the first reward day after it sends coins, so send from it only after
+	switching to an xpub. This opt-in is temporary, until hardware wallets
+	can export an account xpub.
+
 	The address is written to the root of the default 'local' directory
 	specified in the visor's config.
 
@@ -95,6 +101,7 @@ skywire cli reward <address | xpub> || [flags]
   -d, --delete           delete reward address file - opt out of rewards
       --pks string       comma-separated visor PKs (via hypervisor) to set reward address on
       --all-visors       apply reward address to every visor connected to this hypervisor (requires running hypervisor)
+      --accept-risk      set a single address instead of an xpub. It stops earning rewards once it sends coins
       --all              show all flags
 ```
 

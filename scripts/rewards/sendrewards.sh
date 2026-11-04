@@ -15,8 +15,12 @@ if [[ "$user_input" != "Y" && "$user_input" != "y" ]]; then
   echo "exiting"
   exit 0
 fi
-## get link to the latest CSV
-#skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/csv -s $REWARD_WL_SK
-## get reward csv data
-# skywire dmsg curl  $REWARD_SYS_URL/$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/csv -s $REWARD_WL_SK) -s $REWARD_WL_SK | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' |  grep -v '^,0.000$'
-skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS --csv <(skywire dmsg curl  $REWARD_SYS_URL/$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/csv -s $REWARD_WL_SK) -s $REWARD_WL_SK | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' |  grep -v '^,0.000$'))" -s $REWARD_WL_SK
+## get the payout csv: the oldest undistributed day, without payouts to single
+## reward addresses that have sent coins. Stop if it is not a clean csv.
+payout="$(skywire dmsg curl $REWARD_SYS_URL/skycoin-rewards/payout -s $REWARD_WL_SK)"
+if [[ -z "$payout" ]] || echo "$payout" | grep -vx 'Skycoin Address, Reward Amount' | grep -qvE '^[1-9A-HJ-NP-Za-km-z]+, *[0-9.]+ *$'; then
+  echo "could not get a clean payout csv ; exiting"
+  echo "$payout"
+  exit 1
+fi
+skywire dmsg curl $REWARD_SYS_URL/reward -d "$(skycoin-cli createRawTransaction $WALLET_FILE -a $FROM_ADDRESS --csv <(echo "$payout" | tr -d ' ' | awk -F, '{printf "%s,%.3f\n", $1, int($2*1000)/1000}' |  grep -v '^,0.000$'))" -s $REWARD_WL_SK

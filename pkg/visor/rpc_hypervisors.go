@@ -402,3 +402,14 @@ func (r *RPC) HVUpdateForwardedPort(in *visorapi.HVForwardedPortArgs, _ *struct{
 	}
 	return v.HVUpdateForwardedPort(in.PK, in.Port)
 }
+
+// HVSetSingleRewardAddress sets a single reward address, with the opt-in, on a remote visor.
+func (r *RPC) HVSetSingleRewardAddress(in *visorapi.HVRewardArgs, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "HVSetSingleRewardAddress", in)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	*out, err = v.HVSetSingleRewardAddress(in.PK, in.Addr)
+	return err
+}

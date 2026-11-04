@@ -30,8 +30,11 @@ bytes. See `reward rules` for the human eligibility rules.
 ## `reward` (singular), node operator
 - **`reward`** (no args) → prints the currently-set reward address (RPC first, then the
   local `<localPath>/reward.txt`). `reward -r/--read` = same, explicit. `--json` wraps it.
-- **`reward <address|xpub>`** → SET the address (skycoin address OR BIP44 **account-level**
-  xpub, path `--path=0` depth 3, NOT the wallet GUI's `0/0` external-chain xpub). Writes via
+- **`reward <address|xpub>`** → SET the address: a BIP44 **account-level** xpub (path
+  `--path=0` depth 3, NOT the `0/0` external-chain xpub). A single skycoin address needs
+  `--accept-risk` (`SetSingleRewardAddress` / `HVSetSingleRewardAddress`); the visor asks the
+  skycoin node first and refuses one that has sent coins, or when the node cannot answer.
+  From reward day 2026-11-15 a single address that has sent coins earns nothing. Writes via
   visor RPC (no sudo) + mirrors to the local file. MUTATING.
 - Hidden flags (show with `reward --all`): `-a/--address`, `-o/--out <file>`,
   `-r/--read`, `-d/--delete` (opt out, removes the file / RPC-deletes). Visible bulk flags:
