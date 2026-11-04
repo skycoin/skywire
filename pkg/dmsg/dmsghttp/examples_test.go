@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/nettest"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -16,10 +15,11 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func ExampleMakeHTTPTransport() {
-	logrus.SetLevel(logrus.FatalLevel)
+	logging.SetLevel(logging.FatalLevel)
 
 	const maxSessions = 100
 	const dmsgHTTPPort = 80

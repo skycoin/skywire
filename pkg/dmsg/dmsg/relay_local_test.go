@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -227,9 +226,9 @@ func TestAttachedClientRestsInsteadOfHuntingServers(t *testing.T) {
 	// every other client in the test binary, and redirecting IT races with their
 	// serve goroutines.
 	logs := &syncBuffer{}
-	lr := logrus.New()
+	lr := logging.New()
 	lr.SetOutput(logs)
-	lr.SetLevel(logrus.DebugLevel)
+	lr.SetLevel(logging.DebugLevel)
 	attached.SetLogger(&logging.Logger{FieldLogger: lr})
 	defer attached.Close() //nolint:errcheck
 

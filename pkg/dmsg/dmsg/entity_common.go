@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -118,7 +116,7 @@ type EntityCommon struct {
 	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
 	noListenerHits *portHitTracker
 
-	log  logrus.FieldLogger
+	log  logging.FieldLogger
 	mlog *logging.MasterLogger
 
 	setSessionCallback func(ctx context.Context) error
@@ -255,7 +253,7 @@ type EntityCommon struct {
 	geoLookup GeoLookupFunc
 }
 
-func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {
+func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logging.FieldLogger, updateInterval time.Duration) {
 	if updateInterval == 0 {
 		updateInterval = DefaultUpdateInterval
 	}
@@ -384,11 +382,11 @@ func (c *EntityCommon) InboundSince(t time.Time) bool {
 }
 
 // Logger obtains the logger.
-func (c *EntityCommon) Logger() logrus.FieldLogger { return c.log }
+func (c *EntityCommon) Logger() logging.FieldLogger { return c.log }
 
 // SetLogger sets the internal logger.
 // This should be called before we serve.
-func (c *EntityCommon) SetLogger(log logrus.FieldLogger) { c.log = log }
+func (c *EntityCommon) SetLogger(log logging.FieldLogger) { c.log = log }
 
 // SetDHTBootstrap marks this entity as a DHT bootstrap node.
 // When set, the server's discovery entry includes dht_bootstrap=true

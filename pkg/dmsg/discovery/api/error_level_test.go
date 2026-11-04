@@ -6,16 +6,16 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
-type levelHook struct{ entries []*logrus.Entry }
+type levelHook struct{ entries []*logging.Entry }
 
-func (h *levelHook) Levels() []logrus.Level { return logrus.AllLevels }
-func (h *levelHook) Fire(e *logrus.Entry) error {
+func (h *levelHook) Levels() []logging.Level { return logging.AllLevels }
+func (h *levelHook) Fire(e *logging.Entry) error {
 	h.entries = append(h.entries, e)
 	return nil
 }
@@ -24,9 +24,9 @@ func (h *levelHook) Fire(e *logrus.Entry) error {
 // peer re-posting a stale entry could otherwise fill the discovery's log at
 // Warn — the 422 below was measured at ~88 per two minutes in production.
 func TestLogAPIErrorLevelByStatus(t *testing.T) {
-	l := logrus.New()
+	l := logging.New()
 	l.SetOutput(io.Discard)
-	l.SetLevel(logrus.DebugLevel)
+	l.SetLevel(logging.DebugLevel)
 	h := &levelHook{}
 	l.AddHook(h)
 
@@ -38,15 +38,15 @@ func TestLogAPIErrorLevelByStatus(t *testing.T) {
 	logAPIError(l, http.StatusUnprocessableEntity,
 		disc.NewEntryValidationError("sequence field of new entry is not sequence of old entry"))
 	require.Len(t, h.entries, 1)
-	require.Equal(t, logrus.DebugLevel, h.entries[0].Level)
+	require.Equal(t, logging.DebugLevel, h.entries[0].Level)
 
 	logAPIError(l, http.StatusUnauthorized, disc.ErrUnauthorized)
 	require.Len(t, h.entries, 2)
-	require.Equal(t, logrus.DebugLevel, h.entries[1].Level)
+	require.Equal(t, logging.DebugLevel, h.entries[1].Level)
 
 	// 5xx is this service failing, and stays a warning.
 	logAPIError(l, http.StatusInternalServerError, disc.ErrUnexpected)
 	require.Len(t, h.entries, 3)
-	require.Equal(t, logrus.WarnLevel, h.entries[2].Level)
+	require.Equal(t, logging.WarnLevel, h.entries[2].Level)
 	require.Contains(t, h.entries[2].Message, "500")
 }

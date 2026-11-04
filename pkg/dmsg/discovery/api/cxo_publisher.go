@@ -50,8 +50,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -160,7 +158,7 @@ type ClientsByServerCXOPublisher struct {
 // publisher can't be created (no dmsg client, listener bind failure,
 // etc.); callers log and continue without it (HTTP path stays the
 // source of truth).
-func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*ClientsByServerCXOPublisher, error) {
+func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*ClientsByServerCXOPublisher, error) {
 	log := logging.MustGetLogger("dmsgd-cxo-clients-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

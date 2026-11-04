@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,7 +19,7 @@ import (
 )
 
 func TestClient_RemoteClients(t *testing.T) {
-	logging.SetLevel(logrus.ErrorLevel)
+	logging.SetLevel(logging.ErrorLevel)
 
 	// duration to wait before the resultant state is checked after an action
 	const waitDuration = time.Millisecond * 100

@@ -5,10 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var apiErrors = map[error]func() (int, string){
@@ -69,7 +68,7 @@ func (a *API) handleError(w http.ResponseWriter, r *http.Request, e error) {
 // is wrong here. A 5xx is this service's own failure and stays at warn. A 404
 // is the ordinary answer to a lookup for a key that was never registered, so
 // it stays unlogged.
-func logAPIError(log logrus.FieldLogger, code int, e error) {
+func logAPIError(log logging.FieldLogger, code int, e error) {
 	switch {
 	case code == http.StatusNotFound:
 		// A miss is a normal answer, not an error worth a line.
