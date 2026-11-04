@@ -288,11 +288,11 @@ func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKe
 	//   any filter param   → plain-text streaming filtered mode
 	//
 	// Served at /skywire.log (matching the on-disk filename written by
-	// visor.go's lumberjackrus hook) with /visor.log kept as an alias so
+	// visor.go's log file hook) with /visor.log kept as an alias so
 	// older links and tooling keep working — both routes share this handler.
 	serveVisorLog := func(w http.ResponseWriter, req *http.Request) {
 		// The visor writes its rotating log to LocalPath/log/skywire.log
-		// (visor.go, via lumberjackrus). The endpoint previously looked at
+		// (visor.go, via lumberjack). The endpoint previously looked at
 		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
 		// even with file logging enabled.
 		logFile := filepath.Join(localPath, "log", "skywire.log")

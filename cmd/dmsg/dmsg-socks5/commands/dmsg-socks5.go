@@ -134,7 +134,7 @@ var serveCmd = &cobra.Command{
 
 		defer closeDmsg()
 
-		dlog.Infof("dmsg client pk: " + pk.String())
+		dlog.Info("dmsg client pk: " + pk.String())
 		time.Sleep(time.Second)
 		dmsgL, err := dmsgC.Listen(dmsgPort)
 		if err != nil {
@@ -263,7 +263,7 @@ var proxyCmd = &cobra.Command{
 		}
 
 		defer closeDmsg()
-		dlog.Infof("dmsg client pk: " + pk.String())
+		dlog.Info("dmsg client pk: " + pk.String())
 
 		proxyListenAddr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
 		tcpL, err := net.Listen("tcp", proxyListenAddr)

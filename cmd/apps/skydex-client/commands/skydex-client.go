@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging/logrusbridge"
 
 	"github.com/0magnet/calvin"
 	skydexclient "github.com/skycoin/skycoin/cmd/skydex-client/commands"
@@ -235,7 +236,7 @@ func RunSkydexClient(ctx context.Context, args []string) error {
 
 	cfg := skydexclient.Config{UIAddr: engineAddr, DefaultPK: marketPK}
 	errCh := make(chan error, 1)
-	go func() { errCh <- skydexclient.Run(ctx, cfg, dialer, appCl.Log()) }()
+	go func() { errCh <- skydexclient.Run(ctx, cfg, dialer, logrusbridge.New(appCl.Log())) }()
 
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)

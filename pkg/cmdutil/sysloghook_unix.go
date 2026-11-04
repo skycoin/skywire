@@ -8,20 +8,43 @@ import (
 	"log/syslog"
 	"strings"
 
-	logrussyslog "github.com/sirupsen/logrus/hooks/syslog"
-
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func (sf *ServiceFlags) sysLogHook(log *logging.Logger, sysLvl int) {
-	hook, err := logrussyslog.NewSyslogHook(sf.SyslogNet, sf.Syslog, syslog.Priority(sysLvl), sf.Tag)
+	w, err := syslog.Dial(sf.SyslogNet, sf.Syslog, syslog.Priority(sysLvl), sf.Tag)
 	if err != nil {
 		log.WithError(err).
 			WithField("net", sf.SyslogNet).
 			WithField("addr", sf.Syslog).
 			Fatal("Failed to connect to syslog daemon.")
 	}
-	logging.AddHook(hook)
+	logging.AddHook(syslogHook{w})
+}
+
+// syslogHook sends every entry, rendered by its logger's formatter, to
+// syslog at the matching severity.
+type syslogHook struct{ w *syslog.Writer }
+
+func (syslogHook) Levels() []logging.Level { return logging.AllLevels }
+
+func (h syslogHook) Fire(e *logging.Entry) error {
+	line, err := e.String()
+	if err != nil {
+		return err
+	}
+	switch e.Level {
+	case logging.PanicLevel, logging.FatalLevel:
+		return h.w.Crit(line)
+	case logging.ErrorLevel:
+		return h.w.Err(line)
+	case logging.WarnLevel:
+		return h.w.Warning(line)
+	case logging.InfoLevel:
+		return h.w.Info(line)
+	default:
+		return h.w.Debug(line)
+	}
 }
 
 // LevelFromString returns a logging.Level and syslog.Priority from a string
