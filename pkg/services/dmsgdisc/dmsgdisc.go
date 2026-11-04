@@ -29,7 +29,6 @@ import (
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -398,7 +397,7 @@ func officialServersMap(list []string) map[string]bool {
 // last-resort safety net for binaries built with an empty embedded
 // keyring. Polls the API every minute until a non-empty server set
 // shows up, or ctx cancels (returns empty in that case).
-func pollServersUntilFound(ctx context.Context, a *api.API, dmsgServerType string, log logrus.FieldLogger) []*disc.Entry {
+func pollServersUntilFound(ctx context.Context, a *api.API, dmsgServerType string, log logging.FieldLogger) []*disc.Entry {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -441,7 +440,7 @@ func pollServersUntilFound(ctx context.Context, a *api.API, dmsgServerType strin
 // still unreachable, then steady 30s maintenance so dropped sessions are
 // re-established promptly. EnsureSession is idempotent — already-connected
 // servers cost a cheap map check.
-func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, a *api.API, dClient disc.APIClient, dmsgC *dmsg.Client, dmsgServerType string, log logrus.FieldLogger) {
+func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, a *api.API, dClient disc.APIClient, dmsgC *dmsg.Client, dmsgServerType string, log logging.FieldLogger) {
 	const minInterval, maxInterval = time.Second, 30 * time.Second
 	interval := minInterval
 	for {
@@ -491,7 +490,7 @@ func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, a *api
 // each server's CURRENT address is dialed even when the static config has
 // drifted. A registry-fetch error degrades to the static seed set for that tick
 // (cold-start, before anything has registered, or a transient registry blip).
-func reconcileServerSet(ctx context.Context, static []*disc.Entry, a *api.API, dmsgServerType string, log logrus.FieldLogger) []*disc.Entry {
+func reconcileServerSet(ctx context.Context, static []*disc.Entry, a *api.API, dmsgServerType string, log logging.FieldLogger) []*disc.Entry {
 	reg, err := a.AllServers(ctx, log)
 	if err != nil {
 		log.WithError(err).Debug("dmsg-disc: registry fetch failed; using static seed set this tick")

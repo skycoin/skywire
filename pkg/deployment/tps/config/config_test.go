@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,7 +19,7 @@ import (
 // nonExitingLogger returns a *logging.Logger whose Fatalf does not terminate the
 // process, so the error branches of MustReadConfig can be exercised.
 func nonExitingLogger() *logging.Logger {
-	lr := logrus.New()
+	lr := logging.New()
 	lr.SetOutput(io.Discard)
 	lr.ExitFunc = func(int) {}
 	return &logging.Logger{FieldLogger: lr}

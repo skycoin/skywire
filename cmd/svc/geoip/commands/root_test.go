@@ -24,7 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/geoip"

@@ -11,11 +11,10 @@ import (
 
 	rpc "github.com/0magnet/gobrpc"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -47,7 +46,7 @@ func (api *API) callVisorRPC(ctx context.Context, pk cipher.PubKey, method strin
 	return nil
 }
 
-func (api *API) log(r *http.Request) logrus.FieldLogger {
+func (api *API) log(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 

@@ -11,7 +11,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // STUN protocol constants matching the vendored go-stun client.

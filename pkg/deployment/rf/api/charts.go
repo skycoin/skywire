@@ -13,10 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 )
 
@@ -58,7 +57,7 @@ type rfCharts struct {
 
 // StartCharts samples the finder's counts, and those of sn when it is set,
 // into st until ctx ends and serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, sn *SetupNodes, log logging.FieldLogger) {
 	c := &rfCharts{sn: sn, prevNode: map[cipher.PubKey]*setupmetrics.StatsSnapshot{}}
 	page := &charts.Page{
 		Title: "Skywire route finder",

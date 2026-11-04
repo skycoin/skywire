@@ -8,9 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
@@ -29,7 +28,7 @@ var chartTypes = []string{servicedisc.ServiceTypeVisor, servicedisc.ServiceTypeV
 
 // StartCharts samples the registered services into st until ctx ends and
 // serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	page := &charts.Page{
 		Title: "Skywire service discovery",
 		About: strings.Split(a.dmsgAddr, ":")[0],

@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -126,7 +126,7 @@ func TestRouteRequestsAreCountedAndCharted(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, do(t, api, http.MethodGet, "/", nil).Code)
 	ctx := t.Context()
-	api.StartCharts(ctx, charts.NewMemoryStore(), nil, logrus.New())
+	api.StartCharts(ctx, charts.NewMemoryStore(), nil, logging.New())
 	rec := do(t, api, http.MethodGet, "/", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), "Route requests")

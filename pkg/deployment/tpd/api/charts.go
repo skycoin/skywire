@@ -14,12 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/charts"
 	"github.com/skycoin/skywire/pkg/deployment/netgraph"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Series keys TPD samples.
@@ -46,7 +45,7 @@ type tpdCharts struct {
 
 // StartCharts samples TPD's counts into st until ctx ends and serves them
 // as the charts page.
-func (api *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (api *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	c := &tpdCharts{st: st}
 	charts.SetVersionLookup(api.versionOf)
 	c.page = &charts.Page{

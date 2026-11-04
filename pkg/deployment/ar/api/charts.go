@@ -12,9 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/deployment/charts"
+	"github.com/skycoin/skywire/pkg/logging"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -69,7 +68,7 @@ func (a *API) countBind(t types.Type) { a.counters.add(chartBinds + typeName(str
 
 // StartCharts samples the resolver's bindings and lookups into st until ctx
 // ends and serves them as the charts page.
-func (a *API) StartCharts(ctx context.Context, st charts.Store, log logrus.FieldLogger) {
+func (a *API) StartCharts(ctx context.Context, st charts.Store, log logging.FieldLogger) {
 	page := &charts.Page{
 		Title: "Skywire address resolver",
 		About: strings.Split(a.dmsgAddr, ":")[0],

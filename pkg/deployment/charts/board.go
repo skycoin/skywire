@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Board serves the charts of several services as one page, a section each,
@@ -23,7 +23,7 @@ type Board struct {
 	Sections func() []Section
 	// Summary, when set, is a table shown before the sections.
 	Summary func() *Table
-	Log     logrus.FieldLogger
+	Log     logging.FieldLogger
 	// Separate keeps each section's process charts in it, for sections that
 	// are separate processes, such as the visors of a hypervisor.
 	Separate bool
