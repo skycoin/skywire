@@ -68,7 +68,7 @@ The bandwidth considered for this pool excludes same-LAN transports (where both 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version)** — see the [Version](#Version) section for the schedule of version requirement updates (currently v1.3.59 as of 06-10-2026)
+* [1)](#Version) **Minimum skywire [version](#Version)** — the newest release published at least two weeks ago, see the [Version](#Version) section
 
 * [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
@@ -76,9 +76,9 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [4)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime. *(Temporary exception: for the month of June 2026 only, the per-IP cap is raised to 12 shares — see [Per IP Limit](#Per-IP-Limit) for the rationale; the cap auto-reverts to 8 on 2026-07-01.)*
+* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor (a single address set earlier is still accepted)
+* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor (a single address set earlier is still accepted for now, but an xpub is planned to be required from mid-November 2026)
 
 * [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
 
@@ -131,7 +131,9 @@ NOTE: the uptime tracker and other services consider the visor's config version 
 
 It is expected that the visor's config is re-generated on every update in order to include any config changes which may have been introduced
 
-The update deadlines specify the version of software required as of (i.e. on or before) the specified date in order to maintain reward eligibility:
+The minimum version is the newest release that was published at least two weeks ago. Each new release becomes required two weeks after it is published, so there is no separate announcement of an update deadline. The [releases page](https://github.com/skycoin/skywire/releases) shows the publish dates.
+
+The dated deadlines below were used before the two week rule and are kept for reference only:
 
 
 **Reward eligibility after 02-01-2026 requires Skywire v1.3.33**
@@ -303,7 +305,7 @@ A maximum of 8 reward shares per ip address is divided between all visors which 
 
 For example, if 9 visors at a given ip address meet the minimum uptime requirement, the reward share for each visor will be 8/9ths of a share (~0.8888) which sum to a total of ~7.99999 shares.
 
-**Temporary exception — June 2026 only**: the per-IP cap is raised from 8 to **12** shares for calc dates within June 2026 (UTC). Rationale: a specific operator was unable to relocate excess visors off a single IP address because OS-level update infrastructure was blocked by ongoing bandwidth-pool issues this month, and several boards in their official miner died reducing the visor count to 11+1 at one location. The cap reverts automatically to 8 on 2026-07-01 with no further action required.
+For calc dates in June 2026 only, the cap was temporarily 12 shares.
 
 ### Regional Saturation Scaling
 
@@ -336,9 +338,9 @@ The exponent can be adjusted via the `--sat-exp` flag (default 0.5):
 
 ### Skycoin Address
 
-Rewards are paid to an account xpub, not a single address. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent. A single skycoin address can no longer be set; one set earlier still works for now.
+Rewards are paid to an account xpub, not a single address. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent. A single skycoin address can no longer be set. One set earlier is still paid for now, but an xpub is planned to be required from mid-November 2026, so replace a single address with an xpub before then.
 
-Use the **account** xpub of a BIP44 wallet (depth 3). In the Skycoin desktop wallet or skycoin-web it is shown for the wallet as "Account xPub", next to the two chain xpubs. A chain xpub (depth 4) is not accepted, because the addresses derived from it are not ones its wallet shows. `skywire cli reward` and the hypervisor UI list the first addresses of the xpub that is set, which should match the first addresses of the wallet.
+Use the **account** xpub of a BIP44 wallet (depth 3). The [reward xpub guide](https://github.com/skycoin/skywire/blob/develop/docs/guides/reward-xpub.md) shows how to make the wallet and which xpub to copy. The hypervisor UI has a Wallet page (`http://127.0.0.1:8000/#/wallet`) that makes the wallet in the browser. In the Skycoin desktop wallet, skycoin-web or the Wallet page it is shown for the wallet as "Account xPub", next to the two chain xpubs. `skywire skycoin cli verifyXpub <xpub>` prints the depth. A chain xpub (depth 4) is not accepted, because the addresses derived from it are not ones its wallet shows. `skywire cli reward` and the hypervisor UI list the first addresses of the xpub that is set, which should match the first addresses of the wallet.
 
 Set it from the cli:
 
@@ -348,34 +350,18 @@ skywire cli reward <account-xpub>
 
 or in the hypervisor UI.
 
-It is __highly recommended__ to set it in the file '/etc/skywire.conf', so a config regeneration keeps it:
+On a linux package install, setting it this way on a running visor also saves it as `REWARDSKYADDR` in `/etc/skywire.conf`, so a config regeneration on restart or update keeps it. There is no need to edit that file by hand.
+
+Edit `/etc/skywire.conf` yourself only when the visor is not running. Set the line to
 
 ```
-echo "REWARDSKYADDR=('<account-xpub>')" | sudo tee -a /etc/skywire.conf
+REWARDSKYADDR='<account-xpub>'
 ```
 
-then run:
-```
-skywire-autoconfig
-```
-
-on linux (assumes you have installed the package)
-
-If this file does not exist for you, it can be created with
-```
-skywire cli config gen -q | sudo tee /etc/skywire.conf
-```
-
-**If you do this, YOU MUST UNCOMMENT THE FOLLOWING LINES OF THE FILE:**
-```
-PKGENV=true
-BESTPROTO=TRUE
-```
-
-you can open the file in an editor to make that change, for instance nano
+for instance with `sudo nano /etc/skywire.conf`, then run `skywire-autoconfig`. If the file does not exist, create it first with
 
 ```
-sudo nano /etc/skywire.conf
+skywire cli config gen -pq | sudo tee /etc/skywire.conf
 ```
 
 ### Connection To DMSG Network
