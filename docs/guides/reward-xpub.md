@@ -5,8 +5,11 @@ reward system derives a fresh address from it for every payout and never pays
 the same address twice. This page shows how to make the wallet, which xpub to
 copy, and how to set it.
 
-From November 15, 2026 rewards require an xpub. A single Skycoin address
-can already no longer be set, and one set earlier is paid only until then.
+An xpub is the default and the recommended reward address. A single Skycoin
+address can be set only with an explicit opt-in, and it is refused if it has
+already sent coins. From the reward day of November 15, 2026 a single address
+stops earning from the first reward day after it sends coins. See
+[A single address](#a-single-address) below.
 
 ## Why an xpub
 
@@ -177,12 +180,39 @@ that a config regeneration keeps it. The
 [mainnet rules](https://github.com/skycoin/skywire/blob/develop/rewards/mainnet_rules.md#Skycoin-Address)
 show how.
 
+## A single address
+
+Some wallets, such as hardware wallets, cannot export an account xpub yet. For
+them a single address can be set with an explicit opt-in.
+
+```
+skywire cli reward <address> --accept-risk
+```
+
+In the hypervisor UI tick the box that accepts the risk under the field.
+
+The visor asks a skycoin node whether the address has ever sent coins. It
+refuses an address that has, and it refuses to set one when no node can be
+asked. Once set, the address earns rewards only while it has never sent coins.
+It stops earning from the first reward day after it sends coins, so send from
+it only after switching to an xpub. `skywire cli reward` and the hypervisor UI
+say so when a set address has sent coins.
+
+Rewards are never sent to a single address that has sent coins. The reward
+system checks again when it sends a day's rewards, so a payout to an address
+that sent coins after the day was calculated is skipped.
+
+This opt-in is temporary. Once hardware wallet firmware can export an account
+xpub, only xpubs will be accepted.
+
 ## Common mistakes
 
 - Copying the External Chain xPub, or exporting with the default `--path=0/0`.
   Its depth is 4. Use the Account xPub, depth 3.
-- Setting a plain Skycoin address. It is refused with
-  `a single skycoin address is no longer accepted as a reward address`.
+- Setting a plain Skycoin address without the opt-in. It is refused with
+  `a single skycoin address is accepted as a reward address only with an explicit opt-in`.
+- Sending coins from a single reward address. It stops earning rewards from
+  the next reward day. Switch to an xpub first.
 - Sharing the seed, an xprv or a private key. The reward address only ever
   needs the xpub. Nobody asks for the seed to pay rewards.
 

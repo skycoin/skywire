@@ -78,7 +78,7 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
 
-* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor (a single address set earlier is accepted only until November 15, 2026)
+* [6)](#Skycoin-Address) **A valid [reward account xpub](#Skycoin-Address)** must be set for the visor. A single address is accepted only with an explicit opt-in, and from November 15, 2026 only while it has never sent coins
 
 * [7)](#Connection-To-DMSG-Network) The visor must be **[connected to the DMSG network](#Connection-To-DMSG-Network)**
 
@@ -338,7 +338,11 @@ The exponent can be adjusted via the `--sat-exp` flag (default 0.5):
 
 ### Skycoin Address
 
-Rewards are paid to an account xpub, not a single address. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent. A single skycoin address can no longer be set. One set earlier is paid only until November 15, 2026, so replace it with an xpub before then.
+Rewards are paid to an account xpub. This is the default and the recommended choice. The reward system derives a fresh address from the xpub for each payment, so the rewards a visor earns are not all visible on one address and are not linked when they are spent.
+
+A single skycoin address can be set only with an explicit opt-in, `skywire cli reward <address> --accept-risk` or the risk checkbox in the hypervisor UI. The visor refuses an address that has already sent coins, and refuses to set one when it cannot ask a skycoin node. From the reward day of November 15, 2026, a single address earns rewards only while it has never sent coins. It stops earning from the first reward day after it sends coins, so send from it only after switching to an xpub. Rewards are never sent to a single address that has sent coins. This is checked again when a day's rewards are sent, which can be days after they were calculated, and a payout to an address that has sent coins in between is skipped.
+
+The single address opt-in is temporary. It is there until hardware wallet firmware can export an account xpub. After that only xpubs will be accepted.
 
 Use the **account** xpub of a BIP44 wallet (depth 3). The [reward xpub guide](https://github.com/skycoin/skywire/blob/develop/docs/guides/reward-xpub.md) shows how to make the wallet and which xpub to copy. The hypervisor UI has a Wallet page (`http://127.0.0.1:8000/#/wallet`) that makes the wallet in the browser. In the Skycoin desktop wallet, skycoin-web or the Wallet page it is shown for the wallet as "Account xPub", next to the two chain xpubs. `skywire skycoin cli verifyXpub <xpub>` prints the depth. A chain xpub (depth 4) is not accepted, because the addresses derived from it are not ones its wallet shows. `skywire cli reward` and the hypervisor UI list the first addresses of the xpub that is set, which should match the first addresses of the wallet.
 
