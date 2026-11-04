@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/0magnet/bitree"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -22,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
@@ -200,7 +200,7 @@ func collectHVMap(local visorapi.API, tree visorapi.HVVisorTree, only map[cipher
 					v.Error = err.Error()
 					return
 				}
-				quiet := logrus.New()
+				quiet := logging.New()
 				quiet.SetOutput(io.Discard)
 				client = visorapi.NewRPCClient(quiet, conn, visorapi.RPCPrefix, time.Duration(clirpc.Timeout)*time.Second)
 				defer client.Close() //nolint:errcheck

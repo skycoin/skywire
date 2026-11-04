@@ -1,7 +1,11 @@
 // Package logging pkg/logging/types.go c0-com-log
 package logging
 
-import "github.com/sirupsen/logrus"
+import (
+	"io"
+
+	"github.com/sirupsen/logrus"
+)
 
 // The names below let code outside this package log without importing
 // logrus, so the backend can move to log/slog behind them.
@@ -57,3 +61,11 @@ func NewEntry(l *MasterLogger) *Entry { return logrus.NewEntry(l.Logger) }
 
 // StandardLogger returns the process-wide default logger.
 func StandardLogger() *MasterLogger { return &MasterLogger{Logger: logrus.StandardLogger()} }
+
+// Discard returns a standalone logger that writes nothing.
+func Discard() *MasterLogger {
+	l := New()
+	l.SetOutput(io.Discard)
+	l.SetLevel(PanicLevel)
+	return l
+}

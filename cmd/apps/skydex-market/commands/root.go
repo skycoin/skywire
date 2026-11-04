@@ -20,9 +20,9 @@ import (
 	"os/signal"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 
 	"github.com/0magnet/calvin"
-	"github.com/sirupsen/logrus"
 	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -81,9 +81,9 @@ func Execute() {
 // market's own identity (the visor public key).
 type appHost struct{ appCl *app.Client }
 
-func (h appHost) Log() logrus.FieldLogger { return h.appCl.Log() }
-func (h appHost) PublishOTP(otp string)   { h.appCl.SetOTPOrLog(otp) }
-func (h appHost) PubKey() string          { return h.appCl.VisorPubKey() }
+func (h appHost) Log() logging.FieldLogger { return h.appCl.Log() }
+func (h appHost) PublishOTP(otp string)    { h.appCl.SetOTPOrLog(otp) }
+func (h appHost) PubKey() string           { return h.appCl.VisorPubKey() }
 
 // RunSkydexMarket runs the skydex-market app: it wires the visor's appnet dmsg
 // transport to the skycoin exchange engine.

@@ -25,7 +25,6 @@ import (
 
 	"github.com/0magnet/calvin"
 	ipc "github.com/0magnet/golang-ipc"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -71,7 +70,7 @@ var (
 	// and chatLog holds the stderr logrus instance directly. HTTP
 	// handlers + SSE pumps + accept loops use chatLog to avoid the
 	// nil-deref crash class on standalone.
-	chatLog   logrus.FieldLogger
+	chatLog   logging.FieldLogger
 	hub       *sseHub        // SSE broadcast registry; see sse.go-like helpers below
 	chatCtrl  *dm.Controller // shared 1:1 DM core (pkg/skychat/dm): conns, read loop, envelopes, send
 	appPort   uint16
@@ -863,7 +862,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		// listenLoop attempts don't try to acquire a nil rpcC.
 		useSkynet = false
 		useDmsg = false
-		standaloneLog := logrus.New()
+		standaloneLog := logging.New()
 		standaloneLog.SetOutput(cmdutil.Stderr())
 		standaloneLog.SetFormatter(&logging.TextFormatter{
 			FullTimestamp:      true,

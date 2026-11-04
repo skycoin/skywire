@@ -8,11 +8,11 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skysocks"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
@@ -22,7 +22,7 @@ import (
 // proxy, as a browser pointed at the proxy's SOCKS5 port does. The resolvers
 // are looked up on each page fetch: this app can start before the visor has
 // published them, and asking once at start left the names unanswered.
-func statusDialer(appCl *app.Client, log logrus.FieldLogger) meshgw.LocalDial {
+func statusDialer(appCl *app.Client, log logging.FieldLogger) meshgw.LocalDial {
 	if appCl == nil {
 		return nil
 	}

@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 )
 
@@ -44,7 +44,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		ui := pty.NewUI(pty.NetUIDialer(hostNet, hostAddr), conf)
-		logrus.
+		logging.StandardLogger().
 			WithField("addr", addr).
 			Info("Serving.")
 
@@ -58,7 +58,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		err := srv.ListenAndServe()
-		logrus.
+		logging.StandardLogger().
 			WithError(err).
 			Info("Stopped serving.")
 	},

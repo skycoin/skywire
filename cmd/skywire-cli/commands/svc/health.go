@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -269,7 +268,7 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []visorapi.ServiceHealthEntry 
 // that publish no discovery entry, because the direct client carries a
 // synthetic entry delegating only the pinned server.
 func queryServiceViaServer(cmd *cobra.Command) visorapi.ServiceHealthEntry {
-	logging.SetLevel(logrus.ErrorLevel)
+	logging.SetLevel(logging.ErrorLevel)
 	log := logging.MustGetLogger("svc-health")
 
 	entry := visorapi.ServiceHealthEntry{Name: "service", Status: "DOWN"}
@@ -489,7 +488,7 @@ func probeOneCarrier(ctx context.Context, srvPK cipher.PubKey, entry *disc.Entry
 }
 
 func probeServerCarriers(cmd *cobra.Command) {
-	logging.SetLevel(logrus.ErrorLevel)
+	logging.SetLevel(logging.ErrorLevel)
 	log := logging.MustGetLogger("svc-health")
 	pkHex := healthViaServer
 	if at := strings.IndexByte(pkHex, '@'); at > 0 {

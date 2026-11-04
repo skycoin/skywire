@@ -15,13 +15,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -70,7 +69,7 @@ func main() {
 		AppSrvAddr: *procAddr,
 		ProcKey:    pKey,
 	}
-	log := logrus.New()
+	log := logging.New()
 	appCl, err := app.NewClientFromConfig(log, procConfig, nil)
 	if err != nil {
 		print(fmt.Sprintf("Failed get new app client: %v\n", err))

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
@@ -73,7 +73,7 @@ and leaves the running proxy untouched.
 		// `proxy start --verbose` uses) scoped to this app's session, to
 		// stdout. We do NOT touch the app — ctrl+c just cancels ctx and
 		// detaches.
-		ctx, cancel := cmdutil.SignalContext(context.Background(), &logrus.Logger{})
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logging.Discard())
 		defer cancel()
 
 		vs, err := clirpc.OpenVerboseTo(ctx, clirpc.Addr, clirpc.VerboseFilter{

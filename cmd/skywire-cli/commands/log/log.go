@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-version"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/net/proxy"
@@ -590,7 +589,7 @@ func download(ctx context.Context, log *logging.Logger, httpC http.Client, targe
 }
 
 // downloadDmsg downloads a file from the given URL into 'w'.
-func downloadDmsg(ctx context.Context, log logrus.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
+func downloadDmsg(ctx context.Context, log logging.FieldLogger, httpC *http.Client, w io.Writer, urlStr string, maxSize int64) error {
 	req, err := http.NewRequest(http.MethodGet, urlStr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to formulate HTTP request.")
