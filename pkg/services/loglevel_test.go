@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/logging"
@@ -35,11 +34,11 @@ func TestNewLoggerBadLevelWarnsAndUsesInfo(t *testing.T) {
 	for _, bad := range []string{"inof", "DEBUGG", "verbose"} {
 		buf := restoreLogging(t)
 		setHosted(1)
-		logging.SetLevel(logrus.DebugLevel)
+		logging.SetLevel(logging.DebugLevel)
 
 		logger := NewLogger("tag_"+bad[:4], bad)
-		require.Equal(t, logrus.InfoLevel, logger.Level(), "bad level %q must fall back to info", bad)
-		require.Equal(t, logrus.InfoLevel, logging.GetLevel())
+		require.Equal(t, logging.InfoLevel, logger.Level(), "bad level %q must fall back to info", bad)
+		require.Equal(t, logging.InfoLevel, logging.GetLevel())
 
 		out := buf.String()
 		require.Contains(t, out, bad, "the warning must name the offending string")
@@ -51,8 +50,8 @@ func TestNewLoggerBadLevelWarnsAndUsesInfo(t *testing.T) {
 	// pretending the operator asked for something.
 	buf := restoreLogging(t)
 	setHosted(1)
-	logging.SetLevel(logrus.WarnLevel)
-	require.Equal(t, logrus.WarnLevel, NewLogger("empty_level", "").Level())
+	logging.SetLevel(logging.WarnLevel)
+	require.Equal(t, logging.WarnLevel, NewLogger("empty_level", "").Level())
 	require.Empty(t, buf.String())
 }
 
@@ -60,11 +59,11 @@ func TestNewLoggerBadLevelWarnsAndUsesInfo(t *testing.T) {
 func TestNewLoggerExplicitDebugUnchanged(t *testing.T) {
 	restoreLogging(t)
 	setHosted(1)
-	logging.SetLevel(logrus.InfoLevel)
+	logging.SetLevel(logging.InfoLevel)
 
 	logger := NewLogger("noisy_service", "debug")
-	require.Equal(t, logrus.DebugLevel, logger.Level())
-	require.Equal(t, logrus.DebugLevel, logging.GetLevel(),
+	require.Equal(t, logging.DebugLevel, logger.Level())
+	require.Equal(t, logging.DebugLevel, logging.GetLevel(),
 		"a single-service binary still sets the process-global level, so library packages follow")
 }
 
@@ -74,14 +73,14 @@ func TestNewLoggerExplicitDebugUnchanged(t *testing.T) {
 func TestNewLoggerTwoServicesKeepDifferentLevels(t *testing.T) {
 	buf := restoreLogging(t)
 	setHosted(2)
-	logging.SetLevel(logrus.WarnLevel)
+	logging.SetLevel(logging.WarnLevel)
 
 	noisy := NewLogger("service_noisy", "debug")
 	quiet := NewLogger("service_quiet", "error")
 
-	require.Equal(t, logrus.DebugLevel, noisy.Level())
-	require.Equal(t, logrus.ErrorLevel, quiet.Level())
-	require.Equal(t, logrus.WarnLevel, logging.GetLevel(),
+	require.Equal(t, logging.DebugLevel, noisy.Level())
+	require.Equal(t, logging.ErrorLevel, quiet.Level())
+	require.Equal(t, logging.WarnLevel, logging.GetLevel(),
 		"a hosted service must not move the process-global level")
 
 	buf.Reset()
@@ -96,8 +95,8 @@ func TestNewLoggerTwoServicesKeepDifferentLevels(t *testing.T) {
 
 	// Building them the other way round gives the same answer.
 	quiet2 := NewLogger("service_quiet2", "error")
-	require.Equal(t, logrus.DebugLevel, noisy.Level())
-	require.Equal(t, logrus.ErrorLevel, quiet2.Level())
+	require.Equal(t, logging.DebugLevel, noisy.Level())
+	require.Equal(t, logging.ErrorLevel, quiet2.Level())
 }
 
 // The shared (library) level the supervisor picks is the quietest any block
@@ -114,12 +113,12 @@ func TestSharedLogLevel(t *testing.T) {
 	require.NoError(t, err)
 	lvl, ok := sharedLogLevel(log, file)
 	require.True(t, ok)
-	require.Equal(t, logrus.ErrorLevel, lvl)
+	require.Equal(t, logging.ErrorLevel, lvl)
 
 	reversed := File{Services: []Block{file.Services[2], file.Services[1], file.Services[0]}}
 	lvl, ok = sharedLogLevel(log, reversed)
 	require.True(t, ok)
-	require.Equal(t, logrus.ErrorLevel, lvl)
+	require.Equal(t, logging.ErrorLevel, lvl)
 
 	// No block configured a level: leave the global alone.
 	none, err := ParseFile([]byte(`{"services":[{"type":"noop","name":"a"}]}`))
@@ -136,7 +135,7 @@ func TestSharedLogLevel(t *testing.T) {
 	require.NoError(t, err)
 	lvl, ok = sharedLogLevel(log, bad)
 	require.True(t, ok)
-	require.Equal(t, logrus.InfoLevel, lvl)
+	require.Equal(t, logging.InfoLevel, lvl)
 }
 
 // Block.UnmarshalJSON must surface log_level without disturbing Raw.

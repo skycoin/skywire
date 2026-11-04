@@ -62,8 +62,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -282,7 +280,7 @@ type StatsCXOPublisher struct {
 //
 // Best-effort: the HTTP routes stay the source of truth, so the caller
 // should log and continue if this returns an error.
-func StartStatsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*StatsCXOPublisher, error) {
+func StartStatsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*StatsCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-stats-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

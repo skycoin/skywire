@@ -5,7 +5,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -13,18 +12,18 @@ import (
 )
 
 // packetLogHook records every entry the logger emits.
-type packetLogHook struct{ entries []*logrus.Entry }
+type packetLogHook struct{ entries []*logging.Entry }
 
-func (h *packetLogHook) Levels() []logrus.Level { return logrus.AllLevels }
-func (h *packetLogHook) Fire(e *logrus.Entry) error {
+func (h *packetLogHook) Levels() []logging.Level { return logging.AllLevels }
+func (h *packetLogHook) Fire(e *logging.Entry) error {
 	h.entries = append(h.entries, e)
 	return nil
 }
 
-func packetLogger() (*logrus.Logger, *packetLogHook) {
-	l := logrus.New()
+func packetLogger() (*logging.MasterLogger, *packetLogHook) {
+	l := logging.New()
 	l.SetOutput(io.Discard)
-	l.SetLevel(logrus.TraceLevel)
+	l.SetLevel(logging.TraceLevel)
 	h := &packetLogHook{}
 	l.AddHook(h)
 	return l, h
@@ -41,7 +40,7 @@ func TestLogSUDPHPacketCostsNothingWhenOff(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	payload := []byte("SECRET-PAYLOAD-do-not-log")
 
-	logging.SetLevel(logrus.DebugLevel)
+	logging.SetLevel(logging.DebugLevel)
 	logSUDPHPacket(l, pk, "1.2.3.4:5", payload)
 	require.Empty(t, h.entries, "a per-packet line must not be emitted below trace")
 
@@ -57,7 +56,7 @@ func TestLogSUDPHPacketCostsNothingWhenOff(t *testing.T) {
 func TestLogSUDPHPacketOmitsPayload(t *testing.T) {
 	old := logging.GetLevel()
 	defer logging.SetLevel(old)
-	logging.SetLevel(logrus.TraceLevel)
+	logging.SetLevel(logging.TraceLevel)
 
 	l, h := packetLogger()
 	pk, _ := cipher.GenerateKeyPair()
@@ -67,7 +66,7 @@ func TestLogSUDPHPacketOmitsPayload(t *testing.T) {
 
 	require.Len(t, h.entries, 1)
 	e := h.entries[0]
-	require.Equal(t, logrus.TraceLevel, e.Level, "per-packet lines belong below debug")
+	require.Equal(t, logging.TraceLevel, e.Level, "per-packet lines belong below debug")
 	require.NotContains(t, e.Message, "SECRET-PAYLOAD", "the payload must never reach the log")
 	require.Contains(t, e.Message, "25 bytes")
 	require.Contains(t, e.Message, pk.String())

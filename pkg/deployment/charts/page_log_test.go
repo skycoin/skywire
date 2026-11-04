@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // A failed render is a 503 to the client and a logged reason on the server.
 func TestPageLogsRenderFailure(t *testing.T) {
 	var buf bytes.Buffer
-	log := logrus.New()
+	log := logging.New()
 	log.SetOutput(&buf)
 	p := &Page{
 		Title: "t",

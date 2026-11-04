@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -568,7 +568,7 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 	}
 	api.mirrorEdges(r.Context(), touchedEdges)
 
-	api.log(r).WithFields(logrus.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
+	api.log(r).WithFields(logging.Fields{"Number of Transports": len(tps), "Transports": tps}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, nil)
 }
 

@@ -17,7 +17,7 @@ import (
 
 	"github.com/0magnet/calvin"
 	"github.com/oschwald/geoip2-golang/v2"
-	"github.com/skycoin/skycoin/src/util/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"

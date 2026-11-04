@@ -40,8 +40,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/ar/arfeed"
@@ -127,7 +125,7 @@ type BindingsCXOPublisher struct {
 // Returns nil plus an error if the underlying treestore publisher cannot be
 // created; callers log and continue without it, HTTP staying the source of
 // truth.
-func StartBindingsCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, st store.Store, logger logrus.FieldLogger) (*BindingsCXOPublisher, error) {
+func StartBindingsCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, st store.Store, logger logging.FieldLogger) (*BindingsCXOPublisher, error) {
 	log := logging.MustGetLogger("ar-cxo-bindings-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

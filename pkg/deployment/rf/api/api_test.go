@@ -10,10 +10,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -67,7 +66,7 @@ func do(t *testing.T, api *API, method, target string, body io.Reader) *httptest
 }
 
 func newTestAPI(s store.Store) *API {
-	return New(s, logrus.New(), false, "dmsg://test:1")
+	return New(s, logging.New(), false, "dmsg://test:1")
 }
 
 func postRoutes(t *testing.T, api *API, reqBody rfclient.FindRoutesRequest) *httptest.ResponseRecorder {

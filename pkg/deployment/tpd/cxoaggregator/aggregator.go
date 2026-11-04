@@ -52,7 +52,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
@@ -478,7 +477,7 @@ func New(dmsgC *dmsg.Client, sk cipher.SecKey, sink Sink, conf Config) (*Aggrega
 			cfg.Logger.Prefix = "[tpd-cxo-aggregator:node] "
 			// Asked per line, so a log level changed at runtime takes
 			// effect without rebuilding the node.
-			cfg.Logger.DebugIf = func() bool { return logging.GetLevel() >= logrus.DebugLevel }
+			cfg.Logger.DebugIf = func() bool { return logging.GetLevel() >= logging.DebugLevel }
 			// Filter to the pins that diagnose Subscribe → Root
 			// delivery → fill chains. ConnPin is loud-on-startup but
 			// only one-shot; MsgPin would be too chatty (every Root +

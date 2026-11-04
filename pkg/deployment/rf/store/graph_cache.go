@@ -7,9 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // GraphCache holds ONE full-network graph, shared across every route request.
@@ -35,7 +34,7 @@ type GraphCache struct {
 	// (store.SharedLiveStore). Empty: always read store.
 	sharedURL string
 	refresh   time.Duration
-	log       logrus.FieldLogger
+	log       logging.FieldLogger
 	cur       atomic.Pointer[Graph]
 
 	// builtAt is when cur was built, in Unix nanoseconds.
@@ -61,7 +60,7 @@ const staleFactor = 4
 // build it and let requests keep it fresh, or Rebuild once for a synchronous
 // build. Until the first build completes Get returns nil and callers should fall
 // back to a per-request build.
-func NewGraphCache(s store.Store, refresh time.Duration, log logrus.FieldLogger) *GraphCache {
+func NewGraphCache(s store.Store, refresh time.Duration, log logging.FieldLogger) *GraphCache {
 	if refresh <= 0 {
 		refresh = DefaultCacheRefresh
 	}

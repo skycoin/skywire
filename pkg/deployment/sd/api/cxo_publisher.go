@@ -74,8 +74,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -130,7 +128,7 @@ const servicesKeepRoots = 60
 // mirror inherits that. Returns nil + error if the publisher can't be
 // created (no dmsg client, listener bind failure, etc.); callers log
 // and continue without it (the HTTP path remains the source of truth).
-func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*ServicesCXOPublisher, error) {
+func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*ServicesCXOPublisher, error) {
 	log := logging.MustGetLogger("sd-cxo-services-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

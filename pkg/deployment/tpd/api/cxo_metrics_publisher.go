@@ -57,8 +57,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/deployment/tpd/store"
@@ -127,7 +125,7 @@ type MetricsCXOPublisher struct {
 // client, listener bind failure, etc.); the caller should log and
 // continue without it. Treat the publisher as best-effort: the
 // existing HTTP /metrics route stays the source of truth.
-func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*MetricsCXOPublisher, error) {
+func StartMetricsCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*MetricsCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-metrics-pub")
 
 	// Thirty days of leaves, several MB each, would otherwise sit in the heap

@@ -23,8 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -83,7 +81,7 @@ type PerKeyCXOPublisher struct {
 // and TPD secret key and starts its ticker. The feed is open to any
 // subscriber, like the HTTP endpoint it mirrors. Best-effort: HTTP stays the
 // source of truth, so the caller should log and continue on error.
-func StartPerKeyCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*PerKeyCXOPublisher, error) {
+func StartPerKeyCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*PerKeyCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-perkey-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{

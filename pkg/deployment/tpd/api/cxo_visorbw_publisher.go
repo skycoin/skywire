@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -62,7 +60,7 @@ type VisorBWCXOPublisher struct {
 
 // StartVisorBWCXOPublisher starts the per-visor bandwidth feed on
 // DmsgTPDVisorBWCXOPort.
-func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logrus.FieldLogger) (*VisorBWCXOPublisher, error) {
+func StartVisorBWCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, logger logging.FieldLogger) (*VisorBWCXOPublisher, error) {
 	log := logging.MustGetLogger("tpd-cxo-visorbw-pub")
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
 		Logger:     log,

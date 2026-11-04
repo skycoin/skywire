@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	kcp "github.com/0magnet/kcp-go/v5"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -196,7 +194,7 @@ func (a *API) mirrorSUDPH(pk cipher.PubKey, data *addrresolver.VisorData) {
 // GetAll failure logs and skips that whole transport type. We do not
 // abort startup — AR continues serving HTTP either way, and live
 // Bind/DelBind traffic will gradually rebuild the mirror anyway.
-func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+func (a *API) BackfillDHTMirror(ctx context.Context, log logging.FieldLogger) {
 	if a.dhtMirrorStcpr == nil && a.dhtMirrorSudph == nil {
 		return
 	}
@@ -342,7 +340,7 @@ func (a *API) updateMetrics() {
 	a.metrics.SetClientsCount(int64(clientsCount))
 }
 
-func (a *API) logger(r *http.Request) logrus.FieldLogger {
+func (a *API) logger(r *http.Request) logging.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
@@ -721,7 +719,7 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 	for _, pk := range pks {
 		err := a.store.DelBind(ctx, netType, pk)
 		if err != nil {
-			a.log.WithFields(logrus.Fields{"PK": pk.Hex(), "Step": "Delete Bind"}).Error("Deregistration process interrupt.")
+			a.log.WithFields(logging.Fields{"PK": pk.Hex(), "Step": "Delete Bind"}).Error("Deregistration process interrupt.")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -737,7 +735,7 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	a.log.WithFields(logrus.Fields{"Number of Keys": len(pks), "Keys": pks, "Network Type": netType}).Info("Deregistration process completed.")
+	a.log.WithFields(logging.Fields{"Number of Keys": len(pks), "Keys": pks, "Network Type": netType}).Info("Deregistration process completed.")
 	httputil.WriteJSON(w, r, http.StatusOK, nil)
 }
 
@@ -1115,8 +1113,8 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 //
 // The level is trace, and guarded. Per-packet lines are noise in aggregate,
 // and reaching a logrus entry at all allocates even when the entry is
-// discarded, so the gate has to be here rather than inside logrus.
-func logSUDPHPacket(log logrus.FieldLogger, pk cipher.PubKey, fromAddr string, data []byte) {
+// discarded, so the gate has to be here rather than inside logging.
+func logSUDPHPacket(log logging.FieldLogger, pk cipher.PubKey, fromAddr string, data []byte) {
 	if !logging.TraceEnabled() {
 		return
 	}

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/fastjson"
@@ -36,7 +35,7 @@ const (
 )
 
 type redisStore struct {
-	log    logrus.FieldLogger
+	log    logging.FieldLogger
 	client *redis.Client
 	ttl    time.Duration
 

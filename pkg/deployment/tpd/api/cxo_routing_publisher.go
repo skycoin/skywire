@@ -28,8 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -95,7 +93,7 @@ type RoutingCXOPublisher struct {
 
 // StartRoutingCXOPublisher starts the routing feed on DmsgTPDRoutingCXOPort,
 // configured by cfg.
-func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, cfg RoutingFeedConfig, logger logrus.FieldLogger) (*RoutingCXOPublisher, error) {
+func StartRoutingCXOPublisher(ctx context.Context, api *API, dmsgC *dmsg.Client, sk cipher.SecKey, cfg RoutingFeedConfig, logger logging.FieldLogger) (*RoutingCXOPublisher, error) {
 	if cfg.Every <= 0 {
 		cfg.Every = DefaultRoutingPublishEvery
 	}
