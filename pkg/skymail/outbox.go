@@ -430,6 +430,8 @@ func (mb *Mailbox) RunOutbox(ctx context.Context) {
 	slots := make(chan struct{}, maxAttempts)
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for {
 		select {
 		case <-ctx.Done():
@@ -444,10 +446,10 @@ func (mb *Mailbox) RunOutbox(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			}
-			go func() {
+			wg.Go(func() {
 				defer func() { <-slots; mb.out.poke() }()
 				mb.attempt(ctx, id, helpers)
-			}()
+			})
 		}
 		timer.Reset(mb.out.wait(time.Now(), mb.Limits().MaxAge, helpers))
 	}
