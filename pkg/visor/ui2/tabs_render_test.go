@@ -44,6 +44,7 @@ func TestInfoRender(t *testing.T) {
 		RewardAddress:  "xpub",
 		RewardEligible: &no, RewardIneligibleReason: "old version",
 		ConfigVersion: "v1.3.100",
+		Connectivity:  &visorapi.Connectivity{State: visorapi.ConnOffline},
 	}, Ports: []KV{{"cli", "3435"}}}
 	out := renderEN(t, InfoPage(i))
 	require.Contains(t, out, pk.Hex())
@@ -53,6 +54,7 @@ func TestInfoRender(t *testing.T) {
 	require.Contains(t, out, "900 ms")
 	require.Contains(t, out, "vpn-client failed.")
 	require.Contains(t, out, "This visor has no transports.")
+	require.Contains(t, out, "Offline, waiting for network.")
 	require.Contains(t, out, "Not eligible for rewards: old version")
 	require.Contains(t, out, "The config was made by v1.3.100")
 	require.Contains(t, out, "2 hours")

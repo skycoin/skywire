@@ -518,6 +518,7 @@ return {
     node.rewardsAddress = response.reward_address;
     node.rewardEligible = response.reward_eligible;
     node.rewardIneligibleReason = response.reward_ineligible_reason;
+    node.connectivity = response.connectivity?.state;
 
     // Hypervisor relationships. `hypervisors` are the PKs the
     // visor was configured to report to (from skywire-config);

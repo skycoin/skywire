@@ -55,6 +55,9 @@ export class Node {
   // undefined = no verdict yet (never pushed / no reward address).
   rewardEligible?: boolean;
   rewardIneligibleReason?: string;
+  // The visor's own connectivity state, "connecting", "online" or "offline"
+  // (visorapi.Connectivity). undefined from visors older than the field.
+  connectivity?: string;
   countryCode?: string;
   regionName?: string;
   cityName?: string;
