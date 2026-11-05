@@ -110,6 +110,15 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			case strings.HasPrefix(rest, "coin/"):
 				serveAt(app, w, r, "/"+rest)
 				return
+			case rest == "ui2":
+				ui2Redirect(w, "ui2/")
+				return
+			// skycoin-web's server rendered wallet, and the assets, API and icon
+			// its pages load relative to /wallet/.
+			case strings.HasPrefix(rest, "ui2/"), strings.HasPrefix(rest, "assets/"),
+				strings.HasPrefix(rest, "api/"), rest == "favicon.ico":
+				serveAt(app, w, r, "/"+rest)
+				return
 			}
 		}
 		switch {

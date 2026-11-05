@@ -14,6 +14,8 @@ import (
 	wasmtinygo "github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 )
@@ -155,4 +157,45 @@ func TestWalletRequiresSession(t *testing.T) {
 		_ = resp.Body.Close() //nolint:errcheck
 		require.Equal(t, want, resp.StatusCode, path)
 	}
+}
+
+// TestWalletHandlerUI2 covers the paths of skycoin-web's /ui2 pages, which
+// go to the app only while it runs.
+func TestWalletHandlerUI2(t *testing.T) {
+	h := (&Hypervisor{}).walletHandler()
+	paths := []string{"ui2/", "ui2/status", "ui2/static/ui2.css", "assets/scripts/wasm_exec.js", "api/v1/csrf", "favicon.ico"}
+
+	for _, rest := range paths {
+		w := httptest.NewRecorder()
+		h(w, walletReq(rest))
+		require.Equal(t, http.StatusNotFound, w.Code, "%s without the app", rest)
+	}
+
+	app := &recordingApp{}
+	launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, app)
+	defer launcher.ClearHTTPHandler(skyenv.SkycoinWebName, app)
+
+	for _, rest := range paths {
+		w := httptest.NewRecorder()
+		h(w, walletReq(rest))
+		require.Equal(t, http.StatusTeapot, w.Code, rest)
+	}
+	require.Equal(t, []string{"/ui2/", "/ui2/status", "/ui2/static/ui2.css", "/assets/scripts/wasm_exec.js", "/api/v1/csrf", "/favicon.ico"}, app.got)
+
+	w := httptest.NewRecorder()
+	h(w, walletReq("ui2"))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.Equal(t, "ui2/", w.Header().Get("Location"), "relative, so it holds under any prefix")
+
+	w = httptest.NewRecorder()
+	h(w, walletReq(""))
+	require.Equal(t, "../#/wallet", w.Header().Get("Location"), "the wallet page is still the dashboard's")
+}
+
+// recordingApp stands in for the skycoin-web app, noting each path it gets.
+type recordingApp struct{ got []string }
+
+func (a *recordingApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.got = append(a.got, r.URL.Path)
+	w.WriteHeader(http.StatusTeapot)
 }
