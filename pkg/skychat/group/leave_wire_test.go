@@ -1,7 +1,9 @@
 package group
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -9,9 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
@@ -56,11 +60,53 @@ func TestLeaveFrameRemovesTheAuthenticatedAsker(t *testing.T) {
 	require.True(t, ack.Removed)
 	require.Equal(t, []cipher.PubKey{member}, asked)
 
+	// Over a route the asker is named by a routing.Addr.
+	ack, got = driveLeave(t, s, routing.Addr{PubKey: member, Port: 1}, LeaveMsg{Kind: frameKindLeave, GroupID: gid})
+	require.True(t, got, "a member leaving over a route got no answer")
+	require.True(t, ack.Removed)
+	require.Equal(t, []cipher.PubKey{member, member}, asked)
+
 	_, got = driveLeave(t, s, dmsg.Addr{PK: member, Port: 1}, LeaveMsg{Kind: frameKindLeave, GroupID: uuid.NewString()})
 	require.False(t, got, "answered a leave for another group")
 	_, got = driveLeave(t, s, plainAddr{}, LeaveMsg{Kind: frameKindLeave, GroupID: gid})
 	require.False(t, got, "answered an unauthenticated leave")
-	require.Len(t, asked, 1)
+	require.Len(t, asked, 2)
+}
+
+// deadRouteNetworker reaches a listener that reads a frame and hangs up, as a
+// half-open route or a refusing admin does.
+type deadRouteNetworker struct{ appnet.Networker }
+
+func (deadRouteNetworker) DialContext(context.Context, appnet.Addr) (net.Conn, error) {
+	near, far := net.Pipe()
+	go func() {
+		_, _ = message.ReadFrame(far) //nolint:errcheck
+		_ = far.Close()               //nolint:errcheck
+	}()
+	return near, nil
+}
+
+func (deadRouteNetworker) ListenContext(context.Context, appnet.Addr) (net.Listener, error) {
+	return nil, errors.New("no listener in this test")
+}
+
+// TestLeaveRetriesOverDmsgAfterADeadRoute: a route that takes the frame and
+// gives no answer must not lose the leave, as join does not lose a request.
+func TestLeaveRetriesOverDmsgAfterADeadRoute(t *testing.T) {
+	a, b := newGroupEnv(t)
+	rec, err := a.mgr.Create("open room", KindPublic, nil)
+	require.NoError(t, err)
+	_, err = b.mgr.Join(inviteFor(t, a, rec.ID))
+	require.NoError(t, err)
+
+	require.NoError(t, appnet.AddNetworker(appnet.TypeSkynet, deadRouteNetworker{}))
+	t.Cleanup(appnet.ClearNetworkers)
+
+	require.NoError(t, b.mgr.Leave(rec.ID))
+	require.Eventually(t, func() bool {
+		r, _, err := a.store.Get(rec.ID)
+		return err == nil && !containsPK(r.Members, b.pk)
+	}, 30*time.Second, 100*time.Millisecond, "the founder still lists a member that left")
 }
 
 // TestLateLeaveKeepsAMemberAddedBack: a leave sent before the member was added

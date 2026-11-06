@@ -112,17 +112,31 @@ func AnnounceLeave(ctx context.Context, dmsgC *dmsg.Client, groupID string, cand
 
 func leaveRoundTrip(ctx context.Context, dmsgC *dmsg.Client, admin cipher.PubKey, relayPort uint16, body []byte) (LeaveAck, error) {
 	conn, err := dialSkynetRelay(ctx, appnet.Addr{Net: appnet.TypeSkynet, PubKey: admin, Port: routing.Port(relayPort)})
-	if err != nil {
-		if dmsgC == nil {
-			return LeaveAck{}, err
-		}
-		dialCtx, cancel := context.WithTimeout(ctx, joinResponseReadTimeout)
-		defer cancel()
-		if conn, err = dmsgC.DialStream(dialCtx, dmsg.Addr{PK: admin, Port: relayPort}); err != nil {
-			return LeaveAck{}, fmt.Errorf("group: leave: dial %s: %w", admin, err)
+	if err == nil {
+		var ack LeaveAck
+		ack, err = leaveExchange(conn, body)
+		_ = conn.Close() //nolint:errcheck
+		if err == nil {
+			return ack, nil
 		}
 	}
-	defer conn.Close()                                            //nolint:errcheck
+	// Dmsg next, as SendJoinRequest does: a route can reach a listener and
+	// still get no answer.
+	if dmsgC == nil {
+		return LeaveAck{}, err
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, joinResponseReadTimeout)
+	defer cancel()
+	stream, err := dmsgC.DialStream(dialCtx, dmsg.Addr{PK: admin, Port: relayPort})
+	if err != nil {
+		return LeaveAck{}, fmt.Errorf("group: leave: dial %s: %w", admin, err)
+	}
+	defer stream.Close() //nolint:errcheck
+	return leaveExchange(stream, body)
+}
+
+// leaveExchange writes the leave frame and reads the admin's answer.
+func leaveExchange(conn net.Conn, body []byte) (LeaveAck, error) {
 	_ = conn.SetDeadline(time.Now().Add(joinResponseReadTimeout)) //nolint:errcheck
 	if err := message.WriteFrame(conn, body); err != nil {
 		return LeaveAck{}, fmt.Errorf("group: leave: write: %w", err)
