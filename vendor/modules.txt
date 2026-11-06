@@ -1007,7 +1007,7 @@ github.com/shopspring/decimal
 # github.com/sirupsen/logrus v1.10.2
 ## explicit; go 1.23
 github.com/sirupsen/logrus
-# github.com/skycoin/skycoin v0.28.8-0.20261105175805-bec4e85f94ec
+# github.com/skycoin/skycoin v0.28.8-0.20261106045634-4e617d33e8d5
 ## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
