@@ -200,6 +200,15 @@ func TestGroupParkWiring(t *testing.T) {
 	sender.async.cache[rcptC.LocalPK()] = cachedRecord{rec: *st.Inbox.Record, at: time.Now()}
 	sender.async.mu.Unlock()
 
+	require.NoError(t, sender.groupParker(rcptC.LocalPK(), []byte(`{"kind":"x"}`)))
+
+	held, err := rcpt.asyncPeek([]uint16{skychatgroup.ParkPort})
+	require.NoError(t, err)
+	require.Len(t, held, 1)
+	require.NotContains(t, string(held[0].Payload), `"kind"`, "the host must hold it sealed")
+
+	// The inbox loop's first cycle may still be running, and it fetches every
+	// port with a handler, so set the handler only after the peek.
 	type frame struct {
 		from    cipher.PubKey
 		payload []byte
@@ -209,13 +218,6 @@ func TestGroupParkWiring(t *testing.T) {
 		got <- frame{from, p}
 		return nil
 	}))
-	require.NoError(t, sender.groupParker(rcptC.LocalPK(), []byte(`{"kind":"x"}`)))
-
-	held, err := rcpt.asyncPeek([]uint16{skychatgroup.ParkPort})
-	require.NoError(t, err)
-	require.Len(t, held, 1)
-	require.NotContains(t, string(held[0].Payload), `"kind"`, "the host must hold it sealed")
-
 	require.NoError(t, rcpt.DmsgAsyncSync())
 	select {
 	case f := <-got:
