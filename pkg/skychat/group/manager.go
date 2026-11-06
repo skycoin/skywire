@@ -548,13 +548,18 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	if slices.Contains(r.Members, pk) {
 		return r, nil // already present, idempotent
 	}
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if live {
+		// Before the store write: a leave that finds the member back on the
+		// roster must also find when it came back. See handleLeave.
+		sess.noteLocalMutation(familyRoster, pk, time.Now().UTC())
+	}
 	r.Members = append(r.Members, pk)
 	if err := m.store.Put(r); err != nil {
 		return Record{}, fmt.Errorf("group: AddMember: store: %w", err)
 	}
-	m.mu.RLock()
-	sess, live := m.sessions[id]
-	m.mu.RUnlock()
 	if live {
 		// AddMember is additive so evicted is typically empty here,
 		// but route the result through peerReconnectClear anyway so

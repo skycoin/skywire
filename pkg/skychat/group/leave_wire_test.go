@@ -63,6 +63,32 @@ func TestLeaveFrameRemovesTheAuthenticatedAsker(t *testing.T) {
 	require.Len(t, asked, 1)
 }
 
+// TestLateLeaveKeepsAMemberAddedBack: a leave sent before the member was added
+// back does not remove it again, and a leave sent after that still does.
+func TestLateLeaveKeepsAMemberAddedBack(t *testing.T) {
+	gid := uuid.NewString()
+	member, _ := cipher.GenerateKeyPair()
+	addedBack := time.Now().UTC()
+	s := &Session{
+		cfg:          Config{Record: Record{ID: gid}},
+		log:          logging.MustGetLogger("group.leave-test"),
+		mutationSeen: map[string]time.Time{watermarkKey(familyRoster, member): addedBack},
+	}
+	asked := 0
+	s.SetLeaveHandler(func(cipher.PubKey) bool { asked++; return true })
+	from := dmsg.Addr{PK: member, Port: 1}
+
+	ack, got := driveLeave(t, s, from, LeaveMsg{Kind: frameKindLeave, GroupID: gid, TS: addedBack.Add(-time.Second)})
+	require.True(t, got, "the member got no answer")
+	require.True(t, ack.Removed, "a late leave must count as done, or the member asks the next admin")
+	require.Zero(t, asked, "a late leave removed a member that was added back")
+
+	ack, got = driveLeave(t, s, from, LeaveMsg{Kind: frameKindLeave, GroupID: gid, TS: addedBack.Add(time.Second)})
+	require.True(t, got, "the member got no answer")
+	require.True(t, ack.Removed)
+	require.Equal(t, 1, asked, "a leave sent after the add was ignored")
+}
+
 // TestLeaveTakesTheMemberOffTheAdminsRoster: the founder stops listing a
 // member as soon as the member leaves.
 func TestLeaveTakesTheMemberOffTheAdminsRoster(t *testing.T) {

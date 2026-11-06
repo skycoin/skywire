@@ -72,8 +72,11 @@ func (s *Session) handleLeave(c net.Conn, payload []byte) {
 	}
 	s.membersMu.RLock()
 	handler := s.onLeave
+	// A leave older than the member's last roster change must not undo it.
+	// Answered as done, so the member does not take it to another admin.
+	stale := msg.TS.Before(s.mutationSeen[watermarkKey(familyRoster, pk)])
 	s.membersMu.RUnlock()
-	removed := handler != nil && handler(pk)
+	removed := stale || (handler != nil && handler(pk))
 	body, err := json.Marshal(LeaveAck{Kind: frameKindLeaveAck, Removed: removed})
 	if err != nil {
 		return
@@ -81,7 +84,7 @@ func (s *Session) handleLeave(c net.Conn, payload []byte) {
 	if err := message.WriteFrame(c, body); err != nil {
 		s.log.WithError(err).Debug("group: leave: write answer")
 	}
-	s.log.WithField("member", pk.Hex()).WithField("removed", removed).Info("group: leave: member left")
+	s.log.WithField("member", pk.Hex()).WithField("removed", removed).WithField("stale", stale).Info("group: leave: member left")
 }
 
 // AnnounceLeave asks each candidate admin in turn to take this visor off
