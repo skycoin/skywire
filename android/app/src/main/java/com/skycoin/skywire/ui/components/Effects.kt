@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.Dp
  * The design's one piece of ambient motion: a disc that swells from a
  * control and fades as it goes, over and over. Drawn *behind* whatever it
  * belongs to — the caller stacks it under the control in a Box. Used by the
- * bar's cloud button and Home's Connect while the phone is on the network.
+ * bar's cloud button and Home's Connect while the phone is connecting. Show it
+ * only for that long: it redraws the whole window at the display's full rate.
  */
 @Composable
 fun PulseRing(size: Dp, color: Color, modifier: Modifier = Modifier) {

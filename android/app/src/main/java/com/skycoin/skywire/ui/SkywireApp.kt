@@ -67,6 +67,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.CoreServiceState
+import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.UpdateNotice
 import com.skycoin.skywire.core.VoiceCalls
@@ -602,8 +604,8 @@ private fun NavSlot(
 /**
  * The raised cloud: brand gradient under the Skycoin mark, a ring of the
  * shell's own color so it reads as punched *through* the bar, and a slow
- * pulse behind it — the bar's one piece of motion, on the one control that
- * is always worth a look.
+ * pulse behind it while the core is on its way up. Only then: the pulse makes
+ * the whole window redraw, which on a phone costs most of a CPU core.
  */
 @Composable
 private fun CloudButton(
@@ -612,9 +614,12 @@ private fun CloudButton(
     modifier: Modifier = Modifier,
 ) {
     val hubLabel = stringResource(R.string.tab_hub_description)
+    val core by CoreServiceState.state.collectAsState()
 
     Box(contentAlignment = Alignment.Center, modifier = modifier) {
-        PulseRing(size = CLOUD_SIZE, color = MaterialTheme.colorScheme.primary)
+        if (core is CoreState.Starting || core is CoreState.Restarting) {
+            PulseRing(size = CLOUD_SIZE, color = MaterialTheme.colorScheme.primary)
+        }
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
