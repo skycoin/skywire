@@ -21,11 +21,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/cmdutil"
 
 	cdplog "github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
@@ -85,10 +84,23 @@ func getJSON(u string, v interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
+// browserPath returns HVINSPECT_BROWSER, or the first Brave or Chromium found on PATH.
+func browserPath() string {
+	if p := os.Getenv("HVINSPECT_BROWSER"); p != "" {
+		return p
+	}
+	for _, name := range []string{"brave", "brave-browser", "brave-browser-nightly", "chromium", "google-chrome"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return "brave"
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		cmdutil.Eprintln("usage: hvinspect <url> [waitSeconds] [outPrefix]")
-		cmdutil.Exit(2)
+		fmt.Fprintln(os.Stderr, "usage: hvinspect <url> [waitSeconds] [outPrefix]")
+		os.Exit(2)
 	}
 	url := os.Args[1]
 	wait := 7 * time.Second
@@ -116,14 +128,14 @@ func main() {
 	if attach {
 		ws, tid, err := resolveCDP(cdpBase, url)
 		if err != nil {
-			cmdutil.Eprintln("CDP attach:", err)
-			cmdutil.Exit(1)
+			fmt.Fprintln(os.Stderr, "CDP attach:", err)
+			os.Exit(1)
 		}
 		attachID = tid
 		allocCtx, cancelA = chromedp.NewRemoteAllocator(context.Background(), ws)
 	} else {
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.ExecPath("/usr/bin/brave"),
+			chromedp.ExecPath(browserPath()),
 			chromedp.Flag("headless", true),
 			chromedp.Flag("ignore-certificate-errors", true),
 			chromedp.Flag("no-sandbox", true),
@@ -262,7 +274,7 @@ func main() {
 		chromedp.FullScreenshot(&shot, 80),
 	)
 	if err := chromedp.Run(ctx, actions...); err != nil {
-		cmdutil.Eprintln("inspect error:", err)
+		fmt.Fprintln(os.Stderr, "inspect error:", err)
 		// still write whatever we captured
 	}
 
@@ -273,15 +285,15 @@ func main() {
 		_ = os.WriteFile(outPrefix+".png", shot, 0o644)
 	}
 	if evalExpr != "" {
-		cmdutil.Printf("---- eval ----\n%s\n", evalResult)
+		fmt.Printf("---- eval ----\n%s\n", evalResult)
 	}
-	cmdutil.Printf("---- network (%d) ----\n%s\n", len(netlog), strings.Join(netlog, "\n"))
+	fmt.Printf("---- network (%d) ----\n%s\n", len(netlog), strings.Join(netlog, "\n"))
 
-	cmdutil.Printf("=== %s ===\n", url)
-	cmdutil.Printf("DOM: %s.html (%d bytes)  screenshot: %s.png  console: %d lines\n",
+	fmt.Printf("=== %s ===\n", url)
+	fmt.Printf("DOM: %s.html (%d bytes)  screenshot: %s.png  console: %d lines\n",
 		outPrefix, len(html), outPrefix, len(console))
-	cmdutil.Println("---- console ----")
+	fmt.Println("---- console ----")
 	for _, l := range console {
-		cmdutil.Println(l)
+		fmt.Println(l)
 	}
 }
