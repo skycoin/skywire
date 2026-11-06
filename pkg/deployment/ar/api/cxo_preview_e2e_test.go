@@ -159,6 +159,10 @@ func TestPreviewFallsBackOnASparseTree(t *testing.T) {
 	// Publish ONLY the buckets that have content, so both levels are sparse.
 	target, _ := cipher.GenerateKeyPair()
 	other, _ := cipher.GenerateKeyPair()
+	// A shared bucket would hold only the second key, about 1 run in 274.
+	for arfeed.BucketPath(other) == arfeed.BucketPath(target) {
+		other, _ = cipher.GenerateKeyPair()
+	}
 	for _, pk := range []cipher.PubKey{target, other} {
 		blob, eerr := arfeed.EncodeBucket(map[cipher.PubKey]*arfeed.PeerBindings{
 			pk: {STCPR: &addrresolver.VisorData{RemoteAddr: "198.51.100.9:1234"}},
