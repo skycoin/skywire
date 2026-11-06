@@ -772,6 +772,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Per-member subscribers: each non-owner-self member publishes
 	// their own message feed at memberPK:Record.Port. Owner follows
@@ -958,6 +959,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Admin-aggregator topology (post-#2685 signed leaves):
 	//
@@ -2759,6 +2761,16 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 // that replaces the four-flag tangle (subAlive bool +
 // lastHeartbeatNs + LastMessageAt + Status's health semantics).
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, false)
+}
+
+// onRecovered takes the leaves a restored visor got back from a peer. Its own
+// posts count here, since it holds no copy and no local echo will come.
+func (s *Session) onRecovered(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, true)
+}
+
+func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 	if len(events) > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
 	}
@@ -2956,7 +2968,7 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		// member sees its own message echoed back after sending. The UI shows
 		// local sends optimistically, so the round-tripped copy is a duplicate.
 		// (Owner-role self-echo is delivered separately from publishAs, not here.)
-		if msg.SenderPK == s.cfg.MyPK {
+		if msg.SenderPK == s.cfg.MyPK && !ownToo {
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)

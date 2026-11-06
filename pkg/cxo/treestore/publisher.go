@@ -107,6 +107,9 @@ type Publisher struct {
 	// Config.DropPublishedLeaves).
 	dropLeaves bool
 
+	// onRecovered receives what a newer Root of this feed brought back. Under mu.
+	onRecovered UpdateCallback
+
 	// keepRoots is how many Roots runCleanup keeps (see Config.KeepRoots).
 	keepRoots int
 
@@ -447,6 +450,9 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		conf.Logger.WithError(err).
 			Warn("treestore-pub: hydrate from container failed; starting with empty tree (any previously-published leaves will not be in the next published Root)")
 	}
+	if !p.dropLeaves {
+		p.watchOwnFeed()
+	}
 	go p.runLoop()
 	go p.runCleanupLoop()
 	return p, nil
@@ -478,32 +484,9 @@ func (p *Publisher) hydrateFromContainer() error {
 	if r == nil || len(r.Refs) == 0 {
 		return nil
 	}
-	skyfromCipher := skycipher.SecKey(p.sk)
-	up, err := c.Unpack(skyfromCipher, Registry)
+	hydrated, err := p.treeOf(r)
 	if err != nil {
-		return fmt.Errorf("Unpack: %w", err)
-	}
-	defer up.Close() //nolint:errcheck
-
-	var rootNode TreeNode
-	if err := r.Refs[0].Value(up, &rootNode); err != nil {
-		return fmt.Errorf("decode root TreeNode: %w", err)
-	}
-	hydrated := newMemNode()
-	var dropped []string
-	if err := hydrateMemNode(up, &rootNode, hydrated, &dropped, "", p.dropLeaves); err != nil {
-		return fmt.Errorf("walk: %w", err)
-	}
-	// A dangling sub-object reference (the filling-trap's persisted form:
-	// a placeholder whose CXDS backing never landed) no longer discards the
-	// WHOLE previously-published tree. hydrateMemNode skips only the affected
-	// subtree; here we surface exactly which object(s) trapped so the culprit
-	// hash is identifiable, then keep the intact remainder as our starting
-	// state. This bounds the TPD under-report to the trapped subtree instead
-	// of dropping every transport this visor had published.
-	if len(dropped) > 0 {
-		p.log.WithField("dropped", dropped).
-			Warn("treestore-pub: hydrate skipped dangling sub-object refs (filling-trap culprits); kept the intact subtrees")
+		return err
 	}
 	p.root = hydrated
 	return nil
