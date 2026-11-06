@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { TranslateService } from '@ngx-translate/core';
 import { ActivatedRoute } from '@angular/router';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, of } from 'rxjs';
@@ -78,6 +79,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private formBuilder: UntypedFormBuilder,
     private changeDetectorRef: ChangeDetectorRef,
+    private translate: TranslateService,
   ) {
     this.rewardForm = this.formBuilder.group({
       address: ['', Validators.compose([
@@ -179,7 +181,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
       `api/rewards/skycoin-rewards/visor/${this.pk}?days=${this.days}`
     ).pipe(
       catchError(err => {
-        this.errorMsg = 'Failed to load reward data';
+        this.errorMsg = 'node.details.rewards-info.history.load-error';
 
         return of({ history: [] });
       })
@@ -199,7 +201,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
 
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return d.toLocaleDateString(this.translate.getCurrentLang() || 'en', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   statusClass(day: RewardDay): string {
@@ -212,10 +214,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 
   statusText(day: RewardDay): string {
     if (!day.amount || day.amount === 0) {
- return 'No reward'; 
+ return 'node.details.rewards-info.history.status-none'; 
 }
 
-    return day.sent ? 'Sent' : 'Pending';
+    return day.sent ? 'node.details.rewards-info.history.status-sent' : 'node.details.rewards-info.history.status-pending';
   }
 
   /** True when the configured reward address is actually a BIP44
