@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "sources": [
+    "src/app/utils/app-status.spec.ts"
+  ],
+  "sourcesContent": [
+    "import { appStatusDot, appStatusTone, portLabel } from './app-status';\n\ndescribe('app status colours', () => {\n  it('uses grey for stopped and red only for failed', () => {\n    expect(appStatusDot(0)).toBe('dot-grey');\n    expect(appStatusDot(1)).toBe('dot-green');\n    expect(appStatusDot(2)).toBe('dot-red');\n    expect(appStatusDot(3)).toBe('dot-yellow');\n  });\n\n  it('treats an unknown status as stopped', () => {\n    expect(appStatusTone(7)).toBe('stopped');\n  });\n});\n\ndescribe('portLabel', () => {\n  it('shows a dash for a service with no port', () => {\n    expect(portLabel(0)).toBe('—');\n    expect(portLabel(undefined)).toBe('—');\n    expect(portLabel(44)).toBe('44');\n  });\n});\n"
+  ],
+  "mappings": ";;;;;;;;AAEA,SAAS,sBAAsB,MAAK;AAClC,KAAG,iDAAiD,MAAK;AACvD,WAAO,aAAa,CAAC,CAAC,EAAE,KAAK,UAAU;AACvC,WAAO,aAAa,CAAC,CAAC,EAAE,KAAK,WAAW;AACxC,WAAO,aAAa,CAAC,CAAC,EAAE,KAAK,SAAS;AACtC,WAAO,aAAa,CAAC,CAAC,EAAE,KAAK,YAAY;EAC3C,CAAC;AAED,KAAG,uCAAuC,MAAK;AAC7C,WAAO,cAAc,CAAC,CAAC,EAAE,KAAK,SAAS;EACzC,CAAC;AACH,CAAC;AAED,SAAS,aAAa,MAAK;AACzB,KAAG,2CAA2C,MAAK;AACjD,WAAO,UAAU,CAAC,CAAC,EAAE,KAAK,QAAG;AAC7B,WAAO,UAAU,MAAS,CAAC,EAAE,KAAK,QAAG;AACrC,WAAO,UAAU,EAAE,CAAC,EAAE,KAAK,IAAI;EACjC,CAAC;AACH,CAAC;",
+  "names": [],
+  "debugId": "8a0e7778-2d5d-5876-8329-deb4e3f273a4"
+}

@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "sources": [
+    "src/app/utils/reward-address.ts"
+  ],
+  "sourcesContent": [
+    "import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';\n\n/**\n * Accepts an account xpub, an empty field, or a single address when acceptRisk\n * returns true. The visor still refuses a single address that has sent coins.\n */\nexport function rewardAddressValidator(acceptRisk: () => boolean): ValidatorFn {\n  return (c: AbstractControl): ValidationErrors | null => {\n    const v = ((c.value as string) || '').trim();\n    if (!v || v.startsWith('xpub') || acceptRisk()) {\n      return null;\n    }\n\n    return { xpubRequired: true };\n  };\n}\n\n/** Whether a save of address needs the single address opt-in sent. */\nexport function needsAcceptRisk(address: string, acceptRisk: boolean): boolean {\n  const v = (address || '').trim();\n\n  return acceptRisk && !!v && !v.startsWith('xpub');\n}\n"
+  ],
+  "mappings": ";AAMM,SAAU,uBAAuB,YAAyB;AAC9D,SAAO,CAAC,MAA+C;AACrD,UAAM,KAAM,EAAE,SAAoB,IAAI,KAAI;AAC1C,QAAI,CAAC,KAAK,EAAE,WAAW,MAAM,KAAK,WAAU,GAAI;AAC9C,aAAO;IACT;AAEA,WAAO,EAAE,cAAc,KAAI;EAC7B;AACF;AAGM,SAAU,gBAAgB,SAAiB,YAAmB;AAClE,QAAM,KAAK,WAAW,IAAI,KAAI;AAE9B,SAAO,cAAc,CAAC,CAAC,KAAK,CAAC,EAAE,WAAW,MAAM;AAClD;",
+  "names": [],
+  "debugId": "baea7dbf-6fe9-54f5-8dc0-ce90993fb3e7"
+}

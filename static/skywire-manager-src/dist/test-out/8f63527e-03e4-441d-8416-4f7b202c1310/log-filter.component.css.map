@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/pages/node/apps/node-apps-list/log/log-filter/log-filter.component.scss"],
+  "sourcesContent": ["@use \"variables\";\n\nmat-form-field {\n  margin-bottom: -(variables.$mat-dialog-padding);\n}\n"],
+  "mappings": ";AAEA;AACE,iBAAA;;",
+  "names": []
+}

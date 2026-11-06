@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "sources": [
+    "src/app/components/pages/node-list/node-list.versions.spec.ts"
+  ],
+  "sourcesContent": [
+    "import { compareVersions, versionParts } from './node-list.component';\n\n// The Outdated chip compares visor versions with these. A wrong order would\n// flag current visors or hide old ones.\ndescribe('node list version order', () => {\n  it('parses tagged and post-tag versions', () => {\n    expect(versionParts('v1.3.103')).toEqual([1, 3, 103, 0]);\n    expect(versionParts('v1.3.103-122-g7845bbc81-7845bbc81358')).toEqual([1, 3, 103, 122]);\n    expect(versionParts('1.3.104')).toEqual([1, 3, 104, 0]);\n  });\n\n  it('gives null for a build name that is not a version', () => {\n    expect(versionParts('develop-latest-tinygo-cores-7845bbc81358')).toBeNull();\n    expect(versionParts(undefined)).toBeNull();\n  });\n\n  it('orders by release, then by commits after the tag', () => {\n    const order = ['v1.3.99', 'v1.3.103', 'v1.3.103-5-gabc', 'v1.3.103-122-gdef', 'v1.3.104', 'v1.4.0']\n      .map(v => versionParts(v) as number[]);\n    for (let i = 1; i < order.length; i++) {\n      expect(compareVersions(order[i - 1], order[i])).toBeLessThan(0);\n    }\n    expect(compareVersions(order[2], order[2])).toBe(0);\n  });\n});\n"
+  ],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;AAIA,SAAS,2BAA2B,MAAK;AACvC,KAAG,uCAAuC,MAAK;AAC7C,WAAO,aAAa,UAAU,CAAC,EAAE,QAAQ,CAAC,GAAG,GAAG,KAAK,CAAC,CAAC;AACvD,WAAO,aAAa,sCAAsC,CAAC,EAAE,QAAQ,CAAC,GAAG,GAAG,KAAK,GAAG,CAAC;AACrF,WAAO,aAAa,SAAS,CAAC,EAAE,QAAQ,CAAC,GAAG,GAAG,KAAK,CAAC,CAAC;EACxD,CAAC;AAED,KAAG,qDAAqD,MAAK;AAC3D,WAAO,aAAa,0CAA0C,CAAC,EAAE,SAAQ;AACzE,WAAO,aAAa,MAAS,CAAC,EAAE,SAAQ;EAC1C,CAAC;AAED,KAAG,oDAAoD,MAAK;AAC1D,UAAM,QAAQ,CAAC,WAAW,YAAY,mBAAmB,qBAAqB,YAAY,QAAQ,EAC/F,IAAI,OAAK,aAAa,CAAC,CAAa;AACvC,aAAS,IAAI,GAAG,IAAI,MAAM,QAAQ,KAAK;AACrC,aAAO,gBAAgB,MAAM,IAAI,CAAC,GAAG,MAAM,CAAC,CAAC,CAAC,EAAE,aAAa,CAAC;IAChE;AACA,WAAO,gBAAgB,MAAM,CAAC,GAAG,MAAM,CAAC,CAAC,CAAC,EAAE,KAAK,CAAC;EACpD,CAAC;AACH,CAAC;",
+  "names": [],
+  "debugId": "a2a56b60-8754-5e66-b7a1-3352766bc5bf"
+}

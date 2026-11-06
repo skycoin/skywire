@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/layout/filters-selection/filters-selection.component.scss"],
+  "sourcesContent": [".image-container {\n  display: inline-block;\n  background-size: contain;\n  margin-right: 5px;\n\n  .image {\n    background-size: contain;\n    width: 100%;\n    height: 100%;\n  }\n}\n"],
+  "mappings": ";AAAA,CAAA;AACE,WAAA;AACA,mBAAA;AACA,gBAAA;;AAEA,CALF,gBAKE,CAAA;AACE,mBAAA;AACA,SAAA;AACA,UAAA;;",
+  "names": []
+}

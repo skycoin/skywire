@@ -1,0 +1,12 @@
+{
+  "version": 3,
+  "sources": [
+    "src/app/utils/node-tabs.spec.ts"
+  ],
+  "sourcesContent": [
+    "import { isRemoteVisor, nodePaletteTabs, nodeTabsData } from './node-tabs';\n\nconst local = '02' + 'a'.repeat(64);\nconst remote = '03' + 'b'.repeat(64);\n\nconst hasChat = (tabs: { label: string }[]) => tabs.some(t => t.label === 'node.tabs.chat');\n\ndescribe('node tabs for a remote visor', () => {\n  it('knows a remote visor from the local one', () => {\n    expect(isRemoteVisor(remote, local)).toBeTrue();\n    expect(isRemoteVisor(local, local)).toBeFalse();\n    // Before /api/about answers nothing counts as remote.\n    expect(isRemoteVisor(remote, undefined)).toBeFalse();\n    expect(isRemoteVisor(undefined, local)).toBeFalse();\n  });\n\n  it('drops the Chat tab only for a remote visor', () => {\n    expect(hasChat(nodeTabsData(local, false))).toBeTrue();\n    expect(hasChat(nodeTabsData(remote, false, true))).toBeFalse();\n    expect(hasChat(nodePaletteTabs(remote, false, true))).toBeFalse();\n    expect(nodeTabsData(remote, false, true).length).toBe(nodeTabsData(remote, false).length - 1);\n  });\n});\n"
+  ],
+  "mappings": ";;;;;;;;AAEA,IAAM,QAAQ,OAAO,IAAI,OAAO,EAAE;AAClC,IAAM,SAAS,OAAO,IAAI,OAAO,EAAE;AAEnC,IAAM,UAAU,CAAC,SAA8B,KAAK,KAAK,OAAK,EAAE,UAAU,gBAAgB;AAE1F,SAAS,gCAAgC,MAAK;AAC5C,KAAG,2CAA2C,MAAK;AACjD,WAAO,cAAc,QAAQ,KAAK,CAAC,EAAE,SAAQ;AAC7C,WAAO,cAAc,OAAO,KAAK,CAAC,EAAE,UAAS;AAE7C,WAAO,cAAc,QAAQ,MAAS,CAAC,EAAE,UAAS;AAClD,WAAO,cAAc,QAAW,KAAK,CAAC,EAAE,UAAS;EACnD,CAAC;AAED,KAAG,8CAA8C,MAAK;AACpD,WAAO,QAAQ,aAAa,OAAO,KAAK,CAAC,CAAC,EAAE,SAAQ;AACpD,WAAO,QAAQ,aAAa,QAAQ,OAAO,IAAI,CAAC,CAAC,EAAE,UAAS;AAC5D,WAAO,QAAQ,gBAAgB,QAAQ,OAAO,IAAI,CAAC,CAAC,EAAE,UAAS;AAC/D,WAAO,aAAa,QAAQ,OAAO,IAAI,EAAE,MAAM,EAAE,KAAK,aAAa,QAAQ,KAAK,EAAE,SAAS,CAAC;EAC9F,CAAC;AACH,CAAC;",
+  "names": [],
+  "debugId": "1c04b9b3-c2f4-5b52-b2aa-62b56696e743"
+}
