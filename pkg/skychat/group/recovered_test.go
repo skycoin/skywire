@@ -1,6 +1,7 @@
 package group
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -40,4 +41,35 @@ func TestOnlyARecoveredOwnPostReachesTheHandler(t *testing.T) {
 	s, box = session()
 	s.onRecovered(events)
 	require.True(t, hasText("after the backup")(box.snapshot()), "the recovered post was not delivered")
+}
+
+// The session's own heartbeat is a post on the feed, so it must wait for a
+// connection too, or a lone owner climbs past its members' Root seq.
+func TestOwnerHeartbeatWaitsForAConnection(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
+	pub, err := treestore.NewWithTCP("127.0.0.1:0", sk, treestore.PubConfig{InMemoryDB: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
+	s, _ := reconcileSession(t, pk, sk, Record{ID: uuid.NewString(), OwnerPK: pk, Members: []cipher.PubKey{pk}})
+	s.pub = pub
+
+	leaves := func() int {
+		n := 0
+		pub.Walk(MessagePathPrefix, func(string, []byte) bool { n++; return true })
+		return n
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.heartbeatWG.Add(1)
+	go s.runHeartbeatLoop(ctx, 5*time.Millisecond)
+	t.Cleanup(func() { cancel(); s.heartbeatWG.Wait() })
+
+	time.Sleep(100 * time.Millisecond)
+	require.Zero(t, leaves(), "a heartbeat went out with nobody connected")
+
+	sub, err := treestore.NewSubscriberTCP("", pk, treestore.SubConfig{InMemoryDB: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Close() }) //nolint:errcheck
+	require.NoError(t, sub.ConnectTCP(ctx, pub.Node().TCP().Address()))
+	require.Eventually(t, func() bool { return leaves() > 0 }, 5*time.Second, 10*time.Millisecond,
+		"no heartbeat with a peer connected")
 }

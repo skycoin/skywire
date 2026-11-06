@@ -151,3 +151,22 @@ func TestRestoredPublisherRecoversFromSubscriber(t *testing.T) {
 		require.True(t, holds(path)(), "the next Root dropped %s", path)
 	}
 }
+
+// With nobody connected a heartbeat reassures no one and only climbs the Root
+// seq, which would carry a restored publisher past the peers that can help it.
+func TestHeartbeatWaitsForAConnection(t *testing.T) {
+	pk, sk := cipher.GenerateKeyPair()
+	pub, err := NewWithTCP("127.0.0.1:0", sk, PubConfig{InMemoryDB: true, BatchWindow: 5 * time.Millisecond})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
+	pub.lastPublishNs.Store(time.Now().Add(-2 * heartbeatInterval).UnixNano())
+	require.False(t, pub.heartbeatDue(), "a heartbeat with no connection")
+
+	sub, err := NewSubscriberTCP("", pk, SubConfig{InMemoryDB: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Close() }) //nolint:errcheck
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, sub.ConnectTCP(ctx, pub.Node().TCP().Address()))
+	require.Eventually(t, pub.heartbeatDue, 5*time.Second, 10*time.Millisecond, "no heartbeat with a peer connected")
+}

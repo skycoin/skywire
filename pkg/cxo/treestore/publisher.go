@@ -1173,8 +1173,7 @@ func (p *Publisher) runLoop() {
 			// full interval, so subscribers keep seeing an inbound Root and
 			// don't re-dial. Skip until the first real publish so we never
 			// emit an empty startup Root.
-			if last := p.lastPublishNs.Load(); last != 0 &&
-				time.Since(time.Unix(0, last)) >= heartbeatInterval {
+			if p.heartbeatDue() {
 				if err := p.publishHeartbeat(); err != nil {
 					p.log.WithError(err).Debug("treestore: heartbeat republish failed")
 				}
@@ -1196,6 +1195,14 @@ func (p *Publisher) runLoop() {
 			}
 		}
 	}
+}
+
+// heartbeatDue reports whether a quiet feed should republish. With no conn it
+// should not: that only climbs the Root seq, past what peers could give back.
+func (p *Publisher) heartbeatDue() bool {
+	last := p.lastPublishNs.Load()
+	return last != 0 && time.Since(time.Unix(0, last)) >= heartbeatInterval &&
+		p.cxoNode.Stats().ActiveConnections > 0
 }
 
 func (p *Publisher) doPublish(force bool) error {

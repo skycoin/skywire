@@ -886,6 +886,10 @@ func (s *Session) runHeartbeatLoop(ctx context.Context, interval time.Duration) 
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			// Nobody to reassure, and each one would climb the feed's Root seq.
+			if s.pub.Stats().ActiveConnections == 0 {
+				continue
+			}
 			if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, time.Now().UTC()); err != nil {
 				s.log.WithError(err).Debug("group: heartbeat publish failed")
 			}
