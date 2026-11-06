@@ -103,13 +103,13 @@
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
-        <span class="title">Reward History</span>
+        <span class="title">{{ 'node.details.rewards-info.history.title' | translate }}</span>
         @if (label) {
           <span class="label-text ml-2">({{ label }})</span>
         }
       </div>
       <div class="d-flex align-items-center">
-        <span class="mr-2" style="font-size: 0.85em; color: rgba(var(--sw-fg-rgb), 0.8);">Show:</span>
+        <span class="mr-2" style="font-size: 0.85em; color: rgba(var(--sw-fg-rgb), 0.8);">{{ 'node.details.rewards-info.history.show' | translate }}</span>
         <button mat-button [class.active-days]="days === 7" (click)="changeDays(7)">7d</button>
         <button mat-button [class.active-days]="days === 30" (click)="changeDays(30)">30d</button>
         <button mat-button [class.active-days]="days === 90" (click)="changeDays(90)">90d</button>
@@ -125,10 +125,10 @@
     @if (!loading && history.length > 0) {
       <div class="total-row mb-3">
         <span style="font-size: 1.1em; font-weight: bold; color: rgb(var(--sw-green-rgb));">
-          Total: {{ total.toFixed(2) }} SKY
+          {{ 'node.details.rewards-info.history.total' | translate: { total: total.toFixed(2) } }}
         </span>
         <span style="font-size: 0.85em; color: var(--sw-status-stopped); margin-left: 12px;">
-          ({{ days }} days)
+          {{ 'node.details.rewards-info.history.days' | translate: { days: days } }}
         </span>
       </div>
     }
@@ -142,18 +142,18 @@
 
     <!-- Error -->
     @if (errorMsg) {
-      <div class="error-msg py-2">{{ errorMsg }}</div>
+      <div class="error-msg py-2">{{ errorMsg | translate }}</div>
     }
 
     <!-- Table -->
     @if (!loading && history.length > 0) {
       <table class="responsive-table-translucid" cellspacing="0" cellpadding="0">
         <tr>
-          <th>Date</th>
-          <th>Amount (SKY)</th>
-          <th>Share (%)</th>
-          <th>Status</th>
-          <th>Transaction</th>
+          <th>{{ 'node.details.rewards-info.history.date' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.amount' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.share' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.status' | translate }}</th>
+          <th>{{ 'node.details.rewards-info.history.transaction' | translate }}</th>
         </tr>
         @for (day of history; track day.date) {
           <tr [class]="statusClass(day)">
@@ -173,7 +173,7 @@
               }
             </td>
             <td>
-              <span [class]="'status-badge ' + statusClass(day)">{{ statusText(day) }}</span>
+              <span [class]="'status-badge ' + statusClass(day)">{{ statusText(day) | translate }}</span>
             </td>
             <td>
               @if (day.txid) {
@@ -192,7 +192,7 @@
 
     @if (!loading && history.length === 0 && !errorMsg) {
       <div class="py-4 text-center" style="color: var(--sw-status-stopped);">
-        No reward data available for this visor.
+        {{ 'node.details.rewards-info.history.no-data' | translate }}
       </div>
     }
   </div>

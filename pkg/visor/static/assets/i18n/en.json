@@ -233,7 +233,23 @@
         "exposed-balance": "It holds {{ balance }} SKY now. Move them to an address of the xpub's wallet.",
         "exposed-action": "Set your wallet's account xpub as the reward address. The address's public key is also on the blockchain, where a future quantum computer could use it to take coins sent there.",
         "xpub-addresses": "Rewards go to these addresses of the xpub, each day to the next one not used yet. They should match the first addresses of the wallet:",
-        "single-risk": "A single reward address stops earning rewards from the first reward day after it sends coins. Send from it only after switching to an xpub. An account xpub avoids this."
+        "single-risk": "A single reward address stops earning rewards from the first reward day after it sends coins. Send from it only after switching to an xpub. An account xpub avoids this.",
+        "history": {
+          "title": "Reward History",
+          "show": "Show:",
+          "total": "Total: {{ total }} SKY",
+          "days": "({{ days }} days)",
+          "date": "Date",
+          "amount": "Amount (SKY)",
+          "share": "Share (%)",
+          "status": "Status",
+          "transaction": "Transaction",
+          "no-data": "No reward data available for this visor.",
+          "load-error": "Failed to load reward data.",
+          "status-none": "No reward",
+          "status-sent": "Sent",
+          "status-pending": "Pending"
+        }
       },
       "transports-info": {
         "title": "Transport",

@@ -233,7 +233,23 @@
         "exposed-balance": "它目前持有 {{ balance }} SKY。请将其转移到该 xpub 钱包的地址。",
         "exposed-action": "请将钱包的账户 xpub 设置为奖励地址。此地址的公钥也已在区块链上公开，未来的量子计算机可能利用它窃取发送到该地址的币。",
         "xpub-addresses": "奖励会发送到该 xpub 的以下地址，每天发送到下一个尚未使用的地址。它们应与钱包的前几个地址一致：",
-        "single-risk": "单个奖励地址在发送币之后的第一个奖励日起将不再获得奖励。请在切换到 xpub 之后再从该地址发送币。使用账户 xpub 可以避免这种情况。"
+        "single-risk": "单个奖励地址在发送币之后的第一个奖励日起将不再获得奖励。请在切换到 xpub 之后再从该地址发送币。使用账户 xpub 可以避免这种情况。",
+        "history": {
+          "title": "奖励历史",
+          "show": "显示：",
+          "total": "总计：{{ total }} SKY",
+          "days": "（{{ days }} 天）",
+          "date": "日期",
+          "amount": "金额（SKY）",
+          "share": "份额（%）",
+          "status": "状态",
+          "transaction": "交易",
+          "no-data": "此 visor 暂无奖励数据。",
+          "load-error": "加载奖励数据失败。",
+          "status-none": "无奖励",
+          "status-sent": "已发送",
+          "status-pending": "待发送"
+        }
       },
       "transports-info": {
         "title": "传输",
