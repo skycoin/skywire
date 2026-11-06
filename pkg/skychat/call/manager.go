@@ -352,8 +352,8 @@ var blockedRingMin, blockedRingMax = 3 * time.Second, 8 * time.Second
 
 func blockedRing() time.Duration {
 	var b [8]byte
-	_, _ = rand.Read(b[:]) //nolint:errcheck
-	return blockedRingMin + time.Duration(binary.BigEndian.Uint64(b[:])%uint64(blockedRingMax-blockedRingMin+1))
+	_, _ = rand.Read(b[:])                                                                                       //nolint:errcheck
+	return blockedRingMin + time.Duration(binary.BigEndian.Uint64(b[:])%uint64(blockedRingMax-blockedRingMin+1)) //nolint:gosec // the range is positive
 }
 
 // ringUnseen rings a blocked caller for blockedRing, without our tone, and
