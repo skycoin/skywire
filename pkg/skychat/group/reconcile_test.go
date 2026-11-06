@@ -221,3 +221,41 @@ func TestApplyRosterLeaf_WrongGroupIgnored(t *testing.T) {
 		t.Error("onRosterChange must not fire for a foreign-group mutation")
 	}
 }
+
+// A member added since the session opened must survive another admin's removal
+// of someone else. The reconciler used to persist the roster the session opened
+// with, so the owner forgot everyone who joined after that.
+func TestRosterReconcileKeepsMembersAddedSinceOpen(t *testing.T) {
+	ownerPK, ownerSK := cipher.GenerateKeyPair()
+	oldPK, _ := cipher.GenerateKeyPair()
+	adminPK, adminSK := cipher.GenerateKeyPair()
+	gid := uuid.New()
+
+	pub, err := treestore.NewWithTCP("127.0.0.1:0", ownerSK, treestore.PubConfig{InMemoryDB: true})
+	if err != nil {
+		t.Fatalf("publisher: %v", err)
+	}
+	t.Cleanup(func() { _ = pub.Close() }) //nolint:errcheck
+
+	s, capture := reconcileSession(t, ownerPK, ownerSK, Record{
+		ID: gid.String(), OwnerPK: ownerPK, Role: RoleMember,
+		Members: []cipher.PubKey{ownerPK, oldPK},
+		Admins:  []cipher.PubKey{ownerPK, adminPK},
+	})
+	s.pub = pub
+	if _, err := s.SetAllowlist([]cipher.PubKey{ownerPK, oldPK, adminPK}); err != nil {
+		t.Fatalf("SetAllowlist: %v", err)
+	}
+
+	_, body := signedRosterLeaf(t, gid, RosterOpRemove, oldPK, adminSK, 1)
+	s.applyRosterLeaf(body)
+
+	if capture.count() != 1 {
+		t.Fatalf("the removal was applied %d times, want 1", capture.count())
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if len(capture.lastMembers) != 2 || !containsPK(capture.lastMembers, adminPK) || containsPK(capture.lastMembers, oldPK) {
+		t.Fatalf("roster after the removal = %v, want the owner and the admin", capture.lastMembers)
+	}
+}

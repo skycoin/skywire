@@ -1618,6 +1618,8 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
 	s.membersMu.Lock()
 	s.members = snap
+	// The gossip reconciler edits this copy and persists it over the store.
+	s.cfg.Record.Members = append([]cipher.PubKey(nil), members...)
 	s.membersMu.Unlock()
 	if s.cfg.Record.Role != RoleOwner {
 		// Allowlist refreshed; the rest of this function is the owner's
