@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["src/app/components/layout/confirmation/confirmation.component.scss"],
-  "sourcesContent": ["@use 'variables';\n\n.text-container {\n  word-break: break-word;\n}\n\n.list-container {\n  font-size: 14px;\n  margin: 10px;\n  color: variables.$blue-medium;\n  word-break: break-word;\n}\n\n.buttons {\n  margin-top: 15px;\n  text-align: right;\n\n  app-button {\n    margin-left: 5px;\n  }\n}\n"],
-  "mappings": ";AAEA,CAAA;AACE,cAAA;;AAGF,CAAA;AACE,aAAA;AACA,UAAA;AACA,SAAA;AACA,cAAA;;AAGF,CAAA;AACE,cAAA;AACA,cAAA;;AAEA,CAJF,QAIE;AACE,eAAA;;",
-  "names": []
-}

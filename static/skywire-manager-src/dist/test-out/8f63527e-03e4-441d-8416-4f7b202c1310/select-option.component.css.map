@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["src/app/components/layout/select-option/select-option.component.scss"],
-  "sourcesContent": [".icon {\n  font-size: 14px;\n  width: 14px;\n  line-height: 1;\n}\n\n.grey-button-background {\n  justify-content: left !important;\n  min-height: 45px;\n}\n"],
-  "mappings": ";AAAA,CAAA;AACE,aAAA;AACA,SAAA;AACA,eAAA;;AAGF,CAAA;AACE,mBAAA;AACA,cAAA;;",
-  "names": []
-}
