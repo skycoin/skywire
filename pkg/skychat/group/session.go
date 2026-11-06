@@ -387,6 +387,9 @@ type Session struct {
 	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
 	// manager can persist the converged Record. See SetRosterChangeHandler.
 	onRosterChange func(members, admins []cipher.PubKey)
+	// onRemoved is invoked when an admin removes this visor from the group.
+	// See SetRemovedHandler.
+	onRemoved func()
 	// onModChange is invoked with a snapshot of the converged moderation
 	// state after applyModLeaf mutates it, so the manager can persist it.
 	// Parallel to onRosterChange. See SetModChangeHandler.
@@ -403,7 +406,9 @@ type Session struct {
 	// admission authority (e.g. the native-TCP standalone path, which
 	// has no Manager) and every request is refused.
 	onJoinRequest JoinRequestHandler
-	log           *logging.Logger
+	// onLeave removes a member that asked to leave. See SetLeaveHandler.
+	onLeave LeaveHandler
+	log     *logging.Logger
 
 	// lastInboundNs is the unified liveness signal for this session,
 	// in unix-nanoseconds. Set on every observable inbound event —
@@ -767,6 +772,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Per-member subscribers: each non-owner-self member publishes
 	// their own message feed at memberPK:Record.Port. Owner follows
@@ -880,6 +886,10 @@ func (s *Session) runHeartbeatLoop(ctx context.Context, interval time.Duration) 
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			// Nobody to reassure, and each one would climb the feed's Root seq.
+			if s.pub.Stats().ActiveConnections == 0 {
+				continue
+			}
 			if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, time.Now().UTC()); err != nil {
 				s.log.WithError(err).Debug("group: heartbeat publish failed")
 			}
@@ -953,6 +963,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
+	pub.OnRecovered(s.onRecovered)
 
 	// Admin-aggregator topology (post-#2685 signed leaves):
 	//
@@ -1611,6 +1622,8 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
 	s.membersMu.Lock()
 	s.members = snap
+	// The gossip reconciler edits this copy and persists it over the store.
+	s.cfg.Record.Members = append([]cipher.PubKey(nil), members...)
 	s.membersMu.Unlock()
 	if s.cfg.Record.Role != RoleOwner {
 		// Allowlist refreshed; the rest of this function is the owner's
@@ -2256,6 +2269,10 @@ func (s *Session) handleRelay(c net.Conn) {
 		s.handleJoinRequest(c, payload)
 		return
 	}
+	if probe.Kind == frameKindLeave {
+		s.handleLeave(c, payload)
+		return
+	}
 	// Chat submission is the owner's job. Member sessions bind this port
 	// to answer join requests, and republishing someone else's text onto
 	// a member's own feed is not something any honest peer asks for:
@@ -2750,6 +2767,16 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 // that replaces the four-flag tangle (subAlive bool +
 // lastHeartbeatNs + LastMessageAt + Status's health semantics).
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, false)
+}
+
+// onRecovered takes the leaves a restored visor got back from a peer. Its own
+// posts count here, since it holds no copy and no local echo will come.
+func (s *Session) onRecovered(events []treestore.UpdateEvent) {
+	s.applyUpdates(events, true)
+}
+
+func (s *Session) applyUpdates(events []treestore.UpdateEvent, ownToo bool) {
 	if len(events) > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
 	}
@@ -2947,7 +2974,7 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		// member sees its own message echoed back after sending. The UI shows
 		// local sends optimistically, so the round-tripped copy is a duplicate.
 		// (Owner-role self-echo is delivered separately from publishAs, not here.)
-		if msg.SenderPK == s.cfg.MyPK {
+		if msg.SenderPK == s.cfg.MyPK && !ownToo {
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)

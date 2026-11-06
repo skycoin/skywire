@@ -187,6 +187,7 @@ internal class MeteredFlag {
 internal class NetworkWatcher(context: Context) {
 
     private val app = context.applicationContext
+    private val dnsServersFile = SkywirePaths(app).dnsServersFile
     private val api = VisorApi.get(app)
 
     // Written on the callback thread, read when reporting.
@@ -194,6 +195,14 @@ internal class NetworkWatcher(context: Context) {
     private val movePending = AtomicBoolean(false)
     @Volatile private var meteredNow: Boolean? = null
     @Volatile private var ifname: String? = null
+
+    /** Android has no resolv.conf, so this file is how the Go core finds a resolver. */
+    private fun reportDnsServers(props: LinkProperties) {
+        val servers = props.dnsServers.filterNot { it.isLinkLocalAddress }.mapNotNull { it.hostAddress }
+        if (servers.isEmpty()) return
+        runCatching { dnsServersFile.writeText(servers.joinToString("\n")) }
+            .onFailure { Log.w(TAG, "could not record the DNS servers", it) }
+    }
 
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         val cm = app.getSystemService(ConnectivityManager::class.java)
@@ -251,6 +260,7 @@ internal class NetworkWatcher(context: Context) {
                 } else {
                     props?.interfaceName?.let { ifname = it }
                     noteMetered(caps)
+                    props?.let(::reportDnsServers)
                 }
                 if (!state.observe(next, vpn)) {
                     // The first attachment is worth a line of its own: it is

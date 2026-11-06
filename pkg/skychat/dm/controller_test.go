@@ -296,12 +296,32 @@ func TestController_DeleteForEveryone(t *testing.T) {
 			}
 		},
 	})
-	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	acked := make(chan string, 1)
+	ctrlA := New(Config{
+		Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg},
+		OnEvent: func(Event) {},
+		OnReceipt: func(_, id, kind string) {
+			if kind == message.TypeAck {
+				acked <- id
+			}
+		},
+	})
 	_ = ctrlB.Start(context.Background())                      //nolint
 	_ = ctrlA.Start(context.Background())                      //nolint
 	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
 
 	const targetID = "msg-abc-123"
+	defer func() {
+		// The deleter hears that the delete landed, so its outbox can let go.
+		select {
+		case id := <-acked:
+			if got, ok := DeletedID(id); !ok || got != targetID {
+				t.Errorf("ack id = %q, want the delete ack for %s", id, targetID)
+			}
+		case <-time.After(2 * time.Second):
+			t.Error("no ack for the delete")
+		}
+	}()
 	if err := ctrlA.SendDelete(context.Background(), pkB, targetID); err != nil {
 		t.Fatalf("SendDelete: %v", err)
 	}

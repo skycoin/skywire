@@ -24,6 +24,7 @@
 package group
 
 import (
+	"context"
 	"net"
 	"strings"
 	"sync"
@@ -235,7 +236,12 @@ func TestSessionTCP_ReplayHistoryThrough(t *testing.T) {
 // members detect a silently-stalled subscriber. It rides the normal publish
 // path but must NOT surface as chat content.
 func TestSessionTCP_HeartbeatPublishes(t *testing.T) {
-	owner, _ := openTCPGroup(t, 50*time.Millisecond)
+	owner, member := openTCPGroup(t, 50*time.Millisecond)
+	// Heartbeats wait for a connection. Best effort, as in production: the conn
+	// is what counts here, and Connect can block out its deadline after it.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = member.sess.Connect(ctx) }() //nolint:errcheck
 
 	deadline := time.Now().Add(20 * time.Second)
 	var seen bool

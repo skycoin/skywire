@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -67,6 +68,8 @@ fun copyText(context: Context, text: String) {
 fun QrDialog(spec: QrSpec, vm: ChatViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Said here, not in a snackbar: the dialog is its own window and would cover one.
+    var copied by remember { mutableStateOf<Int?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (spec.titleArg != null) stringResource(spec.title, spec.titleArg) else stringResource(spec.title)) },
@@ -84,8 +87,16 @@ fun QrDialog(spec: QrSpec, vm: ChatViewModel, onDismiss: () -> Unit) {
                     }
                     IconButton(onClick = {
                         copyText(context, spec.address)
-                        vm.repo.note(R.string.chat_address_copied)
+                        copied = R.string.chat_address_copied
                     }) { Icon(Icons.Rounded.ContentCopy, stringResource(R.string.chat_copy_address)) }
+                }
+                copied?.let {
+                    Text(
+                        stringResource(it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(spec.help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -98,7 +109,7 @@ fun QrDialog(spec: QrSpec, vm: ChatViewModel, onDismiss: () -> Unit) {
                     scope.launch {
                         vm.repo.inviteLink(gid)?.let {
                             copyText(context, it)
-                            vm.repo.note(R.string.chat_invite_copied)
+                            copied = R.string.chat_invite_copied
                         }
                     }
                 }) { Text(stringResource(R.string.chat_copy_invite_instead)) }

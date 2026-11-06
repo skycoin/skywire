@@ -58,6 +58,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // Relay frame kinds. Chat submissions (RelayMessage) carry no "kind"
@@ -480,6 +481,9 @@ func remotePKOf(c net.Conn) (cipher.PubKey, bool) {
 		if a == nil {
 			return cipher.PubKey{}, false
 		}
+		return a.PubKey, a.PubKey != cipher.PubKey{}
+	case routing.Addr:
+		// A conn accepted over a route. Its Noise KK handshake proved this key.
 		return a.PubKey, a.PubKey != cipher.PubKey{}
 	default:
 		return cipher.PubKey{}, false

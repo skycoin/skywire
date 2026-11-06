@@ -26,6 +26,9 @@ class SkywirePaths(context: Context) {
      */
     val sealedConfigFile: File = File(dataDir, "skywire-config.json.enc")
 
+    /** The current network's resolvers, read by the Go core on each lookup (pkg/netutil/dns.go). */
+    val dnsServersFile: File = File(dataDir, "dns-servers")
+
     /** Config `local_path` — app workdirs, log DBs, uptime.db land here. */
     val localDir: File = File(dataDir, "local")
 
@@ -123,4 +126,5 @@ internal fun coreEnv(paths: SkywirePaths): Map<String, String> = mapOf(
     "SKYWIRE_ANDROID_VPN_SOCKET" to "@" + SkyVpnService.SOCKET_NAME,
     "SKYWIRE_ANDROID_VPN_SHARE_SOCKET" to "@" + VpnHotspot.SOCKET_NAME,
     "SKYWIRE_ANDROID_DEVICE" to paths.deviceJson,
+    "SKYWIRE_DNS_SERVERS_FILE" to paths.dnsServersFile.absolutePath,
 )
