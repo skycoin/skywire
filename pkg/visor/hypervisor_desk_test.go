@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -248,7 +250,7 @@ func TestNativeDeskServing(t *testing.T) {
 // the shared skeleton: `hv serve`'s desk must still wire the wasm assets and
 // the harness injection anchor exactly as before.
 func TestDeskShellHTMLWasmMode(t *testing.T) {
-	page := string(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(WasmServeConfig{}, "http", "8443", ".mesh.localhost")), deskWasmBootOpts(false, 0)))
+	page := string(deskShellHTML(wasmDeskScripts(wasmBrowseOriginScripts(WasmServeConfig{}, "http", "8443", ".mesh.localhost")), deskWasmBootOpts(false, 0, false)))
 	for _, want := range []string{
 		"wasmURL: '/skywire.wasm'",
 		"autostartVisor: true",
@@ -538,4 +540,34 @@ func TestWasmBrowseOriginScripts(t *testing.T) {
 			t.Errorf("want config < responder < transport, got %d %d %d", cfgAt, respAt, transAt)
 		}
 	})
+}
+
+// TestDeskWasmBootOptsTinyGo checks that a desk served with a TinyGo module
+// picks it only for ?wasm=tinygo, and that the options stay valid JavaScript.
+func TestDeskWasmBootOptsTinyGo(t *testing.T) {
+	if opts := deskWasmBootOpts(false, 0, false); strings.Contains(opts, "tinygo") {
+		t.Fatalf("no TinyGo module, but the options mention it:\n%s", opts)
+	}
+	opts := deskWasmBootOpts(false, 0, true)
+	if !strings.Contains(opts, "get('wasm') === 'tinygo' ? '/skywire-tinygo.wasm' : '/skywire.wasm'") {
+		t.Fatalf("options do not choose the module by ?wasm=tinygo:\n%s", opts)
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not found")
+	}
+	for search, want := range map[string]string{
+		"?wasm=tinygo": "/skywire-tinygo.wasm",
+		"":             "/skywire.wasm",
+		"?wasm=go":     "/skywire.wasm",
+	} {
+		js := "const location={search:" + strconv.Quote(search) + "};const o=" + opts + ";process.stdout.write(o.wasmURL)"
+		out, err := exec.Command(node, "-e", js).Output() //nolint:gosec
+		if err != nil {
+			t.Fatalf("%q: %v", search, err)
+		}
+		if string(out) != want {
+			t.Errorf("%q: wasmURL %s, want %s", search, out, want)
+		}
+	}
 }
