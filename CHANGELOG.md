@@ -8,6 +8,11 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.107
 
+-   ci, changelog: build the tinygo release assets with v0.45.0-dev-skywire.2  [#6059](https://github.com/skycoin/skywire/pull/6059)
+-   all: build with go 1.27.3 and take gopus v0.2.3  [#6058](https://github.com/skycoin/skywire/pull/6058)
+-   deps: go 1.27.2 again, keep gopus v0.2.2, rebuild netview  [#6057](https://github.com/skycoin/skywire/pull/6057)
+-   deps: take go-fuse from master for its 32-bit build fix  [#6056](https://github.com/skycoin/skywire/pull/6056)
+-   hv, visor: serve a TinyGo build of the module beside the Go one  [#6055](https://github.com/skycoin/skywire/pull/6055)
 -   deps: update Go and npm dependencies and vendor the latest skycoin  [#6053](https://github.com/skycoin/skywire/pull/6053)
 -   deps, visor: update skycoin for the wallet insecure page notice and select color  [#6052](https://github.com/skycoin/skywire/pull/6052)
 -   rewardconfig, rewards: skip an xpub index without a key, as BIP32 says  [#6051](https://github.com/skycoin/skywire/pull/6051)
