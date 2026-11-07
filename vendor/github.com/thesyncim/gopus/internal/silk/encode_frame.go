@@ -223,9 +223,16 @@ func (e *Encoder) encodeFrame(re *rangecoding.Encoder, condCoding int, maxBits i
 		}
 	}
 
+	// silk_NSQ_wrapper_FLP converts the same frame for LBRR and each gain-search
+	// attempt. Keep that read-only input in encoder scratch across those calls.
+	inputQ0 := ensureInt16Slice(&e.scratchInputQ0, frameSamples)
+	for i := 0; i < frameSamples && i < len(framePCM); i++ {
+		inputQ0[i] = float32ToInt16(framePCM[i])
+	}
+
 	// LBRR uses pre-NSQ indices/NSQ state (libopus silk_LBRR_encode_FLP before the bitrate loop).
 	if e.lbrrEnabled {
-		e.lbrrEncode(framePCM, frameIndices, lpcQ12, predCoefQ12, interpIdx, pitchLags, ltpCoeffs, ltpScaleIndex, noiseParams, int(seed), numSubframes, subframeSamples, frameSamples, int(speechActivityQ8), currentPrevInd, condCoding)
+		e.lbrrEncode(inputQ0, frameIndices, lpcQ12, predCoefQ12, interpIdx, pitchLags, ltpCoeffs, ltpScaleIndex, noiseParams, int(seed), numSubframes, subframeSamples, frameSamples, int(speechActivityQ8), currentPrevInd, condCoding)
 	}
 
 	ltpScaleQ14 := int32(0)
@@ -281,7 +288,7 @@ gainSearch:
 
 			// Noise shaping quantization
 			var seedOut int
-			pulses, seedOut = e.computeNSQExcitation(framePCM, lpcQ12, predCoefQ12, interpIdx, gainsQ16, pitchLags, ltpCoeffs, ltpScaleQ14, signalType, quantOffset, int(speechActivityQ8), noiseParams, int(frameIndices.Seed), numSubframes, subframeSamples, frameSamples, e.nsqState)
+			pulses, seedOut = e.computeNSQExcitation(inputQ0, lpcQ12, predCoefQ12, interpIdx, gainsQ16, pitchLags, ltpCoeffs, ltpScaleQ14, signalType, quantOffset, int(speechActivityQ8), noiseParams, int(frameIndices.Seed), numSubframes, subframeSamples, frameSamples, e.nsqState)
 			frameIndices.Seed = int8(seedOut)
 			frameIndices.quantOffsetType = int8(quantOffset)
 			if encodeFrameTraceEnabled {
@@ -607,11 +614,7 @@ func (e *Encoder) prefillFrame(in []int16) {
 	e.frameCounter++
 }
 
-func (e *Encoder) computeNSQExcitation(pcm []float32, lpcQ12 []int16, predCoefQ12 []int16, nlsfInterpQ2 int, gainsQ16 []int32, pitchLags []int32, ltpCoeffs LTPCoeffsArray, ltpScaleQ14 int32, signalType, quantOffset, speechActivityQ8 int, noiseParams *NoiseShapeParams, seed, numSubframes, subframeSamples, frameSamples int, nsqState *NSQState) ([]int8, int) {
-	inputQ0 := ensureInt16Slice(&e.scratchInputQ0, frameSamples)
-	for i := 0; i < frameSamples && i < len(pcm); i++ {
-		inputQ0[i] = float32ToInt16(pcm[i])
-	}
+func (e *Encoder) computeNSQExcitation(inputQ0 []int16, lpcQ12 []int16, predCoefQ12 []int16, nlsfInterpQ2 int, gainsQ16 []int32, pitchLags []int32, ltpCoeffs LTPCoeffsArray, ltpScaleQ14 int32, signalType, quantOffset, speechActivityQ8 int, noiseParams *NoiseShapeParams, seed, numSubframes, subframeSamples, frameSamples int, nsqState *NSQState) ([]int8, int) {
 	if len(gainsQ16) < numSubframes {
 		tmp := ensureInt32Slice(&e.scratchGainsQ16, numSubframes)
 		copy(tmp, gainsQ16)

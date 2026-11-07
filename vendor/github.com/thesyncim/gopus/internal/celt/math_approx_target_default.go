@@ -25,6 +25,8 @@ func celtLog2(x float32) float32 {
 }
 
 // celtAtan2pNormF32 uses the libopus float-path expression order for non-v3 targets.
+// celt/mathops.h:celt_atan2p_norm complements the rounded celt_atan_norm result;
+// round32 preserves that boundary through PGO inlining.
 func celtAtan2pNormF32(y, x float32) float32 {
 	if x*x+y*y < 1e-18 {
 		return 0
@@ -32,5 +34,5 @@ func celtAtan2pNormF32(y, x float32) float32 {
 	if y < x {
 		return celtAtanNormF32(y / x)
 	}
-	return 1 - celtAtanNormF32(x/y)
+	return 1 - round32(celtAtanNormF32(x/y))
 }

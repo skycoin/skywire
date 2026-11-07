@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.27.2
+go 1.27.3
 
 require (
 	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
@@ -105,7 +105,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/thesyncim/gopus v0.2.2
+	github.com/thesyncim/gopus v0.2.3
 	github.com/tidwall/pretty v1.2.2
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/vishvananda/netlink v1.3.1

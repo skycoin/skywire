@@ -1424,6 +1424,7 @@ func (d *Decoder) fillPLCNoiseCoeffs(coeffs []celtNorm, frameSize, startBand, en
 
 	edges := d.modeEdges()
 	lm := d.modeConfig(frameSize).LM
+	rng := *seed
 	for band := startBand; band < endBand; band++ {
 		start := edges[band] << lm
 		end := edges[band+1] << lm
@@ -1437,9 +1438,10 @@ func (d *Decoder) fillPLCNoiseCoeffs(coeffs []celtNorm, frameSize, startBand, en
 			continue
 		}
 		for i := start; i < end; i++ {
-			*seed = *seed*1664525 + 1013904223
-			coeffs[i] = celtNorm(int32(*seed) >> 20)
+			rng = rng*1664525 + 1013904223
+			coeffs[i] = celtNorm(int32(rng) >> 20)
 		}
 		normalizeNormVectorInPlace(coeffs[start:end])
 	}
+	*seed = rng
 }

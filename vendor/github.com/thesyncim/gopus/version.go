@@ -1,7 +1,7 @@
 package gopus
 
 // gopusVersion is the gopus library version string.
-const gopusVersion = "gopus 0.1.0"
+const gopusVersion = "gopus 0.2.3"
 
 // VersionString returns gopus's compiled-in identification string.
 func VersionString() string {
