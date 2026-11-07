@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -152,6 +153,9 @@ func findRewardHistory(histDir, address string) []rewardHistoryEntry {
 		}
 		for i := uint32(0); i < n; i++ {
 			derived, err := rewardconfig.DeriveExternalAddressFromXpub(address, i)
+			if errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+				continue
+			}
 			if err != nil {
 				break
 			}
@@ -426,7 +430,13 @@ func registerLoginRoutes(mux *http.ServeMux, wd string, loginEnabled bool) {
 				w.Write([]byte(l)) //nolint:errcheck,gosec
 				return
 			}
-			derived, err := rewardconfig.DeriveLoginAddressFromXpub(address, 0)
+			var derived string
+			var err error
+			for i := uint32(0); ; i++ {
+				if derived, err = rewardconfig.DeriveLoginAddressFromXpub(address, i); !errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+					break
+				}
+			}
 			if err != nil {
 				http.Redirect(w, r, "/login?msg="+url.QueryEscape("Failed to derive login address from xpub: "+err.Error()), http.StatusFound)
 				return

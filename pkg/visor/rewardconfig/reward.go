@@ -74,6 +74,13 @@ func ValidateRewardSetting(addr string, acceptRisk bool) (canonical string, isXp
 	if CheckXpubDepth(canonical) != "" {
 		return "", true, ErrNotAccountXpub
 	}
+	// A BIP44 account is always a hardened child, m/44'/coin'/account'.
+	if pk, err := bip32.DeserializeEncodedPublicKey(canonical); err == nil && pk.ChildNumber() < bip32.FirstHardenedChild {
+		return "", true, ErrNotAccountXpub
+	}
+	if _, err := RewardAddresses(canonical, 1); err != nil {
+		return "", true, fmt.Errorf("no reward address can be derived from this xpub: %w", err)
+	}
 	return canonical, true, nil
 }
 
@@ -111,15 +118,19 @@ func CheckXpubDepth(xpub string) string {
 }
 
 // RewardAddresses derives the first n external chain addresses of an account
-// xpub, m/44'/8000'/0'/0/0 onward. Rewards are paid to these, in order, each to
-// an address not used before, so they are what the wallet should list.
+// xpub, m/44'/8000'/0'/0/0 onward, skipping an index without a key.
+// Rewards are paid to these, in order, each to an address not used before, so
+// they are what the wallet should list.
 func RewardAddresses(xpub string, n uint32) ([]string, error) {
 	if msg := CheckXpubDepth(xpub); msg != "" {
 		return nil, errors.New(msg)
 	}
 	addrs := make([]string, 0, n)
-	for i := range n {
+	for i := uint32(0); len(addrs) < int(n); i++ {
 		a, err := DeriveExternalAddressFromXpub(xpub, i)
+		if errors.Is(err, ErrNoAddressAtIndex) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -128,9 +139,19 @@ func RewardAddresses(xpub string, n uint32) ([]string, error) {
 	return addrs, nil
 }
 
+// ErrNoAddressAtIndex is returned for an index BIP32 derives no key for. The
+// spec says to skip to the next index, as the Skycoin wallets do.
+// https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#public-parent-key--public-child-key
+var ErrNoAddressAtIndex = errors.New("BIP32 derives no key at this index")
+
+// deriveChild is the address step of DeriveExternalAddressFromXpub. Tests
+// replace it, since a real index without a key is found once in 2^127.
+var deriveChild = (*bip32.PublicKey).NewPublicChildKey
+
 // DeriveExternalAddressFromXpub derives a reward address from an account xpub key.
 // Uses the BIP44 external chain (m/account'/0/index) — the same chain used for
-// reward distribution addresses.
+// reward distribution addresses. It returns ErrNoAddressAtIndex for an index
+// without a key, which callers skip.
 func DeriveExternalAddressFromXpub(xpub string, index uint32) (string, error) {
 	accountKey, err := bip32.DeserializeEncodedPublicKey(xpub)
 	if err != nil {
@@ -144,7 +165,10 @@ func DeriveExternalAddressFromXpub(xpub string, index uint32) (string, error) {
 	}
 
 	// Derive address at index
-	addrKey, err := externalChainKey.NewPublicChildKey(index)
+	addrKey, err := deriveChild(externalChainKey, index)
+	if bip32.IsImpossibleChildError(err) {
+		return "", fmt.Errorf("index %d: %w", index, ErrNoAddressAtIndex)
+	}
 	if err != nil {
 		return "", fmt.Errorf("derive address at index %d: %w", index, err)
 	}
@@ -189,6 +213,9 @@ func DeriveLoginAddressFromXpub(xpub string, index uint32) (string, error) {
 
 	// Derive address at index: change_chain → child(index)
 	addrKey, err := changeChainKey.NewPublicChildKey(index)
+	if bip32.IsImpossibleChildError(err) {
+		return "", fmt.Errorf("index %d: %w", index, ErrNoAddressAtIndex)
+	}
 	if err != nil {
 		return "", fmt.Errorf("derive address at index %d: %w", index, err)
 	}

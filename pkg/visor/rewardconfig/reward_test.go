@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	coincipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skycoin/src/cipher/bip32"
 	"github.com/skycoin/skycoin/src/cipher/bip44"
 )
 
@@ -113,5 +114,61 @@ func TestValidateRewardSetting(t *testing.T) {
 		if _, _, err := ValidateRewardSetting(chain, risk); !errors.Is(err, ErrNotAccountXpub) {
 			t.Fatalf("chain xpub, opt-in %v: %v", risk, err)
 		}
+	}
+}
+
+func TestRewardAddressesSkipImpossibleChild(t *testing.T) {
+	account, _ := testXpubs(t)
+	want, err := RewardAddresses(account, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	real := deriveChild
+	t.Cleanup(func() { deriveChild = real })
+	deriveChild = func(k *bip32.PublicKey, i uint32) (*bip32.PublicKey, error) {
+		if i == 1 {
+			return nil, bip32.NewImpossibleChildError(errors.New("test"), i)
+		}
+		return real(k, i)
+	}
+
+	if _, err := DeriveExternalAddressFromXpub(account, 1); !errors.Is(err, ErrNoAddressAtIndex) {
+		t.Fatalf("index 1: %v, want ErrNoAddressAtIndex", err)
+	}
+	got, err := RewardAddresses(account, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != want[0] || got[1] != want[2] || got[2] != want[3] {
+		t.Fatalf("got %v, want indexes 0, 2 and 3 of %v", got, want)
+	}
+}
+
+func TestValidateRewardSettingNonHardenedAccount(t *testing.T) {
+	// m/44'/8000'/0 is at depth 3 like an account, but its last step is not hardened.
+	master, err := bip32.NewMasterKey([]byte("skywire reward xpub test seed 0123456789"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := master
+	for _, i := range []uint32{44 + bip32.FirstHardenedChild, 8000 + bip32.FirstHardenedChild} {
+		if k, err = k.NewPrivateChildKey(i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	kp, err := k.PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := kp.NewPublicChildKey(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pub.Depth != AccountXpubDepth {
+		t.Fatalf("depth %d", pub.Depth)
+	}
+	if _, _, err := ValidateRewardSetting(pub.String(), false); !errors.Is(err, ErrNotAccountXpub) {
+		t.Fatalf("non-hardened account: %v, want ErrNotAccountXpub", err)
 	}
 }
