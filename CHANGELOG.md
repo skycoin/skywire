@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.107
+
+-   deps: update Go and npm dependencies and vendor the latest skycoin  [#6053](https://github.com/skycoin/skywire/pull/6053)
+-   deps, visor: update skycoin for the wallet insecure page notice and select color  [#6052](https://github.com/skycoin/skywire/pull/6052)
+-   rewardconfig, rewards: skip an xpub index without a key, as BIP32 says  [#6051](https://github.com/skycoin/skywire/pull/6051)
+-   visor: pin the routing feed when the visualizer reads it  [#6050](https://github.com/skycoin/skywire/pull/6050)
+-   hvui: translate the rewards history  [#6049](https://github.com/skycoin/skywire/pull/6049)
+-   hvinspect: build as its own module again and find the browser on PATH  [#6048](https://github.com/skycoin/skywire/pull/6048)
+-   hvui: darken the login logo in the light theme  [#6047](https://github.com/skycoin/skywire/pull/6047)
+-   deps, visor: update skycoin for the wallet change address fix  [#6046](https://github.com/skycoin/skywire/pull/6046)
+-   visor: stop racing the inbox loop in TestGroupParkWiring  [#6045](https://github.com/skycoin/skywire/pull/6045)
+-   visor, deps: serve skycoin-web's /ui2 under /wallet/  [#6044](https://github.com/skycoin/skywire/pull/6044)
+-   deps: update the metrics fork to upstream v1.45.0  [#6043](https://github.com/skycoin/skywire/pull/6043)
+-   transport: pool MakeTransportID's hash state  [#6042](https://github.com/skycoin/skywire/pull/6042)
+-   scripts: show bytes per op in bench-compare  [#6041](https://github.com/skycoin/skywire/pull/6041)
+-   dmsg: update yamux to skip processFlags for frames without flags  [#6040](https://github.com/skycoin/skywire/pull/6040)
+-   rewards, docs: describe the single reward address opt-in  [#6039](https://github.com/skycoin/skywire/pull/6039)
+-   hvui, ui2, visor: single reward address opt-in in both UIs  [#6038](https://github.com/skycoin/skywire/pull/6038)
+-   noise: pool the ChaCha20-Poly1305 nonce  [#6037](https://github.com/skycoin/skywire/pull/6037)
+-   logging: replace the logrus backend with log/slog and own types  [#6036](https://github.com/skycoin/skywire/pull/6036)
+-   rewardconfig, visor, cli, rewards: single reward address with an explicit opt-in  [#6035](https://github.com/skycoin/skywire/pull/6035)
+-   visor, vpn, vpnrouter: log through pkg/logging instead of logrus  [#6034](https://github.com/skycoin/skywire/pull/6034)
+-   app, router, transport, all: log through pkg/logging instead of logrus  [#6033](https://github.com/skycoin/skywire/pull/6033)
+-   deployment, services, geoip: log through pkg/logging instead of logrus  [#6032](https://github.com/skycoin/skywire/pull/6032)
+-   dmsg: log through pkg/logging instead of logrus  [#6031](https://github.com/skycoin/skywire/pull/6031)
+-   cmd, example: log through pkg/logging instead of logrus  [#6030](https://github.com/skycoin/skywire/pull/6030)
+-   logging: add names for the logrus types and levels  [#6029](https://github.com/skycoin/skywire/pull/6029)
+
 ## 1.3.106
 
 -   scripts, dmsg: compare hot path benchmarks under Go and TinyGo  [#6027](https://github.com/skycoin/skywire/pull/6027)
