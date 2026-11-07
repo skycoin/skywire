@@ -77,6 +77,9 @@ func (x *XpubIndex) Assign(xpub, date string, used func(addr string) (bool, erro
 	}
 	for i := start; i < start+maxXpubScan; i++ {
 		addr, err := rewardconfig.DeriveExternalAddressFromXpub(xpub, i)
+		if errors.Is(err, rewardconfig.ErrNoAddressAtIndex) {
+			continue
+		}
 		if err != nil {
 			return 0, err
 		}

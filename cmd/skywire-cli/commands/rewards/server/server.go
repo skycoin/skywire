@@ -1476,9 +1476,9 @@ func buildRouter() http.Handler {
 				// Derive the address if an xpub appears in historical data.
 				displayAddr := strings.TrimRight(skyaddr, "\n")
 				if strings.HasPrefix(displayAddr, "xpub") {
-					derived, dErr := rewardconfig.DeriveExternalAddressFromXpub(displayAddr, 0)
+					derived, dErr := rewardconfig.RewardAddresses(displayAddr, 1)
 					if dErr == nil {
-						displayAddr = derived
+						displayAddr = derived[0]
 					} else {
 						displayAddr = displayAddr[:12] + "..." // truncate xpub for safety
 					}
