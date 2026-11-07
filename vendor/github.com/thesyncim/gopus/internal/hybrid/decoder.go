@@ -51,9 +51,6 @@ type Decoder struct {
 	// This matches libopus behavior where the silk_DecControl.resampler_state
 	// is shared across all decoding modes.
 
-	// Track previous packet stereo flag for transition handling.
-	prevPacketStereo bool
-
 	// Channel count (1 for mono, 2 for stereo), matching libopus C int state width.
 	channels int32
 	// Decoder API sample rate. Hybrid CELT stays packet-domain internally but
@@ -192,16 +189,9 @@ func (d *Decoder) Reset() {
 	d.silkDecoder.Reset()
 	d.celtDecoder.Reset()
 
-	d.prevPacketStereo = false
 	if d.plcState != nil {
 		d.plcState.Reset()
 	}
-}
-
-// SetPrevPacketStereo synchronizes the previous packet stereo flag.
-// This is used when Hybrid decoding is driven by an external Opus decoder.
-func (d *Decoder) SetPrevPacketStereo(stereo bool) {
-	d.prevPacketStereo = stereo
 }
 
 // Channels returns the number of audio channels (1 or 2).
@@ -311,8 +301,8 @@ func (d *Decoder) decodeFrameWithHookFloat32(rd *rangecoding.Decoder, frameSize 
 	// 20ms: 320 samples at 16kHz
 	silkSamples := frameSize48 / 3 // 48kHz -> 16kHz = divide by 3
 
-	monoToStereo := packetStereo && !d.prevPacketStereo
-	stereoToMono := d.silkDecoder.ShouldUseStereoToMonoHistory(silk.BandwidthWideband, !packetStereo && d.prevPacketStereo)
+	monoToStereo := packetStereo && !d.silkDecoder.InternalStereo()
+	stereoToMono := d.silkDecoder.ShouldUseStereoToMonoHistory(silk.BandwidthWideband, !packetStereo && d.silkDecoder.InternalStereo())
 	if monoToStereo {
 		// Reset side-channel state to match libopus mono->stereo transition.
 		d.silkDecoder.ResetSideChannel()
@@ -494,6 +484,7 @@ func (d *Decoder) decodeFrameWithHookFloat32(rd *rangecoding.Decoder, frameSize 
 	if filledSilkSamples < totalSamples {
 		clear(silkUpsampled[filledSilkSamples:totalSamples])
 	}
+	d.silkDecoder.SetInternalStereo(packetStereo)
 
 	dataLen := rd.StorageBits() / 8
 	if afterSilk != nil {
@@ -532,7 +523,6 @@ func (d *Decoder) decodeFrameWithHookFloat32(rd *rangecoding.Decoder, frameSize 
 		return nil, err
 	}
 
-	d.prevPacketStereo = packetStereo
 	return out, nil
 }
 

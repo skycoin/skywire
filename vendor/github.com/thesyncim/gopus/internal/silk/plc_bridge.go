@@ -78,25 +78,13 @@ func (d *Decoder) updateSILKPLCStateFromCtrl(channel int, st *decoderState, ctrl
 		subfrLength = 80
 	}
 
-	var pitchL [maxNbSubfr]int32
-	copy(pitchL[:nbSubfr], ctrl.pitchL[:nbSubfr])
-
-	var ltpCoefQ14 [ltpOrder * maxNbSubfr]int16
-	copy(ltpCoefQ14[:nbSubfr*ltpOrder], ctrl.LTPCoefQ14[:nbSubfr*ltpOrder])
-
-	var gainsQ16 [maxNbSubfr]int32
-	copy(gainsQ16[:nbSubfr], ctrl.GainsQ16[:nbSubfr])
-
-	var lpcQ12 [maxLPCOrder]int16
-	copy(lpcQ12[:lpcOrder], ctrl.PredCoefQ12[1][:lpcOrder])
-
 	state.UpdateFromGoodFrame(
 		int(st.indices.signalType),
-		pitchL[:nbSubfr],
-		ltpCoefQ14[:nbSubfr*ltpOrder],
+		ctrl.pitchL[:nbSubfr],
+		ctrl.LTPCoefQ14[:nbSubfr*ltpOrder],
 		ctrl.LTPScaleQ14,
-		gainsQ16[:nbSubfr],
-		lpcQ12[:lpcOrder],
+		ctrl.GainsQ16[:nbSubfr],
+		ctrl.PredCoefQ12[1][:lpcOrder],
 		fsKHz,
 		nbSubfr,
 		subfrLength,
