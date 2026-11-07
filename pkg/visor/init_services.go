@@ -1011,8 +1011,10 @@ func (a *visorAPIAdapter) RoutingRules() ([]routing.Rule, error) {
 // feed (with-self, so the local visor's own transports appear in the graph) —
 // no clearnet HTTP. Returns the not-ready error on a CXO cache miss; tpviz
 // surfaces that instead of falling back to a deprecated clearnet TPD.
-func (a *visorAPIAdapter) AllTransports(_ context.Context) ([]byte, error) {
-	return a.v.FetchAllTransportsCXO(true)
+func (a *visorAPIAdapter) AllTransports(ctx context.Context) ([]byte, error) {
+	// Stay under the hypervisor's 10 s WriteTimeout; the pinned feed keeps
+	// filling after a miss, so a later refresh finds it.
+	return a.v.FetchAllTransportsCXO(ctx, true, 8*time.Second)
 }
 
 // Close implements tpviz.VisorAPI.
