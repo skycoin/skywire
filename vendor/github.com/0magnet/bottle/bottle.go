@@ -51,6 +51,9 @@ var coiSWJS []byte
 //go:embed coi-register.js
 var coiRegisterJS []byte
 
+//go:embed update.js
+var updateJS []byte
+
 // JSFS returns jsfs.js — the globalThis.fs / globalThis.process filesystem.
 func JSFS() []byte { return jsfs }
 
@@ -99,3 +102,9 @@ func COISWJS() []byte { return coiSWJS }
 // anything that wants SharedArrayBuffer, and keep tolerating
 // crossOriginIsolated being false on first paint.
 func COIRegisterJS() []byte { return coiRegisterJS }
+
+// UpdateJS returns update.js — a notice that a newer build of the page has
+// been deployed, from a stamp file the build writes beside it. It never
+// reloads by itself: the user's Reload re-validates what the page loaded,
+// so a static host's cache cannot rebuild the new page from the old wasm.
+func UpdateJS() []byte { return updateJS }

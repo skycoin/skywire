@@ -14,7 +14,7 @@ func (e *MultistreamEncoder) Encode(pcm []float32, data []byte) (int, error) {
 	}
 	n, err := e.enc.EncodeWithAnalysis(pcm[:frameSize*int(e.channels)], frameSize, pcm, data)
 	if err != nil {
-		return 0, err
+		return 0, translateEncoderError(err)
 	}
 	return n, nil
 }
@@ -43,7 +43,7 @@ func (e *MultistreamEncoder) EncodeInt16(pcm []int16, data []byte) (int, error) 
 	}
 	n, err := e.enc.EncodeInt16WithAnalysis(pcm[:frameSize*int(e.channels)], frameSize, pcm, data)
 	if err != nil {
-		return 0, err
+		return 0, translateEncoderError(err)
 	}
 	return n, nil
 }

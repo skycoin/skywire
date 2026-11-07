@@ -82,6 +82,10 @@ type Parser struct {
 	nextGt         nextMatchCache
 	nextCommentEnd nextMatchCache
 
+	// htmlCloseMisses remembers, per buffer and tag, the longest tail known
+	// to hold no closing tag, so unclosed HTML blocks do not rescan it.
+	htmlCloseMisses map[htmlCloseKey]int
+
 	// pendingRefDef is a reference definition detected at the start of a
 	// paragraph line. It is added after the preceding paragraph so source
 	// order is preserved.
@@ -97,6 +101,12 @@ type Parser struct {
 
 	// Lazy container continuation lines cannot become setext underlines.
 	commonMarkLazyLines map[*byte]bool
+
+	// commonMarkExtensions are the extensions that apply in CommonMark mode,
+	// and commonMarkHooks is set when Opts.ParserHook runs in it; both are
+	// set by NewCommonMarkWithExtensions.
+	commonMarkExtensions Extensions
+	commonMarkHooks      bool
 
 	// Matching ']' for each '[' in the current Inline() buffer.
 	brackets bracketTable
@@ -114,6 +124,42 @@ type Parser struct {
 
 	// Line-oriented indexes for the current Block() buffer.
 	blockIndex blockIndex
+
+	// inputSize is the size of the document being parsed, which sets
+	// expansionLimit.
+	inputSize int
+	// refExpansion is how many bytes of destinations and titles references
+	// have expanded to, and paddedCells how many empty cells were added to
+	// table rows with too few cells.
+	refExpansion int
+	paddedCells  int
+}
+
+// minExpansionLimit is the smallest expansionLimit.
+const minExpansionLimit = 100 * 1024
+
+// expansionLimit bounds how much output short input can add: a short
+// reference to a long destination used many times, or many table rows with
+// one cell under a header with many columns, would otherwise make the output
+// quadratic in the size of the document. Like cmark and cmark-gfm, it's the
+// size of the document or 100KB, whichever is larger.
+func (p *Parser) expansionLimit() int {
+	return max(p.inputSize, minExpansionLimit)
+}
+
+// expandRef reports whether a link can use ref, which is not the case when
+// references have expanded to more than expansionLimit. References from
+// ReferenceOverride don't count.
+func (p *Parser) expandRef(ref *reference) bool {
+	if ref.overridden {
+		return true
+	}
+	size := len(ref.link) + len(ref.title)
+	if p.refExpansion+size > p.expansionLimit() {
+		return false
+	}
+	p.refExpansion += size
+	return true
 }
 
 func (p *Parser) getRef(refid string) (ref *reference, found bool) {
@@ -124,9 +170,10 @@ func (p *Parser) getRef(refid string) (ref *reference, found bool) {
 				return nil, false
 			}
 			return &reference{
-				link:  []byte(r.Link),
-				title: []byte(r.Title),
-				text:  []byte(r.Text)}, true
+				link:       []byte(r.Link),
+				title:      []byte(r.Title),
+				text:       []byte(r.Text),
+				overridden: true}, true
 		}
 	}
 	// refs are case insensitive
@@ -203,7 +250,7 @@ func (p *Parser) closeUnmatchedBlocks() {
 }
 
 // Reference represents the details of a link.
-// See the documentation in Options for more details on use-case.
+// See Parser.ReferenceOverride for how it's used.
 type Reference struct {
 	// Link is usually the URL the reference points to.
 	Link string
@@ -221,25 +268,38 @@ type Reference struct {
 // You can then convert AST to html using html.Renderer, to some other format
 // using a custom renderer or transform the tree.
 //
-// Parser is not reusable. Create a new Parser for each Parse() call.
+// Parse can be called only once on a Parser and panics if called again.
+// Create a new Parser for each document. Inline and Block can be called
+// any number of times, for example from parser hooks.
+//
+// Parsing takes time linear in the size of input, and limits keep the tree
+// from growing much faster than input for documents that aren't trusted:
+// blocks and inline content are nested at most 64 levels deep, references
+// stop being resolved once they have expanded to more destination and title
+// bytes than the size of input or 100KB, whichever is larger, and table rows
+// stop being padded with empty cells after as many cells. Footnotes and
+// references from ReferenceOverride don't count toward the limit.
 func (p *Parser) Parse(input []byte) ast.Node {
 	if p.didParse {
 		panic("Parser is not reusable. Must create new Parser for each Parse() call.")
 	}
 	p.didParse = true
+	p.inputSize = len(input)
 
 	if p.Opts.Flags&CommonMark != 0 {
 		p.Doc.(*ast.Document).CommonMark = true
-		input = bytes.ReplaceAll(input, []byte{0}, []byte("\ufffd"))
+		if bytes.IndexByte(input, 0) >= 0 {
+			input = bytes.ReplaceAll(input, []byte{0}, []byte("\ufffd"))
+		}
 		defer func() { p.commonMarkLazyLines = nil }()
 	}
 
-	// the code only works with Unix CR newlines so to make life easy for
-	// callers normalize newlines
+	// the code only works with Unix (LF) newlines, so to make life easy for
+	// callers, normalize newlines
 	input = NormalizeNewlines(input)
 
 	p.Block(input)
-	// Walk the tree and finish up some of unfinished blocks
+	// Walk the tree and finish up unfinished blocks
 	for p.tip != nil {
 		p.Finalize(p.tip)
 	}

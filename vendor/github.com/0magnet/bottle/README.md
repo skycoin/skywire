@@ -74,6 +74,12 @@ a few page-global primitives:
   cannot set them, so `SharedArrayBuffer` and `spawnWorker` work. The register
   script reloads once after the worker takes control. `bottle.COISWJS()` and
   `bottle.COIRegisterJS()` serve them.
+- **`update.js`** — a notice that a newer build of the page has been deployed:
+  `<script src="update.js" data-stamp="version.txt"></script>`, where the
+  build writes a hash of what it built into `version.txt`. It polls the stamp
+  past every cache and never reloads by itself; the notice's Reload first
+  re-validates the files the page loaded, so a cached old wasm cannot come
+  back with the new page. `bottle.UpdateJS()` serves it.
 
 The **`vnet`** Go subpackage is the adapter: `vnet.Listen` /
 `vnet.DialTimeout` are exactly `net.Listen` / `net.DialTimeout` on native

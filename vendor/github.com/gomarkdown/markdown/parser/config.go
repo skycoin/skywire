@@ -22,13 +22,13 @@ const (
 	Footnotes                                     // Pandoc-style footnotes
 	NoEmptyLineBeforeBlock                        // No need to insert an empty line to start a (code, quote, ordered list, unordered list) block
 	HeadingIDs                                    // Specify heading IDs with {#id}
-	Titleblock                                    // Titleblock ala pandoc
+	Titleblock                                    // Pandoc-style title block
 	AutoHeadingIDs                                // Create the heading ID from the text
 	BackslashLineBreak                            // Translate trailing backslashes into line breaks
 	DefinitionLists                               // Parse definition lists
 	MathJax                                       // Parse MathJax
 	OrderedListStart                              // Keep track of the first number used when starting an ordered list.
-	Attributes                                    // Block Attributes
+	Attributes                                    // Block attributes: {#id .class key="value"} before a block or {: ...} after it. See html.SkipHTML for untrusted documents.
 	SuperSubscript                                // Super- and subscript support: 2^10^, H~2~O.
 	// EmptyLinesBreakList is retained for source compatibility and has no effect.
 	//
@@ -36,7 +36,7 @@ const (
 	EmptyLinesBreakList
 	Includes         // Support including other files.
 	Mmark            // Support Mmark syntax, see https://mmark.miek.nl/post/syntax/
-	InlineAttributes // Parse {: key="value"} after links and images
+	InlineAttributes // Parse {key="value"} after links and images. See html.SkipHTML for untrusted documents.
 	MarkdownInHTML   // Parse markdown inside HTML table cells and similar tags
 
 	CommonExtensions Extensions = NoIntraEmphasis | Tables | FencedCode |
@@ -69,13 +69,41 @@ func NewCommonMark() *Parser {
 	return p
 }
 
+// CommonMarkExtensions are the extensions NewCommonMarkWithExtensions
+// supports. They follow GitHub Flavored Markdown where it differs from the
+// historical parser.
+const CommonMarkExtensions = Tables | Strikethrough | Autolink | AutoHeadingIDs
+
+// NewCommonMarkWithExtensions creates a markdown parser that follows the
+// CommonMark 0.31.2 spec plus the given extensions, of which those in
+// CommonMarkExtensions apply and the rest are ignored:
+//
+//   - Tables: pipe tables, which can interrupt a paragraph.
+//   - Strikethrough: ~~text~~.
+//   - Autolink: bare http://, https://, ftp:// and mailto: URLs become links.
+//     Trailing punctuation and unbalanced closing parentheses or brackets
+//     are not part of the URL.
+//   - AutoHeadingIDs: heading ids made from the heading text.
+//
+// Unlike NewCommonMark, the parser also runs Opts.ParserHook, at the start
+// of each block.
+func NewCommonMarkWithExtensions(extensions Extensions) *Parser {
+	p := NewCommonMark()
+	p.commonMarkExtensions = extensions & CommonMarkExtensions
+	p.commonMarkHooks = true
+	return p
+}
+
+// maxNesting limits how deeply blocks and inline content are nested.
+const maxNesting = 64
+
 // NewWithExtensions creates a markdown parser with the given extensions.
 func NewWithExtensions(extension Extensions) *Parser {
 	doc := &ast.Document{}
 	p := Parser{
 		refs:                 make(map[string]*reference),
 		refsRecord:           make(map[string]struct{}),
-		maxNesting:           64,
+		maxNesting:           maxNesting,
 		Doc:                  doc,
 		extensions:           extension,
 		tip:                  doc,

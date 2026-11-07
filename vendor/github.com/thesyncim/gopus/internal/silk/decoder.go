@@ -52,6 +52,9 @@ type Decoder struct {
 	state                [2]decoderState
 	stereo               stereoDecState
 	prevDecodeOnlyMiddle int32
+	// Active internal channel layout, shared by SILK and Hybrid. libopus
+	// opus_decode_frame retains DecControl.nChannelsInternal through DTX/PLC.
+	internalChannels int32
 
 	// Track previous bandwidth to detect bandwidth changes.
 	// Used to reset sMid state when sample rate changes.
@@ -410,6 +413,7 @@ func (d *Decoder) Reset() {
 	resetDecoderState(&d.state[1])
 	d.stereo = stereoDecState{}
 	d.prevDecodeOnlyMiddle = 0
+	d.internalChannels = 0
 
 	// Reset resampler state for a clean stream start
 	for _, pair := range d.resamplers {
@@ -1162,6 +1166,21 @@ func (d *Decoder) ResetSideChannel() {
 			continue
 		}
 		pair.right.Reset()
+	}
+}
+
+// InternalStereo reports SILK's active coded channel layout. It is independent
+// of CELT's packet channel count and is retained during DTX and concealment.
+func (d *Decoder) InternalStereo() bool {
+	return d.internalChannels == 2
+}
+
+// SetInternalStereo records the channel layout selected by coded SILK/Hybrid
+// data, matching DecControl.nChannelsInternal in src/opus_decoder.c.
+func (d *Decoder) SetInternalStereo(stereo bool) {
+	d.internalChannels = 1
+	if stereo {
+		d.internalChannels = 2
 	}
 }
 

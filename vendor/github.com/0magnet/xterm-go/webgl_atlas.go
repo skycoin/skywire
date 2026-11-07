@@ -23,8 +23,10 @@ const atlasDebug = false
 const (
 	// atlasPageSize is where a page starts. A terminal showing text needs a
 	// fraction of it, so it is not worth allocating more up front; a page
-	// that keeps overflowing grows itself, up to atlasPageSizeMax.
-	atlasPageSize    = 2048
+	// that keeps overflowing grows itself, up to atlasPageSizeMax. A page is
+	// its size squared at four bytes a pixel twice over, once in the canvas
+	// and once as the texture: 4 MB each at 1024, 16 MB at 2048.
+	atlasPageSize    = 1024
 	atlasPageSizeMax = 4096
 	// atlasGrowAfter is how many overflows in a row justify a bigger page.
 	// One is ordinary -- the screen changed. Repeated ones mean the working
@@ -139,9 +141,18 @@ func newTextureAtlas(cfg atlasConfig) *textureAtlas {
 	return a
 }
 
+// dispose lets the atlas's canvases go. Removing a canvas does not free its
+// pixels: the browser keeps them until the element is collected, and the
+// element is held by the js.Value Go has for it until Go's collector runs
+// and finalizes that. The page replaced on every resize stayed allocated
+// beside its successor for as long as that took, 16 MB of it. A canvas
+// sized to nothing has no pixels to keep.
 func (a *textureAtlas) dispose() {
-	a.tmpCanvas.Call("remove")
-	a.canvas.Call("remove")
+	for _, c := range []js.Value{a.canvas, a.tmpCanvas} {
+		c.Set("width", 0)
+		c.Set("height", 0)
+		c.Call("remove")
+	}
 }
 
 // beginFrame reports whether the model must be cleared (atlas was

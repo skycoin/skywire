@@ -17,7 +17,7 @@
 [11]: https://sourcegraph.com/github.com/xtaci/smux/-/badge.svg
 [12]: https://sourcegraph.com/github.com/xtaci/smux?badge
 
-[English](README.md) | [中文](README_zh-cn.md)
+[English](README.md)
 
 ## Introduction
 
@@ -28,9 +28,8 @@ Smux (**S**imple **MU**ltiple**X**ing) is a multiplexing library for Golang. It 
 1. ***Token bucket*** controlled receiving, providing a smoother bandwidth graph (see picture below).
 2. Session-wide receive buffer shared among streams for **fully controlled** overall memory usage.
 3. Minimized header (8 bytes), maximized payload.
-4. Battle-tested on millions of devices in [kcptun](https://github.com/xtaci/kcptun).
-5. Built-in fair queue traffic shaping.
-6. Per-stream sliding window for congestion control (protocol version 2+).
+4. Built-in fair queue traffic shaping.
+5. Per-stream sliding window for congestion control (protocol version 2+).
 
 ![smooth bandwidth curve](assets/curve.jpg)
 
@@ -172,4 +171,3 @@ func server() {
 
 * [hashicorp/yamux](https://github.com/hashicorp/yamux)
 * [xtaci/kcp-go](https://github.com/xtaci/kcp-go)
-* [xtaci/kcptun](https://github.com/xtaci/kcptun)

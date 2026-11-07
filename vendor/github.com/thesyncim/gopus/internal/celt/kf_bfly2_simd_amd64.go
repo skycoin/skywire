@@ -20,7 +20,7 @@ func kfBfly2M4SIMD(fout []kissCpx, N int) {
 		return
 	}
 	_ = fout[8*N-1]
-	p := unsafe.Pointer(unsafe.SliceData(fout))
+	base := unsafe.Pointer(unsafe.SliceData(fout))
 	tw := broadcastF32x4Arch(kfBfly2M4Twiddle)
 	lane0 := archsimd.LoadInt32x4Array(&[4]int32{-1, 0, 0, 0}).ToMask()
 	lane1 := archsimd.LoadInt32x4Array(&[4]int32{0, -1, 0, 0}).ToMask()
@@ -28,11 +28,14 @@ func kfBfly2M4SIMD(fout []kissCpx, N int) {
 	lane3 := archsimd.LoadInt32x4Array(&[4]int32{0, 0, 0, -1}).ToMask()
 	fusedGroups := N &^ 3
 	for group := 0; group < N; group++ {
+		// Index from base each group: advancing p after the last group would
+		// point one past fout's allocation, which unsafe.Pointer rules forbid
+		// (checkptr reports it under -race).
+		p := unsafe.Add(base, group*64)
 		fr, fi := bflyLoadCpx4AMD64(p)
 		r, i := bflyLoadCpx4AMD64(unsafe.Add(p, 32))
 		minusR, minusI, plusR, plusI := bfly2M4GroupOutputsAMD64(fr, fi, r, i, tw, lane0, lane1, lane2, lane3, group < fusedGroups)
 		bflyStoreCpx4AMD64(unsafe.Add(p, 32), minusR, minusI)
 		bflyStoreCpx4AMD64(p, plusR, plusI)
-		p = unsafe.Add(p, 64)
 	}
 }
