@@ -49,6 +49,19 @@ addresses your wallet shows, so you would not see those rewards arrive.
 The Wallet page of the hypervisor UI makes the wallet in your browser. This
 needs a visor newer than v1.3.104.
 
+The browser encrypts the wallet only on a secure page: `http://127.0.0.1` or
+`http://localhost` on the machine running the hypervisor, or https. Opened
+from another computer at `http://<ip>:8000`, creating a wallet fails. Reach
+the hypervisor through an SSH tunnel instead, then open
+`http://localhost:8000`:
+
+```
+ssh -L 8000:localhost:8000 user@<hypervisor-ip>
+```
+
+The browser keeps the wallet for the address it was opened at. Opened at
+another address, load it again from the seed.
+
 1. Open `http://127.0.0.1:8000/#/wallet`. Choose **New** and give the wallet
    a name. **Wallet type** is already **BIP44 (HD Wallet)**. Write the seed
    down on paper and type it into **Confirm seed**. Set a **Password**, which
