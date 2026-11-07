@@ -10,8 +10,10 @@ import (
 	"log"
 	"reflect"
 	"strings"
-	"time"
+	"sync"
 	"unsafe"
+
+	"github.com/hanwen/go-fuse/v2/internal/iov"
 )
 
 const sizeOfOutHeader = unsafe.Sizeof(OutHeader{})
@@ -19,12 +21,13 @@ const sizeOfOutHeader = unsafe.Sizeof(OutHeader{})
 type request struct {
 	inflightIndex int
 
-	cancel chan struct{}
+	ctx *requestContext
+
+	// mu protects against reading outdated data through the Call accessors.
+	mu  sync.Mutex
+	gen uint64
 
 	suppressReply bool
-
-	// written under Server.interruptMu
-	interrupted bool
 
 	// inHeader + opcode specific data
 	inputBuf []byte
@@ -51,13 +54,13 @@ type request struct {
 	// Unstructured output. Only one of outPayload and readResult is non-nil.
 	outPayload []byte
 	readResult ReadResult
-
-	// Start timestamp for timing info.
-	startTime time.Time
 }
 
 // requestAlloc holds the request, plus I/O buffers, which are
 // reused across requests.
+//
+// As of Oct 2026, memory recycling decreases walltime on metadata
+// heavy loads by ~9%.
 type requestAlloc struct {
 	request
 
@@ -75,9 +78,11 @@ type requestAlloc struct {
 	outDataInline [uintptr(outputDataSize)]byte
 
 	// Input, if small enough to fit here.
-	smallInputBuf [128]byte
+	smallInputBuf [uintptr(inputDataSize)]byte
 
 	extInline requestExt
+
+	call fdCall
 }
 
 func (r *request) inHeader() *InHeader {
@@ -100,8 +105,14 @@ func (r *request) clear() {
 	r.ext = nil
 	r.status = OK
 	r.outPayload = nil
-	r.startTime = time.Time{}
 	r.readResult = nil
+	r.ctx = nil
+}
+
+func (r *request) finish() {
+	r.mu.Lock()
+	r.gen++
+	r.mu.Unlock()
 }
 
 func asType(ptr unsafe.Pointer, typ any) any {
@@ -131,7 +142,7 @@ func (r *request) InputDebug() string {
 		n1, n2, _ := r.filenames()
 		names = fmt.Sprintf(" %q %q", n1, n2)
 	} else if r.inPayloadIov != nil {
-		names = fmt.Sprintf(" %db in %d segments", iovLen(r.inPayloadIov), len(r.inPayloadIov))
+		names = fmt.Sprintf(" %db in %d segments", iov.Len(r.inPayloadIov), len(r.inPayloadIov))
 	} else {
 		names = summarizePayload(r.inPayload)
 	}
@@ -272,7 +283,7 @@ func (r *request) inData() unsafe.Pointer {
 }
 
 // note: outSize is without OutHeader
-func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
+func parseRequest(in []byte, negotiated uint64) (h *operationHandler, inSize, outSize, outPayloadSize int, errno Status) {
 	inSize = int(unsafe.Sizeof(InHeader{}))
 	if len(in) < inSize {
 		errno = EIO
@@ -289,7 +300,7 @@ func parseRequest(in []byte, kernelSettings *InitIn, negotiated uint64) (h *oper
 		inSize = int(h.InputSize)
 	}
 	if hdr.Opcode == _OP_RENAME {
-		inSize = renameInSize(kernelSettings)
+		inSize = renameInSize(negotiated)
 	}
 	if hdr.Opcode == _OP_SETXATTR {
 		inSize = setXAttrInSize(negotiated)

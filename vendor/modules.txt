@@ -603,13 +603,14 @@ github.com/gorilla/securecookie
 # github.com/guptarohit/asciigraph v0.10.0
 ## explicit; go 1.11
 github.com/guptarohit/asciigraph
-# github.com/hanwen/go-fuse/v2 v2.12.1
+# github.com/hanwen/go-fuse/v2 v2.12.1-0.20261104063644-78661f400093
 ## explicit; go 1.21
 github.com/hanwen/go-fuse/v2/fs
 github.com/hanwen/go-fuse/v2/fuse
 github.com/hanwen/go-fuse/v2/internal
 github.com/hanwen/go-fuse/v2/internal/fallocate
 github.com/hanwen/go-fuse/v2/internal/ioctl
+github.com/hanwen/go-fuse/v2/internal/iov
 github.com/hanwen/go-fuse/v2/internal/openat
 github.com/hanwen/go-fuse/v2/internal/renameat
 github.com/hanwen/go-fuse/v2/internal/utimens
