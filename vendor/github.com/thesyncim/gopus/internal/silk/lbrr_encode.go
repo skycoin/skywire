@@ -27,7 +27,7 @@ const lbrrSpeechActivityThresholdQ8 = 77
 //
 // Reference: libopus silk/float/encode_frame_FLP.c silk_LBRR_encode_FLP
 func (e *Encoder) lbrrEncode(
-	pcm []float32,
+	inputQ0 []int16,
 	frameIndices sideInfoIndices,
 	lpcQ12 []int16,
 	predCoefQ12 []int16,
@@ -98,7 +98,7 @@ func (e *Encoder) lbrrEncode(
 	if signalType == typeVoiced {
 		ltpScaleQ14 = int32(silk_LTPScales_table_Q14[ltpScaleIndex])
 	}
-	pulses, seedOut := e.computeNSQExcitation(pcm, lpcQ12, predCoefQ12, interpIdx, lbrrGainsQ16, pitchLags, ltpCoeffs, ltpScaleQ14, signalType, quantOffset, speechActivityQ8, noiseParams, seed, numSubframes, subframeSamples, frameSamples, lbrrNSQ)
+	pulses, seedOut := e.computeNSQExcitation(inputQ0, lpcQ12, predCoefQ12, interpIdx, lbrrGainsQ16, pitchLags, ltpCoeffs, ltpScaleQ14, signalType, quantOffset, speechActivityQ8, noiseParams, seed, numSubframes, subframeSamples, frameSamples, lbrrNSQ)
 	e.lbrrIndices[frameIdx].Seed = int8(seedOut)
 
 	lbrrPulses := e.lbrrPulses[frameIdx]

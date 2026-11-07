@@ -471,7 +471,7 @@ func (d *streamState) decodeSILKToFloat32(data []byte, frameSize int, packetSter
 		case packetStereo && d.channels == 1:
 			n, err = d.silkDec.DecodePLCInto(bw, frameSize, out32)
 		case !packetStereo && d.channels == 2:
-			n, err = d.silkDec.DecodeMonoToStereoPLCInto(bw, frameSize, d.lastPacketStereo, out32)
+			n, err = d.silkDec.DecodeMonoToStereoPLCInto(bw, frameSize, d.silkDec.InternalStereo(), out32)
 		default:
 			n, err = d.silkDec.DecodePLCInto(bw, frameSize, out32)
 		}
@@ -485,13 +485,16 @@ func (d *streamState) decodeSILKToFloat32(data []byte, frameSize int, packetSter
 		case packetStereo && d.channels == 1:
 			out32, err = d.silkDec.DecodeStereoToMono(data, bw, frameSize, true)
 		case !packetStereo && d.channels == 2:
-			out32, err = d.silkDec.DecodeMonoToStereo(data, bw, frameSize, true, d.lastPacketStereo)
+			out32, err = d.silkDec.DecodeMonoToStereo(data, bw, frameSize, true, d.silkDec.InternalStereo())
 		default:
 			out32, err = d.silkDec.Decode(data, bw, frameSize, true)
 		}
 	}
 	if err != nil {
 		return nil, err
+	}
+	if data != nil {
+		d.silkDec.SetInternalStereo(packetStereo)
 	}
 
 	if extsupport.OSCERuntime {
@@ -529,7 +532,7 @@ func (d *streamState) decodeSILKWithDecoder(rd *rangecoding.Decoder, frameSize i
 		_, err = d.silkDec.DecodeStereoToMonoWithDecoderInto(rd, bw, frameSize, true, out32)
 	case !packetStereo && channels == 2:
 		out32 = d.framePCMFor(frameSize * channels)
-		_, err = d.silkDec.DecodeMonoToStereoWithDecoderInto(rd, bw, frameSize, true, d.lastPacketStereo, out32)
+		_, err = d.silkDec.DecodeMonoToStereoWithDecoderInto(rd, bw, frameSize, true, d.silkDec.InternalStereo(), out32)
 	default:
 		out32 = d.framePCMFor(frameSize * channels)
 		_, err = d.silkDec.DecodeWithDecoderInto(rd, bw, frameSize, true, out32)
@@ -537,6 +540,7 @@ func (d *streamState) decodeSILKWithDecoder(rd *rangecoding.Decoder, frameSize i
 	if err != nil {
 		return nil, err
 	}
+	d.silkDec.SetInternalStereo(packetStereo)
 
 	if extsupport.OSCERuntime {
 		d.applyOSCEPostSilk(out32, frameSize, bw, packetStereo)

@@ -80,20 +80,28 @@ func fcntl(fd uintptr, cmd int, arg int) (val int, errno syscall.Errno) {
 const F_SETPIPE_SZ = 1031
 const F_GETPIPE_SZ = 1032
 
-func osPipe() (int, int, error) {
-	var fds [2]int
-	err := syscall.Pipe2(fds[:], syscall.O_NONBLOCK)
-	return fds[0], fds[1], err
-}
-
 func newSplicePair() (p *Pair, err error) {
 	p = &Pair{}
-	p.r, p.w, err = osPipe()
+	p.r, p.w, err = os.Pipe()
 	if err != nil {
 		return nil, err
 	}
+	p.rConn, err = p.r.SyscallConn()
+	if err != nil {
+		p.r.Close()
+		p.w.Close()
+		return nil, err
+	}
+	p.wConn, err = p.w.SyscallConn()
+	if err != nil {
+		p.r.Close()
+		p.w.Close()
+		return nil, err
+	}
 	var errNo syscall.Errno
-	p.size, errNo = fcntl(uintptr(p.r), F_GETPIPE_SZ, 0)
+	p.rConn.Control(func(fd uintptr) {
+		p.size, errNo = fcntl(fd, F_GETPIPE_SZ, 0)
+	})
 	if errNo == syscall.EINVAL {
 		p.size = DefaultPipeSize
 		return p, nil

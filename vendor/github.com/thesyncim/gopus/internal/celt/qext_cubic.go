@@ -115,36 +115,11 @@ func cubicQuantPartition(ctx *bandCtx, x []celtNorm, n, b, B, lm int, gain opusV
 	return cm
 }
 
-func computeQEXTCubicBits(ctx *bandCtx, extBudget, n, b, lm int) int {
-	_ = b
-	_ = lm
-	if ctx == nil || n <= 1 || extBudget <= 2*n<<bitRes {
+func computeQEXTCubicBits(ctx *bandCtx, extBudget, n int) int {
+	if extBudget <= 2*n<<bitRes {
 		return 0
 	}
-	if ctx.encode {
-		if ctx.extEnc == nil {
-			return 0
-		}
-	} else if ctx.extDec == nil {
-		return 0
-	}
-
-	extraBits := (extBudget / (n - 1)) >> bitRes
-	extTellFrac := 0
-	if ctx.encode {
-		extTellFrac = ctx.extEnc.TellFrac()
-	} else {
-		extTellFrac = ctx.extDec.TellFrac()
-	}
-	extRemainingBits := ctx.extTotalBits - extTellFrac
-	if extRemainingBits <= n<<bitRes {
-		return 0
-	}
-	if extRemainingBits < ((extraBits+1)*(n-1)+n)<<bitRes {
-		extraBits = ((extRemainingBits - (n << bitRes)) / (n - 1)) >> bitRes
-		extraBits = max(extraBits-1, 0)
-	}
-	return min(14, extraBits)
+	return computeQEXTExtraBits(ctx, extBudget, n, 14)
 }
 
 func cubicSynthesis(x []celtNorm, iy []int32, n, k, face, sign int, gain opusVal16) {

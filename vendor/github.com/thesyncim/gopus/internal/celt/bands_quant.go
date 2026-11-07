@@ -2618,34 +2618,36 @@ func computeThetaExt(ctx *bandCtx, sctx *splitCtx, x, y []celtNorm, n int, b *in
 	_, _ = bIn, rawItheta
 }
 
-func computeQEXTPVQRefineBits(ctx *bandCtx, extBudget, n int) int {
+// computeQEXTExtraBits reads the active coder before dividing. On POWER,
+// Go 1.27.3 can clobber the encode/decode condition across a division
+// (golang/go#81842). The limits in celt/bands.c:quant_partition are 12 for
+// PVQ refinement and 14 for cubic quantization.
+func computeQEXTExtraBits(ctx *bandCtx, extBudget, n, maxExtraBits int) int {
 	if ctx == nil || n <= 1 || extBudget <= 0 {
 		return 0
 	}
+	var extTellFrac int
 	if ctx.encode {
 		if ctx.extEnc == nil {
 			return 0
 		}
-	} else if ctx.extDec == nil {
-		return 0
-	}
-
-	extraBits := (extBudget / (n - 1)) >> bitRes
-	extTellFrac := 0
-	if ctx.encode {
 		extTellFrac = ctx.extEnc.TellFrac()
 	} else {
+		if ctx.extDec == nil {
+			return 0
+		}
 		extTellFrac = ctx.extDec.TellFrac()
 	}
 	extRemainingBits := ctx.extTotalBits - extTellFrac
 	if extRemainingBits <= n<<bitRes {
 		return 0
 	}
+	extraBits := (extBudget / (n - 1)) >> bitRes
 	if extRemainingBits < ((extraBits+1)*(n-1)+n)<<bitRes {
 		extraBits = ((extRemainingBits - (n << bitRes)) / (n - 1)) >> bitRes
 		extraBits = max(extraBits-1, 0)
 	}
-	return min(12, extraBits)
+	return min(maxExtraBits, extraBits)
 }
 
 func quantPartitionEncodeWithExtBudget(ctx *bandCtx, x []celtNorm, n, b, B int, lowband []celtNorm, lm int, gain opusVal16, fill int, extBudget int) (int, []celtNorm) {
@@ -2802,7 +2804,7 @@ func quantPartitionEncodeWithExtBudget(ctx *bandCtx, x []celtNorm, n, b, B int, 
 		if ctx.encode {
 			pvqExtraBits := 0
 			if extBudget > 0 && ctx.extEnc != nil {
-				pvqExtraBits = computeQEXTPVQRefineBits(ctx, extBudget, n)
+				pvqExtraBits = computeQEXTExtraBits(ctx, extBudget, n, 12)
 			}
 			var traceState quantBandTraceState
 			if celtQuantBandTraceEnabled {
@@ -2815,10 +2817,10 @@ func quantPartitionEncodeWithExtBudget(ctx *bandCtx, x []celtNorm, n, b, B int, 
 			return cm, x
 		}
 		// Use scratch-aware version to avoid allocations in decode hot path
-		cm := algUnquantInto(x, ctx.rd, ctx.band, n, k, ctx.spread, B, gain, ctx.extDec, computeQEXTPVQRefineBits(ctx, extBudget, n), ctx.scratch)
+		cm := algUnquantInto(x, ctx.rd, ctx.band, n, k, ctx.spread, B, gain, ctx.extDec, computeQEXTExtraBits(ctx, extBudget, n, 12), ctx.scratch)
 		return cm, x
 	}
-	if cubicBits := computeQEXTCubicBits(ctx, extBudget, n, b, lm); cubicBits > 0 {
+	if cubicBits := computeQEXTCubicBits(ctx, extBudget, n); cubicBits > 0 {
 		if ctx.encode {
 			return cubicQuant(x, n, cubicBits, B, ctx.extEnc, gain, ctx.resynth, ctx.encScratch), x
 		}
@@ -3154,12 +3156,12 @@ func quantPartitionDecodeWithExtBudget(ctx *bandCtx, x []celtNorm, n, b, B int, 
 		k := getPulses(q)
 		pvqExtraBits := 0
 		if extBudget > 0 && ctx.extDec != nil {
-			pvqExtraBits = computeQEXTPVQRefineBits(ctx, extBudget, n)
+			pvqExtraBits = computeQEXTExtraBits(ctx, extBudget, n, 12)
 		}
 		cm := algUnquantInto(x, ctx.rd, ctx.band, n, k, ctx.spread, B, gain, ctx.extDec, pvqExtraBits, ctx.scratch)
 		return cm
 	}
-	if cubicBits := computeQEXTCubicBits(ctx, extBudget, n, b, lm); cubicBits > 0 {
+	if cubicBits := computeQEXTCubicBits(ctx, extBudget, n); cubicBits > 0 {
 		return cubicUnquant(x, n, cubicBits, B, ctx.extDec, gain, ctx.scratch)
 	}
 	if ctx.resynth {

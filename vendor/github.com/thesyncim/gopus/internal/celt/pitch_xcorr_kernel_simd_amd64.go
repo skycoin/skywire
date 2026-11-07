@@ -92,9 +92,12 @@ func xcorrKernelAVX8OnePassTail(x, y *float32, sum *[8]float32, length int, tail
 	// y register is the one the three-operand FMA overwrites, so x stays live
 	// without a copy per lag.
 	var acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7 archsimd.Float32x8
-	xp, yp := unsafe.Pointer(x), unsafe.Pointer(y)
+	// Derive x only for active blocks; a final advance can leave its allocation.
+	// The y buffer includes the additional lag samples.
+	xBase, yp := unsafe.Pointer(x), unsafe.Pointer(y)
 	i := 0
 	for ; i+8 <= length; i += 8 {
+		xp := unsafe.Add(xBase, i*4)
 		xv := archsimd.LoadFloat32x8Array((*[8]float32)(xp))
 		acc0 = archsimd.LoadFloat32x8Array((*[8]float32)(yp)).MulAdd(xv, acc0)
 		acc1 = archsimd.LoadFloat32x8Array((*[8]float32)(unsafe.Add(yp, 4))).MulAdd(xv, acc1)
@@ -108,7 +111,6 @@ func xcorrKernelAVX8OnePassTail(x, y *float32, sum *[8]float32, length int, tail
 			acc6 = archsimd.LoadFloat32x8Array((*[8]float32)(unsafe.Add(yp, 24))).MulAdd(xv, acc6)
 			acc7 = archsimd.LoadFloat32x8Array((*[8]float32)(unsafe.Add(yp, 28))).MulAdd(xv, acc7)
 		}
-		xp = unsafe.Add(xp, 32)
 		yp = unsafe.Add(yp, 32)
 	}
 	if i < length {

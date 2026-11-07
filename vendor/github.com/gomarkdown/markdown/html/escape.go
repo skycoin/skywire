@@ -27,6 +27,8 @@ const (
 
 var htmlTagRe = regexp.MustCompile("(?i)^" + htmlTag)
 
+var entityRe = regexp.MustCompile(`&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);`)
+
 // Escaper maps HTML special characters to their escaped forms.
 var Escaper = [256][]byte{
 	'&': []byte("&amp;"),
@@ -68,12 +70,38 @@ func EscapeHTML(w io.Writer, d []byte) {
 	w.Write(d[start:])
 }
 
+// EscLink writes text with its character references decoded, then HTML-escaped.
 func EscLink(w io.Writer, text []byte) {
-	EscapeHTML(w, []byte(html.UnescapeString(string(text))))
+	EscapeHTML(w, unescapeEntities(text))
 }
 
-// Escape writes text while removing Markdown escape backslashes.
+// unescapeEntities decodes semicolon-terminated character references once.
+// html.UnescapeString alone would also decode legacy names without a semicolon,
+// corrupting a query string such as ?a=1&copy=2.
+func unescapeEntities(text []byte) []byte {
+	if bytes.IndexByte(text, '&') < 0 {
+		return text
+	}
+	return entityRe.ReplaceAllFunc(text, func(ent []byte) []byte {
+		s := html.UnescapeString(string(ent))
+		// A trailing ';' means only a legacy prefix such as &not matched.
+		if len(s) > 1 && s[len(s)-1] == ';' {
+			return ent
+		}
+		return []byte(s)
+	})
+}
+
+// Escape writes text while removing Markdown escape backslashes. It doesn't
+// escape HTML: use EscapeHTML for that.
 func Escape(w io.Writer, text []byte) {
+	w.Write(removeBackslashEscapes(text))
+}
+
+// removeBackslashEscapes returns text without the backslashes of Markdown
+// escapes.
+func removeBackslashEscapes(text []byte) []byte {
+	out := make([]byte, 0, len(text))
 	escaped := false
 	for _, char := range text {
 		if char == '\\' {
@@ -82,6 +110,7 @@ func Escape(w io.Writer, text []byte) {
 				continue
 			}
 		}
-		w.Write([]byte{char})
+		out = append(out, char)
 	}
+	return out
 }

@@ -57,14 +57,14 @@ func (d *Decoder) Init(buf []byte) {
 	d.rem = int32(d.readByte())
 	d.val = d.rng - 1 - uint32(d.rem>>(EC_SYM_BITS-EC_CODE_EXTRA))
 
-	// Set initial bit count BEFORE normalize (matches libopus ec_dec_init).
-	// This compensates for bits that will be added in normalize().
+	// Set the initial bit count before normalization (libopus ec_dec_init).
+	// This compensates for the bits added by normalized.
 	d.nbitsTotal = int32(EC_CODE_BITS + 1 -
 		((EC_CODE_BITS-EC_CODE_EXTRA)/EC_SYM_BITS)*EC_SYM_BITS)
 	d.ext = 0
 
 	// Normalize to fill the range (this will add more bits to nbitsTotal)
-	d.normalize()
+	d.rng, d.val = d.normalized(d.rng, d.val)
 }
 
 // readByte reads the next byte from the buffer.
@@ -97,25 +97,6 @@ func (d *Decoder) normalized(rng, val uint32) (uint32, uint32) {
 		val = (val<<EC_SYM_BITS + EC_SYM_MAX&^sym) & (EC_CODE_TOP - 1)
 	}
 	return rng, val
-}
-
-// normalize ensures rng > EC_CODE_BOT by reading more bytes.
-// This is the core renormalization loop from RFC 6716 Section 4.1.1.
-//
-//go:nosplit
-func (d *Decoder) normalize() {
-	for d.rng <= EC_CODE_BOT {
-		d.nbitsTotal += int32(EC_SYM_BITS)
-		d.rng <<= EC_SYM_BITS
-
-		// Combine previous remainder with new byte
-		sym := uint32(d.rem)
-		d.rem = int32(d.readByte())
-		sym = (sym<<EC_SYM_BITS | uint32(d.rem)) >> (EC_SYM_BITS - EC_CODE_EXTRA)
-
-		// Update val: shift in new bits, mask to valid range
-		d.val = ((d.val << EC_SYM_BITS) + (EC_SYM_MAX &^ sym)) & (EC_CODE_TOP - 1)
-	}
 }
 
 // DecodeICDF decodes a symbol using an inverse cumulative distribution function table.

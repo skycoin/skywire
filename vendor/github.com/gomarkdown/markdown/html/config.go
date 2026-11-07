@@ -1,6 +1,7 @@
 package html
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/gomarkdown/markdown/ast"
@@ -9,15 +10,16 @@ import (
 // Flags control optional behavior of the HTML renderer.
 type Flags int
 
-// IDTag is the tag used for tag identification. It defaults to "id".
+// IDTag is the name of the HTML attribute that holds a block attribute's ID.
+// It defaults to "id".
 var IDTag = "id"
 
 const (
 	FlagsNone               Flags = 0
-	SkipHTML                Flags = 1 << iota // Skip raw HTML blocks.
+	SkipHTML                Flags = 1 << iota // Skip raw HTML, and keep only document attributes that can't run script or load anything.
 	SkipImages                                // Skip embedded images.
 	SkipLinks                                 // Render link text without links.
-	Safelink                                  // Link only to trusted protocols.
+	Safelink                                  // Allow only trusted URL schemes in links and images, and keep only safe document attributes. Doesn't check hosts or sanitize HTML.
 	NofollowLinks                             // Add rel="nofollow" to external links.
 	NoreferrerLinks                           // Add rel="noreferrer" to external links.
 	NoopenerLinks                             // Add rel="noopener" to external links.
@@ -68,9 +70,10 @@ type Renderer struct {
 	lastOutputLen     int
 	commonMark        bool
 	DisableTags       int               // Strip tags from Out and Outs when positive.
-	IsSafeURLOverride func([]byte) bool // Optional safe-URL predicate.
+	IsSafeURLOverride func([]byte) bool // Optional safe-URL predicate. Gets the URL as written to the output.
 	sr                *SPRenderer
 	documentMatter    ast.DocumentMatters
+	textBuf           bytes.Buffer // reused by Text for escaped text before smartypants
 }
 
 // NewRenderer creates an HTML renderer.
