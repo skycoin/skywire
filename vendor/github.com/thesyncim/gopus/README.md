@@ -4,28 +4,26 @@ gopus encodes and decodes Opus audio in pure Go, without cgo or an external
 codec library. It supports voice and music, mono and stereo, multistream and
 ambisonics, Ogg files, and RTP RED recovery.
 
-The caller-buffer packet APIs perform zero-allocation processing after warmup.
-Ordinary builds use scalar Go; Go 1.27's experimental SIMD support adds
+The packet APIs use caller-owned buffers for allocation-free processing after
+warmup. Ordinary builds use scalar Go; Go 1.27's experimental SIMD support adds
 CPU-specific kernels. Correctness is checked against pinned libopus 1.6.1 and
 the RFC 8251 test vectors; see [parity and testing](#parity--testing) for the
 exact guarantees and tested configurations.
 
 [API reference](https://pkg.go.dev/github.com/thesyncim/gopus) ·
-[Quick start](#quick-start) · [Working with audio](#working-with-audio) ·
-[Examples](#examples) · [Build options](#build-options) ·
-[Performance](#performance) · [Parity & testing](#parity--testing) ·
-[Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Examples](#examples) ·
+[Performance](#performance) · [Contributing](CONTRIBUTING.md)
 
 ## Install
 
-gopus v0.2.3 requires Go 1.27.3 or newer.
+This README describes `master`, which requires Go 1.27 or newer:
 
 ```sh
-go get github.com/thesyncim/gopus@v0.2.3
+go get github.com/thesyncim/gopus@master
 ```
 
-See the [v0.2.3 documentation](https://github.com/thesyncim/gopus/tree/v0.2.3)
-for this release.
+For the published release, use `@v0.2.2` and its
+[versioned documentation](https://github.com/thesyncim/gopus/tree/v0.2.2).
 
 ## Quick start
 
@@ -84,14 +82,8 @@ func main() {
 
 ### PCM and reusable buffers
 
-Use one encoder and decoder per stream, and allocate PCM and packet buffers
-outside the audio loop. `Encode`, `EncodeInt16`, `EncodeInt24`, `Decode`,
-`DecodeInt16` and `DecodeInt24` use caller-owned output. `EncodeFloat32`,
-`EncodeInt16Slice`, `EncodeInt24Slice` and `DecodeInt24Slice` return newly
-allocated slices; use the caller-buffer methods when zero allocations are required.
-
-With `enc`, `dec`, and `cfg` from the quick start, the same round trip works
-with `int16` PCM:
+Use one encoder and decoder per stream, and reuse their buffers. With `enc`,
+`dec`, and `cfg` from the quick start, the same round trip works with `int16` PCM:
 
 ```go
 // Allocate once, outside the audio loop. FrameSize counts samples per channel.
@@ -116,18 +108,6 @@ decoded := output[:samples*channels]
 fmt.Printf("decoded %d interleaved values\n", len(decoded))
 // Consume decoded before the next decode overwrites output.
 ```
-
-The encoder starts at 20 ms per frame. `SetFrameSize` changes the input length
-in samples per channel: for 10 ms at 48 kHz, use `enc.SetFrameSize(480)` and
-supply exactly `480*channels` PCM values. `FrameSize()` reports that required
-length per channel. Decode reports the packet's actual sample count per channel,
-independently of any encoder instance.
-
-The packet buffer's **length**, not capacity, sets the encode byte budget.
-Pass `packetBuf` on each call and send only `packetBuf[:bytesWritten]`; keeping
-the shortened slice as the next call's buffer also shrinks its budget. Likewise,
-pass the full reusable PCM output slice to decode coded packets and consume only
-`output[:samples*channels]`. Consume or copy output before reusing its buffer.
 
 `Encode`/`Decode` use `float32` PCM, normally in [-1, 1]. The `Int24` methods
 use right-justified signed 24-bit PCM in `[]int32`; decode output is not clamped
@@ -340,27 +320,15 @@ build tags.
 
 ## Build options
 
-Ordinary builds use scalar Go kernels. Go 1.27's `GOEXPERIMENT=simd` enables
-`simd/archsimd` kernels on amd64 and arm64 where implemented; runtime CPU checks
-select supported kernels, with scalar fallbacks. Apply the setting when building
-your application, not just when fetching the dependency.
-
-From the repository root:
+Ordinary builds use scalar Go kernels. `GOEXPERIMENT=simd` compiles
+`simd/archsimd` kernels where implemented; runtime CPU checks select supported
+kernels and the rest use scalar code. `-tags nosimd` or `-tags purego` forces
+the scalar path, including the matching scalar C reference in oracle tests.
+Enable SIMD when building your application; for this repository:
 
 ```sh
-go build ./...                                # ordinary scalar build
-GOEXPERIMENT=simd go build ./...                # opt into SIMD
-GOEXPERIMENT=simd go build -tags nosimd ./...    # force scalar with SIMD enabled
+GOEXPERIMENT=simd go build ./...
 ```
-
-The benchmark commands explicitly apply the repository's `default.pgo`.
-For an application, use `go build -pgo=/path/to/gopus/default.pgo` to select it.
-Go's automatic PGO lookup searches the main package's directory; it does not
-select a profile from a library dependency automatically.
-
-The `nosimd` and `purego` tags both force scalar kernels and select the matching
-scalar C reference in oracle tests. SIMD is opt-in and independent of the
-optional codec features below.
 
 Optional features mirror libopus build flags and are excluded from the default
 build's import graph:
@@ -401,70 +369,49 @@ go test -tags gopus_osce ./...
 
 ## Performance
 
-**Lower ns/sample or ns/packet means faster. Higher × realtime means faster.**
-The Go/C time ratio divides Go time by C time: below `1.0` is a Go win; above
-`1.0` is slower. For example, 287 ns/sample beats 348 ns/sample.
+The table pairs **C scalar with Go scalar** and **C SIMD with Go SIMD**, using
+identical inputs and controls. Values are median **ns/sample per channel**
+(lower is faster) on AMD EPYC 7763, Go 1.27.1 and GCC 13.3.0, with
+**GOAMD64=v3**, PGO and candidate `4b660d668`. Each case has three runs of
+at least 250 ms. Go reports zero allocations; C allocations are not measured.
 
-These measurements use **Apple M4 Max, darwin/arm64, Go 1.27.0, Apple Clang
-21.0.0**, `GOMAXPROCS=1`, and identical C/Go workloads. Go explicitly uses the
-checked-in **`default.pgo`** (SHA-256 `a85d5274259f…`; profile source `18eaa63b8`);
-C uses `-O3` without PGO. The measured codec source is `42975dbd3`. Values are
-medians across five runs of at least 300 ms. Every Go row reports **0 allocs/op**
-after warmup; C allocations are not measured.
+| Workload | C scalar | Go scalar | C SIMD | Go SIMD |
+|---|---:|---:|---:|---:|
+| Encode CELT, fullband, 20 ms stereo, 128 kbps | 176.89 | 197.94 | 129.50 | 126.28 |
+| Encode CELT, fullband, 5 ms mono, 64 kbps | 75.99 | 93.79 | 69.83 | 80.00 |
+| Encode SILK, wideband, 20 ms mono, 32 kbps | 705.61 | 685.98 | 462.01 | 329.21 |
+| Encode Hybrid, fullband, 20 ms mono, 64 kbps | 363.00 | 420.99 | 253.40 | 225.80 |
+| Encode Hybrid, fullband, 20 ms stereo, 96 kbps | 200.37 | 227.97 | 145.10 | 139.57 |
+| Decode RFC vectors, float32 | 38.22 | 42.29 | 35.90 | 33.14 |
+| Decode RFC vectors, int16 | 42.23 | 46.80 | 38.83 | 37.64 |
 
-| Workload | C SIMD ns/sample | Go SIMD ns/sample | Go/C time | Result |
-|---|---:|---:|---:|---|
-| Encode aggregate | 146.32 | 143.66 | 0.982× | Go faster |
-| Encode CELT, fullband, 20 ms stereo, 128 kbps | 74.57 | 86.89 | 1.165× | Go slower |
-| Encode CELT, fullband, 5 ms mono, 64 kbps | 34.61 | 41.42 | 1.197× | Go slower |
-| Encode SILK, wideband, 20 ms mono, 32 kbps | 337.21 | 282.86 | 0.839× | Go faster |
-| Encode Hybrid, fullband, 20 ms mono, 64 kbps | 169.95 | 166.92 | 0.982× | Go faster |
-| Encode Hybrid, fullband, 20 ms stereo, 96 kbps | 88.10 | 102.49 | 1.163× | Go slower |
-| Decode RFC vectors, float32 | 19.00 | 17.63 | 0.928× | Go faster |
-| Decode RFC vectors, int16 | 19.20 | 18.09 | 0.942× | Go faster |
+Decoder rows aggregate 20,075 identical packets. Go SIMD takes 2.5–28.7% less
+time than matched C SIMD in four encoder cases and 14.6% more in the 5 ms CELT
+case. Float32 and int16 decode take 7.7% and 3.1% less time, respectively.
+Results apply to these workloads and the stated revision; they are not a speed
+guarantee for every stream or CPU.
 
-With this profile, SIMD aggregate encoding takes **1.8% less time** than libopus;
-SILK encoding takes **16.1% less**, and float32/int16 RFC decode take
-**7.2%/5.8% less**. CELT 20 ms/5 ms encoding and stereo Hybrid take
-**16.5%/19.7%/16.3% more time**. Small differences can include measurement noise.
-The encoder aggregate weights five workloads equally by samples per channel;
-it does not imply a win on every stream. RFC decode covers 20,075 packets.
+The [validation reference](reports/validation.md#performance) contains all
+**53 replacement routines**, assembly/Go/`nosimd` comparisons, raw-run links,
+and measurements of later parity fixes. Its paired incremental measurement
+records public encoder time changes within 0.5%; measurements from different
+hosts are kept separate.
 
-The [measurement report](reports/benchmarks/2026-10-23-m4/README.md) includes
-matched scalar results, the exact PGO hash and provenance, raw output, and
-separate PGO-off measurements. Those snapshots do not isolate the effect of PGO.
-The PGO-off short-frame decode comparison covers eight CELT 2.5 ms cases with a
-Go/C geometric-mean ratio of 0.937× and public **0 B/op, 0 allocs/op** checks.
-
-Native amd64 evidence is separate. The
-[AMD EPYC 7763 measurements](reports/validation.md#performance) at `4b660d668`
-use Go 1.27.1, GCC 13.3.0 and `GOAMD64=v3`. Their direct C comparison tools use
-`-pgo=auto` without a package-local profile, so those particular rows have PGO
-off. The ARM64 measurements above do **not** establish native amd64 performance
-or SIMD parity for this revision. The
-[v1/v2/v3 audit](reports/validation.md#amd64-compiler-targets) records native
-compiler-target evidence; routine PR CI does not run that timing matrix.
-
-Reproduce the scalar and SIMD comparisons from the repository root:
+Use **GOAMD64=v3** on a supporting CPU and select the same C compiler target:
 
 ```sh
-GOMAXPROCS=1 GOEXPERIMENT=nosimd make bench-libopus-guard \
-  PGO_FILE=default.pgo BENCH_LIBOPUS_GUARD_TIME=300ms BENCH_LIBOPUS_GUARD_COUNT=5
-GOMAXPROCS=1 GOEXPERIMENT=simd make bench-libopus-guard \
-  PGO_FILE=default.pgo BENCH_LIBOPUS_GUARD_TIME=300ms BENCH_LIBOPUS_GUARD_COUNT=5
+GOAMD64=v3 GOEXPERIMENT=simd GOPUS_LIBOPUS_AMD64_TARGET=v3 go run ./tools/encoderbenchcmp
+GOAMD64=v3 GOEXPERIMENT=simd GOPUS_LIBOPUS_AMD64_TARGET=v3 go run ./tools/testvectorbenchcmp -cases aggregate
 ```
 
-Both commands explicitly apply the same profile and enforce zero warm Go
-allocations. Use `PGO_FILE=off` for a separate PGO-off run. Their runtime-ratio
-limit is a regression guard, not a requirement to beat C. On a supporting amd64
-CPU, prefix both commands with `GOAMD64=v3 GOPUS_LIBOPUS_AMD64_TARGET=v3`. Also
-set `LIBOPUS_ENABLE_SCALAR=1` for the nosimd command or `LIBOPUS_ENABLE_SIMD=1`
-for the SIMD command; leave the other reference flag unset. Omit the AMD64 target
-settings on ARM64. Avoid concurrent builds or tests during timings.
-
-These tools exclude file I/O, codec construction and C helper startup. The
-file-based `bench-encode` and `bench-decode` examples include `opus_demo` startup
+These tools measure codec work with matched C and Go workloads. The file-based
+`bench-encode` and `bench-decode` examples include `opus_demo` process startup
 and file I/O in C timings, so they provide rough estimates.
+
+For scalar comparisons, retain both target settings and use `GOEXPERIMENT=nosimd`.
+On ARM64, omit both AMD64 target settings. The optional
+[v1/v2/v3 audit](reports/validation.md#amd64-compiler-targets) compares compiler
+targets on one native host; routine PR CI does not run that timing matrix.
 
 ## Parity & testing
 
@@ -487,24 +434,9 @@ and identifies evidence gaps. The documented
 custom-QEXT history read at 96 kHz / 2,048 samples; Go uses bounded concealment
 and compares defined C behavior.
 
-Run checks from the repository root. The full suites build the pinned libopus
-reference automatically; the library itself needs no C toolchain.
-
-| Command | Checks |
-|---|---|
-| `make test-fast` | Short iteration suite; omits parity and exhaustive tiers |
-| `make test` | Full default suite with live C oracles |
-| `make test-simd` | Full opt-in SIMD suite with matching C oracles |
-| `make test-race` | Fast suite with Go's race detector |
-| `make test-build-contract` | Build tags and optional-feature boundaries |
-| `make test-type-parity` | Codec storage widths against the tracked baseline |
-
-Allocation regressions use warmed `testing.AllocsPerRun` checks with an exact
-zero-allocation requirement for caller-buffer hot paths. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for quality, performance and release checks.
-
-<details>
-<summary>Test execution and CI reproducibility</summary>
+Use `make test-fast` for iteration, `make test` for the live C-oracle suite,
+and `make test-build-contract` for build boundaries. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the verification and release checklist.
 
 Independent composite encode cases run concurrently, capped at four active cases
 and `GOMAXPROCS`, with fresh codec state and every selected frame. Use
@@ -529,15 +461,13 @@ requires every assigned test to complete exactly once before merging the suite.
 CI runs independent correctness lanes and four full-suite shards concurrently;
 paired benchmark samples for both revisions share one runner.
 
-</details>
+## Trust And Verification
 
-## Trust and verification
-
-The API is pre-v1.
+Released version: `v0.2.2`. The API is pre-v1.
 
 `v0.1.0` is retracted: it has no published GitHub Release.
-The [v0.2.3 release](https://github.com/thesyncim/gopus/releases/tag/v0.2.3)
-includes the verification summary and logs.
+Latest release evidence: attached to the
+[v0.2.2 release](https://github.com/thesyncim/gopus/releases/tag/v0.2.2).
 
 Required branch checks:
 

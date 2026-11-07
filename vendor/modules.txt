@@ -1178,8 +1178,8 @@ github.com/tetratelabs/wazero/internal/wasm/binary
 github.com/tetratelabs/wazero/internal/wasmdebug
 github.com/tetratelabs/wazero/internal/wasmruntime
 github.com/tetratelabs/wazero/sys
-# github.com/thesyncim/gopus v0.2.3
-## explicit; go 1.27.3
+# github.com/thesyncim/gopus v0.2.2
+## explicit; go 1.27.0
 github.com/thesyncim/gopus
 github.com/thesyncim/gopus/internal/arena
 github.com/thesyncim/gopus/internal/celt

@@ -84,7 +84,7 @@ func (d *Decoder) decodeCELTFrameToAPIScratch(data []byte, frameSize int, packet
 }
 
 func (d *Decoder) prepareStereoTransition(packetStereo bool, bandwidth silk.Bandwidth) {
-	if !packetStereo || d.channels != 2 || d.silkDecoder.InternalStereo() {
+	if !packetStereo || d.channels != 2 || d.prevPacketStereo {
 		return
 	}
 
@@ -376,15 +376,11 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 			// frame AND the post-loss recovery frame stay bit-exact. When the integer
 			// path is declined (no active packet, integer CELT not yet primed, or a
 			// rate below 48 kHz) the int16/int24 wrappers use the float conversion.
-			silkStereo := packetStereoLocal
-			if useDecoderPLCState {
-				silkStereo = d.silkDecoder.InternalStereo()
-			}
 			fixedHybridPLCArmed := false
 			if extsupport.QEXT {
-				fixedHybridPLCArmed = d.armFixedQEXTHybridLost(frameSize, silkStereo)
+				fixedHybridPLCArmed = d.armFixedQEXTHybridLost(frameSize, packetStereoLocal)
 			} else {
-				fixedHybridPLCArmed = d.armFixedHybridLost(frameSize, silkStereo)
+				fixedHybridPLCArmed = d.armFixedHybridLost(frameSize, packetStereoLocal)
 			}
 			if !fixedHybridPLCArmed {
 				d.markFixedUnhandled()
@@ -392,7 +388,7 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 					d.invalidateFixedQEXTCELT()
 				}
 			}
-			if err := d.hybridDecoder.DecodePLCToFloat32WithPacketStereoInto(frameSize, silkStereo, out); err != nil {
+			if err := d.hybridDecoder.DecodePLCToFloat32WithPacketStereoInto(frameSize, packetStereoLocal, out); err != nil {
 				if fixedHybridPLCArmed {
 					d.silkDecoder.ArmPLCLowbandCapture(nil)
 				}
@@ -421,6 +417,7 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 			if !fixedHybridArmed {
 				d.markFixedUnhandled()
 			}
+			d.hybridDecoder.SetPrevPacketStereo(d.prevPacketStereo)
 			afterSilk := func(rd *rangecoding.Decoder) (int, error) {
 				if rd == nil {
 					return mainLen, nil
@@ -548,7 +545,6 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 			d.silkDecoder.Reset()
 		}
 
-		silkStereo := packetStereoLocal
 		silkBW, ok := silk.BandwidthFromOpus(int(bandwidth))
 		if !ok {
 			silkBW = silk.BandwidthWideband
@@ -556,9 +552,8 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 		if data == nil && useDecoderPLCState {
 			// A one-byte DTX packet updates the public bandwidth from its TOC,
 			// but libopus opus_decode_frame (src/opus_decoder.c) updates
-			// DecControl.internalSampleRate and nChannelsInternal only for coded
-			// data. Public PLC follows the active SILK rate and channel layout.
-			silkStereo = d.silkDecoder.InternalStereo()
+			// DecControl.internalSampleRate only for coded data. Public PLC
+			// follows the active SILK rate.
 			switch d.silkDecoder.GetSampleRateKHz() {
 			case 8:
 				silkBW = silk.BandwidthNarrowband
@@ -578,24 +573,24 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 		var silkSamples int
 		var err error
 		if data != nil {
-			d.prepareStereoTransition(silkStereo, silkBW)
+			d.prepareStereoTransition(packetStereoLocal, silkBW)
 			switch {
-			case silkStereo && channels == 2:
+			case packetStereoLocal && channels == 2:
 				silkSamples, err = d.silkDecoder.DecodeStereoWithDecoderInto(rd, silkBW, silkDecodeSize, true, out)
 				if err == nil {
 					if frameSize < silkDecodeSize {
 						silkSamples = frameSize
 					}
 				}
-			case silkStereo && channels == 1:
+			case packetStereoLocal && channels == 1:
 				silkSamples, err = d.silkDecoder.DecodeStereoToMonoWithDecoderInto(rd, silkBW, silkDecodeSize, true, out)
 				if err == nil {
 					if frameSize < silkDecodeSize {
 						silkSamples = frameSize
 					}
 				}
-			case !silkStereo && channels == 2:
-				silkSamples, err = d.silkDecoder.DecodeMonoToStereoWithDecoderInto(rd, silkBW, silkDecodeSize, true, d.silkDecoder.InternalStereo(), out)
+			case !packetStereoLocal && channels == 2:
+				silkSamples, err = d.silkDecoder.DecodeMonoToStereoWithDecoderInto(rd, silkBW, silkDecodeSize, true, d.prevPacketStereo, out)
 				if err == nil {
 					if frameSize < silkDecodeSize {
 						silkSamples = frameSize
@@ -609,9 +604,9 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 				}
 			}
 		} else {
-			d.prepareStereoTransition(silkStereo, silkBW)
+			d.prepareStereoTransition(packetStereoLocal, silkBW)
 			switch {
-			case silkStereo && channels == 2:
+			case packetStereoLocal && channels == 2:
 				// Zero-allocation stereo SILK PLC: conceal interleaved L/R into
 				// decoder-owned scratch (sized once at NewDecoder) and copy the
 				// requested frame into out.
@@ -628,7 +623,7 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 					}
 					copyFloat32(out, plcBuf[:silkSamples*channels])
 				}
-			case silkStereo && channels == 1:
+			case packetStereoLocal && channels == 1:
 				if cap(d.scratchSilkPLC) < silkDecodeSize {
 					d.scratchSilkPLC = make([]float32, silkDecodeSize)
 				}
@@ -642,13 +637,13 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 					}
 					copyFloat32(out, plcBuf[:silkSamples*channels])
 				}
-			case !silkStereo && channels == 2:
+			case !packetStereoLocal && channels == 2:
 				if cap(d.scratchSilkPLC) < silkDecodeSize*channels {
 					d.scratchSilkPLC = make([]float32, silkDecodeSize*channels)
 				}
 				plcBuf := d.scratchSilkPLC[:silkDecodeSize*channels]
 				var n int
-				n, err = d.silkDecoder.DecodeMonoToStereoPLCInto(silkBW, silkDecodeSize, d.silkDecoder.InternalStereo(), plcBuf)
+				n, err = d.silkDecoder.DecodeMonoToStereoPLCInto(silkBW, silkDecodeSize, d.prevPacketStereo, plcBuf)
 				if err == nil {
 					silkSamples = n / channels
 					if frameSize < silkDecodeSize {
@@ -676,9 +671,6 @@ func (d *Decoder) decodeOpusFrameIntoWithStatePolicyAndQEXT(
 		}
 		if err != nil {
 			return 0, err
-		}
-		if data != nil {
-			d.silkDecoder.SetInternalStereo(silkStereo)
 		}
 		_ = silkSamples // Used for tracking decode size
 
