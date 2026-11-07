@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -185,10 +184,15 @@ func (n *Inode) String() string {
 //
 // See lockNodes where this property is used to avoid deadlock when taking
 // locks on inode group.
+//
+// This uses insertion sort, because ns has only a few entries, and
+// sort.Slice allocates.
 func sortNodes(ns []*Inode) {
-	sort.Slice(ns, func(i, j int) bool {
-		return nodeLess(ns[i], ns[j])
-	})
+	for i := 1; i < len(ns); i++ {
+		for j := i; j > 0 && nodeLess(ns[j], ns[j-1]); j-- {
+			ns[j], ns[j-1] = ns[j-1], ns[j]
+		}
+	}
 }
 
 func nodeLess(a, b *Inode) bool {
@@ -214,10 +218,11 @@ func lockNodes(ns ...*Inode) {
 	}
 }
 
-// lockNode2 locks a and b in order consistent with lockNodes.
+// lockNode2 locks a and b in order consistent with lockNodes. a may
+// be nil.
 func lockNode2(a, b *Inode) {
-	if a == b {
-		a.mu.Lock()
+	if a == b || a == nil {
+		b.mu.Lock()
 	} else if nodeLess(a, b) {
 		a.mu.Lock()
 		b.mu.Lock()
@@ -229,8 +234,8 @@ func lockNode2(a, b *Inode) {
 
 // unlockNode2 unlocks a and b
 func unlockNode2(a, b *Inode) {
-	if a == b {
-		a.mu.Unlock()
+	if a == b || a == nil {
+		b.mu.Unlock()
 	} else {
 		a.mu.Unlock()
 		b.mu.Unlock()
@@ -287,9 +292,9 @@ func (n *Inode) Path(root *Inode) string {
 		// the caller won't use the "path" string under lock anyway.
 		p.mu.Lock()
 		// Get last known parent
-		pd := p.parents.get()
+		pd, ok := p.parents.get()
 		p.mu.Unlock()
-		if pd == nil {
+		if !ok {
 			p = nil
 			break
 		}
@@ -558,8 +563,8 @@ func (n *Inode) childrenList() []childEntry {
 func (n *Inode) Parent() (string, *Inode) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	p := n.parents.get()
-	if p == nil {
+	p, ok := n.parents.get()
+	if !ok {
 		return "", nil
 	}
 	return p.name, p.parent
@@ -732,10 +737,7 @@ retry:
 // tuple should be invalidated. On next access, a LOOKUP operation
 // will be started.
 func (n *Inode) NotifyEntry(name string) syscall.Errno {
-	if n.bridge.server == nil {
-		return syscall.ENOSYS
-	}
-	status := n.bridge.server.EntryNotify(n.nodeId, name)
+	status := n.bridge.notify.InvalEntry(n.nodeId, name)
 	return syscall.Errno(status)
 }
 
@@ -744,15 +746,11 @@ func (n *Inode) NotifyEntry(name string) syscall.Errno {
 // in response.  If the receiver Inode must be forgotten too it must
 // be included in the argument separately.
 func (n *Inode) NotifyPrune(nodes []*Inode) syscall.Errno {
-	server, ok := n.bridge.server.(*fuse.Server)
-	if !ok {
-		return syscall.ENOSYS
-	}
 	ids := make([]uint64, 0, len(nodes))
 	for _, n := range nodes {
 		ids = append(ids, n.nodeId)
 	}
-	status := server.PruneNotify(ids)
+	status := n.bridge.notify.Prune(ids)
 	return syscall.Errno(status)
 }
 
@@ -760,36 +758,24 @@ func (n *Inode) NotifyPrune(nodes []*Inode) syscall.Errno {
 // from this directory as entry under the given name. It is equivalent
 // to NotifyEntry, but also sends an event to inotify watchers.
 func (n *Inode) NotifyDelete(name string, child *Inode) syscall.Errno {
-	if n.bridge.server == nil {
-		return syscall.ENOSYS
-	}
 	// XXX arg ordering?
-	return syscall.Errno(n.bridge.server.DeleteNotify(n.nodeId, child.nodeId, name))
+	return syscall.Errno(n.bridge.notify.Delete(n.nodeId, child.nodeId, name))
 }
 
 // NotifyContent notifies the kernel that content under the given
 // inode should be flushed from buffers.
 func (n *Inode) NotifyContent(off, sz int64) syscall.Errno {
-	if n.bridge.server == nil {
-		return syscall.ENOSYS
-	}
 	// XXX how does this work for directories?
-	return syscall.Errno(n.bridge.server.InodeNotify(n.nodeId, off, sz))
+	return syscall.Errno(n.bridge.notify.InvalInode(n.nodeId, off, sz))
 }
 
 // WriteCache stores data in the kernel cache.
 func (n *Inode) WriteCache(offset int64, data []byte) syscall.Errno {
-	if n.bridge.server == nil {
-		return syscall.ENOSYS
-	}
-	return syscall.Errno(n.bridge.server.InodeNotifyStoreCache(n.nodeId, offset, data))
+	return syscall.Errno(n.bridge.notify.Store(n.nodeId, offset, data))
 }
 
 // ReadCache reads data from the kernel cache.
 func (n *Inode) ReadCache(offset int64, dest []byte) (count int, errno syscall.Errno) {
-	if n.bridge.server == nil {
-		return 0, syscall.ENOSYS
-	}
-	c, s := n.bridge.server.InodeRetrieveCache(n.nodeId, offset, dest)
+	c, s := n.bridge.notify.Retrieve(n.nodeId, offset, dest)
 	return c, syscall.Errno(s)
 }
