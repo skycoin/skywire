@@ -66,11 +66,7 @@ func opPVQSearchScratchNormWithInputMutation(x []celtNorm, k int, iyBuf *[]int32
 		y = make([]float32, n)
 	}
 
-	if absInput {
-		// op_pvq_search_c in celt/vq.c takes absolute values in place after
-		// saving the signs. The encoder owns x until resynthesis overwrites it.
-		absX = x
-	} else if absXBuf != nil {
+	if absXBuf != nil {
 		absX = ensureFloat32Slice(absXBuf, n)
 	} else {
 		absX = make([]float32, n)
@@ -158,6 +154,12 @@ func opPVQSearchScratchNormWithInputMutation(x []celtNorm, k int, iyBuf *[]int32
 			// Reference: libopus vq.c line 279
 			y[j] *= 2
 			pulsesLeft -= int(iy[j])
+		}
+	}
+
+	if absInput {
+		for j := range n {
+			x[j] = celtNorm(absX[j])
 		}
 	}
 

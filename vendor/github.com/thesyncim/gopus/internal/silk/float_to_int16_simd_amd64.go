@@ -4,9 +4,7 @@ package silk
 
 import "simd/archsimd"
 
-// Go 1.27.3 asyncPreempt saves full YMM registers only with AVX2 or newer
-// (golang/go#81209). The conversion keeps eight lanes live across iterations.
-var floatToInt16UsesAVX2 = archsimd.X86.AVX2()
+var floatToInt16UsesAVX = archsimd.X86.AVX()
 
 // floatToInt16Scaled converts eight products per step: VROUNDPS rounds to
 // nearest with ties to even, VCVTTPS2DQ then converts the integral values (and
@@ -16,7 +14,7 @@ func floatToInt16Scaled(out []int16, in []float32, scale float32, n int) {
 	out = out[:n]
 	in = in[:n]
 	i := 0
-	if floatToInt16UsesAVX2 {
+	if floatToInt16UsesAVX {
 		i = floatToInt16ScaledAVX(out, in, scale)
 	}
 	floatToInt16ScaledScalar(out[i:], in[i:], scale)

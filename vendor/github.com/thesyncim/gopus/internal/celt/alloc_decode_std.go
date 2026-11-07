@@ -96,7 +96,6 @@ func (d *Decoder) decodeBandAllocationStd(rd *rangecoding.Decoder, totalBits, st
 	// Dynamic allocation boosts.
 	totalBitsQ3 := int32(totalBits << bitRes)
 	dynallocLogp := int32(6)
-	skipStart := start
 	for i := start; i < end; i++ {
 		loopLogp := dynallocLogp
 		boost := int32(0)
@@ -119,7 +118,6 @@ func (d *Decoder) decodeBandAllocationStd(rd *rangecoding.Decoder, totalBits, st
 		}
 		s.offsets[i] = boost
 		if boost > 0 {
-			skipStart = i
 			dynallocLogp = max(2, dynallocLogp-1)
 		}
 	}
@@ -141,6 +139,7 @@ func (d *Decoder) decodeBandAllocationStd(rd *rangecoding.Decoder, totalBits, st
 	c := int32(channels)
 	allocFloor := c << bitRes
 	total = max(total, 0)
+	skipStart := start
 	skipRsv := int32(0)
 	if total >= 1<<bitRes {
 		skipRsv = 1 << bitRes
@@ -178,13 +177,12 @@ func (d *Decoder) decodeBandAllocationStd(rd *rangecoding.Decoder, totalBits, st
 	lo--
 
 	allocLo := &t.alloc[lo]
-	allocHi := &t.caps
-	if hi < len(BandAlloc) {
-		allocHi = &t.alloc[hi]
-	}
 	for j := start; j < end; j++ {
 		bits1j := allocLo[j]
-		bits2j := allocHi[j]
+		bits2j := t.caps[j]
+		if hi < len(BandAlloc) {
+			bits2j = t.alloc[hi][j]
+		}
 		if bits1j > 0 {
 			bits1j = max(0, bits1j+trimOffset[j])
 		}
@@ -196,6 +194,9 @@ func (d *Decoder) decodeBandAllocationStd(rd *rangecoding.Decoder, totalBits, st
 			bits1j += off
 		}
 		bits2j += off
+		if off > 0 {
+			skipStart = j
+		}
 		bits1[j] = bits1j
 		bits2[j] = max(0, bits2j-bits1j)
 	}

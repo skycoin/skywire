@@ -17,25 +17,30 @@ func (d *Decoder) decodePLCForFEC(pcm []float32, frameSize int) (int, error) {
 		// frame ends with CELT redundancy, even though prev_mode remains Hybrid.
 		mode = ModeCELT
 	}
-	// opus_decode_native falls back to ordinary NULL-packet decoding when FEC
-	// is unavailable. Preserve SILK's active rate and channel layout even when
-	// a DTX packet's TOC differs (src/opus_decoder.c: opus_decode_frame).
-	return d.decodePLCForFECWithState(pcm, frameSize, plcDecodeState{
-		packetFrameSize:    packetFrameSize,
-		mode:               mode,
-		bandwidth:          d.lastBandwidth,
-		packetStereo:       d.prevPacketStereo,
-		useDecoderPLCState: true,
-	})
+	return d.decodePLCForFECWithState(pcm, frameSize, packetFrameSize, mode, d.lastBandwidth, d.prevPacketStereo)
 }
 
-func (d *Decoder) decodePLCForFECWithState(pcm []float32, frameSize int, state plcDecodeState) (int, error) {
+func (d *Decoder) decodePLCForFECWithState(
+	pcm []float32,
+	frameSize int,
+	packetFrameSize int,
+	mode Mode,
+	bandwidth Bandwidth,
+	packetStereo bool,
+) (int, error) {
 	channels := int(d.channels)
-	if state.packetFrameSize <= 0 {
-		state.packetFrameSize = frameSize
+	if packetFrameSize <= 0 {
+		packetFrameSize = frameSize
 	}
-	if extsupport.DREDRuntime && (state.mode == ModeSILK || state.mode == ModeHybrid) {
-		if d.beginDREDRawMonoFrameCapture(state.mode) {
+	state := plcDecodeState{
+		packetFrameSize:    packetFrameSize,
+		mode:               mode,
+		bandwidth:          bandwidth,
+		packetStereo:       packetStereo,
+		useDecoderPLCState: false,
+	}
+	if extsupport.DREDRuntime && (mode == ModeSILK || mode == ModeHybrid) {
+		if d.beginDREDRawMonoFrameCapture(mode) {
 			defer d.endDREDRawMonoFrameCapture()
 		}
 	}
@@ -56,7 +61,7 @@ func (d *Decoder) decodePLCForFECWithState(pcm []float32, frameSize int, state p
 	}
 	frameSize = n
 	d.applyOutputGain(pcm[:frameSize*channels])
-	d.lastFrameSize = int32(state.packetFrameSize)
+	d.lastFrameSize = int32(packetFrameSize)
 	d.lastPacketDuration = int32(frameSize)
 	d.lastDataLen = 0
 	if extsupport.DREDRuntime && !usedNeuralConcealment && d.dredGoodPacketMarkerActive() {
@@ -450,13 +455,12 @@ func (d *Decoder) decodeFECViaSILK(pcm []float32, frameSize int) (int, error) {
 	// arrive after a PLC prefix, so apply the transition here immediately before
 	// decoding the redundant stereo frame.
 	d.prepareStereoTransition(d.fecStereo, silkBW)
-	stereoToMono := d.silkDecoder.ShouldUseStereoToMonoHistory(silkBW, !d.fecStereo && d.silkDecoder.InternalStereo())
+	stereoToMono := d.silkDecoder.ShouldUseStereoToMonoHistory(silkBW, !d.fecStereo && d.prevPacketStereo)
 
 	needed, err := d.silkDecoder.DecodeFECInto(d.fecData, silkBW, frameSize, d.fecStereo, stereoToMono, int(d.channels), pcm)
 	if err != nil {
 		return 0, err
 	}
-	d.silkDecoder.SetInternalStereo(d.fecStereo)
 
 	return needed, nil
 }

@@ -4,11 +4,10 @@ import (
 	"errors"
 
 	"github.com/thesyncim/gopus/internal/encoder"
-	"github.com/thesyncim/gopus/multistream"
 )
 
 func translateEncoderError(err error) error {
-	if errors.Is(err, encoder.ErrBufferTooSmall) || errors.Is(err, multistream.ErrBufferTooSmall) {
+	if errors.Is(err, encoder.ErrBufferTooSmall) {
 		return ErrBufferTooSmall
 	}
 	return err
