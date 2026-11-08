@@ -199,7 +199,12 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 			if err == nil {
 				return nil
 			}
-			log.WithError(err).Debug("VisorSCP RPC failed; falling back to standalone dmsg")
+			if !visorUnreachable(err) {
+				// The visor answered, so its key is the one the peer whitelists.
+				// A throwaway key would only be refused, and would hide this error.
+				return err
+			}
+			log.WithError(err).Debug("No visor on --rpc; falling back to standalone dmsg")
 		}
 
 		// Standalone dmsg path — the CLI bootstraps its own
@@ -258,6 +263,12 @@ standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 // LocalPath is normalized to an absolute path before sending so the
 // visor (which doesn't share the CLI's cwd) reads/writes the
 // expected file.
+// errVisorUnreachable marks a VisorSCP failure where no visor answered on --rpc,
+// the only case in which auto falls back to the standalone dmsg path.
+var errVisorUnreachable = errors.New("no visor on --rpc")
+
+func visorUnreachable(err error) bool { return errors.Is(err, errVisorUnreachable) }
+
 func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection, localPath, remotePath string, cmd *cobra.Command) error {
 	abs, err := filepath.Abs(localPath)
 	if err != nil {
@@ -286,7 +297,7 @@ func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection,
 	defer func() { clirpc.Timeout = prevTimeout }()
 	rc, err := clirpc.Client(cmd.Flags())
 	if err != nil {
-		return fmt.Errorf("VisorSCP RPC client: %w", err)
+		return fmt.Errorf("VisorSCP RPC client: %w: %w", errVisorUnreachable, err)
 	}
 	if err := rc.VisorSCP(req); err != nil {
 		return fmt.Errorf("VisorSCP (%s): %w", transport, err)

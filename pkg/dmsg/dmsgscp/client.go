@@ -103,7 +103,13 @@ func (c *Client) Download(remotePath, localPath string) error {
 		return fmt.Errorf("dmsgscp: write role line: %w", err)
 	}
 
-	// Step 2: read the C-record from the host.
+	// Step 2: read the C-record from the host. A host that cannot serve
+	// the path answers with a fatal line instead, such as a missing file.
+	if b, err := c.reader.Peek(1); err == nil && (b[0] == FatalPrefix || b[0] == WarnPrefix) {
+		if _, err := ReadAck(c.reader); err != nil {
+			return err
+		}
+	}
 	hdr, err := ReadHeader(c.reader)
 	if err != nil {
 		return fmt.Errorf("dmsgscp: read header: %w", err)
