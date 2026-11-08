@@ -152,6 +152,9 @@ github.com/0magnet/img2txt-go/shape
 # github.com/0magnet/kcp-go/v5 v5.6.84
 ## explicit; go 1.26.0
 github.com/0magnet/kcp-go/v5
+# github.com/0magnet/logrus v1.10.3-0.20261108193845-7365f3bff722
+## explicit; go 1.23
+github.com/0magnet/logrus
 # github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489
 ## explicit; go 1.25.0
 github.com/0magnet/lolcat-go/lol
@@ -1009,10 +1012,7 @@ github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.6.0
 ## explicit; go 1.10
 github.com/shopspring/decimal
-# github.com/sirupsen/logrus v1.10.2
-## explicit; go 1.23
-github.com/sirupsen/logrus
-# github.com/skycoin/skycoin v0.28.8-0.20261108193755-ed8e40c05cbd
+# github.com/skycoin/skycoin v0.28.8-0.20261108194204-3ef15698b8d3
 ## explicit; go 1.27.0
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands

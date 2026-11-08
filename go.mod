@@ -21,6 +21,7 @@ require (
 	github.com/0magnet/got v0.0.1-0.20261013224534-da4158f4280a
 	github.com/0magnet/gotop/v4 v4.2.1-0.20261013215112-c72a4dc29a54
 	github.com/0magnet/kcp-go/v5 v5.6.84
+	github.com/0magnet/logrus v1.10.3-0.20261108193845-7365f3bff722
 	github.com/0magnet/lolcat-go v0.0.1-0.20261013220959-57aa27491489
 	github.com/0magnet/metrics v1.44.1-0.20261104204112-415e795e7886
 	github.com/0magnet/netscrape v0.0.1-0.20261013224547-9fae42cd783b
@@ -96,8 +97,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/sirupsen/logrus v1.10.2
-	github.com/skycoin/skycoin v0.28.8-0.20261108193755-ed8e40c05cbd
+	github.com/skycoin/skycoin v0.28.8-0.20261108194204-3ef15698b8d3
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
