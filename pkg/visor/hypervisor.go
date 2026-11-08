@@ -893,6 +893,9 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				if hv.c.EnableAuth {
 					r.Use(hv.users.Authorize)
 				}
+				// Every write below needs a CSRF token or a same-origin browser, see
+				// csrfGuard. visorCtx still asks the routes it serves for the token.
+				r.Use(hv.csrfGuard)
 
 				r.Get("/user", hv.users.UserInfo())
 				r.Post("/change-password", hv.users.ChangePassword())
