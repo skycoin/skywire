@@ -33,8 +33,11 @@ app-lang-button {
   box-shadow: 0 3px 8px 0 rgba(var(--sw-shade-rgb), 0.10), 0 6px 20px 0 rgba(var(--sw-shade-rgb), 0.10);
   display: flex;
 
+  // The field is always white, so its text stays dark in the dark theme too.
   input[type='password'] {
     background: #fff;
+    color: variables.$black;
+    caret-color: variables.$black;
     width: calc(100% - 35px);
     height: 100%;
     font-size: variables.$font-size-sm;
