@@ -27,6 +27,7 @@ import { MultipleNodeDataService, MultipleNodesBackendData } from 'src/app/servi
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppComponent } from 'src/app/app.component';
 import { RewardService, VisorRewardData } from 'src/app/services/reward.service';
+import { AlertsService } from 'src/app/services/alerts.service';
 import { BulkAppActionComponent, BulkAppMode, BulkAppNode } from '../../layout/bulk-app-action/bulk-app-action.component';
 
 // Where the compact-rows and apps-column choices are remembered in this browser.
@@ -314,6 +315,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     private clipboardService: ClipboardService,
     private translateService: TranslateService,
     private rewardService: RewardService,
+    private alertsService: AlertsService,
     route: ActivatedRoute,
     private changeDetectorRef: ChangeDetectorRef,
   ) {
@@ -1333,6 +1335,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.close();
       this.storageService.setLocalNodesAsHidden([node.localPk], [node.ip]);
+      this.forgetOnHypervisor([node.localPk]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
       this.changeDetectorRef.markForCheck();
@@ -1511,6 +1514,14 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   /**
+   * Also drops the visors from the hypervisor's remembered list, so they stay
+   * gone after it restarts. A visor that is connected again is refused there.
+   */
+  private forgetOnHypervisor(pks: string[]) {
+    pks.forEach(pk => this.alertsService.forget(pk).subscribe({ error: () => {} }));
+  }
+
+  /**
    * Removes all offline nodes from the list, until seeing them online again.
    */
   removeOffline() {
@@ -1537,6 +1548,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       // Remove the nodes and show the result.
       if (nodesToRemove.length > 0) {
         this.storageService.setLocalNodesAsHidden(nodesToRemove, ipsToRemove);
+        this.forgetOnHypervisor(nodesToRemove);
 
         this.forceDataRefresh();
 

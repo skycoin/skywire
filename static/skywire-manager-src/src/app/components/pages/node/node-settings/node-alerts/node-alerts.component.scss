@@ -1,0 +1,33 @@
+.title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  width: 100%;
+}
+
+.relay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 4px 12px;
+  border-bottom: 1px solid rgba(var(--sw-fg-rgb), 0.08);
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .port { width: 70px; }
+}
+
+.watched {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
