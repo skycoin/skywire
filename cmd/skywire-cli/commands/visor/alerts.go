@@ -30,6 +30,7 @@ func init() {
 	f.StringVar(&alSMTPPass, "smtp-pass", "", "SMTP relay password (kept when not given)")
 	f.BoolVar(&alSMTPTLS, "smtp-starttls", false, "require STARTTLS on the relay")
 	f.BoolVar(&alNoSMTP, "no-smtp", false, "remove the relay and deliver directly")
+	f.Float64Var(&alDiskWarn, "disk-warn", 0, "disk use percent that raises a storage warning (default 90)")
 }
 
 var (
@@ -44,6 +45,7 @@ var (
 	alSMTPPass string
 	alSMTPTLS  bool
 	alNoSMTP   bool
+	alDiskWarn float64
 )
 
 var alertsCmd = &cobra.Command{
@@ -56,6 +58,14 @@ offline for the offline delay, and once more when it is back. A visor
 that returns within the delay sends nothing. Watched visors are those its
 hypervisor manages, remembered offline ones included, plus the --watch
 list, which is checked by its dmsg discovery entry.
+
+When every watched visor behind one public IP goes down together, one
+site alert replaces the per-board alerts. For a single board, an online
+visor on the same LAN checks whether the board still answers there. A
+recovery says whether the board rebooted during the outage (power loss
+or crash) or stayed up (network outage). A storage warning is sent while
+a board is still online when its root filesystem turns read-only, the
+kernel logs storage I/O errors, or the disk passes --disk-warn.
 
 Without a relay, mail goes straight to each recipient domain's MX on
 port 25. Many home connections block port 25 or are refused by large
@@ -90,6 +100,7 @@ func formatAlerts(st *alerts.Status) string {
 	fmt.Fprintf(&b, "enabled:        %v\n", st.Enabled)
 	fmt.Fprintf(&b, "email:          %s\n", or(strings.Join(s.EmailTo, ", "), "-"))
 	fmt.Fprintf(&b, "offline after:  %s\n", st.OfflineAfter)
+	fmt.Fprintf(&b, "disk warn:      %.0f%%\n", s.DiskWarn())
 	fmt.Fprintf(&b, "webhook:        %s\n", or(s.Webhook, "-"))
 	fmt.Fprintf(&b, "from:           %s\n", or(s.From, "(default)"))
 	if s.SMTP != nil {
@@ -119,11 +130,15 @@ func formatAlerts(st *alerts.Status) string {
 	}
 	b.WriteString("\n")
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PK\tHOSTNAME\tSOURCE\tSTATE\tLAST SEEN") //nolint:errcheck
+	fmt.Fprintln(tw, "PK\tHOSTNAME\tSOURCE\tSTATE\tLAST SEEN\tSTORAGE") //nolint:errcheck
 	for _, w := range st.Watched {
 		state := "online"
 		switch {
+		case w.Online && w.Site != "":
+			state = "online, site " + w.Site + " recovering"
 		case w.Online:
+		case w.Site != "":
+			state = "offline, site " + w.Site + " alerted"
 		case w.Alerted:
 			state = "offline, alerted"
 		default:
@@ -133,9 +148,24 @@ func formatAlerts(st *alerts.Status) string {
 		if !w.LastSeen.IsZero() {
 			seen = w.LastSeen.UTC().Format(time.RFC3339)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", w.PK, or(w.Hostname, "-"), w.Source, state, seen) //nolint:errcheck
+		storage := "-"
+		if w.Storage != nil {
+			storage = or(strings.Join(w.StorageWarnings, "; "), "ok")
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", w.PK, or(w.Hostname, "-"), w.Source, state, seen, storage) //nolint:errcheck
 	}
 	tw.Flush() //nolint:errcheck,gosec
+	if len(st.LastEvents) > 0 {
+		b.WriteString("\nrecent alerts:\n")
+		for _, ev := range st.LastEvents {
+			fmt.Fprintf(&b, "  %s %s\n", ev.At.UTC().Format(time.RFC3339), alerts.Subject(ev))
+			for _, s := range append([]string{ev.Diagnosis, ev.RecoveryReason}, ev.Warnings...) {
+				if s != "" {
+					fmt.Fprintf(&b, "    %s\n", s)
+				}
+			}
+		}
+	}
 	return b.String()
 }
 
@@ -175,6 +205,9 @@ and survives a config regen.
 		}
 		if f.Changed("from") {
 			s.From = alFrom
+		}
+		if f.Changed("disk-warn") {
+			s.DiskWarnPercent = alDiskWarn
 		}
 		if f.Changed("watch") {
 			s.Watch = nil

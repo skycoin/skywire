@@ -6,6 +6,7 @@ describe('node alerts form', () => {
       email_to: ['a@example.com', 'b@example.com'],
       smtp: { host: 'smtp.example.com', port: 587, username: 'u', starttls: true, password_set: true },
       watch: ['02aa'],
+      disk_warn_percent: 80,
     },
     enabled: true,
     offline_after: '15m0s',
@@ -24,6 +25,7 @@ describe('node alerts form', () => {
     expect(s.smtp!.port).toBe(587);
     expect(s.smtp!.password).toBe('');
     expect(s.watch).toEqual(['02aa']);
+    expect(s.disk_warn_percent).toBe(80);
   });
 
   it('drops the relay when unticked', () => {

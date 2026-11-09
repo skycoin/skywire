@@ -21,6 +21,7 @@ export interface AlertsSettings {
   webhook?: string;
   watch?: string[] | null;
   from?: string;
+  disk_warn_percent?: number;
 }
 
 export interface AlertsWatched {

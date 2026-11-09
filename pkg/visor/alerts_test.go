@@ -97,6 +97,59 @@ func TestAlertsOverRPCNeverReturnPassword(t *testing.T) {
 	require.Equal(t, "watch", ts[0].Source)
 }
 
+func TestAlertsLANProbeOverRPC(t *testing.T) {
+	v := alertsTestVisor(t)
+	srv := rpc.NewServer()
+	require.NoError(t, srv.RegisterName(visorapi.RPCPrefix, &RPC{visor: v, log: logging.New()}))
+	sc, cc := net.Pipe()
+	go srv.ServeConn(sc)
+	api := visorapi.NewRPCClient(nil, cc, visorapi.RPCPrefix, 30*time.Second)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	old := alerts.ProbePorts
+	t.Cleanup(func() { alerts.ProbePorts = old })
+	alerts.ProbePorts = []int{port}
+
+	ok, err := api.AlertsLANProbe("127.0.0.1")
+	require.NoError(t, err)
+	require.True(t, ok, "a listening port answers")
+
+	require.NoError(t, ln.Close())
+	ok, err = api.AlertsLANProbe("127.0.0.1")
+	require.NoError(t, err)
+	require.True(t, ok, "a refused connection still proves the host is up")
+
+	_, err = api.AlertsLANProbe("8.8.8.8")
+	require.ErrorContains(t, err, "not a LAN address")
+	_, err = api.AlertsLANProbe("nope")
+	require.Error(t, err)
+
+	// The watcher probes from itself when it is the neighbor.
+	ok, err = v.alertProbe(context.Background(), v.conf.PK, "127.0.0.1")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestHypervisorAlertTargetsHealth(t *testing.T) {
+	hv := newKnownTestHV(t.TempDir())
+	pk, _ := cipher.GenerateKeyPair()
+	now := time.Now()
+	sum := knownVisorSummary(knownVisor{PK: pk, PublicIP: "203.0.113.1"})
+	sum.Overview.LocalIP = "192.168.0.5"
+	sum.Uptime = 60
+	sum.Load = &visorapi.LoadStats{HostUptime: 3600, DiskUsedPercent: 93, RootReadOnly: true, StorageIOErrors: 2, LastStorageIOError: "I/O error, dev mmcblk0"}
+	hv.summaryCache[pk] = cachedSummary{sum: sum, seenAt: now.Add(-10 * time.Second)}
+	hv.remoteVisors[pk] = Conn{}
+
+	ts := hv.alertTargets(now)
+	require.Len(t, ts, 1)
+	require.Equal(t, "192.168.0.5", ts[0].LocalIP)
+	require.Equal(t, alerts.Duration(3610*time.Second), ts[0].Uptime, "host uptime, aged to now")
+	require.Equal(t, &alerts.Storage{ReadOnlyRoot: true, IOErrors: 2, LastIOError: "I/O error, dev mmcblk0", DiskUsedPercent: 93}, ts[0].Storage)
+}
+
 func TestAlertsHTTP(t *testing.T) {
 	v := alertsTestVisor(t)
 	hv := newKnownTestHV(t.TempDir())

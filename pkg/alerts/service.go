@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +20,14 @@ const CheckInterval = 30 * time.Second
 // maxAttempts bounds retries of an event no channel accepted.
 const maxAttempts = 5
 
+// LAN check results for a board alert.
+const (
+	DiagLANUp      = "board answers on the LAN, skywire is down"
+	DiagLANDown    = "board does not answer on the LAN: powered off, hung or unplugged"
+	DiagNoNeighbor = "no neighbor to check from"
+	DiagNoLocalIP  = "board's LAN address is unknown, no LAN check"
+)
+
 // Status is what a read of the alerts returns. It never carries the relay
 // password.
 type Status struct {
@@ -29,7 +39,12 @@ type Status struct {
 	LastSent     time.Time     `json:"last_sent,omitzero"`
 	LastResults  []Result      `json:"last_results,omitempty"`
 	Pending      int           `json:"pending,omitempty"`
+	// LastEvents are the most recent alerts, newest last.
+	LastEvents []Event `json:"last_events,omitempty"`
 }
+
+// maxLastEvents bounds Status.LastEvents.
+const maxLastEvents = 10
 
 type pending struct {
 	ev       Event
@@ -41,6 +56,12 @@ type Service struct {
 	Sender *Sender
 	// Targets returns the current liveness of every watched visor.
 	Targets func(ctx context.Context, s Settings) []Target
+	// Probe asks the visor via to check whether ip answers on its LAN.
+	// Nil skips the LAN check.
+	Probe func(ctx context.Context, via cipher.PubKey, ip string) (bool, error)
+	// Self is the watching visor, a LAN neighbor when it shares a site.
+	// Nil means it is never one.
+	Self func() Target
 	// Logf logs delivery failures. Nil discards.
 	Logf func(format string, args ...any)
 
@@ -53,6 +74,7 @@ type Service struct {
 	lastCheck   time.Time
 	lastSent    time.Time
 	lastResults []Result
+	lastEvents  []Event
 }
 
 const (
@@ -79,15 +101,16 @@ func NewService(dir string, base *Settings, sender *Sender) (*Service, error) {
 			}
 		}
 	}
-	alerted := map[cipher.PubKey]time.Time{}
+	saved := map[cipher.PubKey]Saved{}
 	if dir != "" {
 		if b, err := os.ReadFile(filepath.Join(dir, stateFile)); err == nil { //nolint:gosec
-			if err := json.Unmarshal(b, &alerted); err != nil {
+			if err := json.Unmarshal(b, &saved); err != nil {
 				errs = append(errs, err)
+				saved = map[cipher.PubKey]Saved{}
 			}
 		}
 	}
-	s.tracker = NewTracker(alerted)
+	s.tracker = NewTracker(saved)
 	return s, errors.Join(errs...)
 }
 
@@ -133,6 +156,7 @@ func (s *Service) Status() Status {
 		LastSent:     s.lastSent,
 		LastResults:  s.lastResults,
 		Pending:      len(s.pending),
+		LastEvents:   append([]Event(nil), s.lastEvents...),
 	}
 }
 
@@ -174,18 +198,32 @@ func (s *Service) Tick(ctx context.Context, now time.Time) {
 		targets = s.Targets(ctx, set)
 	}
 	s.mu.Lock()
+	s.tracker.DiskWarn = set.DiskWarn()
 	events := s.tracker.Observe(now, set.Delay(), targets)
+	s.lastCheck = now
+	saved := s.tracker.Saved()
+	s.mu.Unlock()
+
+	for i, ev := range events {
+		if ev.Kind == KindOffline && ev.Scope == ScopeBoard {
+			events[i].Diagnosis = joinNotes(s.lanCheck(ctx, ev.Target, targets), ev.Diagnosis)
+		}
+	}
+
+	s.mu.Lock()
 	queue := append(s.pending, make([]pending, 0, len(events))...)
 	for _, ev := range events {
 		queue = append(queue, pending{ev: ev})
 	}
 	s.pending = nil
-	s.lastCheck = now
-	alerted := s.tracker.Alerted()
+	s.lastEvents = append(s.lastEvents, events...)
+	if n := len(s.lastEvents) - maxLastEvents; n > 0 {
+		s.lastEvents = append([]Event(nil), s.lastEvents[n:]...)
+	}
 	s.mu.Unlock()
 
 	if len(events) > 0 {
-		s.saveState(alerted)
+		s.saveState(saved)
 	}
 	var retry []pending
 	for _, p := range queue {
@@ -195,7 +233,7 @@ func (s *Service) Tick(ctx context.Context, now time.Time) {
 			if r.Err == "" {
 				ok = true
 			} else if s.Logf != nil {
-				s.Logf("alert %s for %s via %s %s failed: %s", p.ev.Kind, p.ev.Target.PK, r.Channel, r.Target, r.Err)
+				s.Logf("alert %s for %s via %s %s failed: %s", p.ev.Kind, displayName(p.ev.Target), r.Channel, r.Target, r.Err)
 			}
 		}
 		s.mu.Lock()
@@ -215,11 +253,80 @@ func (s *Service) Tick(ctx context.Context, now time.Time) {
 	}
 }
 
-func (s *Service) saveState(alerted map[cipher.PubKey]time.Time) {
+// lanCheck asks an online visor on the same LAN as the offline board
+// whether the board still answers there.
+func (s *Service) lanCheck(ctx context.Context, board Target, targets []Target) string {
+	if s.Probe == nil {
+		return ""
+	}
+	if board.LocalIP == "" {
+		return DiagNoLocalIP
+	}
+	cands := targets
+	if s.Self != nil {
+		me := s.Self()
+		me.Online = true
+		cands = append([]Target{me}, targets...)
+	}
+	cands = Neighbors(board, cands)
+	if len(cands) == 0 {
+		return DiagNoNeighbor
+	}
+	var errs []string
+	for _, n := range cands {
+		ok, err := s.Probe(ctx, n.PK, board.LocalIP)
+		if err != nil {
+			errs = append(errs, displayName(n)+": "+err.Error())
+			continue
+		}
+		res := DiagLANDown
+		if ok {
+			res = DiagLANUp
+		}
+		return res + " (checked from " + displayName(n) + ")"
+	}
+	return "LAN check failed: " + strings.Join(errs, "; ")
+}
+
+// Neighbors lists the online visors in targets at board's site: the same
+// public IP and the same LAN subnet, a /24 for IPv4 and a /64 for IPv6.
+func Neighbors(board Target, targets []Target) []Target {
+	var out []Target
+	for _, t := range targets {
+		if t.Online && t.PK != board.PK && board.PublicIP != "" && t.PublicIP == board.PublicIP && sameLAN(t.LocalIP, board.LocalIP) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func sameLAN(a, b string) bool {
+	ia, ib := net.ParseIP(a), net.ParseIP(b)
+	if ia == nil || ib == nil {
+		return false
+	}
+	if a4, b4 := ia.To4(), ib.To4(); a4 != nil || b4 != nil {
+		return a4 != nil && b4 != nil && a4.Mask(net.CIDRMask(24, 32)).Equal(b4.Mask(net.CIDRMask(24, 32)))
+	}
+	m := net.CIDRMask(64, 128)
+	return ia.Mask(m).Equal(ib.Mask(m))
+}
+
+func joinNotes(notes ...string) string {
+	var out []string
+	for _, n := range notes {
+		if n != "" {
+			out = append(out, n)
+		}
+	}
+	return strings.Join(out, "; ")
+}
+
+func (s *Service) saveState(saved map[cipher.PubKey]Saved) {
 	if s.dir == "" {
 		return
 	}
-	b, err := json.Marshal(alerted)
+	b, err := json.Marshal(saved)
 	if err != nil {
 		return
 	}

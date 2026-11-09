@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
+	"github.com/skycoin/skywire/pkg/visor/visorapi"
 )
 
 // alertFreshWindow is how recently an attached visor must have answered
@@ -38,6 +39,8 @@ func initAlerts(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.WithError(err).Warn("Reading saved alert settings")
 	}
 	svc.Targets = v.alertTargets
+	svc.Probe = v.alertProbe
+	svc.Self = v.alertSelf
 	svc.Logf = log.Warnf
 	v.alertsMu.Lock()
 	v.alertSvc = svc
@@ -115,7 +118,11 @@ func (hv *Hypervisor) alertTargets(now time.Time) []alerts.Target {
 		t := alerts.Target{PK: pk, Source: "hypervisor", LastSeen: c.seenAt,
 			Online: connected[pk] && now.Sub(c.seenAt) < alertFreshWindow}
 		if c.sum != nil && c.sum.Overview != nil {
-			t.Hostname, t.PublicIP = c.sum.Overview.Hostname, c.sum.Overview.PublicIP
+			o := c.sum.Overview
+			t.Hostname, t.PublicIP, t.LocalIP = o.Hostname, o.PublicIP, o.LocalIP
+		}
+		if c.sum != nil {
+			t.Uptime, t.Storage = alertHealth(c.sum, now.Sub(c.seenAt))
 		}
 		out = append(out, t)
 		delete(connected, pk)
@@ -124,6 +131,57 @@ func (hv *Hypervisor) alertTargets(now time.Time) []alerts.Target {
 		out = append(out, alerts.Target{PK: pk, Source: "hypervisor", Online: true, LastSeen: now})
 	}
 	return out
+}
+
+// alertHealth is a summary's board uptime, aged by since the summary was
+// taken, and its storage health. Host uptime wins over the visor's own.
+func alertHealth(sum *visorapi.Summary, age time.Duration) (alerts.Duration, *alerts.Storage) {
+	up := time.Duration(sum.Uptime * float64(time.Second))
+	var st *alerts.Storage
+	if l := sum.Load; l != nil {
+		if l.HostUptime > 0 {
+			up = time.Duration(l.HostUptime) * time.Second //nolint:gosec // seconds of uptime
+		}
+		st = &alerts.Storage{ReadOnlyRoot: l.RootReadOnly, IOErrors: l.StorageIOErrors,
+			LastIOError: l.LastStorageIOError, DiskUsedPercent: l.DiskUsedPercent}
+	}
+	if up > 0 {
+		up += age
+	}
+	return alerts.Duration(up), st
+}
+
+// alertSelf is this visor as a possible LAN neighbor of a watched board.
+func (v *Visor) alertSelf() alerts.Target {
+	t := alerts.Target{PK: v.conf.PK}
+	if o, err := v.Overview(); err == nil {
+		t.Hostname, t.PublicIP, t.LocalIP = o.Hostname, o.PublicIP, o.LocalIP
+	}
+	return t
+}
+
+// alertProbe asks the visor via, this one or a visor the hypervisor
+// manages, whether ip answers on its LAN.
+func (v *Visor) alertProbe(ctx context.Context, via cipher.PubKey, ip string) (bool, error) {
+	if via == v.conf.PK {
+		return alerts.LANProbe(ctx, ip)
+	}
+	hv := v.hvInstance
+	if hv == nil {
+		return false, errors.New("no hypervisor")
+	}
+	conn, ok := hv.visorConn(via)
+	if !ok || conn.API == nil {
+		return false, errors.New("not connected")
+	}
+	return conn.API.AlertsLANProbe(ip)
+}
+
+// AlertsLANProbe implements visorapi.Alerts.
+func (v *Visor) AlertsLANProbe(ip string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return alerts.LANProbe(ctx, ip)
 }
 
 // AlertsStatus implements visorapi.Alerts.
@@ -179,6 +237,14 @@ func (r *RPC) AlertsTest(_ *struct{}, out *[]alerts.Result) (err error) {
 	defer rpcutil.LogCall(r.log, "AlertsTest", nil)(out, &err)
 	res, err := r.visor.AlertsTest()
 	*out = res
+	return err
+}
+
+// AlertsLANProbe reports whether a LAN address answers, for a watcher
+// diagnosing an offline neighbor.
+func (r *RPC) AlertsLANProbe(in *string, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "AlertsLANProbe", in)(out, &err)
+	*out, err = r.visor.AlertsLANProbe(*in)
 	return err
 }
 

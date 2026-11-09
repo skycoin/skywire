@@ -16,6 +16,9 @@ type Alerts interface {
 	AlertsSet(s alerts.Settings) error
 	// AlertsTest sends a test alert to every configured channel.
 	AlertsTest() ([]alerts.Result, error)
+	// AlertsLANProbe reports whether a LAN address answers, so a watcher
+	// can tell a board that is off from one whose skywire is down.
+	AlertsLANProbe(ip string) (bool, error)
 }
 
 // AlertsStatus calls AlertsStatus.
@@ -45,3 +48,13 @@ func (mc *mockRPCClient) AlertsSet(alerts.Settings) error { return nil }
 
 // AlertsTest implements API.
 func (mc *mockRPCClient) AlertsTest() ([]alerts.Result, error) { return nil, nil }
+
+// AlertsLANProbe calls AlertsLANProbe.
+func (rc *rpcClient) AlertsLANProbe(ip string) (bool, error) {
+	var out bool
+	err := rc.Call("AlertsLANProbe", &ip, &out)
+	return out, err
+}
+
+// AlertsLANProbe implements API.
+func (mc *mockRPCClient) AlertsLANProbe(string) (bool, error) { return false, nil }
