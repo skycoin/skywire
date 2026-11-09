@@ -77,5 +77,5 @@ func checkPayoutTxn(histDir, day, rawTxn string) error {
 	if err != nil {
 		return err
 	}
-	return rewards.CheckTransactionPayouts(rawTxn, shares, payoutAddressSpent)
+	return rewards.CheckTransactionPayouts(day, rawTxn, shares, payoutAddressSpent)
 }

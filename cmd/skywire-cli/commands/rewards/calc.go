@@ -284,12 +284,12 @@ func addressSpent(addr string) (bool, error) {
 	return e.Spent, nil
 }
 
-// checkRewardAddress checks a visor's reward address.
+// checkRewardAddress checks a visor's reward address for the reward day t.
 // ineligible is the reason it is not paid. failed means the node could not
 // say whether a single address has sent coins, so the calculation must stop.
-func checkRewardAddress(addr string) (ineligible, failed error) {
+func checkRewardAddress(addr string, t time.Time) (ineligible, failed error) {
 	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
-	if err != nil || isXpub {
+	if err != nil || isXpub || t.Before(deprewards.SingleAddressCutoff) {
 		return err, nil
 	}
 	spent, err := addressSpent(canonical)
@@ -304,8 +304,8 @@ func checkRewardAddress(addr string) (ineligible, failed error) {
 
 // rewardAddressError is checkRewardAddress, stopping the calculation when the
 // node cannot be asked, rather than paying or leaving out the visor.
-func rewardAddressError(addr string) error {
-	ineligible, failed := checkRewardAddress(addr)
+func rewardAddressError(addr string, t time.Time) error {
+	ineligible, failed := checkRewardAddress(addr, t)
 	if failed != nil {
 		log.Fatal(failed)
 	}
@@ -1057,7 +1057,7 @@ Architectures:
 			}
 			uu := survey.UUID
 
-			addrErr := rewardAddressError(sky)
+			addrErr := rewardAddressError(sky, wDate)
 
 			_, hasTransports := transportMap[pk]
 			meetsTransportReq := !requireTransports || hasTransports
