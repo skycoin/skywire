@@ -16,13 +16,43 @@ In order to expose the hypervisor UI, generate a config file with the `-i` / `--
 skywire cli config gen -i
 ```
 
-After starting up the visor, the dashboard is on `localhost:8000` and the
-desk — the wasm-visor hypervisor UI, with the dashboard as a tab inside it —
-on `localhost:8010`. See [the two ports](#the-two-ports) below.
+After starting up the visor, the dashboard is on `http://127.0.0.1:8000` and
+the desk (the wasm-visor hypervisor UI, with the dashboard as a tab inside it)
+on `http://127.0.0.1:8010`. See [the two ports](#the-two-ports) below.
 
-From another device on the same LAN, use the machine's mDNS name:
-`http://<hostname>.local:8000/`. That name comes from the OS (Avahi on
-Linux, Bonjour on macOS/Windows); the visor advertises nothing itself.
+### Serving the UI on the LAN
+
+Both addresses default to 127.0.0.1, so only the machine itself can reach the
+UI. A fresh hypervisor has no admin account, and whoever reaches `:8000` first
+creates it and with it control of every managed visor, shells included. On a
+VPS or a board with a public address that could be anyone.
+
+An existing install moves to localhost on its next `skywire autoconfig` run,
+which every automatic package update performs, unless `HVHTTPADDR` or
+`HVDESKADDR` is set in `/etc/skywire.conf`. Autoconfig prints a note when the
+UI serves this machine only.
+
+Set the admin password first (see below), then serve the UI on every
+interface:
+
+```
+skywire autoconfig --hvaddr :8000
+```
+
+That writes `HVHTTPADDR=':8000'` into `/etc/skywire.conf`, so later updates
+keep it. You can also pin one LAN address, such as `192.168.0.2:8000`. Add
+`--hvdeskaddr :8010` to serve the desk as well. Without a package install, pass
+the same addresses to `skywire cli config gen --hvaddr :8000 --hvdeskaddr :8010`.
+(`--hvaddr` is listed under `config gen --all`.)
+
+Once the UI is on the LAN, another device can use the machine's mDNS name,
+`http://<hostname>.local:8000/`. That name comes from the OS (Avahi on Linux,
+Bonjour on macOS and Windows); the visor advertises nothing itself.
+
+[Offline alerts](visor-alerts.md) can email you when a visor this hypervisor
+manages goes offline.
+
+### The admin account
 
 The UI password gate is on for a freshly generated hypervisor config. The
 first visit creates the account, and the username is always `admin` — it is
