@@ -1,0 +1,115 @@
+<div class="container-elevated-translucid mt-4.5 settings-container alerts">
+  <h3 class="title">Offline alerts</h3>
+
+  @if (loading) {
+    <div class="text-center py-2">
+      <mat-spinner diameter="24" class="mx-auto"></mat-spinner>
+    </div>
+  }
+
+  @if (!loading && loadError) {
+    <p class="status error">{{ loadError }}</p>
+    <button mat-stroked-button class="secondary" (click)="load()">Retry</button>
+  }
+
+  @if (!loading && status && !loadError) {
+    <p class="status">
+      This visor mails you when a visor it watches has been offline for the delay below, and once more
+      when it is back. A visor that returns within the delay sends nothing. It watches the visors its
+      hypervisor manages. Changes apply at once.
+    </p>
+
+    <div class="row">
+      <div class="about">
+        <div class="name">Email addresses</div>
+        <div class="help">Comma separated. Empty turns mail alerts off.</div>
+      </div>
+      <div class="field">
+        <input type="text" [(ngModel)]="form.emails" placeholder="you@example.com" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="about">
+        <div class="name">Offline delay</div>
+        <div class="help">How long a visor must stay offline before you are told. Longer ignores brief outages.</div>
+      </div>
+      <div class="field">
+        <select [(ngModel)]="form.delay">
+          @for (d of delays; track d.value) {
+            <option [value]="d.value">{{ d.label }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="about">
+        <div class="name">Webhook</div>
+        <div class="help">Optional URL that gets a JSON POST for each alert.</div>
+      </div>
+      <div class="field">
+        <input type="text" [(ngModel)]="form.webhook" placeholder="https://example.com/hook" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="about">
+        <div class="name">Sender address</div>
+        <div class="help">Optional. Default skywire-alerts&#64;this host, or the relay login.</div>
+      </div>
+      <div class="field">
+        <input type="text" [(ngModel)]="form.from" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="about">
+        <mat-checkbox [(ngModel)]="form.useRelay" color="primary">Send through an SMTP relay</mat-checkbox>
+        <div class="help">
+          Without one, mail goes straight to the recipient's mail server on port 25, which many home
+          connections block and large providers often refuse.
+        </div>
+      </div>
+    </div>
+
+    @if (form.useRelay) {
+      <div class="relay">
+        <label>Host <input type="text" [(ngModel)]="form.host" placeholder="smtp.example.com" spellcheck="false" autocomplete="off"></label>
+        <label>Port <input type="text" class="port" [(ngModel)]="form.port" placeholder="587" autocomplete="off"></label>
+        <label>Username <input type="text" [(ngModel)]="form.username" spellcheck="false" autocomplete="off"></label>
+        <label>Password <input type="password" [(ngModel)]="form.password" [placeholder]="passwordPlaceholder" autocomplete="new-password"></label>
+        <mat-checkbox [(ngModel)]="form.starttls" color="primary">Require STARTTLS</mat-checkbox>
+      </div>
+    }
+
+    <div class="bar">
+      @if (error) {
+        <span class="invalid-count">{{ error }}</span>
+      }
+      <span class="spacer"></span>
+      <button mat-stroked-button class="secondary" [disabled]="testing || !status.enabled" (click)="sendTest()">
+        {{ testing ? 'Sending…' : 'Send test' }}
+      </button>
+      <button mat-raised-button color="primary" [disabled]="saving || !!error" (click)="save()">Save</button>
+    </div>
+
+    @if (testResults) {
+      @for (r of testResults; track r.channel + r.target) {
+        <p class="status" [class.ok]="!r.error" [class.error]="!!r.error">
+          {{ r.channel }} {{ r.target }}: {{ r.error ? 'failed, ' + r.error : 'sent' }}
+        </p>
+      }
+    }
+
+    <p class="status watched">
+      Watching {{ status.watched?.length || 0 }} visor(s), {{ offlineCount }} offline.
+      @if (status.last_sent) {
+        Last alert sent {{ status.last_sent | date:'medium' }}.
+      }
+      @if (status.pending) {
+        {{ status.pending }} alert(s) waiting to be retried.
+      }
+    </p>
+  }
+</div>

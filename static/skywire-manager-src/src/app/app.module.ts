@@ -44,6 +44,7 @@ import { InitialSetupComponent } from './components/pages/login/initial-setup/in
 import { ProxySettingsComponent } from './components/pages/node/actions/proxy-settings/proxy-settings.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
 import { NodeSettingsComponent } from './components/pages/node/node-settings/node-settings.component';
+import { NodeAlertsComponent } from './components/pages/node/node-settings/node-alerts/node-alerts.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { VisorOverviewComponent } from './components/pages/node/node-info/visor-overview/visor-overview.component';
 import { CommandPaletteComponent } from './components/layout/command-palette/command-palette.component';
@@ -114,6 +115,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         ProxySettingsComponent,
         SkynetComponent,
         NodeSettingsComponent,
+        NodeAlertsComponent,
         NodeInfoContentComponent,
         VisorOverviewComponent,
         CommandPaletteComponent,
