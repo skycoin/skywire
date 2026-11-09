@@ -1492,3 +1492,7 @@ func (proxyDefaultAPI) SetSingleRewardAddress(_ string) (string, error) {
 func (proxyDefaultAPI) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (string, error) {
 	return "", ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) HVForgetVisor(_ cipher.PubKey) error {
+	return ErrProxyNotSupported
+}

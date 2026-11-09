@@ -142,6 +142,11 @@ func (v *Visor) HVListDirectVisors() ([]visorapi.HVVisorEntry, error) {
 		}(i, e.pk, e.conn.API)
 	}
 	wg.Wait()
+	skip := map[cipher.PubKey]bool{v.conf.PK: true}
+	for _, e := range remotes {
+		skip[e.pk] = true
+	}
+	results = append(results, hv.offlineKnownEntries(skip)...)
 
 	// Build the local entry first so we can use its PublicIP as the
 	// "LAN-adjacent" sort key for the remote entries.
@@ -196,6 +201,11 @@ func (v *Visor) HVListVisors() ([]visorapi.HVVisorEntry, error) {
 		}(i, e.pk, e.conn.API)
 	}
 	wg.Wait()
+	skip := map[cipher.PubKey]bool{v.conf.PK: true}
+	for _, e := range remotes {
+		skip[e.pk] = true
+	}
+	results = append(results, hv.offlineKnownEntries(skip)...)
 
 	// Build the local entry; PublicIP anchors LAN-adjacency in the final
 	// sort. We append rather than prepend here — the single sortHVVisor-
@@ -318,6 +328,7 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 			entry.Online = true
 			populateEntryFromSummary(&entry, r.summary)
 			now := time.Now().UTC()
+			entry.LastSeenAt = &now
 			cached := *r.summary
 			hv.summaryCacheMx.Lock()
 			hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
@@ -340,6 +351,8 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 	if ok && cached.sum != nil {
 		populateEntryFromSummary(&entry, cached.sum)
 		entry.Online = false
+		seen := cached.seenAt
+		entry.LastSeenAt = &seen
 		entry.Error = entry.Error + " (cached " + time.Since(cached.seenAt).Truncate(time.Second).String() + " ago)"
 	}
 	return entry
