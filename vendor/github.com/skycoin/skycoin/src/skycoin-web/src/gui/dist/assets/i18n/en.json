@@ -95,7 +95,19 @@
     "button": "Proceed",
     "cancel-button": "Cancel",
     "mismatch": "The passwords do not match",
-    "save-seed-text": "Set a password to unlock this wallet without its seed next time. Leave it empty to skip."
+    "save-seed-text": "Set a password to unlock this wallet without its seed next time. Leave it empty to skip.",
+    "reset-link": "I forgot my password"
+  },
+  "reset": {
+    "title": "Reset Password",
+    "wallet-label": "Wallet",
+    "seed-label": "Wallet seed",
+    "passphrase-label": "Seed passphrase (leave empty if the wallet has none)",
+    "password-label": "New password (leave empty if you want the wallet not to be encrypted)",
+    "confirm-label": "Confirm new password",
+    "confirm-error-info": "The two passwords must match.",
+    "reset-button": "Reset",
+    "done": "Password successfully changed."
   },
   "buy": {
     "deposit-address": "Choose an address to generate a BTC deposit link for:",
@@ -202,7 +214,10 @@
       "seed-passphrase-space-warning": "This passphrase starts or ends with a space. It is used exactly as typed, so the space must be entered every time you restore this wallet.",
       "segwit-label": "Native Segwit (bech32)",
       "segwit-info": "Generate bc1q... addresses (BIP84). Recommended for lower fees. Uncheck for legacy P2PKH addresses.",
-      "wallet-created": "The wallet has been added to the list."
+      "wallet-created": "The wallet has been added to the list.",
+      "temporary-check": "Load temporarily",
+      "temporary-info": "The wallet will be kept in memory only and deleted as soon as you close or reload the wallet page.",
+      "temporary-warning": "The wallet will be deleted when you close or reload the wallet page, and it will not have a password. You will need the seed to recover access to the funds. Are you sure you want to continue?"
     },
     "scan": {
       "connection-error": "It is not possible to connect to the server. Please try again later.",
@@ -234,8 +249,19 @@
       "outputs": "Unspent Outputs",
       "history": "History",
       "exposed": "This address has sent coins before, so its public key is on the blockchain. A future quantum computer could use it to steal coins sent to it. Do not receive coins at it again.",
-      "exposed-funded": "This address has sent coins before and still holds coins. Its public key is on the blockchain, so a future quantum computer could steal them. Move these coins to a new address."
-    }
+      "exposed-funded": "This address has sent coins before and still holds coins. Its public key is on the blockchain, so a future quantum computer could steal them. Move these coins to a new address.",
+      "confirm": "Confirm Address"
+    },
+    "scan-help": "Finds the already used addresses of this wallet which are missing from the list.",
+    "add-addresses": {
+      "title": "New Addresses",
+      "quantity-label": "How many addresses to create",
+      "quantity-error-info": "You must enter a whole number from 1 to 100.",
+      "cancel-button": "Cancel",
+      "create-button": "Create"
+    },
+    "add-many-confirmation": "WARNING: If you add too many addresses without using the previous ones, some addresses may not be found automatically if you restore the wallet using the seed, and you will have to add them by hand. Do you want to continue?",
+    "temporary": "Temporary wallet."
   },
   "qr": {
     "title": "Address",
@@ -253,6 +279,26 @@
     "gateway-confirm-eth": "Send {{ amount }} {{ symbol }} to {{ to }}? The network fee is at most {{ fee }} ETH.",
     "gateway-confirm-btc": "Send {{ amount }} {{ symbol }} to {{ to }}? The network fee is {{ rate }} satoshis per byte.",
     "gateway-sent": "Sent. Transaction {{ txid }}",
+    "fill-with-link": {
+      "title": "Use a Payment Link",
+      "button": "Use a payment link",
+      "link-info": "Paste a link sent to you requesting coins, such as skycoin:ADDRESS?amount=1. The form will be filled in with its data.",
+      "link-label": "Payment link",
+      "invalid-link-error": "This is not a valid payment link.",
+      "data-overwritten-alert": "Some data you have entered will be overwritten. Are you sure you want to continue?",
+      "confirmation": "The form has been filled in with the data of the payment link.",
+      "link-hours": "The link requests {{ hours }} {{ name }}, which will be sent with the coins.",
+      "process-button": "Process",
+      "cancel-button": "Cancel"
+    },
+    "signed-button": "Signed",
+    "unsigned-button": "Unsigned",
+    "unsigned-confirmation": "The unsigned form does not send transactions. It only creates the text of a transaction from the addresses you enter, which must be signed before it can be sent to the network. This is useful for a wallet whose keys are kept on an offline device. Do you want to continue?",
+    "addresses-manual-help": "The addresses the coins will be sent from, separated by commas. All of them must belong to the wallet that will sign the transaction.",
+    "manual-addresses-error": "The outputs of these addresses could not be loaded. Check the addresses.",
+    "personal-note-label": "Personal note",
+    "personal-note-help": "A text to help you identify the transaction later. It is saved in this browser only, so it is not visible from other devices.",
+    "saving-note-error": "The transaction was sent, but the note could not be saved.",
     "fee-label": "Network fee",
     "fee-slow": "Slow",
     "fee-normal": "Normal",
@@ -325,6 +371,12 @@
     "hours-sent": "sent",
     "hours-received": "received",
     "hours-burned": "burned",
+    "note": "Note",
+    "without-note": "Without note",
+    "edit-note": "Edit note",
+    "save-note": "Save note",
+    "cancel-note": "Cancel",
+    "note-error": "The note could not be saved.",
     "inputs": "Inputs",
     "outputs": "Outputs",
     "confirmed": "Confirmed",
@@ -438,6 +490,7 @@
   },
   "history": {
     "tx-detail": "Transaction Detail",
+    "note": "Note",
     "moving": "Internally moving",
     "moved": "Internally moved",
     "sending": "Sending",
@@ -595,6 +648,10 @@
       "and": "and",
       "hours": "coin hours",
       "to": "to"
+    },
+    "confirm-address": {
+      "instructions": "Please confirm on the Skywallet that the address is {{ address }}",
+      "confirmation": "Address confirmed."
     }
   },
   "app-lock": {
