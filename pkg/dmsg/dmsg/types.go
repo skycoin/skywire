@@ -283,9 +283,22 @@ type StreamRequest struct {
 	raw SignedObject `enc:"-"` // back reference.
 }
 
-// Verify verifies the StreamRequest.
+// verifySig checks a signed object. Tests count the checks through it.
+var verifySig = cipher.VerifyPubKeySignedPayload
+
+// Verify verifies the StreamRequest, signature included.
 func (req StreamRequest) Verify(lastTimestamp int64) error {
-	// Check fields.
+	if err := req.verifyFields(lastTimestamp); err != nil {
+		return err
+	}
+	if err := verifySig(req.SrcAddr.PK, req.raw.Sig(), req.raw.Object()); err != nil {
+		return ErrReqInvalidSig.Wrap(err)
+	}
+	return nil
+}
+
+// verifyFields checks everything in the StreamRequest but the signature.
+func (req StreamRequest) verifyFields(lastTimestamp int64) error {
 	if req.SrcAddr.PK.Null() {
 		return ErrReqInvalidSrcPK
 	}
@@ -301,12 +314,6 @@ func (req StreamRequest) Verify(lastTimestamp int64) error {
 	if req.Timestamp <= lastTimestamp {
 		return ErrReqInvalidTimestamp
 	}
-
-	// Check signature.
-	if err := cipher.VerifyPubKeySignedPayload(req.SrcAddr.PK, req.raw.Sig(), req.raw.Object()); err != nil {
-		return ErrReqInvalidSig.Wrap(err)
-	}
-
 	return nil
 }
 
@@ -333,14 +340,18 @@ type StreamResponse struct {
 
 // Verify verifies the StreamResponse.
 func (resp StreamResponse) Verify(req StreamRequest) error {
-	// Check fields.
+	return resp.verify(req, true)
+}
+
+// verify checks the StreamResponse, and its signature when sig is set.
+func (resp StreamResponse) verify(req StreamRequest, sig bool) error {
 	if resp.ReqHash != req.raw.Hash() {
 		return ErrDialRespInvalidHash
 	}
-
-	// Check signature.
-	if err := cipher.VerifyPubKeySignedPayload(req.DstAddr.PK, resp.raw.Sig(), resp.raw.Object()); err != nil {
-		return ErrDialRespInvalidSig.Wrap(err)
+	if sig {
+		if err := verifySig(req.DstAddr.PK, resp.raw.Sig(), resp.raw.Object()); err != nil {
+			return ErrDialRespInvalidSig.Wrap(err)
+		}
 	}
 
 	// Check whether response states that the request is accepted.
@@ -418,7 +429,7 @@ func (a PeerAnnounce) Verify(remoteStatic cipher.PubKey) error {
 	if a.SrcPK != remoteStatic {
 		return ErrReqInvalidSrcPK
 	}
-	if err := cipher.VerifyPubKeySignedPayload(a.SrcPK, a.raw.Sig(), a.raw.Object()); err != nil {
+	if err := verifySig(a.SrcPK, a.raw.Sig(), a.raw.Object()); err != nil {
 		return ErrReqInvalidSig.Wrap(err)
 	}
 	return nil
