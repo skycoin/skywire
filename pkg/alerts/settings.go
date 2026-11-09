@@ -1,5 +1,5 @@
 // Package alerts sends mail and webhook alerts when watched visors go
-// offline and when they come back.
+// offline, when they come back, and when their storage starts to fail.
 package alerts
 
 import (
@@ -21,6 +21,9 @@ const (
 	MaxOfflineAfter     = time.Hour
 	DefaultOfflineAfter = 5 * time.Minute
 )
+
+// DefaultDiskWarn is the disk use percent that raises a storage warning.
+const DefaultDiskWarn = 90
 
 // Duration is a time.Duration written as a string such as "5m" in JSON.
 type Duration time.Duration
@@ -74,6 +77,17 @@ type Settings struct {
 	Watch        []cipher.PubKey `json:"watch,omitempty"`
 	// From is the sender address. Default: skywire-alerts@<hostname>.
 	From string `json:"from,omitempty"`
+	// DiskWarnPercent is the disk use that raises a storage warning.
+	// Default: DefaultDiskWarn.
+	DiskWarnPercent float64 `json:"disk_warn_percent,omitempty"`
+}
+
+// DiskWarn is the disk warning threshold, the default when unset.
+func (s *Settings) DiskWarn() float64 {
+	if s == nil || s.DiskWarnPercent == 0 {
+		return DefaultDiskWarn
+	}
+	return s.DiskWarnPercent
 }
 
 // Enabled reports whether there is anywhere to send an alert.
@@ -102,6 +116,9 @@ func (s *Settings) Validate() error {
 	}
 	if d := time.Duration(s.OfflineAfter); d != 0 && (d < MinOfflineAfter || d > MaxOfflineAfter) {
 		errs = append(errs, fmt.Errorf("offline_after %s is outside %s to %s", d, MinOfflineAfter, MaxOfflineAfter))
+	}
+	if s.DiskWarnPercent < 0 || s.DiskWarnPercent > 100 {
+		errs = append(errs, fmt.Errorf("disk_warn_percent %.0f is outside 0 to 100", s.DiskWarnPercent))
 	}
 	if s.Webhook != "" {
 		u, err := url.Parse(s.Webhook)

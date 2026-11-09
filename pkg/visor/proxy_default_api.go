@@ -1509,3 +1509,7 @@ func (proxyDefaultAPI) AlertsSet(_ alerts.Settings) error {
 func (proxyDefaultAPI) AlertsTest() ([]alerts.Result, error) {
 	return nil, ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) AlertsLANProbe(_ string) (bool, error) {
+	return false, ErrProxyNotSupported
+}

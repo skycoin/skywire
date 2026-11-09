@@ -84,15 +84,20 @@ func (s *Sender) from(set Settings) string {
 
 // Subject is the mail subject for ev.
 func Subject(ev Event) string {
-	name := ev.Target.Hostname
-	if name == "" {
-		name = ev.Target.PK.String()
-	}
-	switch ev.Kind {
-	case KindOffline:
+	name := displayName(ev.Target)
+	switch {
+	case ev.Kind == KindConflict:
+		return fmt.Sprintf("[skywire] IP conflict: %d visors at site %s share LAN IP %s", len(ev.Members), ev.Site, ev.Target.LocalIP)
+	case ev.Scope == ScopeSite && ev.Kind == KindOffline:
+		return fmt.Sprintf("[skywire] site %s: all %d visors offline", ev.Site, len(ev.Members))
+	case ev.Scope == ScopeSite && ev.Kind == KindOnline:
+		return fmt.Sprintf("[skywire] site %s is back online", ev.Site)
+	case ev.Kind == KindOffline:
 		return fmt.Sprintf("[skywire] visor %s is offline", name)
-	case KindOnline:
+	case ev.Kind == KindOnline:
 		return fmt.Sprintf("[skywire] visor %s is back online", name)
+	case ev.Kind == KindStorage:
+		return fmt.Sprintf("[skywire] visor %s storage warning", name)
 	default:
 		return "[skywire] test alert"
 	}
@@ -101,11 +106,20 @@ func Subject(ev Event) string {
 // Body is the plain text mail body for ev.
 func (s *Sender) Body(ev Event) string {
 	var b strings.Builder
-	switch ev.Kind {
-	case KindOffline:
+	site := ev.Scope == ScopeSite
+	switch {
+	case ev.Kind == KindConflict:
+		b.WriteString("Two or more visors you watch at one site report the same LAN IP. Expect both to flap until one gets a new address.\n\n")
+	case site && ev.Kind == KindOffline:
+		b.WriteString("Every visor you watch behind one public IP went offline.\n\n")
+	case site && ev.Kind == KindOnline:
+		b.WriteString("A site you watch is back online.\n\n")
+	case ev.Kind == KindOffline:
 		b.WriteString("A visor you watch went offline.\n\n")
-	case KindOnline:
+	case ev.Kind == KindOnline:
 		b.WriteString("A visor you watch is back online.\n\n")
+	case ev.Kind == KindStorage:
+		b.WriteString("A visor you watch reports storage problems. Its SD card or disk may be failing.\n\n")
 	default:
 		b.WriteString("This is a test of your skywire visor alerts. Delivery works.\n\n")
 	}
@@ -115,11 +129,18 @@ func (s *Sender) Body(ev Event) string {
 		}
 	}
 	if ev.Kind != KindTest {
-		line("Hostname", ev.Target.Hostname)
-		line("Public key", ev.Target.PK.String())
-		line("Public IP", ev.Target.PublicIP)
-		if !ev.Target.LastSeen.IsZero() {
-			line("Last seen", ev.Target.LastSeen.UTC().Format(time.RFC3339))
+		line("Kind", ev.Scope)
+		if site {
+			line("Site", ev.Site)
+			line("LAN IP", ev.Target.LocalIP)
+		} else {
+			line("Hostname", ev.Target.Hostname)
+			line("Public key", ev.Target.PK.String())
+			line("Public IP", ev.Target.PublicIP)
+			line("LAN IP", ev.Target.LocalIP)
+			if !ev.Target.LastSeen.IsZero() {
+				line("Last seen", ev.Target.LastSeen.UTC().Format(time.RFC3339))
+			}
 		}
 		if !ev.Since.IsZero() {
 			line("Offline since", ev.Since.UTC().Format(time.RFC3339))
@@ -127,10 +148,28 @@ func (s *Sender) Body(ev Event) string {
 				line("Down for", ev.At.Sub(ev.Since).Truncate(time.Second).String())
 			}
 		}
+		line("Diagnosis", ev.Diagnosis)
+		line("Recovery", ev.RecoveryReason)
+		for _, w := range ev.Warnings {
+			line("Warning", w)
+		}
 	}
 	line("Time", ev.At.UTC().Format(time.RFC3339))
 	line("Watched by", s.Watcher.String())
+	if len(ev.Members) > 0 {
+		b.WriteString("\nVisors:\n")
+		for _, m := range ev.Members {
+			fmt.Fprintf(&b, "  %s %s %s\n", m.PK, orDash(m.Hostname), orDash(m.LocalIP))
+		}
+	}
 	return b.String()
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // Format builds the full RFC 5322 message for ev.
@@ -308,22 +347,31 @@ func (s *Sender) tlsConfig(host string) *tls.Config {
 
 // WebhookPayload is the JSON body of a webhook POST.
 type WebhookPayload struct {
-	Event        string    `json:"event"`
-	PK           string    `json:"pk,omitempty"`
-	Hostname     string    `json:"hostname,omitempty"`
-	PublicIP     string    `json:"public_ip,omitempty"`
-	LastSeen     time.Time `json:"last_seen,omitzero"`
-	OfflineSince time.Time `json:"offline_since,omitzero"`
-	At           time.Time `json:"at"`
-	Watcher      string    `json:"watcher"`
-	Text         string    `json:"text"`
+	Event string `json:"event"`
+	// Kind is "board" or "site".
+	Kind           string    `json:"kind,omitempty"`
+	PK             string    `json:"pk,omitempty"`
+	Hostname       string    `json:"hostname,omitempty"`
+	PublicIP       string    `json:"public_ip,omitempty"`
+	LocalIP        string    `json:"local_ip,omitempty"`
+	LastSeen       time.Time `json:"last_seen,omitzero"`
+	OfflineSince   time.Time `json:"offline_since,omitzero"`
+	At             time.Time `json:"at"`
+	Diagnosis      string    `json:"diagnosis,omitempty"`
+	RecoveryReason string    `json:"recovery_reason,omitempty"`
+	Warnings       []string  `json:"warnings,omitempty"`
+	// Members are the visors of a site event.
+	Members []Target `json:"members,omitempty"`
+	Watcher string   `json:"watcher"`
+	Text    string   `json:"text"`
 }
 
 func (s *Sender) postWebhook(ctx context.Context, u string, ev Event) error {
 	p := WebhookPayload{
-		Event: ev.Kind, Hostname: ev.Target.Hostname, PublicIP: ev.Target.PublicIP,
-		LastSeen: ev.Target.LastSeen, OfflineSince: ev.Since, At: ev.At,
-		Watcher: s.Watcher.String(), Text: Subject(ev),
+		Event: ev.Kind, Kind: ev.Scope, Hostname: ev.Target.Hostname, PublicIP: ev.Target.PublicIP,
+		LocalIP: ev.Target.LocalIP, LastSeen: ev.Target.LastSeen, OfflineSince: ev.Since, At: ev.At,
+		Diagnosis: ev.Diagnosis, RecoveryReason: ev.RecoveryReason, Warnings: ev.Warnings,
+		Members: ev.Members, Watcher: s.Watcher.String(), Text: Subject(ev),
 	}
 	if !ev.Target.PK.Null() {
 		p.PK = ev.Target.PK.String()

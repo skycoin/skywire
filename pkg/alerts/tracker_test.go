@@ -83,11 +83,11 @@ func TestTrackerUsesLastSeenAndFloor(t *testing.T) {
 func TestTrackerRestoresAlerted(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	since := time.Now().Add(-time.Hour)
-	tr := NewTracker(map[cipher.PubKey]time.Time{pk: since})
+	tr := NewTracker(map[cipher.PubKey]Saved{pk: {Since: since}})
 	require.Empty(t, tr.Observe(time.Now(), time.Minute, []Target{{PK: pk}}), "no repeat after a restart")
 	evs := tr.Observe(time.Now(), time.Minute, []Target{{PK: pk, Online: true}})
 	require.Equal(t, []string{KindOnline}, kinds(evs), "recovery still sent after a restart")
-	require.Empty(t, tr.Alerted())
+	require.Empty(t, tr.Saved())
 }
 
 func TestTrackerDropsUnwatched(t *testing.T) {

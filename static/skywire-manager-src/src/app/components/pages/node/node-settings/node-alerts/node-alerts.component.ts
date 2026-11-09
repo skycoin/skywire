@@ -72,8 +72,8 @@ export function formError(f: AlertsForm): string {
 }
 
 /**
- * The settings to save. The watch list is kept as read; an empty password
- * keeps the relay's current one (pkg/alerts.Merge).
+ * The settings to save. The watch list and disk warning are kept as read;
+ * an empty password keeps the relay's current one (pkg/alerts.Merge).
  */
 export function settingsFor(f: AlertsForm, cur: AlertsSettings): AlertsSettings {
   const s: AlertsSettings = {
@@ -83,6 +83,7 @@ export function settingsFor(f: AlertsForm, cur: AlertsSettings): AlertsSettings 
     from: f.from.trim(),
     watch: cur.watch || [],
     smtp: null,
+    disk_warn_percent: cur.disk_warn_percent || 0,
   };
   if (f.useRelay) {
     s.smtp = {
