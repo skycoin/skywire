@@ -287,7 +287,14 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	// the server. Strict monotonic enforcement would reject valid
 	// concurrent requests. The noise encryption layer already prevents
 	// replay at the session level via nonce tracking.
-	if err := req.Verify(0); err != nil {
+	relayed := req.SrcAddr.PK != ss.rPK
+	// A request from this session's own key needs no signature check here: the
+	// session handshake authenticated it, and the destination checks it again.
+	verifyReq := req.verifyFields
+	if relayed {
+		verifyReq = req.Verify
+	}
+	if err := verifyReq(0); err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
 	}
@@ -298,7 +305,6 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	// envelope to the claimed source key, so the relaying session cannot
 	// impersonate anyone; what it spends is this server's relay capacity,
 	// charged in bridgeStream.
-	relayed := req.SrcAddr.PK != ss.rPK
 	if relayed {
 		ss.settleFiling(filedAsBefore)
 	} else {
@@ -656,7 +662,10 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 	if resp, err = respObj.ObtainStreamResponse(); err != nil {
 		return mStr, respObj, err
 	}
-	if err = resp.Verify(req); err != nil {
+	// The response comes over the destination's own session, which its handshake
+	// authenticated, so only a response relayed by a peer needs the signature
+	// check here. The initiator checks it again either way.
+	if err = resp.verify(req, ss.rPK != req.DstAddr.PK); err != nil {
 		return mStr, respObj, err
 	}
 	return mStr, respObj, nil
