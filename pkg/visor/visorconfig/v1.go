@@ -4,6 +4,7 @@ package visorconfig
 import (
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/proxyroute"
@@ -35,12 +36,15 @@ type V1 struct {
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
-	DmsgAsync     *DmsgAsyncConfig     `json:"dmsg_async,omitempty"`
-	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
-	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
-	Transport     *Transport           `json:"transport"`
-	Routing       *Routing             `json:"routing"`
-	Launcher      *Launcher            `json:"launcher"`
+	// Alerts mails or posts a webhook when a watched visor goes offline and
+	// when it is back (pkg/alerts). Settings saved at runtime override it.
+	Alerts    *alerts.Settings   `json:"alerts,omitempty"`
+	DmsgAsync *DmsgAsyncConfig   `json:"dmsg_async,omitempty"`
+	Rewards   *RewardsConfig     `json:"rewards,omitempty"`
+	STCP      *tnspec.STCPConfig `json:"skywire-tcp,omitempty"`
+	Transport *Transport         `json:"transport"`
+	Routing   *Routing           `json:"routing"`
+	Launcher  *Launcher          `json:"launcher"`
 	// EmbeddedServices are deployment services (transport-discovery,
 	// address-resolver, route-finder, service-discovery) this visor runs
 	// in-process, each mounted under a path prefix on its dmsg HTTP port

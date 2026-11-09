@@ -10,6 +10,7 @@ import (
 	rpc "github.com/0magnet/gobrpc"
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -110,6 +111,36 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 		return func() (any, error) {
 			rpcReply := new(visorapi.TransportSummary)
 			return rpcReply, rpcRcvr.AddTransport(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsSet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(alerts.Settings)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(struct{})
+			return rpcReply, rpcRcvr.AlertsSet(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsStatus", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(alerts.Status)
+			return rpcReply, rpcRcvr.AlertsStatus(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsTest", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new([]alerts.Result)
+			return rpcReply, rpcRcvr.AlertsTest(rpcArg, rpcReply)
 		}, nil
 	})
 	rpcSrv.HandleCall(rpcName+".App", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {

@@ -211,6 +211,7 @@ var (
 	// app), so this is orthogonal to SKYCOIND. Driven by ${COIN_NODES[@]}.
 	coinNodes                string
 	rewardSkyAddr            string
+	alertEmail               string
 	hvHTTPAddr               string
 	stunServers              string
 	shutdownTimeout          string

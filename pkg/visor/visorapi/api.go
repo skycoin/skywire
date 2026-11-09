@@ -47,6 +47,7 @@ type API interface {
 	Routing
 	Transports
 	Mail
+	Alerts
 	Contacts
 	DmsgAsync
 }

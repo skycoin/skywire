@@ -168,6 +168,8 @@ type modules struct {
 	sdRegCXOMod vinit.Module
 	// netWatch reacts to a move to another network
 	netWatch vinit.Module
+	// alertsMod mails when a watched visor goes offline (alerts.go)
+	alertsMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 }
@@ -333,8 +335,9 @@ func registerModules(logger *logging.MasterLogger) *modules {
 	// (the SD clients whose entries it mirrors) and dmsgC (the feed
 	// transport). See init_sd_reg_cxo.go.
 	m.sdRegCXOMod = maker("sd_reg_cxo", initSDRegCXO, &m.disc, &m.dmsgC, &m.statsMod)
+	m.alertsMod = maker("alerts", initAlerts, &m.dmsgC)
 	m.vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &m.ebc, &m.ar, &m.disc, &m.ptyModule,
-		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices, &m.netWatch)
+		&m.tr, &m.rt, &m.launch, &m.cli, &m.hvs, &m.uptime, &m.pv, &m.pvs, &m.trs, &m.stcpC, &m.stcprC, &m.quicC, &m.wsC, &m.wtC, &m.skyFwd, &m.pi, &m.dmsgPi, &m.dmsgSrv, &m.dmsgServerLatency, &m.systemSurvey, &m.tc, &m.tpdco, &m.embTPS, &m.embRouteSetup, &m.embDmsgWeb, &m.embFwdProxy, &m.embSkynetWeb, &m.embResolvers, &m.meshProxy, &m.embSkymailBridge, &m.embWisp, &m.hostBridge, &m.nodeHealth, &m.selfProbe, &m.skynetPorts, &m.statsMod, &m.cxoUserFeedsMod, &m.pairingMod, &m.groupingMod, &m.dmsgAsyncMod, &m.voiceMod, &m.coinNodesMod, &m.regCXOMod, &m.arBindCXOMod, &m.sdRegCXOMod, &m.embeddedServices, &m.ownKeyServices, &m.netWatch, &m.alertsMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

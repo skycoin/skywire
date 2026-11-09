@@ -941,6 +941,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/visors/{pk}/health", hv.getHealth())
 				r.Get("/visors/{pk}/uptime", hv.getUptime())
 				hv.mailRoutes(r)
+				hv.alertsRoutes(r)
 				hv.contactsRoutes(r)
 				r.Get("/visors/{pk}/apps", hv.getApps())
 				r.Post("/visors/{pk}/apps", hv.postApp())
