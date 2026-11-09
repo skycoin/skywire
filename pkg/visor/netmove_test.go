@@ -153,7 +153,7 @@ func TestWatcherFiresOnFingerprintChange(t *testing.T) {
 	require.Zero(t, v.netMove.runs.Load(), "an unchanged network is not a move")
 
 	fp.Store("10.0.0.9")
-	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return v.netMove.runs.Load() == 1 && got.Load() != nil }, time.Second, time.Millisecond)
 	require.Equal(t, "addresses changed", got.Load())
 
 	// Turning the watcher off takes effect live.
