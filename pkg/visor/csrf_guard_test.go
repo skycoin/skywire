@@ -24,6 +24,8 @@ func TestCSRFGuard(t *testing.T) {
 		{"cross-site write with bad token", http.MethodDelete, map[string]string{"Sec-Fetch-Site": "cross-site", CSRFHeaderName: "bad.token"}, http.StatusForbidden},
 		{"cross-site write with token", http.MethodPost, map[string]string{"Sec-Fetch-Site": "cross-site", CSRFHeaderName: token}, http.StatusOK},
 		{"same-origin write", http.MethodPost, map[string]string{"Sec-Fetch-Site": "same-origin"}, http.StatusOK},
+		{"typed-URL write", http.MethodPost, map[string]string{"Sec-Fetch-Site": "none"}, http.StatusOK},
+		{"same-origin write by Origin", http.MethodPost, map[string]string{"Origin": "http://127.0.0.1:8000"}, http.StatusOK},
 		{"non-browser write", http.MethodPost, nil, http.StatusOK},
 		{"cross-site read", http.MethodGet, map[string]string{"Sec-Fetch-Site": "cross-site"}, http.StatusOK},
 	}
