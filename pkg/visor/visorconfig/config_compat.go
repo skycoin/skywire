@@ -15,6 +15,7 @@ package visorconfig
 import (
 	"encoding/json"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/services"
@@ -46,6 +47,7 @@ type v1JSON struct {
 	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Skymail       *SkymailConfig       `json:"skymail,omitempty"`
+	Alerts        *alerts.Settings     `json:"alerts,omitempty"`
 	DmsgAsync     *DmsgAsyncConfig     `json:"dmsg_async,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
@@ -122,6 +124,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.BrowseOrigin = mirror.BrowseOrigin
 	v.SkymailBridge = mirror.SkymailBridge
 	v.Skymail = mirror.Skymail
+	v.Alerts = mirror.Alerts
 	v.DmsgAsync = mirror.DmsgAsync
 	v.Rewards = mirror.Rewards
 	v.STCP = mirror.STCP

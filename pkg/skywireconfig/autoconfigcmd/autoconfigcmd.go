@@ -127,6 +127,7 @@ type Values struct {
 
 	// --- Visor public/private + autoconnect ---
 	RewardAddr     string
+	AlertEmail     string // ALERTEMAIL
 	Public         bool
 	NoPublic       bool
 	PublicIP       bool // DISPLAYNODEIP
@@ -359,6 +360,7 @@ func New(v *Values) *cobra.Command {
 
 	// --- Visor public/private + autoconnect ---
 	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "reward account xpub (BIP44, account level) — writes REWARDSKYADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.AlertEmail, "alert-email", "", "email address(es), comma separated, to alert when a watched visor goes offline — writes ALERTEMAIL in skywire.conf")
 	cmd.Flags().BoolVar(&v.Public, "public", false, "publicize visor in service discovery — writes VISORISPUBLIC=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoPublic, "no-public", false, "unpublish visor from service discovery — writes VISORISPUBLIC=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.PublicIP, "publicip", false, "display visor IP in service discovery — writes DISPLAYNODEIP=true in skywire.conf")
@@ -537,6 +539,7 @@ var envMap = map[string]EnvMapping{
 
 	// Visor public/private + autoconnect
 	"rewardaddr":              {Key: "REWARDSKYADDR", Format: EnvFormatString},
+	"alert-email":             {Key: "ALERTEMAIL", Format: EnvFormatString},
 	"public":                  {Key: "VISORISPUBLIC", Format: EnvFormatBool},
 	"no-public":               {Key: "VISORISPUBLIC", Format: EnvFormatBool, Negate: true},
 	"publicip":                {Key: "DISPLAYNODEIP", Format: EnvFormatBool},

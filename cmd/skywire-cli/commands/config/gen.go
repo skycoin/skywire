@@ -24,6 +24,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -437,6 +438,7 @@ func init() {
 
 	// Reward address
 	skyenvStringVar(genConfigCmd.Flags(), &rewardSkyAddr, "rewardaddr", "${REWARDSKYADDR}", "reward account xpub (BIP44, account level)")
+	skyenvStringVar(genConfigCmd.Flags(), &alertEmail, "alert-email", "${ALERTEMAIL}", "email address(es), comma separated, to alert when a watched visor goes offline")
 
 	// Path and environment flags
 	genConfigCmd.Flags().StringVarP(&selectedOS, "os", "k", skyenv.OS, "(linux / mac / win) paths")
@@ -1598,6 +1600,17 @@ func configureLauncher(log *logging.Logger) {
 			log.Warn(rewardconfig.SingleAddressRisk)
 		}
 		conf.RewardAddress = canonical
+	}
+	if alertEmail != "" {
+		conf.Alerts = &alerts.Settings{}
+		for _, a := range strings.Split(alertEmail, ",") {
+			if a = strings.TrimSpace(a); a != "" {
+				conf.Alerts.EmailTo = append(conf.Alerts.EmailTo, a)
+			}
+		}
+		if err := conf.Alerts.Validate(); err != nil {
+			log.WithError(err).Fatal("Invalid alert email")
+		}
 	}
 
 	dmsgptyAddr := pty.DefaultCLIAddr()
@@ -2926,11 +2939,12 @@ var (
 	}
 	// String flags: KEY='value' lines.
 	valueFlagToEnv = map[string]string{
-		"cliaddr":    "CLIADDR",
-		"loglvl":     "LOGLVL",
-		"hvaddr":     "HVHTTPADDR",
-		"timeout":    "SHUTDOWNTIMEOUT",
-		"rewardaddr": "REWARDSKYADDR",
+		"cliaddr":     "CLIADDR",
+		"loglvl":      "LOGLVL",
+		"hvaddr":      "HVHTTPADDR",
+		"timeout":     "SHUTDOWNTIMEOUT",
+		"rewardaddr":  "REWARDSKYADDR",
+		"alert-email": "ALERTEMAIL",
 		// The resolvers' string knobs, for the same reason as the two bools
 		// above: an upstream or a bind address that cannot round-trip is a
 		// chain that comes back up pointing somewhere else, or nowhere.

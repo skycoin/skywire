@@ -254,6 +254,14 @@ const envfileTemplate = `#
 #	earlier still works, but a new one must be an xpub.
 #REWARDSKYADDR=''
 
+### Alerts ##############################################################
+
+#--	Email address(es), comma separated, to mail when a visor this one
+#	watches goes offline and when it is back. Watched are the visors its
+#	hypervisor manages. Delay, relay and webhook are set with
+#	'skywire cli visor alerts set' or the hypervisor UI.
+#ALERTEMAIL=''
+
 ### Apps ################################################################
 
 #--	Display the node ip in the service discovery

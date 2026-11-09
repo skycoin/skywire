@@ -20,6 +20,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -516,6 +517,9 @@ type Visor struct {
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
+	// alertSvc is the offline alerts (alerts.go), set by initAlerts.
+	alertsMu sync.RWMutex
+	alertSvc *alerts.Service
 	// pressure is the visor's resource pressure, see pressure.go.
 	pressure pressureState
 

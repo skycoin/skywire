@@ -181,6 +181,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 
 	// Visor public/private + autoconnect
 	addString("REWARDSKYADDR", "rewardaddr", autoconfigVals.RewardAddr)
+	addString("ALERTEMAIL", "alert-email", autoconfigVals.AlertEmail)
 	addBool("VISORISPUBLIC", "public", "no-public", autoconfigVals.Public, autoconfigVals.NoPublic)
 	addSoloBool("DISPLAYNODEIP", "publicip", autoconfigVals.PublicIP)
 	addSoloBool("DISABLEPUBLICAUTOCONN", "disable-public-autoconn", autoconfigVals.DisablePubAuto)

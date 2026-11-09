@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -1495,4 +1496,16 @@ func (proxyDefaultAPI) HVSetSingleRewardAddress(_ cipher.PubKey, _ string) (stri
 
 func (proxyDefaultAPI) HVForgetVisor(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsStatus() (*alerts.Status, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsSet(_ alerts.Settings) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsTest() ([]alerts.Result, error) {
+	return nil, ErrProxyNotSupported
 }
