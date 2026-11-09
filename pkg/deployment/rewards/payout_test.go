@@ -67,27 +67,14 @@ func payoutRawTxn(t *testing.T, addrs ...string) string {
 }
 
 func TestCheckTransactionPayouts(t *testing.T) {
-	require.NoError(t, CheckTransactionPayouts("2026-11-20", payoutRawTxn(t, payoutDerived, payoutUnspent), payoutShares, payoutNode(map[string]int{}, false)))
+	require.NoError(t, CheckTransactionPayouts(payoutRawTxn(t, payoutDerived, payoutUnspent), payoutShares, payoutNode(map[string]int{}, false)))
 
-	err := CheckTransactionPayouts("2026-11-20", payoutRawTxn(t, payoutUnspent, payoutSpent), payoutShares, payoutNode(map[string]int{}, false))
+	err := CheckTransactionPayouts(payoutRawTxn(t, payoutUnspent, payoutSpent), payoutShares, payoutNode(map[string]int{}, false))
 	require.ErrorContains(t, err, payoutSpent)
 	require.ErrorContains(t, err, payoutPK1)
 
-	err = CheckTransactionPayouts("2026-11-20", payoutRawTxn(t, payoutUnspent), payoutShares, payoutNode(map[string]int{}, true))
+	err = CheckTransactionPayouts(payoutRawTxn(t, payoutUnspent), payoutShares, payoutNode(map[string]int{}, true))
 	require.ErrorContains(t, err, "node down")
 
-	require.Error(t, CheckTransactionPayouts("2026-11-20", "nothex", payoutShares, payoutNode(map[string]int{}, false)))
-}
-
-// Before the cutoff a single address is paid whether or not it has sent coins,
-// and the node is not asked.
-func TestPayoutsBeforeCutoff(t *testing.T) {
-	asked := map[string]int{}
-	out, skipped, err := FilterSpentPayouts("2026-10-30", payoutTxn, payoutShares, payoutNode(asked, true))
-	require.NoError(t, err)
-	require.Equal(t, string(payoutTxn), string(out))
-	require.Empty(t, skipped)
-	require.NoError(t, CheckTransactionPayouts("2026-11-14", payoutRawTxn(t, payoutSpent), payoutShares, payoutNode(asked, true)))
-	require.Empty(t, asked)
-	require.Error(t, CheckTransactionPayouts("2026-10-30", "nothex", payoutShares, payoutNode(asked, false)))
+	require.Error(t, CheckTransactionPayouts("nothex", payoutShares, payoutNode(map[string]int{}, false)))
 }

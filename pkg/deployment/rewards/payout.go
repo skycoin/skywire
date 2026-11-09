@@ -13,17 +13,6 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
-// SingleAddressCutoff is the first reward day that pays a single address only
-// if it has never sent coins. See rewards/mainnet_rules.md, Skycoin Address.
-var SingleAddressCutoff = time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
-
-// spentCheckApplies reports whether a reward day (2006-01-02) is on or after
-// SingleAddressCutoff. A day that does not parse is checked.
-func spentCheckApplies(day string) bool {
-	t, err := time.Parse(time.DateOnly, day)
-	return err != nil || !t.Before(SingleAddressCutoff)
-}
-
 // SkippedPayout is a payout to a single address left out at distribution
 // because the address has sent coins.
 type SkippedPayout struct {
@@ -71,12 +60,9 @@ func SingleAddressPKs(sharesCSV []byte) map[string][]string {
 }
 
 // FilterSpentPayouts drops from a day's reward transaction CSV ("address,
-// amount" rows) every payout to a single address that has sent coins, from
-// SingleAddressCutoff on. It fails, rather than guess, when spent cannot answer.
+// amount" rows) every payout to a single address that has sent coins. It fails, rather than
+// guess, when spent cannot answer.
 func FilterSpentPayouts(day string, txnCSV, sharesCSV []byte, spent func(string) (bool, error)) ([]byte, []SkippedPayout, error) {
-	if !spentCheckApplies(day) {
-		return txnCSV, nil, nil
-	}
 	singles := SingleAddressPKs(sharesCSV)
 	var out bytes.Buffer
 	var skipped []SkippedPayout
@@ -102,16 +88,12 @@ func FilterSpentPayouts(day string, txnCSV, sharesCSV []byte, spent func(string)
 	return out.Bytes(), skipped, sc.Err()
 }
 
-// CheckTransactionPayouts refuses a raw transaction (hex) for a reward day on
-// or after SingleAddressCutoff that pays a single reward address of the day
-// that has sent coins, or when spent cannot answer.
-func CheckTransactionPayouts(day, rawTxn string, sharesCSV []byte, spent func(string) (bool, error)) error {
+// CheckTransactionPayouts refuses a raw transaction (hex) that pays a single
+// reward address of the day that has sent coins, or when spent cannot answer.
+func CheckTransactionPayouts(rawTxn string, sharesCSV []byte, spent func(string) (bool, error)) error {
 	txn, err := coin.DeserializeTransactionHex(strings.TrimSpace(rawTxn))
 	if err != nil {
 		return fmt.Errorf("decode transaction: %w", err)
-	}
-	if !spentCheckApplies(day) {
-		return nil
 	}
 	singles := SingleAddressPKs(sharesCSV)
 	var bad []string
