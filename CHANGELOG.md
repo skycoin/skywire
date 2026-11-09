@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.108
+
+-   docs: add alerts, skycoin wallet and macOS install guides  [#6081](https://github.com/skycoin/skywire/pull/6081)
+-   deps: update skycoin for the fiber.toml coin_name key  [#6080](https://github.com/skycoin/skywire/pull/6080)
+-   deps: update skycoin for the addressSpent cli command  [#6079](https://github.com/skycoin/skywire/pull/6079)
+-   rewards: restore the November 15 cutoff for spent single addresses  [#6078](https://github.com/skycoin/skywire/pull/6078)
+-   rewards: never pay a single address that has sent coins, on any day  [#6077](https://github.com/skycoin/skywire/pull/6077)
+-   rewards: check payouts for spent single addresses only from the cutoff  [#6076](https://github.com/skycoin/skywire/pull/6076)
+-   alerts, visor, cli/visor, hvui: tell detached and restarting visors from offline ones  [#6075](https://github.com/skycoin/skywire/pull/6075)
+-   alerts, visor, cli/visor, hvui: say what kind of outage an alert is  [#6074](https://github.com/skycoin/skywire/pull/6074)
+-   visor: wait for the refresh in TestWatcherFiresOnFingerprintChange  [#6073](https://github.com/skycoin/skywire/pull/6073)
+-   hvui: add an offline alerts section to the visor settings  [#6072](https://github.com/skycoin/skywire/pull/6072)
+-   deps: update skycoin for faster public key derivation  [#6071](https://github.com/skycoin/skywire/pull/6071)
+-   alerts, visor, cli/visor, config: mail when a watched visor goes offline  [#6070](https://github.com/skycoin/skywire/pull/6070)
+-   visor, cli/visor: remember offline visors across hypervisor restarts  [#6069](https://github.com/skycoin/skywire/pull/6069)
+-   dmsg: skip signature checks the session already proves  [#6068](https://github.com/skycoin/skywire/pull/6068)
+-   deps, logging: use the 0magnet/logrus fork  [#6067](https://github.com/skycoin/skywire/pull/6067)
+-   deps, visor: update skycoin for joint transactions  [#6066](https://github.com/skycoin/skywire/pull/6066)
+-   dmsg, dmsgscp: return the scp error instead of retrying as a stranger  [#6065](https://github.com/skycoin/skywire/pull/6065)
+-   visor: refuse cross-origin writes without a CSRF token  [#6064](https://github.com/skycoin/skywire/pull/6064)
+-   deps, visor: update skycoin for the seed passphrase space warning  [#6062](https://github.com/skycoin/skywire/pull/6062)
+-   hvui: keep the login password text dark in the dark theme  [#6061](https://github.com/skycoin/skywire/pull/6061)
+-   deps, visor: update skycoin for the wallet address rescan and gui api sets  [#6060](https://github.com/skycoin/skywire/pull/6060)
+
 ## 1.3.107
 
 -   ci, changelog: build the tinygo release assets with v0.45.0-dev-skywire.2  [#6059](https://github.com/skycoin/skywire/pull/6059)
