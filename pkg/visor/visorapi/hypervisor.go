@@ -2,6 +2,8 @@
 package visorapi
 
 import (
+	"time"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
@@ -67,6 +69,8 @@ type HVVisorEntry struct {
 	RunningApps       []string         `json:"running_apps,omitempty"`
 	PublicAutoconnect bool             `json:"public_autoconnect,omitempty"`
 	IsPublic          bool             `json:"is_public,omitempty"`
+	// LastSeenAt is when the hypervisor last got a summary from this visor.
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 }
 
 // HVVisorTreeNode is one hypervisor's section in the tree response:

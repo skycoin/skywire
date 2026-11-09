@@ -1681,6 +1681,11 @@ func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVForgetVisor implements API.
+func (mc *mockRPCClient) HVForgetVisor(_ cipher.PubKey) error {
+	return fmt.Errorf("not supported in mock")
+}
+
 // HVStartApp implements API.
 func (mc *mockRPCClient) HVStartApp(_ cipher.PubKey, _ string) error {
 	return fmt.Errorf("not supported in mock")

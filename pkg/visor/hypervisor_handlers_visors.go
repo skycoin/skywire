@@ -534,6 +534,7 @@ func projectEntryToSummary(e visorapi.HVVisorEntry) visorapi.Summary {
 		DMSGServers:       e.DMSGServers,
 		PublicAutoconnect: e.PublicAutoconnect,
 		IsPublic:          e.IsPublic,
+		LastSeenAt:        e.LastSeenAt,
 	}
 }
 

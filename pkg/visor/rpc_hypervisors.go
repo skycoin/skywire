@@ -413,3 +413,9 @@ func (r *RPC) HVSetSingleRewardAddress(in *visorapi.HVRewardArgs, out *string) (
 	*out, err = v.HVSetSingleRewardAddress(in.PK, in.Addr)
 	return err
 }
+
+// HVForgetVisor drops an offline visor from the hypervisor's remembered list.
+func (r *RPC) HVForgetVisor(in *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "HVForgetVisor", in)(nil, &err)
+	return r.visor.HVForgetVisor(*in)
+}

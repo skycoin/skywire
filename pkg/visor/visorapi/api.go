@@ -143,6 +143,7 @@ type Hypervisors interface {
 	HVListDirectVisors() ([]HVVisorEntry, error)
 	HVListVisorsTree() (*HVVisorTree, error)
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
+	HVForgetVisor(pk cipher.PubKey) error
 	HVStartApp(pk cipher.PubKey, appName string) error
 	HVStopApp(pk cipher.PubKey, appName string) error
 	HVAppCatalog(pk cipher.PubKey) ([]CatalogEntry, error)

@@ -2789,3 +2789,8 @@ func (rc *rpcClient) DmsgAsyncSettings() (*DmsgAsyncSettings, error) {
 func (rc *rpcClient) DmsgAsyncSetSettings(kv map[string]string) error {
 	return rc.Call("DmsgAsyncSetSettings", &kv, &struct{}{})
 }
+
+// HVForgetVisor drops an offline visor from the hypervisor's remembered list.
+func (rc *rpcClient) HVForgetVisor(pk cipher.PubKey) error {
+	return rc.Call("HVForgetVisor", &pk, &struct{}{})
+}

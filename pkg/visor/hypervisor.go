@@ -93,6 +93,11 @@ type Hypervisor struct {
 	attachedGraphMu   sync.Mutex
 	attachedGraphHash [32]byte
 	attachedGraphAt   time.Time
+
+	// knownMu guards knownWritten, the bytes of the last known visor file
+	// write (hypervisor_known_visors.go).
+	knownMu      sync.Mutex
+	knownWritten []byte
 }
 
 // cachedSummary is one entry in Hypervisor.summaryCache.
@@ -134,6 +139,7 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		logger:       mLogger.PackageLogger("hypervisor"),
 		summaryCache: make(map[cipher.PubKey]cachedSummary),
 	}
+	hv.loadKnownVisors()
 
 	// tpviz is constructed whenever a hypervisor has a local visor — the
 	// hvui's network-visualizer tab is always shown in the home top bar, so
@@ -698,6 +704,7 @@ func (hv *Hypervisor) runBackgroundSummaryPoll(ctx context.Context) {
 			return
 		case <-ticker.C:
 			hv.pollAllForCache(ctx)
+			hv.saveKnownVisors()
 		}
 	}
 }
@@ -923,6 +930,7 @@ func (hv *Hypervisor) makeMux() *httputil.Router {
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
+				r.Delete("/visors/{pk}/known", hv.deleteKnownVisor())
 				r.Get("/visors-tree-summary", hv.getVisorsTreeSummary())
 				r.Get("/network-view", hv.getNetworkView())
 				r.Get("/log", hv.getLog())
