@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.109
+
+-   visor: check cross-origin writes without http.CrossOriginProtection  [#6087](https://github.com/skycoin/skywire/pull/6087)
+
 ## 1.3.108
 
 -   deps, hvui: update skycoin for the wallet features lost with the old GUI  [#6085](https://github.com/skycoin/skywire/pull/6085)
