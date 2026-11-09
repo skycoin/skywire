@@ -290,7 +290,7 @@ func waitForRedial(ctx context.Context, wait time.Duration, tpM *transport.Manag
 // a RPC server to that address. The dial uses dmsg by default, switching
 // to skynet when an underlying fast transport exists and isn't in
 // cooldown — see dialHypervisorRPC.
-func ServeRPCClient(ctx context.Context, log logging.FieldLogger, tpM *transport.Manager, dmsgC *dmsg.Client, rpcS *rpc.Server, rAddr dmsg.Addr, errCh chan<- error) {
+func ServeRPCClient(ctx context.Context, log logging.FieldLogger, tpM *transport.Manager, dmsgC *dmsg.Client, rpcS *rpc.Server, link *hvLink, rAddr dmsg.Addr, errCh chan<- error) {
 	// lastSkyFail is per-hypervisor (this function is one goroutine
 	// per hypervisor PK). Records the most recent skynet failure so
 	// dialHypervisorRPC can apply the cooldown.
@@ -302,6 +302,14 @@ func ServeRPCClient(ctx context.Context, log logging.FieldLogger, tpM *transport
 		absentWarned bool          // the one-shot notice below has been logged
 	)
 	for {
+		// After a goodbye a redial would undo it at the hypervisor.
+		if link != nil && link.said() {
+			<-ctx.Done()
+			if errCh != nil {
+				errCh <- ctx.Err()
+			}
+			return
+		}
 		conn, via, err := dialHypervisorRPC(ctx, log, tpM, dmsgC, rAddr, &lastSkyFail)
 		if err != nil {
 			if isDone(ctx) {
@@ -372,6 +380,9 @@ func ServeRPCClient(ctx context.Context, log logging.FieldLogger, tpM *transport
 			rpcS.ServeConn(idleConn)
 			cancel()
 		}()
+		if link != nil {
+			link.serving(connCtx.Done())
+		}
 		// A conn that came up over dmsg is only the bootstrap: if a direct
 		// transport to the hypervisor appears while it is serving (the
 		// upgrade loop built one, or a browser visor attached over /tp/ws

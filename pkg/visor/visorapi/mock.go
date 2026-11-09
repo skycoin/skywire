@@ -1861,6 +1861,11 @@ func (mc *mockRPCClient) RemoveAllHypervisors() (int, error) {
 	return 0, nil
 }
 
+// HypervisorNotice implements API. A mock visor never says goodbye.
+func (mc *mockRPCClient) HypervisorNotice() (string, error) {
+	return "", nil
+}
+
 // SetHypervisorPassword implements API.
 func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
 	return nil

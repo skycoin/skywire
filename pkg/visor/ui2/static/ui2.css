@@ -177,6 +177,7 @@ input:focus, textarea:focus, select:focus, .row:focus { outline: 2px solid var(-
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .dot.on { background: rgb(var(--green)); box-shadow: 0 0 6px rgb(var(--green)); }
 .dot.off { background: rgba(var(--fg), 0.35); }
+.dot.warn { background: rgb(var(--amber)); }
 .dot.err { background: rgb(var(--rose)); }
 
 table.list { width: 100%; border-collapse: collapse; }

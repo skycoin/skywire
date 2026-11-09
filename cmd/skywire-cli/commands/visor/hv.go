@@ -15,6 +15,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorapi"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -465,6 +466,10 @@ func formatHVVisorRow(tw *tabwriter.Writer, e visorapi.HVVisorEntry, indent stri
 		if len(status) > 25 {
 			status = status[:25] + "..."
 		}
+	}
+	// The hypervisor's state wins: the same one its alerts use.
+	if e.State != "" && e.State != alerts.StateOnline && (e.State != alerts.StateOffline || e.Error == "") {
+		status = e.State
 	}
 	ver := e.Version
 	if ver == "" {

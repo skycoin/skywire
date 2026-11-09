@@ -327,6 +327,10 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			if e.Error != "" {
 				st, stStyle = truncStr(e.Error, 20), tcell.StyleDefault.Foreground(color.Red)
 			}
+			switch e.State {
+			case "reconnecting", "restarting", "detached":
+				st, stStyle = e.State, tcell.StyleDefault.Foreground(color.Yellow)
+			}
 			up := "-"
 			if e.Uptime > 0 {
 				up = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()

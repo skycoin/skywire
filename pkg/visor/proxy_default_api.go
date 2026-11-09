@@ -1222,6 +1222,10 @@ func (proxyDefaultAPI) RemoveAllHypervisors() (int, error) {
 	return 0, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) HypervisorNotice() (string, error) {
+	return "", ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) SetHypervisorPassword(_ string, _ string) error {
 	return ErrProxyNotSupported
 }

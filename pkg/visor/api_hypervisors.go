@@ -32,7 +32,7 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
 	addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-	rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
+	rpcS, link, err := newHypervisorRPCServer(v, addr.PK)
 	if err != nil {
 		return fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
 	}
@@ -54,7 +54,7 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 		v.connectedHypervisors[hvPK] = true
 		v.hypervisorCancels[hvPK] = cancel
 		v.initLock.Unlock()
-		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
+		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, link, addr, hvErrs)
 	}()
 
 	v.pushCloseStack("hypervisor.runtime."+hvPK.String()[:shortHashLen], func() error {
@@ -136,6 +136,8 @@ func (v *Visor) RemoveHypervisor(hvPK cipher.PubKey) error {
 	v.initLock.Lock()
 	cancel, ok := v.hypervisorCancels[hvPK]
 	v.initLock.Unlock()
+	// Tell the hypervisor first, so it records a detach and does not alert.
+	v.sayGoodbye(byeDetached, hvPK)
 	if ok {
 		// Tear down the live connection; its goroutine's deferred cleanup removes
 		// hvPK from connectedHypervisors + hypervisorCancels. Config-loaded
@@ -178,6 +180,7 @@ func (v *Visor) RemoveAllHypervisors() (int, error) {
 		cancels = append(cancels, c)
 	}
 	v.initLock.Unlock()
+	v.sayGoodbye(byeDetached)
 	for _, c := range cancels {
 		c()
 	}

@@ -63,6 +63,11 @@ type Hypervisor struct {
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
 
+	// links holds goodbyes and call back outcomes, see visorState.
+	links linkTable
+	// dialBack replaces callBack in tests.
+	dialBack func(context.Context, cipher.PubKey) dialBackResult
+
 	// wsMux holds the finished router (as a muxRef) so /ws can replay each
 	// frame through the SAME handlers the HTTP surface uses — one API, two
 	// transports. Written once at the end of makeMux, read per request.
@@ -555,6 +560,8 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				hv.visor.remoteVisors[peerPK] = *visorConn
 				hv.remoteVisors[peerPK] = *visorConn
 				hv.mu.Unlock()
+				hv.linkUp(peerPK)
+				go hv.watchGoodbye(peerPK, visorConn.API)
 
 				// Warm-cache: see comment in the dmsg accept path
 				// below — same intent, same one-shot Summary.
@@ -614,6 +621,8 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.visor.remoteVisors[addr.PK] = *visorConn
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
+		hv.linkUp(addr.PK)
+		go hv.watchGoodbye(addr.PK, visorConn.API)
 
 		// Eager-warm the summaryCache so the next UI poll renders
 		// this peer's row immediately instead of waiting for its
@@ -704,6 +713,7 @@ func (hv *Hypervisor) runBackgroundSummaryPoll(ctx context.Context) {
 			return
 		case <-ticker.C:
 			hv.pollAllForCache(ctx)
+			hv.checkLinks(ctx, time.Now())
 			hv.saveKnownVisors()
 		}
 	}

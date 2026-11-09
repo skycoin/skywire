@@ -137,6 +137,10 @@ type Hypervisors interface {
 	NewPairCode(ttl time.Duration) (PairCode, error)
 	RemoveHypervisor(pk cipher.PubKey) error
 	RemoveAllHypervisors() (int, error)
+	// HypervisorNotice waits up to 15s for the goodbye this visor owes the
+	// calling hypervisor: "", "detached" or "restarting". Served only to a
+	// hypervisor, over the link it manages the visor on.
+	HypervisorNotice() (string, error)
 	SetHypervisorPassword(oldPassword, newPassword string) error
 	SetHypervisorPasswordForce(newPassword string) error
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
@@ -692,6 +696,9 @@ type Summary struct {
 	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
 	Online               bool                           `json:"online"`
+	// State is one of the alerts.State values for a managed visor, as
+	// HVVisorEntry.State.
+	State string `json:"state,omitempty"`
 	// OfflineSince is set on cached summaries served when the live
 	// RPC fails. Lets the UI render a "offline since X" indicator
 	// alongside the otherwise-stale fields. nil when Online=true.

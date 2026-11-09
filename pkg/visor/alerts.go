@@ -102,33 +102,31 @@ func (v *Visor) alertTargets(ctx context.Context, set alerts.Settings) []alerts.
 	return list
 }
 
-// alertTargets lists every visor this hypervisor manages or remembers.
+// alertTargets lists every visor this hypervisor manages or remembers, in
+// the state visorState gives it.
 func (hv *Hypervisor) alertTargets(now time.Time) []alerts.Target {
-	hv.mu.RLock()
-	connected := make(map[cipher.PubKey]bool, len(hv.remoteVisors))
-	for pk := range hv.remoteVisors {
-		connected[pk] = true
-	}
-	hv.mu.RUnlock()
-
-	hv.summaryCacheMx.RLock()
-	defer hv.summaryCacheMx.RUnlock()
-	out := make([]alerts.Target, 0, len(hv.summaryCache)+len(connected))
-	for pk, c := range hv.summaryCache {
-		t := alerts.Target{PK: pk, Source: "hypervisor", LastSeen: c.seenAt,
-			Online: connected[pk] && now.Sub(c.seenAt) < alertFreshWindow}
-		if c.sum != nil && c.sum.Overview != nil {
-			o := c.sum.Overview
-			t.Hostname, t.PublicIP, t.LocalIP = o.Hostname, o.PublicIP, o.LocalIP
-		}
-		if c.sum != nil {
-			t.Uptime, t.Storage = alertHealth(c.sum, now.Sub(c.seenAt))
+	pks := hv.managedPKs()
+	out := make([]alerts.Target, 0, len(pks))
+	for _, pk := range pks {
+		t := alerts.Target{PK: pk, Source: "hypervisor", State: hv.visorState(pk, now)}
+		t.Online = t.State == alerts.StateOnline
+		hv.summaryCacheMx.RLock()
+		c, ok := hv.summaryCache[pk]
+		hv.summaryCacheMx.RUnlock()
+		switch {
+		case ok:
+			t.LastSeen = c.seenAt
+			if c.sum != nil && c.sum.Overview != nil {
+				o := c.sum.Overview
+				t.Hostname, t.PublicIP, t.LocalIP = o.Hostname, o.PublicIP, o.LocalIP
+			}
+			if c.sum != nil {
+				t.Uptime, t.Storage = alertHealth(c.sum, now.Sub(c.seenAt))
+			}
+		case t.Online:
+			t.LastSeen = now
 		}
 		out = append(out, t)
-		delete(connected, pk)
-	}
-	for pk := range connected {
-		out = append(out, alerts.Target{PK: pk, Source: "hypervisor", Online: true, LastSeen: now})
 	}
 	return out
 }

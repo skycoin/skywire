@@ -90,6 +90,7 @@ export class NodeService {
         node.offlineSince = response.offline_since;
         node.lastSeenAt = response.last_seen_at;
         node.isStale = !!response.offline_since;
+        node.linkState = response.state;
         node.localPk = response.overview.local_pk;
         node.hostname = response.overview.hostname;
         node.version = response.overview.build_info.version;
@@ -341,6 +342,7 @@ return {
       node.offlineSince = response.offline_since;
       node.lastSeenAt = response.last_seen_at;
       node.isStale = !!response.offline_since;
+      node.linkState = response.state;
       node.localPk = response.overview ? response.overview.local_pk : '';
       node.hostname = response.overview ? response.overview.hostname : undefined;
       node.version = response.overview && response.overview.build_info ? response.overview.build_info.version : '';

@@ -92,6 +92,10 @@ func Subject(ev Event) string {
 		return fmt.Sprintf("[skywire] site %s: all %d visors offline", ev.Site, len(ev.Members))
 	case ev.Scope == ScopeSite && ev.Kind == KindOnline:
 		return fmt.Sprintf("[skywire] site %s is back online", ev.Site)
+	case ev.Kind == KindLinkLost:
+		return fmt.Sprintf("[skywire] visor %s lost its connection to the hypervisor", name)
+	case ev.Kind == KindOnline && ev.Diagnosis == DiagLinkRestored:
+		return fmt.Sprintf("[skywire] visor %s reconnected to the hypervisor", name)
 	case ev.Kind == KindOffline:
 		return fmt.Sprintf("[skywire] visor %s is offline", name)
 	case ev.Kind == KindOnline:
@@ -114,6 +118,10 @@ func (s *Sender) Body(ev Event) string {
 		b.WriteString("Every visor you watch behind one public IP went offline.\n\n")
 	case site && ev.Kind == KindOnline:
 		b.WriteString("A site you watch is back online.\n\n")
+	case ev.Kind == KindLinkLost:
+		b.WriteString("A visor you watch is up but has not reconnected to its hypervisor. Check the network path between them.\n\n")
+	case ev.Kind == KindOnline && ev.Diagnosis == DiagLinkRestored:
+		b.WriteString("A visor you watch reconnected to its hypervisor.\n\n")
 	case ev.Kind == KindOffline:
 		b.WriteString("A visor you watch went offline.\n\n")
 	case ev.Kind == KindOnline:
@@ -143,7 +151,11 @@ func (s *Sender) Body(ev Event) string {
 			}
 		}
 		if !ev.Since.IsZero() {
-			line("Offline since", ev.Since.UTC().Format(time.RFC3339))
+			label := "Offline since"
+			if ev.Kind == KindLinkLost || ev.Diagnosis == DiagLinkRestored {
+				label = "Link lost"
+			}
+			line(label, ev.Since.UTC().Format(time.RFC3339))
 			if ev.Kind == KindOnline {
 				line("Down for", ev.At.Sub(ev.Since).Truncate(time.Second).String())
 			}

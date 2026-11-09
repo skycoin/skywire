@@ -2304,6 +2304,13 @@ func (rc *rpcClient) RemoveAllHypervisors() (int, error) {
 	return out, err
 }
 
+// HypervisorNotice calls HypervisorNotice.
+func (rc *rpcClient) HypervisorNotice() (string, error) {
+	var out string
+	err := rc.Call("HypervisorNotice", &struct{}{}, &out)
+	return out, err
+}
+
 // SetHypervisorPassword changes the hypervisor UI admin password.
 func (rc *rpcClient) SetHypervisorPassword(oldPassword, newPassword string) error {
 	return rc.Call("SetHypervisorPassword", &HypervisorPasswordChangeIn{

@@ -137,6 +137,10 @@ func formatAlerts(st *alerts.Status) string {
 		case w.Online && w.Site != "":
 			state = "online, site " + w.Site + " recovering"
 		case w.Online:
+		case w.State == alerts.StateReconnecting && w.LinkAlerted:
+			state = "reconnecting, alerted"
+		case w.State == alerts.StateReconnecting, w.State == alerts.StateRestarting:
+			state = w.State
 		case w.Site != "":
 			state = "offline, site " + w.Site + " alerted"
 		case w.Alerted:
