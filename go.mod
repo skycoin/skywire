@@ -97,7 +97,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/skycoin/skycoin v0.28.8-0.20261108194204-3ef15698b8d3
+	github.com/skycoin/skycoin v0.28.8-0.20261109020145-0fd4d9b3f6f9
 	github.com/soheilhy/cmux v0.1.5
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
