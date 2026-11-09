@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -326,6 +327,7 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 			// Online ONLY when we actually got a Summary back —
 			// hardcoded Online=true previously rendered ghost rows.
 			entry.Online = true
+			entry.State = alerts.StateOnline
 			populateEntryFromSummary(&entry, r.summary)
 			now := time.Now().UTC()
 			entry.LastSeenAt = &now
@@ -350,11 +352,13 @@ func hvVisorEntryFor(hv *Hypervisor, pk cipher.PubKey, api visorapi.API, log *lo
 	hv.summaryCacheMx.RUnlock()
 	if ok && cached.sum != nil {
 		populateEntryFromSummary(&entry, cached.sum)
-		entry.Online = false
 		seen := cached.seenAt
 		entry.LastSeenAt = &seen
 		entry.Error = entry.Error + " (cached " + time.Since(cached.seenAt).Truncate(time.Second).String() + " ago)"
 	}
+	// The failed call alone does not decide the state, visorState does.
+	entry.State = hv.visorState(pk, time.Now())
+	entry.Online = entry.State == alerts.StateOnline
 	return entry
 }
 

@@ -134,7 +134,13 @@
       "offline": "Offline",
       "offline-tooltip": "The visor is offline.",
       "stale": "Offline (stale)",
-      "stale-tooltip": "The visor is offline; showing last-known data."
+      "stale-tooltip": "The visor is offline; showing last-known data.",
+      "reconnecting": "Reconnecting",
+      "reconnecting-tooltip": "The link to the visor dropped, but the visor still answers the hypervisor.",
+      "restarting": "Restarting",
+      "restarting-tooltip": "The visor said it is restarting.",
+      "detached": "Detached",
+      "detached-tooltip": "The visor removed this hypervisor. It can be forgotten."
     },
     "overview": {
       "health": "Health",

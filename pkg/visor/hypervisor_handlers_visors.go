@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -750,6 +751,7 @@ func (hv *Hypervisor) allVisorSummaries() []visorapi.Summary {
 				if r.rpcErr == nil {
 					now := time.Now().UTC()
 					resp := makeSummaryResp(true, false, r.sum)
+					resp.State = alerts.StateOnline
 					resp.LastSeenAt = &now
 					mu.Lock()
 					summaries = append(summaries, resp)
@@ -791,15 +793,14 @@ func (hv *Hypervisor) allVisorSummaries() []visorapi.Summary {
 				return
 			}
 			stale := *cached.sum
-			// A recent cache hit means a previous round (or this
-			// round's background completion) just updated us —
-			// the visor's RPCs are merely slow, not dead. Surface
-			// it as online so the UI doesn't flap on slow peers.
-			fresh := time.Since(cached.seenAt) < cacheFreshWindow
+			// The same state hv ls and the alerts use: a slow peer whose
+			// last poll answered recently is still online.
+			state := hv.visorState(pk, time.Now())
 			seenAt := cached.seenAt
-			resp := makeSummaryResp(fresh, false, &stale)
+			resp := makeSummaryResp(state == alerts.StateOnline, false, &stale)
+			resp.State = state
 			resp.LastSeenAt = &seenAt
-			if !fresh {
+			if state != alerts.StateOnline {
 				offlineSince := time.Now().UTC()
 				resp.OfflineSince = &offlineSince
 			}
@@ -844,29 +845,33 @@ func (hv *Hypervisor) allVisorSummaries() []visorapi.Summary {
 			rendered[s.Overview.PubKey] = struct{}{}
 		}
 	}
+	type sweptRow struct {
+		pk     cipher.PubKey
+		sum    visorapi.Summary
+		seenAt time.Time
+	}
+	var swept []sweptRow
 	hv.summaryCacheMx.RLock()
 	for pk, cached := range hv.summaryCache {
 		if _, already := rendered[pk]; already {
 			continue
 		}
-		stale := *cached.sum
-		// Same freshness window as the in-remoteVisors fallback
-		// path above: a peer that was just Summary'd N seconds
-		// ago (within the dmsg stream-idle cycle) hasn't been
-		// disconnected long enough to render as offline. Once
-		// outside the window the row keeps showing "last seen
-		// at" with offline_since stamped.
-		fresh := time.Since(cached.seenAt) < cacheFreshWindow
-		seenAt := cached.seenAt
-		resp := makeSummaryResp(fresh, false, &stale)
-		resp.LastSeenAt = &seenAt
-		if !fresh {
+		swept = append(swept, sweptRow{pk, *cached.sum, cached.seenAt})
+	}
+	hv.summaryCacheMx.RUnlock()
+	// visorState takes the cache lock itself, so it runs after the sweep.
+	for i := range swept {
+		row := &swept[i]
+		state := hv.visorState(row.pk, time.Now())
+		resp := makeSummaryResp(state == alerts.StateOnline, false, &row.sum)
+		resp.State = state
+		resp.LastSeenAt = &row.seenAt
+		if state != alerts.StateOnline {
 			offlineSince := time.Now().UTC()
 			resp.OfflineSince = &offlineSince
 		}
 		summaries = append(summaries, resp)
 	}
-	hv.summaryCacheMx.RUnlock()
 
 	// Attach DMSG stats
 	for i := 0; i < len(summaries); i++ {

@@ -18,6 +18,9 @@ type Target struct {
 	// LastSeen is when the visor was last seen online, if known.
 	LastSeen time.Time `json:"last_seen,omitzero"`
 	Online   bool      `json:"online"`
+	// State is one of the State values. Empty means StateOnline or
+	// StateOffline, from Online.
+	State string `json:"state,omitempty"`
 	// Source is "hypervisor" or "watch".
 	Source string `json:"source,omitempty"`
 	// Uptime is how long the board has been up at the check, the host's
@@ -43,7 +46,28 @@ const (
 	KindStorage  = "storage"
 	KindConflict = "ip-conflict"
 	KindTest     = "test"
+	// KindLinkLost is a visor that is up but has not reconnected to its
+	// hypervisor for the offline delay.
+	KindLinkLost = "link-lost"
 )
+
+// States of a watched visor. A hypervisor reports all five for the visors
+// it manages; a watch list visor is only online or offline.
+const (
+	StateOnline = "online"
+	// StateReconnecting is a visor whose link to the hypervisor dropped
+	// but which still answers the hypervisor's call back.
+	StateReconnecting = "reconnecting"
+	// StateRestarting is a visor that said it is going down to restart.
+	StateRestarting = "restarting"
+	// StateDetached is a visor that removed this hypervisor. It is not
+	// watched.
+	StateDetached = "detached"
+	StateOffline  = "offline"
+)
+
+// DiagLinkRestored is the diagnosis of the recovery after KindLinkLost.
+const DiagLinkRestored = "the visor reconnected to its hypervisor"
 
 // ConflictWindow is how recently a visor must have been online for its
 // LAN IP to count in a conflict, so a dead board's stale address does not.
@@ -90,6 +114,9 @@ type TargetState struct {
 	// Site is set while the visor is part of an alerted site outage.
 	Site            string   `json:"site,omitempty"`
 	StorageWarnings []string `json:"storage_warnings,omitempty"`
+	// LinkLostSince is when a reconnecting visor lost its hypervisor link.
+	LinkLostSince time.Time `json:"link_lost_since,omitzero"`
+	LinkAlerted   bool      `json:"link_alerted,omitempty"`
 }
 
 // Saved is one visor's alert state kept across restarts.
@@ -97,6 +124,8 @@ type Saved struct {
 	Since   time.Time `json:"since,omitzero"`
 	Site    string    `json:"site,omitempty"`
 	Storage []string  `json:"storage,omitempty"`
+	// Lost is when the link lost alert's outage began.
+	Lost time.Time `json:"lost,omitzero"`
 }
 
 type trackState struct {
@@ -106,6 +135,30 @@ type trackState struct {
 	site      string
 	// storage maps each storage warning already sent to its text.
 	storage map[string]string
+	// lostSince and lostAlerted track a reconnecting visor.
+	lostSince   time.Time
+	lostAlerted bool
+	// restarted is set while the visor is restarting, so its offline
+	// delay counts from the end of the restart grace.
+	restarted bool
+}
+
+// held reports a visor that is neither online nor offline: its offline
+// delay does not run.
+func held(state string) bool {
+	return state == StateReconnecting || state == StateRestarting
+}
+
+// normalize fills State from Online and makes Online agree with State.
+func normalize(tg Target) Target {
+	if tg.State == "" {
+		tg.State = StateOffline
+		if tg.Online {
+			tg.State = StateOnline
+		}
+	}
+	tg.Online = tg.State == StateOnline
+	return tg
 }
 
 type siteState struct {
@@ -137,6 +190,9 @@ func NewTracker(saved map[cipher.PubKey]Saved) *Tracker {
 	t := &Tracker{states: map[cipher.PubKey]*trackState{}, sites: map[string]*siteState{}, conflicts: map[string]string{}}
 	for pk, s := range saved {
 		st := &trackState{info: Target{PK: pk}, storage: map[string]string{}}
+		if !s.Lost.IsZero() {
+			st.lostSince, st.lostAlerted = s.Lost, true
+		}
 		for _, k := range s.Storage {
 			st.storage[k] = ""
 		}
@@ -154,11 +210,17 @@ func NewTracker(saved map[cipher.PubKey]Saved) *Tracker {
 }
 
 // Observe records one check of the whole watched set at now and returns
-// the events it causes. Visors no longer in targets are dropped silently.
+// the events it causes. Visors no longer in targets, or detached, are
+// dropped silently. Reconnecting and restarting visors are held: their
+// offline delay does not run.
 func (t *Tracker) Observe(now time.Time, delay time.Duration, targets []Target) []Event {
 	var events []Event
 	seen := make(map[cipher.PubKey]bool, len(targets))
 	for _, tg := range targets {
+		tg = normalize(tg)
+		if tg.State == StateDetached {
+			continue
+		}
 		seen[tg.PK] = true
 		st, ok := t.states[tg.PK]
 		if !ok {
@@ -166,11 +228,20 @@ func (t *Tracker) Observe(now time.Time, delay time.Duration, targets []Target) 
 			t.states[tg.PK] = st
 		}
 		st.info = mergeInfo(st.info, tg)
-		if !tg.Online && st.downSince.IsZero() {
+		switch {
+		case held(tg.State):
+			if !st.alerted {
+				st.downSince = time.Time{}
+			}
+			st.restarted = st.restarted || tg.State == StateRestarting
+		case tg.State == StateOffline && st.downSince.IsZero():
 			st.downSince = now
-			if !tg.LastSeen.IsZero() && tg.LastSeen.Before(now) {
+			if !st.restarted && !tg.LastSeen.IsZero() && tg.LastSeen.Before(now) {
 				st.downSince = tg.LastSeen
 			}
+			st.restarted = false
+		case tg.State == StateOnline:
+			st.restarted = false
 		}
 	}
 	for pk := range t.states {
@@ -199,8 +270,10 @@ func (t *Tracker) Observe(now time.Time, delay time.Duration, targets []Target) 
 			bySite[ip] = append(bySite[ip], st)
 		}
 	}
+	events = append(events, t.linkEvents(now, delay, order)...)
+
 	for _, st := range order {
-		if st.info.Online || st.alerted {
+		if st.info.Online || st.alerted || held(st.info.State) {
 			continue
 		}
 		from := st.downSince
@@ -237,6 +310,41 @@ func (t *Tracker) Observe(now time.Time, delay time.Duration, targets []Target) 
 		}
 	}
 	return append(events, t.ipConflicts(now, order)...)
+}
+
+// linkEvents alerts once when a visor stays reconnecting for the delay,
+// and sends the recovery when it is online again.
+func (t *Tracker) linkEvents(now time.Time, delay time.Duration, order []*trackState) []Event {
+	var events []Event
+	for _, st := range order {
+		switch st.info.State {
+		case StateReconnecting:
+			if st.lostSince.IsZero() {
+				st.lostSince = now
+				if ls := st.info.LastSeen; !ls.IsZero() && ls.Before(now) {
+					st.lostSince = ls
+				}
+			}
+			from := st.lostSince
+			if from.Before(t.Floor) {
+				from = t.Floor
+			}
+			if !st.lostAlerted && !st.alerted && now.Sub(from) >= delay {
+				st.lostAlerted = true
+				events = append(events, Event{Kind: KindLinkLost, Scope: ScopeBoard, Target: st.info, Since: st.lostSince, At: now,
+					Diagnosis: "the visor answers the hypervisor's call back but has not reconnected"})
+			}
+		case StateOnline:
+			if st.lostAlerted {
+				events = append(events, Event{Kind: KindOnline, Scope: ScopeBoard, Target: st.info, Since: st.lostSince, At: now,
+					Diagnosis: DiagLinkRestored})
+			}
+			st.lostSince, st.lostAlerted = time.Time{}, false
+		case StateOffline:
+			st.lostSince, st.lostAlerted = time.Time{}, false
+		}
+	}
+	return events
 }
 
 // ipConflicts alerts once when two or more recently online visors behind
@@ -321,7 +429,7 @@ func (t *Tracker) siteOutage(st *trackState, members []*trackState, now time.Tim
 	var fresh []*trackState
 	lo, hi := st.downSince, st.downSince
 	for _, m := range members {
-		if m.info.Online {
+		if m.info.Online || held(m.info.State) {
 			return Event{}, false
 		}
 		if m.alerted {
@@ -512,10 +620,13 @@ func mergeInfo(old, cur Target) Target {
 func (t *Tracker) Saved() map[cipher.PubKey]Saved {
 	out := map[cipher.PubKey]Saved{}
 	for pk, st := range t.states {
-		if !st.alerted && len(st.storage) == 0 {
+		if !st.alerted && !st.lostAlerted && len(st.storage) == 0 {
 			continue
 		}
 		s := Saved{Site: st.site}
+		if st.lostAlerted {
+			s.Lost = st.lostSince
+		}
 		if st.alerted {
 			s.Since = st.downSince
 		}
@@ -532,7 +643,8 @@ func (t *Tracker) Saved() map[cipher.PubKey]Saved {
 func (t *Tracker) States() []TargetState {
 	out := make([]TargetState, 0, len(t.states))
 	for _, st := range t.sorted() {
-		ts := TargetState{Target: st.info, OfflineSince: st.downSince, Alerted: st.alerted, Site: st.site}
+		ts := TargetState{Target: st.info, OfflineSince: st.downSince, Alerted: st.alerted, Site: st.site,
+			LinkLostSince: st.lostSince, LinkAlerted: st.lostAlerted}
 		for k, text := range st.storage {
 			if text == "" {
 				text = k

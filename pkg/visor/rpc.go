@@ -36,13 +36,32 @@ var (
 type RPC struct {
 	visor visorapi.API
 	log   logging.FieldLogger
+	// link is set on the server a visor runs for one of its hypervisors.
+	link *hvLink
 }
 
 func newRPCServer(v *Visor, remoteName string) (*rpc.Server, error) {
+	return newRPCServerWith(v, remoteName, nil)
+}
+
+// newHypervisorRPCServer is the RPC server a visor serves to hvPK, with
+// the link that carries its goodbye.
+func newHypervisorRPCServer(v *Visor, hvPK cipher.PubKey) (*rpc.Server, *hvLink, error) {
+	link := newHVLink()
+	rpcS, err := newRPCServerWith(v, hvPK.String()[:shortHashLen], link)
+	if err != nil {
+		return nil, nil, err
+	}
+	v.setHVLink(hvPK, link)
+	return rpcS, link, nil
+}
+
+func newRPCServerWith(v *Visor, remoteName string, link *hvLink) (*rpc.Server, error) {
 	rpcS := rpc.NewServer()
 	rpcG := &RPC{
 		visor: v,
 		log:   v.MasterLogger().PackageLogger("visor_rpc:" + remoteName),
+		link:  link,
 	}
 
 	if err := registerVisorRPC(rpcS, visorapi.RPCPrefix, rpcG); err != nil {

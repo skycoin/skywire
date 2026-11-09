@@ -129,3 +129,73 @@ func TestRedactAndMerge(t *testing.T) {
 	next = Merge(cur, Settings{SMTP: &SMTP{Host: "other.example.com"}})
 	require.Empty(t, next.SMTP.Password, "a different relay does not inherit it")
 }
+
+func TestTrackerDetachedRestartingReconnectingSendNothing(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	t0 := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	delay := time.Minute
+	seen := t0.Add(-time.Hour)
+	for _, state := range []string{StateDetached, StateRestarting} {
+		tr := NewTracker(nil)
+		for i := 0; i < 20; i++ {
+			require.Empty(t, tr.Observe(t0.Add(time.Duration(i)*time.Minute), delay,
+				[]Target{{PK: pk, State: state, LastSeen: seen}}), "%s step %d", state, i)
+		}
+	}
+	tr := NewTracker(nil)
+	require.Empty(t, tr.Observe(t0, delay, []Target{{PK: pk, State: StateDetached}}))
+	require.Empty(t, tr.States(), "a detached visor is not watched")
+
+	tr = NewTracker(nil)
+	require.Empty(t, tr.Observe(t0, delay, []Target{{PK: pk, State: StateReconnecting}}))
+	require.Empty(t, tr.Observe(t0.Add(30*time.Second), delay, []Target{{PK: pk, State: StateReconnecting}}))
+	require.Empty(t, tr.Observe(t0.Add(50*time.Second), delay, []Target{{PK: pk, Online: true}}), "back within the delay")
+}
+
+func TestTrackerRestartGraceThenOffline(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	t0 := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	delay := time.Minute
+	seen := t0.Add(-10 * time.Second)
+	tr := NewTracker(nil)
+	require.Empty(t, tr.Observe(t0, delay, []Target{{PK: pk, State: StateRestarting, LastSeen: seen}}))
+	require.Empty(t, tr.Observe(t0.Add(time.Minute), delay, []Target{{PK: pk, LastSeen: seen}}),
+		"the offline delay counts from the end of the restart grace")
+	require.Empty(t, tr.Observe(t0.Add(90*time.Second), delay, []Target{{PK: pk, LastSeen: seen}}))
+	evs := tr.Observe(t0.Add(2*time.Minute), delay, []Target{{PK: pk, LastSeen: seen}})
+	require.Equal(t, []string{KindOffline}, kinds(evs))
+}
+
+func TestTrackerLinkLost(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	t0 := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	delay := time.Minute
+	rec := []Target{{PK: pk, State: StateReconnecting, LastSeen: t0}}
+	require.Empty(t, NewTracker(nil).Observe(t0, delay, rec))
+
+	tr := NewTracker(nil)
+	require.Empty(t, tr.Observe(t0, delay, rec))
+	require.Empty(t, tr.Observe(t0.Add(30*time.Second), delay, rec))
+	evs := tr.Observe(t0.Add(time.Minute), delay, rec)
+	require.Equal(t, []string{KindLinkLost}, kinds(evs), "a distinct alert, not offline")
+	require.Equal(t, t0, evs[0].Since)
+	require.Empty(t, tr.Observe(t0.Add(5*time.Minute), delay, rec), "no repeat")
+	require.Equal(t, t0, tr.Saved()[pk].Lost)
+
+	tr = NewTracker(tr.Saved())
+	evs = tr.Observe(t0.Add(6*time.Minute), delay, []Target{{PK: pk, Online: true}})
+	require.Equal(t, []string{KindOnline}, kinds(evs))
+	require.Equal(t, DiagLinkRestored, evs[0].Diagnosis)
+	require.Empty(t, tr.Saved())
+}
+
+func TestTrackerReconnectingThenOffline(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	t0 := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	delay := 5 * time.Minute
+	tr := NewTracker(nil)
+	require.Empty(t, tr.Observe(t0, delay, []Target{{PK: pk, State: StateReconnecting, LastSeen: t0}}))
+	require.Empty(t, tr.Observe(t0.Add(time.Minute), delay, []Target{{PK: pk, State: StateOffline, LastSeen: t0}}))
+	evs := tr.Observe(t0.Add(5*time.Minute), delay, []Target{{PK: pk, State: StateOffline, LastSeen: t0}})
+	require.Equal(t, []string{KindOffline}, kinds(evs), "the delay counts from when the link dropped")
+}

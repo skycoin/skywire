@@ -32,6 +32,9 @@ export class Node {
   // cache rather than a live fetch. Convenience flag derived from
   // offlineSince — saves repeating the truthiness check in templates.
   isStale?: boolean;
+  // The hypervisor's state for the visor: online, reconnecting,
+  // restarting, detached or offline. Undefined from older hypervisors.
+  linkState?: string;
   secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;

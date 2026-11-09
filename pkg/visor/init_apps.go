@@ -1408,7 +1408,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		log := v.MasterLogger().PackageLogger("hypervisor_client").WithField("hypervisor_pk", hvPK)
 
 		addr := dmsg.Addr{PK: hvPK, Port: skyenv.DmsgHypervisorPort}
-		rpcS, err := newRPCServer(v, addr.PK.String()[:shortHashLen])
+		rpcS, link, err := newHypervisorRPCServer(v, addr.PK)
 		if err != nil {
 			err := fmt.Errorf("failed to start RPC server for hypervisor %s: %w", hvPK, err)
 			return err
@@ -1434,7 +1434,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			v.connectedHypervisors[hvPK] = true
 			v.hypervisorCancels[hvPK] = cancel
 			v.initLock.Unlock()
-			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, link, addr, hvErrs)
 		}(hvPK, cancel, hvErrs)
 
 		// Background goroutine: probe the hypervisor via dmsg, then

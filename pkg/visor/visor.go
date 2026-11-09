@@ -285,6 +285,9 @@ type Visor struct {
 	// (those that came through AddHypervisor / RPC); config-loaded
 	// hypervisors take a different path that doesn't enter this map.
 	hypervisorCancels map[cipher.PubKey]context.CancelFunc
+	// hvLinks carries the goodbye owed to each hypervisor.
+	hvLinksMu sync.Mutex
+	hvLinks   map[cipher.PubKey]*hvLink
 
 	// Allowed ports for app connections (legacy — being replaced by forwardedPorts)
 	allowed allowedPortsState
@@ -1196,6 +1199,9 @@ func (v *Visor) Close() error {
 	if v.cxoSubMgr != nil {
 		v.cxoSubMgr.Close()
 	}
+
+	// Tell the hypervisors this is a restart, before their links go.
+	v.sayGoodbye(byeRestarting)
 
 	// Cleanly close ongoing raw TCP forward conns
 	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {

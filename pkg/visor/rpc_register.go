@@ -1813,6 +1813,16 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.HostStats(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".HypervisorNotice", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(struct{})
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(string)
+			return rpcReply, rpcRcvr.HypervisorNotice(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".IsDMSGClientReady", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(struct{})
 		if err := rpcDec.Decode(rpcArg); err != nil {

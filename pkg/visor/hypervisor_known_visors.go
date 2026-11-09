@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/alerts"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -148,6 +149,7 @@ func (hv *Hypervisor) ForgetVisor(pk cipher.PubKey) error {
 	_, ok := hv.summaryCache[pk]
 	delete(hv.summaryCache, pk)
 	hv.summaryCacheMx.Unlock()
+	hv.linkUp(pk)
 	if !ok {
 		return fmt.Errorf("visor %s is not known to this hypervisor", pk)
 	}
@@ -159,7 +161,6 @@ func (hv *Hypervisor) ForgetVisor(pk cipher.PubKey) error {
 // that is not in skip.
 func (hv *Hypervisor) offlineKnownEntries(skip map[cipher.PubKey]bool) []visorapi.HVVisorEntry {
 	hv.summaryCacheMx.RLock()
-	defer hv.summaryCacheMx.RUnlock()
 	var out []visorapi.HVVisorEntry
 	for pk, c := range hv.summaryCache {
 		if skip[pk] || c.sum == nil || c.sum.Overview == nil || c.sum.Overview.BuildInfo == nil {
@@ -169,12 +170,20 @@ func (hv *Hypervisor) offlineKnownEntries(skip map[cipher.PubKey]bool) []visorap
 		populateEntryFromSummary(&e, c.sum)
 		seen := c.seenAt
 		e.LastSeenAt = &seen
-		e.Online = time.Since(seen) < cacheFreshWindow
+		out = append(out, e)
+	}
+	hv.summaryCacheMx.RUnlock()
+	now := time.Now()
+	for i := range out {
+		e := &out[i]
+		e.State = hv.visorState(e.PK, now)
+		e.Online = e.State == alerts.StateOnline
 		if !e.Online {
 			e.Uptime = 0
-			e.Error = "offline " + time.Since(seen).Truncate(time.Minute).String()
 		}
-		out = append(out, e)
+		if e.State == alerts.StateOffline {
+			e.Error = "offline " + now.Sub(*e.LastSeenAt).Truncate(time.Minute).String()
+		}
 	}
 	return out
 }

@@ -85,6 +85,9 @@ templ nodeRow(n Node, parent string) {
 			if n.Online {
 				<span class="dot on" title={ T(ctx, "ui2.online") }></span>
 				<span class="sr">{ T(ctx, "ui2.online") }</span>
+			} else if n.Held() {
+				<span class="dot warn" title={ T(ctx, "node.statuses."+n.State+"-tooltip") }></span>
+				<span class="sr">{ T(ctx, "node.statuses."+n.State) }</span>
 			} else {
 				<span class="dot off" title={ T(ctx, "ui2.offline") }></span>
 				<span class="sr">{ T(ctx, "ui2.offline") }</span>

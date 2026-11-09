@@ -13,10 +13,12 @@ import (
 
 // Node is one row of the visor list.
 type Node struct {
-	PK          string
-	Hostname    string
-	Version     string
-	Online      bool
+	PK       string
+	Hostname string
+	Version  string
+	Online   bool
+	// State is the hypervisor's state for the visor, see alerts.State.
+	State       string
 	IsHV        bool
 	PublicIP    string
 	LocalIP     string
@@ -40,7 +42,7 @@ type Node struct {
 
 // NodeOf turns a visor summary into a row.
 func NodeOf(s visorapi.Summary) Node {
-	n := Node{Online: s.Online, IsHV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
+	n := Node{Online: s.Online, State: s.State, IsHV: s.IsHypervisor, Reward: s.RewardAddress, Routes: len(s.Routes)}
 	if o := s.Overview; o != nil {
 		n.PK = o.PubKey.Hex()
 		n.Hostname = o.Hostname
@@ -74,6 +76,12 @@ func NodeOf(s visorapi.Summary) Node {
 		n.LastSeen = s.LastSeenAt.Local().Format(time.DateTime)
 	}
 	return n
+}
+
+// Held reports a visor that is not online but not offline either: it is
+// reconnecting, restarting or detached.
+func (n Node) Held() bool {
+	return !n.Online && (n.State == "reconnecting" || n.State == "restarting" || n.State == "detached")
 }
 
 // SortNodes puts the hypervisor first, then online visors, then by name.

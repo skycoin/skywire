@@ -547,6 +547,10 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return forDot ? 'dot-outline-gray' : '';
       }
+    } else if (node.linkState === 'reconnecting' || node.linkState === 'restarting') {
+      return forDot ? 'dot-yellow' : 'yellow-text';
+    } else if (node.linkState === 'detached') {
+      return forDot ? 'dot-outline-gray' : '';
     } else if (node.isStale) {
       // Offline but the row carries last-known data from the
       // hypervisor's summary cache. Distinguish from plain offline.
@@ -572,6 +576,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return 'node.statuses.unknown' + (forTooltip ? '-tooltip' : '');
       }
+    } else if (node.linkState === 'reconnecting' || node.linkState === 'restarting' || node.linkState === 'detached') {
+      return 'node.statuses.' + node.linkState + (forTooltip ? '-tooltip' : '');
     } else if (node.isStale) {
       return 'node.statuses.stale' + (forTooltip ? '-tooltip' : '');
     } else {

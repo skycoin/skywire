@@ -9,17 +9,20 @@ import (
 
 // HVVisorEntry is a summary of a remote visor connected to this hypervisor.
 type HVVisorEntry struct {
-	PK             cipher.PubKey `json:"pk"`
-	Online         bool          `json:"online"`
-	IsLocal        bool          `json:"is_local,omitempty"`
-	Version        string        `json:"version,omitempty"`
-	BuildTag       string        `json:"build_tag,omitempty"`
-	Uptime         float64       `json:"uptime_seconds,omitempty"`
-	LocalIP        string        `json:"local_ip,omitempty"`
-	PublicIP       string        `json:"public_ip,omitempty"`
-	CountryCode    string        `json:"country_code,omitempty"`
-	IsSymmetricNAT bool          `json:"symmetric_nat,omitempty"`
-	Transports     int           `json:"transports"`
+	PK     cipher.PubKey `json:"pk"`
+	Online bool          `json:"online"`
+	// State is one of the alerts.State values, the same state the hypervisor
+	// alerts on. Empty from an older hypervisor.
+	State          string  `json:"state,omitempty"`
+	IsLocal        bool    `json:"is_local,omitempty"`
+	Version        string  `json:"version,omitempty"`
+	BuildTag       string  `json:"build_tag,omitempty"`
+	Uptime         float64 `json:"uptime_seconds,omitempty"`
+	LocalIP        string  `json:"local_ip,omitempty"`
+	PublicIP       string  `json:"public_ip,omitempty"`
+	CountryCode    string  `json:"country_code,omitempty"`
+	IsSymmetricNAT bool    `json:"symmetric_nat,omitempty"`
+	Transports     int     `json:"transports"`
 	// TransportSummaries is the full per-transport detail (type,
 	// remote PK, sent/recv counters, etc.) the hvui's node-list
 	// table needs to render its Transports column. Populated by
