@@ -8,6 +8,9 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.108
 
+-   deps, hvui: update skycoin for the wallet features lost with the old GUI  [#6085](https://github.com/skycoin/skywire/pull/6085)
+-   hvui: rebuild the bundle for the skycoin wallet send all link  [#6084](https://github.com/skycoin/skywire/pull/6084)
+-   deps: update skycoin for the send all available coins link  [#6083](https://github.com/skycoin/skywire/pull/6083)
 -   docs: add alerts, skycoin wallet and macOS install guides  [#6081](https://github.com/skycoin/skywire/pull/6081)
 -   deps: update skycoin for the fiber.toml coin_name key  [#6080](https://github.com/skycoin/skywire/pull/6080)
 -   deps: update skycoin for the addressSpent cli command  [#6079](https://github.com/skycoin/skywire/pull/6079)
