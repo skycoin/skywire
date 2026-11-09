@@ -263,10 +263,6 @@ func perIPShareLimit(t time.Time) int {
 	return 8
 }
 
-// singleAddressCutoff is the first reward day that pays a single address only
-// if it has never sent coins. See rewards/mainnet_rules.md, Skycoin Address.
-var singleAddressCutoff = time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC)
-
 // spentCache holds, per run, whether each single address has sent coins.
 var spentCache = struct {
 	sync.Mutex
@@ -293,7 +289,7 @@ func addressSpent(addr string) (bool, error) {
 // say whether a single address has sent coins, so the calculation must stop.
 func checkRewardAddress(addr string, t time.Time) (ineligible, failed error) {
 	canonical, isXpub, err := rewardconfig.ValidateRewardAddress(addr)
-	if err != nil || isXpub || t.Before(singleAddressCutoff) {
+	if err != nil || isXpub || t.Before(deprewards.SingleAddressCutoff) {
 		return err, nil
 	}
 	spent, err := addressSpent(canonical)

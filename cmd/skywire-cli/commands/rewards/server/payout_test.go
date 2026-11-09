@@ -26,11 +26,11 @@ func TestNextPayoutSkipsSpentSingleAddresses(t *testing.T) {
 		fresh + ", 02aa, 1.0, 3.0, 1.2.3.5, amd64, u, eth0, US,  \n"
 	txn := "Skycoin Address, Reward Amount\n" + spent + ", 4.000000\n" + fresh + ", 3.000000\n"
 	// The first day was sent already, so the backlog starts at the second.
-	for _, d := range []string{"2026-11-01", "2026-11-02"} {
+	for _, d := range []string{"2026-11-15", "2026-11-16"} {
 		write(d+"_rewardtxn0.csv", txn)
 		write(d+"_shares.csv", shares)
 	}
-	write("2026-11-01.txt", "sometxid\n")
+	write("2026-11-15.txt", "sometxid\n")
 
 	down := false
 	old := payoutAddressSpent
@@ -43,13 +43,13 @@ func TestNextPayoutSkipsSpentSingleAddresses(t *testing.T) {
 	defer func() { payoutAddressSpent = old }()
 
 	day, csv, err := nextPayout(dir)
-	if err != nil || day != "2026-11-02" {
+	if err != nil || day != "2026-11-16" {
 		t.Fatalf("nextPayout: %q %v", day, err)
 	}
 	if strings.Contains(string(csv), spent) || !strings.Contains(string(csv), fresh) {
 		t.Fatalf("payout csv:\n%s", csv)
 	}
-	skippedLog, err := os.ReadFile(filepath.Join(dir, "2026-11-02_skipped.txt")) //nolint:gosec
+	skippedLog, err := os.ReadFile(filepath.Join(dir, "2026-11-16_skipped.txt")) //nolint:gosec
 	if err != nil || !strings.Contains(string(skippedLog), pk) || !strings.Contains(string(skippedLog), spent) {
 		t.Fatalf("skipped log: %q %v", skippedLog, err)
 	}
@@ -72,8 +72,18 @@ func TestNextPayoutSkipsSpentSingleAddresses(t *testing.T) {
 		t.Fatal("node down: transaction accepted")
 	}
 
-	write("2026-11-02.txt", "othertxid\n")
+	write("2026-11-16.txt", "othertxid\n")
 	if _, _, err := nextPayout(dir); !errors.Is(err, errNoPayout) {
 		t.Fatalf("all sent: %v", err)
+	}
+
+	// A day before the cutoff pays every single address, without asking the node.
+	write("2026-10-30_rewardtxn0.csv", txn)
+	write("2026-10-30_shares.csv", shares)
+	if day, csv, err := nextPayout(dir); err != nil || day != "2026-10-30" || string(csv) != txn {
+		t.Fatalf("before cutoff: %q %v\n%s", day, err, csv)
+	}
+	if err := checkPayoutTxn(dir, "2026-10-30", raw); err != nil {
+		t.Fatalf("before cutoff: transaction refused: %v", err)
 	}
 }

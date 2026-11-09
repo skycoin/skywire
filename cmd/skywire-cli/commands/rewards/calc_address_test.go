@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	deprewards "github.com/skycoin/skywire/pkg/deployment/rewards"
 	"github.com/skycoin/skywire/pkg/visor/rewardconfig"
 )
 
@@ -37,28 +38,28 @@ func TestRewardAddressCutoff(t *testing.T) {
 	if inel, failed := checkRewardAddress(spent, before); inel != nil || failed != nil || queries != 0 {
 		t.Fatalf("spent single address before the cutoff: %v %v (queries %d)", inel, failed, queries)
 	}
-	if inel, failed := checkRewardAddress(unspent, singleAddressCutoff); inel != nil || failed != nil {
+	if inel, failed := checkRewardAddress(unspent, deprewards.SingleAddressCutoff); inel != nil || failed != nil {
 		t.Fatalf("unspent single address on the cutoff: %v %v", inel, failed)
 	}
-	inel, failed := checkRewardAddress(spent, singleAddressCutoff)
+	inel, failed := checkRewardAddress(spent, deprewards.SingleAddressCutoff)
 	if failed != nil || !errors.Is(inel, rewardconfig.ErrAddressSpent) || addressReason(inel) != "Reward address has sent coins" {
 		t.Fatalf("spent single address on the cutoff: %v %v", inel, failed)
 	}
-	if inel, failed := checkRewardAddress(xpub, singleAddressCutoff); inel != nil || failed != nil {
+	if inel, failed := checkRewardAddress(xpub, deprewards.SingleAddressCutoff); inel != nil || failed != nil {
 		t.Fatalf("xpub on the cutoff: %v %v", inel, failed)
 	}
 	if inel, failed := checkRewardAddress("notanaddress", before); failed != nil || inel == nil || addressReason(inel) != "Invalid Skycoin address" {
 		t.Fatalf("invalid address: %v %v", inel, failed)
 	}
 	n := queries
-	if inel, failed := checkRewardAddress(spent, singleAddressCutoff.AddDate(0, 0, 1)); inel == nil || failed != nil || queries != n {
+	if inel, failed := checkRewardAddress(spent, deprewards.SingleAddressCutoff.AddDate(0, 0, 1)); inel == nil || failed != nil || queries != n {
 		t.Fatalf("answer not cached: %v %v, %d queries, want %d", inel, failed, queries, n)
 	}
 
 	// A node that cannot answer stops the calculation, for an address not cached.
 	node.Close()
 	const other = "2iVtHS5ye99Km5PonsB42No3pQRGEURmxyc"
-	if inel, failed := checkRewardAddress(other, singleAddressCutoff); failed == nil || inel != nil {
+	if inel, failed := checkRewardAddress(other, deprewards.SingleAddressCutoff); failed == nil || inel != nil {
 		t.Fatalf("unreachable node: ineligible %v, failed %v", inel, failed)
 	}
 }
