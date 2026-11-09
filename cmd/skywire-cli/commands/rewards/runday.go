@@ -389,7 +389,7 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 		uu := survey.UUID
 
-		addrErr := rewardAddressError(sky)
+		addrErr := rewardAddressError(sky, wDate)
 
 		// TPD-integrated UT already gated >= 2 transports at heartbeat
 		// time, so every pk we're iterating qualified by definition.

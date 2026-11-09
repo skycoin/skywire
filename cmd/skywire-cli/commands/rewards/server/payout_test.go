@@ -77,4 +77,13 @@ func TestNextPayoutSkipsSpentSingleAddresses(t *testing.T) {
 		t.Fatalf("all sent: %v", err)
 	}
 
+	// A day before the cutoff pays every single address, without asking the node.
+	write("2026-10-30_rewardtxn0.csv", txn)
+	write("2026-10-30_shares.csv", shares)
+	if day, csv, err := nextPayout(dir); err != nil || day != "2026-10-30" || string(csv) != txn {
+		t.Fatalf("before cutoff: %q %v\n%s", day, err, csv)
+	}
+	if err := checkPayoutTxn(dir, "2026-10-30", raw); err != nil {
+		t.Fatalf("before cutoff: transaction refused: %v", err)
+	}
 }

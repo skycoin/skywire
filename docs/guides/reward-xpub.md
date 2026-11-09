@@ -7,8 +7,8 @@ copy, and how to set it.
 
 An xpub is the default and the recommended reward address. A single Skycoin
 address can be set only with an explicit opt-in, and it is refused if it has
-already sent coins. A single address stops earning from the first reward day
-after it sends coins. See
+already sent coins. From the reward day of November 15, 2026 a single address
+stops earning from the first reward day after it sends coins. See
 [A single address](#a-single-address) below.
 
 ## Why an xpub
