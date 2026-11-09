@@ -206,10 +206,10 @@ func TestDirectDelivery(t *testing.T) {
 	s := &Sender{
 		Hostname: "home",
 		MXPort:   sink.port(),
-		LookupMX: func(_ context.Context, d string) ([]*net.MX, error) {
+		LookupMX: func(_ context.Context, d string) ([]*MX, error) {
 			asked = append(asked, d)
 			// The preferred host refuses, so delivery falls through.
-			return []*net.MX{{Host: "127.0.0.1.", Pref: 20}, {Host: "127.0.0.2.", Pref: 10}}, nil
+			return []*MX{{Host: "127.0.0.1.", Pref: 20}, {Host: "127.0.0.2.", Pref: 10}}, nil
 		},
 	}
 	ev := testEvent(KindOffline)
@@ -232,7 +232,7 @@ func TestRelayDeliveryWithStartTLSAndAuth(t *testing.T) {
 	s := &Sender{
 		Hostname:  "home",
 		TLSConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
-		LookupMX: func(context.Context, string) ([]*net.MX, error) {
+		LookupMX: func(context.Context, string) ([]*MX, error) {
 			t.Fatal("relay mode must not look up MX")
 			return nil, nil
 		},
@@ -288,7 +288,7 @@ func TestServiceEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	pk, _ := cipher.GenerateKeyPair()
 	sender := &Sender{Hostname: "home", MXPort: sink.port(),
-		LookupMX: func(context.Context, string) ([]*net.MX, error) { return []*net.MX{{Host: "127.0.0.1"}}, nil }}
+		LookupMX: func(context.Context, string) ([]*MX, error) { return []*MX{{Host: "127.0.0.1"}}, nil }}
 
 	online := true
 	var mu sync.Mutex
@@ -351,7 +351,7 @@ func TestServiceRetriesFailedDelivery(t *testing.T) {
 
 	pk, _ := cipher.GenerateKeyPair()
 	sender := &Sender{MXPort: port,
-		LookupMX: func(context.Context, string) ([]*net.MX, error) { return []*net.MX{{Host: "127.0.0.1"}}, nil }}
+		LookupMX: func(context.Context, string) ([]*MX, error) { return []*MX{{Host: "127.0.0.1"}}, nil }}
 	svc, err := NewService("", &Settings{EmailTo: []string{"ops@example.com"}, OfflineAfter: Duration(time.Minute)}, sender)
 	require.NoError(t, err)
 	svc.Targets = func(context.Context, Settings) []Target { return []Target{{PK: pk}} }

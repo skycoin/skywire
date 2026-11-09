@@ -26,15 +26,21 @@ type Sender struct {
 	Watcher cipher.PubKey
 	// Hostname is the watcher's host name, for the default sender address.
 	Hostname string
-	// LookupMX and MXPort are overridable for tests. Defaults are
-	// net.DefaultResolver.LookupMX and 25.
-	LookupMX func(ctx context.Context, domain string) ([]*net.MX, error)
+	// LookupMX and MXPort are overridable for tests. Defaults are the
+	// system resolver and 25.
+	LookupMX func(ctx context.Context, domain string) ([]*MX, error)
 	MXPort   int
 	// TLSConfig is used for STARTTLS and implicit TLS. Nil verifies the
 	// server name against the system roots.
 	TLSConfig *tls.Config
 	// HTTPClient posts webhooks. Nil is a client with a 15s timeout.
 	HTTPClient *http.Client
+}
+
+// MX is one mail exchanger of a domain, as in net.MX.
+type MX struct {
+	Host string
+	Pref uint16
 }
 
 // Result is the outcome of one delivery channel.
@@ -230,7 +236,7 @@ func (s *Sender) direct(ctx context.Context, from, rcpt string, msg []byte) erro
 	domain := domainOf(rcpt)
 	lookup := s.LookupMX
 	if lookup == nil {
-		lookup = net.DefaultResolver.LookupMX
+		lookup = lookupMX
 	}
 	mxs, err := lookup(ctx, domain)
 	hosts := make([]string, 0, len(mxs))
