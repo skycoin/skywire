@@ -26,3 +26,18 @@ func TestRouteHopDetailsFallbackStartsEachLegLocally(t *testing.T) {
 		require.Equal(t, mts[i].Remote().String(), h.To)
 	}
 }
+
+// TestAppendForwardLegHookSkipsFirstLeg checks the two append paths agree: the
+// leg-change hook is for mux growth, not for a group's first leg.
+func TestAppendForwardLegHookSkipsFirstLeg(t *testing.T) {
+	full, mts, _ := createMuxRouteGroup(t, 2)
+	rg := NewRouteGroup(DefaultRouteGroupConfig(), full.rt, full.desc, nil)
+	hook := &legChangeRecorder{}
+	rg.SetLegChangeHook(hook, DialInfo{})
+
+	rg.appendForwardLeg(full.legs[0].fwd, mts[0], "test")
+	require.Empty(t, hook.changes, "the first leg is not a leg change")
+
+	rg.appendForwardLeg(full.legs[1].fwd, mts[1], "test")
+	require.Equal(t, []LegChange{{Event: "added", LegIndex: 1}}, hook.changes)
+}

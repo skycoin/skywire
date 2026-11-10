@@ -226,7 +226,8 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 		rg.mux.growLegs(len(rg.legs))
 	}
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
-	hookSet := rg.legChangeHook != nil
+	// As in appendRules, a group's first leg is not a leg change.
+	hookSet := rg.legChangeHook != nil && newIdx > 0
 	rg.mu.Unlock()
 
 	// A second leg is what the leg-gated loops were parked waiting for.
