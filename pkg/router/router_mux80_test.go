@@ -53,7 +53,7 @@ func newLegTestRouter(t *testing.T) *router {
 		datagramPorts: make(map[routing.Port]struct{}),
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan acceptEntry, acceptSize),
 		done:          make(chan struct{}),
 	}
 }
@@ -181,7 +181,7 @@ func TestAcceptRoutes_DuplicateDescDoesNotDeleteLeg(t *testing.T) {
 
 	aux := r.makeAuxRules(t, desc, 1)
 	// Drive the (pre-Fix-A) path directly: hand the aux leg to the accept loop.
-	r.accept <- aux
+	r.accept <- acceptEntry{rules: aux}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

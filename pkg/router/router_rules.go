@@ -470,7 +470,7 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	// saveRouteGroupRules detects an initializing group and adopts the rules as
 	// an aux mux leg — so the lock guarded nothing here.
 	select {
-	case r.accept <- rules:
+	case r.accept <- acceptEntry{rules: rules, at: time.Now()}:
 		return nil
 	case <-r.done:
 		return io.ErrClosedPipe

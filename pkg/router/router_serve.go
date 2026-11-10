@@ -44,31 +44,50 @@ const perFrameNoiseEnabledDefault = true
 // - Save to routing.Table and internal RouteGroup map.
 // - Return the RoutingGroup.
 func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
-	var (
-		rules routing.EdgeRules
-		ok    bool
-	)
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case conn := <-r.adopted:
-		// An adopted leg reserve (leg_adopt.go), handshaked off this loop.
-		return conn, nil
-	case rules, ok = <-r.accept:
-	}
-
-	if !ok {
-		err := &net.OpError{
-			Op:     "accept",
-			Net:    "skynet",
-			Source: nil,
-			Err:    net.ErrClosed,
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case conn := <-r.adopted:
+			// An adopted leg reserve (leg_adopt.go), handshaked off this loop.
+			return conn, nil
+		case res := <-r.accepted:
+			return res.conn, res.err
+		case e, ok := <-r.accept:
+			if !ok {
+				return nil, &net.OpError{Op: "accept", Net: "skynet", Err: net.ErrClosed}
+			}
+			// The initiator stops waiting after handshakeAwaitTimeout, so an older
+			// setup can only time out here and hold up the ones behind it.
+			if !e.at.IsZero() && time.Since(e.at) > handshakeAwaitTimeout {
+				r.acceptStale.Add(1)
+				r.logger.Debugf("Dropping route setup for %s, queued %v ago", &e.rules.Desc, time.Since(e.at).Round(time.Second))
+				continue
+			}
+			select {
+			case r.acceptSem <- struct{}{}:
+				// Wait for the handshake off this loop: one silent initiator must
+				// not delay every other accept by handshakeAwaitTimeout.
+				go func() {
+					defer func() { <-r.acceptSem }()
+					conn, err := r.acceptOne(ctx, e.rules)
+					select {
+					case r.accepted <- acceptResult{conn: conn, err: err}:
+					case <-r.done:
+						if conn != nil {
+							_ = conn.Close() //nolint:errcheck
+						}
+					}
+				}()
+			default:
+				return r.acceptOne(ctx, e.rules)
+			}
 		}
-
-		return nil, err
 	}
+}
 
+// acceptOne saves one queued setup's rules and waits for its handshake.
+func (r *router) acceptOne(ctx context.Context, rules routing.EdgeRules) (net.Conn, error) {
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 		return nil, fmt.Errorf("SaveRoutingRules: %w", err)
 	}
@@ -571,4 +590,16 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	}
 
 	return nrg, nil
+}
+
+// acceptEntry is a route setup waiting for AcceptRoutes, with its arrival time.
+type acceptEntry struct {
+	rules routing.EdgeRules
+	at    time.Time
+}
+
+// acceptResult is one setup's outcome once its handshake has been waited for.
+type acceptResult struct {
+	conn net.Conn
+	err  error
 }

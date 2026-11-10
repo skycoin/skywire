@@ -31,11 +31,11 @@ func TestIntroduceRules_AcceptSendDoesNotHoldMutex(t *testing.T) {
 		rt:     routing.NewTable(l.PackageLogger("rt")),
 		rgsNs:  make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw: make(map[routing.RouteDescriptor]*RouteGroup),
-		accept: make(chan routing.EdgeRules, 1),
+		accept: make(chan acceptEntry, 1),
 		done:   make(chan struct{}),
 	}
 	// Fill the single accept slot so the next send blocks.
-	r.accept <- routing.EdgeRules{}
+	r.accept <- acceptEntry{}
 
 	initPK, _ := cipher.GenerateKeyPair()
 	respPK, _ := cipher.GenerateKeyPair()

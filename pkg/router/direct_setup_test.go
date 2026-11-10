@@ -47,7 +47,7 @@ func directTestRouter(t *testing.T, pk, peer cipher.PubKey, tpID uuid.UUID) *rou
 		datagramPorts: make(map[routing.Port]struct{}),
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan acceptEntry, acceptSize),
 		done:          make(chan struct{}),
 	}
 }
@@ -93,7 +93,8 @@ func TestDirectSetup_OneHopWithoutSetupNode(t *testing.T) {
 	require.Equal(t, tpID, rules.Forward.NextTransportID())
 
 	select {
-	case got := <-b.accept:
+	case e := <-b.accept:
+		got := e.rules
 		require.Equal(t, bPK, got.Desc.DstPK())
 		require.Equal(t, aPK, got.Desc.SrcPK())
 		require.Equal(t, tpID, got.Forward.NextTransportID())

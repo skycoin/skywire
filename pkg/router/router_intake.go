@@ -27,6 +27,10 @@ type IntakeStats struct {
 	// StaleRouteDrops counts frames for rules that no longer exist (normal
 	// during teardown; a climbing count on an idle visor is not).
 	StaleRouteDrops int64 `json:"stale_route_drops"`
+	// StaleSetupDrops counts queued route setups dropped because their
+	// initiator had stopped waiting. AcceptQueue is how many are queued now.
+	StaleSetupDrops uint64 `json:"stale_setup_drops"`
+	AcceptQueue     int    `json:"accept_queue"`
 	// RouteGroupQueues is the two inbound queues of every active route group:
 	// the app queue (queue/capacity) and the intake queue between the router's
 	// shared read loop and the group's own worker (intake_*).
@@ -105,7 +109,7 @@ func (c *intakeCounters) snapshot() (unknown, control map[string]int64, stale in
 // the visor so the Router interface (and its mock) stay unchanged.
 func (r *router) IntakeStats() IntakeStats {
 	unknown, control, stale := r.intake.snapshot()
-	out := IntakeStats{StaleRouteDrops: stale}
+	out := IntakeStats{StaleRouteDrops: stale, StaleSetupDrops: r.acceptStale.Load(), AcceptQueue: len(r.accept)}
 	out.ForwardQueues = r.forward.snapshot()
 	if len(unknown) > 0 {
 		out.UnknownPacketTypes = unknown
