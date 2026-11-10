@@ -422,12 +422,7 @@ func (rg *RouteGroup) replyRehomeOn(leg *rehomeLeg, nonce uint64, srcPort, dstPo
 func (rg *RouteGroup) legIndexByConsumeRule(routeID routing.RouteID) int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	for i, rv := range rg.rvs {
-		if rv != nil && rv.KeyRouteID() == routeID {
-			return i
-		}
-	}
-	return -1
+	return rg.legByConsumeRuleLocked(routeID)
 }
 
 // rehomeTransportFree enforces the mux invariant a dialed aux leg is held to
@@ -451,7 +446,7 @@ func (rg *RouteGroup) rehomeTransportFree(tp *transport.ManagedTransport) error 
 // of pruneLegByConsumeRule, which deletes them.
 func (rg *RouteGroup) detachLegForRehome(idx int, reason string) (*rehomeLeg, error) {
 	rg.mu.Lock()
-	if idx < 0 || idx >= len(rg.tps) || idx >= len(rg.fwd) || idx >= len(rg.rvs) {
+	if idx < 0 || idx >= len(rg.tps) || idx >= len(rg.fwd) || idx >= len(rg.rvs) || rg.rvs[idx] == nil {
 		rg.mu.Unlock()
 		return nil, fmt.Errorf("no leg %d to re-home", idx)
 	}
@@ -494,10 +489,7 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	}
 
 	rg.mu.Lock()
-	rg.fwd = append(rg.fwd, fwd)
-	rg.rvs = append(rg.rvs, rvs)
-	rg.tps = append(rg.tps, leg.tp)
-	idx := len(rg.tps) - 1
+	idx := rg.appendLegLocked(fwd, rvs, leg.tp)
 	rg.resetLegLiveness(tpEntryID(leg.tp))
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.tps))

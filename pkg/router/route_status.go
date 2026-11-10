@@ -103,7 +103,7 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 			if i < len(rg.fwd) {
 				rt.FwdRuleID = rg.fwd[i].KeyRouteID()
 			}
-			if i < len(rg.rvs) {
+			if i < len(rg.rvs) && rg.rvs[i] != nil {
 				rt.RvsRuleID = rg.rvs[i].KeyRouteID()
 			}
 			status.Transports = append(status.Transports, rt)

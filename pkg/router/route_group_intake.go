@@ -148,14 +148,8 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 		if rg.mux != nil {
 			rg.mu.Lock()
 			rid := packet.RouteID()
-			readyLeg := -1
-			for i, rule := range rg.rvs {
-				if rule != nil && rule.KeyRouteID() == rid {
-					rg.mux.markLegReady(i)
-					readyLeg = i
-					break
-				}
-			}
+			readyLeg := rg.legByConsumeRuleLocked(rid)
+			rg.mux.markLegReady(readyLeg)
 			rg.mu.Unlock()
 			// Signal the just-ready leg's BORN-standby state to the peer. An aux
 			// leg grown into the warm pool (standbyNewLegs) is standby WITHOUT ever
@@ -425,17 +419,11 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 	arrivalLeg := -1
 	if rg.mux != nil {
 		rg.mu.Lock()
-		rid := packet.RouteID()
-		for i, rule := range rg.rvs {
-			if rule != nil && rule.KeyRouteID() == rid {
-				rg.mux.recordRecv(i, uint64(packet.Size()))
-				arrivalLeg = i
-				// Inbound traffic on leg i proves the peer registered its
-				// rule for this leg, so it is now safe to send on it.
-				rg.mux.markLegReady(i)
-				break
-			}
-		}
+		arrivalLeg = rg.legByConsumeRuleLocked(packet.RouteID())
+		rg.mux.recordRecv(arrivalLeg, uint64(packet.Size()))
+		// Inbound traffic on a leg proves the peer registered its rule
+		// for this leg, so it is now safe to send on it.
+		rg.mux.markLegReady(arrivalLeg)
 		rg.mu.Unlock()
 	}
 
@@ -550,14 +538,9 @@ func (rg *RouteGroup) handleRepairPacket(packet routing.Packet) error {
 	// invisible in the per-leg telemetry, so a leg carrying repair overhead was
 	// indistinguishable from an idle one.
 	rg.mu.Lock()
-	rid := packet.RouteID()
-	for i, rule := range rg.rvs {
-		if rule != nil && rule.KeyRouteID() == rid {
-			rg.mux.recordRecv(i, uint64(packet.Size()))
-			rg.mux.recordRepair(i, uint64(packet.Size()))
-			break
-		}
-	}
+	leg := rg.legByConsumeRuleLocked(packet.RouteID())
+	rg.mux.recordRecv(leg, uint64(packet.Size()))
+	rg.mux.recordRepair(leg, uint64(packet.Size()))
 	rg.mu.Unlock()
 	delivered := rg.mux.fecOnRecvRepair(packet.RepairBlockID(), packet.RepairIndex(), packet.RepairSymLen(), packet.RepairSymbol())
 	for _, d := range delivered {
@@ -588,15 +571,8 @@ func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
 		return nil
 	}
 	standby := packet.LegStateStandby()
-	rid := packet.RouteID()
 	rg.mu.Lock()
-	idx := -1
-	for i, rule := range rg.rvs {
-		if rule != nil && rule.KeyRouteID() == rid {
-			idx = i
-			break
-		}
-	}
+	idx := rg.legByConsumeRuleLocked(packet.RouteID())
 	rg.mu.Unlock()
 	if idx < 0 {
 		return nil // no matching leg (already pruned / unknown route)

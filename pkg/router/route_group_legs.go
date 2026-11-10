@@ -1573,7 +1573,7 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 			if i < len(rg.fwd) {
 				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
 			}
-			if i < len(rg.rvs) {
+			if i < len(rg.rvs) && rg.rvs[i] != nil {
 				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
 			}
 			if tp != nil {
@@ -1596,6 +1596,9 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 		if i < len(rg.rvs) {
 			aliveRvs = append(aliveRvs, rg.rvs[i])
 		}
+	}
+	if len(rg.rvs) > len(rg.tps) {
+		aliveRvs = append(aliveRvs, rg.rvs[len(rg.tps):]...) // reverse-only rules
 	}
 	if len(droppedIdx) == 0 {
 		rg.mu.Unlock()
@@ -1707,7 +1710,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 			if i < len(rg.fwd) {
 				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
 			}
-			if i < len(rg.rvs) {
+			if i < len(rg.rvs) && rg.rvs[i] != nil {
 				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
 			}
 			reason := "transport closed"
@@ -1726,6 +1729,9 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 		}
 	}
 
+	if len(rg.rvs) > len(rg.tps) {
+		aliveRvs = append(aliveRvs, rg.rvs[len(rg.tps):]...) // reverse-only rules
+	}
 	if len(aliveTps) == len(rg.tps) {
 		return nil // Nothing was pruned
 	}
@@ -1762,7 +1768,13 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 // primary leg).
 func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	rg.mu.Lock()
-	if len(rg.tps) <= 1 || len(rg.rvs) <= 1 {
+	rvsCount := 0
+	for _, rv := range rg.rvs {
+		if rv != nil {
+			rvsCount++
+		}
+	}
+	if len(rg.tps) <= 1 || rvsCount <= 1 {
 		rg.mu.Unlock()
 		return false // last leg — let the caller do a full close
 	}
@@ -1782,7 +1794,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	if idx < len(rg.fwd) {
 		deadRuleIDs = append(deadRuleIDs, rg.fwd[idx].KeyRouteID())
 	}
-	if idx < len(rg.rvs) {
+	if idx < len(rg.rvs) && rg.rvs[idx] != nil {
 		deadRuleIDs = append(deadRuleIDs, rg.rvs[idx].KeyRouteID())
 	}
 
