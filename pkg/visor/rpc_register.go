@@ -123,6 +123,26 @@ func registerVisorRPC(rpcSrv *rpc.Server, rpcName string, rpcRcvr *RPC) error {
 			return rpcReply, rpcRcvr.AlertsLANProbe(rpcArg, rpcReply)
 		}, nil
 	})
+	rpcSrv.HandleCall(rpcName+".AlertsPushAdd", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(alerts.PushSubscription)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(alerts.PushSubscription)
+			return rpcReply, rpcRcvr.AlertsPushAdd(rpcArg, rpcReply)
+		}, nil
+	})
+	rpcSrv.HandleCall(rpcName+".AlertsPushRemove", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
+		rpcArg := new(string)
+		if err := rpcDec.Decode(rpcArg); err != nil {
+			return nil, err
+		}
+		return func() (any, error) {
+			rpcReply := new(int)
+			return rpcReply, rpcRcvr.AlertsPushRemove(rpcArg, rpcReply)
+		}, nil
+	})
 	rpcSrv.HandleCall(rpcName+".AlertsSet", func(rpcDec *gob.Decoder) (rpc.CallFunc, error) {
 		rpcArg := new(alerts.Settings)
 		if err := rpcDec.Decode(rpcArg); err != nil {

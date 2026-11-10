@@ -183,3 +183,51 @@ func TestAlertsHTTP(t *testing.T) {
 	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodPut, base, strings.NewReader(`{"email_to":["x@example.com"],"offline_after":"30s"}`)))
 	require.Equal(t, http.StatusBadRequest, rr.Code, "below the 1m minimum")
 }
+
+func TestAlertsPushHTTP(t *testing.T) {
+	v := alertsTestVisor(t)
+	hv := newKnownTestHV(t.TempDir())
+	hv.visor = v
+	hv.c.PK = v.conf.PK
+	hv.selfConn = Conn{API: v}
+	v.hvInstance = hv
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /visors/{pk}/alerts", hv.getAlerts())
+	mux.HandleFunc("POST /visors/{pk}/alerts/push", hv.postAlertsPush())
+	mux.HandleFunc("DELETE /visors/{pk}/alerts/push/{id}", hv.deleteAlertsPush())
+	base := "/visors/" + v.conf.PK.Hex() + "/alerts"
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, base, nil))
+	var st alerts.Status
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &st))
+	require.NotEmpty(t, st.PushPublicKey)
+
+	// What the browser's PushSubscription.toJSON() gives, plus a label.
+	sub := `{"endpoint":"https://fcm.googleapis.com/fcm/send/abc","expirationTime":null,"keys":{"p256dh":"BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4","auth":"BTBZMqHH6r4Tts7J_aSIgg"},"label":"phone"}`
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, base+"/push", strings.NewReader(sub)))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.NotContains(t, rr.Body.String(), "BTBZMqHH6r4Tts7J_aSIgg")
+	var got alerts.PushSubscription
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	require.Equal(t, alerts.PushID("https://fcm.googleapis.com/fcm/send/abc"), got.ID)
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, base, nil))
+	require.NotContains(t, rr.Body.String(), "BTBZMqHH6r4Tts7J_aSIgg")
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &st))
+	require.True(t, st.Enabled)
+	require.Len(t, st.Settings.Push, 1)
+	require.Equal(t, "phone", st.Settings.Push[0].Label)
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, base+"/push", strings.NewReader(`{"endpoint":"http://x/y","keys":{}}`)))
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodDelete, base+"/push/"+got.ID, nil))
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.Empty(t, v.alertSvc.Settings().Push)
+}

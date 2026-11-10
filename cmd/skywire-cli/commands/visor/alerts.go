@@ -31,21 +31,23 @@ func init() {
 	f.BoolVar(&alSMTPTLS, "smtp-starttls", false, "require STARTTLS on the relay")
 	f.BoolVar(&alNoSMTP, "no-smtp", false, "remove the relay and deliver directly")
 	f.Float64Var(&alDiskWarn, "disk-warn", 0, "disk use percent that raises a storage warning (default 90)")
+	f.StringVar(&alPushRemove, "push-remove", "", "remove a push notification device by id, or \"all\"")
 }
 
 var (
-	alEmail    []string
-	alDelay    time.Duration
-	alWebhook  string
-	alWatch    []string
-	alFrom     string
-	alSMTPHost string
-	alSMTPPort int
-	alSMTPUser string
-	alSMTPPass string
-	alSMTPTLS  bool
-	alNoSMTP   bool
-	alDiskWarn float64
+	alEmail      []string
+	alDelay      time.Duration
+	alWebhook    string
+	alWatch      []string
+	alFrom       string
+	alSMTPHost   string
+	alSMTPPort   int
+	alSMTPUser   string
+	alSMTPPass   string
+	alSMTPTLS    bool
+	alNoSMTP     bool
+	alDiskWarn   float64
+	alPushRemove string
 )
 
 var alertsCmd = &cobra.Command{
@@ -66,6 +68,10 @@ recovery says whether the board rebooted during the outage (power loss
 or crash) or stayed up (network outage). A storage warning is sent while
 a board is still online when its root filesystem turns read-only, the
 kernel logs storage I/O errors, or the disk passes --disk-warn.
+
+Push notifications go to every browser subscribed with "Notify this
+device" in the Offline alerts section of the hypervisor UI. On an iPhone,
+add the hypervisor UI to the Home Screen first (iOS 16.4 or later).
 
 Without a relay, mail goes straight to each recipient domain's MX on
 port 25. Many home connections block port 25 or are refused by large
@@ -112,6 +118,15 @@ func formatAlerts(st *alerts.Status) string {
 			s.SMTP.Host, s.SMTP.Port, or(s.SMTP.Username, "-"), s.SMTP.StartTLS, pw)
 	} else {
 		b.WriteString("relay:          none, direct to MX\n")
+	}
+	if len(s.Push) == 0 {
+		b.WriteString("push devices:   none, add one with \"Notify this device\" in the hypervisor UI\n")
+	}
+	for _, p := range s.Push {
+		fmt.Fprintf(&b, "push device:    %s %s via %s since %s\n", p.ID, or(p.Label, "-"), p.Host(), p.Created.UTC().Format(time.RFC3339))
+	}
+	if st.PushPublicKey != "" {
+		fmt.Fprintf(&b, "push key:       %s\n", st.PushPublicKey)
 	}
 	if !st.LastSent.IsZero() {
 		fmt.Fprintf(&b, "last sent:      %s\n", st.LastSent.UTC().Format(time.RFC3339))
@@ -183,7 +198,8 @@ and survives a config regen.
 
   skywire cli visor alerts set --email ops@example.com --offline-after 15m
   skywire cli visor alerts set --smtp-host smtp.example.com --smtp-starttls --smtp-user me@example.com --smtp-pass '...'
-  skywire cli visor alerts set --email ''      # stop mail alerts`,
+  skywire cli visor alerts set --email ''      # stop mail alerts
+  skywire cli visor alerts set --push-remove all  # forget every push device`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		f := cmd.Flags()
 		rpcClient, err := clirpc.Client(f)
@@ -193,6 +209,11 @@ and survives a config regen.
 		st, err := rpcClient.AlertsStatus()
 		if err != nil {
 			internal.PrintFatalError(f, err)
+		}
+		if f.Changed("push-remove") {
+			if _, err := rpcClient.AlertsPushRemove(strings.TrimSpace(alPushRemove)); err != nil {
+				internal.PrintFatalError(f, err)
+			}
 		}
 		s := st.Settings
 		if f.Changed("email") {
@@ -259,7 +280,7 @@ and survives a config regen.
 
 var alertsTestCmd = &cobra.Command{
 	Use:   "test",
-	Short: "Send a test alert to every configured address and webhook",
+	Short: "Send a test alert to every configured address, webhook and push device",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

@@ -19,6 +19,12 @@ type Alerts interface {
 	// AlertsLANProbe reports whether a LAN address answers, so a watcher
 	// can tell a board that is off from one whose skywire is down.
 	AlertsLANProbe(ip string) (bool, error)
+	// AlertsPushAdd subscribes a browser to Web Push alerts and returns the
+	// subscription with its id.
+	AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error)
+	// AlertsPushRemove removes a push subscription by id, or all of them
+	// for "all", and returns how many it removed.
+	AlertsPushRemove(id string) (int, error)
 }
 
 // AlertsStatus calls AlertsStatus.
@@ -58,3 +64,25 @@ func (rc *rpcClient) AlertsLANProbe(ip string) (bool, error) {
 
 // AlertsLANProbe implements API.
 func (mc *mockRPCClient) AlertsLANProbe(string) (bool, error) { return false, nil }
+
+// AlertsPushAdd calls AlertsPushAdd.
+func (rc *rpcClient) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	var out alerts.PushSubscription
+	err := rc.Call("AlertsPushAdd", &sub, &out)
+	return out, err
+}
+
+// AlertsPushRemove calls AlertsPushRemove.
+func (rc *rpcClient) AlertsPushRemove(id string) (int, error) {
+	var out int
+	err := rc.Call("AlertsPushRemove", &id, &out)
+	return out, err
+}
+
+// AlertsPushAdd implements API.
+func (mc *mockRPCClient) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	return sub, nil
+}
+
+// AlertsPushRemove implements API.
+func (mc *mockRPCClient) AlertsPushRemove(string) (int, error) { return 0, nil }

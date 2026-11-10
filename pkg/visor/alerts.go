@@ -213,6 +213,40 @@ func (v *Visor) AlertsTest() ([]alerts.Result, error) {
 	return svc.Test(ctx)
 }
 
+// AlertsPushAdd implements visorapi.Alerts.
+func (v *Visor) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	svc, err := v.alertService()
+	if err != nil {
+		return sub, err
+	}
+	return svc.PushAdd(sub)
+}
+
+// AlertsPushRemove implements visorapi.Alerts.
+func (v *Visor) AlertsPushRemove(id string) (int, error) {
+	svc, err := v.alertService()
+	if err != nil {
+		return 0, err
+	}
+	return svc.PushRemove(id)
+}
+
+// AlertsPushAdd subscribes a browser to push alerts. The argument holds
+// the subscription keys and is not logged.
+func (r *RPC) AlertsPushAdd(in *alerts.PushSubscription, out *alerts.PushSubscription) (err error) {
+	defer rpcutil.LogCall(r.log, "AlertsPushAdd", nil)(nil, &err)
+	*out, err = r.visor.AlertsPushAdd(*in)
+	out.Keys = alerts.PushKeys{}
+	return err
+}
+
+// AlertsPushRemove removes push subscriptions.
+func (r *RPC) AlertsPushRemove(in *string, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "AlertsPushRemove", in)(out, &err)
+	*out, err = r.visor.AlertsPushRemove(*in)
+	return err
+}
+
 // AlertsStatus returns the alert settings and watch state.
 func (r *RPC) AlertsStatus(_ *struct{}, out *alerts.Status) (err error) {
 	defer rpcutil.LogCall(r.log, "AlertsStatus", nil)(nil, &err)
@@ -251,6 +285,37 @@ func (hv *Hypervisor) alertsRoutes(r *httputil.Router) {
 	r.Get("/visors/{pk}/alerts", hv.getAlerts())
 	r.Put("/visors/{pk}/alerts", hv.putAlerts())
 	r.Post("/visors/{pk}/alerts/test", hv.postAlertsTest())
+	r.Post("/visors/{pk}/alerts/push", hv.postAlertsPush())
+	r.Delete("/visors/{pk}/alerts/push/{id}", hv.deleteAlertsPush())
+}
+
+// postAlertsPush takes a browser's PushSubscription.toJSON() plus a label.
+func (hv *Hypervisor) postAlertsPush() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var sub alerts.PushSubscription
+		if err := httputil.ReadJSON(r, &sub); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		out, err := ctx.API.AlertsPushAdd(sub)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		out.Keys = alerts.PushKeys{}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
+	})
+}
+
+func (hv *Hypervisor) deleteAlertsPush() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		n, err := ctx.API.AlertsPushRemove(r.PathValue("id"))
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]int{"removed": n})
+	})
 }
 
 func (hv *Hypervisor) getAlerts() http.HandlerFunc {
