@@ -230,7 +230,7 @@ func encryptPush(sub PushSubscription, plaintext []byte, asKey *ecdh.PrivateKey,
 	// One record, so the padding delimiter is 2 (RFC 8188 section 2).
 	rec := append(append([]byte(nil), plaintext...), 2)
 
-	out := make([]byte, 0, 16+4+1+len(asRaw)+len(rec)+gcm.Overhead())
+	out := make([]byte, 0, 16+4+1+65+pushRecordSize)
 	out = append(out, salt...)
 	out = binary.BigEndian.AppendUint32(out, pushRecordSize)
 	out = append(out, byte(len(asRaw))) //nolint:gosec // 65, an uncompressed P-256 point
