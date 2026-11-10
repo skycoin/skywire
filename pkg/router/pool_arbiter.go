@@ -595,8 +595,8 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 }
 
 // releaseLegByTransport gives ONE pool-sourced leg back: by SPLIT when the exit
-// can take the chain back as a standby group of its own, by closing the
-// transport when it cannot.
+// can take the chain back as a standby group of its own, by retiring the leg
+// when it cannot.
 func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
 	idx, tp := rg.legByID(t.tpID)
 	if tp == nil || rg.releasableLegIndex(t.tpID) < 0 {
@@ -629,7 +629,7 @@ func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
 			return
 		}
 		rg.logger.WithError(err).Infof(
-			"Split of the leg taken from standby :%d is unavailable; closing its transport instead", t.from)
+			"Split of the leg taken from standby :%d is unavailable; retiring the leg instead", t.from)
 		if rg.releasableLegIndex(t.tpID) < 0 {
 			return
 		}
@@ -660,25 +660,29 @@ func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 	return idx
 }
 
-// closeReleasedLeg is the pre-split release: the leg's transport is closed and
-// the leg pruned, WITHOUT the self-heal top-up dropLegs triggers — the
-// release is deliberate, and re-dialing a replacement for a leg the group just
-// decided it does not need is the churn this whole file exists to avoid.
+// closeReleasedLeg is the pre-split release: the leg is retired on the peer and
+// pruned, WITHOUT the self-heal top-up dropLegs triggers — the release is
+// deliberate, and re-dialing a replacement for a leg the group just decided it
+// does not need is the churn this whole file exists to avoid.
+//
+// The transport is left open, as in dropLegs: other route groups may ride it.
+// It is closed only for a peer without CapLegState, which cannot be told.
 func (rg *RouteGroup) closeReleasedLeg(tpID uuid.UUID, reason string) {
 	rg.mu.Lock()
 	idx := rg.legIndexLocked(tpID)
-	if idx < 0 {
+	if idx < 0 || len(rg.legs) <= 1 {
 		rg.mu.Unlock()
 		return
 	}
-	tp := rg.legs[idx].tp
+	tp, fwd := rg.legs[idx].tp, rg.legs[idx].fwd
 	rg.noteLegEvent(MuxEventPoolLegReleased, reason, MuxByLocal, idx, len(rg.legs), tp, rg.legHopsLocked(tp.Entry.ID))
-	_ = tp.Close() //nolint:errcheck // the prune below drops it either way
-	dropped := rg.pruneDeadTransports()
-	rg.mu.Unlock()
-	for _, i := range dropped {
-		rg.fireLegChange("pool-released", i)
+	if rg.mux != nil && rg.mux.legStateEnabled && fwd != nil {
+		rg.retireLegOnPeer(tp, fwd)
+	} else {
+		_ = tp.Close() //nolint:errcheck // the prune below drops it either way
 	}
+	rg.mu.Unlock()
+	rg.removeLegsByID([]uuid.UUID{tpID}, reason, "pool-released")
 }
 
 // poolLegSource names where leg tpID came from, for `visor state` and the

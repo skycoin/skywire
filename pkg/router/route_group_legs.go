@@ -1543,6 +1543,17 @@ func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
 // that know the leg is gone for good (a transport the visor itself removed —
 // see handleTransportClosed) close the group instead.
 func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent string) int {
+	n := rg.removeLegsByID(deadIDs, reason, hookEvent)
+	if n > 0 {
+		rg.signalRotate()
+		rg.maybeSelfHeal()
+	}
+	return n
+}
+
+// removeLegsByID is pruneDeadLegs without the rotation wake and the self-heal
+// top-up, for a caller that removed the leg on purpose.
+func (rg *RouteGroup) removeLegsByID(deadIDs []uuid.UUID, reason, hookEvent string) int {
 	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
 	for _, id := range deadIDs {
 		deadSet[id] = struct{}{}
@@ -1607,8 +1618,6 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 	// and they can age out of the bounded retx buffer before the receiver asks.
 	// Resend them on a surviving leg now (a relay dropping mid-download).
 	rg.resendHeldOn(deadIDs, "prune")
-	rg.signalRotate()
-	rg.maybeSelfHeal()
 	return len(droppedIdx)
 }
 
