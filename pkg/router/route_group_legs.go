@@ -1729,18 +1729,28 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 	return droppedIdx
 }
 
-// pruneLegByConsumeRule removes the single mux leg whose consume (reverse) rule
-// matches routeID, WITHOUT closing the route group — the endpoint counterpart to
-// a remote peer retiring one leg (routing.CloseLegRetired). It reclaims that
-// leg's forward+consume rules and drops it from the mux, leaving the group and
-// its other legs live. Returns true if a leg was pruned; false if this is the
-// group's last leg (or the rule wasn't found), in which case the caller falls
-// back to a normal whole-group close. Mirrors pruneDeadTransports' slice/rule
-// bookkeeping; tolerates pruning index 0 exactly as the dead-transport path does
-// (the mux selector is rebuilt and legs[0]-hardcoded probes re-target the new
-// primary leg).
+// pruneLegByConsumeRule handles a remote peer retiring ONE consume rule of this
+// group (routing.CloseLegRetired) WITHOUT closing the route group. A leg's
+// consume rule takes its leg with it: the leg's forward+consume rules are
+// reclaimed and it leaves the mux. A reverse-only rule is no leg, so it is
+// deleted and nothing else changes. Returns true if the rule was retired;
+// false if it is on the group's last leg (or wasn't found), in which case the
+// caller falls back to a normal whole-group close. Mirrors pruneDeadTransports'
+// slice/rule bookkeeping; tolerates pruning index 0 exactly as the
+// dead-transport path does (the mux selector is rebuilt and legs[0]-hardcoded
+// probes re-target the new primary leg).
 func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	rg.mu.Lock()
+	for j, rv := range rg.rvsOnly {
+		if rv == nil || rv.KeyRouteID() != routeID {
+			continue
+		}
+		rg.rvsOnly = append(rg.rvsOnly[:j], rg.rvsOnly[j+1:]...)
+		rg.rt.DelRules([]routing.RouteID{routeID})
+		rg.logger.Infof("Retired remote reverse-only rule %d; %d legs remain", routeID, len(rg.legs))
+		rg.mu.Unlock()
+		return true
+	}
 	rvsCount := 0
 	idx := -1
 	for i := range rg.legs {
@@ -1753,16 +1763,6 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 			idx = i
 		}
 	}
-	// A reverse-only rule takes an index after the last leg.
-	for i, rv := range rg.rvsOnly {
-		if rv == nil {
-			continue
-		}
-		rvsCount++
-		if idx < 0 && rv.KeyRouteID() == routeID {
-			idx = len(rg.legs) + i
-		}
-	}
 	if len(rg.legs) <= 1 || rvsCount <= 1 {
 		rg.mu.Unlock()
 		return false // last leg — let the caller do a full close
@@ -1772,21 +1772,13 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 		return false
 	}
 
-	var deadRuleIDs []routing.RouteID
-	var retiredTp *transport.ManagedTransport
-	if idx < len(rg.legs) {
-		lg := rg.legs[idx]
-		if lg.fwd != nil {
-			deadRuleIDs = append(deadRuleIDs, lg.fwd.KeyRouteID())
-		}
-		deadRuleIDs = append(deadRuleIDs, lg.rvs.KeyRouteID())
-		retiredTp = lg.tp
-		rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
-	} else {
-		j := idx - len(rg.legs)
-		deadRuleIDs = append(deadRuleIDs, rg.rvsOnly[j].KeyRouteID())
-		rg.rvsOnly = append(rg.rvsOnly[:j], rg.rvsOnly[j+1:]...)
+	lg := rg.legs[idx]
+	deadRuleIDs := []routing.RouteID{lg.rvs.KeyRouteID()}
+	if lg.fwd != nil {
+		deadRuleIDs = append(deadRuleIDs, lg.fwd.KeyRouteID())
 	}
+	retiredTp := lg.tp
+	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	rg.forgetPeerPark(tpEntryID(retiredTp))
 	rg.noteLegEvent(MuxEventLegRemoved, "peer retired the leg (close: leg-retired)", MuxByRemote,
 		idx, len(rg.legs), retiredTp, rg.legHopsLocked(tpEntryID(retiredTp)))
@@ -1795,9 +1787,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 			Reason: "peer retired the primary leg"})
 	}
 
-	if len(deadRuleIDs) > 0 {
-		rg.rt.DelRules(deadRuleIDs)
-	}
+	rg.rt.DelRules(deadRuleIDs)
 	if rg.mux != nil {
 		rg.mux.removeLegs(idx)
 		rg.mux.rebuildWeights(rg.legs)

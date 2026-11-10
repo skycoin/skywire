@@ -78,3 +78,49 @@ func TestPruneLegByConsumeRuleUnknownRuleNoop(t *testing.T) {
 	rg.mu.Unlock()
 	require.Equal(t, 3, remaining, "unknown rule must not prune any leg")
 }
+
+// legChangeRecorder counts the leg-change hook's calls.
+type legChangeRecorder struct{ changes []LegChange }
+
+func (r *legChangeRecorder) OnLegChange(_ DialInfo, _ []LegInfo, c LegChange) DistributionConfig {
+	r.changes = append(r.changes, c)
+	return DistributionConfig{}
+}
+
+// TestRetireReverseOnlyRuleTouchesNoLeg retires a reverse-only rule. The rule
+// goes, and no leg, leg event or hook call is involved.
+func TestRetireReverseOnlyRuleTouchesNoLeg(t *testing.T) {
+	rg, _, _ := createMuxRouteGroup(t, 2)
+	rg.muxEvents = &muxEventRing{}
+	hook := &legChangeRecorder{}
+	rg.SetLegChangeHook(hook, DialInfo{})
+	const revOnlyID = routing.RouteID(300)
+	revOnly := routing.ConsumeRule(DefaultRouteKeepAlive, revOnlyID, rg.desc.SrcPK(), rg.desc.DstPK(), 2, 1)
+	require.NoError(t, rg.rt.SaveRule(revOnly))
+	rg.appendReverseLeg(revOnly)
+	rg.mux.setLegStandby(1, true)
+
+	require.True(t, rg.pruneLegByConsumeRule(revOnlyID), "the group stays")
+
+	_, err := rg.rt.Rule(revOnlyID)
+	require.Error(t, err, "the retired rule must be deleted")
+	rg.mu.Lock()
+	require.Empty(t, rg.rvsOnly)
+	require.Len(t, rg.legs, 2)
+	rg.mu.Unlock()
+	require.True(t, rg.mux.isLegStandby(1), "the mux must not be touched")
+	require.Zero(t, countEvents(rg, MuxEventLegRemoved), "no leg was removed")
+	require.Empty(t, hook.changes, "no leg changed")
+}
+
+// TestRetireReverseOnlyRuleOnSingleLegGroup checks the same retire does not
+// close a group that holds one leg.
+func TestRetireReverseOnlyRuleOnSingleLegGroup(t *testing.T) {
+	rg, _, _ := createMuxRouteGroup(t, 1)
+	const revOnlyID = routing.RouteID(300)
+	revOnly := routing.ConsumeRule(DefaultRouteKeepAlive, revOnlyID, rg.desc.SrcPK(), rg.desc.DstPK(), 2, 1)
+	require.NoError(t, rg.rt.SaveRule(revOnly))
+	rg.appendReverseLeg(revOnly)
+
+	require.True(t, rg.pruneLegByConsumeRule(revOnlyID), "the caller closes the group on false")
+}
