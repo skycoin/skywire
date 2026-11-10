@@ -124,3 +124,21 @@ func TestRetireReverseOnlyRuleOnSingleLegGroup(t *testing.T) {
 
 	require.True(t, rg.pruneLegByConsumeRule(revOnlyID), "the caller closes the group on false")
 }
+
+// TestRetireOneOfTwoLegsKeepsGroup retires the paired leg of a group whose
+// other leg is forward-only. One of two legs went, so the group stays.
+func TestRetireOneOfTwoLegsKeepsGroup(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+	rg.mu.Lock()
+	fwdOnlyRvs := rg.legs[1].rvs.KeyRouteID()
+	rg.legs[1].rvs = nil
+	rg.mu.Unlock()
+	rg.rt.DelRules([]routing.RouteID{fwdOnlyRvs})
+
+	require.True(t, rg.pruneLegByConsumeRule(routing.RouteID(0+100)), "the caller closes the group on false")
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Len(t, rg.legs, 1)
+	require.Equal(t, mts[1].Entry.ID, rg.legs[0].tp.Entry.ID)
+}

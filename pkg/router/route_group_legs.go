@@ -1751,25 +1751,11 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 		rg.mu.Unlock()
 		return true
 	}
-	rvsCount := 0
-	idx := -1
-	for i := range rg.legs {
-		rv := rg.legs[i].rvs
-		if rv == nil {
-			continue
-		}
-		rvsCount++
-		if idx < 0 && rv.KeyRouteID() == routeID {
-			idx = i
-		}
-	}
-	if len(rg.legs) <= 1 || rvsCount <= 1 {
+	// The floor is the leg count. A forward-only leg is still a leg.
+	idx := rg.legByConsumeRuleLocked(routeID)
+	if idx < 0 || len(rg.legs) <= 1 {
 		rg.mu.Unlock()
-		return false // last leg — let the caller do a full close
-	}
-	if idx < 0 {
-		rg.mu.Unlock()
-		return false
+		return false // unknown rule, or the last leg: the caller does a full close
 	}
 
 	lg := rg.legs[idx]
