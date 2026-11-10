@@ -3,7 +3,10 @@ import { Subscription } from 'rxjs';
 
 import { NodeComponent } from '../../node.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
-import { AlertsService, AlertsSettings, AlertsStatus, AlertsResult, alertDelays } from '../../../../../services/alerts.service';
+import {
+  AlertsService, AlertsSettings, AlertsStatus, AlertsResult, AlertsPushDevice, alertDelays,
+} from '../../../../../services/alerts.service';
+import { pushEnv, pushHint, subscribePush, currentPushEndpoint, deviceLabel } from '../../../../../utils/web-push';
 import { processServiceError } from '../../../../../utils/errors';
 
 /** The form, as the template binds it. */
@@ -120,8 +123,15 @@ export class NodeAlertsComponent implements OnInit, OnDestroy {
   saving = false;
   testing = false;
   testResults: AlertsResult[] | null = null;
+  /** The visor runs in a browser tab, which cannot watch. */
+  wasmVisor = false;
+  pushHint = '';
+  pushBusy = false;
+  pushError = '';
+  thisEndpoint = '';
 
   private sub: Subscription | null = null;
+  private nodeSub: Subscription | null = null;
 
   constructor(
     private alertsService: AlertsService,
@@ -131,16 +141,37 @@ export class NodeAlertsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.nodeKey = NodeComponent.getCurrentNodeKey();
+    this.nodeSub = NodeComponent.currentNode.subscribe(node => {
+      if ((node as any)?.arch === 'wasm' && !this.wasmVisor) {
+        this.wasmVisor = true;
+        this.loading = false;
+        if (this.sub) {
+          this.sub.unsubscribe();
+        }
+        this.changeDetectorRef.markForCheck();
+      }
+    });
+    this.pushHint = pushHint(pushEnv());
+    currentPushEndpoint().then(e => {
+      this.thisEndpoint = e;
+      this.changeDetectorRef.markForCheck();
+    }).catch(() => {});
     this.load();
   }
 
   ngOnDestroy() {
+    if (this.nodeSub) {
+      this.nodeSub.unsubscribe();
+    }
     if (this.sub) {
       this.sub.unsubscribe();
     }
   }
 
   load() {
+    if (this.wasmVisor) {
+      return;
+    }
     this.loading = true;
     if (this.sub) {
       this.sub.unsubscribe();
@@ -213,6 +244,52 @@ export class NodeAlertsComponent implements OnInit, OnDestroy {
         this.snackbarService.showError(err);
         this.changeDetectorRef.markForCheck();
       },
+    });
+  }
+
+  get pushDevices(): AlertsPushDevice[] {
+    return this.status?.settings.push || [];
+  }
+
+  get thisDeviceSubscribed(): boolean {
+    return !!this.thisEndpoint && this.pushDevices.some(d => d.endpoint === this.thisEndpoint);
+  }
+
+  /** Subscribes this browser to the visor's push alerts. */
+  async notifyThisDevice() {
+    const key = this.status?.push_public_key;
+    if (!key || this.pushHint) {
+      return;
+    }
+    this.pushBusy = true;
+    this.pushError = '';
+    this.changeDetectorRef.markForCheck();
+    try {
+      const sub = await subscribePush(key);
+      this.thisEndpoint = sub.endpoint;
+      this.alertsService.addPush(this.nodeKey, { ...sub, label: deviceLabel(navigator.userAgent) }).subscribe({
+        next: () => {
+          this.pushBusy = false;
+          this.snackbarService.showDone('This device gets push alerts now. Use Send test to try it.');
+          this.load();
+        },
+        error: err => {
+          this.pushBusy = false;
+          this.pushError = processServiceError(err).originalServerErrorMsg || 'The visor did not take the subscription.';
+          this.changeDetectorRef.markForCheck();
+        },
+      });
+    } catch (e: any) {
+      this.pushBusy = false;
+      this.pushError = (e && e.message) || String(e);
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  removePushDevice(d: AlertsPushDevice) {
+    this.alertsService.removePush(this.nodeKey, d.id).subscribe({
+      next: () => this.load(),
+      error: err => this.snackbarService.showError(err),
     });
   }
 }
