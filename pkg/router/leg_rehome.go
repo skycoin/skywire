@@ -459,6 +459,7 @@ func (rg *RouteGroup) detachLegForRehome(idx int, reason string) (*rehomeLeg, er
 		rg.mux.removeLegs(idx)
 		rg.mux.rebuildWeights(rg.tps)
 	}
+	rg.forgetPeerPark(tpEntryID(leg.tp))
 	rg.noteLegEvent(MuxEventLegRemoved, reason+": the chain left this group", MuxByLocal,
 		idx, len(rg.tps), leg.tp, leg.hops)
 	rg.mu.Unlock()

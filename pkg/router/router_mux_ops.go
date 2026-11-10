@@ -693,6 +693,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 		rg.mux.rebuildWeights(rg.tps)
 	}
 
+	rg.forgetPeerPark(tpID)
 	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.tps), removedTp,
 		rg.legHopsLocked(tpID))
 	if idx == 0 {

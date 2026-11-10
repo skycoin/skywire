@@ -552,13 +552,14 @@ type RouteGroup struct {
 	adaptiveParks map[uuid.UUID]adaptivePark
 	// peerParkMu guards peerParkedLegs. Leaf lock: NEVER held while taking rg.mu.
 	peerParkMu sync.Mutex
-	// peerParkedLegs holds the leg indices currently standby because the PEER said
+	// peerParkedLegs holds the legs, by transport ID, standby because the PEER said
 	// so (a mirrored CapLegState park), not because a controller here decided it.
 	// The leg-state resync re-broadcasts this side's OWN active/standby set to
 	// repair a dropped signal; re-asserting a park the peer originated instead
 	// pins the leg down from both ends, which is how a peer-mirrored park survived
-	// five downloads. Written by handleLegStatePacket, read by the resync.
-	peerParkedLegs map[int]struct{}
+	// five downloads. Written by handleLegStatePacket, read by the resync, and
+	// dropped when the leg leaves the group.
+	peerParkedLegs map[uuid.UUID]struct{}
 	// legRecvSnap is each leg's last-sampled rg-scoped RecvBytes, keyed by
 	// transport ID (survives index shifts), for the fast data-progress prune:
 	// an ACTIVE leg whose recv is flat across an interval while the group keeps

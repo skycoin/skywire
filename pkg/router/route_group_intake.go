@@ -609,25 +609,38 @@ func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
 // re-asserting standby. A promote (standby=false) clears the record, so the moment
 // the peer promotes the leg our resync owns it again.
 func (rg *RouteGroup) notePeerLegState(idx int, standby bool) {
+	id := tpEntryID(rg.legTransportAt(idx))
+	if id == uuid.Nil {
+		return
+	}
 	rg.peerParkMu.Lock()
 	defer rg.peerParkMu.Unlock()
 	if !standby {
-		delete(rg.peerParkedLegs, idx)
+		delete(rg.peerParkedLegs, id)
 		return
 	}
 	if rg.peerParkedLegs == nil {
-		rg.peerParkedLegs = make(map[int]struct{})
+		rg.peerParkedLegs = make(map[uuid.UUID]struct{})
 	}
-	rg.peerParkedLegs[idx] = struct{}{}
+	rg.peerParkedLegs[id] = struct{}{}
 }
 
 // legParkedByPeer reports whether leg idx's standby state was mirrored from the
 // peer rather than decided here.
 func (rg *RouteGroup) legParkedByPeer(idx int) bool {
+	id := tpEntryID(rg.legTransportAt(idx))
 	rg.peerParkMu.Lock()
 	defer rg.peerParkMu.Unlock()
-	_, ok := rg.peerParkedLegs[idx]
+	_, ok := rg.peerParkedLegs[id]
 	return ok
+}
+
+// forgetPeerPark drops the peer park of the leg on transport id, which has
+// left the group. Caller may hold rg.mu.
+func (rg *RouteGroup) forgetPeerPark(id uuid.UUID) {
+	rg.peerParkMu.Lock()
+	delete(rg.peerParkedLegs, id)
+	rg.peerParkMu.Unlock()
 }
 
 // sendLegState signals leg idx's new active/standby state to the remote so it

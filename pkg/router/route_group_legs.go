@@ -1602,6 +1602,7 @@ func (rg *RouteGroup) pruneDeadLegs(deadIDs []uuid.UUID, reason, hookEvent strin
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByAdaptive, LegIndex: 0,
 					Legs: remaining - 1, Reason: "primary leg failed " + reason})
 			}
+			rg.forgetPeerPark(tpEntryID(tp))
 			droppedIdx = append(droppedIdx, i)
 			remaining--
 			continue
@@ -1742,6 +1743,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 				rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByLocal, LegIndex: 0,
 					Legs: len(rg.tps) - len(droppedIdx) - 1, Reason: "primary leg's " + reason})
 			}
+			rg.forgetPeerPark(tpEntryID(tp))
 			droppedIdx = append(droppedIdx, i)
 		}
 	}
@@ -1826,6 +1828,7 @@ func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
 	if idx < len(rg.rvs) {
 		rg.rvs = append(rg.rvs[:idx], rg.rvs[idx+1:]...)
 	}
+	rg.forgetPeerPark(tpEntryID(retiredTp))
 	rg.noteLegEvent(MuxEventLegRemoved, "peer retired the leg (close: leg-retired)", MuxByRemote,
 		idx, len(rg.tps), retiredTp, rg.legHopsLocked(tpEntryID(retiredTp)))
 	if idx == 0 {
