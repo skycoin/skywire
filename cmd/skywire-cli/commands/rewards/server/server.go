@@ -1051,18 +1051,20 @@ func buildRouter() http.Handler {
 						w.Write([]byte("reward transaction for " + d + " refused:\n\n" + err.Error() + "\n\nBuild it from GET /skycoin-rewards/payout instead.")) //nolint:errcheck,gosec
 						return
 					}
-					//if all is well, broadcast the transaction
-					txid, err := script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
-					if err != nil {
+					// Broadcast, and record the transaction id for that day's reward.
+					marker := strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)
+					txid, err := broadcastAndRecord(marker, func() (string, error) {
+						return script.Exec("skywire skycoin cli broadcastTransaction " + string(body)).String()
+					})
+					if errors.Is(err, errUnrecorded) {
+						log.Errorf("reward transaction %s for %s was broadcast but not recorded: %v", strings.TrimSpace(txid), d, err)
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nskywire skycoin cli broadcastTransaction error:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.Write([]byte("THE TRANSACTION WAS BROADCAST. Do not send it again.\n\nWrite this transaction id to " + marker + " by hand:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
-					//record the transaction ID for that day's reward
-					_, err = script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))
 					if err != nil {
 						w.WriteHeader(http.StatusInternalServerError)
-						w.Write([]byte(`script.Echo(txid).WriteFile(strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1))\n\n` + txid + "\n\n" + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1) + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
+						w.Write([]byte("skywire skycoin cli broadcastTransaction:\n\n" + txid + "\n\nerror:\n\n" + err.Error())) //nolint:errcheck,gosec
 						return
 					}
 					//record the transaction ID for the reward notification system - append the file!

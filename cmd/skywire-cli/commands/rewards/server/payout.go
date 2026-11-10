@@ -2,6 +2,7 @@ package clirewardsserver
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,39 @@ var payoutAddressSpent = func(addr string) (bool, error) {
 		node = "http://127.0.0.1:6420"
 	}
 	return rewards.NodeAddressSpent(node)(addr)
+}
+
+// errUnrecorded marks a transaction that was broadcast but whose id could not
+// be written to the day's marker file.
+var errUnrecorded = errors.New("transaction broadcast but not recorded")
+
+// broadcastAndRecord reserves the day's marker file, broadcasts, then records
+// the transaction id. A marker that cannot be reserved stops the broadcast.
+func broadcastAndRecord(marker string, broadcast func() (string, error)) (string, error) {
+	pending := marker + ".pending"
+	f, err := os.OpenFile(pending, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec
+	if errors.Is(err, os.ErrExist) {
+		return "", fmt.Errorf("%s exists: an earlier send did not finish. Check the chain for it, then remove the file or write the transaction id to %s", pending, marker)
+	}
+	if err != nil {
+		return "", fmt.Errorf("reserve the marker file: %w", err)
+	}
+	txid, err := broadcast()
+	if err != nil {
+		_ = f.Close()          //nolint:errcheck
+		_ = os.Remove(pending) //nolint:errcheck
+		return txid, err
+	}
+	if _, err = f.WriteString(txid); err == nil {
+		err = f.Close()
+	}
+	if err == nil {
+		err = os.Rename(pending, marker)
+	}
+	if err != nil {
+		return txid, fmt.Errorf("%w: %v", errUnrecorded, err)
+	}
+	return txid, nil
 }
 
 // undistributed reports whether the day's rewards have not been sent: its
