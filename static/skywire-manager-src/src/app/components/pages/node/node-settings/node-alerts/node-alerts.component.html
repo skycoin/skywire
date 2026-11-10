@@ -7,14 +7,22 @@
     </div>
   }
 
-  @if (!loading && loadError) {
+  @if (wasmVisor) {
+    <p class="status">
+      This visor runs in a browser tab, which is not always on, so it cannot watch other visors.
+      Set alerts on an always-on native hypervisor instead, in the Settings of that hypervisor's own
+      visor. This page can still be the device that gets its push notifications.
+    </p>
+  }
+
+  @if (!loading && loadError && !wasmVisor) {
     <p class="status error">{{ loadError }}</p>
     <button mat-stroked-button class="secondary" (click)="load()">Retry</button>
   }
 
-  @if (!loading && status && !loadError) {
+  @if (!loading && status && !loadError && !wasmVisor) {
     <p class="status">
-      This visor mails you when a visor it watches has been offline for the delay below, and once more
+      This visor alerts you when a visor it watches has been offline for the delay below, and once more
       when it is back. A visor that returns within the delay sends nothing. It watches the visors its
       hypervisor manages. Changes apply at once.
     </p>
@@ -84,6 +92,41 @@
         <label>Username <input type="text" [(ngModel)]="form.username" spellcheck="false" autocomplete="off"></label>
         <label>Password <input type="password" [(ngModel)]="form.password" [placeholder]="passwordPlaceholder" autocomplete="new-password"></label>
         <mat-checkbox [(ngModel)]="form.starttls" color="primary">Require STARTTLS</mat-checkbox>
+      </div>
+    }
+
+    <div class="row">
+      <div class="about">
+        <div class="name">Push notifications</div>
+        <div class="help">
+          Alerts on this phone or computer as system notifications, even with this page closed.
+          No mail setup needed.
+        </div>
+      </div>
+      <div class="field">
+        <button mat-stroked-button class="secondary" [disabled]="pushBusy || !!pushHint || !status.push_public_key"
+          (click)="notifyThisDevice()">
+          {{ pushBusy ? 'Subscribing…' : (thisDeviceSubscribed ? 'Subscribe this device again' : 'Notify this device') }}
+        </button>
+      </div>
+    </div>
+    @if (pushHint) {
+      <p class="status hint">{{ pushHint }}</p>
+    }
+    @if (pushError) {
+      <p class="status error">{{ pushError }}</p>
+    }
+    @for (d of pushDevices; track d.id) {
+      <div class="device">
+        <span>{{ d.label || 'Device' }}</span>
+        @if (d.endpoint === thisEndpoint) {
+          <span class="this">this device</span>
+        }
+        @if (d.created) {
+          <span class="since">since {{ d.created | date:'mediumDate' }}</span>
+        }
+        <span class="spacer"></span>
+        <button mat-button class="secondary" (click)="removePushDevice(d)">Remove</button>
       </div>
     }
 

@@ -94,6 +94,11 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 			w.Header().Set("Cache-Control", "no-store")
 			_, _ = w.Write(wasmhv.ServiceWorkerFor(hv.servedUIVersion(), []string{"/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/browse.js", "/desk-boot.js", "/wasm_exec.js", "/skywire-worker.js", "/autoupdate.js"})) //nolint:errcheck
 			return
+		case "/push-sw.js":
+			// Shows the alerts this hypervisor pushes, for a dashboard that
+			// has no root service worker of its own.
+			serveJS(w, wasmhv.PushSWJS)
+			return
 		case "/browse.js":
 			serveJS(w, browseui.BrowseJS)
 			return

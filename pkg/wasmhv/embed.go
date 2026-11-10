@@ -71,6 +71,12 @@ var PWAManifest []byte
 //go:embed sw.js
 var ServiceWorkerJS []byte
 
+// PushSWJS is pkg/wasmhv/push-sw.js, the alert notification handlers. The
+// dashboard registers it alone as /push-sw.js, and sw.js carries a copy.
+//
+//go:embed push-sw.js
+var PushSWJS []byte
+
 // Real-origin mesh browser, served on the isolated browse origin B
 // (<id>.mesh.localhost) and the visor origin V.
 //
@@ -127,5 +133,6 @@ var WasmExecTinyGoJS []byte
 func ServiceWorkerFor(build string, precache []string) []byte {
 	list, _ := json.Marshal(precache) //nolint:errcheck // a []string always marshals
 	out := bytes.ReplaceAll(ServiceWorkerJS, []byte("__BUILD__"), []byte(build))
-	return bytes.ReplaceAll(out, []byte("__PRECACHE__"), list)
+	out = bytes.ReplaceAll(out, []byte("__PRECACHE__"), list)
+	return append(append(out, '\n'), PushSWJS...)
 }

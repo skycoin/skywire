@@ -22,6 +22,16 @@ export interface AlertsSettings {
   watch?: string[] | null;
   from?: string;
   disk_warn_percent?: number;
+  /** Read only here, changed through addPush and removePush. */
+  push?: AlertsPushDevice[] | null;
+}
+
+/** Mirrors pkg/alerts.PushSubscription as reads give it, without keys. */
+export interface AlertsPushDevice {
+  id: string;
+  endpoint: string;
+  label?: string;
+  created?: string;
 }
 
 export interface AlertsWatched {
@@ -50,6 +60,7 @@ export interface AlertsStatus {
   last_sent?: string;
   last_results?: AlertsResult[] | null;
   pending?: number;
+  push_public_key?: string;
 }
 
 /** The offline delay choices, all within the visor's 1m to 1h range. */
@@ -66,6 +77,8 @@ export const alertDelays = [
  *   GET  /api/visors/<pk>/alerts
  *   PUT  /api/visors/<pk>/alerts
  *   POST /api/visors/<pk>/alerts/test
+ *   POST /api/visors/<pk>/alerts/push
+ *   DELETE /api/visors/<pk>/alerts/push/<id>
  * the same calls `skywire cli visor alerts` makes over RPC.
  */
 @Injectable({
@@ -84,6 +97,15 @@ export class AlertsService {
 
   test(pk: string): Observable<AlertsResult[]> {
     return this.apiService.post(`visors/${pk}/alerts/test`) as Observable<AlertsResult[]>;
+  }
+
+  /** Subscribes a browser: PushSubscription.toJSON() plus a label. */
+  addPush(pk: string, sub: any): Observable<AlertsPushDevice> {
+    return this.apiService.post(`visors/${pk}/alerts/push`, sub) as Observable<AlertsPushDevice>;
+  }
+
+  removePush(pk: string, id: string): Observable<any> {
+    return this.apiService.delete(`visors/${pk}/alerts/push/${id}`);
   }
 
   /** Drops an offline visor from the hypervisor's remembered list. */

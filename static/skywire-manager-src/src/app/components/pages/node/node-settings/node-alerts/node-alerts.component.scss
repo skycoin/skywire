@@ -27,6 +27,28 @@
   .port { width: 70px; }
 }
 
+.hint {
+  opacity: 0.85;
+}
+
+.device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  font-size: 13px;
+
+  .this {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: rgba(var(--sw-fg-rgb), 0.12);
+  }
+
+  .since { opacity: 0.7; }
+  .spacer { flex: 1; }
+}
+
 .watched {
   margin-top: 8px;
   margin-bottom: 0;
