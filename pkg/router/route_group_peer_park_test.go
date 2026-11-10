@@ -16,7 +16,12 @@ func peerParkLeg(t *testing.T, rg *RouteGroup, idx int) {
 	rid := rg.legs[idx].rvs.KeyRouteID()
 	rg.mu.Unlock()
 	require.NoError(t, rg.handleLegStatePacket(routing.MakeLegStatePacket(rid, true)))
-	require.True(t, rg.legParkedByPeer(idx))
+	require.True(t, peerParkedAt(rg, idx))
+}
+
+// peerParkedAt reports whether the leg now at idx is parked by the peer.
+func peerParkedAt(rg *RouteGroup, idx int) bool {
+	return rg.legParkedByPeer(tpEntryID(rg.legTransportAt(idx)))
 }
 
 func peerParkCount(rg *RouteGroup) int {
@@ -35,8 +40,8 @@ func TestPeerParkFollowsLegAcrossPrune(t *testing.T) {
 	require.Equal(t, 1, rg.pruneDeadLegs([]uuid.UUID{mts[1].Entry.ID}, "test", "test"))
 
 	require.True(t, rg.mux.isLegStandby(2), "the parked leg moved from index 3 to 2")
-	require.True(t, rg.legParkedByPeer(2), "the peer park must follow its leg to index 2")
-	require.False(t, rg.legParkedByPeer(1), "the leg now at index 1 was never parked by the peer")
+	require.True(t, peerParkedAt(rg, 2), "the peer park must follow its leg to index 2")
+	require.False(t, peerParkedAt(rg, 1), "the leg now at index 1 was never parked by the peer")
 }
 
 // TestPeerParkFollowsLegAcrossPrimarySwap covers the other index change.
@@ -52,8 +57,8 @@ func TestPeerParkFollowsLegAcrossPrimarySwap(t *testing.T) {
 	rg.mux.swapLegs(1, 2)
 	rg.mu.Unlock()
 
-	require.True(t, rg.legParkedByPeer(1))
-	require.False(t, rg.legParkedByPeer(2))
+	require.True(t, peerParkedAt(rg, 1))
+	require.False(t, peerParkedAt(rg, 2))
 }
 
 // TestPeerParkDroppedWithLeg checks every removal path forgets the park, so a
@@ -82,7 +87,7 @@ func TestPeerParkDroppedWithLeg(t *testing.T) {
 			require.NoError(t, r.RemoveMuxRouteByTransport(rg.desc, rg.legTransportAt(idx).Entry.ID))
 		},
 		"re-home away": func(t *testing.T, rg *RouteGroup, idx int) {
-			_, err := rg.detachLegForRehome(idx, "test")
+			_, err := rg.detachLegForRehome(rg.legTransportAt(idx).Entry.ID, "test")
 			require.NoError(t, err)
 		},
 	}

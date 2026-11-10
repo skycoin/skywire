@@ -620,19 +620,17 @@ func (rg *RouteGroup) nextRetxTransport(avoid uuid.UUID) (*transport.ManagedTran
 	return rg.mux.selectRetxTransport(rg.legs, avoid)
 }
 
-// dropLegsByIndex removes the legs at the policy-supplied indices from this
-// group and fires OnLegChange. It never drops the last alive leg.
+// dropLegs removes the legs on the given transports from this group and fires
+// OnLegChange. It never drops the last alive leg.
 //
 // The transport is left open: other route groups may ride it, and closing
 // it would prune or close them too. The peer is told with CloseLegRetired so
 // it stops sending on the leg. A peer without CapLegState predates that
 // signal and would close the whole group, so for it the transport is closed.
 //
-// Indices come from the policy's view of the leg slice at tick
-// time; the snapshot the policy saw might be stale by the time
-// we mutate (concurrent prune from keep-alive loop), so we treat
-// out-of-range indices as no-ops rather than errors.
-func (rg *RouteGroup) dropLegsByIndex(indices []int) {
+// The caller names legs by transport ID, so a leg pruned since the decision
+// is skipped and no other leg is dropped in its place.
+func (rg *RouteGroup) dropLegs(want []uuid.UUID) {
 	const reason = "policy rotation: on_tick asked to drop this leg"
 	rg.mu.Lock()
 	aliveCount := 0
@@ -642,15 +640,16 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 			aliveCount++
 		}
 	}
-	dropped := make([]int, 0, len(indices))
-	ids := make([]uuid.UUID, 0, len(indices))
+	dropped := make([]int, 0, len(want))
+	ids := make([]uuid.UUID, 0, len(want))
 	canRetire := rg.mux != nil && rg.mux.legStateEnabled
-	for _, idx := range indices {
-		if idx < 0 || idx >= len(rg.legs) {
+	for _, id := range want {
+		idx := rg.legIndexLocked(id)
+		if idx < 0 {
 			continue
 		}
 		tp := rg.legs[idx].tp
-		if tp == nil || tp.IsClosed() || slices.Contains(ids, tp.Entry.ID) {
+		if tp.IsClosed() || slices.Contains(ids, id) {
 			continue
 		}
 		if aliveCount <= 1 {
@@ -995,10 +994,11 @@ func pickPrimaryReelectionWith(kn *routersettings.View, legs []bandLeg, tight bo
 // the byte stream continues uninterrupted. The displaced old primary lands at
 // newIdx as an ordinary (now demotable) leg, to be parked by the band pass if it
 // is out of band. Caller must NOT hold rg.mu.
-func (rg *RouteGroup) reelectPrimary(newIdx int) {
+func (rg *RouteGroup) reelectPrimary(id uuid.UUID) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if newIdx <= 0 || newIdx >= len(rg.legs) {
+	newIdx := rg.legIndexLocked(id)
+	if newIdx <= 0 || rg.mux.isLegStandby(newIdx) {
 		return
 	}
 	rg.legs[0], rg.legs[newIdx] = rg.legs[newIdx], rg.legs[0]
@@ -1076,6 +1076,11 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	}
 	rg.mu.Lock()
 	tpsCopy := legTransports(rg.legs)
+	shown := rg.legIDsLocked()
+	standbyAt := make([]bool, len(tpsCopy))
+	for i := range tpsCopy {
+		standbyAt[i] = rg.mux.isLegStandby(i)
+	}
 	rg.mu.Unlock()
 
 	// The evidence rate is measured on the SEND path — SACK-acknowledged bytes per
@@ -1144,7 +1149,7 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	// (uploads x0.06-0.12). With demotion off the detector is purely
 	// OBSERVATIONAL: it records the ruling and changes nothing.
 	if SBDDemote() {
-		rg.mux.SetLegGroups(groups)
+		rg.setLegGroupsFor(shown, groups)
 	} else {
 		rg.mux.SetLegGroups(nil)
 	}
@@ -1158,14 +1163,16 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 		legs = append(legs, bottleneckLeg{
 			idx:     i,
 			group:   groups[i],
-			standby: rg.mux.isLegStandby(i),
+			standby: standbyAt[i],
 			primary: i == 0,
 			goodput: recvDeltas[tp.Entry.ID],
 			latMs:   rg.legBandLatencyMs(tp),
 		})
 	}
 	demote := pickBottleneckDemotions(legs)
-	demote = rg.keepReverseFloor(demote, recvDeltas)
+	// The floor is checked against the legs as they are now, by identity.
+	kept := rg.keepReverseFloor(legIDsAt(shown, demote), recvDeltas)
+	demote = slices.DeleteFunc(demote, func(i int) bool { return !slices.Contains(kept, shown[i]) })
 	if len(demote) == 0 {
 		return
 	}
@@ -1203,29 +1210,23 @@ func (rg *RouteGroup) enforceBottleneckGroups(recvDeltas map[uuid.UUID]uint64) {
 	// 01:06:35.615 landed before row 1 moved a byte and all 15 rows after them ran
 	// single-leg at x0.81 (50 MB) and x0.68 (10 MB) against the paired reference,
 	// where the same route pair with parking off gave x1.13.
-	for _, idx := range demote {
-		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby on TRIAL (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost). Aggregate goodput now %.0f B/s; if it falls more than %.0f%% within %v the park is undone",
-			idx, groups[idx], sendRate, SBDTrialLoss()*100, SBDTrialWindow())
-		rg.mux.setLegStandby(idx, true)
-		if idx < len(tpsCopy) && tpsCopy[idx] != nil {
-			// The ruling is provisional: record the pre-park aggregate rate and the
-			// active leg this one was judged redundant against, so the next tick can
-			// undo the park if it cost the group capacity (see sbd_trial.go).
-			var keeperID uuid.UUID
-			if k := sbdGroupKeeper(legs, demote, idx); k >= 0 && k < len(tpsCopy) && tpsCopy[k] != nil {
-				keeperID = tpsCopy[k].Entry.ID
-			}
-			rg.beginSBDTrial(tpsCopy[idx].Entry.ID, keeperID, sendRate)
-			rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two) — on trial until the aggregate goodput is re-read", MuxByAdaptive, idx, len(tpsCopy), tpsCopy[idx], nil)
-			// Start the park's minimum hold so the latency band — which runs later
-			// in THIS same data-progress tick and is blind to the grouping — cannot
-			// re-admit the leg on the spot (the measured 5s park/promote flap).
-			rg.noteAdaptivePark(tpsCopy[idx].Entry.ID, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)")
+	for _, shownIdx := range demote {
+		id := shown[shownIdx]
+		idx, tp, ok := rg.setLegStandbyByID(id, true)
+		if !ok {
+			continue // pruned or made primary since the ruling
 		}
-		// Mirror the park to the remote (CapLegState) so the bulk-sending peer
-		// stops striping across this leg — without this the native park is
-		// send-side-only here and the peer keeps spraying the download over it.
-		rg.sendLegState(idx, true)
+		rg.logger.Infof("shared-bottleneck: parking leg %d to warm standby on TRIAL (co-bottlenecked with a kept active leg in group %d — one pipe, not two; striping it adds only reorder cost). Aggregate goodput now %.0f B/s; if it falls more than %.0f%% within %v the park is undone",
+			idx, groups[shownIdx], sendRate, SBDTrialLoss()*100, SBDTrialWindow())
+		// The ruling is provisional: record the pre-park aggregate rate and the
+		// active leg this one was judged redundant against (see sbd_trial.go).
+		rg.beginSBDTrial(id, sbdLegID(tpsCopy, sbdGroupKeeper(legs, demote, shownIdx)), sendRate)
+		rg.noteLegEvent(MuxEventLegParked, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two) — on trial until the aggregate goodput is re-read", MuxByAdaptive, idx, rg.legCount(), tp, nil)
+		// Hold the park so the latency band, later in this same tick, cannot
+		// re-admit the leg on the spot.
+		rg.noteAdaptivePark(id, "shared bottleneck: co-bottlenecked with a kept active leg (one pipe, not two)")
+		// Mirror the park so the bulk-sending peer stops striping across this leg.
+		rg.sendLegStateByID(id, true)
 	}
 }
 
@@ -1254,6 +1255,80 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 	// homogeneous and stops the frontier-stall → prune → collapse spiral. In
 	// ECF/failover mode the wider band is fine (only one leg carries data).
 	tight := rg.mux.distributionMode() == WeightModeCapacity
+	legs, shown := rg.bandLegsLocked(recvDeltas)
+	rg.mu.Unlock()
+
+	// If the primary slot itself is a gross latency outlier, re-elect a healthier
+	// active leg into it (make-before-break) BEFORE the band pass. The primary is
+	// exempt from demotion, so without this a bad leg that lands at index 0 (a
+	// LAN-artifact or a self-healed multi-second leg) anchors the active set off-
+	// band forever. After the swap the leg indices have changed, so rebuild the
+	// list; the displaced old primary is now an ordinary leg the band pass can
+	// park.
+	if newPrimary, ok := pickPrimaryReelectionWith(rg.knobs(), legs, tight); ok {
+		rg.reelectPrimary(shown[newPrimary])
+		rg.mu.Lock()
+		legs, shown = rg.bandLegsLocked(recvDeltas)
+		rg.mu.Unlock()
+	}
+
+	// The partition speaks in indices of the snapshot above. Every decision
+	// leaves here as a transport ID.
+	demoteIdx, promoteIdx := partitionLatencyBandWith(rg.knobs(), legs, manual, tight)
+	demote := rg.keepReverseFloor(legIDsAt(shown, demoteIdx), recvDeltas)
+	promote := legIDsAt(shown, promoteIdx)
+	// Per-leg diagnostics: the rendered statistic each decision was taken on, so
+	// the log line and the leg event name the number AND what it is.
+	statOf := make(map[uuid.UUID]string, len(legs))
+	for _, l := range legs {
+		statOf[shown[l.idx]] = bandStatLabel(l.latMs, l.windowed)
+	}
+	if len(demote) > 0 || len(promote) > 0 {
+		mode := "adaptive"
+		if manual {
+			mode = "manual"
+		}
+		band := "wide"
+		if tight {
+			band = "tight"
+		}
+		rg.logger.Infof("latency-band[%s/%s]: %d active legs, demote=%v promote=%v", mode, band, len(legs), demote, promote)
+	}
+	for _, id := range demote {
+		idx, bandTp, ok := rg.setLegStandbyByID(id, true)
+		if !ok {
+			continue // pruned or made primary since the band was read
+		}
+		rg.logger.Infof("latency-band: parking leg %d to warm standby (%s out-of-band, keeping the active stripe set homogeneous)", idx, statOf[id])
+		reason := fmt.Sprintf("latency band: %s is out of the active set's band", statOf[id])
+		rg.noteLegEvent(MuxEventLegParked, reason, MuxByAdaptive, idx, rg.legCount(), bandTp, nil)
+		rg.noteAdaptivePark(id, reason)
+		// Mirror to the remote so the bulk sender stops striping across this leg
+		// (CapLegState) — the native park is otherwise send-side-only here.
+		rg.sendLegStateByID(id, true)
+	}
+	for _, id := range promote {
+		// Through the hysteresis seam: a leg another controller just parked (say
+		// as co-bottlenecked) is still perfectly in-band, so without the hold the
+		// band re-admits it microseconds after the park and the two controllers
+		// flap the leg once per tick.
+		if !rg.promoteLegAdaptive(id, fmt.Sprintf("latency band: %s back within the active set's band", statOf[id])) {
+			continue
+		}
+		rg.logger.Infof("latency-band: re-admitting leg on %s to active (%s back within band)", id, statOf[id])
+	}
+	if len(demote) > 0 || len(promote) > 0 {
+		rg.mu.Lock()
+		if rg.mux != nil {
+			rg.mux.rebuildWeights(rg.legs)
+		}
+		rg.mu.Unlock()
+	}
+}
+
+// bandLegsLocked reads the latency band's inputs for every live leg, and the
+// transport ID of each leg index they were read at. Caller holds rg.mu.
+func (rg *RouteGroup) bandLegsLocked(recvDeltas map[uuid.UUID]uint64) ([]bandLeg, []uuid.UUID) {
 	legs := make([]bandLeg, 0, len(rg.legs))
 	for i, lg := range rg.legs {
 		tp := lg.tp
@@ -1270,92 +1345,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 			recvDelta: recvDeltas[tp.Entry.ID],
 		})
 	}
-	rg.mu.Unlock()
-
-	// If the primary slot itself is a gross latency outlier, re-elect a healthier
-	// active leg into it (make-before-break) BEFORE the band pass. The primary is
-	// exempt from demotion, so without this a bad leg that lands at index 0 (a
-	// LAN-artifact or a self-healed multi-second leg) anchors the active set off-
-	// band forever. After the swap the leg indices have changed, so rebuild the
-	// list; the displaced old primary is now an ordinary leg the band pass can
-	// park.
-	if newPrimary, ok := pickPrimaryReelectionWith(rg.knobs(), legs, tight); ok {
-		rg.reelectPrimary(newPrimary)
-		rg.mu.Lock()
-		legs = legs[:0]
-		for i, lg := range rg.legs {
-			tp := lg.tp
-			if tp == nil || tp.IsClosed() {
-				continue
-			}
-			latMs, windowed := rg.legBandMinLatencyMs(tp)
-			legs = append(legs, bandLeg{
-				idx:       i,
-				latMs:     latMs,
-				windowed:  windowed,
-				standby:   rg.mux.isLegStandby(i),
-				primary:   i == 0,
-				recvDelta: recvDeltas[tp.Entry.ID],
-			})
-		}
-		rg.mu.Unlock()
-	}
-
-	demote, promote := partitionLatencyBandWith(rg.knobs(), legs, manual, tight)
-	demote = rg.keepReverseFloor(demote, recvDeltas)
-	// Per-leg diagnostics: the rendered statistic each decision was taken on, so
-	// the log line and the leg event name the number AND what it is.
-	statOf := make(map[int]string, len(legs))
-	for _, l := range legs {
-		statOf[l.idx] = bandStatLabel(l.latMs, l.windowed)
-	}
-	if len(demote) > 0 || len(promote) > 0 {
-		mode := "adaptive"
-		if manual {
-			mode = "manual"
-		}
-		band := "wide"
-		if tight {
-			band = "tight"
-		}
-		rg.logger.Infof("latency-band[%s/%s]: %d active legs, demote=%v promote=%v", mode, band, len(legs), demote, promote)
-	}
-	for _, idx := range demote {
-		rg.logger.Infof("latency-band: parking leg %d to warm standby (%s out-of-band, keeping the active stripe set homogeneous)", idx, statOf[idx])
-		rg.mux.setLegStandby(idx, true)
-		rg.mu.Lock()
-		var bandTp *transport.ManagedTransport
-		if idx < len(rg.legs) {
-			bandTp = rg.legs[idx].tp
-		}
-		bandLegs := len(rg.legs)
-		rg.mu.Unlock()
-		if bandTp != nil {
-			reason := fmt.Sprintf("latency band: %s is out of the active set's band", statOf[idx])
-			rg.noteLegEvent(MuxEventLegParked, reason, MuxByAdaptive, idx, bandLegs, bandTp, nil)
-			rg.noteAdaptivePark(bandTp.Entry.ID, reason)
-		}
-		// Mirror to the remote so the bulk sender stops striping across this leg
-		// (CapLegState) — the native park is otherwise send-side-only here.
-		rg.sendLegState(idx, true)
-	}
-	for _, idx := range promote {
-		// Through the hysteresis seam: a leg another controller just parked (say
-		// as co-bottlenecked) is still perfectly in-band, so without the hold the
-		// band re-admits it microseconds after the park and the two controllers
-		// flap the leg once per tick.
-		if !rg.promoteLegAdaptive(idx, fmt.Sprintf("latency band: %s back within the active set's band", statOf[idx])) {
-			continue
-		}
-		rg.logger.Infof("latency-band: re-admitting leg %d to active (%s back within band)", idx, statOf[idx])
-	}
-	if len(demote) > 0 || len(promote) > 0 {
-		rg.mu.Lock()
-		if rg.mux != nil {
-			rg.mux.rebuildWeights(rg.legs)
-		}
-		rg.mu.Unlock()
-	}
+	return legs, rg.legIDsLocked()
 }
 
 // keepReverseFloor filters a park-controller's demote list so it never strands
@@ -1376,7 +1366,7 @@ func (rg *RouteGroup) enforceLatencyBand(recvDeltas map[uuid.UUID]uint64) {
 // (Direct == flipped). Non-directional groups have no forward/reverse split and
 // are returned unchanged. Stalled-leg parking (leg-dataprogress) is deliberately
 // NOT guarded — a dead sole reverse leg must still be parked/pruned.
-func (rg *RouteGroup) keepReverseFloor(demote []int, recvDeltas map[uuid.UUID]uint64) []int {
+func (rg *RouteGroup) keepReverseFloor(demote []uuid.UUID, recvDeltas map[uuid.UUID]uint64) []uuid.UUID {
 	if len(demote) == 0 || rg.mux == nil {
 		return demote
 	}
@@ -1384,13 +1374,11 @@ func (rg *RouteGroup) keepReverseFloor(demote []int, recvDeltas map[uuid.UUID]ui
 	if !directional {
 		return demote
 	}
+	// One lock for the legs, their standby state and the demote list's indices.
 	rg.mu.Lock()
-	tps := legTransports(rg.legs)
-	rg.mu.Unlock()
-
-	// Collect the active (non-standby) download-class legs with their goodput.
 	var activeDL []legGoodput
-	for i, tp := range tps {
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil || tp.IsClosed() || rg.mux.isLegStandby(i) {
 			continue
 		}
@@ -1400,17 +1388,24 @@ func (rg *RouteGroup) keepReverseFloor(demote []int, recvDeltas map[uuid.UUID]ui
 		activeDL = append(activeDL, legGoodput{idx: i, gp: recvDeltas[tp.Entry.ID]})
 	}
 	demoteSet := make(map[int]bool, len(demote))
-	for _, d := range demote {
-		demoteSet[d] = true
+	for _, id := range demote {
+		if i := rg.legIndexLocked(id); i >= 0 {
+			demoteSet[i] = true
+		}
 	}
 	rescue := reverseFloorRescue(activeDL, demoteSet)
+	var rescueID uuid.UUID
+	if rescue >= 0 {
+		rescueID = tpEntryID(rg.legs[rescue].tp)
+	}
+	rg.mu.Unlock()
 	if rescue < 0 {
 		return demote // floor already met, or no active download leg is being parked
 	}
-	out := make([]int, 0, len(demote))
-	for _, d := range demote {
-		if d != rescue {
-			out = append(out, d)
+	out := make([]uuid.UUID, 0, len(demote))
+	for _, id := range demote {
+		if id != rescueID {
+			out = append(out, id)
 		}
 	}
 	rg.logger.Infof("reverse-floor: keeping active download leg %d active (parking it would strand reverse_active=0; the bulk sender needs an active reverse set to confine to, else it sprays download across standby)", rescue)
@@ -1467,7 +1462,7 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 		// ACCEPTOR: the active set is the initiator's mirror, not ours to size —
 		// the same rule enforceBottleneckGroups and enforceLatencyBand already
 		// obey. Parking here is worse than re-admitting, because the park is
-		// mirrored BACK over CapLegState (sendLegState below) and the initiator
+		// mirrored BACK over CapLegState (sendLegStateByID below) and the initiator
 		// adopts it: measured on a composed 2x2 run, seven leg_parked events all
 		// arrived as by=peer mirrors, four of them mid-set on one 201.8 ms leg,
 		// and a 15 s all-paths blackout sat inside one such park window. Report
@@ -1476,34 +1471,24 @@ func (rg *RouteGroup) demoteStalledLegs(deadIDs []uuid.UUID) {
 		rg.reportStalledLegs(deadSet)
 		return
 	}
-	rg.mu.Lock()
-	var idxs []int
-	var parkedIDs []uuid.UUID
-	for i, lg := range rg.legs {
-		tp := lg.tp
-		if i == 0 || tp == nil {
-			continue // never park the primary anchor
+	const reason = "data progress stalled with an open reorder gap (parked to standby, rules kept)"
+	parked := false
+	for _, id := range deadIDs {
+		// The primary anchor is never parked, and a leg pruned since is skipped.
+		idx, tp, ok := rg.setLegStandbyByID(id, true)
+		if !ok {
+			continue
 		}
-		if _, dead := deadSet[tp.Entry.ID]; dead {
-			idxs = append(idxs, i)
-			rg.noteLegEvent(MuxEventLegParked, "data progress stalled with an open reorder gap (parked to standby, rules kept)",
-				MuxByAdaptive, i, len(rg.legs), tp, rg.legHopsLocked(tp.Entry.ID))
-			parkedIDs = append(parkedIDs, tp.Entry.ID)
-		}
-	}
-	rg.mu.Unlock()
-	for _, id := range parkedIDs {
+		parked = true
+		rg.noteLegEvent(MuxEventLegParked, reason, MuxByAdaptive, idx, rg.legCount(), tp, rg.legHopsFor(id))
 		// Hold this park too: a stalled leg that is otherwise in-band must not be
 		// re-admitted by the latency band on the very next tick.
-		rg.noteAdaptivePark(id, "data progress stalled with an open reorder gap (parked to standby, rules kept)")
-	}
-	for _, i := range idxs {
-		rg.mux.setLegStandby(i, true)
+		rg.noteAdaptivePark(id, reason)
 		// Mirror to the remote so it also stops sending on the dead leg
 		// (CapLegState); the native park is otherwise send-side-only here.
-		rg.sendLegState(i, true)
+		rg.sendLegStateByID(id, true)
 	}
-	if len(idxs) > 0 {
+	if parked {
 		rg.mu.Lock()
 		if rg.mux != nil {
 			rg.mux.rebuildWeights(rg.legs)

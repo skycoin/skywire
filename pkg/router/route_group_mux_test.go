@@ -20,6 +20,7 @@ type workingTransport struct {
 	closed   chan struct{}
 	pk1, pk2 cipher.PubKey
 	onWrite  func([]byte) // optional, sees every write
+	writeErr error        // optional, returned by every write after onWrite
 }
 
 func newWorkingTransport() *workingTransport {
@@ -39,6 +40,9 @@ func (t *workingTransport) Write(b []byte) (int, error) {
 	default:
 		if t.onWrite != nil {
 			t.onWrite(append([]byte(nil), b...))
+		}
+		if t.writeErr != nil {
+			return 0, t.writeErr
 		}
 		return len(b), nil // Succeed immediately
 	}
