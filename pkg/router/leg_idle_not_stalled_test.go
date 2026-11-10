@@ -73,7 +73,7 @@ func TestPeerLegStateIsAnEvent(t *testing.T) {
 	rg.mux.legStateEnabled = true
 
 	rg.mu.Lock()
-	rid := rg.rvs[1].KeyRouteID()
+	rid := rg.legs[1].rvs.KeyRouteID()
 	rg.mu.Unlock()
 
 	require.NoError(t, rg.handleLegStatePacket(routing.MakeLegStatePacket(rid, true)))

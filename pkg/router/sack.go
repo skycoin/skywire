@@ -197,7 +197,7 @@ type retxEntry struct {
 	// window (measured live: a whole-window flush duplicated 33.8MB against
 	// 14.7MB of payload on one leg of a 20MB transfer). The tag is the
 	// transport identity, NOT the leg index: indices shift whenever
-	// pruneDeadTransports compacts tps[] after a leg drop, and an index tag
+	// pruneDeadTransports compacts legs after a leg drop, and an index tag
 	// went stale exactly then — the flush missed genuinely stranded sequences
 	// and the receiver's no-skip frontier wedged into a retransmit storm.
 	tpID uuid.UUID

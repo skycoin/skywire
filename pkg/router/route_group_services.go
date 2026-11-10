@@ -126,7 +126,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 
 	// Promote/demote first: they only flip the mux's per-leg standby flag (no
 	// teardown, no compaction), so they must run on the pre-drop indices. A
-	// demoted leg stays in tps[] — kept alive by the keepalive/liveness loops —
+	// demoted leg stays in legs — kept alive by the keepalive/liveness loops —
 	// but is skipped by selectTransport; promoting re-selects it instantly.
 	demoted := false
 	if rg.mux != nil {
@@ -176,8 +176,8 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		rg.mu.Lock()
 		demotedTps := make([]uuid.UUID, 0, len(action.DemoteToStandby))
 		for _, idx := range action.DemoteToStandby {
-			if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil {
-				demotedTps = append(demotedTps, rg.tps[idx].Entry.ID)
+			if idx >= 0 && idx < len(rg.legs) && rg.legs[idx].tp != nil {
+				demotedTps = append(demotedTps, rg.legs[idx].tp.Entry.ID)
 			}
 		}
 		rg.mu.Unlock()
@@ -192,7 +192,7 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 	if len(action.DropLegs) > 0 {
 		// A dropped ACTIVE leg strands its in-flight sequences exactly as a
 		// demote does, and closing it means no SACK round-trip will ever be
-		// answered on it. Name its transports before the drop compacts tps[],
+		// answered on it. Name its transports before the drop compacts legs,
 		// then resend their held sequences onto a surviving leg — the same
 		// narrowed flush as the demote above. Without it an aged-out sequence
 		// left the receiver's no-skip reorder gap open for good and the stream
@@ -201,8 +201,8 @@ func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
 		if rg.mux != nil {
 			rg.mu.Lock()
 			for _, idx := range action.DropLegs {
-				if idx >= 0 && idx < len(rg.tps) && rg.tps[idx] != nil && !rg.mux.isLegStandby(idx) {
-					droppedTps = append(droppedTps, rg.tps[idx].Entry.ID)
+				if idx >= 0 && idx < len(rg.legs) && rg.legs[idx].tp != nil && !rg.mux.isLegStandby(idx) {
+					droppedTps = append(droppedTps, rg.legs[idx].tp.Entry.ID)
 				}
 			}
 			rg.mu.Unlock()
@@ -248,12 +248,13 @@ func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
 		id   uuid.UUID
 	}
 	rg.mu.Lock()
-	probes := make([]legProbe, 0, len(rg.tps))
-	for i, tp := range rg.tps {
-		if tp == nil || tp.IsClosed() || i >= len(rg.fwd) {
+	probes := make([]legProbe, 0, len(rg.legs))
+	for _, lg := range rg.legs {
+		tp := lg.tp
+		if tp == nil || tp.IsClosed() || lg.fwd == nil {
 			continue
 		}
-		probes = append(probes, legProbe{tp: tp, rule: rg.fwd[i], id: tp.Entry.ID})
+		probes = append(probes, legProbe{tp: tp, rule: lg.fwd, id: tp.Entry.ID})
 	}
 	rg.mu.Unlock()
 
@@ -447,7 +448,7 @@ func (rg *RouteGroup) legStateResyncServiceFn(_ time.Duration) {
 		return
 	}
 	rg.mu.Lock()
-	n := len(rg.tps)
+	n := len(rg.legs)
 	rg.mu.Unlock()
 	// sendLegState / isLegStandby are each individually bounds-checked and take
 	// their own locks, so the leg set changing mid-loop is safe (a since-removed
@@ -472,7 +473,7 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	}
 
 	rg.mu.Lock()
-	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	tpsCopy := legTransports(rg.legs)
 	manual := !rg.standbyNewLegs
 	rg.mu.Unlock()
 
@@ -666,8 +667,8 @@ func (rg *RouteGroup) legDataProgressServiceFn(_ time.Duration) {
 	// earns its share within a few ticks, a fading leg loses it just as fast).
 	// Cheap: a per-leg byte-delta under the mux lock plus a selector rebuild.
 	rg.mu.Lock()
-	if rg.mux != nil && len(rg.tps) > 1 {
-		rg.mux.rebuildWeights(rg.tps)
+	if rg.mux != nil && len(rg.legs) > 1 {
+		rg.mux.rebuildWeights(rg.legs)
 	}
 	rg.mu.Unlock()
 
@@ -836,8 +837,8 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	if rg.mux != nil {
 		rg.mu.Lock()
 		droppedLegs = rg.pruneDeadTransports()
-		if len(rg.tps) > 1 {
-			rg.mux.rebuildWeights(rg.tps)
+		if len(rg.legs) > 1 {
+			rg.mux.rebuildWeights(rg.legs)
 		}
 		rg.mu.Unlock()
 	}
@@ -910,8 +911,8 @@ func (rg *RouteGroup) windowServiceFn(_ time.Duration) {
 		return
 	}
 	rg.mu.Lock()
-	tps := append([]*transport.ManagedTransport(nil), rg.tps...)
+	legs := append([]groupLeg(nil), rg.legs...)
 	rg.mu.Unlock()
-	rg.mux.refreshLegWindows(tps)
+	rg.mux.refreshLegWindows(legs)
 	rg.mux.signalWindow()
 }

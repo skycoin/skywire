@@ -206,15 +206,15 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 				// If a promoting rotation engine was already wired (SetRotation
 				// before the handshake), route new aux legs through warm standby
 				// on add. Set BEFORE growLegs so it governs any aux legs already
-				// present in tps[]; the primary (index 0) is always active.
+				// present in legs; the primary (index 0) is always active.
 				if rg.standbyNewLegs {
 					rg.mux.SetStandbyNewLegs(true)
 				}
-				// rg.tps already has the primary transport at this
+				// rg.legs already has the primary transport at this
 				// point; size the leg counters to match. Subsequent
 				// AppendRoute calls (mux 2/N+) extend the slice via
 				// appendRules.
-				rg.mux.growLegs(len(rg.tps))
+				rg.mux.growLegs(len(rg.legs))
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
@@ -412,7 +412,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	// Per-mux-leg recv counter. We resolve the leg from the
-	// packet's route ID (which matches one of rg.rvs[].KeyRouteID,
+	// packet's route ID (which matches one of the consume rule key route IDs,
 	// each leg has its own consume rule). The lookup is O(legs)
 	// but legs is small (typically 1-16) and this only runs for
 	// data packets after we've already paid for noise decryption.
@@ -466,7 +466,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		// promptly once the threshold passes without needing a tight timer.
 		if rg.mux.holRetxEnabled && rg.mux.reorderPending() > 0 {
 			rg.mu.Lock()
-			fastMs := rg.mux.fastestLegLatency(rg.tps)
+			fastMs := rg.mux.fastestLegLatency(rg.legs)
 			rg.mu.Unlock()
 			interval := rg.mux.holPerSeqInterval(fastMs)
 			if rg.mux.gapAge() > rg.mux.holGapThreshold(fastMs) && rg.mux.shouldSendHolSACK(interval) {
@@ -656,9 +656,9 @@ func (rg *RouteGroup) sendLegState(idx int, standby bool) {
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport
 	var rule routing.Rule
-	if idx >= 0 && idx < len(rg.tps) && idx < len(rg.fwd) {
-		tp = rg.tps[idx]
-		rule = rg.fwd[idx]
+	if idx >= 0 && idx < len(rg.legs) {
+		tp = rg.legs[idx].tp
+		rule = rg.legs[idx].fwd
 	}
 	rg.mu.Unlock()
 	if tp == nil || rule == nil {
@@ -699,9 +699,9 @@ func (rg *RouteGroup) SetDirectionPin(mode byte) error {
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport
 	var rule routing.Rule
-	if len(rg.tps) > 0 && len(rg.fwd) > 0 {
-		tp = rg.tps[0]
-		rule = rg.fwd[0]
+	if len(rg.legs) > 0 {
+		tp = rg.legs[0].tp
+		rule = rg.legs[0].fwd
 	}
 	rg.mu.Unlock()
 	if tp == nil || rule == nil {
@@ -856,8 +856,8 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	// Propagate ping latency to the underlying transport so it gets
 	// reported to TPD during re-registration.
 	rg.mu.Lock()
-	if len(rg.tps) > 0 && rg.tps[0] != nil {
-		rg.tps[0].SetLatency(latencyMs)
+	if len(rg.legs) > 0 && rg.legs[0].tp != nil {
+		rg.legs[0].tp.SetLatency(latencyMs)
 	}
 	rg.mu.Unlock()
 

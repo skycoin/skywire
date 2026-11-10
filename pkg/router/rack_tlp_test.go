@@ -313,7 +313,7 @@ func TestRefreshWindowsAndSACKNoLockInversion(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for range rounds {
-			m.refreshLegWindows(tps)
+			m.refreshLegWindows(tpLegs(tps))
 		}
 	}()
 	go func() {

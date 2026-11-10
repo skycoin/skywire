@@ -23,8 +23,8 @@ func TestHandleTransportClosedPrunesTheLeg(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Len(t, rg.tps, 2, "the leg on the closed transport is gone")
-	for _, tp := range rg.tps {
+	require.Len(t, rg.legs, 2, "the leg on the closed transport is gone")
+	for _, tp := range legTransports(rg.legs) {
 		require.NotEqual(t, dead, tp.Entry.ID)
 	}
 	require.False(t, rg.isClosed(), "a group with surviving legs stays open")
@@ -53,7 +53,7 @@ func TestHandleTransportClosedIgnoresAnotherGroupsTransport(t *testing.T) {
 	require.Equal(t, 0, rg.handleTransportClosed(uuid.New()))
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Len(t, rg.tps, 2)
+	require.Len(t, rg.legs, 2)
 }
 
 // TestRouterCloseLegsOnTransportReachesEveryGroup: the router's hook is what
@@ -80,10 +80,10 @@ func TestRouterCloseLegsOnTransportReachesEveryGroup(t *testing.T) {
 	require.Equal(t, 2, r.ruleOnTransportClosed(dead), "one leg ruled on in each group")
 
 	ns.mu.Lock()
-	require.Len(t, ns.tps, 2)
+	require.Len(t, ns.legs, 2)
 	ns.mu.Unlock()
 	raw.mu.Lock()
-	require.Len(t, raw.tps, 2)
+	require.Len(t, raw.legs, 2)
 	raw.mu.Unlock()
 }
 
@@ -120,6 +120,6 @@ func TestCloseLegsOnTransportDoesNotRuleInline(t *testing.T) {
 	require.Eventually(t, func() bool {
 		rg.mu.Lock()
 		defer rg.mu.Unlock()
-		return len(rg.tps) == 1
+		return len(rg.legs) == 1
 	}, 2*time.Second, 5*time.Millisecond, "the leg on the closed transport was never pruned")
 }

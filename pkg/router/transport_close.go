@@ -31,16 +31,14 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
-// anyLiveTransport reports whether any of tps can still carry a packet. A
+// anyLiveTransport reports whether any of legs can still carry a packet. A
 // group with none of them cannot receive a close reply, so it must not wait
 // for one.
-func anyLiveTransport(tps []*transport.ManagedTransport) bool {
-	for _, tp := range tps {
-		if tp != nil && !tp.IsClosed() {
+func anyLiveTransport(legs []groupLeg) bool {
+	for _, lg := range legs {
+		if tp := lg.tp; tp != nil && !tp.IsClosed() {
 			return true
 		}
 	}
@@ -60,9 +58,10 @@ func (rg *RouteGroup) handleTransportClosed(tpID uuid.UUID) int {
 	}
 
 	rg.mu.Lock()
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	hit := 0
-	for _, tp := range rg.tps {
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tpEntryID(tp) == tpID {
 			hit++
 		}

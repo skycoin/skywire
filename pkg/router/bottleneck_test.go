@@ -159,7 +159,7 @@ func TestRebuildWeightsCollapsesBottleneckGroup(t *testing.T) {
 	m.recordSent(2, 1000)
 
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	m.rebuildWeights(tps)
+	m.rebuildWeights(tpLegs(tps))
 
 	w := m.tpSelector.capacityWeights
 	require.Len(t, w, 3)
@@ -188,7 +188,7 @@ func TestRebuildWeightsGroupColdFloorPerGroup(t *testing.T) {
 	m.recordSent(1, 1000)
 
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
-	m.rebuildWeights(tps)
+	m.rebuildWeights(tpLegs(tps))
 
 	w := m.tpSelector.capacityWeights
 	require.Len(t, w, 3)
@@ -212,7 +212,7 @@ func TestRebuildWeightsStandbyGroupMemberZero(t *testing.T) {
 	m.recordSent(1, 5000) // standby leg's bytes must not leak into the weight
 
 	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
-	m.rebuildWeights(tps)
+	m.rebuildWeights(tpLegs(tps))
 
 	w := m.tpSelector.capacityWeights
 	require.Len(t, w, 2)

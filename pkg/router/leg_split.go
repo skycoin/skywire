@@ -126,11 +126,11 @@ func (rg *RouteGroup) splitLeg(idx int, reason string) (*RouteGroup, error) {
 	}
 
 	rg.mu.Lock()
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	var fwd routing.Rule
 	var tp *transport.ManagedTransport
-	if idx >= 0 && idx < legs && idx < len(rg.fwd) {
-		fwd, tp = rg.fwd[idx], rg.tps[idx]
+	if idx >= 0 && idx < legs {
+		fwd, tp = rg.legs[idx].fwd, rg.legs[idx].tp
 	}
 	rg.mu.Unlock()
 	// A group's LAST leg is the group: splitting it off would leave the app's

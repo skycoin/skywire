@@ -331,7 +331,7 @@ func sbdLegWeights(rg *RouteGroup, mts []*transport.ManagedTransport) []float64 
 	for i := range mts {
 		rg.mux.recordSent(i, 1000)
 	}
-	rg.mux.rebuildWeights(mts)
+	rg.mux.rebuildWeights(tpLegs(mts))
 	return append([]float64(nil), rg.mux.tpSelector.capacityWeights...)
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/router/routersettings"
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // Proactive head-of-line (HoL) retransmit.
@@ -169,10 +168,11 @@ func (t *holRetxTracker) Purge(belowSeq uint32) {
 // mux's live, ready, non-standby legs, or 0 when none has a measurement yet.
 // This is the leg a proactive retransmit will actually ride
 // (selectFastestTransport), so its RTT sets both the gap-age threshold and the
-// per-seq re-nudge interval. Caller holds rg.mu (reads the tps slice).
-func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 {
+// per-seq re-nudge interval. Caller holds rg.mu (reads the legs slice).
+func (m *routeMux) fastestLegLatency(legs []groupLeg) float64 {
 	best := 0.0
-	for idx, tp := range tps {
+	for idx := range legs {
+		tp := legs[idx].tp
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
 			continue
 		}
@@ -191,7 +191,7 @@ func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 
 // UUID (unmeasured/zero RTTs omitted). Standby legs are included: a seq sent
 // on a since-demoted leg is still in flight on THAT leg's latency, and judging
 // it against anything else declares it stalled while it is merely slow. Caller
-// holds rg.mu (reads the tps slice).
+// holds rg.mu (reads the legs slice).
 //
 // The value is max(first-hop transport RTT, end-to-end pong RTT). tp.GetLatency
 // is only the NEAR EDGE: on the 2026-09-17 compositions the two pinned legs left
@@ -199,9 +199,10 @@ func (m *routeMux) fastestLegLatency(tps []*transport.ManagedTransport) float64 
 // end-to-end, so the first hop alone put the slow leg's frames one fast-hop RTT
 // past due and the proactive path re-sent them on the fastest leg — the leg that
 // sets the rate — while the originals were still in ordinary flight.
-func (m *routeMux) legLatencyByTp(tps []*transport.ManagedTransport) map[uuid.UUID]float64 {
-	out := make(map[uuid.UUID]float64, len(tps))
-	for _, tp := range tps {
+func (m *routeMux) legLatencyByTp(legs []groupLeg) map[uuid.UUID]float64 {
+	out := make(map[uuid.UUID]float64, len(legs))
+	for _, lg := range legs {
+		tp := lg.tp
 		if tp == nil || tp.IsClosed() {
 			continue
 		}

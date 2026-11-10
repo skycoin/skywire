@@ -64,7 +64,7 @@ func TestRemoteLegTransportIDsMirrorsDestinationLegs(t *testing.T) {
 	// Primary leg: 1-hop direct, so the destination installs its ForwardRule
 	// over the very same direct transport (fwd[0].TpID == rev[0].TpID).
 	rg.mu.Lock()
-	primaryTpID := rg.tps[0].Entry.ID
+	primaryTpID := rg.legs[0].tp.Entry.ID
 	rg.mu.Unlock()
 	rg.recordLegRoute(
 		[]routing.Hop{{TpID: primaryTpID, From: local, To: peer}},
@@ -128,7 +128,7 @@ func TestAddMuxRouteByHopsRejectsCollidingReverseBeforeDial(t *testing.T) {
 	peer := desc.SrcPK()
 
 	rg.mu.Lock()
-	primaryTpID := rg.tps[0].Entry.ID
+	primaryTpID := rg.legs[0].tp.Entry.ID
 	rg.mu.Unlock()
 	// Primary: 1-hop direct in both directions — the shape that dominates the
 	// live route_length_hist and the one that makes this collision the default.

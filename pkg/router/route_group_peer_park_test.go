@@ -13,7 +13,7 @@ import (
 func peerParkLeg(t *testing.T, rg *RouteGroup, idx int) {
 	t.Helper()
 	rg.mu.Lock()
-	rid := rg.rvs[idx].KeyRouteID()
+	rid := rg.legs[idx].rvs.KeyRouteID()
 	rg.mu.Unlock()
 	require.NoError(t, rg.handleLegStatePacket(routing.MakeLegStatePacket(rid, true)))
 	require.True(t, rg.legParkedByPeer(idx))
@@ -46,9 +46,9 @@ func TestPeerParkFollowsLegAcrossPrimarySwap(t *testing.T) {
 	peerParkLeg(t, rg, 2)
 
 	rg.mu.Lock()
-	rg.tps[1], rg.tps[2] = rg.tps[2], rg.tps[1]
-	rg.fwd[1], rg.fwd[2] = rg.fwd[2], rg.fwd[1]
-	rg.rvs[1], rg.rvs[2] = rg.rvs[2], rg.rvs[1]
+	rg.legs[1].tp, rg.legs[2].tp = rg.legs[2].tp, rg.legs[1].tp
+	rg.legs[1].fwd, rg.legs[2].fwd = rg.legs[2].fwd, rg.legs[1].fwd
+	rg.legs[1].rvs, rg.legs[2].rvs = rg.legs[2].rvs, rg.legs[1].rvs
 	rg.mux.swapLegs(1, 2)
 	rg.mu.Unlock()
 
@@ -71,7 +71,7 @@ func TestPeerParkDroppedWithLeg(t *testing.T) {
 		},
 		"peer retire": func(t *testing.T, rg *RouteGroup, idx int) {
 			rg.mu.Lock()
-			rid := rg.rvs[idx].KeyRouteID()
+			rid := rg.legs[idx].rvs.KeyRouteID()
 			rg.mu.Unlock()
 			require.True(t, rg.pruneLegByConsumeRule(rid))
 		},

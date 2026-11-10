@@ -26,9 +26,9 @@ func legTpID(t *testing.T, rg *RouteGroup, idx int) uuid.UUID {
 	t.Helper()
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Greater(t, len(rg.tps), idx, "the group has no leg %d", idx)
-	require.NotNil(t, rg.tps[idx])
-	return rg.tps[idx].Entry.ID
+	require.Greater(t, len(rg.legs), idx, "the group has no leg %d", idx)
+	require.NotNil(t, rg.legs[idx].tp)
+	return rg.legs[idx].tp.Entry.ID
 }
 
 // TestEmuSplitReleasedLegBackIntoTheStandbyPool is the gate: the pool arbiter's

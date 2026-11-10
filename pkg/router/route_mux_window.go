@@ -13,7 +13,7 @@ import (
 )
 
 // rebuildWeights updates transport selection weights based on current latency.
-func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
+func (m *routeMux) rebuildWeights(legs []groupLeg) {
 	if m.tpSelector == nil {
 		return
 	}
@@ -109,9 +109,9 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 	// branch feeds all three predictive schedulers; only the per-frame pick in
 	// the selector differs (ecfPick vs otiasPick vs stmsPick).
 	if m.tpSelector.Mode().isPredictive() || (m.sackEnabled && m.retxBuf != nil) {
-		m.refreshLegWindows(tps)
+		m.refreshLegWindows(legs)
 	}
-	m.tpSelector.Rebuild(tps)
+	m.tpSelector.Rebuild(legs)
 }
 
 // refreshLegWindows recomputes each leg's ECF state — RTT/jitter EWMAs, the
@@ -120,7 +120,7 @@ func (m *routeMux) rebuildWeights(tps []*transport.ManagedTransport) {
 // sender on the rig ran the capacity mode and had none). Run from
 // rebuildWeights and, so a window can grow between rebuilds, from the route
 // group's send-window loop every windowRefreshInterval.
-func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
+func (m *routeMux) refreshLegWindows(legs []groupLeg) {
 	if m.tpSelector == nil {
 		return
 	}
@@ -129,9 +129,10 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 	// read the leg table — taking the two in the opposite order here deadlocked
 	// the group (measured live 2026-09-16: a three-leg session froze mid-upload
 	// with the refresh waiting on the buffer and the SACK handler on legMu).
-	ackedByIdx := make([]uint64, len(tps))
+	ackedByIdx := make([]uint64, len(legs))
 	if m.retxBuf != nil {
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp != nil {
 				ackedByIdx[i] = m.retxBuf.AckedBytes(tp.Entry.ID)
 			}
@@ -140,8 +141,9 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 	// Per-leg send→ack delay, read once here (outside legMu) and used for BOTH
 	// the leg's RTT basis and the window's feedback delay below — one lock trip
 	// instead of one per leg per use, and the same number in both places.
-	adByIdx := make([]float64, len(tps))
-	for i, tp := range tps {
+	adByIdx := make([]float64, len(legs))
+	for i := range legs {
+		tp := legs[i].tp
 		if tp != nil {
 			adByIdx[i] = m.ackDelayMsTp(tp.Entry.ID)
 		}
@@ -182,8 +184,8 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// state agree with it. The first-hop value stays the FLOOR, so a
 			// leg with no ack sample yet behaves exactly as before.
 			var rttMs, hopMs float64
-			if i < len(tps) && tps[i] != nil {
-				hopMs = tps[i].GetLatency()
+			if i < len(legs) && legs[i].tp != nil {
+				hopMs = legs[i].tp.GetLatency()
 				rttMs = hopMs
 				if ad := adByIdx[i]; ad > rttMs {
 					rttMs = ad
@@ -255,7 +257,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 			// capacity, which is how a slow leg was fed seconds deep. Cold legs
 			// (no acked bytes yet) keep the send-rate BDP and the probe budget.
 			cwnd := rate * bdpRttMs / 1000.0
-			if m.retxBuf != nil && i < len(tps) && tps[i] != nil {
+			if m.retxBuf != nil && i < len(legs) && legs[i].tp != nil {
 				acked := ackedByIdx[i]
 				switch {
 				case acked == 0:
@@ -341,7 +343,7 @@ func (m *routeMux) refreshLegWindows(tps []*transport.ManagedTransport) {
 		m.ecfLastRebuildNano = now
 		m.legMu.Unlock()
 		m.tpSelector.SetECFState(states)
-		m.reportProbeRulings(tps, rulings)
+		m.reportProbeRulings(legs, rulings)
 	}
 }
 
@@ -457,16 +459,16 @@ func (m *routeMux) ruleProbeOnlyLegsLocked(states []ecfLegState) []legProbeRulin
 // reportProbeRulings records each probe-only transition as a mux event. Called
 // with legMu dropped; the hook is the route group's noteLegEvent, which takes no
 // locks of its own.
-func (m *routeMux) reportProbeRulings(tps []*transport.ManagedTransport, rulings []legProbeRuling) {
+func (m *routeMux) reportProbeRulings(legs []groupLeg, rulings []legProbeRuling) {
 	if len(rulings) == 0 || m.onLegProbeRuling == nil {
 		return
 	}
 	for _, r := range rulings {
 		var tp *transport.ManagedTransport
-		if r.idx < len(tps) {
-			tp = tps[r.idx]
+		if r.idx < len(legs) {
+			tp = legs[r.idx].tp
 		}
-		m.onLegProbeRuling(r.idx, len(tps), tp, r.probeOnly, r.reason)
+		m.onLegProbeRuling(r.idx, len(legs), tp, r.probeOnly, r.reason)
 	}
 }
 
@@ -536,8 +538,9 @@ func (m *routeMux) legProbeExhausted(idx int) bool {
 // firstProbeReadyLeg returns the lowest-indexed live, ready leg that is not out
 // of probe budget, or -1 when every ready leg is. Used to move a schedule pick
 // off an outclassed leg.
-func (m *routeMux) firstProbeReadyLeg(tps []*transport.ManagedTransport) int {
-	for idx, tp := range tps {
+func (m *routeMux) firstProbeReadyLeg(legs []groupLeg) int {
+	for idx := range legs {
+		tp := legs[idx].tp
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(idx) {
 			continue
 		}
@@ -551,12 +554,13 @@ func (m *routeMux) firstProbeReadyLeg(tps []*transport.ManagedTransport) int {
 // feedInflight hands the predictive selector each leg's REAL unacknowledged
 // bytes (from the retx buffer, attributed per transport) before a pick, so
 // ecfSaturated judges true backlog rather than a rate-drain estimate.
-func (m *routeMux) feedInflight(tps []*transport.ManagedTransport) {
+func (m *routeMux) feedInflight(legs []groupLeg) {
 	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return
 	}
-	ids := make([]uuid.UUID, len(tps))
-	for i, tp := range tps {
+	ids := make([]uuid.UUID, len(legs))
+	for i := range legs {
+		tp := legs[i].tp
 		if tp != nil {
 			ids[i] = tp.Entry.ID
 		}
@@ -593,11 +597,11 @@ func (m *routeMux) signalWindow() {
 // not AllReadySaturated — a leg outside the skew band has room the upload is
 // not allowed to use, and releasing the writer against it would put the frame
 // on the confined leg's full window instead.
-func (m *routeMux) sendWindowBlocked(tps []*transport.ManagedTransport) bool {
+func (m *routeMux) sendWindowBlocked(legs []groupLeg) bool {
 	if !ForwardSpill() {
 		if idx := m.confinedForwardIdx(); idx >= 0 && m.forwardSender() {
 			if m.forwardFanoutActive() {
-				return !m.forwardFanoutRoom(tps, idx)
+				return !m.forwardFanoutRoom(legs, idx)
 			}
 			return m.tpSelector.Saturated(idx)
 		}
@@ -609,20 +613,20 @@ func (m *routeMux) sendWindowBlocked(tps []*transport.ManagedTransport) bool {
 // in-flight window, until a SACK frees capacity, the group closes, or
 // sendWindowWaitMax elapses. A no-op unless SACK accounting and a predictive
 // scheduler are on.
-func (m *routeMux) waitSendWindow(tps []*transport.ManagedTransport, closed <-chan struct{}) {
+func (m *routeMux) waitSendWindow(legs []groupLeg, closed <-chan struct{}) {
 	if m.retxBuf == nil || !m.sackEnabled || m.tpSelector == nil {
 		return
 	}
 	deadline := time.Now().Add(SendWindowWaitMax())
 	waited := false
 	for {
-		m.feedInflight(tps)
+		m.feedInflight(legs)
 		// One observation of the confined leg's window per poll, blocked or
 		// not: this loop is the only place that sees the forward writer's
 		// demand with the in-flight estimates fresh, so it is where the
 		// load-triggered fan-out engages and releases.
-		m.noteForwardLoad(tps)
-		if !m.sendWindowBlocked(tps) {
+		m.noteForwardLoad(legs)
+		if !m.sendWindowBlocked(legs) {
 			return
 		}
 		if !waited {

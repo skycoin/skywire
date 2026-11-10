@@ -9,8 +9,8 @@
 // probe-only rulings, park/promote and failover are all exercised — under
 // `go test`, with no root, no rig and no live deployment.
 //
-// The harness lives in package router because a leg is a (rg.tps, rg.fwd,
-// rg.rvs, rg.mux) tuple and none of those are exported. pkg/router/emu holds
+// The harness lives in package router because a leg is an entry of
+// rg.legs plus rg.mux state and neither is exported. pkg/router/emu holds
 // everything that does NOT need package internals: the wire itself and the
 // report format.
 //
@@ -404,9 +404,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 
 	rg.mu.Lock()
 	rg.mux = m
-	rg.tps = e.tps
-	rg.fwd = fwd
-	rg.rvs = rvs
+	setTestLegs(rg, e.tps, fwd, rvs)
 	rg.encrypt = false
 	m.growLegs(len(e.tps))
 	// Both ends' legs are established before the first byte, as they are
@@ -414,7 +412,7 @@ func (r *emuRig) wireEnd(e *emuEnd, fwd, rvs []routing.Rule, opts emuOpts, initi
 	for i := range e.tps {
 		m.markLegReady(i)
 	}
-	m.rebuildWeights(e.tps)
+	m.rebuildWeights(rg.legs)
 	rg.mu.Unlock()
 
 	m.SetForwardRehomeFn(rg.noteForwardRehome)
@@ -688,10 +686,10 @@ func (r *emuRig) Summary(name string, dir emuDir, x *emuTransfer) emu.Summary {
 // scenario would move it.
 func (r *emuRig) AddedLegs() (a, b int) {
 	r.A.rg.mu.Lock()
-	a = len(r.A.rg.tps)
+	a = len(r.A.rg.legs)
 	r.A.rg.mu.Unlock()
 	r.B.rg.mu.Lock()
-	b = len(r.B.rg.tps)
+	b = len(r.B.rg.legs)
 	r.B.rg.mu.Unlock()
 	return a, b
 }
@@ -800,7 +798,7 @@ func (h *emuHost) singleLegGroupOn(tpID uuid.UUID) *RouteGroup {
 			continue
 		}
 		rg.mu.Lock()
-		hit := len(rg.tps) == 1 && rg.tps[0] != nil && rg.tps[0].Entry.ID == tpID
+		hit := len(rg.legs) == 1 && rg.legs[0].tp != nil && rg.legs[0].tp.Entry.ID == tpID
 		rg.mu.Unlock()
 		if hit {
 			return rg

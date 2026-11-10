@@ -87,8 +87,8 @@ func TestForwardConfinedLegWaitsInsteadOfSpilling(t *testing.T) {
 	seen := map[int]int{}
 	const frames = 160 // 160 x 64 KiB = 10 MiB
 	for i := range frames {
-		m.waitSendWindow(tps, closed)
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, payload)
+		m.waitSendWindow(tpLegs(tps), closed)
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), payload)
 		if err != nil {
 			t.Fatalf("frame %d: selectTransportRaw: %v", i, err)
 		}
@@ -123,7 +123,7 @@ func TestForwardSpillKnobRestoresOldBehaviour(t *testing.T) {
 	payload := make([]byte, 64*1024)
 	spilled := 0
 	for i := range 20 {
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, payload)
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), payload)
 		if err != nil {
 			t.Fatalf("frame %d: selectTransportRaw: %v", i, err)
 		}
@@ -153,7 +153,7 @@ func TestForwardConfinementHysteresis(t *testing.T) {
 
 	sample := func() int {
 		m.confinedFwdAtNano = 0 // a fresh measurement, without sleeping a refresh
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 		if err != nil {
 			t.Fatalf("selectTransportRaw: %v", err)
 		}
@@ -221,7 +221,7 @@ func TestForwardRehomesWhenConfinedLegParks(t *testing.T) {
 		reasons = append(reasons, reason)
 	})
 
-	_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+	_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 	if err != nil {
 		t.Fatalf("selectTransportRaw: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestForwardRehomesWhenConfinedLegParks(t *testing.T) {
 
 	m.setLegStandby(1, true)
 	m.confinedFwdAtNano = 0
-	_, _, idx, err = m.selectTransportRaw(tps, fwd, []byte("payload"))
+	_, _, idx, err = m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 	if err != nil {
 		t.Fatalf("selectTransportRaw after park: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestReverseFanoutUnchangedByForwardConfinement(t *testing.T) {
 
 	seen := map[int]int{}
 	for i := range 200 {
-		_, _, idx, err := m.selectTransportRaw(tps, fwd, []byte("payload"))
+		_, _, idx, err := m.selectTransportRaw(testLegs(tps, fwd, nil), []byte("payload"))
 		if err != nil {
 			t.Fatalf("iteration %d: selectTransportRaw: %v", i, err)
 		}

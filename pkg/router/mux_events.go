@@ -356,14 +356,14 @@ func (rg *RouteGroup) noteTunnelEvent(kind, reason string) {
 	}
 	rg.mu.Lock()
 	var tp *transport.ManagedTransport
-	if len(rg.tps) > 0 {
-		tp = rg.tps[0]
+	if len(rg.legs) > 0 {
+		tp = rg.legs[0].tp
 	}
 	var hops []routing.Hop
 	if tp != nil {
 		hops = rg.legHopsLocked(tp.Entry.ID)
 	}
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	rg.mu.Unlock()
 	rg.noteLegEvent(kind, reason, MuxByAdaptive, 0, legs, tp, hops)
 }
@@ -432,7 +432,7 @@ func hopInfos(hops []routing.Hop) []RouteHopInfo {
 func (rg *RouteGroup) legCount() int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	return len(rg.tps)
+	return len(rg.legs)
 }
 
 // activatePinnedLeg promotes the leg riding tpID out of warm standby and
@@ -449,7 +449,8 @@ func (rg *RouteGroup) activatePinnedLeg(tpID uuid.UUID) {
 	rg.mu.Lock()
 	idx := -1
 	var tp *transport.ManagedTransport
-	for i, t := range rg.tps {
+	for i, lg := range rg.legs {
+		t := lg.tp
 		if t != nil && t.Entry.ID == tpID {
 			idx, tp = i, t
 			break

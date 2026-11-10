@@ -255,17 +255,18 @@ func (rg *RouteGroup) adoptableChain() (routing.Rule, *transport.ManagedTranspor
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if len(rg.tps) != 1 || len(rg.fwd) != 1 || rg.fwd[0] == nil || rg.tps[0] == nil {
-		return nil, nil, fmt.Errorf("%w: the leg reserve holds %d chains", ErrAdoptUnsupported, len(rg.tps))
+	if len(rg.legs) != 1 || rg.legs[0].fwd == nil || rg.legs[0].tp == nil {
+		return nil, nil, fmt.Errorf("%w: the leg reserve holds %d chains", ErrAdoptUnsupported, len(rg.legs))
 	}
-	return rg.fwd[0], rg.tps[0], nil
+	return rg.legs[0].fwd, rg.legs[0].tp, nil
 }
 
 // legIndexByTransport finds the leg riding tp.
 func (rg *RouteGroup) legIndexByTransport(tp *transport.ManagedTransport) int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	for i, held := range rg.tps {
+	for i, lg := range rg.legs {
+		held := lg.tp
 		if held != nil && held.Entry.ID == tp.Entry.ID {
 			return i
 		}

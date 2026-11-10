@@ -144,7 +144,7 @@ func (rg *RouteGroup) singleLegDormant() bool {
 		return false // suspension disabled
 	}
 	rg.mu.Lock()
-	n := len(rg.tps)
+	n := len(rg.legs)
 	rg.mu.Unlock()
 	return n < 2
 }

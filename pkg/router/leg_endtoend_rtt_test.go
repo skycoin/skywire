@@ -32,7 +32,7 @@ func TestRefreshLegWindowsUsesEndToEndFeedbackDelay(t *testing.T) {
 	rg.mux.recordAckDelayTp(mts[0].Entry.ID, 170*time.Millisecond)
 	rg.mux.recordAckDelayTp(mts[1].Entry.ID, 170*time.Millisecond)
 
-	rg.mux.refreshLegWindows(mts)
+	rg.mux.refreshLegWindows(tpLegs(mts))
 
 	states := ecfStatesOf(rg.mux)
 	require.Len(t, states, 2)

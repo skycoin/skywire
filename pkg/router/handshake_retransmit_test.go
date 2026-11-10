@@ -123,9 +123,9 @@ func TestRouteGroup_InitiatorRetransmitsHandshake(t *testing.T) {
 
 	conn := newCountingTransport()
 	mt := transport.NewManagedTransportForTest(conn)
-	mt.Entry = transport.Entry{ID: rg.fwd[0].NextTransportID(), Type: "test"}
+	mt.Entry = transport.Entry{ID: rg.legs[0].fwd.NextTransportID(), Type: "test"}
 	rg.mu.Lock()
-	rg.tps[0] = mt // swap the leg's transport for a counting one
+	rg.legs[0].tp = mt // swap the leg's transport for a counting one
 	rg.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 130*time.Millisecond)
@@ -154,10 +154,10 @@ func TestRouteGroup_ResponderReAcksDuplicateHandshake(t *testing.T) {
 
 	conn := newCountingTransport()
 	mt := transport.NewManagedTransportForTest(conn)
-	mt.Entry = transport.Entry{ID: rg.fwd[0].NextTransportID(), Type: "test"}
+	mt.Entry = transport.Entry{ID: rg.legs[0].fwd.NextTransportID(), Type: "test"}
 	rg.mu.Lock()
-	rg.tps[0] = mt
-	rid := rg.rvs[0].KeyRouteID()
+	rg.legs[0].tp = mt
+	rid := rg.legs[0].rvs.KeyRouteID()
 	rg.mu.Unlock()
 
 	hs := routing.MakeHandshakePacket(rid, true, routing.CapMux|routing.CapSACK)

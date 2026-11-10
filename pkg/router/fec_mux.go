@@ -29,7 +29,6 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/router/routersettings"
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // FEC block geometry. K data frames + R repair frames per block; recovers all K
@@ -424,8 +423,8 @@ func (m *routeMux) fecStripeSyncLocked(block uint32) {
 // R-erasure recovery. ok=false keeps the original pick — when the cap is inactive,
 // idx still has room, or every alive-ready leg is already block-full (never fail a
 // send for the cap; an over-stripe just falls back to SACK-retransmit as before).
-func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int) (int, bool) {
-	if !m.fecStripeActive() || idx < 0 || idx >= len(tps) {
+func (m *routeMux) fecStripeReassign(legs []groupLeg, idx int) (int, bool) {
+	if !m.fecStripeActive() || idx < 0 || idx >= len(legs) {
 		return idx, false
 	}
 	block := m.writeSeq.Load() / uint32(m.knInt(routersettings.FECK)) //nolint:gosec
@@ -438,13 +437,13 @@ func (m *routeMux) fecStripeReassign(tps []*transport.ManagedTransport, idx int)
 	// idx is full for this block — search round-robin from just past it for an
 	// alive-ready leg with room, so successive blocks fan across the leg set
 	// instead of always collapsing onto leg 0.
-	n := len(tps)
+	n := len(legs)
 	for off := 1; off <= n; off++ {
 		j := (idx + off) % n
 		if j == idx {
 			continue
 		}
-		tp := tps[j]
+		tp := legs[j].tp
 		if tp == nil || tp.IsClosed() || !m.legReadyAt(j) {
 			continue
 		}

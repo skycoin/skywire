@@ -451,7 +451,7 @@ func TestEnforceLatencyBandReelectsBadPrimary(t *testing.T) {
 
 	// The primary slot must now hold a healthy in-band leg, not the old 2ms one.
 	rg.mu.Lock()
-	newPrimaryID := rg.tps[0].Entry.ID
+	newPrimaryID := rg.legs[0].tp.Entry.ID
 	rg.mu.Unlock()
 	require.NotEqual(t, oldPrimaryID, newPrimaryID, "the out-of-band primary must be re-elected out of slot 0")
 
@@ -461,7 +461,7 @@ func TestEnforceLatencyBandReelectsBadPrimary(t *testing.T) {
 	// The displaced old primary (2ms artifact) must now be parked to warm standby.
 	parkedOld := false
 	rg.mu.Lock()
-	for i, tp := range rg.tps {
+	for i, tp := range legTransports(rg.legs) {
 		if tp != nil && tp.Entry.ID == oldPrimaryID {
 			parkedOld = rg.mux.isLegStandby(i)
 		}
@@ -483,7 +483,7 @@ func TestDemoteStalledLegsParksNotRemoves(t *testing.T) {
 
 	// Still present — nothing removed.
 	rg.mu.Lock()
-	after := len(rg.tps)
+	after := len(rg.legs)
 	rg.mu.Unlock()
 	require.Equal(t, before, after, "manual-mode demote must not remove legs from the group")
 

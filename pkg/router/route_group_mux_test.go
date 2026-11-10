@@ -102,10 +102,8 @@ func createMuxRouteGroup(t *testing.T, nTransports int) (*RouteGroup, []*transpo
 	}
 
 	rg.mu.Lock()
-	rg.tps = mts
-	rg.fwd = fwds
-	rg.rvs = rvss
-	rg.mux.rebuildWeights(mts)
+	setTestLegs(rg, mts, fwds, rvss)
+	rg.mux.rebuildWeights(tpLegs(mts))
 	// These helpers model already-established legs, so mark every leg
 	// ready for selection. In live operation an aux leg becomes ready
 	// only after inbound traffic proves the peer registered its rule.
@@ -165,7 +163,7 @@ func TestPruneDeadTransports(t *testing.T) {
 	// Prune
 	rg.mu.Lock()
 	rg.pruneDeadTransports()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 
 	require.Equal(t, 2, remaining, "should have pruned 1 dead transport")
@@ -182,7 +180,7 @@ func TestPrunePreservesLastTransport(t *testing.T) {
 	// Prune should not remove it
 	rg.mu.Lock()
 	rg.pruneDeadTransports()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 
 	require.Equal(t, 1, remaining, "should not prune the last transport")
@@ -203,7 +201,7 @@ func TestMuxSelectTransportSkipsNotReadyLeg(t *testing.T) {
 	// Every selection must return the primary while leg 1 is not ready.
 	for range 20 {
 		rg.mu.Lock()
-		tp, _, idx, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+		tp, _, idx, err := rg.mux.selectTransport(rg.legs, nil)
 		rg.mu.Unlock()
 		require.NoError(t, err)
 		require.Equal(t, 0, idx, "must not select the not-ready aux leg")
@@ -215,7 +213,7 @@ func TestMuxSelectTransportSkipsNotReadyLeg(t *testing.T) {
 	sawLeg1 := false
 	for i := 0; i < 50 && !sawLeg1; i++ {
 		rg.mu.Lock()
-		_, _, idx, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+		_, _, idx, err := rg.mux.selectTransport(rg.legs, nil)
 		rg.mu.Unlock()
 		require.NoError(t, err)
 		if idx == 1 {
@@ -236,7 +234,7 @@ func TestMuxSelectTransportSkipsDead(t *testing.T) {
 
 	// Select should return transport 2 (the only alive one)
 	rg.mu.Lock()
-	tp, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+	tp, _, _, err := rg.mux.selectTransport(rg.legs, nil)
 	rg.mu.Unlock()
 
 	require.NoError(t, err)
@@ -253,7 +251,7 @@ func TestMuxSelectTransportFailsAllDead(t *testing.T) {
 	}
 
 	rg.mu.Lock()
-	_, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+	_, _, _, err := rg.mux.selectTransport(rg.legs, nil)
 	rg.mu.Unlock()
 
 	require.ErrorIs(t, err, ErrNoSuitableTransport)
@@ -319,7 +317,7 @@ func TestRouteMuxRemoveLegsPromotesPrimary(t *testing.T) {
 // TestRemoveMuxRouteByTransportRemovesPrimary proves the router-level guard
 // against removing the primary leg (index 0) is gone: removing the tps[0]
 // transport re-homes the primary onto a surviving leg — the ping/SACK/latency
-// probes read rg.tps[0] LIVE, so the promoted leg transparently takes over, the
+// probes read rg.legs[0].tp LIVE, so the promoted leg transparently takes over, the
 // same way pruneDeadTransports/pruneLegByConsumeRule already re-home index 0.
 // This is the primitive that lets exact route pinning, live direct<->multihop
 // route switching and single-leg pinning reach the operator's exact leg-set
@@ -341,8 +339,8 @@ func TestRemoveMuxRouteByTransportRemovesPrimary(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Len(t, rg.tps, 2, "exactly one leg removed")
-	require.Equal(t, secondID, rg.tps[0].Entry.ID,
+	require.Len(t, rg.legs, 2, "exactly one leg removed")
+	require.Equal(t, secondID, rg.legs[0].tp.Entry.ID,
 		"former leg 1 must be promoted to primary at index 0")
 }
 
@@ -381,8 +379,8 @@ func TestPruneLivenessDeadLegs(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Equal(t, 2, len(rg.tps), "should drop exactly the one black-holing leg")
-	for _, tp := range rg.tps {
+	require.Equal(t, 2, len(rg.legs), "should drop exactly the one black-holing leg")
+	for _, tp := range legTransports(rg.legs) {
 		require.NotEqual(t, deadID, tp.Entry.ID, "the black-holing leg must be gone")
 	}
 	require.False(t, mts[1].IsClosed(), "liveness prune must NOT close the (shared) transport")
@@ -398,7 +396,7 @@ func TestPruneLivenessPreservesLastLeg(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Equal(t, 1, len(rg.tps), "must always keep at least one leg")
+	require.Equal(t, 1, len(rg.legs), "must always keep at least one leg")
 }
 
 // TestLegLivenessPrunesSilentLegs verifies the probe loop prunes legs that
@@ -413,7 +411,7 @@ func TestLegLivenessPrunesSilentLegs(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Equal(t, 1, len(rg.tps), "silent legs prune down to the last surviving leg")
+	require.Equal(t, 1, len(rg.legs), "silent legs prune down to the last surviving leg")
 }
 
 // TestLegLivenessKeepsEchoingLeg verifies a leg that keeps echoing its probe is
@@ -432,13 +430,13 @@ func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	found := false
-	for _, tp := range rg.tps {
+	for _, tp := range legTransports(rg.legs) {
 		if tp.Entry.ID == keep {
 			found = true
 		}
 	}
 	require.True(t, found, "a leg that keeps echoing must survive")
-	require.GreaterOrEqual(t, len(rg.tps), 1)
+	require.GreaterOrEqual(t, len(rg.legs), 1)
 }
 
 // TestMuxStatsReportsFullMultihopLegChain verifies that a mux leg whose full

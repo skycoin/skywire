@@ -309,7 +309,7 @@ func TestAdoptLegReserveNoAckLeavesItIntact(t *testing.T) {
 	require.Same(t, reserveB, rig.b.anyLegReserve(), "the exit keeps its reserve")
 	require.Equal(t, 1, legCount(rig.reserveA))
 	require.Equal(t, 1, legCount(reserveB))
-	rule, err := rig.a.rt.Rule(rig.reserveA.rvs[0].KeyRouteID())
+	rule, err := rig.a.rt.Rule(rig.reserveA.legs[0].rvs.KeyRouteID())
 	require.NoError(t, err)
 	require.Equal(t, rig.reserveA.desc, rule.RouteDescriptor(), "the reserve's consume rule is not rewritten")
 	require.Nil(t, rig.a.rehomeGroupFor(rig.reserveA.adoptDesc(adoptNewPort, adoptServicePort)), "no half-built tunnel")

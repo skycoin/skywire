@@ -2,8 +2,8 @@
 //
 // The emulated testbed, exported to the package's EXTERNAL test package.
 //
-// The harness (harness_emu_test.go) has to live in package router — a leg is a
-// (rg.tps, rg.fwd, rg.rvs, rg.mux) tuple and none of those are exported. But
+// The harness (harness_emu_test.go) has to live in package router — a leg is an
+// entry of rg.legs plus rg.mux state and neither is exported. But
 // the stream bench in emu_stream_test.go drives a real pkg/skysocks Client over
 // the same rig, and pkg/skysocks imports pkg/router, so that file can only be
 // compiled as package router_test. This is the seam: a handful of exported
@@ -103,7 +103,7 @@ func (r *emuRig) SimulateEstablishMuxRoutesWiden(width int) bool {
 	mt := transport.NewManagedTransportForTest(probe)
 	mt.Entry = transport.Entry{ID: uuid.New(), Type: "emu-widen-probe"}
 	rg.mu.Lock()
-	rg.tps = append(rg.tps, mt)
+	rg.appendLegLocked(nil, nil, mt)
 	rg.mu.Unlock()
 	return true
 }

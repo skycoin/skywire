@@ -13,14 +13,14 @@ import (
 func (rg *RouteGroup) sendPing() error {
 	rg.mu.Lock()
 
-	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		rg.mu.Unlock()
 		// if no transports, no rules, then no latency probe
 		return nil
 	}
 
-	tp := rg.tps[0]
-	rule := rg.fwd[0]
+	tp := rg.legs[0].tp
+	rule := rg.legs[0].fwd
 	rg.mu.Unlock()
 
 	if tp == nil {
@@ -39,14 +39,14 @@ func (rg *RouteGroup) sendPing() error {
 func (rg *RouteGroup) sendPong(timestamp int64) error {
 	rg.mu.Lock()
 
-	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		rg.mu.Unlock()
 		// if no transports, no rules, then no latency probe
 		return nil
 	}
 
-	tp := rg.tps[0]
-	rule := rg.fwd[0]
+	tp := rg.legs[0].tp
+	rule := rg.legs[0].fwd
 	rg.mu.Unlock()
 
 	if tp == nil {
@@ -62,7 +62,7 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		return nil
 	}
 
@@ -74,9 +74,9 @@ func (rg *RouteGroup) sendKeepAlive() error {
 	anySuccess := false
 	var lastErr error
 
-	for i := 0; i < len(rg.tps); i++ {
-		tp := rg.tps[i]
-		rule := rg.fwd[i]
+	for i := 0; i < len(rg.legs); i++ {
+		tp := rg.legs[i].tp
+		rule := rg.legs[i].fwd
 
 		if tp == nil || tp.IsClosed() {
 			continue

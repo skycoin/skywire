@@ -73,7 +73,7 @@ func TestMuxEventsRecordPrimaryRehome(t *testing.T) {
 	mt := r.tm.Transport(rules.Forward.NextTransportID())
 	rg.appendRules(rules.Forward, rules.Reverse, mt, "mux append: aux leg")
 
-	require.NoError(t, rg.tps[0].Close())
+	require.NoError(t, rg.legs[0].tp.Close())
 	rg.mu.Lock()
 	rg.pruneDeadTransports()
 	rg.mu.Unlock()
