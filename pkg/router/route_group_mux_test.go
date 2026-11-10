@@ -19,6 +19,7 @@ import (
 type workingTransport struct {
 	closed   chan struct{}
 	pk1, pk2 cipher.PubKey
+	onWrite  func([]byte) // optional, sees every write
 }
 
 func newWorkingTransport() *workingTransport {
@@ -36,6 +37,9 @@ func (t *workingTransport) Write(b []byte) (int, error) {
 	case <-t.closed:
 		return 0, net.ErrClosed
 	default:
+		if t.onWrite != nil {
+			t.onWrite(append([]byte(nil), b...))
+		}
 		return len(b), nil // Succeed immediately
 	}
 }

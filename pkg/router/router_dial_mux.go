@@ -355,8 +355,8 @@ func (r *router) establishMuxRoutes(
 	// Phase 2 (parallel): fire all aux setup-node dials at once.
 	// Each dial blocks ~setup-timeout (15s); doing them in
 	// parallel collapses N × 15s into one window. Append happens
-	// inside the goroutine — appendRouteAsymmetric takes rg.mu
-	// internally, so concurrent appends serialize naturally.
+	// inside the goroutine — appendRouteAsymmetric adds each leg under
+	// one rg.mu hold, so concurrent appends cannot split a leg.
 	var wg sync.WaitGroup
 	for _, p := range plans {
 		wg.Add(1)

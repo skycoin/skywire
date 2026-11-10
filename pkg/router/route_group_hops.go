@@ -2,6 +2,8 @@
 package router
 
 import (
+	"slices"
+
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -148,16 +150,37 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 	return hops
 }
 
+// appendLegLocked adds one leg and returns its index. rvs[i] pairs with tps[i]
+// (nil on a forward-only leg); reverse-only rules sit after the last leg.
+func (rg *RouteGroup) appendLegLocked(forward, reverse routing.Rule, tp *transport.ManagedTransport) int {
+	idx := len(rg.tps)
+	for len(rg.rvs) < idx {
+		rg.rvs = append(rg.rvs, nil)
+	}
+	rg.fwd = append(rg.fwd, forward)
+	rg.tps = append(rg.tps, tp)
+	rg.rvs = slices.Insert(rg.rvs, idx, reverse)
+	return idx
+}
+
+// legByConsumeRuleLocked returns the leg whose reverse rule is routeID, or -1.
+// A reverse-only rule belongs to no leg. Caller holds rg.mu.
+func (rg *RouteGroup) legByConsumeRuleLocked(routeID routing.RouteID) int {
+	for i := 0; i < len(rg.rvs) && i < len(rg.tps); i++ {
+		if rv := rg.rvs[i]; rv != nil && rv.KeyRouteID() == routeID {
+			return i
+		}
+	}
+	return -1
+}
+
 // appendRules adds a forward/reverse rule pair and its transport as a new leg.
 // reason names what asked for the leg ("route setup", "mux append", …); it is
 // what the leg_added mux event carries.
 func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
-	rg.fwd = append(rg.fwd, forward)
-	rg.rvs = append(rg.rvs, reverse)
-	rg.tps = append(rg.tps, tp)
-	newIdx := len(rg.tps) - 1
+	newIdx := rg.appendLegLocked(forward, reverse, tp)
 	rg.resetLegLiveness(tpEntryID(tp))
 	legs := len(rg.tps)
 
@@ -193,15 +216,13 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 // (router.appendRouteAsymmetric) so it doesn't leak in the routing
 // table.
 //
-// Mirrors appendRules' tps[]+fwd[] parallel maintenance but leaves
-// rvs[] untouched. Mux weight + per-leg counter bookkeeping treats
+// Mirrors appendRules but holds a nil in the leg's rvs[] slot. Mux weight
+// + per-leg counter bookkeeping treats
 // this as a new forward leg.
 func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport, reason string) {
 	rg.mu.Lock()
 
-	rg.fwd = append(rg.fwd, forward)
-	rg.tps = append(rg.tps, tp)
-	newIdx := len(rg.tps) - 1
+	newIdx := rg.appendLegLocked(forward, nil, tp)
 	rg.resetLegLiveness(tpEntryID(tp))
 	legs := len(rg.tps)
 
@@ -229,8 +250,8 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 // canonical bandwidth-asymmetric case (1 forward + N reverse for
 // download-heavy workloads).
 //
-// rvs[] grows independently of tps[]/fwd[]; the read path is by
-// route-id lookup (not slice-indexed) so this works without further
+// The rule goes after the last leg in rvs[], so it shifts no leg; the read
+// path is by route-id lookup (not slice-indexed) so this works without further
 // data-plane changes. Per-leg counter slots (mux.legs) are NOT
 // extended here — they are parallel to tps[] and the reverse-only
 // leg doesn't add a forward transport. Per-direction recv-byte
@@ -239,6 +260,9 @@ func (rg *RouteGroup) appendReverseLeg(reverse routing.Rule) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
+	for len(rg.rvs) < len(rg.tps) {
+		rg.rvs = append(rg.rvs, nil)
+	}
 	rg.rvs = append(rg.rvs, reverse)
 }
 

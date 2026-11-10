@@ -74,27 +74,27 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 			}
 		}
 		nrg.rg.mu.Unlock()
-		nrg.rg.appendForwardLeg(rules.Forward, tp, "mux append: asymmetric forward-only leg")
+		// A paired leg goes in under one lock so its rules cannot be split by
+		// another append.
+		rg := nrg.rg
+		if addRev {
+			rg.appendRules(rules.Forward, rules.Reverse, tp, "mux append: aux leg")
+		} else {
+			rg.appendForwardLeg(rules.Forward, tp, "mux append: asymmetric forward-only leg")
+		}
 
 		// Send handshake on the new forward transport.
-		rg := nrg.rg
-		rg.mu.Lock()
-		lastIdx := len(rg.tps) - 1
-		lastTp := rg.tps[lastIdx]
-		lastRule := rg.fwd[lastIdx]
-		rg.mu.Unlock()
-		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, muxHandshakeCaps())
-		if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
+		packet := routing.MakeHandshakePacket(rules.Forward.NextRouteID(), rg.encrypt, muxHandshakeCaps())
+		if err := rg.writePacket(context.Background(), tp, packet, rules.Forward.KeyRouteID()); err != nil {
 			r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 		}
 	} else {
 		// Forward not wanted — drop the forward rule from routing table.
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID()})
+		nrg.rg.appendReverseLeg(rules.Reverse)
 	}
 
-	if addRev {
-		nrg.rg.appendReverseLeg(rules.Reverse)
-	} else {
+	if !addRev {
 		// Reverse not wanted — drop the reverse rule from routing table.
 		r.rt.DelRules([]routing.RouteID{rules.Reverse.KeyRouteID()})
 	}
@@ -203,14 +203,8 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 
 	// Send handshake on the new transport to inform the remote side
 	rg := nrg.rg
-	rg.mu.Lock()
-	lastIdx := len(rg.tps) - 1
-	lastTp := rg.tps[lastIdx]
-	lastRule := rg.fwd[lastIdx]
-	rg.mu.Unlock()
-
-	packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, muxHandshakeCaps())
-	if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
+	packet := routing.MakeHandshakePacket(rules.Forward.NextRouteID(), rg.encrypt, muxHandshakeCaps())
+	if err := rg.writePacket(context.Background(), tp, packet, rules.Forward.KeyRouteID()); err != nil {
 		r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
 	}
 
@@ -645,8 +639,8 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	// `proxy mux set --prune`), with no un-prunable auto primary left behind.
 
 	// Retire this leg on the FAR endpoint before tearing down local state, so the
-	// exit stops striping data onto it. Unlike the adaptive drop (dropLegsByIndex
-	// closes the transport, which the peer's liveness eventually notices), a manual
+	// exit stops striping data onto it. Unlike a leg whose transport closed (which
+	// the peer's liveness eventually notices), a manual
 	// removal leaves the transport UP — so without an explicit signal the far side
 	// keeps SENDING on a leg the receiver has dropped: the send-side desync that
 	// strands the whole downlink (measured: a mux group's agg_recv pinned at ~0
@@ -675,7 +669,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	if idx < len(rg.fwd) {
 		deadRuleIDs = append(deadRuleIDs, rg.fwd[idx].KeyRouteID())
 	}
-	if idx < len(rg.rvs) {
+	if idx < len(rg.rvs) && rg.rvs[idx] != nil {
 		deadRuleIDs = append(deadRuleIDs, rg.rvs[idx].KeyRouteID())
 	}
 
@@ -699,6 +693,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 		rg.mux.rebuildWeights(rg.tps)
 	}
 
+	rg.forgetPeerPark(tpID)
 	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.tps), removedTp,
 		rg.legHopsLocked(tpID))
 	if idx == 0 {

@@ -106,7 +106,9 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 	// resolves the orphaned consume rule but finds no route group
 	// (errRouteDescNotExist log-spam).
 	for _, r := range rg.rvs {
-		rules = append(rules, r.KeyRouteID())
+		if r != nil {
+			rules = append(rules, r.KeyRouteID())
+		}
 	}
 	rg.mu.Unlock()
 
