@@ -67,8 +67,10 @@ func newAdoptRouter(t *testing.T, pk cipher.PubKey, sk cipher.SecKey) *router {
 		datagramPorts: make(map[routing.Port]struct{}),
 		pending:       newPendingPackets(),
 		pendingLegs:   newPendingLegs(),
-		accept:        make(chan routing.EdgeRules, acceptSize),
+		accept:        make(chan acceptEntry, acceptSize),
 		adopted:       make(chan net.Conn, acceptSize),
+		accepted:      make(chan acceptResult, acceptSize),
+		acceptSem:     make(chan struct{}, acceptConcurrency),
 		done:          make(chan struct{}),
 	}
 }
@@ -361,7 +363,7 @@ func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
 		Forward: routing.ForwardRule(DefaultRouteKeepAlive, bF, aC, tp, rig.aPK, rig.bPK, ordPort, adoptServicePort),
 		Reverse: routing.ConsumeRule(DefaultRouteKeepAlive, bC, rig.aPK, rig.bPK, ordPort, adoptServicePort)}
 	require.NoError(t, rig.a.SaveRoutingRules(rulesA.Forward, rulesA.Reverse))
-	rig.b.accept <- rulesB
+	rig.b.accept <- acceptEntry{rules: rulesB}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
