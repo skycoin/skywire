@@ -1517,3 +1517,11 @@ func (proxyDefaultAPI) AlertsTest() ([]alerts.Result, error) {
 func (proxyDefaultAPI) AlertsLANProbe(_ string) (bool, error) {
 	return false, ErrProxyNotSupported
 }
+
+func (proxyDefaultAPI) AlertsPushAdd(sub alerts.PushSubscription) (alerts.PushSubscription, error) {
+	return sub, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) AlertsPushRemove(_ string) (int, error) {
+	return 0, ErrProxyNotSupported
+}

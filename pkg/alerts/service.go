@@ -2,6 +2,7 @@ package alerts
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"net"
@@ -41,6 +42,8 @@ type Status struct {
 	Pending      int           `json:"pending,omitempty"`
 	// LastEvents are the most recent alerts, newest last.
 	LastEvents []Event `json:"last_events,omitempty"`
+	// PushPublicKey is the VAPID public key a browser subscribes with.
+	PushPublicKey string `json:"push_public_key,omitempty"`
 }
 
 // maxLastEvents bounds Status.LastEvents.
@@ -75,11 +78,13 @@ type Service struct {
 	lastSent    time.Time
 	lastResults []Result
 	lastEvents  []Event
+	vapid       *ecdsa.PrivateKey
 }
 
 const (
 	settingsFile = "alerts.json"
 	stateFile    = "alerts-state.json"
+	vapidFile    = "alerts-vapid.key"
 )
 
 // NewService returns a Service whose settings and alert state live in
@@ -130,8 +135,13 @@ func (s *Service) SetSettings(next Settings) error {
 	if err := next.Validate(); err != nil {
 		return err
 	}
+	return s.saveLocked(next)
+}
+
+// saveLocked saves and applies set. s.mu is held.
+func (s *Service) saveLocked(set Settings) error {
 	if s.dir != "" {
-		b, err := json.MarshalIndent(next, "", "  ")
+		b, err := json.MarshalIndent(set, "", "  ")
 		if err != nil {
 			return err
 		}
@@ -139,7 +149,7 @@ func (s *Service) SetSettings(next Settings) error {
 			return err
 		}
 	}
-	s.settings = next
+	s.settings = set
 	return nil
 }
 
@@ -148,15 +158,16 @@ func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return Status{
-		Settings:     s.settings.Redacted(),
-		Enabled:      s.settings.Enabled(),
-		OfflineAfter: s.settings.Delay().String(),
-		Watched:      s.tracker.States(),
-		LastCheck:    s.lastCheck,
-		LastSent:     s.lastSent,
-		LastResults:  s.lastResults,
-		Pending:      len(s.pending),
-		LastEvents:   append([]Event(nil), s.lastEvents...),
+		Settings:      s.settings.Redacted(),
+		Enabled:       s.settings.Enabled(),
+		OfflineAfter:  s.settings.Delay().String(),
+		Watched:       s.tracker.States(),
+		LastCheck:     s.lastCheck,
+		LastSent:      s.lastSent,
+		LastResults:   s.lastResults,
+		Pending:       len(s.pending),
+		LastEvents:    append([]Event(nil), s.lastEvents...),
+		PushPublicKey: VAPIDPublicKey(s.vapidKey()),
 	}
 }
 
@@ -164,9 +175,11 @@ func (s *Service) Status() Status {
 func (s *Service) Test(ctx context.Context) ([]Result, error) {
 	set := s.Settings()
 	if !set.Enabled() {
-		return nil, errors.New("no email address or webhook is set")
+		return nil, errors.New("no email address, webhook or push device is set")
 	}
-	return s.Sender.Send(ctx, set, Event{Kind: KindTest, At: time.Now()}), nil
+	res := s.sender().Send(ctx, set, Event{Kind: KindTest, At: time.Now()})
+	s.dropGone(res)
+	return res, nil
 }
 
 // Run checks every interval until ctx is done. Visors that went down while
@@ -227,7 +240,8 @@ func (s *Service) Tick(ctx context.Context, now time.Time) {
 	}
 	var retry []pending
 	for _, p := range queue {
-		res := s.Sender.Send(ctx, set, p.ev)
+		res := s.sender().Send(ctx, set, p.ev)
+		s.dropGone(res)
 		ok := false
 		for _, r := range res {
 			if r.Err == "" {

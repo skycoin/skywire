@@ -3,6 +3,7 @@ package alerts
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
@@ -20,7 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// Sender delivers events by mail and webhook.
+// Sender delivers events by mail, webhook and Web Push.
 type Sender struct {
 	// Watcher is the public key of the visor doing the watching.
 	Watcher cipher.PubKey
@@ -33,8 +34,11 @@ type Sender struct {
 	// TLSConfig is used for STARTTLS and implicit TLS. Nil verifies the
 	// server name against the system roots.
 	TLSConfig *tls.Config
-	// HTTPClient posts webhooks. Nil is a client with a 15s timeout.
+	// HTTPClient posts webhooks and pushes. Nil is a client with a 15s
+	// timeout.
 	HTTPClient *http.Client
+	// VAPID signs Web Push requests (RFC 8292). Nil sends no pushes.
+	VAPID *ecdsa.PrivateKey
 }
 
 // MX is one mail exchanger of a domain, as in net.MX.
@@ -48,6 +52,8 @@ type Result struct {
 	Channel string `json:"channel"`
 	Target  string `json:"target"`
 	Err     string `json:"error,omitempty"`
+	// gone is the id of a push subscription the push service dropped.
+	gone string
 }
 
 // Send delivers ev to every configured channel and reports each one.
@@ -62,6 +68,18 @@ func (s *Sender) Send(ctx context.Context, set Settings, ev Event) []Result {
 	}
 	if set.Webhook != "" {
 		out = append(out, result("webhook", set.Webhook, s.postWebhook(ctx, set.Webhook, ev)))
+	}
+	if len(set.Push) > 0 {
+		payload := s.pushPayload(ev)
+		urgent := ev.Kind == KindOffline || ev.Kind == KindLinkLost || ev.Kind == KindConflict
+		for _, sub := range set.Push {
+			gone, err := s.sendPush(ctx, pushSubject(set), sub, payload, urgent)
+			r := result("push", sub.name(), err)
+			if gone {
+				r.gone = sub.ID
+			}
+			out = append(out, r)
+		}
 	}
 	return out
 }

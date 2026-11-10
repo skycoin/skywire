@@ -80,6 +80,9 @@ type Settings struct {
 	// DiskWarnPercent is the disk use that raises a storage warning.
 	// Default: DefaultDiskWarn.
 	DiskWarnPercent float64 `json:"disk_warn_percent,omitempty"`
+	// Push are the browsers that get Web Push alerts. They change only
+	// through Service.PushAdd and Service.PushRemove.
+	Push []PushSubscription `json:"push,omitempty"`
 }
 
 // DiskWarn is the disk warning threshold, the default when unset.
@@ -92,7 +95,7 @@ func (s *Settings) DiskWarn() float64 {
 
 // Enabled reports whether there is anywhere to send an alert.
 func (s *Settings) Enabled() bool {
-	return s != nil && (len(s.EmailTo) > 0 || s.Webhook != "")
+	return s != nil && (len(s.EmailTo) > 0 || s.Webhook != "" || len(s.Push) > 0)
 }
 
 // Delay is the offline delay, the default when unset.
@@ -139,11 +142,24 @@ func (s *Settings) Validate() error {
 			errs = append(errs, fmt.Errorf("invalid sender address %q", s.From))
 		}
 	}
+	for i := range s.Push {
+		if err := s.Push[i].Validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 
-// Redacted is a copy without the relay password.
+// Redacted is a copy without the relay password and the push keys.
 func (s Settings) Redacted() Settings {
+	if len(s.Push) > 0 {
+		p := make([]PushSubscription, len(s.Push))
+		for i, sub := range s.Push {
+			sub.Keys = PushKeys{}
+			p[i] = sub
+		}
+		s.Push = p
+	}
 	if s.SMTP != nil {
 		r := *s.SMTP
 		r.PasswordSet = r.Password != ""
@@ -154,8 +170,13 @@ func (s Settings) Redacted() Settings {
 }
 
 // Merge returns next, keeping the current relay password when next names
-// the same relay and leaves the password empty.
+// the same relay and leaves the password empty. The push subscriptions
+// are always the current ones.
 func Merge(cur *Settings, next Settings) Settings {
+	next.Push = nil
+	if cur != nil {
+		next.Push = cur.Push
+	}
 	if next.SMTP != nil {
 		r := *next.SMTP
 		r.PasswordSet = false
