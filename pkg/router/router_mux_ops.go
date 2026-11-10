@@ -639,8 +639,8 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	// `proxy mux set --prune`), with no un-prunable auto primary left behind.
 
 	// Retire this leg on the FAR endpoint before tearing down local state, so the
-	// exit stops striping data onto it. Unlike the adaptive drop (dropLegsByIndex
-	// closes the transport, which the peer's liveness eventually notices), a manual
+	// exit stops striping data onto it. Unlike a leg whose transport closed (which
+	// the peer's liveness eventually notices), a manual
 	// removal leaves the transport UP — so without an explicit signal the far side
 	// keeps SENDING on a leg the receiver has dropped: the send-side desync that
 	// strands the whole downlink (measured: a mux group's agg_recv pinned at ~0

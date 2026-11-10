@@ -2,6 +2,7 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -625,18 +626,20 @@ func (rg *RouteGroup) nextRetxTransport(avoid uuid.UUID) (*transport.ManagedTran
 	return rg.mux.selectRetxTransport(rg.tps, rg.fwd, avoid)
 }
 
-// dropLegsByIndex closes the transports at the policy-supplied
-// indices (re-mapped to current live legs) then triggers a prune
-// so the slice compacts and OnLegChange fires. Bounded: never
-// drops the last alive leg — the prune itself enforces that
-// invariant, but we skip the close too so we don't briefly
-// orphan a route group with no transports.
+// dropLegsByIndex removes the legs at the policy-supplied indices from this
+// group and fires OnLegChange. It never drops the last alive leg.
+//
+// The transport is left open: other route groups may ride it, and closing
+// it would prune or close them too. The peer is told with CloseLegRetired so
+// it stops sending on the leg. A peer without CapLegState predates that
+// signal and would close the whole group, so for it the transport is closed.
 //
 // Indices come from the policy's view of the leg slice at tick
 // time; the snapshot the policy saw might be stale by the time
 // we mutate (concurrent prune from keep-alive loop), so we treat
 // out-of-range indices as no-ops rather than errors.
 func (rg *RouteGroup) dropLegsByIndex(indices []int) {
+	const reason = "policy rotation: on_tick asked to drop this leg"
 	rg.mu.Lock()
 	aliveCount := 0
 	for _, tp := range rg.tps {
@@ -644,41 +647,55 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 			aliveCount++
 		}
 	}
-	closed := make([]int, 0, len(indices))
+	dropped := make([]int, 0, len(indices))
+	ids := make([]uuid.UUID, 0, len(indices))
+	canRetire := rg.mux != nil && rg.mux.legStateEnabled
 	for _, idx := range indices {
 		if idx < 0 || idx >= len(rg.tps) {
 			continue
 		}
 		tp := rg.tps[idx]
-		if tp == nil || tp.IsClosed() {
+		if tp == nil || tp.IsClosed() || slices.Contains(ids, tp.Entry.ID) {
 			continue
 		}
 		if aliveCount <= 1 {
-			// Refuse to drop the last alive leg — pruneDeadTransports
-			// also refuses, but skipping the close avoids the brief
-			// window where the leg is closed but not yet pruned.
 			break
 		}
-		rg.noteLegEvent(MuxEventLegDropped, "policy rotation: on_tick asked to drop this leg", MuxByPolicy,
+		rg.noteLegEvent(MuxEventLegDropped, reason, MuxByPolicy,
 			idx, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
-		_ = tp.Close() //nolint:errcheck
 		aliveCount--
-		closed = append(closed, idx)
+		dropped = append(dropped, idx)
+		ids = append(ids, tp.Entry.ID)
+		if canRetire && idx < len(rg.fwd) && rg.fwd[idx] != nil {
+			rg.retireLegOnPeer(tp, rg.fwd[idx])
+		} else {
+			_ = tp.Close() //nolint:errcheck
+		}
 	}
-	droppedIdx := rg.pruneDeadTransports()
 	rg.mu.Unlock()
-	for _, idx := range droppedIdx {
-		rg.fireLegChange("dropped", idx)
+	if len(ids) == 0 {
+		return
 	}
-	if len(droppedIdx) > 0 {
-		rg.signalRotate()
-		rg.maybeSelfHeal()
-	}
-	if rg.logger != nil && len(closed) > 0 {
+	rg.pruneDeadLegs(ids, reason, "dropped")
+	if rg.logger != nil {
 		rg.logger.
-			WithField("dropped_indices", closed).
+			WithField("dropped_indices", dropped).
 			Debug("Rotation hook dropped legs.")
 	}
+}
+
+// retireLegOnPeer tells the far endpoint to drop one leg and keep the group.
+// It writes off the caller's goroutine, which may hold rg.mu.
+func (rg *RouteGroup) retireLegOnPeer(tp *transport.ManagedTransport, fwd routing.Rule) {
+	retire := routing.MakeClosePacket(fwd.NextRouteID(), routing.CloseLegRetired)
+	keyID := fwd.KeyRouteID()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
+		defer cancel()
+		if err := rg.writePacket(ctx, tp, retire, keyID); err != nil && rg.logger != nil {
+			rg.logger.WithError(err).Debugf("leg-retire signal to remote failed for tp %s", tp.Entry.ID)
+		}
+	}()
 }
 
 // selectDataStalledLegs picks the ACTIVE legs to fast-prune: while the receiver
