@@ -1673,10 +1673,9 @@ func (s *Server) handleLocalVisor(w http.ResponseWriter, r *http.Request) {
 
 // handleLocalVisorWS handles websocket connections for live local visor data streaming
 func (s *Server) handleLocalVisorWS(w http.ResponseWriter, r *http.Request) {
-	// Accept websocket connection
-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"}, // Allow any origin for local development
-	})
+	// nil options: the Origin host must equal the Host header. An upgrade is
+	// not subject to CORS, so any other page could read the stream otherwise.
+	ws, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to accept websocket: %v", err), http.StatusBadRequest)
 		return
@@ -1754,8 +1753,8 @@ func (s *Server) handleTPSStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTPSAddTransport creates a transport between two remote visors via TPS RPC.
-// requireSameOriginJSON gates the four endpoints that MUTATE a visor's
-// transports. They are only ever called same-origin by the tpviz UI, so they
+// requireSameOriginJSON gates the endpoints that MUTATE a visor's transports
+// or apps. They are only ever called same-origin by the tpviz UI, so they
 // send no Access-Control-Allow-Origin header and refuse preflight outright —
 // they previously answered both with "*", which let any page the operator
 // happened to visit create or delete transports on their visor.
@@ -2310,12 +2309,7 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 // POST with JSON body: {"name": "app-name"}
 func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-			"error": "POST required",
-		})
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -2357,12 +2351,7 @@ func (s *Server) handleAppStart(w http.ResponseWriter, r *http.Request) {
 // POST with JSON body: {"name": "app-name"}
 func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-			"error": "POST required",
-		})
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -2404,12 +2393,7 @@ func (s *Server) handleAppStop(w http.ResponseWriter, r *http.Request) {
 // POST with JSON body: {"name": "app-name", "auto_start": true}
 func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-			"error": "POST required",
-		})
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
@@ -2453,12 +2437,7 @@ func (s *Server) handleAppAutoStart(w http.ResponseWriter, r *http.Request) {
 // POST with JSON body: {"name": "app-name", "pk": "public-key"}
 func (s *Server) handleAppSetPK(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	if r.Method != http.MethodPost {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,gosec
-			"error": "POST required",
-		})
+	if !requireSameOriginJSON(w, r) {
 		return
 	}
 
