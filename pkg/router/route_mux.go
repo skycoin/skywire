@@ -339,7 +339,7 @@ type routeMux struct {
 	// mirrors the active/standby set on its send side — otherwise standby is a
 	// send-side-only decision and the bulk-sending peer stripes across every
 	// established leg, head-of-line-stalling the reorder frontier (the wide-mux
-	// download stall). See handleLegStatePacket / sendLegState in route_group.go.
+	// download stall). See handleLegStatePacket / sendLegStateByID.
 	legStateEnabled bool
 
 	// legRehomeEnabled is true when both peers advertised CapLegRehome. When set,

@@ -410,7 +410,7 @@ func (c *shapeConverge) decompose(g *RouteGroup, from Shape, why string) bool {
 	}
 	idx := leg.idx
 	reason := fmt.Sprintf("shape %s -> %s: %s", from, c.target, why)
-	ns, err := g.splitLeg(idx, reason)
+	ns, err := g.splitLeg(leg.tp, reason)
 	if err != nil {
 		if errors.Is(err, ErrRehomeNoAck) || errors.Is(err, ErrRehomeUnsupported) {
 			// Not a transient: the hop dropping the request will still be

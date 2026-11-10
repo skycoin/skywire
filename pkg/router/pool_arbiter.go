@@ -53,7 +53,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -596,11 +595,11 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 }
 
 // releaseLegByTransport gives ONE pool-sourced leg back: by SPLIT when the exit
-// can take the chain back as a standby group of its own, by closing the
-// transport when it cannot.
+// can take the chain back as a standby group of its own, by retiring the leg
+// when it cannot.
 func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
-	idx := rg.releasableLegIndex(t.tpID)
-	if idx < 0 {
+	idx, tp := rg.legByID(t.tpID)
+	if tp == nil || rg.releasableLegIndex(t.tpID) < 0 {
 		return
 	}
 	// A released leg is not a dead leg. Hand the whole chain back to the pool
@@ -609,20 +608,16 @@ func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
 	// in. Only a peer that never negotiated the capability, or one that does
 	// not answer, costs the transport the way every release used to.
 	if rg.splitOnRelease() {
-		tp := rg.legTransportAt(idx)
-		tpID := tpEntryID(tp)
-		firstHop := cipher.PubKey{}
-		if tp != nil {
-			firstHop = tp.Remote()
-		}
-		ns, err := rg.splitLeg(idx, reason)
+		tpID := t.tpID
+		firstHop := tp.Remote()
+		ns, err := rg.splitLeg(tpID, reason)
 		if err == nil {
 			// Same fields as the re-home success line: the chain is named by
 			// the transport it kept and by whether that transport is the far
 			// end, so one line is a complete per-attempt audit.
 			peer := rg.farEndPK()
 			rg.logger.WithField("first_hop", firstHop.String()).
-				WithField("direct", tp != nil && firstHop == peer).
+				WithField("direct", firstHop == peer).
 				WithField("tp", tpID.String()).
 				Infof("Split leg :%d back into standby group :%d", t.from, ns.desc.SrcPort())
 			// Still a pool_leg_released — the group gave the leg back. It just
@@ -634,12 +629,12 @@ func (rg *RouteGroup) releaseLegByTransport(t poolTakenLeg, reason string) {
 			return
 		}
 		rg.logger.WithError(err).Infof(
-			"Split of the leg taken from standby :%d is unavailable; closing its transport instead", t.from)
-		if idx = rg.releasableLegIndex(t.tpID); idx < 0 {
+			"Split of the leg taken from standby :%d is unavailable; retiring the leg instead", t.from)
+		if rg.releasableLegIndex(t.tpID) < 0 {
 			return
 		}
 	}
-	rg.closeReleasedLeg(idx, reason)
+	rg.closeReleasedLeg(t.tpID, reason)
 }
 
 // releasableLegIndex finds the live leg riding transport tpID, or -1 when it is
@@ -665,24 +660,29 @@ func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 	return idx
 }
 
-// closeReleasedLeg is the pre-split release: the leg's transport is closed and
-// the leg pruned, WITHOUT the self-heal top-up dropLegsByIndex triggers — the
-// release is deliberate, and re-dialing a replacement for a leg the group just
-// decided it does not need is the churn this whole file exists to avoid.
-func (rg *RouteGroup) closeReleasedLeg(idx int, reason string) {
+// closeReleasedLeg is the pre-split release: the leg is retired on the peer and
+// pruned, WITHOUT the self-heal top-up dropLegs triggers — the release is
+// deliberate, and re-dialing a replacement for a leg the group just decided it
+// does not need is the churn this whole file exists to avoid.
+//
+// The transport is left open, as in dropLegs: other route groups may ride it.
+// It is closed only for a peer without CapLegState, which cannot be told.
+func (rg *RouteGroup) closeReleasedLeg(tpID uuid.UUID, reason string) {
 	rg.mu.Lock()
-	if idx < 0 || idx >= len(rg.legs) || rg.legs[idx].tp == nil {
+	idx := rg.legIndexLocked(tpID)
+	if idx < 0 || len(rg.legs) <= 1 {
 		rg.mu.Unlock()
 		return
 	}
-	tp := rg.legs[idx].tp
+	tp, fwd := rg.legs[idx].tp, rg.legs[idx].fwd
 	rg.noteLegEvent(MuxEventPoolLegReleased, reason, MuxByLocal, idx, len(rg.legs), tp, rg.legHopsLocked(tp.Entry.ID))
-	_ = tp.Close() //nolint:errcheck // the prune below drops it either way
-	dropped := rg.pruneDeadTransports()
-	rg.mu.Unlock()
-	for _, i := range dropped {
-		rg.fireLegChange("pool-released", i)
+	if rg.mux != nil && rg.mux.legStateEnabled && fwd != nil {
+		rg.retireLegOnPeer(tp, fwd)
+	} else {
+		_ = tp.Close() //nolint:errcheck // the prune below drops it either way
 	}
+	rg.mu.Unlock()
+	rg.removeLegsByID([]uuid.UUID{tpID}, reason, "pool-released")
 }
 
 // poolLegSource names where leg tpID came from, for `visor state` and the

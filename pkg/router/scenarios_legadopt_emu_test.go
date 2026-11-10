@@ -123,7 +123,7 @@ func newAdoptRig(t *testing.T) *adoptRig {
 		go rig.serve(rig.b, rig.connsB[i])
 	}
 
-	reserve, err := rig.activeA.splitLeg(1, "test: release the second leg")
+	reserve, err := rig.activeA.splitLeg(tpsA[1].Entry.ID, "test: release the second leg")
 	require.NoError(t, err, "the split that makes the leg reserve")
 	require.True(t, reserve.legReserve)
 	rig.reserveA, rig.reservePrt = reserve, reserve.farEndPort()
@@ -342,7 +342,7 @@ func TestAdoptedChainNeverBlocksOrdinaryAccepts(t *testing.T) {
 	// The exit adopts the reserve's chain, but no handshake will ever come for
 	// it: the initiator's side of the chain is cut.
 	rig.connsA[1].Egress().Cut()
-	leg, err := reserveB.detachLegForRehome(0, "test: adopted, initiator gone")
+	leg, err := reserveB.detachLegForRehome(reserveB.firstLegTpID(), "test: adopted, initiator gone")
 	require.NoError(t, err)
 	deadDesc := routing.NewRouteDescriptor(rig.aPK, rig.bPK, adoptNewPort, adoptServicePort)
 	rules, err := adoptedEdgeRules(rig.b.rt, leg, deadDesc)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/routing"
@@ -32,7 +33,7 @@ func TestPolicyDropKeepsTransportOpen(t *testing.T) {
 		}
 	}
 
-	rg.dropLegsByIndex([]int{1})
+	rg.dropLegs([]uuid.UUID{mts[1].Entry.ID})
 
 	require.False(t, dropped.IsClosed(), "a policy drop must not close the transport")
 	select {
@@ -67,7 +68,7 @@ func TestPolicyDropClosesTransportForOldPeer(t *testing.T) {
 		}
 	}
 
-	rg.dropLegsByIndex([]int{1})
+	rg.dropLegs([]uuid.UUID{mts[1].Entry.ID})
 
 	require.True(t, mts[1].IsClosed(), "without the signal the peer learns of the drop from the close")
 	rg.mu.Lock()
@@ -79,7 +80,7 @@ func TestPolicyDropClosesTransportForOldPeer(t *testing.T) {
 func TestPolicyDropKeepsLastLeg(t *testing.T) {
 	rg, mts, _ := createMuxRouteGroup(t, 2)
 
-	rg.dropLegsByIndex([]int{0, 1})
+	rg.dropLegs([]uuid.UUID{mts[0].Entry.ID, mts[1].Entry.ID})
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()

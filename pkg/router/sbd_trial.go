@@ -278,11 +278,16 @@ func (rg *RouteGroup) undoRefutedPark(v sbdTrialVerdict, tps []*transport.Manage
 		tp = tps[v.leg]
 	}
 	rg.noteLegEvent(MuxEventParkTrialFailed, reason, MuxByAdaptive, v.leg, len(tps), tp, nil)
-	if !rg.mux.isLegStandby(v.leg) {
-		return // something already re-admitted it; nothing to undo
+	// v.leg is where the leg was when the trial was read. The unpark goes by
+	// transport ID, so a prune since then cannot move it onto another leg.
+	if standby, ok := rg.legStandbyByID(v.tpID); !ok || !standby {
+		return // gone, or something already re-admitted it; nothing to undo
 	}
-	rg.mux.setLegStandby(v.leg, false)
+	idx, tp, ok := rg.setLegStandbyByID(v.tpID, false)
+	if !ok {
+		return
+	}
 	rg.clearAdaptivePark(v.tpID)
-	rg.sendLegState(v.leg, false)
-	rg.noteLegEvent(MuxEventLegPromoted, promoted, MuxByAdaptive, v.leg, len(tps), tp, nil)
+	rg.sendLegStateByID(v.tpID, false)
+	rg.noteLegEvent(MuxEventLegPromoted, promoted, MuxByAdaptive, idx, rg.legCount(), tp, nil)
 }

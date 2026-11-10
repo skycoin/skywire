@@ -150,20 +150,14 @@ func (rg *RouteGroup) handlePacketNow(packet routing.Packet) error {
 			rid := packet.RouteID()
 			readyLeg := rg.legByConsumeRuleLocked(rid)
 			rg.mux.markLegReady(readyLeg)
-			rg.mu.Unlock()
-			// Signal the just-ready leg's BORN-standby state to the peer. An aux
-			// leg grown into the warm pool (standbyNewLegs) is standby WITHOUT ever
-			// passing through the rotation engine's demote path — the only place
-			// sendLegState was previously called — so the peer (accept side, no
-			// standby of its own) kept striping its send traffic across it. Now that
-			// the leg's rules are peer-confirmed (this handshake), tell the peer to
-			// park it too, so the bulk-sending direction is bounded to the active
-			// set. Only signals standby legs; leg 0 / active legs are the peer's
-			// default, and the accept side (all-active) never enters this branch.
-			// Sent after the rg.mu unlock — sendLegState takes rg.mu itself.
+			var bornStandby uuid.UUID
 			if readyLeg > 0 && rg.mux.isLegStandby(readyLeg) {
-				rg.sendLegState(readyLeg, true)
+				bornStandby = tpEntryID(rg.legs[readyLeg].tp)
 			}
+			rg.mu.Unlock()
+			// A leg born standby never passed through a demote, so the peer was never
+			// told. Sent after the unlock, since the write must not hold rg.mu.
+			rg.sendLegStateByID(bornStandby, true)
 		}
 		firstHandshake := false
 		rg.handshakeProcessedOnce.Do(func() {
@@ -571,18 +565,23 @@ func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
 		return nil
 	}
 	standby := packet.LegStateStandby()
+	// Resolve the leg and flip it under one lock, so the flag lands on the leg
+	// the packet arrived on.
 	rg.mu.Lock()
 	idx := rg.legByConsumeRuleLocked(packet.RouteID())
-	rg.mu.Unlock()
 	if idx < 0 {
+		rg.mu.Unlock()
 		return nil // no matching leg (already pruned / unknown route)
 	}
+	tp, legs := rg.legs[idx].tp, len(rg.legs)
+	hops := append([]routing.Hop(nil), rg.legHopsLocked(tpEntryID(tp))...)
 	// The peer re-broadcasts its COMPLETE set every legStateResyncInterval, so only
 	// a real transition is an event — otherwise a steady state would post one every
 	// tick and flood the 256-deep ring.
 	changed := rg.mux.isLegStandby(idx) != standby
 	rg.mux.setLegStandby(idx, standby)
-	rg.notePeerLegState(idx, standby)
+	rg.mu.Unlock()
+	rg.notePeerLegState(tpEntryID(tp), standby)
 	if rg.logger != nil {
 		rg.logger.Debugf("LegState: peer marked leg %d %s", idx, map[bool]string{true: "standby", false: "active"}[standby])
 	}
@@ -595,21 +594,20 @@ func (rg *RouteGroup) handleLegStatePacket(packet routing.Packet) error {
 		if standby {
 			kind, reason = MuxEventLegParked, "peer-mirrored park: the remote end marked this leg standby (CapLegState)"
 		}
-		tp := rg.legTransportAt(idx)
-		rg.noteLegEvent(kind, reason, MuxByPeer, idx, rg.legCount(), tp, rg.legHopsFor(tpEntryID(tp)))
+		rg.noteLegEvent(kind, reason, MuxByPeer, idx, legs, tp, hops)
 	}
 	return nil
 }
 
-// notePeerLegState records whether leg idx is standby because the PEER said so.
+// notePeerLegState records whether the leg on transport id is standby because
+// the PEER said so.
 // The leg-state resync re-broadcasts this side's own active/standby set to repair
 // a dropped signal; a park the peer originated is the peer's to re-assert, and
 // echoing it back pins the leg down from both ends — measured as a peer-mirrored
 // park that survived five consecutive downloads because our own 7s resync kept
 // re-asserting standby. A promote (standby=false) clears the record, so the moment
 // the peer promotes the leg our resync owns it again.
-func (rg *RouteGroup) notePeerLegState(idx int, standby bool) {
-	id := tpEntryID(rg.legTransportAt(idx))
+func (rg *RouteGroup) notePeerLegState(id uuid.UUID, standby bool) {
 	if id == uuid.Nil {
 		return
 	}
@@ -625,10 +623,9 @@ func (rg *RouteGroup) notePeerLegState(idx int, standby bool) {
 	rg.peerParkedLegs[id] = struct{}{}
 }
 
-// legParkedByPeer reports whether leg idx's standby state was mirrored from the
-// peer rather than decided here.
-func (rg *RouteGroup) legParkedByPeer(idx int) bool {
-	id := tpEntryID(rg.legTransportAt(idx))
+// legParkedByPeer reports whether the standby state of the leg on transport id
+// was mirrored from the peer rather than decided here.
+func (rg *RouteGroup) legParkedByPeer(id uuid.UUID) bool {
 	rg.peerParkMu.Lock()
 	defer rg.peerParkMu.Unlock()
 	_, ok := rg.peerParkedLegs[id]
@@ -641,33 +638,6 @@ func (rg *RouteGroup) forgetPeerPark(id uuid.UUID) {
 	rg.peerParkMu.Lock()
 	delete(rg.peerParkedLegs, id)
 	rg.peerParkMu.Unlock()
-}
-
-// sendLegState signals leg idx's new active/standby state to the remote so it
-// mirrors the parking on its send side (CapLegState). Sent ON the leg (its
-// forward rule + transport) so the remote identifies the leg by the route the
-// packet arrives on — the same identity an aux-leg handshake uses. Best-effort:
-// parking keeps the leg's rules and transport installed, so the signal still
-// rides a just-demoted leg. No-op unless CapLegState was negotiated.
-func (rg *RouteGroup) sendLegState(idx int, standby bool) {
-	if rg.mux == nil || !rg.mux.legStateEnabled {
-		return
-	}
-	rg.mu.Lock()
-	var tp *transport.ManagedTransport
-	var rule routing.Rule
-	if idx >= 0 && idx < len(rg.legs) {
-		tp = rg.legs[idx].tp
-		rule = rg.legs[idx].fwd
-	}
-	rg.mu.Unlock()
-	if tp == nil || rule == nil {
-		return
-	}
-	packet := routing.MakeLegStatePacket(rule.NextRouteID(), standby)
-	if err := rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID()); err != nil {
-		rg.logger.WithError(err).Debugf("LegState: failed to signal leg %d", idx)
-	}
 }
 
 // SetDirectionPin applies the operator's MANUAL direction pin to this route

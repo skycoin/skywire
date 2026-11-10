@@ -118,15 +118,15 @@ func TestAsymmetricLegsKeepReverseRulesAligned(t *testing.T) {
 	require.NoError(t, r.appendRouteAsymmetric(nrg, revOnly, false, true))
 	require.NoError(t, r.appendRouteAsymmetric(nrg, paired, true, true))
 
-	require.Equal(t, 2, rg.legIndexByConsumeRule(paired.Reverse.KeyRouteID()),
+	require.Equal(t, 2, consumeLegIdx(rg, paired.Reverse.KeyRouteID()),
 		"the paired leg is leg 2, after the forward-only leg")
-	require.Equal(t, -1, rg.legIndexByConsumeRule(revOnly.Reverse.KeyRouteID()),
+	require.Equal(t, -1, consumeLegIdx(rg, revOnly.Reverse.KeyRouteID()),
 		"a reverse-only rule belongs to no leg")
 
 	// Pruning the forward-only leg must leave the others paired and must keep
 	// the reverse-only rule.
 	require.Equal(t, 1, rg.pruneDeadLegs([]uuid.UUID{fwdOnly.Forward.NextTransportID()}, "test", "test"))
-	require.Equal(t, 1, rg.legIndexByConsumeRule(paired.Reverse.KeyRouteID()))
+	require.Equal(t, 1, consumeLegIdx(rg, paired.Reverse.KeyRouteID()))
 	_, err := r.rt.Rule(paired.Reverse.KeyRouteID())
 	require.NoError(t, err, "the paired leg's reverse rule must survive the prune")
 	_, err = r.rt.Rule(revOnly.Reverse.KeyRouteID())
@@ -141,4 +141,11 @@ func TestAsymmetricLegsKeepReverseRulesAligned(t *testing.T) {
 	}
 	rg.mu.Unlock()
 	require.True(t, tracked, "the group must still hold the reverse-only rule so its close deletes it")
+}
+
+// consumeLegIdx is the index of the leg routeID arrives on, or -1.
+func consumeLegIdx(rg *RouteGroup, routeID routing.RouteID) int {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	return rg.legByConsumeRuleLocked(routeID)
 }

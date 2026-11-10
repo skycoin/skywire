@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router/routersettings"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -188,7 +190,7 @@ func rehomeChain(g, s *RouteGroup) error {
 	globalMuxCounters.legRehomesAcked.Add(1)
 
 	reason := fmt.Sprintf("rehome from :%d", s.desc.DstPort())
-	leg, err := s.detachLegForRehome(0, reason)
+	leg, err := s.detachLegForRehome(tp.Entry.ID, reason)
 	if err != nil {
 		return err
 	}
@@ -307,18 +309,18 @@ func (rg *RouteGroup) farEndPK() cipher.PubKey {
 func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPort, dstPort routing.Port,
 	dialect legControlDialect) {
 	globalMuxCounters.legRehomesReceived.Add(1)
-	idx := rg.legIndexByConsumeRule(routeID)
+	id, via := rg.legChainByConsumeRule(routeID)
 	target, err := rg.rehomeTarget(srcPort, dstPort)
-	if err == nil && idx < 0 {
+	if err == nil && via == nil {
 		err = fmt.Errorf("no leg holds consume rule %d", routeID)
 	}
 	if err == nil {
-		err = target.rehomeTransportFree(rg.legTransportAt(idx))
+		err = target.rehomeTransportFree(via.tp)
 	}
 	var leg *rehomeLeg
 	reason := fmt.Sprintf("rehome from :%d", rg.desc.DstPort())
 	if err == nil {
-		leg, err = rg.detachLegForRehome(idx, reason)
+		leg, err = rg.detachLegForRehome(id, reason)
 	}
 	if err == nil {
 		// Adopted in STANDBY: this side is the bulk sender on a download, and it
@@ -329,7 +331,9 @@ func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPor
 	if err != nil {
 		globalMuxCounters.legRehomesFailed.Add(1)
 		rg.logger.WithError(err).Debug("Re-home refused")
-		rg.replyRehome(idx, nonce, srcPort, dstPort, routing.LegRehomeRefused, dialect)
+		if via != nil {
+			rg.replyRehomeOn(via, nonce, srcPort, dstPort, routing.LegRehomeRefused, dialect)
+		}
 		return
 	}
 	// The ack is sealed by THIS group, not by the target the chain has just
@@ -351,16 +355,23 @@ func (rg *RouteGroup) acceptRehome(routeID routing.RouteID, nonce uint64, srcPor
 // has rewritten its own consume rule, so the chain now carries this group's
 // sequence space in both directions.
 func (rg *RouteGroup) commitRehomedLeg(routeID routing.RouteID) {
-	idx := rg.legIndexByConsumeRule(routeID)
-	if idx < 0 || rg.mux == nil {
+	if rg.mux == nil {
+		return
+	}
+	rg.mu.Lock()
+	idx := rg.legByConsumeRuleLocked(routeID)
+	if idx < 0 {
+		rg.mu.Unlock()
 		return
 	}
 	rg.mux.setLegStandby(idx, false)
 	rg.mux.markLegReady(idx)
+	tp, legs := rg.legs[idx].tp, len(rg.legs)
+	hops := append([]routing.Hop(nil), rg.legHopsLocked(tpEntryID(tp))...)
+	rg.mu.Unlock()
 	rg.mux.signalWindow()
-	tp := rg.legTransportAt(idx)
 	rg.noteLegEvent(MuxEventLegPromoted, "rehome commit: the adopted chain now carries this group",
-		MuxByPeer, idx, rg.legCount(), tp, rg.legHopsFor(tpEntryID(tp)))
+		MuxByPeer, idx, legs, tp, hops)
 	rg.signalServiceWake()
 }
 
@@ -391,22 +402,6 @@ func (rg *RouteGroup) rehomeTarget(srcPort, dstPort routing.Port) (*RouteGroup, 
 	return target, nil
 }
 
-// replyRehome answers on the leg that is still ours (the refusal path).
-func (rg *RouteGroup) replyRehome(idx int, nonce uint64, srcPort, dstPort routing.Port, flags byte,
-	dialect legControlDialect) {
-	rg.mu.Lock()
-	var fwd routing.Rule
-	var tp *transport.ManagedTransport
-	if idx >= 0 && idx < len(rg.legs) {
-		fwd, tp = rg.legs[idx].fwd, rg.legs[idx].tp
-	}
-	rg.mu.Unlock()
-	if fwd == nil || tp == nil {
-		return
-	}
-	rg.replyRehomeOn(&rehomeLeg{fwd: fwd, tp: tp}, nonce, srcPort, dstPort, flags, dialect)
-}
-
 // replyRehomeOn answers over a detached (or still-held) leg. The chain's
 // next-hop route ID toward the initiator is unchanged by the rewrite, so the
 // reply rides the same rule either way.
@@ -415,14 +410,6 @@ func (rg *RouteGroup) replyRehomeOn(leg *rehomeLeg, nonce uint64, srcPort, dstPo
 	if err := rg.writeLegControl(leg, nonce, srcPort, dstPort, flags, dialect); err != nil {
 		rg.logger.WithError(err).Debug("Re-home: failed to answer the request")
 	}
-}
-
-// legIndexByConsumeRule finds the leg a packet arrived on, the way every
-// on-leg control packet identifies itself (see handleLegStatePacket).
-func (rg *RouteGroup) legIndexByConsumeRule(routeID routing.RouteID) int {
-	rg.mu.Lock()
-	defer rg.mu.Unlock()
-	return rg.legByConsumeRuleLocked(routeID)
 }
 
 // rehomeTransportFree enforces the mux invariant a dialed aux leg is held to
@@ -442,14 +429,27 @@ func (rg *RouteGroup) rehomeTransportFree(tp *transport.ManagedTransport) error 
 	return nil
 }
 
-// detachLegForRehome takes a leg out of this group WITHOUT deleting its rules —
-// they are about to be rewritten and handed to another group. The counterpart
-// of pruneLegByConsumeRule, which deletes them.
-func (rg *RouteGroup) detachLegForRehome(idx int, reason string) (*rehomeLeg, error) {
+// legChainByConsumeRule names the leg routeID arrives on: its transport ID and
+// the chain a reply rides. The ID is uuid.Nil and the chain nil when no leg does.
+func (rg *RouteGroup) legChainByConsumeRule(routeID routing.RouteID) (uuid.UUID, *rehomeLeg) {
 	rg.mu.Lock()
-	if idx < 0 || idx >= len(rg.legs) || rg.legs[idx].rvs == nil {
+	defer rg.mu.Unlock()
+	idx := rg.legByConsumeRuleLocked(routeID)
+	if idx < 0 || rg.legs[idx].tp == nil || rg.legs[idx].fwd == nil {
+		return uuid.Nil, nil
+	}
+	return rg.legs[idx].tp.Entry.ID, &rehomeLeg{fwd: rg.legs[idx].fwd, tp: rg.legs[idx].tp}
+}
+
+// detachLegForRehome takes the leg on transport id out of this group WITHOUT
+// deleting its rules — they are about to be rewritten and handed to another
+// group. The counterpart of pruneLegByConsumeRule, which deletes them.
+func (rg *RouteGroup) detachLegForRehome(id uuid.UUID, reason string) (*rehomeLeg, error) {
+	rg.mu.Lock()
+	idx := rg.legIndexLocked(id)
+	if idx < 0 || rg.legs[idx].rvs == nil {
 		rg.mu.Unlock()
-		return nil, fmt.Errorf("no leg %d to re-home", idx)
+		return nil, fmt.Errorf("no leg on transport %s to re-home", id)
 	}
 	leg := &rehomeLeg{fwd: rg.legs[idx].fwd, rvs: rg.legs[idx].rvs, tp: rg.legs[idx].tp}
 	leg.hops = rg.legHopsLocked(tpEntryID(leg.tp))
@@ -494,16 +494,14 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.legs))
 		rg.mux.rebuildWeights(rg.legs)
+		// The chain is already established, so it needs no aux-leg handshake to
+		// become selectable. Set under rg.mu, while idx still names this leg.
+		rg.mux.markLegReady(idx)
+		rg.mux.setLegStandby(idx, standby)
 	}
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByOperator, idx, len(rg.legs), leg.tp, leg.hops)
 	rg.mu.Unlock()
 
-	if rg.mux != nil {
-		// The chain is already established — it carried another group a moment
-		// ago — so it needs no aux-leg handshake to become selectable.
-		rg.mux.markLegReady(idx)
-		rg.mux.setLegStandby(idx, standby)
-	}
 	if len(leg.hops) > 0 {
 		rg.recordLegRoute(leg.hops, nil)
 	}

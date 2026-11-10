@@ -127,25 +127,23 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 		return hops
 	}
 
-	// Fallback: reconstruct from local transports (may be incomplete for multi-hop)
-	srcPK := rg.desc.SrcPK()
+	// Fallback: one first hop per leg. Legs are parallel routes, so each starts
+	// at this visor, which is the descriptor's Dst (see LocalAddr).
+	local := rg.localPK
+	if local.Null() {
+		local = rg.desc.DstPK()
+	}
 	hops := make([]RouteHopInfo, 0, len(rg.legs))
-	for i, lg := range rg.legs {
+	for _, lg := range rg.legs {
 		tp := lg.tp
 		if tp == nil {
 			continue
 		}
-		var fromPK cipher.PubKey
-		if i == 0 {
-			fromPK = srcPK
-		} else if i > 0 && rg.legs[i-1].tp != nil {
-			fromPK = rg.legs[i-1].tp.Remote()
-		}
 		hops = append(hops, RouteHopInfo{
 			TpID:   tp.Entry.ID.String(),
-			From:   fromPK.String(),
+			From:   local.String(),
 			To:     tp.Remote().String(),
-			TpType: string(tp.Type()),
+			TpType: string(tp.Entry.Type),
 		})
 	}
 	return hops
@@ -228,7 +226,8 @@ func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.Manag
 		rg.mux.growLegs(len(rg.legs))
 	}
 	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByLocal, newIdx, legs, tp, rg.legHopsLocked(tpEntryID(tp)))
-	hookSet := rg.legChangeHook != nil
+	// As in appendRules, a group's first leg is not a leg change.
+	hookSet := rg.legChangeHook != nil && newIdx > 0
 	rg.mu.Unlock()
 
 	// A second leg is what the leg-gated loops were parked waiting for.
