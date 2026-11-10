@@ -22,8 +22,9 @@ import (
 
 // SameSite gets cookie's `SameSite` value.
 func (c *CookieConfig) SameSite() http.SameSite {
-	// using default value for now
-	return http.SameSiteDefaultMode
+	// Lax keeps the session off cross-site POSTs and subrequests in every
+	// browser, not only the ones that default to it.
+	return http.SameSiteLaxMode
 }
 
 // Parse parses the file at path and decodes its JSON into c.

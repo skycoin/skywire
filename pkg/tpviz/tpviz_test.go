@@ -628,13 +628,13 @@ func TestHandleAppStart(t *testing.T) {
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps/start", nil))
 		body := decodeMap(t, rec.Body.Bytes())
-		require.Equal(t, "POST required", body["error"])
+		require.Equal(t, "method not allowed", body["error"])
 	})
 
 	t.Run("invalid body", func(t *testing.T) {
 		s := testServer(t)
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/apps/start", strings.NewReader("{bad"))
+		req := postJSON("/api/apps/start", "{bad")
 		s.Handler().ServeHTTP(rec, req)
 		body := decodeMap(t, rec.Body.Bytes())
 		require.Equal(t, "invalid request body", body["error"])
@@ -643,7 +643,7 @@ func TestHandleAppStart(t *testing.T) {
 	t.Run("not connected", func(t *testing.T) {
 		s := testServer(t)
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/apps/start", strings.NewReader(`{"name":"vpn"}`))
+		req := postJSON("/api/apps/start", `{"name":"vpn"}`)
 		s.Handler().ServeHTTP(rec, req)
 		body := decodeMap(t, rec.Body.Bytes())
 		require.Equal(t, "visor not connected", body["error"])
@@ -654,7 +654,7 @@ func TestHandleAppStart(t *testing.T) {
 		fv := &fakeVisorAPI{}
 		s.SetVisorAPI(fv, "PK")
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/apps/start", strings.NewReader(`{"name":"vpn"}`))
+		req := postJSON("/api/apps/start", `{"name":"vpn"}`)
 		s.Handler().ServeHTTP(rec, req)
 		body := decodeMap(t, rec.Body.Bytes())
 		require.Equal(t, "started", body["status"])
@@ -665,7 +665,7 @@ func TestHandleAppStart(t *testing.T) {
 		s := testServer(t)
 		s.SetVisorAPI(&fakeVisorAPI{startErr: errors.New("start boom")}, "PK")
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/apps/start", strings.NewReader(`{"name":"vpn"}`))
+		req := postJSON("/api/apps/start", `{"name":"vpn"}`)
 		s.Handler().ServeHTTP(rec, req)
 		body := decodeMap(t, rec.Body.Bytes())
 		require.Equal(t, "start boom", body["error"])
@@ -677,7 +677,7 @@ func TestHandleAppStop(t *testing.T) {
 	fv := &fakeVisorAPI{}
 	s.SetVisorAPI(fv, "PK")
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/stop", strings.NewReader(`{"name":"skysocks"}`))
+	req := postJSON("/api/apps/stop", `{"name":"skysocks"}`)
 	s.Handler().ServeHTTP(rec, req)
 	body := decodeMap(t, rec.Body.Bytes())
 	require.Equal(t, "stopped", body["status"])
@@ -689,8 +689,7 @@ func TestHandleAppAutoStart(t *testing.T) {
 	fv := &fakeVisorAPI{}
 	s.SetVisorAPI(fv, "PK")
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/autostart",
-		strings.NewReader(`{"name":"vpn","auto_start":true}`))
+	req := postJSON("/api/apps/autostart", `{"name":"vpn","auto_start":true}`)
 	s.Handler().ServeHTTP(rec, req)
 	body := decodeMap(t, rec.Body.Bytes())
 	require.Equal(t, "updated", body["status"])
@@ -704,8 +703,7 @@ func TestHandleAppSetPK(t *testing.T) {
 	fv := &fakeVisorAPI{}
 	s.SetVisorAPI(fv, "PK")
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/set-pk",
-		strings.NewReader(`{"name":"vpn","pk":"remotePK"}`))
+	req := postJSON("/api/apps/set-pk", `{"name":"vpn","pk":"remotePK"}`)
 	s.Handler().ServeHTTP(rec, req)
 	body := decodeMap(t, rec.Body.Bytes())
 	require.Equal(t, "updated", body["status"])
@@ -1065,5 +1063,54 @@ func TestStop(t *testing.T) {
 		// closed as expected
 	default:
 		t.Fatal("stopChan was not closed by Stop()")
+	}
+}
+
+// TestAppWriteEndpointsAreSameOriginOnly pins the same guard on the endpoints
+// that start, stop and reconfigure apps.
+func TestAppWriteEndpointsAreSameOriginOnly(t *testing.T) {
+	s := testServer(t)
+	fv := &fakeVisorAPI{}
+	s.SetVisorAPI(fv, "PK")
+
+	for _, path := range []string{
+		"/api/apps/start",
+		"/api/apps/stop",
+		"/api/apps/autostart",
+		"/api/apps/set-pk",
+	} {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, path, nil))
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"), path)
+
+		// A text/plain POST skips preflight; it must not reach the visor.
+		rec = httptest.NewRecorder()
+		req := postJSON(path, `{"name":"vpn-client","pk":"x","auto_start":true}`)
+		req.Header.Set("Content-Type", "text/plain")
+		s.Handler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code, path)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"), path)
+	}
+}
+
+// TestLocalVisorWSRefusesOtherOrigins checks a page on another origin cannot
+// open the local visor stream.
+func TestLocalVisorWSRefusesOtherOrigins(t *testing.T) {
+	ts := httptest.NewServer(testServer(t).Handler())
+	defer ts.Close()
+
+	for origin, upgraded := range map[string]bool{"https://attacker.example": false, ts.URL: true} {
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/ws/local-visor", nil)
+		require.NoError(t, err)
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", "websocket")
+		req.Header.Set("Sec-WebSocket-Version", "13")
+		req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+		req.Header.Set("Origin", origin)
+		resp, err := http.DefaultTransport.RoundTrip(req)
+		require.NoError(t, err)
+		require.Equal(t, upgraded, resp.StatusCode == http.StatusSwitchingProtocols, origin)
+		require.NoError(t, resp.Body.Close())
 	}
 }
