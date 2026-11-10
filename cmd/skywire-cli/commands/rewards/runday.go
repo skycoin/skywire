@@ -354,12 +354,18 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 	// available for diagnostics but is not load-bearing for rewards.
 
 	// Get PKs that met uptime on this date.
-	res, _ := script.File(utfilePath).Match(strings.TrimRight(opts.Date, "\n")).Column(1).Slice() //nolint:errcheck
+	res, belowUptime, err := uptimeKeys(utfilePath, strings.TrimRight(opts.Date, "\n"))
+	if err != nil {
+		return nil, fmt.Errorf("read uptime file: %w", err)
+	}
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no keys achieved minimum uptime on %s", opts.Date)
 	}
 
 	var nodesInfos1, grrInfos []nodeinfo
+	for _, pk := range belowUptime {
+		grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
+	}
 	for _, pk := range res {
 		surveyPath := fmt.Sprintf("%s/%s/node-info.json", opts.HwSurveyPath, pk)
 		survey, parseErr := parseSurvey(surveyPath)

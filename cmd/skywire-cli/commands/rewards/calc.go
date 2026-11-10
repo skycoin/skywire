@@ -1013,24 +1013,27 @@ Architectures:
 		}
 
 		// Get public keys that met uptime requirement
-		var res []string
-		if pubkey == "" {
-			//nolint:errcheck
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Slice()
-			if len(res) == 0 {
-				log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
-			}
-		} else {
-			//nolint:errcheck
-			res, _ = script.File(utfile).Match(strings.TrimRight(wdate, "\n")).Column(1).Match(pubkey).Slice()
+		res, belowUptime, err := uptimeKeys(utfile, strings.TrimRight(wdate, "\n"))
+		if err != nil {
+			log.Fatal("Failed to read uptime file " + utfile + ": " + err.Error())
+		}
+		if pubkey != "" {
+			keep := func(pk string) bool { return strings.Contains(pk, pubkey) }
+			res = slices.DeleteFunc(res, func(pk string) bool { return !keep(pk) })
+			belowUptime = slices.DeleteFunc(belowUptime, func(pk string) bool { return !keep(pk) })
 			if len(res) == 0 {
 				log.Fatal("Specified key " + pubkey + "\n did not achieve minimum uptime on " + wdate + " !")
 			}
+		} else if len(res) == 0 {
+			log.Fatal("No keys achieved minimum uptime on " + wdate + " !")
 		}
 
 		// Collect eligible nodes by parsing surveys
 		var nodesInfos1 []nodeinfo // every eligible visor: presence, and bandwidth when there is data
 		var grrInfos []nodeinfo    // ineligible nodes (for error reporting)
+		for _, pk := range belowUptime {
+			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: uptimeBelowReason})
+		}
 
 		for _, pk := range res {
 			surveyPath := fmt.Sprintf("%s/%s/node-info.json", hwSurveyPath, pk)
