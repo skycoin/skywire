@@ -1725,7 +1725,7 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 		rg.mux.removeLegs(droppedIdx...)
 	}
 
-	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(alive), len(deadRuleIDs)/2)
+	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(alive), len(droppedIdx))
 	return droppedIdx
 }
 
