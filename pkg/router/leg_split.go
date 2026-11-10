@@ -12,8 +12,7 @@
 // re-pointed at a different descriptor — so it rides the SAME packet type with
 // one more flag, routing.LegRehomeSplit, and the same capability bit
 // (routing.CapLegRehome). An exit that never negotiated it simply never acks,
-// and the caller falls back to what the release path did before: closing the
-// transport.
+// and the caller falls back to retiring the leg (closeReleasedLeg).
 //
 // Why it matters: a route has to be able to change from stream level to packet
 // level and back trivially. Before this, the pool arbiter's release
@@ -40,8 +39,7 @@ import (
 // ErrSplitUnsupported is returned when a leg cannot be split back out in
 // place: the peer did not negotiate CapLegRehome, the group has no mux, or the
 // group is not registered with a router that can hold the new standby group.
-// The caller's fallback is to close the leg's transport, which is what the
-// release path did before splits existed.
+// The caller's fallback is to retire the leg (closeReleasedLeg).
 var ErrSplitUnsupported = fmt.Errorf("%w: leg split unavailable", ErrRehomeUnsupported)
 
 // splitPortFirst is the bottom of the local port range a split-out standby
@@ -117,7 +115,7 @@ func randomSplitPort() (routing.Port, error) {
 //
 // On any refusal — an unsupported peer, no ack, a host that cannot register the
 // new group — the leg is left exactly where it was and an error is returned;
-// the caller then closes the transport as the release always did.
+// the caller then retires the leg (closeReleasedLeg).
 func (rg *RouteGroup) splitLeg(id uuid.UUID, reason string) (*RouteGroup, error) {
 	if rg.mux == nil || !rg.mux.legRehomeEnabled {
 		return nil, ErrSplitUnsupported

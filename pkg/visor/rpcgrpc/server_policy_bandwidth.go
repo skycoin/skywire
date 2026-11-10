@@ -379,7 +379,7 @@ func (c *muxBwController) applyRotation(pumpCtx context.Context, action policy.R
 
 	// Drops: cancel each leg's pump (its defer tears down the conn) and remove
 	// it from active so subsequent snapshots re-index. Never drop the last
-	// alive leg — mirrors route_group.go dropLegsByIndex: precompute the alive
+	// alive leg — mirrors the router's dropLegs: precompute the alive
 	// count and decrement per drop, and build a FRESH kept slice so the alive
 	// bookkeeping can't alias the compaction.
 	if len(action.DropLegs) > 0 {
