@@ -1,6 +1,7 @@
 # Offline alerts
 
-A hypervisor can mail you, or post to a webhook, when a visor it manages goes
+A hypervisor can mail you, push a notification to your phone, or post to a
+webhook when a visor it manages goes
 offline, and once more when the visor is back. A visor that returns within the
 offline delay sends nothing.
 
@@ -32,7 +33,8 @@ skywire cli visor alerts test
 skywire cli visor alerts
 ```
 
-`alerts test` sends a test alert to every configured address and webhook.
+`alerts test` sends a test alert to every configured address, webhook and
+push device.
 `alerts` with no subcommand shows the settings and the state of each watched
 visor. `alerts set --email ''` stops mail alerts.
 
@@ -111,6 +113,29 @@ which defaults to `skywire-alerts@<hostname>` or the relay login.
 `--webhook <url>` posts a JSON body for each alert, as well as or instead of
 mail. It has the event, the visor's key, hostname and addresses, the times,
 the diagnosis and a one line `text`.
+
+## Push notifications
+
+Push needs no mail setup. Open the hypervisor UI on the phone or computer that
+should get the alerts, go to the Offline alerts section of the hypervisor's own
+visor settings, press **Notify this device** and allow notifications. Alerts
+then arrive as system notifications, even with the page closed. Press **Send
+test** to try it.
+
+- **iPhone and iPad** need iOS 16.4 or later. Open the UI in Safari, tap Share,
+  then Add to Home Screen, open it from the Home Screen icon and press the
+  button there. Push does not work in a normal Safari tab.
+- **Android and desktop** browsers subscribe directly. Brave needs "Use Google
+  services for push messaging" turned on in its privacy settings.
+- The page must be a secure context. `http://localhost` is one, so a UI
+  reached through an SSH tunnel works. A LAN address over plain http is not,
+  and the section says so.
+
+`skywire cli visor alerts` lists the subscribed devices and the visor's push
+key. Remove one with `alerts set --push-remove <id>`, or all of them with
+`--push-remove all`. A device whose subscription the push service has dropped
+is removed on the next alert. A browser visor cannot watch, but its page can
+subscribe to the alerts of a native hypervisor it manages.
 
 ## Forgetting a visor
 
