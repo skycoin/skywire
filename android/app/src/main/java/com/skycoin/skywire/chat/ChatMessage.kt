@@ -59,6 +59,8 @@ data class ChatMessage(
     val readSent: Boolean = false,
     /** Group or DM request flag the server attached. */
     val request: Boolean = false,
+    /** A group notice instead of a message: what changed, about the member in [from]. */
+    val notice: String = "",
 ) {
     val mine: Boolean get() = from == ME
 

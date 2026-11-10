@@ -2,6 +2,7 @@ package com.skycoin.skywire
 
 import com.skycoin.skywire.chat.ChatFile
 import com.skycoin.skywire.chat.ChatMessage
+import com.skycoin.skywire.chat.GroupInfo
 import com.skycoin.skywire.chat.ReplyRef
 import com.skycoin.skywire.chat.SkychatClient
 import com.skycoin.skywire.chat.SseDispatch
@@ -15,6 +16,7 @@ import com.skycoin.skywire.chat.nanoText
 import com.skycoin.skywire.chat.parseTime
 import com.skycoin.skywire.chat.thumbPath
 import com.skycoin.skywire.chat.tickStatus
+import com.skycoin.skywire.ui.chat.cannotPostRes
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -142,5 +144,18 @@ class ChatProtocolTest {
         assertEquals(listOf("b", "c"), SseDispatch.withoutDeleted(list, "100", "02bb", me).map { it.key })
         assertEquals(listOf("a", "b"), SseDispatch.withoutDeleted(list, "200", me, me).map { it.key })
         assertTrue(SseDispatch.withoutDeleted(list, "300", "02bb", me) === list)
+    }
+
+    @Test
+    fun everyPostBlockCodeHasItsOwnString() {
+        val info = json.decodeFromString<GroupInfo>("""{"can_post":false,"cannot_post_reason":"this is a channel — only admins can post","cannot_post_code":"channel"}""")
+        assertEquals("channel", info.cannotPostCode)
+        // The codes pkg/skychat/group PostBlock returns.
+        val codes = listOf("banned", "removed", "muted", "channel", "read_only")
+        val res = codes.map { cannotPostRes(it) }
+        assertTrue(res.none { it == null })
+        assertEquals(codes.size, res.toSet().size)
+        assertNull(cannotPostRes(""))
+        assertNull(cannotPostRes("something_newer"))
     }
 }

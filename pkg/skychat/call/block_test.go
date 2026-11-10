@@ -10,10 +10,12 @@ import (
 )
 
 // TestBlockedCallerRingsUnseen: a blocked caller is told the call is ringing,
-// without our tone, as for any unanswered call, while nothing rings here.
+// without our tone, and is then declined, while nothing rings here.
 func TestBlockedCallerRingsUnseen(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	defer func(lo, hi time.Duration) { blockedRingMin, blockedRingMax = lo, hi }(blockedRingMin, blockedRingMax)
+	blockedRingMin, blockedRingMax = 300*time.Millisecond, 400*time.Millisecond
 	pkA, _ := cipher.GenerateKeyPair()
 	pkB, _ := cipher.GenerateKeyPair()
 	lis := newMemListener()
@@ -45,6 +47,14 @@ func TestBlockedCallerRingsUnseen(t *testing.T) {
 	}
 	if got := mgrB.Incoming(); len(got) != 0 {
 		t.Fatalf("Incoming = %+v, want the blocked call hidden", got)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
+	end, err := readSig(c)
+	if err != nil {
+		t.Fatalf("read the end of the ring: %v", err)
+	}
+	if end.Type != SigDecline || end.Reason != "declined" {
+		t.Fatalf("the blocked caller got %s reason=%q, want a decline", sigTypeName(end.Type), end.Reason)
 	}
 	_ = c.Close() //nolint:errcheck
 

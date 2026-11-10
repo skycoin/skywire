@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -143,6 +144,19 @@ fun SettingsScreen(
     val exportPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri -> uri?.let(viewModel::exportConfig) }
+    val backupPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri -> uri?.let(viewModel::backup) }
+    val restorePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val pk = viewModel.backupPublicKey(uri) ?: return@launch
+                dialog = if (state.hasIdentity) SettingsDialog.RestoreWarning(uri, pk) else SettingsDialog.RestoreFinal(uri, pk)
+            }
+        }
+    }
 
     /** Ask, then run — or run anyway on a phone with nothing to ask with. */
     val confirmBiometrically: (Int, () -> Unit) -> Unit = { titleRes, onConfirmed ->
@@ -190,6 +204,8 @@ fun SettingsScreen(
                 ConfigCard(
                     state = state,
                     onExport = { dialog = SettingsDialog.ExportWarning },
+                    onBackup = { dialog = SettingsDialog.BackupWarning },
+                    onRestore = { restorePicker.launch(arrayOf("application/zip", "application/octet-stream")) },
                     onToggleEncryption = { wanted ->
                         // Turning it ON is not destructive and needs no
                         // ceremony. Turning it OFF puts the secret key back on
@@ -361,6 +377,39 @@ fun SettingsScreen(
             },
         )
 
+        SettingsDialog.BackupWarning -> DestructiveDialog(
+            title = stringResource(R.string.settings_backup_title),
+            body = stringResource(R.string.settings_backup_warning),
+            confirm = stringResource(R.string.settings_continue),
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                confirmBiometrically(R.string.settings_backup_prompt) {
+                    backupPicker.launch(BACKUP_FILE_NAME)
+                }
+            },
+        )
+
+        is SettingsDialog.RestoreWarning -> DestructiveDialog(
+            title = stringResource(R.string.settings_restore),
+            body = stringResource(R.string.settings_identity_loss, shortPk(state.publicKey)),
+            extra = stringResource(R.string.settings_restore_extra, shortPk(open.publicKey)),
+            confirm = stringResource(R.string.settings_continue),
+            onDismiss = { dialog = null },
+            onConfirm = { dialog = SettingsDialog.RestoreFinal(open.uri, open.publicKey) },
+        )
+
+        is SettingsDialog.RestoreFinal -> DestructiveDialog(
+            title = stringResource(R.string.settings_restore),
+            body = stringResource(R.string.settings_restore_extra, shortPk(open.publicKey)),
+            confirm = stringResource(R.string.settings_restore),
+            onDismiss = { dialog = null },
+            onConfirm = {
+                viewModel.restoreBackup(open.uri)
+                dialog = null
+            },
+        )
+
         SettingsDialog.ExportWarning -> DestructiveDialog(
             title = stringResource(R.string.settings_export_title),
             body = stringResource(R.string.settings_export_warning),
@@ -385,6 +434,9 @@ private sealed interface SettingsDialog {
     data object NewIdentityWarning : SettingsDialog
     data object NewIdentityFinal : SettingsDialog
     data object ExportWarning : SettingsDialog
+    data object BackupWarning : SettingsDialog
+    data class RestoreWarning(val uri: Uri, val publicKey: String) : SettingsDialog
+    data class RestoreFinal(val uri: Uri, val publicKey: String) : SettingsDialog
 }
 
 // --- cards ---
@@ -486,6 +538,8 @@ private fun IdentityCard(
 private fun ConfigCard(
     state: SettingsUiState,
     onExport: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
     onToggleEncryption: (Boolean) -> Unit,
 ) {
     SectionCard {
@@ -499,6 +553,15 @@ private fun ConfigCard(
         Spacer(Modifier.height(12.dp))
         FilledTonalButton(onClick = onExport, enabled = state.hasIdentity && !state.busy) {
             Text(stringResource(R.string.settings_export))
+        }
+        // The key alone brings back the identity, not the channels and groups it runs.
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(onClick = onBackup, enabled = state.hasIdentity && !state.busy) {
+            Text(stringResource(R.string.settings_backup))
+        }
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(onClick = onRestore, enabled = !state.busy) {
+            Text(stringResource(R.string.settings_restore))
         }
 
         // Encryption at rest sits in this card rather than its own, because it
@@ -1442,3 +1505,4 @@ private fun DestructiveDialog(
 }
 
 private const val EXPORT_FILE_NAME = "skywire-config.json"
+private const val BACKUP_FILE_NAME = "skywire-backup.zip"

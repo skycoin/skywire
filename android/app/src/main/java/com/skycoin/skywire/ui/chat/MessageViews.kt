@@ -95,6 +95,7 @@ fun MessageRow(
     highlighted: Boolean,
     onTap: () -> Unit,
     onQuote: (ReplyRef) -> Unit,
+    onLongPress: () -> Unit = onTap,
 ) {
     val repo = vm.repo
     val mine = m.mine
@@ -104,7 +105,7 @@ fun MessageRow(
         Modifier
             .fillMaxWidth()
             .background(rowBg)
-            .combinedClickable(onClick = onTap, onLongClick = onTap)
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .padding(horizontal = 10.dp, vertical = 2.dp),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
@@ -284,7 +285,9 @@ private fun FileCard(vm: ChatViewModel, m: ChatMessage, f: ChatFile, colors: Bub
             )
             if (f.url.isEmpty() && f.from.isNotEmpty() && f.id.isNotEmpty()) {
                 TextButton(onClick = { repo.requestFile(m) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                    Text(stringResource(R.string.chat_rerequest), color = colors.accent, style = MaterialTheme.typography.labelMedium)
+                    // A held file was offered but never fetched: there is nothing to re-request yet.
+                    val label = if (f.status == "held") R.string.chat_get_file else R.string.chat_rerequest
+                    Text(stringResource(label), color = colors.accent, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

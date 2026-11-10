@@ -149,13 +149,20 @@ func deleteHandler(ctx context.Context) http.HandlerFunc {
 			http.Error(w, "chat controller not ready", http.StatusServiceUnavailable)
 			return
 		}
-		if err := chatCtrl.SendDelete(ctx, peer, body.ID); err != nil {
-			appLog("skychat: delete %s to %s failed: %v", body.ID, peer, err)
-			// Still tombstone locally — the operator's intent is recorded even if
-			// the peer is currently unreachable (they can't receive the delete).
-		}
+		// Kept until the peer acknowledges it, and sent again until then: the
+		// peer may be offline, or the cached conn dead without our knowing.
+		deletes.add(peer.Hex(), body.ID)
 		forgetPersisted(peer.Hex(), body.ID)
 		broadcastDMStatus(body.ID, dmStatusDeleted, peer.Hex())
+		// In the background, so an unreachable peer does not hold the request.
+		ctrl := chatCtrl
+		go func() {
+			sctx, cancel := context.WithTimeout(ctx, deleteSendBudget)
+			defer cancel()
+			if err := ctrl.SendDelete(sctx, peer, body.ID); err != nil {
+				appLog("skychat: delete %s to %s failed, will retry: %v", body.ID, peer, err)
+			}
+		}()
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

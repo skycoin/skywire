@@ -303,7 +303,23 @@
     <string name="transport_sudph_hint">带打洞的 UDP 直连。需要 NAT 允许打洞——很多运营商并不允许。</string>
 
     <!-- SkyChat -->
+    <string name="chat_cannot_post_removed">管理员已将你移出此群组。</string>
+    <string name="chat_clear_selection">取消选择</string>
+    <string name="chat_confirm_delete_selected">要仅为我删除所选消息吗？\n\n此操作无法撤销。</string>
+    <string name="chat_delete_selected">删除所选</string>
+    <string name="chat_get_file">获取文件</string>
+    <string name="chat_notice_admin_added">新管理员：%1$s</string>
+    <string name="chat_notice_admin_removed">取消管理员：%1$s</string>
+    <string name="chat_notice_banned">已封禁：%1$s</string>
+    <string name="chat_notice_joined">新成员：%1$s</string>
+    <string name="chat_notice_left">不再是成员：%1$s</string>
+    <string name="chat_notice_muted">已限制发言：%1$s</string>
+    <string name="chat_notice_read_only_off">所有人都可以再次发送消息。</string>
+    <string name="chat_notice_read_only_on">现在只有管理员可以发送消息。</string>
+    <string name="chat_notice_unbanned">已解除封禁：%1$s</string>
+    <string name="chat_notice_unmuted">已恢复发言：%1$s</string>
     <string name="chat_page_lang">zh</string>
+    <string name="chat_selected_count">已选择 %1$d 条</string>
     <string name="chat_starting">正在启动 SkyChat…</string>
     <string name="chat_core_starting">正在等待 Skywire 核心启动…</string>
     <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
@@ -429,6 +445,15 @@
     <string name="settings_export_prompt">导出 Skywire 配置</string>
     <string name="settings_export_done">配置已导出。</string>
     <string name="settings_export_unwritable">无法打开所选文件进行写入。</string>
+    <string name="settings_backup">连同群组备份</string>
+    <string name="settings_backup_title">连同群组一起备份？</string>
+    <string name="settings_backup_warning">备份以明文包含本节点的私钥，以及它创建或加入的频道和群组。在新手机上恢复后，它们会一起回来。任何人读到它，都能以本节点的身份运行，请存放在只有你能访问的地方。\n\n复制期间 Skywire 会断开连接，完成后重新连接。</string>
+    <string name="settings_backup_prompt">备份 Skywire</string>
+    <string name="settings_backup_done">备份已保存。</string>
+    <string name="settings_backup_unreadable">此文件不是 Skywire 备份。</string>
+    <string name="settings_restore">恢复备份</string>
+    <string name="settings_restore_extra">此备份属于 %1$s。其频道和群组会一起恢复。</string>
+    <string name="settings_restore_done">备份已恢复。</string>
 
     <!-- 设置 — 应用锁 -->
     <string name="settings_app_lock">应用锁</string>
@@ -1137,6 +1162,7 @@
     <string name="help_mail_body">SkyMail 是节点之间的电子邮件。你的节点在一个由其公钥生成的地址上有一个邮箱，邮件经 Skywire 加密传递，发件人的公钥由网络本身证明，而不是靠邮件服务器。\n\n它不会送到普通电子邮箱，也不能给离线的节点写信：邮件会立即发出，不会重试。在手机上请使用 .dmsg 地址；.skynet 地址需要一条路由，而手机很少能有。\n\n邮件保存在这部手机上，大小和保存时间以邮箱设置中的限制为准。</string>
     <!-- skychat-native:begin -->
     <string name="chat_attachment">附件</string>
+    <string name="chat_state_removed">已被移出</string>
     <string name="chat_you">你</string>
     <string name="chat_note_failed">失败：%1$s</string>
     <string name="chat_note_group_send_failed">群组消息发送失败：%1$s</string>
@@ -1297,6 +1323,10 @@
     <string name="chat_cannot_open">无法打开此文件。</string>
     <string name="chat_cannot_play">无法播放此片段。</string>
     <string name="chat_cannot_post">你无法在此群组中发送消息。</string>
+    <string name="chat_cannot_post_banned">你已被此群组封禁。</string>
+    <string name="chat_cannot_post_channel">这是一个频道，只有频道管理员可以发言。</string>
+    <string name="chat_cannot_post_muted">你在此群组中已被限制发言。</string>
+    <string name="chat_cannot_post_read_only">此群组为只读，只有管理员可以发送消息。</string>
     <string name="chat_catalog_open">打开</string>
     <string name="chat_catalog_view">查看</string>
     <string name="chat_catalog_title">此节点发布的其他内容</string>

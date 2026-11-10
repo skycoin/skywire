@@ -14,9 +14,15 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /**
  * Generates and maintains the visor config, on-device, with the same binary
@@ -620,6 +626,77 @@ class ConfigManager(
      */
     suspend fun configJson(): String = vault.readText()
 
+    // --- backup ---
+
+    /**
+     * The config and this visor's group state as one zip. The state is
+     * `local/skychat`: the group store with its sealed keys, the feeds and
+     * their history, which a key alone cannot bring back. **Call with the
+     * core stopped**, because those are open databases while it runs.
+     */
+    suspend fun writeBackup(out: OutputStream) {
+        val config = configJson()
+        withContext(Dispatchers.IO) {
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry(BACKUP_CONFIG))
+                zip.write(config.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+                val dir = File(paths.localDir, BACKUP_GROUPS)
+                dir.walkTopDown().filter { it.isFile }.forEach { f ->
+                    zip.putNextEntry(ZipEntry("$BACKUP_GROUPS/${f.relativeTo(dir).invariantSeparatorsPath}"))
+                    f.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+        }
+    }
+
+    /** The secret key in a backup, or null when [input] is not one. */
+    fun backupSecretKey(input: InputStream): String? = runCatching {
+        ZipInputStream(input).use { zip ->
+            generateSequence { zip.nextEntry }.firstOrNull { it.name == BACKUP_CONFIG }?.let { secretKeyOf(zip.readBytes()) }
+        }
+    }.getOrNull()
+
+    /**
+     * Install a backup's identity, then its group state, and return the
+     * public key. **Call with the core stopped.**
+     */
+    suspend fun restoreBackup(input: InputStream): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val staged = File(context.cacheDir, "restore").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            try {
+                var sk: String? = null
+                ZipInputStream(input).use { zip ->
+                    generateSequence { zip.nextEntry }.forEach { e ->
+                        if (e.name == BACKUP_CONFIG) {
+                            sk = secretKeyOf(zip.readBytes())
+                        } else if (e.name.startsWith("$BACKUP_GROUPS/") && !e.isDirectory) {
+                            val target = File(staged, e.name).canonicalFile
+                            // An entry naming ../ must not land outside the staging dir.
+                            require(target.path.startsWith(staged.canonicalPath + File.separator)) { context.getString(R.string.settings_backup_unreadable) }
+                            target.parentFile?.mkdirs()
+                            target.outputStream().use { zip.copyTo(it) }
+                        }
+                    }
+                }
+                val pk = replaceSecretKey(sk ?: error(context.getString(R.string.settings_backup_unreadable))).getOrThrow()
+                File(staged, BACKUP_GROUPS).takeIf { it.isDirectory }
+                    ?.copyRecursively(File(paths.localDir, BACKUP_GROUPS), overwrite = true)
+                pk
+            } finally {
+                staged.deleteRecursively()
+            }
+        }
+    }
+
+    private fun secretKeyOf(config: ByteArray): String? = runCatching {
+        json.parseToJsonElement(config.toString(Charsets.UTF_8)).jsonObject["sk"]?.jsonPrimitive?.content
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
     /**
      * The config with the secret key removed, for the diagnostics bundle.
      *
@@ -687,6 +764,8 @@ class ConfigManager(
 
     private companion object {
         const val TAG = "SkywireConfig"
+        const val BACKUP_CONFIG = "skywire-config.json"
+        const val BACKUP_GROUPS = "skychat"
         val MAILBOX_CHOICES = setOf("settings.json", "whitelist")
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"

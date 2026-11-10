@@ -81,7 +81,7 @@ func TestPrivacy_ApprovalRequestsAndBlocking(t *testing.T) {
 	}
 }
 
-func TestPrivacy_FilesFromBlockedOrRequestingPeersAreDeclined(t *testing.T) {
+func TestPrivacy_FilesFromRequestingPeersAreHeldAndBlockedOnesDeclined(t *testing.T) {
 	withXferEnv(t)
 	withCleanDownloads(t)
 	withPrivacyStore(t)
@@ -93,8 +93,8 @@ func TestPrivacy_FilesFromBlockedOrRequestingPeersAreDeclined(t *testing.T) {
 	if err := privacyStore.SetApproval(true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if w, ok := acceptInbound(from, offer); ok || w != nil {
-		t.Error("accepted a file from a peer still waiting as a request")
+	if w, ok := acceptInbound(from, offer); ok || w != xfer.Held {
+		t.Error("a file from a peer still waiting as a request was not held")
 	}
 	if err := privacyStore.Accept(from.Hex()); err != nil {
 		t.Fatal(err)

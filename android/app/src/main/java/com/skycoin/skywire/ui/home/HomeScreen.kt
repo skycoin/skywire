@@ -233,11 +233,14 @@ private fun ConnectButton(
     val busy = core is CoreState.Starting || core is CoreState.Stopping
     val showDisconnect = core is CoreState.Running || core is CoreState.Restarting
 
+    val connecting = core is CoreState.Starting || core is CoreState.Restarting ||
+        (core is CoreState.Running && !state.connected)
+
     // Idle: the brand gradient asking to be pressed. Running: a quiet tonal
     // disc — stopping should never look like the loud action — with the
-    // pulse breathing behind it once the network is really there.
+    // pulse breathing behind it until the network is really there.
     Box(contentAlignment = Alignment.Center) {
-        if (state.connected) {
+        if (connecting) {
             PulseRing(size = 180.dp, color = MaterialTheme.colorScheme.primary)
         }
         Surface(
