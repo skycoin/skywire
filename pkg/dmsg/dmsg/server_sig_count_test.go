@@ -50,6 +50,9 @@ func TestServerSkipsSessionAuthenticatedSigChecks(t *testing.T) {
 	}
 	_, aSes := newClient("sigcount-a")
 	b, _ := newClient("sigcount-b")
+	// A client has its session before the server lists it, and a dial to a
+	// session the server does not list yet is refused.
+	require.Eventually(t, func() bool { return srv.SessionCount() == 2 }, 5*time.Second, time.Millisecond)
 	l, err := b.Listen(1001)
 	require.NoError(t, err)
 	go func() {
