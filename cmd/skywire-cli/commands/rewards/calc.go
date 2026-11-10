@@ -133,7 +133,21 @@ func parseSurvey(path string) (*surveyData, error) {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err
 	}
+	for _, f := range []*string{&s.IPAddr, &s.SkyAddr, &s.Arch, &s.UUID, &s.SysInfo.Node.Hypervisor} {
+		*f = csvSafe(*f)
+	}
 	return &s, nil
+}
+
+// csvSafe drops what would break a row of the reward CSVs or hide an address
+// from its checks. Survey fields are reported by the visor itself.
+func csvSafe(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == ',' {
+			return -1
+		}
+		return r
+	}, s))
 }
 
 // extractInterfaces returns the interface list string and MAC addresses from a survey.
