@@ -127,8 +127,9 @@ func (rg *RouteGroup) shapeLegs() []shapeLeg {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	dst := rg.farEndPK()
-	out := make([]shapeLeg, 0, len(rg.tps))
-	for i, tp := range rg.tps {
+	out := make([]shapeLeg, 0, len(rg.legs))
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if i == 0 || tp == nil || tp.IsClosed() {
 			continue
 		}
@@ -142,7 +143,8 @@ func (rg *RouteGroup) shapeLegs() []shapeLeg {
 func (rg *RouteGroup) firstLegTpID() uuid.UUID {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	for _, tp := range rg.tps {
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp != nil && !tp.IsClosed() {
 			return tp.Entry.ID
 		}

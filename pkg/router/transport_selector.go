@@ -137,7 +137,7 @@ const (
 )
 
 // ecfLegState is the per-leg snapshot the ECF scheduler reasons over — one
-// entry per leg index (parallel to the route group's tps[]). The rate/RTT/
+// entry per leg index (parallel to the route group's legs). The rate/RTT/
 // jitter/ready fields are refreshed by the mux via SetECFState on the
 // rebuildWeights cadence; inflightBytes is maintained by the selector itself
 // between refreshes (incremented per selected frame, drained by rate over
@@ -214,7 +214,7 @@ type transportSelector struct {
 	liveLegs []int
 	// liveTps holds pointers to the same transports as liveLegs,
 	// for adaptive's GetLatency lookups — avoids reaching back
-	// through the route group's tps[] under a lock per packet.
+	// through the route group's legs under a lock per packet.
 	liveTps []*transport.ManagedTransport
 	// capacityWeights holds per-leg recent throughput (bytes moved
 	// since the last rebuild), one entry per leg index, used by
@@ -360,12 +360,12 @@ func (ts *transportSelector) SetECFState(states []ecfLegState) {
 
 // Rebuild recomputes the selection schedule from the current transport latencies.
 // Called periodically (e.g., every keep-alive cycle) and when transports change.
-// tps must not be modified concurrently (caller holds RouteGroup.mu or equivalent).
-func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
+// legs must not be modified concurrently (caller holds RouteGroup.mu or equivalent).
+func (ts *transportSelector) Rebuild(legs []groupLeg) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	n := len(tps)
+	n := len(legs)
 	if n == 0 {
 		ts.schedule = nil
 		return
@@ -379,7 +379,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	// Equal mode: always round-robin regardless of latency
 	if ts.mode == WeightModeEqual {
 		schedule := make([]int, 0, n)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp != nil && !tp.IsClosed() {
 				schedule = append(schedule, i)
 			}
@@ -408,7 +409,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 		}
 		live := make([]liveLeg, 0, n)
 		maxW := 0.0
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp == nil || tp.IsClosed() {
 				continue
 			}
@@ -455,7 +457,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 		if len(ts.explicitWeights) == 0 {
 			// Misconfigured — fall back to equal.
 			schedule := make([]int, 0, n)
-			for i, tp := range tps {
+			for i := range legs {
+				tp := legs[i].tp
 				if tp != nil && !tp.IsClosed() {
 					schedule = append(schedule, i)
 				}
@@ -476,7 +479,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 			minW = 1
 		}
 		schedule := make([]int, 0, 16)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp == nil || tp.IsClosed() {
 				continue
 			}
@@ -505,7 +509,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	if ts.mode == WeightModeSizeThreshold {
 		ts.schedule = []int{0}
 		smallSched := make([]int, 0, n-1)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if i == 0 {
 				continue
 			}
@@ -527,7 +532,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	if ts.mode == WeightModeDSCPPriority {
 		ts.schedule = []int{0}
 		smallSched := make([]int, 0, n-1)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if i == 0 {
 				continue
 			}
@@ -554,7 +560,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	if ts.mode == WeightModeSticky5Tuple || ts.mode == WeightModeLatencyAdaptive || ts.mode.isPredictive() {
 		live := make([]int, 0, n)
 		liveTps := make([]*transport.ManagedTransport, 0, n)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp != nil && !tp.IsClosed() {
 				live = append(live, i)
 				liveTps = append(liveTps, tp)
@@ -562,7 +569,7 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 		}
 		if len(live) == 0 {
 			live = []int{0}
-			liveTps = []*transport.ManagedTransport{tps[0]}
+			liveTps = []*transport.ManagedTransport{legs[0].tp}
 		}
 		ts.liveLegs = live
 		ts.liveTps = liveTps
@@ -576,7 +583,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	maxLatency := 0.0
 	hasLatency := false
 
-	for i, tp := range tps {
+	for i := range legs {
+		tp := legs[i].tp
 		if tp == nil {
 			weights[i] = 0
 			continue
@@ -593,7 +601,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	if !hasLatency {
 		// No latency data: equal weights (pure round-robin)
 		schedule := make([]int, 0, n)
-		for i, tp := range tps {
+		for i := range legs {
+			tp := legs[i].tp
 			if tp != nil && !tp.IsClosed() {
 				schedule = append(schedule, i)
 			}
@@ -606,7 +615,8 @@ func (ts *transportSelector) Rebuild(tps []*transport.ManagedTransport) {
 	}
 
 	// Compute weights as integer multiples
-	for i, tp := range tps {
+	for i := range legs {
+		tp := legs[i].tp
 		if tp == nil || tp.IsClosed() {
 			weights[i] = 0
 			continue

@@ -30,8 +30,8 @@ func TestPruneLegByConsumeRule(t *testing.T) {
 	require.True(t, ok, "a non-last leg must be prunable")
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
-	fwdN, rvsN := len(rg.fwd), len(rg.rvs)
+	remaining := len(rg.legs)
+	fwdN, rvsN := len(testFwd(rg)), len(testRvs(rg))
 	after := rg.rt.Count()
 	rg.mu.Unlock()
 
@@ -58,7 +58,7 @@ func TestPruneLegByConsumeRuleLastLegFallsBack(t *testing.T) {
 	require.False(t, ok, "the last leg must not be prunable — caller does a full close")
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 	require.Equal(t, 1, remaining, "last leg preserved")
 	require.False(t, rg.isClosed())
@@ -74,7 +74,7 @@ func TestPruneLegByConsumeRuleUnknownRuleNoop(t *testing.T) {
 	require.False(t, ok)
 
 	rg.mu.Lock()
-	remaining := len(rg.tps)
+	remaining := len(rg.legs)
 	rg.mu.Unlock()
 	require.Equal(t, 3, remaining, "unknown rule must not prune any leg")
 }

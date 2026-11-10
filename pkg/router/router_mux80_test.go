@@ -133,7 +133,7 @@ func (r *router) registerPrimary(rg *RouteGroup, desc routing.RouteDescriptor) {
 func legCount(rg *RouteGroup) int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	return len(rg.tps)
+	return len(rg.legs)
 }
 
 // TestIntroduceRules_AuxLegDuringInitialization is the core Fix A regression:

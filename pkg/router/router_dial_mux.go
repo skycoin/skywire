@@ -77,7 +77,8 @@ func (r *router) establishMuxRoutes(
 	// alongside another DMSG-bearing route risks data looping through the same
 	// dmsg server with no way to detect it.
 	nrg.rg.mu.Lock()
-	for _, tp := range nrg.rg.tps {
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp != nil && tp.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
 			log.Debug("Skipping mux setup: primary route contains a DMSG transport")
@@ -449,8 +450,9 @@ func (r *router) addOneAuxLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *D
 	// Existing tp IDs to exclude (prevents picking the same
 	// transports the route group already uses).
 	nrg.rg.mu.Lock()
-	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
-	for _, tp := range nrg.rg.tps {
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.legs))
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			excludeIDs = append(excludeIDs, tp.Entry.ID)
 		}

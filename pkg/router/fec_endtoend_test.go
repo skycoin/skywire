@@ -156,10 +156,8 @@ func fecE2ESetup(t *testing.T, fec bool, legLatencies []time.Duration) (*RouteGr
 	}
 
 	rgA.mu.Lock()
-	rgA.tps = mts
-	rgA.fwd = fwds
-	rgA.rvs = rvss
-	rgA.mux.rebuildWeights(mts)
+	setTestLegs(rgA, mts, fwds, rvss)
+	rgA.mux.rebuildWeights(tpLegs(mts))
 	rgA.mux.growLegs(len(mts))
 	for i := range mts {
 		rgA.mux.markLegReady(i)

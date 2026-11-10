@@ -297,7 +297,7 @@ type LegChangeHook interface {
 }
 
 // LegInfo describes one mux leg's current state. Index is the
-// position in the route group's tps[] slice; Kind is the transport
+// position in the route group's legs slice; Kind is the transport
 // type ("stcpr" / "sudph" / "stcp" / "dmsg" — though DMSG is
 // filtered out of mux groups at setup so it shouldn't appear here).
 // LatencyMs is the most recent measurement, 0 for "unknown."
@@ -308,7 +308,7 @@ type LegInfo struct {
 	Kind  string
 	// TransportID is the leg transport's stable UUID
 	// (ManagedTransport.Entry.ID) as a string. Unlike Index — which
-	// shifts when legs are dropped/added and the tps[] slice compacts
+	// shifts when legs are dropped/added and the legs slice compacts
 	// — TransportID identifies the same underlying transport across
 	// ticks, so an on_tick policy can key per-leg state (e.g. an EWMA
 	// of latency) by it and smooth signals over time. Empty for a nil

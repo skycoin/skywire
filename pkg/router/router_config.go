@@ -81,7 +81,7 @@ func (r *router) SetMuxMode(mode WeightMode) {
 		rg := nrg.rg
 		if rg.mux != nil && rg.mux.tpSelector != nil {
 			rg.mux.tpSelector.SetMode(mode)
-			rg.mux.tpSelector.Rebuild(rg.tps)
+			rg.mux.tpSelector.Rebuild(rg.legs)
 		}
 	}
 	r.mx.Unlock()

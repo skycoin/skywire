@@ -98,21 +98,21 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	if len(rg.tps) == 0 || len(rg.fwd) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
 	defer cancel()
 
-	for i := 0; i < len(rg.tps); i++ {
-		tp := rg.tps[i]
+	for i := 0; i < len(rg.legs); i++ {
+		tp := rg.legs[i].tp
 
 		if tp == nil {
 			continue
 		}
 
-		rule := rg.fwd[i]
+		rule := rg.legs[i].fwd
 		// CapFEC is advertised only when this group's config opts in (router
 		// Config.MuxFEC, visor config routing.mux_fec): FEC repair frames are a
 		// flat 25%+ wire overhead on every multi-leg group and the legs ride
@@ -158,7 +158,7 @@ func (rg *RouteGroup) sendHandshake(encrypt bool) error {
 		}
 
 		rg.logger.Debugf("Failed to send handshake via transport %v: %v [%v/%v]",
-			tp.Entry.ID, err, i+1, len(rg.tps))
+			tp.Entry.ID, err, i+1, len(rg.legs))
 	}
 
 	return ErrNoSuitableTransport

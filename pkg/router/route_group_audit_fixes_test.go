@@ -80,7 +80,7 @@ func TestClose_DeletesReverseRules(t *testing.T) {
 	require.Equal(t, 2, rg.rt.Count()) // 1 fwd (from helper) + 1 reverse
 
 	rg.mu.Lock()
-	rg.rvs = []routing.Rule{rvsRule}
+	rg.legs[0].rvs = rvsRule
 	rg.mu.Unlock()
 
 	require.NoError(t, rg.Close())

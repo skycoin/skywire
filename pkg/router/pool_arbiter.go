@@ -325,7 +325,8 @@ func noteHeldFirstHops(rg *RouteGroup, held map[uuid.UUID]struct{}) {
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	for _, tp := range rg.tps {
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp != nil {
 			held[tp.Entry.ID] = struct{}{}
 		}
@@ -372,13 +373,13 @@ func poolCandidates(g *RouteGroup, pool []*RouteGroup, sibling map[uuid.UUID]str
 			continue
 		}
 		s.mu.Lock()
-		ok := len(s.tps) == 1 && s.tps[0] != nil && !s.tps[0].IsClosed()
+		ok := len(s.legs) == 1 && s.legs[0].tp != nil && !s.legs[0].tp.IsClosed()
 		var first uuid.UUID
 		var lat, thr float64
 		if ok {
-			first = s.tps[0].Entry.ID
-			lat = s.legBandLatencyMs(s.tps[0])
-			thr = throughputPrior(s.tps[0])
+			first = s.legs[0].tp.Entry.ID
+			lat = s.legBandLatencyMs(s.legs[0].tp)
+			thr = throughputPrior(s.legs[0].tp)
 		}
 		s.mu.Unlock()
 		if !ok {
@@ -505,7 +506,8 @@ func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, h
 	// names a live leg and the release accounting counts live legs only.
 	live := rg.poolTaken[:0]
 	for _, t := range rg.poolTaken {
-		for _, tp := range rg.tps {
+		for _, lg := range rg.legs {
+			tp := lg.tp
 			if tp != nil && !tp.IsClosed() && tp.Entry.ID == t.tpID {
 				live = append(live, t)
 				break
@@ -515,19 +517,20 @@ func (rg *RouteGroup) notePoolLegTaken(c poolCandidate, now time.Time, reason, h
 	rg.poolTaken = live
 	idx := -1
 	var tpID uuid.UUID
-	for i, tp := range rg.tps {
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp != nil && tp.Entry.ID == c.plan.firstTp {
 			idx, tpID = i, tp.Entry.ID
 		}
 	}
-	if idx < 0 && len(rg.tps) > 0 { // the grow fallback dialed its own transport
-		idx = len(rg.tps) - 1
-		if tp := rg.tps[idx]; tp != nil {
+	if idx < 0 && len(rg.legs) > 0 { // the grow fallback dialed its own transport
+		idx = len(rg.legs) - 1
+		if tp := rg.legs[idx].tp; tp != nil {
 			tpID = tp.Entry.ID
 		}
 	}
 	rg.poolTaken = append(rg.poolTaken, poolTakenLeg{tpID: tpID, from: c.plan.port, how: how, at: now})
-	legs := len(rg.tps)
+	legs := len(rg.legs)
 	rg.mu.Unlock()
 
 	took := fmt.Sprintf("took standby tunnel :%d as a mux leg", c.plan.port)
@@ -563,7 +566,8 @@ func (rg *RouteGroup) releasePoolLegs(now time.Time, keep int) {
 	taken := rg.poolTaken
 	if keep > 1 {
 		alive := 0
-		for _, tp := range rg.tps {
+		for _, lg := range rg.legs {
+			tp := lg.tp
 			if tp != nil && !tp.IsClosed() {
 				alive++
 			}
@@ -645,7 +649,8 @@ func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	alive, idx := 0, -1
-	for i, tp := range rg.tps {
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil || tp.IsClosed() {
 			continue
 		}
@@ -666,12 +671,12 @@ func (rg *RouteGroup) releasableLegIndex(tpID uuid.UUID) int {
 // decided it does not need is the churn this whole file exists to avoid.
 func (rg *RouteGroup) closeReleasedLeg(idx int, reason string) {
 	rg.mu.Lock()
-	if idx < 0 || idx >= len(rg.tps) || rg.tps[idx] == nil {
+	if idx < 0 || idx >= len(rg.legs) || rg.legs[idx].tp == nil {
 		rg.mu.Unlock()
 		return
 	}
-	tp := rg.tps[idx]
-	rg.noteLegEvent(MuxEventPoolLegReleased, reason, MuxByLocal, idx, len(rg.tps), tp, rg.legHopsLocked(tp.Entry.ID))
+	tp := rg.legs[idx].tp
+	rg.noteLegEvent(MuxEventPoolLegReleased, reason, MuxByLocal, idx, len(rg.legs), tp, rg.legHopsLocked(tp.Entry.ID))
 	_ = tp.Close() //nolint:errcheck // the prune below drops it either way
 	dropped := rg.pruneDeadTransports()
 	rg.mu.Unlock()
@@ -769,7 +774,7 @@ func poolArbiterRound(active, pool []*RouteGroup, now time.Time,
 			f = func(s *RouteGroup) error { return grow(g, s, heldFirstHopIDs(sibling)) }
 		}
 		poolArbiterStepExcluding(g, pool, now, sibling, f)
-		// A take — re-homed or dialed — is on g.tps now, and is a first hop
+		// A take — re-homed or dialed — is on g.legs now, and is a first hop
 		// the next active tunnel of this session must not take again.
 		noteHeldFirstHops(g, held)
 	}
@@ -800,7 +805,8 @@ func (rg *RouteGroup) shedLegsForStandby() {
 	rg.poolTaken = nil
 	var extra []uuid.UUID
 	alive := 0
-	for _, tp := range rg.tps {
+	for _, lg := range rg.legs {
+		tp := lg.tp
 		if tp == nil || tp.IsClosed() {
 			continue
 		}

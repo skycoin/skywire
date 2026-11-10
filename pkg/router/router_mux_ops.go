@@ -50,7 +50,8 @@ func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeR
 			return errors.New("refusing to append DMSG transport to mux route group")
 		}
 		nrg.rg.mu.Lock()
-		for _, existing := range nrg.rg.tps {
+		for _, lg := range nrg.rg.legs {
+			existing := lg.tp
 			if existing == nil {
 				continue
 			}
@@ -169,7 +170,8 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 		return errors.New("refusing to append DMSG transport to mux route group")
 	}
 	nrg.rg.mu.Lock()
-	for _, existing := range nrg.rg.tps {
+	for _, lg := range nrg.rg.legs {
+		existing := lg.tp
 		if existing == nil {
 			continue
 		}
@@ -276,7 +278,8 @@ func (r *router) addMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	// existing first hop, defeating mux; refusing here surfaces the
 	// duplication at the API boundary.
 	nrg.rg.mu.Lock()
-	for i, existing := range nrg.rg.tps {
+	for i, lg := range nrg.rg.legs {
+		existing := lg.tp
 		if existing != nil && existing.Entry.ID == tpID {
 			nrg.rg.mu.Unlock()
 			return fmt.Errorf("transport %s is already leg %d in this route group", tpID, i)
@@ -401,8 +404,9 @@ func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int)
 	// re-picking an existing first hop, which AddMuxRouteByHops rejects).
 	nrg.rg.mu.Lock()
 	current := 0
-	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
-	for _, tp := range nrg.rg.tps {
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.legs))
+	for _, lg := range nrg.rg.legs {
+		tp := lg.tp
 		if tp == nil {
 			continue
 		}
@@ -611,13 +615,14 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 
-	if len(rg.tps) <= 1 {
+	if len(rg.legs) <= 1 {
 		return errors.New("cannot remove the last route from a route group")
 	}
 
 	// Find and remove the transport
 	idx := -1
-	for i, tp := range rg.tps {
+	for i, lg := range rg.legs {
+		tp := lg.tp
 		if tp != nil && tp.Entry.ID == tpID {
 			idx = i
 			break
@@ -627,7 +632,7 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 		return fmt.Errorf("transport %s not found in route group", tpID)
 	}
 	// Removing the primary leg (index 0) is ALLOWED and re-homes the primary.
-	// ping/pong/SACK and latency attribution read rg.tps[0] LIVE on each call
+	// ping/pong/SACK and latency attribution read rg.legs[0].tp LIVE on each call
 	// (they hold no cached leg reference), and the mux selector is rebuilt
 	// below, so the survivor compacted into index 0 transparently takes over —
 	// the exact re-home pruneDeadTransports (index-0 death) and
@@ -651,9 +656,9 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	// with no keepalive/liveness wait. Fire-and-forget in a goroutine with a bounded
 	// context so the network write never blocks under rg.mu; it reads only captured
 	// values, which stay valid after the slices below are compacted.
-	if idx < len(rg.fwd) && rg.fwd[idx] != nil && rg.tps[idx] != nil {
-		retireTp := rg.tps[idx]
-		retireRule := rg.fwd[idx]
+	if rg.legs[idx].fwd != nil && rg.legs[idx].tp != nil {
+		retireTp := rg.legs[idx].tp
+		retireRule := rg.legs[idx].fwd
 		retire := routing.MakeClosePacket(retireRule.NextRouteID(), routing.CloseLegRetired)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), closeRoutineTimeout)
@@ -666,20 +671,16 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 
 	// Collect rule IDs to delete
 	var deadRuleIDs []routing.RouteID
-	if idx < len(rg.fwd) {
-		deadRuleIDs = append(deadRuleIDs, rg.fwd[idx].KeyRouteID())
+	if rg.legs[idx].fwd != nil {
+		deadRuleIDs = append(deadRuleIDs, rg.legs[idx].fwd.KeyRouteID())
 	}
-	if idx < len(rg.rvs) && rg.rvs[idx] != nil {
-		deadRuleIDs = append(deadRuleIDs, rg.rvs[idx].KeyRouteID())
+	if rg.legs[idx].rvs != nil {
+		deadRuleIDs = append(deadRuleIDs, rg.legs[idx].rvs.KeyRouteID())
 	}
 
 	// Remove from slices
-	removedTp := rg.tps[idx]
-	rg.tps = append(rg.tps[:idx], rg.tps[idx+1:]...)
-	rg.fwd = append(rg.fwd[:idx], rg.fwd[idx+1:]...)
-	if idx < len(rg.rvs) {
-		rg.rvs = append(rg.rvs[:idx], rg.rvs[idx+1:]...)
-	}
+	removedTp := rg.legs[idx].tp
+	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 
 	// Clean up rules
 	if len(deadRuleIDs) > 0 {
@@ -687,17 +688,17 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	}
 
 	// Compact the per-leg counter/readiness arrays in lockstep with the
-	// tps/fwd/rvs compaction above, then rebuild the selector.
+	// legs compaction above, then rebuild the selector.
 	if rg.mux != nil {
 		rg.mux.removeLegs(idx)
-		rg.mux.rebuildWeights(rg.tps)
+		rg.mux.rebuildWeights(rg.legs)
 	}
 
 	rg.forgetPeerPark(tpID)
-	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.tps), removedTp,
+	rg.noteLegEvent(MuxEventLegRemoved, "operator: mux remove", MuxByOperator, idx, len(rg.legs), removedTp,
 		rg.legHopsLocked(tpID))
 	if idx == 0 {
-		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByOperator, LegIndex: 0, Legs: len(rg.tps),
+		rg.noteMuxEvent(MuxEvent{Event: MuxEventPrimaryRehome, By: MuxByOperator, LegIndex: 0, Legs: len(rg.legs),
 			Reason: "operator removed the primary leg"})
 	}
 

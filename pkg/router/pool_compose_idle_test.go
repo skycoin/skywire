@@ -91,7 +91,7 @@ func (rig *composeRig) closeLeg(t *testing.T, tpID uuid.UUID) {
 	t.Helper()
 	rig.active.mu.Lock()
 	defer rig.active.mu.Unlock()
-	for _, tp := range rig.active.tps {
+	for _, tp := range legTransports(rig.active.legs) {
 		if tp != nil && tp.Entry.ID == tpID {
 			require.NoError(t, tp.Close())
 			rig.active.pruneDeadTransports()
@@ -238,7 +238,7 @@ func (rig *twoActiveRig) grow(t *testing.T) func(g, s *RouteGroup, exclude []uui
 	t.Helper()
 	return func(g, s *RouteGroup, exclude []uuid.UUID) error {
 		s.mu.Lock()
-		mt := s.tps[0]
+		mt := s.legs[0].tp
 		s.mu.Unlock()
 		for _, id := range exclude {
 			require.NotEqual(t, mt.Entry.ID, id,

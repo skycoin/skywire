@@ -40,7 +40,7 @@ func (m *routeMux) SetStandbyNewLegs(v bool) {
 
 // SetLegGroups records the per-leg shared-bottleneck group ids (see the
 // legGroups field). The slice is copied and is parallel to legs[] in the rg's
-// tps[] order; a shorter slice leaves the trailing legs as singletons. Cheap and
+// legs order; a shorter slice leaves the trailing legs as singletons. Cheap and
 // idempotent — called each data-progress tick from the route group after it
 // recomputes groups from per-leg OWD statistics.
 func (m *routeMux) SetLegGroups(groups []int) {
@@ -60,12 +60,12 @@ func (m *routeMux) groupOf(i int) int {
 }
 
 // removeLegs drops the given ORIGINAL leg indices from legs[] and ready[] so
-// they stay aligned with the rg's compacted tps[]/fwd[]/rvs[] after a leg is
+// they stay aligned with the rg's compacted legs after a leg is
 // removed (RemoveMuxRouteByTransport / pruneDeadTransports). It rebuilds both
 // slices skipping the dropped indices (order-independent), then re-asserts the
 // leg-0-always-ready invariant — leg 0 may have been promoted from an aux when
 // a primary transport is pruned. Without this lockstep compaction the arrays
-// desync from tps[]: readiness and per-leg accounting attach to the wrong leg,
+// desync from legs: readiness and per-leg accounting attach to the wrong leg,
 // which can flip a live leg to not-ready (the mux>=2 hang — see the ready[]
 // note above) or mis-attribute bytes after an index is reused. The counterpart
 // to growLegs.
@@ -204,7 +204,7 @@ func (m *routeMux) parkAllAuxStandby() {
 // swapLegs exchanges the mux's per-leg state (counters, readiness, standby
 // marker) between two leg indices so the primary slot (0) can be RE-ELECTED
 // onto a healthier leg without tearing down any route. The caller (RouteGroup.
-// reelectPrimary) swaps the parallel tps[]/fwd[]/rvs[] entries in the same
+// reelectPrimary) swaps the parallel legs entries in the same
 // critical section, so leg accounting and rules stay attached to their own
 // transport across the swap. After the swap the new primary (whatever leg landed
 // at index 0) is forced ready and out of standby — it is chosen from the active,

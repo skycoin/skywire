@@ -184,8 +184,8 @@ func (rg *RouteGroup) writeLegControl(leg *rehomeLeg, nonce uint64, srcPort, dst
 func (rg *RouteGroup) firstLeg() *rehomeLeg {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if len(rg.fwd) == 0 || len(rg.tps) == 0 {
+	if len(rg.legs) == 0 || rg.legs[0].fwd == nil {
 		return nil
 	}
-	return &rehomeLeg{fwd: rg.fwd[0], tp: rg.tps[0]}
+	return &rehomeLeg{fwd: rg.legs[0].fwd, tp: rg.legs[0].tp}
 }

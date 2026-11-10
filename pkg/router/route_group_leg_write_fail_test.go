@@ -21,7 +21,7 @@ func TestRouteGroupWriteSurvivesALegFailingUnderIt(t *testing.T) {
 	conns[0].workingTransport.Close() //nolint:errcheck,gosec
 
 	rg.mu.Lock()
-	tp, rule := rg.tps[0], rg.fwd[0]
+	tp, rule := rg.legs[0].tp, rg.legs[0].fwd
 	rg.mu.Unlock()
 	n, err := rg.write([]byte("payload"), tp, rule, 0)
 	require.NoError(t, err)
@@ -46,7 +46,7 @@ func TestRouteGroupWriteFailsWhenNoOtherLegIsUp(t *testing.T) {
 	conns[1].workingTransport.Close() //nolint:errcheck,gosec
 
 	rg.mu.Lock()
-	tp, rule := rg.tps[0], rg.fwd[0]
+	tp, rule := rg.legs[0].tp, rg.legs[0].fwd
 	rg.mu.Unlock()
 	_, err := rg.write([]byte("payload"), tp, rule, 0)
 	require.Error(t, err)
@@ -66,8 +66,8 @@ func TestRouteGroupWriteSurvivesALegPrunedBeforeItsWriteFails(t *testing.T) {
 	conns[0].workingTransport.Close() //nolint:errcheck,gosec
 
 	rg.mu.Lock()
-	tp, rule := rg.tps[0], rg.fwd[0]
-	rg.tps, rg.fwd, rg.rvs = rg.tps[1:], rg.fwd[1:], rg.rvs[1:]
+	tp, rule := rg.legs[0].tp, rg.legs[0].fwd
+	rg.legs = rg.legs[1:]
 	rg.mu.Unlock()
 
 	n, err := rg.write([]byte("payload"), tp, rule, 0)

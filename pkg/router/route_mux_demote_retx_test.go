@@ -91,10 +91,8 @@ func createCapturingMuxRouteGroup(t *testing.T) (*RouteGroup, []*capturingTransp
 	}
 
 	rg.mu.Lock()
-	rg.tps = mts
-	rg.fwd = fwds
-	rg.rvs = rvss
-	rg.mux.rebuildWeights(mts)
+	setTestLegs(rg, mts, fwds, rvss)
+	rg.mux.rebuildWeights(tpLegs(mts))
 	rg.mux.growLegs(len(mts))
 	for i := range mts {
 		rg.mux.markLegReady(i)
@@ -132,9 +130,9 @@ func TestMuxDemoteFlushesInFlightSeqs(t *testing.T) {
 
 	// Tags are TRANSPORT UUIDs (stable across slice compaction), never leg
 	// indices — an index tag went stale the moment pruneDeadTransports
-	// compacted tps[] and the flush then missed genuinely stranded sequences.
-	leg0ID := rg.tps[0].Entry.ID
-	leg1ID := rg.tps[1].Entry.ID
+	// compacted legs and the flush then missed genuinely stranded sequences.
+	leg0ID := rg.legs[0].tp.Entry.ID
+	leg1ID := rg.legs[1].tp.Entry.ID
 
 	// Sequences in flight ON LEG 1's transport (the leg about to be demoted) —
 	// these are stranded by the demote and must be flushed.

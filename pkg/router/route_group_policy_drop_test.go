@@ -19,8 +19,8 @@ func TestPolicyDropKeepsTransportOpen(t *testing.T) {
 	rg.mux.legStateEnabled = true
 	dropped := mts[1]
 	rg.mu.Lock()
-	fwdID, rvsID := rg.fwd[1].KeyRouteID(), rg.rvs[1].KeyRouteID()
-	retire := routing.MakeClosePacket(rg.fwd[1].NextRouteID(), routing.CloseLegRetired)
+	fwdID, rvsID := rg.legs[1].fwd.KeyRouteID(), rg.legs[1].rvs.KeyRouteID()
+	retire := routing.MakeClosePacket(rg.legs[1].fwd.NextRouteID(), routing.CloseLegRetired)
 	rg.mu.Unlock()
 	retired := make(chan struct{}, 1)
 	conns[1].onWrite = func(b []byte) {
@@ -42,10 +42,10 @@ func TestPolicyDropKeepsTransportOpen(t *testing.T) {
 	}
 
 	rg.mu.Lock()
-	require.Len(t, rg.tps, 2)
-	require.Len(t, rg.fwd, 2)
-	require.Len(t, rg.rvs, 2)
-	for _, tp := range rg.tps {
+	require.Len(t, rg.legs, 2)
+	require.Len(t, testFwd(rg), 2)
+	require.Len(t, testRvs(rg), 2)
+	for _, tp := range legTransports(rg.legs) {
 		require.NotEqual(t, dropped.Entry.ID, tp.Entry.ID, "the dropped leg must be gone")
 	}
 	rg.mu.Unlock()
@@ -71,7 +71,7 @@ func TestPolicyDropClosesTransportForOldPeer(t *testing.T) {
 
 	require.True(t, mts[1].IsClosed(), "without the signal the peer learns of the drop from the close")
 	rg.mu.Lock()
-	require.Len(t, rg.tps, 2)
+	require.Len(t, rg.legs, 2)
 	rg.mu.Unlock()
 }
 
@@ -83,6 +83,6 @@ func TestPolicyDropKeepsLastLeg(t *testing.T) {
 
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	require.Len(t, rg.tps, 1)
-	require.Equal(t, mts[1].Entry.ID, rg.tps[0].Entry.ID)
+	require.Len(t, rg.legs, 1)
+	require.Equal(t, mts[1].Entry.ID, rg.legs[0].tp.Entry.ID)
 }

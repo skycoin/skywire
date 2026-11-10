@@ -471,8 +471,8 @@ type DialOptions struct {
 	// test — set ForwardMuxRoutes=1 and ReverseMuxRoutes=4 to open a
 	// single forward leg (the GET request rides one TCP socket) while
 	// the reverse direction aggregates the bulk payload across 4
-	// multi-hop legs. The data plane already supports rg.fwd[] and
-	// rg.rvs[] being different lengths (the read path is by route-id
+	// multi-hop legs. The data plane already supports forward rules and
+	// reverse rules being different counts (the read path is by route-id
 	// lookup, not slice index), so this is purely a setup-side change.
 	//
 	// 0 (the default) means "inherit MuxRoutes" for that direction.

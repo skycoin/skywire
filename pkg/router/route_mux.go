@@ -16,7 +16,7 @@ import (
 )
 
 // LegStats is a snapshot of per-mux-leg traffic counters at a point
-// in time. One entry per active route in the rg's tps[] order.
+// in time. One entry per active route in the rg's legs order.
 //
 // Counters are cumulative since route-group creation (atomic uint64);
 // callers wanting rates take two snapshots and divide by elapsed time.
@@ -24,7 +24,7 @@ import (
 // the mux'd routes — the missing piece for verifying that adding more
 // routes actually aggregates throughput rather than just trading share.
 type LegStats struct {
-	// Index in the rg's tps[] slice. Stable for the rg's lifetime
+	// Index in the rg's legs slice. Stable for the rg's lifetime
 	// (transports are appended, never re-ordered) so the index is
 	// also a stable identifier for runtime add/remove operations.
 	Index int
@@ -426,8 +426,8 @@ type routeMux struct {
 	fecRepairBytesRecv atomic.Uint64
 	fecReconstructs    atomic.Uint64
 
-	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
-	// rvs[] slices. Mutated atomically. Read via Snapshot().
+	// Per-leg traffic counters parallel to the rg's legs slice.
+	// Mutated atomically. Read via Snapshot().
 	// legMu guards the slice itself (extended on AppendRoute), not
 	// the individual counters.
 	legMu sync.RWMutex

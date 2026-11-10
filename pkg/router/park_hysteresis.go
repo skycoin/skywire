@@ -101,10 +101,10 @@ func (rg *RouteGroup) clearAdaptivePark(tpID uuid.UUID) {
 func (rg *RouteGroup) legTransportAt(idx int) *transport.ManagedTransport {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	if idx < 0 || idx >= len(rg.tps) {
+	if idx < 0 || idx >= len(rg.legs) {
 		return nil
 	}
-	return rg.tps[idx]
+	return rg.legs[idx].tp
 }
 
 // promoteLegAdaptive re-admits leg idx to the active set on behalf of an

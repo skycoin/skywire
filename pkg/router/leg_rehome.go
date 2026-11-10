@@ -128,11 +128,11 @@ func rehomeChain(g, s *RouteGroup) error {
 	// different operation (and would leave the app's session alive on the rest),
 	// so it is refused rather than half-done.
 	s.mu.Lock()
-	legs := len(s.tps)
+	legs := len(s.legs)
 	var fwd routing.Rule
 	var tp *transport.ManagedTransport
 	if legs > 0 {
-		fwd, tp = s.fwd[0], s.tps[0]
+		fwd, tp = s.legs[0].fwd, s.legs[0].tp
 	}
 	s.mu.Unlock()
 	if legs != 1 || fwd == nil || tp == nil {
@@ -397,8 +397,8 @@ func (rg *RouteGroup) replyRehome(idx int, nonce uint64, srcPort, dstPort routin
 	rg.mu.Lock()
 	var fwd routing.Rule
 	var tp *transport.ManagedTransport
-	if idx >= 0 && idx < len(rg.fwd) && idx < len(rg.tps) {
-		fwd, tp = rg.fwd[idx], rg.tps[idx]
+	if idx >= 0 && idx < len(rg.legs) {
+		fwd, tp = rg.legs[idx].fwd, rg.legs[idx].tp
 	}
 	rg.mu.Unlock()
 	if fwd == nil || tp == nil {
@@ -433,7 +433,8 @@ func (rg *RouteGroup) rehomeTransportFree(tp *transport.ManagedTransport) error 
 	}
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
-	for _, held := range rg.tps {
+	for _, lg := range rg.legs {
+		held := lg.tp
 		if held != nil && held.Entry.ID == tp.Entry.ID {
 			return fmt.Errorf("refusing to re-home: transport %s is already a leg of this group", tp.Entry.ID)
 		}
@@ -446,22 +447,20 @@ func (rg *RouteGroup) rehomeTransportFree(tp *transport.ManagedTransport) error 
 // of pruneLegByConsumeRule, which deletes them.
 func (rg *RouteGroup) detachLegForRehome(idx int, reason string) (*rehomeLeg, error) {
 	rg.mu.Lock()
-	if idx < 0 || idx >= len(rg.tps) || idx >= len(rg.fwd) || idx >= len(rg.rvs) || rg.rvs[idx] == nil {
+	if idx < 0 || idx >= len(rg.legs) || rg.legs[idx].rvs == nil {
 		rg.mu.Unlock()
 		return nil, fmt.Errorf("no leg %d to re-home", idx)
 	}
-	leg := &rehomeLeg{fwd: rg.fwd[idx], rvs: rg.rvs[idx], tp: rg.tps[idx]}
+	leg := &rehomeLeg{fwd: rg.legs[idx].fwd, rvs: rg.legs[idx].rvs, tp: rg.legs[idx].tp}
 	leg.hops = rg.legHopsLocked(tpEntryID(leg.tp))
-	rg.tps = append(rg.tps[:idx], rg.tps[idx+1:]...)
-	rg.fwd = append(rg.fwd[:idx], rg.fwd[idx+1:]...)
-	rg.rvs = append(rg.rvs[:idx], rg.rvs[idx+1:]...)
+	rg.legs = append(rg.legs[:idx], rg.legs[idx+1:]...)
 	if rg.mux != nil {
 		rg.mux.removeLegs(idx)
-		rg.mux.rebuildWeights(rg.tps)
+		rg.mux.rebuildWeights(rg.legs)
 	}
 	rg.forgetPeerPark(tpEntryID(leg.tp))
 	rg.noteLegEvent(MuxEventLegRemoved, reason+": the chain left this group", MuxByLocal,
-		idx, len(rg.tps), leg.tp, leg.hops)
+		idx, len(rg.legs), leg.tp, leg.hops)
 	rg.mu.Unlock()
 	rg.fireLegChange("rehomed-away", idx)
 	return leg, nil
@@ -493,10 +492,10 @@ func (rg *RouteGroup) adoptRehomedLeg(leg *rehomeLeg, reason string, standby boo
 	idx := rg.appendLegLocked(fwd, rvs, leg.tp)
 	rg.resetLegLiveness(tpEntryID(leg.tp))
 	if rg.mux != nil {
-		rg.mux.growLegs(len(rg.tps))
-		rg.mux.rebuildWeights(rg.tps)
+		rg.mux.growLegs(len(rg.legs))
+		rg.mux.rebuildWeights(rg.legs)
 	}
-	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByOperator, idx, len(rg.tps), leg.tp, leg.hops)
+	rg.noteLegEvent(MuxEventLegAdded, reason, MuxByOperator, idx, len(rg.legs), leg.tp, leg.hops)
 	rg.mu.Unlock()
 
 	if rg.mux != nil {

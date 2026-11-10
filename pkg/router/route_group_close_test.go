@@ -82,8 +82,7 @@ func createTestRouteGroupWithBlockingTransport(t *testing.T) (*RouteGroup, *bloc
 	}
 
 	rg.mu.Lock()
-	rg.tps = []*transport.ManagedTransport{mt}
-	rg.fwd = []routing.Rule{fwdRule}
+	setTestLegs(rg, []*transport.ManagedTransport{mt}, []routing.Rule{fwdRule}, nil)
 	rg.mu.Unlock()
 
 	return rg, conn

@@ -43,7 +43,7 @@ func TestHandleDataPacket_NoSendOnClosedReadCh(t *testing.T) {
 
 	// One real reverse rule so handleDataPacket has something to
 	// look up in the mux-recv path (and to give close() a non-empty
-	// fwd-set to clean up). We don't add to rg.fwd / rg.tps so
+	// fwd-set to clean up). We don't add to rg.legs so
 	// broadcastClosePackets is a no-op — the test exercises the
 	// once.Do close path without needing a live transport.
 	pkt, err := routing.MakeDataPacket(routing.RouteID(1), []byte("test-payload"))

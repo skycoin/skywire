@@ -84,15 +84,15 @@ func TestConcurrentAuxAppendsKeepLegsPaired(t *testing.T) {
 	require.NoError(t, <-done)
 
 	rg.mu.Lock()
-	require.Len(t, rg.tps, 3)
-	require.Len(t, rg.rvs, 3)
+	require.Len(t, rg.legs, 3)
+	require.Len(t, testRvs(rg), 3)
 	wantRvs := map[uuid.UUID]routing.RouteID{
 		legB.Forward.NextTransportID(): legB.Reverse.KeyRouteID(),
 		legC.Forward.NextTransportID(): legC.Reverse.KeyRouteID(),
 	}
-	for i := 1; i < len(rg.tps); i++ {
-		id := rg.tps[i].Entry.ID
-		require.Equalf(t, wantRvs[id], rg.rvs[i].KeyRouteID(),
+	for i := 1; i < len(rg.legs); i++ {
+		id := rg.legs[i].tp.Entry.ID
+		require.Equalf(t, wantRvs[id], rg.legs[i].rvs.KeyRouteID(),
 			"leg %d (transport %s) holds another leg's reverse rule", i, id)
 	}
 	rg.mu.Unlock()
@@ -134,7 +134,7 @@ func TestAsymmetricLegsKeepReverseRulesAligned(t *testing.T) {
 
 	rg.mu.Lock()
 	tracked := false
-	for _, rv := range rg.rvs {
+	for _, rv := range testRvs(rg) {
 		if rv != nil && rv.KeyRouteID() == revOnly.Reverse.KeyRouteID() {
 			tracked = true
 		}
