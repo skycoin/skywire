@@ -231,7 +231,6 @@ func TestUI2Islands(t *testing.T) {
 	base := newUI2FakeServer(t, &ui2FakeAPI{})
 	pk := base[strings.LastIndex(base, "/")+1:]
 	for tab, src := range map[string]string{
-		"chat":     `src="#/nodes/` + pk + `/chat?embed=1"`,
 		"terminal": `src="pty/` + pk + `"`,
 		"wallet":   `src="wallet/config"`,
 	} {
@@ -264,4 +263,12 @@ func TestUI2WalletHostsSkycoinWeb(t *testing.T) {
 	t.Cleanup(func() { launcher.RegisterHTTPHandler(skyenv.SkycoinWebName, nil) })
 	_, body = ui2Do(t, ui2Req(t, http.MethodGet, base+"/wallet", "", ""))
 	require.Contains(t, body, `src="wallet/ui2/"`)
+}
+
+// TestUI2ChatIsNative renders the chat tab without the Angular UI.
+func TestUI2ChatIsNative(t *testing.T) {
+	base := newUI2FakeServer(t, &ui2FakeAPI{})
+	_, body := ui2Do(t, ui2Req(t, http.MethodGet, base+"/chat", "", ""))
+	require.Contains(t, body, `id="chat-form"`)
+	require.NotContains(t, body, "<iframe")
 }
