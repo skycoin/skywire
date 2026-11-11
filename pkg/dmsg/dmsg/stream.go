@@ -245,12 +245,10 @@ func (s *Stream) readRequest() (req StreamRequest, err error) {
 
 func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	// Obtain associated local listener.
-	pVal, ok := s.ses.porter.PortValue(s.lAddr.Port)
-	if !ok {
-		return ErrReqNoListener
-	}
+	pVal, _ := s.ses.porter.PortValue(s.lAddr.Port)
 	lis, ok := pVal.(*Listener)
 	if !ok {
+		s.writeRefusal(reqHash, ErrReqNoListener)
 		return ErrReqNoListener
 	}
 
@@ -276,6 +274,17 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 	s.census.Load().set(0, "queued")
 	// Push stream to listener.
 	return lis.introduceStream(s)
+}
+
+// writeRefusal answers a request with the dmsg error that refused it, signed
+// by this client. The caller must hold a request that readRequest verified.
+func (s *Stream) writeRefusal(reqHash cipher.SHA256, dErr Error) {
+	resp := StreamResponse{ReqHash: reqHash, ErrCode: dErr.code}
+	obj, err := MakeSignedStreamResponse(&resp, s.ses.localSK())
+	if err != nil {
+		return
+	}
+	_ = s.ses.writeObject(s.muxStream(), obj) //nolint:errcheck,gosec
 }
 
 func (s *Stream) readResponse(req StreamRequest) error {
