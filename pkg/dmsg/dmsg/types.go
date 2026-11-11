@@ -279,6 +279,9 @@ type StreamRequest struct {
 	// response's geo fields are empty.
 	GeoInfo  bool
 	NoiseMsg []byte
+	// AcceptsServerRefusal says the dialer checks a refusal against the server's
+	// key. A build without the field ignores it, and unset it encodes as nothing.
+	AcceptsServerRefusal bool
 
 	raw SignedObject `enc:"-"` // back reference.
 }

@@ -162,10 +162,11 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 		return req, err
 	}
 	req = StreamRequest{
-		Timestamp: time.Now().UnixNano(),
-		SrcAddr:   s.lAddr,
-		DstAddr:   s.rAddr,
-		NoiseMsg:  nsMsg,
+		Timestamp:            time.Now().UnixNano(),
+		SrcAddr:              s.lAddr,
+		DstAddr:              s.rAddr,
+		NoiseMsg:             nsMsg,
+		AcceptsServerRefusal: true,
 	}
 	obj, err := MakeSignedStreamRequest(&req, s.ses.localSK())
 	if err != nil {
@@ -285,6 +286,11 @@ func (s *Stream) readResponse(req StreamRequest) error {
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
 		return err
+	}
+	// A refusal may be signed by the session's remote, which never reached
+	// the destination. An acceptance is only ever the destination's.
+	if !resp.Accepted && verifySig(s.ses.RemotePK(), obj.Sig(), obj.Object()) == nil {
+		return resp.verify(req, false)
 	}
 	if err := resp.Verify(req); err != nil {
 		return err

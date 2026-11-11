@@ -14,6 +14,7 @@ import (
 	"github.com/0magnet/yamux"
 	"github.com/xtaci/smux"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -190,10 +191,8 @@ func (ss *ServerSession) Serve() {
 }
 
 // closeRefused closes a stream whose request serveStream did not serve. A
-// refusal (bad signature, no listener, relay slots exhausted, no next
-// session) carries no response the dialer could verify — a StreamResponse is
-// signed by the destination, which never saw the request — so the only signal
-// is EOF. Without the close the dialer sat out the full HandshakeTimeout on a
+// relayed request gets no answer (see writeRefusal), so its only signal is
+// EOF. Without the close the dialer sat out the full HandshakeTimeout on a
 // stream nobody would ever write to. Closing after a served bridge is a no-op:
 // CopyReadWriteCloser has already closed both sides.
 func (ss *ServerSession) closeRefused(str io.Closer, err error) {
@@ -203,9 +202,24 @@ func (ss *ServerSession) closeRefused(str io.Closer, err error) {
 	_ = str.Close() //nolint:errcheck,gosec
 }
 
+// writeRefusal answers the session's own request with the dmsg error that
+// refused it, signed by this entity. Errors without a dmsg code send nothing.
+func (ss *ServerSession) writeRefusal(w io.Writer, reqHash cipher.SHA256, err error) {
+	var dErr Error
+	if !errors.As(err, &dErr) {
+		return
+	}
+	resp := StreamResponse{ReqHash: reqHash, ErrCode: dErr.code}
+	obj, mErr := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
+	if mErr != nil {
+		return
+	}
+	_ = ss.writeObject(w, obj) //nolint:errcheck,gosec
+}
+
 // struct
 
-func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
+func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) (err error) {
 	// Set a deadline for the initial stream request read so a slow or
 	// malicious client cannot hold a goroutine and semaphore slot indefinitely.
 	// Asserted on SetReadDeadline (not net.Conn) so QUIC streams — which have
@@ -288,6 +302,11 @@ func (ss *ServerSession) serveStream(log logging.FieldLogger, yStr io.ReadWriteC
 	// concurrent requests. The noise encryption layer already prevents
 	// replay at the session level via nonce tracking.
 	relayed := req.SrcAddr.PK != ss.rPK
+	// Only the session's own dialer can check a refusal signed by this entity,
+	// and only if it asked. Anyone else reads EOF, as a relaying peer must.
+	if !relayed && req.AcceptsServerRefusal {
+		defer func() { ss.writeRefusal(yStr, req.raw.Hash(), err) }()
+	}
 	// A request from this session's own key needs no signature check here: the
 	// session handshake authenticated it, and the destination checks it again.
 	verifyReq := req.verifyFields
