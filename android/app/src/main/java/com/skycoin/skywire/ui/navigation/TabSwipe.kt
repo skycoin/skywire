@@ -45,6 +45,9 @@ fun AnimatedContentTransitionScope<NavBackStackEntry>.tabStep(): Int? {
     return if (from < 0 || to < 0 || from == to) null else (to - from).sign
 }
 
+/** The tab a swipe is moving to. Only that move slides, a tap on the bar switches at once. */
+var swipeTarget: String? = null
+
 /** True while a tab's screen owns horizontal drags, so a swipe does not change tabs. */
 val tabSwipeHeld: State<Boolean> get() = held
 

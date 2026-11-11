@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -86,6 +88,7 @@ import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.navigation.TAB_ORDER
 import com.skycoin.skywire.ui.navigation.TAB_SLIDE_MS
 import com.skycoin.skywire.ui.navigation.tabOnSubPage
+import com.skycoin.skywire.ui.navigation.swipeTarget
 import com.skycoin.skywire.ui.navigation.tabStep
 import com.skycoin.skywire.ui.navigation.tabSwipe
 import com.skycoin.skywire.ui.navigation.tabSwipeHeld
@@ -200,8 +203,14 @@ fun SkywireApp() {
             if (!shortScreen || (currentRoute in TAB_ORDER && !tabOnSubPage.value)) {
                 SkyNavBar(
                     currentRoute = currentRoute,
-                    onSelect = { navController.navigateToTab(it) },
-                    onOpenHub = { navController.navigateToHub() },
+                    onSelect = {
+                        swipeTarget = null
+                        navController.navigateToTab(it)
+                    },
+                    onOpenHub = {
+                        swipeTarget = null
+                        navController.navigateToHub()
+                    },
                 )
             }
         },
@@ -210,9 +219,17 @@ fun SkywireApp() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.HOME,
-                // Tab to tab slides the way a swipe moves; anything else keeps NavHost's default fade.
-                enterTransition = { tabStep()?.let { step -> slideInHorizontally(tween(TAB_SLIDE_MS)) { it * step } } ?: fadeIn(tween(700)) },
-                exitTransition = { tabStep()?.let { step -> slideOutHorizontally(tween(TAB_SLIDE_MS)) { -it * step } } ?: fadeOut(tween(700)) },
+                // A swipe slides to the next tab, any other tab change is instant, and the rest keeps NavHost's default fade.
+                enterTransition = {
+                    tabStep()?.let { step ->
+                        if (targetState.destination.route == swipeTarget) slideInHorizontally(tween(TAB_SLIDE_MS)) { it * step } else EnterTransition.None
+                    } ?: fadeIn(tween(700))
+                },
+                exitTransition = {
+                    tabStep()?.let { step ->
+                        if (targetState.destination.route == swipeTarget) slideOutHorizontally(tween(TAB_SLIDE_MS)) { -it * step } else ExitTransition.None
+                    } ?: fadeOut(tween(700))
+                },
                 // The window never pans (adjustResize in the manifest), so every screen
                 // ends at the keyboard here, less the bottom bar consumed above.
                 modifier = Modifier
@@ -221,7 +238,9 @@ fun SkywireApp() {
                     .imePadding()
                     .tabSwipe(enabled = currentRoute in TAB_ORDER && !tabSwipeHeld.value) { next ->
                         val at = TAB_ORDER.indexOf(currentRoute)
-                        when (val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)) {
+                        val to = TAB_ORDER.getOrNull(if (next) at + 1 else at - 1)
+                        swipeTarget = to
+                        when (to) {
                             null -> Unit
                             Routes.HUB -> navController.navigateToHub()
                             else -> navController.navigateToTab(to)
@@ -250,7 +269,10 @@ fun SkywireApp() {
                         // out of either landed on Home rather than on the hub the
                         // user opened it from. Pushing keeps the hub behind them,
                         // which is what back means here.
-                        onOpenTab = { navController.navigate(it) { launchSingleTop = true } },
+                        onOpenTab = {
+                            swipeTarget = null
+                            navController.navigate(it) { launchSingleTop = true }
+                        },
                     )
                 }
                 // The wallet flow shares one ViewModel across its routes — the
