@@ -9,7 +9,10 @@ extension ChatRepository {
     private var foreground: Bool { UIApplication.shared.applicationState == .active }
 
     func handle(_ m: SseMessage) {
-        if m.history { return }
+        // A replay is history the app loads itself, except a delete: a message
+        // deleted while the app was away leaves no history to say so.
+        let delete = (m.channel == "dm-status" && m.status == "deleted") || m.channel == "group-delete"
+        if m.history && !delete { return }
         switch m.channel {
         case "pair-invite": pairInvite(m)
         case "group": group(m)
