@@ -14,10 +14,11 @@ A missing visor tab renders a link to the same tab in the Angular UI.
 |---|---|---|---|
 | `/` start, `/login` | login, first account creation | yes | `ui2/login` |
 | `/nodes/list` | visor list with nested sub-hypervisor visors | yes | `ui2/` |
-| | search, online and offline chips | yes | |
-| | outdated and no-reward chips, app filter, apps column, compact view | no | |
-| | column sorting, drag to reorder | no | |
-| | edit label, delete visor, delete all offline | no | |
+| | search, online, offline, outdated and no-reward chips | yes | |
+| | app filter, apps column, compact view | no | |
+| | column sorting | yes | in the browser, since labels live there |
+| | drag to reorder | no | |
+| | edit label, remove visor, remove all offline | yes | labels in the same localStorage entry as Angular |
 | | bulk select: update, reward address, restart, add, start and stop app | no | |
 | | update one or all visors, set reward address on all | no | |
 | `/nodes/rewards` | list with reward columns | no | |

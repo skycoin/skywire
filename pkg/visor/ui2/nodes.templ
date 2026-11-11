@@ -12,7 +12,11 @@ templ NodesPage(ns []Node, errMsg string) {
 				<input class="filter" type="search" placeholder={ T(ctx, "nodes.quick.search") } aria-label={ T(ctx, "nodes.quick.search") } autocomplete="off" data-node-q/>
 				<button class="btn sm" type="button" aria-pressed="false" data-node-state="on">{ T(ctx, "nodes.quick.online") }</button>
 				<button class="btn sm" type="button" aria-pressed="false" data-node-state="off">{ T(ctx, "nodes.quick.offline") }</button>
+				<button class="btn sm" type="button" aria-pressed="false" data-node-state="outdated" title={ T(ctx, "nodes.quick.outdated-tooltip") }>{ T(ctx, "nodes.quick.outdated") }</button>
+				<button class="btn sm" type="button" aria-pressed="false" data-node-state="noreward">{ T(ctx, "nodes.quick.no-reward") }</button>
 				<span class="small dim" data-node-shown data-fmt={ T(ctx, "ui2.nodes.shown") }></span>
+				<span class="spacer"></span>
+				<button class="btn sm" type="button" hx-delete="ui2/nodes" hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-all-offline-confirmation") } data-hide-offline><span class="mi">delete_sweep</span>{ T(ctx, "nodes.delete-all-offline") }</button>
 			</div>
 			@NodeRows(ns, errMsg, false)
 		</section>
@@ -33,14 +37,15 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 					<thead>
 						<tr>
 							<th class="state"><span class="sr">{ T(ctx, "nodes.state") }</span></th>
-							<th>{ T(ctx, "nodes.label") }</th>
-							<th>{ T(ctx, "nodes.key") }</th>
-							<th>{ T(ctx, "nodes.version") }</th>
-							<th>{ T(ctx, "nodes.ip-location") }</th>
-							<th class="num">{ T(ctx, "nodes.transports") }</th>
-							<th class="num">{ T(ctx, "node.tabs.apps") }</th>
-							<th class="num">{ T(ctx, "nodes.ping") }</th>
-							<th>{ T(ctx, "nodes.reward") }</th>
+							@nodeSortTh(T(ctx, "nodes.label"), "label", false)
+							@nodeSortTh(T(ctx, "nodes.key"), "pk", false)
+							@nodeSortTh(T(ctx, "nodes.version"), "version", false)
+							@nodeSortTh(T(ctx, "nodes.ip-location"), "loc", false)
+							@nodeSortTh(T(ctx, "nodes.transports"), "tps", true)
+							@nodeSortTh(T(ctx, "node.tabs.apps"), "apps", true)
+							@nodeSortTh(T(ctx, "nodes.ping"), "ping", true)
+							@nodeSortTh(T(ctx, "nodes.reward"), "reward", false)
+							<th><span class="sr">{ T(ctx, "common.options") }</span></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -49,7 +54,7 @@ templ NodeRows(ns []Node, errMsg string, oob bool) {
 							if n.SubErr != "" {
 								<tr class="child" data-parent={ n.PK }>
 									<td></td>
-									<td colspan="8" class="error small">{ n.SubErr }</td>
+									<td colspan="9" class="error small">{ n.SubErr }</td>
 								</tr>
 							}
 							for _, c := range n.Children {
@@ -79,7 +84,14 @@ templ nodeRow(n Node, parent string) {
 		}
 		data-pk={ n.PK }
 		data-online={ boolStr(n.Online) }
+		data-outdated={ boolStr(n.Outdated) }
+		data-reward={ boolStr(n.Reward != "") }
 		data-text={ n.SearchText() }
+		data-sk-version={ n.VersionKey() }
+		data-sk-loc={ n.Location }
+		data-sk-tps={ itoa(n.Transports) }
+		data-sk-apps={ itoa(n.AppsRunning) }
+		data-sk-ping={ itoa(n.PingMS) }
 	>
 		<td class="state" data-label={ T(ctx, "nodes.state") }>
 			if n.Online {
@@ -148,5 +160,21 @@ templ nodeRow(n Node, parent string) {
 				<span class="dim" title={ T(ctx, "nodes.reward-not-set") }>-</span>
 			}
 		</td>
+		<td class="actions" data-label={ T(ctx, "common.options") }>
+			if !n.ViaSub {
+				<button class="icon-btn sm" type="button" data-edit-label={ n.PK } data-prompt={ T(ctx, "edit-label.label") } title={ T(ctx, "labeled-element.edit-label") } aria-label={ T(ctx, "labeled-element.edit-label") }><span class="mi">edit</span></button>
+			}
+			if !n.Online && !n.ViaSub {
+				<button class="icon-btn sm" type="button" hx-delete={ "ui2/nodes/" + n.PK } hx-target="#nodes" hx-swap="outerHTML" hx-confirm={ T(ctx, "nodes.delete-node-confirmation") } data-hide-pk={ n.PK } title={ T(ctx, "nodes.delete-node") } aria-label={ T(ctx, "nodes.delete-node") }><span class="mi">close</span></button>
+			}
+		</td>
 	</tr>
+}
+
+// nodeSortTh is a column head that ui2.js sorts the list by, in the
+// browser, since labels live there.
+templ nodeSortTh(label, key string, num bool) {
+	<th class={ templ.KV("num", num) }>
+		<button class="sort" type="button" data-node-sort={ key }>{ label }<span class="mi"></span></button>
+	</th>
 }

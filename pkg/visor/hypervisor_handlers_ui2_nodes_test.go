@@ -2,6 +2,7 @@ package visor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -35,4 +36,23 @@ func TestUI2NodesOfNestsSubHypervisors(t *testing.T) {
 	}
 	require.Equal(t, "timeout", ns[byPK[pks[4].Hex()]].SubErr)
 	require.Nil(t, ui2NodesOf(nil))
+}
+
+func TestUI2ForgetOfflineVisors(t *testing.T) {
+	hv := newKnownTestHV(t.TempDir())
+	a, _ := cipher.GenerateKeyPair()
+	b, _ := cipher.GenerateKeyPair()
+	for _, pk := range []cipher.PubKey{a, b} {
+		hv.summaryCache[pk] = cachedSummary{sum: knownVisorSummary(knownVisor{PK: pk}), seenAt: time.Now().Add(-time.Hour)}
+	}
+
+	n, errs := hv.ui2Forget([]cipher.PubKey{a})
+	require.Equal(t, 1, n)
+	require.Empty(t, errs)
+	_, errs = hv.ui2Forget([]cipher.PubKey{a})
+	require.Len(t, errs, 1, "a forgotten visor is not known any more")
+	n, errs = hv.ui2Forget(nil)
+	require.Equal(t, 1, n, "no keys forgets every offline visor")
+	require.Empty(t, errs)
+	require.Empty(t, hv.offlineKnownEntries(nil))
 }

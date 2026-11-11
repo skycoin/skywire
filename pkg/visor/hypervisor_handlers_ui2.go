@@ -53,6 +53,7 @@ func (hv *Hypervisor) ui2Routes(r *httputil.Router) {
 			ui2Redirect(w, r.PathValue("pk")+"/info")
 		})
 		r.Get("/ui2/visors/{pk}/{tab}", hv.ui2NotPorted())
+		hv.ui2NodesRoutes(r)
 		hv.ui2ContactsRoutes(r)
 		hv.ui2AppsRoutes(r)
 		hv.ui2TransportsRoutes(r)
@@ -311,6 +312,7 @@ func ui2NodesOf(secs []VisorTreeSection) []ui2.Node {
 		ui2.SortNodes(ns[i].Children)
 	}
 	ui2.SortNodes(ns)
+	ui2.MarkOutdated(ns)
 	return ns
 }
 
