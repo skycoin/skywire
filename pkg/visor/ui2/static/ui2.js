@@ -570,3 +570,20 @@ document.addEventListener('DOMContentLoaded', function () {
 		if (ri) { ri.value = ''; el.querySelector('[data-reply-show]').hidden = true; }
 	});
 })();
+
+// A polled region keeps its open [data-open-key] details open across swaps.
+(function () {
+	'use strict';
+	var open = {};
+	document.addEventListener('htmx:beforeSwap', function (e) {
+		var t = e.detail.target;
+		if (!t || !t.querySelectorAll) return;
+		t.querySelectorAll('details[data-open-key]').forEach(function (d) { open[d.getAttribute('data-open-key')] = d.open; });
+	});
+	document.addEventListener('htmx:afterSettle', function () {
+		document.querySelectorAll('details[data-open-key]').forEach(function (d) {
+			var k = d.getAttribute('data-open-key');
+			if (open[k]) d.open = true;
+		});
+	});
+})();
